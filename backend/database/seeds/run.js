@@ -3,8 +3,9 @@
 // Execute: node database/seeds/run.js
 // ============================================================
 
-require('dotenv').config({ path: '../../.env' });
-const { pool } = require('../../src/config/database');
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../../.env') });
+const { pool } = require(path.join(__dirname, '../../src/config/database'));
 const seedCalendario = require('./001_calendario');
 const seedSuperUsuario = require('./002_superusuario');
 

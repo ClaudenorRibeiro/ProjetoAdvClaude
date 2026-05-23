@@ -1,7 +1,23 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m 'Codifica todo o sistema: backend completo + todas as 15 paginas frontend *)",
+      "Bash(npm --version)",
+      "Bash(mysql --version)",
+      "Read(//c/Program Files/MySQL/**)",
+      "Read(//c//**)",
+      "Bash(npm install *)",
+      "Bash(npm list *)",
+      "Bash(dir \"C:\\\\Users\\\\Claudenor\\\\Downloads\\\\ProjetoAdvClaude\\\\backend\" /s /b)",
+      "Bash(findstr -i \"sql\\\\|migration\\\\|seed\\\\|database\")",
+      "Bash(where mysql *)",
+      "Bash(\"C:/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe\" -u root -pHR5k6nb8*** -e \"SELECT VERSION\\(\\);\")",
+      "Bash(node database/seeds/run.js)",
+      "Bash(node server.js)",
+      "Bash(Start-Sleep -Seconds 4)",
+      "Bash(Get-Content \"C:\\\\Users\\\\CLAUDE~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Claudenor-Downloads-ProjetoAdvClaude\\\\36e2fbef-4d31-454d-8783-0b4b9251dd1b\\\\tasks\\\\bsekbk059.output\")",
+      "Bash(npm start *)"
     ]
   }
 }

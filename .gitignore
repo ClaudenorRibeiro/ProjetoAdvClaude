@@ -1,0 +1,20 @@
+# Arquivos de configuração com senhas — NUNCA enviar para o Git
+backend/.env
+frontend/.env
+frontend/.env.local
+
+# Dependências (muito pesadas, baixadas automaticamente pelo npm)
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Build do frontend (gerado automaticamente)
+frontend/build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
