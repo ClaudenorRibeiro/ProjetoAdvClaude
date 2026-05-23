@@ -1,0 +1,84 @@
+/* ============================================================
+   ESTILOS DO DASHBOARD
+   ============================================================ */
+
+.dashboard-contadores {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.contador-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+  text-decoration: none;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  transition: transform 0.15s, box-shadow 0.15s;
+  border-top: 3px solid transparent;
+}
+.contador-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+
+.contador-valor {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.contador-titulo { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+
+.contador-azul     { border-top-color: #1a56db; .contador-valor { color: #1a56db; } }
+.contador-vermelho { border-top-color: #dc2626; .contador-valor { color: #dc2626; } }
+.contador-laranja  { border-top-color: #d97706; .contador-valor { color: #d97706; } }
+.contador-verde    { border-top-color: #059669; .contador-valor { color: #059669; } }
+.contador-roxo     { border-top-color: #7c3aed; .contador-valor { color: #7c3aed; } }
+
+.contador-azul     .contador-valor { color: #1a56db; }
+.contador-vermelho .contador-valor { color: #dc2626; }
+.contador-laranja  .contador-valor { color: #d97706; }
+.contador-verde    .contador-valor { color: #059669; }
+.contador-roxo     .contador-valor { color: #7c3aed; }
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.secao-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  margin-top: 12px;
+}
+
+/* Audiências sem ata */
+.lista-sem-ata { display: flex; flex-direction: column; gap: 10px; }
+
+.item-sem-ata {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #fffbeb;
+  border-radius: 6px;
+  border-left: 3px solid #d97706;
+  gap: 12px;
+}
+
+.item-sem-ata-acoes {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 1100px) {
+  .dashboard-contadores { grid-template-columns: repeat(3, 1fr); }
+  .dashboard-grid { grid-template-columns: 1fr; }
+}
