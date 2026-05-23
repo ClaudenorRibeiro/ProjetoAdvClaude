@@ -49,12 +49,16 @@ metadata:
 | pesquisas_salvas | Filtros e colunas de pesquisa salvos por usuário |
 | pericia | Perícias vinculadas a processos |
 | tipo_pericia | Tipos de perícia cadastráveis pelo admin |
+| publicacoes | Publicações AASP salvas com texto, data, OAB, número do processo, status |
+| log_publicacoes | Registro de exclusões de publicações (usuário, quantidade, data) |
 
-## Próximos Blocos a Definir
+## Status dos Blocos
 
-- **Bloco 17 — Perícias** (mencionado no dashboard, ainda não detalhado)
-- **Bloco 18 — Notificações internas** (a definir)
-- **Bloco 19 — Integrações CNJ/AASP** (adiadas)
-- **Bloco 20 — Setup/instalação inicial** (a definir)
+- **Bloco 17 — Perícias** ✅ Definido — ver pericias.md
+- **Bloco 18 — Notificações internas** ✅ Dispensado — Dashboard já cumpre esse papel
+- **Bloco 19 — Integrações CNJ/AASP** ✅ Definido — ver integracoes_publicacoes.md
+- **Bloco 20 — Setup/instalação inicial** ✅ Definido — ver setup_inicial.md
+
+**Todos os blocos definidos. Projeto pronto para iniciar o desenvolvimento.**
 
 **Relacionado:** [[project-overview]], [[cadastro-pessoas]], [[processos-pastas]]

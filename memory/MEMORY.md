@@ -17,5 +17,7 @@
 - [Configurações do Escritório](configuracoes_escritorio.md) — Dados, visual personalizável, feriados, alertas configuráveis, backup automático S3
 - [Dashboard](dashboard.md) — Cards do dia (prazos, tarefas, audiências, perícias), audiências sem ata, atalhos rápidos
 - [Perícias](pericias.md) — Agendamento, comunicado ao cliente, e-mail ao perito via modelo, sem registro de laudo ou resultado
+- [Integrações e Publicações](integracoes_publicacoes.md) — Tela de publicações AASP por OAB, gera prazo/tarefa, salvamento incremental, CNJ para versão futura
+- [Setup Inicial](setup_inicial.md) — Campos obrigatórios, bloqueio de módulos, calendário pré-populado 30 anos, primeiro admin
 - [Deploy e Versionamento](deploy_versionamento.md) — Tutorial completo AWS Lightsail, scripts de deploy, Git com rollback
 - [Diretrizes de Código](feedback_codigo.md) — Código comentado, pensar à frente para evitar retrabalho, manutenção via VSCode
