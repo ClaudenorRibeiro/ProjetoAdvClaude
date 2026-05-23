@@ -17,7 +17,8 @@
       "Bash(node server.js)",
       "Bash(Start-Sleep -Seconds 4)",
       "Bash(Get-Content \"C:\\\\Users\\\\CLAUDE~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Claudenor-Downloads-ProjetoAdvClaude\\\\36e2fbef-4d31-454d-8783-0b4b9251dd1b\\\\tasks\\\\bsekbk059.output\")",
-      "Bash(npm start *)"
+      "Bash(npm start *)",
+      "Bash(\"C:/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe\" -u root -pHR5k6nb8*** -e \"UPDATE sistema_advocacia.configuracoes_escritorio SET setup_concluido = 1;\")"
     ]
   }
 }

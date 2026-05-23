@@ -367,7 +367,8 @@ function TabPermissoes() {
 
   useEffect(() => {
     configuracaoAPI.listarUsuarios().then(r => {
-      if (r.data.ok) setUsuarios(r.data.dados.filter(u => u.nivel > 1));
+      // Mostra todos exceto superusuário (nível 0)
+      if (r.data.ok) setUsuarios(r.data.dados.filter(u => u.nivel > 0));
     });
   }, []);
 
@@ -375,13 +376,8 @@ function TabPermissoes() {
     if (!usuarioId) return;
     configuracaoAPI.buscarPermissoes(usuarioId).then(r => {
       if (r.data.ok) {
-        // Converte array de permissões para mapa { modulo: { acao: bool } }
-        const mapa = {};
-        (r.data.dados || []).forEach(p => {
-          if (!mapa[p.modulo]) mapa[p.modulo] = {};
-          mapa[p.modulo][p.acao] = !!p.permitido;
-        });
-        setPermissoes(mapa);
+        // Backend já retorna objeto { modulo: { acao: bool } }
+        setPermissoes(r.data.dados || {});
       }
     });
   }, [usuarioId]);

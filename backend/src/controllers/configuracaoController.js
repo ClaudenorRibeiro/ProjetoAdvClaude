@@ -27,11 +27,14 @@ async function atualizarEscritorio(req, res) {
       dias_alerta_audiencia, dias_alerta_pericia, dias_sem_movimentacao
     } = req.body;
 
+    if (!nome) return erro(res, 'Nome do escritório é obrigatório');
+
     await pool.execute(
       `UPDATE configuracoes_escritorio SET
          nome=?, cnpj_cpf=?, email=?, telefone=?, endereco=?,
          cor_principal=?, horario_alerta_prazos=?,
-         dias_alerta_audiencia=?, dias_alerta_pericia=?, dias_sem_movimentacao=?`,
+         dias_alerta_audiencia=?, dias_alerta_pericia=?, dias_sem_movimentacao=?,
+         setup_concluido = 1`,
       [
         nome, cnpj_cpf || null, email || null, telefone || null, endereco || null,
         cor_principal || '#1a56db', horario_alerta_prazos || '18:00',
