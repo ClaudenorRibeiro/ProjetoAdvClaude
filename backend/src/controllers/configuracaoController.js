@@ -103,44 +103,60 @@ async function listarFeriados(req, res) {
 
 // POST /api/configuracoes/feriados — Cadastra feriado e atualiza calendário
 async function criarFeriado(req, res) {
-  try {
-    const { data, descricao, tipo } = req.body;
-    if (!data || !descricao) return erro(res, 'Data e descrição são obrigatórias');
+  const { data, descricao, tipo } = req.body;
+  if (!data || !descricao) return erro(res, 'Data e descrição são obrigatórias');
 
-    await pool.execute(
+  // Transação: INSERT no feriado + UPDATE no calendário — ambos ou nenhum
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    await conn.execute(
       'INSERT INTO feriados (data, descricao, tipo, criado_por) VALUES (?, ?, ?, ?)',
       [data, descricao.trim(), tipo || 'nacional', req.usuario.id]
     );
 
-    // Atualiza o calendário marcando este dia como não útil
-    await pool.execute(
+    // Marca o dia como não útil no calendário dentro da mesma transação
+    await conn.execute(
       'UPDATE calendario SET dia_util = 0 WHERE data = ?', [data]
     );
 
+    await conn.commit();         // Grava feriado + calendário de uma vez
     return sucesso(res, null, 'Feriado cadastrado e calendário atualizado', 201);
   } catch (err) {
+    await conn.rollback();       // Desfaz ambos se qualquer um falhou
     return erroInterno(res, err);
+  } finally {
+    conn.release();              // SEMPRE devolve a conexão ao pool
   }
 }
 
 // DELETE /api/configuracoes/feriados/:id — Remove feriado
 async function excluirFeriado(req, res) {
+  const { id } = req.params;
+  const [fer] = await pool.execute('SELECT data FROM feriados WHERE id = ?', [id]);
+  if (!fer.length) return naoEncontrado(res, 'Feriado não encontrado');
+
+  // Transação: DELETE do feriado + UPDATE no calendário — ambos ou nenhum
+  const conn = await pool.getConnection();
   try {
-    const { id } = req.params;
-    const [fer] = await pool.execute('SELECT data FROM feriados WHERE id = ?', [id]);
-    if (!fer.length) return naoEncontrado(res, 'Feriado não encontrado');
+    await conn.beginTransaction();
 
-    await pool.execute('DELETE FROM feriados WHERE id = ?', [id]);
+    await conn.execute('DELETE FROM feriados WHERE id = ?', [id]);
 
-    // Verifica se o dia ainda é fim de semana — se não for, volta a ser útil
+    // Se o dia não é fim de semana, volta a ser útil no calendário
     const diaSemana = new Date(fer[0].data + 'T12:00:00').getDay();
     if (diaSemana !== 0 && diaSemana !== 6) {
-      await pool.execute('UPDATE calendario SET dia_util = 1 WHERE data = ?', [fer[0].data]);
+      await conn.execute('UPDATE calendario SET dia_util = 1 WHERE data = ?', [fer[0].data]);
     }
 
+    await conn.commit();         // Remove feriado + restaura calendário de uma vez
     return sucesso(res, null, 'Feriado removido');
   } catch (err) {
+    await conn.rollback();       // Desfaz ambos se qualquer um falhou
     return erroInterno(res, err);
+  } finally {
+    conn.release();              // SEMPRE devolve a conexão ao pool
   }
 }
 

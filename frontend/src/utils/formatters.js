@@ -104,6 +104,26 @@ export function labelStatusPrazo(status) {
   return map[status] || status;
 }
 
+// Converte texto para Primeira Letra Maiúscula Em Cada Palavra
+// Ex: "EDNA SILVA" → "Edna Silva" | "edna silva" → "Edna Silva"
+// Preposições comuns em português permanecem minúsculas (de, da, do, das, dos, e)
+export function toTitleCase(str) {
+  if (!str) return str;
+  const minusculas = ['de', 'da', 'do', 'das', 'dos', 'e', 'em', 'na', 'no', 'nas', 'nos', 'a', 'o', 'as', 'os'];
+  return str
+    .toLowerCase()
+    .split(' ')
+    .map((palavra, index) => {
+      if (!palavra) return '';
+      // Primeira palavra sempre maiúscula; preposições intermediárias ficam minúsculas
+      if (index === 0 || !minusculas.includes(palavra)) {
+        return palavra.charAt(0).toUpperCase() + palavra.slice(1);
+      }
+      return palavra;
+    })
+    .join(' ');
+}
+
 // Retorna rótulo de área do direito
 export function labelAreaDireito(area) {
   const map = {

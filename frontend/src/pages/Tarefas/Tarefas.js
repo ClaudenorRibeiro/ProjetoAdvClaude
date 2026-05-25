@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { tarefasAPI, processosAPI } from '../../services/api';
-import { formatarData, labelPrioridade } from '../../utils/formatters';
+import { formatarData, labelPrioridade, toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 
 const PRIORIDADE_COR = { urgente:'badge-vermelho', normal:'badge-laranja', baixa:'badge-verde' };
@@ -163,11 +163,11 @@ function ModalTarefa({ tarefa, onFechar }) {
         <div className="modal-body">
           <div className="form-group">
             <label className="form-label">Título *</label>
-            <input className="form-control" value={form.titulo||''} onChange={e=>set('titulo',e.target.value)} placeholder="Descreva a tarefa..." />
+            <input className="form-control" value={form.titulo||''} onChange={e=>set('titulo',e.target.value)} onBlur={()=>set('titulo', toTitleCase(form.titulo))} placeholder="Descreva a tarefa..." />
           </div>
           <div className="form-group">
             <label className="form-label">Descrição</label>
-            <textarea className="form-control" rows={3} value={form.descricao||''} onChange={e=>set('descricao',e.target.value)} />
+            <textarea className="form-control" rows={3} value={form.descricao||''} onChange={e=>set('descricao',e.target.value)} onBlur={()=>set('descricao', toTitleCase(form.descricao))} />
           </div>
           <div className="grid-3">
             <div className="form-group">

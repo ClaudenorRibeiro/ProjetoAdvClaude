@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { pessoasAPI } from '../../services/api';
-import { formatarCPF, formatarCNPJ, formatarData, mascaraCPF, validarCPF } from '../../utils/formatters';
+import { formatarCPF, formatarCNPJ, formatarData, mascaraCPF, validarCPF, toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 
 export default function Pessoas() {
@@ -213,12 +213,13 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
 
   // Chamado pelo CampoCEP após buscar o endereço na ViaCEP
   // Preenche logradouro, bairro, cidade e estado — e move o cursor para Número
+  // ViaCEP pode retornar tudo maiúsculo; aplica Title Case automaticamente
   function handleCEPAutoFill(dados) {
     setForm(f => ({
       ...f,
-      logradouro: dados.logradouro || f.logradouro || '',
-      bairro:     dados.bairro     || f.bairro     || '',
-      cidade:     dados.cidade     || f.cidade     || '',
+      logradouro: toTitleCase(dados.logradouro || f.logradouro || ''),
+      bairro:     toTitleCase(dados.bairro     || f.bairro     || ''),
+      cidade:     toTitleCase(dados.cidade     || f.cidade     || ''),
       estado:     dados.estado     || f.estado     || '',
     }));
     // Pequeno delay para o React renderizar os campos antes de focar
@@ -302,14 +303,34 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
                   onAbrirEdicao={onAbrirEdicao}
                 />
               </div>
-              <div className="grid-3">
+              <div className="grid-4">
                 <Campo label="RG" value={form.rg||''} onChange={v=>set('rg',v)} />
+                {/* Órgão expedidor: SSP/SP, DETRAN/RJ, etc. */}
+                <Campo label="Órgão Expedidor" value={form.rg_orgao||''} onChange={v=>set('rg_orgao',v)} placeholder="SSP/SP" />
                 {/* CampoData bloqueia datas futuras — ninguém nasce amanhã */}
                 <CampoDataNascimento value={form.data_nascimento?.split('T')[0]||''} onChange={v=>set('data_nascimento',v)} />
                 <SelectComAdicao
                   label="Gênero" value={form.genero_id||''} onChange={v=>set('genero_id',v)}
                   opcoes={auxiliares.generos} tipo="generos"
                   onNovoItem={item => handleNovoAuxiliar('generos', item)}
+                />
+              </div>
+              {/* Linha 2: PIS + CTPS (Digital/Física com campos condicionais) */}
+              <div className="grid-2">
+                <Campo label="PIS" value={form.pis||''} onChange={v=>set('pis',v)} placeholder="000.00000.00-0" />
+                <CampoCTPS
+                  // Tipo derivado do valor salvo: "Digital" no campo = digital, qualquer outro = física
+                  tipo={form.ctps_numero === 'Digital' ? 'digital' : 'fisica'}
+                  numero={form.ctps_numero === 'Digital' ? '' : (form.ctps_numero||'')}
+                  serie={form.ctps_serie||''}
+                  onChangeTipo={tipo => {
+                    // Digital: salva "Digital" no banco e limpa série
+                    // Física: limpa para o usuário digitar o número
+                    if (tipo === 'digital') { set('ctps_numero', 'Digital'); set('ctps_serie', null); }
+                    else { set('ctps_numero', ''); set('ctps_serie', ''); }
+                  }}
+                  onChangeNumero={v => set('ctps_numero', v)}
+                  onChangeSerie={v => set('ctps_serie', v)}
                 />
               </div>
               <div className="grid-2">
@@ -328,12 +349,12 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
           ) : (
             <>
               <div className="grid-2">
-                <Campo label="Razão Social *" value={form.razao_social||''} onChange={v=>set('razao_social',v)} />
-                <Campo label="Nome Fantasia" value={form.nome_fantasia||''} onChange={v=>set('nome_fantasia',v)} />
+                <Campo label="Razão Social *" value={form.razao_social||''} onChange={v=>set('razao_social',v)} onBlur={()=>set('razao_social', toTitleCase(form.razao_social))} />
+                <Campo label="Nome Fantasia" value={form.nome_fantasia||''} onChange={v=>set('nome_fantasia',v)} onBlur={()=>set('nome_fantasia', toTitleCase(form.nome_fantasia))} />
               </div>
               <div className="grid-2">
                 <Campo label="CNPJ" value={form.cnpj||''} onChange={v=>set('cnpj',v)} placeholder="00.000.000/0000-00" />
-                <Campo label="Representante Legal" value={form.representante_legal||''} onChange={v=>set('representante_legal',v)} />
+                <Campo label="Representante Legal" value={form.representante_legal||''} onChange={v=>set('representante_legal',v)} onBlur={()=>set('representante_legal', toTitleCase(form.representante_legal))} />
               </div>
             </>
           )}
@@ -343,17 +364,17 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
           {/* Linha 1: CEP (busca automática) + Logradouro */}
           <div className="grid-2">
             <CampoCEP value={form.cep||''} onChange={v=>set('cep',v)} onAutoFill={handleCEPAutoFill} />
-            <Campo label="Logradouro" value={form.logradouro||''} onChange={v=>set('logradouro',v)} />
+            <Campo label="Logradouro" value={form.logradouro||''} onChange={v=>set('logradouro',v)} onBlur={()=>set('logradouro', toTitleCase(form.logradouro))} />
           </div>
           {/* Linha 2: Número (recebe foco do CEP) + Complemento + Bairro */}
           <div className="grid-3">
             <Campo label="Número" value={form.numero||''} onChange={v=>set('numero',v)} ref={refNumero} />
-            <Campo label="Complemento" value={form.complemento||''} onChange={v=>set('complemento',v)} placeholder="Apto, sala, bloco..." />
-            <Campo label="Bairro" value={form.bairro||''} onChange={v=>set('bairro',v)} />
+            <Campo label="Complemento" value={form.complemento||''} onChange={v=>set('complemento',v)} onBlur={()=>set('complemento', toTitleCase(form.complemento))} placeholder="Apto, sala, bloco..." />
+            <Campo label="Bairro" value={form.bairro||''} onChange={v=>set('bairro',v)} onBlur={()=>set('bairro', toTitleCase(form.bairro))} />
           </div>
           {/* Linha 3: Cidade + Estado */}
           <div className="grid-2">
-            <Campo label="Cidade" value={form.cidade||''} onChange={v=>set('cidade',v)} />
+            <Campo label="Cidade" value={form.cidade||''} onChange={v=>set('cidade',v)} onBlur={()=>set('cidade', toTitleCase(form.cidade))} />
             <Campo label="Estado" value={form.estado||''} onChange={v=>set('estado',v)} placeholder="SP" />
           </div>
 
@@ -390,7 +411,7 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
           {/* Observações */}
           <div className="form-group" style={{marginTop:'16px'}}>
             <label className="form-label">Observações</label>
-            <textarea className="form-control" rows={3} value={form.observacoes||''} onChange={e=>set('observacoes',e.target.value)} />
+            <textarea className="form-control" rows={3} value={form.observacoes||''} onChange={e=>set('observacoes',e.target.value)} onBlur={()=>set('observacoes', toTitleCase(form.observacoes))} />
           </div>
         </div>
 
@@ -655,6 +676,8 @@ function CampoNomeCompleto({ value, onChange }) {
   const [erroNome, setErroNome] = useState('');
 
   function handleBlur() {
+    // Aplica Title Case ao sair do campo e atualiza o valor no formulário pai
+    if (value) onChange(toTitleCase(value));
     const partes = (value || '').trim().split(/\s+/).filter(Boolean);
     if (partes.length === 1) {
       setErroNome('Informe o nome completo (nome e sobrenome)');
@@ -836,15 +859,63 @@ function CampoCEP({ value, onChange, onAutoFill }) {
 }
 
 // ============================================================
+// CAMPO CTPS — radio Digital/Física + campos condicionais
+// Quando Digital: oculta Núm/Série e persiste "Digital" no banco
+// Quando Física: exibe campos Núm. e Série para preenchimento
+// ============================================================
+function CampoCTPS({ tipo, numero, serie, onChangeTipo, onChangeNumero, onChangeSerie }) {
+  const eFisica = tipo !== 'digital';
+
+  return (
+    <div className="form-group">
+      <label className="form-label">CTPS</label>
+      <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
+
+        {/* Seleção de tipo: Digital ou Física */}
+        <div style={{ display: 'flex', gap: '16px', flexShrink: 0 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px' }}>
+            <input type="radio" checked={!eFisica} onChange={() => onChangeTipo('digital')} />
+            Digital
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px' }}>
+            <input type="radio" checked={eFisica} onChange={() => onChangeTipo('fisica')} />
+            Física
+          </label>
+        </div>
+
+        {/* Campos Núm. e Série — só exibidos quando Física */}
+        {eFisica && (
+          <>
+            <input
+              className="form-control" style={{ flex: 1, minWidth: '100px' }}
+              placeholder="Núm. CTPS"
+              value={numero}
+              onChange={e => onChangeNumero(e.target.value)}
+            />
+            <input
+              className="form-control" style={{ flex: '0 0 90px' }}
+              placeholder="Série"
+              value={serie}
+              onChange={e => onChangeSerie(e.target.value)}
+            />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // COMPONENTES AUXILIARES BÁSICOS
 // Campo usa forwardRef para permitir que o pai passe um ref
 // (usado pelo CampoCEP para mover o cursor para o campo Número)
 // ============================================================
-const Campo = React.forwardRef(function Campo({ label, value, onChange, type='text', placeholder='' }, ref) {
+// onBlur opcional — usado para aplicar Title Case ao sair do campo
+const Campo = React.forwardRef(function Campo({ label, value, onChange, onBlur, type='text', placeholder='' }, ref) {
   return (
     <div className="form-group">
       <label className="form-label">{label}</label>
-      <input ref={ref} type={type} className="form-control" value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} />
+      <input ref={ref} type={type} className="form-control" value={value} onChange={e=>onChange(e.target.value)} onBlur={onBlur} placeholder={placeholder} />
     </div>
   );
 });

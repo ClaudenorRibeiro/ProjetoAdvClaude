@@ -23,6 +23,9 @@ const PORT = process.env.PORT || 3001;
 // Helmet adiciona headers HTTP de segurança automaticamente
 app.use(helmet());
 
+// Informa ao Express que está atrás de um proxy local (evita aviso do express-rate-limit)
+app.set('trust proxy', false);
+
 // Limita requisições para prevenir ataques de força bruta
 // Máximo de 200 requisições por IP a cada 15 minutos
 const limiter = rateLimit({

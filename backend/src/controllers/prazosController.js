@@ -101,42 +101,47 @@ async function criar(req, res) {
 
 // PUT /api/prazos/:id/status — Muda o status de um prazo
 async function mudarStatus(req, res) {
+  const { id } = req.params;
+  const { status, observacao } = req.body;
+
+  const statusValidos = ['aberto', 'fazendo', 'pendente', 'agendado', 'concluido'];
+  if (!statusValidos.includes(status)) {
+    return erro(res, 'Status inválido');
+  }
+
+  const [antes] = await pool.execute(
+    'SELECT status, delegado_para FROM prazos_processo WHERE id = ?', [id]
+  );
+  if (!antes.length) return naoEncontrado(res, 'Prazo não encontrado');
+
+  // Transação: UPDATE do status + INSERT na auditoria — ambos ou nenhum
+  const conn = await pool.getConnection();
   try {
-    const { id } = req.params;
-    const { status, observacao } = req.body;
+    await conn.beginTransaction();
 
-    const statusValidos = ['aberto', 'fazendo', 'pendente', 'agendado', 'concluido'];
-    if (!statusValidos.includes(status)) {
-      return erro(res, 'Status inválido');
-    }
-
-    const [antes] = await pool.execute(
-      'SELECT status, delegado_para FROM prazos_processo WHERE id = ?', [id]
-    );
-    if (!antes.length) return naoEncontrado(res, 'Prazo não encontrado');
-
-    // Campos adicionais para conclusão
-    const campos = status === 'concluido'
-      ? ', concluido_por = ?, concluido_em = NOW()'
-      : '';
+    const campos = status === 'concluido' ? ', concluido_por = ?, concluido_em = NOW()' : '';
     const extraParams = status === 'concluido' ? [req.usuario.id] : [];
 
-    await pool.execute(
+    await conn.execute(
       `UPDATE prazos_processo SET status = ?, status_alterado_por = ?, status_alterado_em = NOW() ${campos}
        WHERE id = ?`,
       [status, req.usuario.id, ...extraParams, id]
     );
 
-    // Registra na auditoria de prazos
-    await pool.execute(
+    // Registra na auditoria de prazos dentro da mesma transação
+    await conn.execute(
       `INSERT INTO auditoria_prazo (prazo_id, status_anterior, status_novo, usuario_id, observacao)
        VALUES (?, ?, ?, ?, ?)`,
       [id, antes[0].status, status, req.usuario.id, observacao || null]
     );
 
+    await conn.commit();         // Grava status + auditoria de uma vez
     return sucesso(res, null, `Prazo marcado como "${status}"`);
   } catch (err) {
+    await conn.rollback();       // Desfaz ambos se qualquer um falhou
     return erroInterno(res, err);
+  } finally {
+    conn.release();              // SEMPRE devolve a conexão ao pool
   }
 }
 

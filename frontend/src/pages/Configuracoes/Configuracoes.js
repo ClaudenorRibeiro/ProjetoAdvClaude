@@ -6,7 +6,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { configuracaoAPI } from '../../services/api';
-import { formatarData } from '../../utils/formatters';
+import { formatarData, toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
 
@@ -101,7 +101,7 @@ function TabEscritorio() {
       <div className="grid-2">
         <div className="form-group">
           <label className="form-label">Nome do escritório *</label>
-          <input className="form-control" value={form.nome||''} onChange={e => set('nome', e.target.value)} />
+          <input className="form-control" value={form.nome||''} onChange={e => set('nome', e.target.value)} onBlur={() => set('nome', toTitleCase(form.nome))} />
         </div>
         <div className="form-group">
           <label className="form-label">CNPJ / CPF</label>
@@ -127,7 +127,7 @@ function TabEscritorio() {
         </div>
         <div className="form-group">
           <label className="form-label">Logradouro</label>
-          <input className="form-control" value={form.logradouro||''} onChange={e => set('logradouro', e.target.value)} />
+          <input className="form-control" value={form.logradouro||''} onChange={e => set('logradouro', e.target.value)} onBlur={() => set('logradouro', toTitleCase(form.logradouro))} />
         </div>
         <div className="form-group">
           <label className="form-label">Número</label>
@@ -137,11 +137,11 @@ function TabEscritorio() {
       <div className="grid-3">
         <div className="form-group">
           <label className="form-label">Bairro</label>
-          <input className="form-control" value={form.bairro||''} onChange={e => set('bairro', e.target.value)} />
+          <input className="form-control" value={form.bairro||''} onChange={e => set('bairro', e.target.value)} onBlur={() => set('bairro', toTitleCase(form.bairro))} />
         </div>
         <div className="form-group">
           <label className="form-label">Cidade</label>
-          <input className="form-control" value={form.cidade||''} onChange={e => set('cidade', e.target.value)} />
+          <input className="form-control" value={form.cidade||''} onChange={e => set('cidade', e.target.value)} onBlur={() => set('cidade', toTitleCase(form.cidade))} />
         </div>
         <div className="form-group">
           <label className="form-label">Estado</label>
@@ -279,7 +279,7 @@ function ModalUsuario({ usuario, onFechar }) {
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Nome completo *</label>
-              <input className="form-control" value={form.nome||''} onChange={e => set('nome', e.target.value)} />
+              <input className="form-control" value={form.nome||''} onChange={e => set('nome', e.target.value)} onBlur={() => set('nome', toTitleCase(form.nome))} />
             </div>
             <div className="form-group">
               <label className="form-label">Login (usuário) *</label>

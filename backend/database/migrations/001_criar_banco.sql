@@ -122,6 +122,10 @@ CREATE TABLE IF NOT EXISTS pessoas_fisicas (
   nome                VARCHAR(200) NOT NULL,
   cpf                 VARCHAR(14) UNIQUE,
   rg                  VARCHAR(20),
+  rg_orgao            VARCHAR(20),   -- Órgão expedidor do RG (ex: SSP/SP, DETRAN/RJ)
+  pis                 VARCHAR(20),   -- Número do PIS/PASEP
+  ctps_numero         VARCHAR(30),   -- Número da CTPS física, ou "Digital" quando digital
+  ctps_serie          VARCHAR(20),   -- Série da CTPS (NULL quando digital)
   data_nascimento     DATE,
   estado_civil_id     INT,
   profissao_id        INT,

@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { documentosAPI, processosAPI } from '../../services/api';
-import { formatarData } from '../../utils/formatters';
+import { formatarData, toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
 
@@ -260,6 +260,7 @@ function ModalModelo({ modelo, onFechar }) {
               <label className="form-label">Título do modelo *</label>
               <input className="form-control" value={form.titulo||''}
                 onChange={e => set('titulo', e.target.value)}
+                onBlur={() => set('titulo', toTitleCase(form.titulo))}
                 placeholder="Ex: Procuração Trabalhista" />
             </div>
             <div className="form-group">

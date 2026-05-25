@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { financeiroAPI, processosAPI } from '../../services/api';
-import { formatarData, formatarMoeda, formatarNumeroPasta } from '../../utils/formatters';
+import { formatarData, formatarMoeda, formatarNumeroPasta, toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
 
@@ -355,7 +355,9 @@ function ModalLancamento({ pastaId, onFechar }) {
           <div className="form-group">
             <label className="form-label">Descrição *</label>
             <input className="form-control" value={form.descricao||''}
-              onChange={e => set('descricao', e.target.value)} placeholder="Ex: Honorários contratados" />
+              onChange={e => set('descricao', e.target.value)}
+              onBlur={() => set('descricao', toTitleCase(form.descricao))}
+              placeholder="Ex: Honorários contratados" />
           </div>
           <div className="form-group">
             <label className="form-label">Valor (R$) *</label>
@@ -365,7 +367,8 @@ function ModalLancamento({ pastaId, onFechar }) {
           <div className="form-group">
             <label className="form-label">Observação</label>
             <textarea className="form-control" rows={2} value={form.observacao||''}
-              onChange={e => set('observacao', e.target.value)} />
+              onChange={e => set('observacao', e.target.value)}
+              onBlur={() => set('observacao', toTitleCase(form.observacao))} />
           </div>
         </div>
         <div className="modal-footer">
@@ -430,7 +433,8 @@ function ModalHonorarios({ pastaId, honorarios, onFechar }) {
           <div className="form-group">
             <label className="form-label">Observações</label>
             <textarea className="form-control" rows={2} value={form.observacoes||''}
-              onChange={e => set('observacoes', e.target.value)} />
+              onChange={e => set('observacoes', e.target.value)}
+              onBlur={() => set('observacoes', toTitleCase(form.observacoes))} />
           </div>
         </div>
         <div className="modal-footer">

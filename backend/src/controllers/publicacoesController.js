@@ -129,25 +129,33 @@ async function marcarTratada(req, res) {
 
 // DELETE /api/publicacoes/:id — Exclui publicação
 async function excluir(req, res) {
+  const { id } = req.params;
+  const [pub] = await pool.execute(
+    'SELECT data_publicacao FROM publicacoes WHERE id = ?', [id]
+  );
+  if (!pub.length) return naoEncontrado(res, 'Publicação não encontrada');
+
+  // Transação: DELETE da publicação + INSERT no log — ambos ou nenhum
+  const conn = await pool.getConnection();
   try {
-    const { id } = req.params;
-    const [pub] = await pool.execute(
-      'SELECT data_publicacao FROM publicacoes WHERE id = ?', [id]
-    );
-    if (!pub.length) return naoEncontrado(res, 'Publicação não encontrada');
+    await conn.beginTransaction();
 
-    await pool.execute('DELETE FROM publicacoes WHERE id = ?', [id]);
+    await conn.execute('DELETE FROM publicacoes WHERE id = ?', [id]);
 
-    // Registra no log (nota simples de exclusão)
-    await pool.execute(
+    // Registra no log de exclusões dentro da mesma transação
+    await conn.execute(
       `INSERT INTO log_publicacoes (usuario_id, quantidade, data_publicacao)
        VALUES (?, 1, ?)`,
       [req.usuario.id, pub[0].data_publicacao]
     );
 
+    await conn.commit();         // Exclui publicação + registra log de uma vez
     return sucesso(res, null, 'Publicação excluída');
   } catch (err) {
+    await conn.rollback();       // Desfaz ambos se qualquer um falhou
     return erroInterno(res, err);
+  } finally {
+    conn.release();              // SEMPRE devolve a conexão ao pool
   }
 }
 

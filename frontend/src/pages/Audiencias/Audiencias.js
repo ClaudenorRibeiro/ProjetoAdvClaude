@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { audienciasAPI, processosAPI } from '../../services/api';
-import { formatarData } from '../../utils/formatters';
+import { formatarData, toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 
 const STATUS_COR = {
@@ -314,6 +314,7 @@ function ModalNovaAudiencia({ tipos, onFechar }) {
               <label className="form-label">Local</label>
               <input className="form-control" value={form.local||''}
                 onChange={e => set('local', e.target.value)}
+                onBlur={() => set('local', toTitleCase(form.local))}
                 placeholder="Endereço do fórum / sala..." />
             </div>
           ) : (
@@ -384,6 +385,7 @@ function ModalRegistrarAta({ audiencia, onFechar }) {
             <label className="form-label">Resumo / Termos</label>
             <textarea className="form-control" rows={4} value={form.resultado_texto||''}
               onChange={e => set('resultado_texto', e.target.value)}
+              onBlur={() => set('resultado_texto', toTitleCase(form.resultado_texto))}
               placeholder="Descreva os principais pontos da audiência..." />
           </div>
 
@@ -435,7 +437,8 @@ function ModalRegistrarAta({ audiencia, onFechar }) {
           <div className="form-group">
             <label className="form-label">Observações</label>
             <textarea className="form-control" rows={2} value={form.observacoes||''}
-              onChange={e => set('observacoes', e.target.value)} />
+              onChange={e => set('observacoes', e.target.value)}
+              onBlur={() => set('observacoes', toTitleCase(form.observacoes))} />
           </div>
         </div>
         <div className="modal-footer">

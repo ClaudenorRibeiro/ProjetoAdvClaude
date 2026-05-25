@@ -109,7 +109,8 @@ async function buscarFisica(req, res) {
 // POST /api/pessoas/fisicas — Cadastra nova pessoa física
 async function criarFisica(req, res) {
   const {
-    nome, cpf, rg, data_nascimento, estado_civil_id, profissao_id,
+    nome, cpf, rg, rg_orgao, pis, ctps_numero, ctps_serie,
+    data_nascimento, estado_civil_id, profissao_id,
     genero_id, cep, logradouro, numero, complemento, bairro, cidade, estado,
     observacoes, telefones = [], emails = []
   } = req.body;
@@ -136,11 +137,13 @@ async function criarFisica(req, res) {
 
     const [result] = await conn.execute(
       `INSERT INTO pessoas_fisicas
-         (nome, cpf, rg, data_nascimento, estado_civil_id, profissao_id, genero_id,
+         (nome, cpf, rg, rg_orgao, pis, ctps_numero, ctps_serie,
+          data_nascimento, estado_civil_id, profissao_id, genero_id,
           cep, logradouro, numero, complemento, bairro, cidade, estado, observacoes, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        nome.trim(), cpf?.replace(/\D/g, '') || null, rg || null,
+        nome.trim(), cpf?.replace(/\D/g, '') || null, rg || null, rg_orgao || null,
+        pis || null, ctps_numero || null, ctps_serie || null,
         data_nascimento || null, estado_civil_id || null, profissao_id || null,
         genero_id || null, cep || null, logradouro || null, numero || null,
         complemento || null, bairro || null, cidade || null, estado || null,
@@ -186,7 +189,8 @@ async function atualizarFisica(req, res) {
   try {
     const { id } = req.params;
     const {
-      nome, cpf, rg, data_nascimento, estado_civil_id, profissao_id,
+      nome, cpf, rg, rg_orgao, pis, ctps_numero, ctps_serie,
+      data_nascimento, estado_civil_id, profissao_id,
       genero_id, cep, logradouro, numero, complemento, bairro, cidade, estado, observacoes
     } = req.body;
 
@@ -196,13 +200,17 @@ async function atualizarFisica(req, res) {
 
     await pool.execute(
       `UPDATE pessoas_fisicas SET
-         nome=?, cpf=?, rg=?, data_nascimento=?, estado_civil_id=?, profissao_id=?,
+         nome=?, cpf=?, rg=?, rg_orgao=?, pis=?, ctps_numero=?, ctps_serie=?,
+         data_nascimento=?, estado_civil_id=?, profissao_id=?,
          genero_id=?, cep=?, logradouro=?, numero=?, complemento=?, bairro=?,
          cidade=?, estado=?, observacoes=?
        WHERE id = ?`,
       [
-        nome?.trim(), cpf?.replace(/\D/g, '') || null, rg || null,
-        data_nascimento || null, estado_civil_id || null, profissao_id || null,
+        nome?.trim(), cpf?.replace(/\D/g, '') || null, rg || null, rg_orgao || null,
+        pis || null, ctps_numero || null, ctps_serie || null,
+        // Garante formato YYYY-MM-DD — frontend pode enviar ISO com horário (ex: 1972-03-27T03:00:00.000Z)
+        data_nascimento ? data_nascimento.toString().slice(0, 10) : null,
+        estado_civil_id || null, profissao_id || null,
         genero_id || null, cep || null, logradouro || null, numero || null,
         complemento || null, bairro || null, cidade || null, estado || null,
         observacoes || null, id

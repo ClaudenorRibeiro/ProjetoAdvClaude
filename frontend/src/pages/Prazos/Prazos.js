@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { prazosAPI, processosAPI } from '../../services/api';
-import { formatarData, labelStatusPrazo, corPrazo } from '../../utils/formatters';
+import { formatarData, labelStatusPrazo, corPrazo, toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 
 const STATUS_OPCOES = ['aberto','fazendo','pendente','agendado','concluido'];
@@ -192,7 +192,7 @@ function ModalNovoPrazo({ tipos, onFechar }) {
           </div>
           <div className="form-group">
             <label className="form-label">Descrição</label>
-            <input className="form-control" value={form.descricao||''} onChange={e=>set('descricao',e.target.value)} placeholder="Descrição adicional..." />
+            <input className="form-control" value={form.descricao||''} onChange={e=>set('descricao',e.target.value)} onBlur={()=>set('descricao', toTitleCase(form.descricao))} placeholder="Descrição adicional..." />
           </div>
           <div className="grid-3">
             <div className="form-group">

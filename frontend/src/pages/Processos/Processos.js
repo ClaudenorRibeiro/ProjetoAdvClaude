@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { processosAPI, pessoasAPI, andamentoAPI } from '../../services/api';
-import { formatarData, formatarNumeroPasta, labelAreaDireito } from '../../utils/formatters';
+import { formatarData, formatarNumeroPasta, labelAreaDireito, toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 
 export default function Processos() {
@@ -124,7 +124,7 @@ function ModalPasta({ onFechar }) {
         <div className="modal-body">
           <div className="form-group">
             <label className="form-label">Título (Autor vs Réu) *</label>
-            <input className="form-control" value={form.titulo||''} onChange={e=>set('titulo',e.target.value)} placeholder="Ex: João Silva vs Empresa XYZ" />
+            <input className="form-control" value={form.titulo||''} onChange={e=>set('titulo',e.target.value)} onBlur={()=>set('titulo', toTitleCase(form.titulo))} placeholder="Ex: João Silva vs Empresa XYZ" />
           </div>
           <div className="grid-2">
             <div className="form-group">

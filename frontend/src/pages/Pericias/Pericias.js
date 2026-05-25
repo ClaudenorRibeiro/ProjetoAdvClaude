@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { periciasAPI, processosAPI, pessoasAPI } from '../../services/api';
-import { formatarData } from '../../utils/formatters';
+import { formatarData, toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 
 export default function Pericias() {
@@ -267,6 +267,7 @@ function ModalPericia({ tipos, pericia, onFechar }) {
             <label className="form-label">Local</label>
             <input className="form-control" value={form.local||''}
               onChange={e => set('local', e.target.value)}
+              onBlur={() => set('local', toTitleCase(form.local))}
               placeholder="Endereço da perícia..." />
           </div>
 

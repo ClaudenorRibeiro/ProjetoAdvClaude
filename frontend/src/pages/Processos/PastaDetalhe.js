@@ -7,7 +7,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { processosAPI, andamentoAPI, prazosAPI, tarefasAPI, audienciasAPI, financeiroAPI } from '../../services/api';
-import { formatarData, formatarNumeroPasta, labelAreaDireito, formatarMoeda, labelStatusPrazo, corPrazo } from '../../utils/formatters';
+import { formatarData, formatarNumeroPasta, labelAreaDireito, formatarMoeda, labelStatusPrazo, corPrazo, toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 
 const AREA_COR = { trabalhista:'badge-azul', previdenciario:'badge-verde', familia:'badge-laranja', outro:'badge-cinza' };
@@ -518,7 +518,8 @@ function ModalNovoProcesso({ pastaId, onFechar }) {
           <div className="form-group">
             <label className="form-label">Observações</label>
             <textarea className="form-control" rows={2} value={form.observacoes||''}
-              onChange={e => set('observacoes', e.target.value)} />
+              onChange={e => set('observacoes', e.target.value)}
+              onBlur={() => set('observacoes', toTitleCase(form.observacoes))} />
           </div>
         </div>
         <div className="modal-footer">
@@ -572,6 +573,7 @@ function ModalAndamento({ processoId, andamento, onFechar }) {
             <label className="form-label">Descrição *</label>
             <textarea className="form-control" rows={4} value={form.descricao||''}
               onChange={e => set('descricao', e.target.value)}
+              onBlur={() => set('descricao', toTitleCase(form.descricao))}
               placeholder="Descreva o andamento processual..." />
           </div>
         </div>
@@ -629,7 +631,8 @@ function ModalLancamento({ pastaId, onFechar }) {
           <div className="form-group">
             <label className="form-label">Descrição *</label>
             <input className="form-control" value={form.descricao||''}
-              onChange={e => set('descricao', e.target.value)} />
+              onChange={e => set('descricao', e.target.value)}
+              onBlur={() => set('descricao', toTitleCase(form.descricao))} />
           </div>
           <div className="form-group">
             <label className="form-label">Valor (R$) *</label>
