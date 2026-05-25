@@ -37,7 +37,12 @@
       "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia -e \"ALTER TABLE ata_audiencia DROP INDEX \\\\`audiencia_id\\\\`;\")",
       "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia -e \"ALTER TABLE honorarios DROP INDEX \\\\`pasta_id\\\\`;\")",
       "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia -e \"ALTER TABLE permissoes DROP INDEX \\\\`uq_permissao\\\\`;\")",
-      "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia -e ' *)"
+      "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia -e ' *)",
+      "Bash(mkdir -p \"/c/Users/Claudio/Downloads/ProjetoAdvClaude/.claude/memory\")",
+      "Bash(cp /c/Users/Claudio/.claude/projects/C--Users-Claudio-Downloads-ProjetoAdvClaude/memory/*.md \"/c/Users/Claudio/Downloads/ProjetoAdvClaude/.claude/memory/\")",
+      "Bash(mysqldump --version)",
+      "Bash(cmd.exe /c backup_banco.bat)",
+      "Bash(cmd.exe /c \"for /f \\\\\"usebackq tokens=1,* delims==\\\\\" %a in \\(\\\\\"backend\\\\\\\\.env\\\\\"\\) do @if \\\\\"%a\\\\\"==\\\\\"DB_NAME\\\\\" echo DB_NAME=%b\")"
     ]
   }
 }
