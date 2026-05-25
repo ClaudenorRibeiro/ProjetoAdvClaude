@@ -23,7 +23,21 @@
       "Bash(xcopy /E /I /Y \"C:\\\\Users\\\\Claudio\\\\Downloads\\\\ProjetoAdvClaude\\\\memory\" \"%USERPROFILE%\\\\.claude\\\\projects\\\\C--Users-Claudio-Downloads-ProjetoAdvClaude\\\\memory\")",
       "Bash(git --version)",
       "Bash(Get-Service -Name \"*mysql*\")",
-      "Bash(Select-Object Name, Status, StartType)"
+      "Bash(Select-Object Name, Status, StartType)",
+      "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia)",
+      "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia -e \"ALTER TABLE pessoas_fisicas DROP INDEX cpf; ALTER TABLE pessoas_juridicas DROP INDEX cnpj; ALTER TABLE ata_audiencia DROP INDEX audiencia_id; ALTER TABLE configuracoes_integracoes DROP INDEX modulo; ALTER TABLE feriados DROP INDEX data; ALTER TABLE honorarios DROP INDEX pasta_id; ALTER TABLE pasta DROP INDEX numero; ALTER TABLE permissoes DROP INDEX uq_permissao; ALTER TABLE usuarios DROP INDEX login;\")",
+      "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia -e \"ALTER TABLE ata_audiencia DROP INDEX audiencia_id;\")",
+      "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia -e \"ALTER TABLE configuracoes_integracoes DROP INDEX modulo;\")",
+      "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia -e \"ALTER TABLE feriados DROP INDEX data;\")",
+      "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia -e \"ALTER TABLE honorarios DROP INDEX pasta_id;\")",
+      "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia -e \"ALTER TABLE pasta DROP INDEX numero;\")",
+      "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia -e \"SHOW CREATE TABLE ata_audiencia\\\\G\")",
+      "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia -e \"SHOW CREATE TABLE honorarios\\\\G\")",
+      "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia -e \"SHOW CREATE TABLE permissoes\\\\G\")",
+      "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia -e \"ALTER TABLE ata_audiencia DROP INDEX \\\\`audiencia_id\\\\`;\")",
+      "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia -e \"ALTER TABLE honorarios DROP INDEX \\\\`pasta_id\\\\`;\")",
+      "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia -e \"ALTER TABLE permissoes DROP INDEX \\\\`uq_permissao\\\\`;\")",
+      "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia -e ' *)"
     ]
   }
 }

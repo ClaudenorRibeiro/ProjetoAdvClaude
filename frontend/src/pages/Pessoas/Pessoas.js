@@ -2,7 +2,7 @@
 // PÁGINA DE PESSOAS — Lista e cadastro de PF e PJ
 // ============================================================
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { pessoasAPI } from '../../services/api';
 import { formatarCPF, formatarCNPJ, formatarData, mascaraCPF, validarCPF } from '../../utils/formatters';
 import { toast } from 'react-toastify';
@@ -172,8 +172,10 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
   const [form, setForm]         = useState(pessoa || {});
   const [auxiliares, setAux]    = useState({ estados_civis: [], generos: [], profissoes: [] });
   const [salvando, setSalvando] = useState(false);
-  const [telefones, setTelefones] = useState(pessoa?.telefones || [{ numero: '', tipo: 'celular', principal: true }]);
+  const [telefones, setTelefones] = useState(pessoa?.telefones || [{ numero: '', tipo: '', principal: true }]);
   const [emails, setEmails]       = useState(pessoa?.emails || [{ email: '', principal: true }]);
+  // Ref do campo Número — recebe o foco automaticamente após o CEP ser preenchido
+  const refNumero = useRef(null);
 
   useEffect(() => {
     pessoasAPI.auxiliares().then(r => setAux(r.data.dados));
@@ -182,8 +184,9 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
       pessoasAPI.buscarFisica(pessoa.id).then(r => {
         if (r.data.ok) {
           setForm(r.data.dados);
-          setTelefones(r.data.dados.telefones || []);
-          setEmails(r.data.dados.emails || []);
+          const tels = r.data.dados.telefones || [];
+          setTelefones(tels.length ? tels : [{ numero: '', tipo: '', principal: true }]);
+          setEmails(r.data.dados.emails || [{ email: '', principal: true }]);
         }
       });
     }
@@ -191,9 +194,75 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
 
   function set(campo, valor) { setForm(f => ({...f, [campo]: valor})); }
 
+  // Chamado pelo SelectComAdicao quando o usuário cadastra um novo item auxiliar
+  // Adiciona o novo item na lista local já ordenado e auto-seleciona no form
+  function handleNovoAuxiliar(tipo, novoItem) {
+    const campoPorTipo = {
+      generos:       'genero_id',
+      estados_civis: 'estado_civil_id',
+      profissoes:    'profissao_id',
+    };
+    // Insere na lista do tipo correto, mantendo ordem alfabética
+    setAux(a => ({
+      ...a,
+      [tipo]: [...a[tipo], novoItem].sort((x, y) => x.nome.localeCompare(y.nome, 'pt-BR')),
+    }));
+    // Auto-seleciona o item recém-criado
+    set(campoPorTipo[tipo], String(novoItem.id));
+  }
+
+  // Chamado pelo CampoCEP após buscar o endereço na ViaCEP
+  // Preenche logradouro, bairro, cidade e estado — e move o cursor para Número
+  function handleCEPAutoFill(dados) {
+    setForm(f => ({
+      ...f,
+      logradouro: dados.logradouro || f.logradouro || '',
+      bairro:     dados.bairro     || f.bairro     || '',
+      cidade:     dados.cidade     || f.cidade     || '',
+      estado:     dados.estado     || f.estado     || '',
+    }));
+    // Pequeno delay para o React renderizar os campos antes de focar
+    setTimeout(() => refNumero.current?.focus(), 100);
+  }
+
   async function salvar() {
-    if (!form.nome && tipo === 'fisicas') return toast.error('Nome é obrigatório');
+    if (tipo === 'fisicas') {
+      // ── Campos obrigatórios de Pessoa Física ──────────────────────────
+      if (!form.nome?.trim()) return toast.error('Nome é obrigatório');
+      const partes = form.nome.trim().split(/\s+/).filter(Boolean);
+      if (partes.length < 2)  return toast.error('Informe o nome completo (nome e sobrenome)');
+
+      if (!form.cpf?.replace(/\D/g, ''))
+        return toast.error('CPF é obrigatório');
+      if (!form.data_nascimento)
+        return toast.error('Data de nascimento é obrigatória');
+      if (!form.genero_id)
+        return toast.error('Gênero é obrigatório');
+      if (!form.estado_civil_id)
+        return toast.error('Estado civil é obrigatório');
+      if (!form.profissao_id)
+        return toast.error('Profissão é obrigatória');
+
+      // Primeiro telefone obrigatório
+      if (!telefones[0]?.numero?.replace(/\D/g, ''))
+        return toast.error('Pelo menos um telefone é obrigatório');
+
+      // Valida formato dos e-mails preenchidos
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      for (const em of emails) {
+        if (em.email && !emailRegex.test(em.email.trim())) {
+          return toast.error(`E-mail inválido: "${em.email}"`);
+        }
+      }
+
+      // Valida data de nascimento — não pode ser futura
+      const hoje = new Date().toISOString().split('T')[0];
+      if (form.data_nascimento > hoje)
+        return toast.error('Data de nascimento não pode ser uma data futura');
+    }
+
     if (!form.razao_social && tipo === 'juridicas') return toast.error('Razão social é obrigatória');
+
     setSalvando(true);
     try {
       const payload = { ...form, telefones, emails };
@@ -223,7 +292,8 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
           {tipo === 'fisicas' ? (
             <>
               <div className="grid-2">
-                <Campo label="Nome completo *" value={form.nome||''} onChange={v=>set('nome',v)} />
+                {/* CampoNome exige ao menos duas palavras ao sair do campo */}
+                <CampoNomeCompleto value={form.nome||''} onChange={v=>set('nome',v)} />
                 {/* CampoCPF aplica máscara, valida algoritmo e verifica duplicata no banco */}
                 <CampoCPF
                   value={form.cpf||''}
@@ -234,12 +304,25 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
               </div>
               <div className="grid-3">
                 <Campo label="RG" value={form.rg||''} onChange={v=>set('rg',v)} />
-                <Campo label="Data de nascimento" type="date" value={form.data_nascimento?.split('T')[0]||''} onChange={v=>set('data_nascimento',v)} />
-                <Select label="Gênero" value={form.genero_id||''} onChange={v=>set('genero_id',v)} opcoes={auxiliares.generos} />
+                {/* CampoData bloqueia datas futuras — ninguém nasce amanhã */}
+                <CampoDataNascimento value={form.data_nascimento?.split('T')[0]||''} onChange={v=>set('data_nascimento',v)} />
+                <SelectComAdicao
+                  label="Gênero" value={form.genero_id||''} onChange={v=>set('genero_id',v)}
+                  opcoes={auxiliares.generos} tipo="generos"
+                  onNovoItem={item => handleNovoAuxiliar('generos', item)}
+                />
               </div>
               <div className="grid-2">
-                <Select label="Estado civil" value={form.estado_civil_id||''} onChange={v=>set('estado_civil_id',v)} opcoes={auxiliares.estados_civis} />
-                <Select label="Profissão" value={form.profissao_id||''} onChange={v=>set('profissao_id',v)} opcoes={auxiliares.profissoes} />
+                <SelectComAdicao
+                  label="Estado civil" value={form.estado_civil_id||''} onChange={v=>set('estado_civil_id',v)}
+                  opcoes={auxiliares.estados_civis} tipo="estados_civis"
+                  onNovoItem={item => handleNovoAuxiliar('estados_civis', item)}
+                />
+                <SelectComAdicao
+                  label="Profissão" value={form.profissao_id||''} onChange={v=>set('profissao_id',v)}
+                  opcoes={auxiliares.profissoes} tipo="profissoes"
+                  onNovoItem={item => handleNovoAuxiliar('profissoes', item)}
+                />
               </div>
             </>
           ) : (
@@ -257,13 +340,19 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
 
           {/* Endereço */}
           <h4 style={{margin:'16px 0 8px',color:'#555',fontSize:'13px',fontWeight:600}}>Endereço</h4>
-          <div className="grid-3">
-            <Campo label="CEP" value={form.cep||''} onChange={v=>set('cep',v)} />
+          {/* Linha 1: CEP (busca automática) + Logradouro */}
+          <div className="grid-2">
+            <CampoCEP value={form.cep||''} onChange={v=>set('cep',v)} onAutoFill={handleCEPAutoFill} />
             <Campo label="Logradouro" value={form.logradouro||''} onChange={v=>set('logradouro',v)} />
-            <Campo label="Número" value={form.numero||''} onChange={v=>set('numero',v)} />
           </div>
+          {/* Linha 2: Número (recebe foco do CEP) + Complemento + Bairro */}
           <div className="grid-3">
+            <Campo label="Número" value={form.numero||''} onChange={v=>set('numero',v)} ref={refNumero} />
+            <Campo label="Complemento" value={form.complemento||''} onChange={v=>set('complemento',v)} placeholder="Apto, sala, bloco..." />
             <Campo label="Bairro" value={form.bairro||''} onChange={v=>set('bairro',v)} />
+          </div>
+          {/* Linha 3: Cidade + Estado */}
+          <div className="grid-2">
             <Campo label="Cidade" value={form.cidade||''} onChange={v=>set('cidade',v)} />
             <Campo label="Estado" value={form.estado||''} onChange={v=>set('estado',v)} placeholder="SP" />
           </div>
@@ -271,31 +360,28 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
           {/* Telefones */}
           <h4 style={{margin:'16px 0 8px',color:'#555',fontSize:'13px',fontWeight:600}}>Telefones</h4>
           {telefones.map((tel, i) => (
-            <div key={i} style={{display:'flex',gap:'8px',marginBottom:'8px',alignItems:'center'}}>
-              <input className="form-control" style={{flex:2}} placeholder="(11) 99999-9999"
-                value={tel.numero} onChange={e => setTelefones(t => t.map((x,j) => j===i ? {...x,numero:e.target.value} : x))} />
-              <select className="form-control" style={{flex:1}}
-                value={tel.tipo} onChange={e => setTelefones(t => t.map((x,j) => j===i ? {...x,tipo:e.target.value} : x))}>
-                <option value="celular">Celular</option>
-                <option value="residencial">Residencial</option>
-                <option value="comercial">Comercial</option>
-                <option value="whatsapp">WhatsApp</option>
-              </select>
-              {i > 0 && <button className="btn btn-danger" style={{padding:'6px 10px'}} onClick={() => setTelefones(t=>t.filter((_,j)=>j!==i))}>✕</button>}
-            </div>
+            <LinhaFone
+              key={i}
+              tel={tel}
+              index={i}
+              onChange={v => setTelefones(t => t.map((x,j) => j===i ? v : x))}
+              onRemove={() => setTelefones(t => t.filter((_,j) => j!==i))}
+            />
           ))}
-          <button className="btn btn-outline" style={{fontSize:'12px'}} onClick={() => setTelefones(t=>[...t,{numero:'',tipo:'celular',principal:false}])}>
+          <button className="btn btn-outline" style={{fontSize:'12px'}} onClick={() => setTelefones(t=>[...t,{numero:'',tipo:'',principal:false}])}>
             + Adicionar telefone
           </button>
 
           {/* E-mails */}
           <h4 style={{margin:'16px 0 8px',color:'#555',fontSize:'13px',fontWeight:600}}>E-mails</h4>
           {emails.map((em, i) => (
-            <div key={i} style={{display:'flex',gap:'8px',marginBottom:'8px',alignItems:'center'}}>
-              <input className="form-control" style={{flex:1}} placeholder="email@exemplo.com"
-                value={em.email} onChange={e => setEmails(t => t.map((x,j) => j===i ? {...x,email:e.target.value} : x))} />
-              {i > 0 && <button className="btn btn-danger" style={{padding:'6px 10px'}} onClick={() => setEmails(t=>t.filter((_,j)=>j!==i))}>✕</button>}
-            </div>
+            <LinhaEmail
+              key={i}
+              email={em.email}
+              index={i}
+              onChange={v => setEmails(t => t.map((x,j) => j===i ? {...x, email: v} : x))}
+              onRemove={() => setEmails(t => t.filter((_,j) => j!==i))}
+            />
           ))}
           <button className="btn btn-outline" style={{fontSize:'12px'}} onClick={() => setEmails(e=>[...e,{email:'',principal:false}])}>
             + Adicionar e-mail
@@ -426,15 +512,342 @@ function CampoCPF({ value, onChange, pessoaIdAtual = null, onAbrirEdicao = null 
   );
 }
 
-// Componentes auxiliares para o formulário
-function Campo({ label, value, onChange, type='text', placeholder='' }) {
+// ============================================================
+// CAMPO DATA NASCIMENTO — impede datas futuras
+// ============================================================
+function CampoDataNascimento({ value, onChange }) {
+  const [erroData, setErroData] = useState('');
+  // Calcula "hoje" no formato YYYY-MM-DD para o atributo max
+  const hoje = new Date().toISOString().split('T')[0];
+
+  function handleChange(v) {
+    if (v && v > hoje) {
+      setErroData('Data de nascimento não pode ser futura');
+    } else {
+      setErroData('');
+    }
+    onChange(v);
+  }
+
   return (
     <div className="form-group">
-      <label className="form-label">{label}</label>
-      <input type={type} className="form-control" value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} />
+      <label className="form-label">Data de nascimento</label>
+      <input
+        type="date"
+        className={`form-control ${erroData ? 'is-invalid' : ''}`}
+        value={value}
+        max={hoje}
+        onChange={e => handleChange(e.target.value)}
+      />
+      {erroData && <small style={{ color: '#e74c3c', fontSize: '12px' }}>⚠️ {erroData}</small>}
     </div>
   );
 }
+
+// ============================================================
+// SELECT COM ADIÇÃO — select normal + botão "..." para cadastrar
+// novo item diretamente na tela, sem abrir outra página
+// tipo: 'generos' | 'estados_civis' | 'profissoes'
+// onNovoItem: callback chamado com { id, nome } após salvar
+// ============================================================
+function SelectComAdicao({ label, value, onChange, opcoes = [], tipo, onNovoItem }) {
+  const [miniFormAberto, setMiniFormAberto] = useState(false);
+  const [novoNome, setNovoNome]             = useState('');
+  const [salvando, setSalvando]             = useState(false);
+
+  // Fecha o mini form e limpa o estado — sem sujeira
+  function fecharMiniForm() {
+    setMiniFormAberto(false);
+    setNovoNome('');
+  }
+
+  async function salvarNovo() {
+    if (!novoNome.trim()) return toast.error('Digite um nome para cadastrar');
+    setSalvando(true);
+    try {
+      const { data } = await pessoasAPI.criarAuxiliar(tipo, { nome: novoNome.trim() });
+      if (data.ok) {
+        toast.success(`"${data.dados.nome}" cadastrado com sucesso!`);
+        onNovoItem(data.dados); // atualiza lista e auto-seleciona no form pai
+        fecharMiniForm();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.mensagem || 'Erro ao cadastrar');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="form-group">
+      <label className="form-label">{label}</label>
+      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+        <select
+          className="form-control"
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          style={{ flex: 1 }}
+        >
+          <option value="">— Selecione —</option>
+          {opcoes.map(o => <option key={o.id} value={o.id}>{o.nome}</option>)}
+        </select>
+        {/* Botão "..." abre mini formulário para cadastrar novo item */}
+        <button
+          type="button"
+          title={`Cadastrar novo(a) ${label} que não está na lista`}
+          className="btn btn-outline"
+          style={{ padding: '6px 10px', fontSize: '15px', flexShrink: 0, lineHeight: 1 }}
+          onClick={() => setMiniFormAberto(v => !v)}
+        >
+          …
+        </button>
+      </div>
+
+      {/* Mini formulário inline — aparece abaixo do select quando "..." é clicado */}
+      {miniFormAberto && (
+        <div style={{
+          marginTop: '8px', padding: '10px 12px',
+          background: '#f0f4ff', border: '1px solid #c5d0e6',
+          borderRadius: '4px'
+        }}>
+          <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: '#444' }}>
+            Novo(a) {label}
+          </div>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <input
+              autoFocus
+              className="form-control"
+              placeholder={`Ex.: ${label === 'Profissão' ? 'Pedreiro' : label === 'Gênero' ? 'Não binário' : 'Viúvo(a)'}`}
+              value={novoNome}
+              onChange={e => setNovoNome(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') salvarNovo(); if (e.key === 'Escape') fecharMiniForm(); }}
+              style={{ flex: 1 }}
+            />
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ fontSize: '12px', padding: '6px 14px', flexShrink: 0 }}
+              onClick={salvarNovo}
+              disabled={salvando}
+            >
+              {salvando ? '...' : 'Salvar'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline"
+              style={{ fontSize: '12px', padding: '6px 10px', flexShrink: 0 }}
+              onClick={fecharMiniForm}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// CAMPO NOME COMPLETO — exige pelo menos duas palavras (nome + sobrenome)
+// Avisa ao sair do campo, bloqueia no Salvar também
+// ============================================================
+function CampoNomeCompleto({ value, onChange }) {
+  const [erroNome, setErroNome] = useState('');
+
+  function handleBlur() {
+    const partes = (value || '').trim().split(/\s+/).filter(Boolean);
+    if (partes.length === 1) {
+      setErroNome('Informe o nome completo (nome e sobrenome)');
+    } else {
+      setErroNome('');
+    }
+  }
+
+  return (
+    <div className="form-group">
+      <label className="form-label">Nome completo *</label>
+      <input
+        type="text"
+        className={`form-control ${erroNome ? 'is-invalid' : ''}`}
+        value={value}
+        onChange={e => { setErroNome(''); onChange(e.target.value); }}
+        onBlur={handleBlur}
+        placeholder="Nome e Sobrenome"
+      />
+      {erroNome && <small style={{ color: '#e74c3c', fontSize: '12px' }}>⚠️ {erroNome}</small>}
+    </div>
+  );
+}
+
+// ============================================================
+// LINHA FONE — número com máscara + campo de texto livre para descrição
+// O usuário digita o que quiser: "Celular", "esposa Edna", "WhatsApp trabalho", etc.
+// ============================================================
+function LinhaFone({ tel, index, onChange, onRemove }) {
+  // Máscara adaptativa: fixo (xx) xxxx-xxxx ou celular (xx) xxxxx-xxxx
+  function mascaraTelefone(value) {
+    const limpo = value.replace(/\D/g, '').slice(0, 11);
+    if (!limpo) return '';
+    if (limpo.length <= 2)  return `(${limpo}`;
+    if (limpo.length <= 6)  return `(${limpo.slice(0,2)}) ${limpo.slice(2)}`;
+    if (limpo.length <= 10) return `(${limpo.slice(0,2)}) ${limpo.slice(2,6)}-${limpo.slice(6)}`;
+    return                         `(${limpo.slice(0,2)}) ${limpo.slice(2,7)}-${limpo.slice(7)}`;
+  }
+
+  return (
+    <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+      {/* Número com máscara automática */}
+      <input
+        className="form-control"
+        style={{ flex: 2 }}
+        placeholder="(11) 99999-9999"
+        value={tel.numero}
+        maxLength={15}
+        onChange={e => onChange({ ...tel, numero: mascaraTelefone(e.target.value) })}
+      />
+      {/* Descrição livre: Celular, Comercial, esposa Edna, recado... */}
+      <input
+        className="form-control"
+        style={{ flex: 1 }}
+        placeholder="Descrição do Telefone"
+        value={tel.tipo || ''}
+        onChange={e => onChange({ ...tel, tipo: e.target.value })}
+      />
+      {/* Botão remover — só aparece a partir da segunda linha */}
+      {index > 0 && (
+        <button
+          type="button"
+          className="btn btn-danger"
+          style={{ padding: '6px 10px', flexShrink: 0 }}
+          onClick={onRemove}
+        >✕</button>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// LINHA EMAIL — campo de e-mail com validação de formato no blur
+// ============================================================
+function LinhaEmail({ email, index, onChange, onRemove }) {
+  const [erroEmail, setErroEmail] = useState('');
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  function handleBlur() {
+    if (email && !emailRegex.test(email.trim())) {
+      setErroEmail('E-mail inválido');
+    } else {
+      setErroEmail('');
+    }
+  }
+
+  return (
+    <div style={{ marginBottom: erroEmail ? '4px' : '8px' }}>
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <input
+          className={`form-control ${erroEmail ? 'is-invalid' : ''}`}
+          style={{ flex: 1 }}
+          placeholder="email@exemplo.com"
+          value={email}
+          onChange={e => { setErroEmail(''); onChange(e.target.value); }}
+          onBlur={handleBlur}
+        />
+        {index > 0 && (
+          <button
+            type="button"
+            className="btn btn-danger"
+            style={{ padding: '6px 10px', flexShrink: 0 }}
+            onClick={onRemove}
+          >✕</button>
+        )}
+      </div>
+      {erroEmail && <small style={{ color: '#e74c3c', fontSize: '12px' }}>⚠️ {erroEmail}</small>}
+    </div>
+  );
+}
+
+// ============================================================
+// CAMPO CEP — máscara xxxxx-xxx + busca automática via ViaCEP
+// onAutoFill: chamado com { logradouro, bairro, cidade, estado }
+// após busca bem-sucedida
+// ============================================================
+function CampoCEP({ value, onChange, onAutoFill }) {
+  const [buscando, setBuscando] = useState(false);
+  const [erroCep, setErroCep]   = useState('');
+
+  // Aplica máscara xxxxx-xxx durante a digitação
+  function mascaraCEP(v) {
+    const limpo = v.replace(/\D/g, '').slice(0, 8);
+    return limpo.replace(/(\d{5})(\d)/, '$1-$2');
+  }
+
+  function handleChange(e) {
+    setErroCep('');
+    onChange(mascaraCEP(e.target.value));
+  }
+
+  // Ao sair do campo: busca endereço na API ViaCEP (gratuita, sem autenticação)
+  async function handleBlur() {
+    const limpo = (value || '').replace(/\D/g, '');
+    if (!limpo) return;
+    if (limpo.length < 8) { setErroCep('CEP incompleto'); return; }
+
+    setBuscando(true);
+    setErroCep('');
+    try {
+      const resp = await fetch(`https://viacep.com.br/ws/${limpo}/json/`);
+      const dados = await resp.json();
+
+      if (dados.erro) {
+        setErroCep('CEP não encontrado');
+        return;
+      }
+
+      // Repassa os dados para o formulário pai preencher os campos
+      onAutoFill({
+        logradouro: dados.logradouro || '',
+        bairro:     dados.bairro     || '',
+        cidade:     dados.localidade || '',
+        estado:     dados.uf         || '',
+      });
+    } catch {
+      setErroCep('Erro ao consultar CEP — verifique a conexão');
+    } finally {
+      setBuscando(false);
+    }
+  }
+
+  return (
+    <div className="form-group">
+      <label className="form-label">CEP</label>
+      <input
+        type="text"
+        className={`form-control ${erroCep ? 'is-invalid' : ''}`}
+        value={value}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        placeholder="00000-000"
+        maxLength={9}
+      />
+      {buscando && <small style={{ color: '#888', fontSize: '12px' }}>🔍 Buscando endereço...</small>}
+      {erroCep  && <small style={{ color: '#e74c3c', fontSize: '12px' }}>⚠️ {erroCep}</small>}
+    </div>
+  );
+}
+
+// ============================================================
+// COMPONENTES AUXILIARES BÁSICOS
+// Campo usa forwardRef para permitir que o pai passe um ref
+// (usado pelo CampoCEP para mover o cursor para o campo Número)
+// ============================================================
+const Campo = React.forwardRef(function Campo({ label, value, onChange, type='text', placeholder='' }, ref) {
+  return (
+    <div className="form-group">
+      <label className="form-label">{label}</label>
+      <input ref={ref} type={type} className="form-control" value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} />
+    </div>
+  );
+});
 function Select({ label, value, onChange, opcoes=[] }) {
   return (
     <div className="form-group">

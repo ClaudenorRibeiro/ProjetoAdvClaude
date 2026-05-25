@@ -125,23 +125,32 @@ async function criar(req, res) {
 
 // POST /api/audiencias/:id/ata — Registra a ata de uma audiência
 async function registrarAta(req, res) {
-  try {
-    const { id } = req.params;
-    const { resultado, houve_acordo, valor_acordo, parcelas, valor_parcela,
-            data_primeiro_pagamento, nova_audiencia, observacoes,
-            // Prazos e tarefas gerados pela ata
-            prazos = [], tarefas = [] } = req.body;
+  const { id } = req.params;
+  const { resultado, houve_acordo, valor_acordo, parcelas, valor_parcela,
+          data_primeiro_pagamento, nova_audiencia, observacoes,
+          // Prazos e tarefas opcionais gerados pela ata
+          prazos = [], tarefas = [] } = req.body;
 
-    // Verifica se já tem ata
+  // Verifica se já tem ata antes de iniciar a transação (leitura simples)
+  try {
     const [ataExistente] = await pool.execute(
       'SELECT id FROM ata_audiencia WHERE audiencia_id = ?', [id]
     );
     if (ataExistente.length > 0) {
       return erro(res, 'Esta audiência já possui ata registrada');
     }
+  } catch (err) {
+    return erroInterno(res, err);
+  }
 
-    // Cria a ata
-    const [result] = await pool.execute(
+  // Transação: ata + lançamento financeiro + prazos + tarefas — tudo ou nada
+  // Se qualquer passo falhar, nenhum dado fica pela metade no banco
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // 1. Cria a ata da audiência
+    const [result] = await conn.execute(
       `INSERT INTO ata_audiencia
          (audiencia_id, resultado, houve_acordo, valor_acordo, parcelas,
           valor_parcela, data_primeiro_pagamento, nova_audiencia, observacoes, criado_por)
@@ -156,16 +165,16 @@ async function registrarAta(req, res) {
     );
 
     // Busca o processo_id da audiência para vincular prazos/tarefas
-    const [aud] = await pool.execute('SELECT processo_id FROM audiencia WHERE id = ?', [id]);
+    const [aud] = await conn.execute('SELECT processo_id FROM audiencia WHERE id = ?', [id]);
     const processoId = aud[0]?.processo_id;
 
-    // Se houve acordo, lança automaticamente no financeiro da pasta
+    // 2. Se houve acordo, lança automaticamente no financeiro da pasta
     if (houve_acordo && valor_acordo) {
-      const [proc] = await pool.execute(
+      const [proc] = await conn.execute(
         'SELECT pasta_id FROM processo WHERE id = ?', [processoId]
       );
       if (proc[0]?.pasta_id) {
-        await pool.execute(
+        await conn.execute(
           `INSERT INTO conta_corrente_pasta (pasta_id, data, descricao, valor, tipo, usuario_id)
            VALUES (?, CURDATE(), 'Acordo em audiência', ?, 'credito', ?)`,
           [proc[0].pasta_id, valor_acordo, req.usuario.id]
@@ -173,7 +182,7 @@ async function registrarAta(req, res) {
       }
     }
 
-    // Cria os prazos gerados pela ata
+    // 3. Cria os prazos gerados pela ata
     for (const p of prazos) {
       if (p.descricao && p.data_inicio) {
         const { calcularVencimento } = require('../services/calendarioService');
@@ -181,7 +190,7 @@ async function registrarAta(req, res) {
           ? await calcularVencimento(p.data_inicio, p.quantidade, p.tipo_dias || 'uteis')
           : p.data_vencimento;
 
-        await pool.execute(
+        await conn.execute(
           `INSERT INTO prazos_processo (processo_id, subtipo_id, descricao, data_inicio,
             quantidade, tipo_dias, data_vencimento, delegado_para, criado_por)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -192,10 +201,10 @@ async function registrarAta(req, res) {
       }
     }
 
-    // Cria as tarefas geradas pela ata
+    // 4. Cria as tarefas geradas pela ata
     for (const t of tarefas) {
       if (t.titulo) {
-        await pool.execute(
+        await conn.execute(
           `INSERT INTO tarefas (titulo, descricao, prioridade, processo_id, atribuida_para,
             data_vencimento, criado_por)
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -205,10 +214,14 @@ async function registrarAta(req, res) {
       }
     }
 
+    await conn.commit();         // Grava ata + financeiro + prazos + tarefas de uma vez
     await auditoria.registrar(req.usuario.id, 'ata_audiencia', 'criar', result.insertId);
     return sucesso(res, { id: result.insertId }, 'Ata registrada com sucesso', 201);
   } catch (err) {
+    await conn.rollback();       // Desfaz tudo se qualquer passo falhou
     return erroInterno(res, err);
+  } finally {
+    conn.release();              // SEMPRE devolve a conexão ao pool
   }
 }
 

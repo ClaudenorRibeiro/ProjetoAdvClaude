@@ -32,7 +32,9 @@ router.get('/auth/verificar',      autenticar, authCtrl.verificarToken);
 router.get('/dashboard', autenticar, dashboardCtrl.buscarDados);
 
 // ---- PESSOAS ----
-router.get('/pessoas/auxiliares',         autenticar, pessoasCtrl.buscarAuxiliares);
+router.get('/pessoas/auxiliares',              autenticar, pessoasCtrl.buscarAuxiliares);
+// Cadastra novo item em tabela auxiliar (generos, estados_civis, profissoes)
+router.post('/pessoas/auxiliares/:tipo',       autenticar, verificarPermissao('pessoas','cadastrar'), pessoasCtrl.criarAuxiliar);
 router.get('/pessoas/fisicas',            autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.listarFisicas);
 // IMPORTANTE: rota /cpf/:cpf deve ficar ANTES de /:id para o Express não capturar "cpf" como id
 router.get('/pessoas/fisicas/cpf/:cpf',   autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.buscarPorCPF);

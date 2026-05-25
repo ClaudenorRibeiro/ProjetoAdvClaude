@@ -99,27 +99,35 @@ async function buscarPasta(req, res) {
 
 // POST /api/processos/pastas — Cria nova pasta
 async function criarPasta(req, res) {
+  const { titulo, area_direito, tipo_pessoa, cliente_id } = req.body;
+
+  if (!titulo || !area_direito || !tipo_pessoa || !cliente_id) {
+    return erro(res, 'Título, área do direito, tipo de pessoa e cliente são obrigatórios');
+  }
+
+  // Transação: numeração sequencial + INSERT dentro do mesmo lock evita número duplicado em concorrência
+  const conn = await pool.getConnection();
   try {
-    const { titulo, area_direito, tipo_pessoa, cliente_id } = req.body;
+    await conn.beginTransaction();
 
-    if (!titulo || !area_direito || !tipo_pessoa || !cliente_id) {
-      return erro(res, 'Título, área do direito, tipo de pessoa e cliente são obrigatórios');
-    }
-
-    // Gera próximo número de pasta
-    const [ultimo] = await pool.execute('SELECT MAX(numero) as ultimo FROM pasta');
+    // Gera próximo número de pasta dentro da transação (SELECT dentro da tx mantém consistência)
+    const [ultimo] = await conn.execute('SELECT MAX(numero) as ultimo FROM pasta');
     const proximoNumero = (ultimo[0].ultimo || 0) + 1;
 
-    const [result] = await pool.execute(
+    const [result] = await conn.execute(
       `INSERT INTO pasta (numero, titulo, area_direito, tipo_pessoa, cliente_id, criado_por)
        VALUES (?, ?, ?, ?, ?, ?)`,
       [proximoNumero, titulo.trim(), area_direito, tipo_pessoa, cliente_id, req.usuario.id]
     );
 
+    await conn.commit();         // Grava pasta com número garantido
     await auditoria.registrar(req.usuario.id, 'pasta', 'criar', result.insertId);
     return sucesso(res, { id: result.insertId, numero: proximoNumero }, 'Pasta criada com sucesso', 201);
   } catch (err) {
+    await conn.rollback();       // Desfaz se falhou
     return erroInterno(res, err);
+  } finally {
+    conn.release();              // SEMPRE devolve a conexão ao pool
   }
 }
 
@@ -171,13 +179,17 @@ async function buscarProcesso(req, res) {
 
 // POST /api/processos — Cria novo processo vinculado a uma pasta
 async function criarProcesso(req, res) {
+  const { pasta_id, numero, vara_id, status_id, data_inicio, observacoes,
+          partes = [], responsaveis = [] } = req.body;
+
+  if (!pasta_id) return erro(res, 'Pasta é obrigatória');
+
+  // Transação: processo + partes + responsáveis gravados juntos ou nenhum é
+  const conn = await pool.getConnection();
   try {
-    const { pasta_id, numero, vara_id, status_id, data_inicio, observacoes,
-            partes = [], responsaveis = [] } = req.body;
+    await conn.beginTransaction();
 
-    if (!pasta_id) return erro(res, 'Pasta é obrigatória');
-
-    const [result] = await pool.execute(
+    const [result] = await conn.execute(
       `INSERT INTO processo (pasta_id, numero, vara_id, status_id, data_inicio, observacoes, criado_por)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [pasta_id, numero || null, vara_id || null, status_id || null,
@@ -186,27 +198,31 @@ async function criarProcesso(req, res) {
 
     const processoId = result.insertId;
 
-    // Insere partes do processo
+    // Insere as partes do processo (autores, réus, terceiros, etc.)
     for (const parte of partes) {
-      await pool.execute(
+      await conn.execute(
         `INSERT INTO partes_processo (processo_id, tipo_pessoa, pessoa_id, polo)
          VALUES (?, ?, ?, ?)`,
         [processoId, parte.tipo_pessoa, parte.pessoa_id, parte.polo]
       );
     }
 
-    // Insere responsáveis
+    // Insere os responsáveis (advogados vinculados ao processo)
     for (const usuarioId of responsaveis) {
-      await pool.execute(
+      await conn.execute(
         'INSERT INTO processo_responsaveis (processo_id, usuario_id) VALUES (?, ?)',
         [processoId, usuarioId]
       );
     }
 
+    await conn.commit();         // Grava processo + partes + responsáveis de uma vez
     await auditoria.registrar(req.usuario.id, 'processo', 'criar', processoId);
     return sucesso(res, { id: processoId }, 'Processo criado com sucesso', 201);
   } catch (err) {
+    await conn.rollback();       // Desfaz tudo se qualquer INSERT falhou
     return erroInterno(res, err);
+  } finally {
+    conn.release();              // SEMPRE devolve a conexão ao pool
   }
 }
 

@@ -108,25 +108,33 @@ async function buscarFisica(req, res) {
 
 // POST /api/pessoas/fisicas — Cadastra nova pessoa física
 async function criarFisica(req, res) {
-  try {
-    const {
-      nome, cpf, rg, data_nascimento, estado_civil_id, profissao_id,
-      genero_id, cep, logradouro, numero, complemento, bairro, cidade, estado,
-      observacoes, telefones = [], emails = []
-    } = req.body;
+  const {
+    nome, cpf, rg, data_nascimento, estado_civil_id, profissao_id,
+    genero_id, cep, logradouro, numero, complemento, bairro, cidade, estado,
+    observacoes, telefones = [], emails = []
+  } = req.body;
 
-    if (!nome) return erro(res, 'O nome é obrigatório');
+  if (!nome) return erro(res, 'O nome é obrigatório');
 
-    // Verifica CPF duplicado
-    if (cpf) {
+  // Verifica CPF duplicado antes de iniciar a transação (leitura simples, sem lock)
+  if (cpf) {
+    try {
       const cpfLimpo = cpf.replace(/\D/g, '');
       const [dup] = await pool.execute(
         'SELECT id FROM pessoas_fisicas WHERE cpf = ?', [cpfLimpo]
       );
       if (dup.length > 0) return erro(res, 'CPF já cadastrado no sistema');
+    } catch (err) {
+      return erroInterno(res, err);
     }
+  }
 
-    const [result] = await pool.execute(
+  // Transação: garante que pessoa, telefones e e-mails são gravados juntos ou nenhum é
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [result] = await conn.execute(
       `INSERT INTO pessoas_fisicas
          (nome, cpf, rg, data_nascimento, estado_civil_id, profissao_id, genero_id,
           cep, logradouro, numero, complemento, bairro, cidade, estado, observacoes, criado_por)
@@ -142,30 +150,34 @@ async function criarFisica(req, res) {
 
     const pessoaId = result.insertId;
 
-    // Insere telefones
+    // Insere telefones vinculados à pessoa
     for (const tel of telefones) {
       if (tel.numero) {
-        await pool.execute(
+        await conn.execute(
           'INSERT INTO telefones_pf (pessoa_id, numero, tipo, principal) VALUES (?, ?, ?, ?)',
           [pessoaId, tel.numero, tel.tipo || 'celular', tel.principal ? 1 : 0]
         );
       }
     }
 
-    // Insere e-mails
+    // Insere e-mails vinculados à pessoa
     for (const em of emails) {
       if (em.email) {
-        await pool.execute(
+        await conn.execute(
           'INSERT INTO emails_pf (pessoa_id, email, principal) VALUES (?, ?, ?)',
           [pessoaId, em.email, em.principal ? 1 : 0]
         );
       }
     }
 
+    await conn.commit();         // Grava tudo de uma vez — pessoa + telefones + e-mails
     await auditoria.registrar(req.usuario.id, 'pessoas_fisicas', 'criar', pessoaId);
     return sucesso(res, { id: pessoaId }, 'Pessoa cadastrada com sucesso', 201);
   } catch (err) {
+    await conn.rollback();       // Desfaz tudo se qualquer INSERT falhou
     return erroInterno(res, err);
+  } finally {
+    conn.release();              // SEMPRE devolve a conexão ao pool
   }
 }
 
@@ -266,16 +278,20 @@ async function listarJuridicas(req, res) {
 
 // POST /api/pessoas/juridicas — Cadastra pessoa jurídica
 async function criarJuridica(req, res) {
+  const {
+    razao_social, nome_fantasia, cnpj, inscricao_estadual, representante_legal,
+    cep, logradouro, numero, complemento, bairro, cidade, estado,
+    observacoes, telefones = [], emails = []
+  } = req.body;
+
+  if (!razao_social) return erro(res, 'A razão social é obrigatória');
+
+  // Transação: garante que empresa, telefones e e-mails são gravados juntos ou nenhum é
+  const conn = await pool.getConnection();
   try {
-    const {
-      razao_social, nome_fantasia, cnpj, inscricao_estadual, representante_legal,
-      cep, logradouro, numero, complemento, bairro, cidade, estado,
-      observacoes, telefones = [], emails = []
-    } = req.body;
+    await conn.beginTransaction();
 
-    if (!razao_social) return erro(res, 'A razão social é obrigatória');
-
-    const [result] = await pool.execute(
+    const [result] = await conn.execute(
       `INSERT INTO pessoas_juridicas
          (razao_social, nome_fantasia, cnpj, inscricao_estadual, representante_legal,
           cep, logradouro, numero, complemento, bairro, cidade, estado, observacoes, criado_por)
@@ -291,25 +307,67 @@ async function criarJuridica(req, res) {
 
     const pessoaId = result.insertId;
 
+    // Insere telefones vinculados à empresa
     for (const tel of telefones) {
       if (tel.numero) {
-        await pool.execute(
+        await conn.execute(
           'INSERT INTO telefones_pj (pessoa_id, numero, tipo, principal) VALUES (?, ?, ?, ?)',
           [pessoaId, tel.numero, tel.tipo || 'comercial', tel.principal ? 1 : 0]
         );
       }
     }
+
+    // Insere e-mails vinculados à empresa
     for (const em of emails) {
       if (em.email) {
-        await pool.execute(
+        await conn.execute(
           'INSERT INTO emails_pj (pessoa_id, email, principal) VALUES (?, ?, ?)',
           [pessoaId, em.email, em.principal ? 1 : 0]
         );
       }
     }
 
+    await conn.commit();         // Grava tudo de uma vez — empresa + telefones + e-mails
     await auditoria.registrar(req.usuario.id, 'pessoas_juridicas', 'criar', pessoaId);
     return sucesso(res, { id: pessoaId }, 'Pessoa jurídica cadastrada com sucesso', 201);
+  } catch (err) {
+    await conn.rollback();       // Desfaz tudo se qualquer INSERT falhou
+    return erroInterno(res, err);
+  } finally {
+    conn.release();              // SEMPRE devolve a conexão ao pool
+  }
+}
+
+// POST /api/pessoas/auxiliares/:tipo — Cadastra novo item em genero, estado_civil ou profissao
+// tipo aceito: "generos" | "estados_civis" | "profissoes"
+async function criarAuxiliar(req, res) {
+  try {
+    const { tipo } = req.params;
+    const { nome } = req.body;
+
+    if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
+
+    // Whitelist de tabelas — evita SQL injection via parâmetro de rota
+    const tabelas = {
+      generos:       'genero',
+      estados_civis: 'estado_civil',
+      profissoes:    'profissao',
+    };
+
+    const tabela = tabelas[tipo];
+    if (!tabela) return erro(res, 'Tipo inválido. Use: generos, estados_civis ou profissoes');
+
+    // Verifica se já existe o mesmo nome (case-insensitive)
+    const [dup] = await pool.execute(
+      `SELECT id FROM ${tabela} WHERE LOWER(nome) = LOWER(?)`, [nome.trim()]
+    );
+    if (dup.length > 0) return erro(res, `"${nome.trim()}" já está cadastrado na lista`);
+
+    const [result] = await pool.execute(
+      `INSERT INTO ${tabela} (nome) VALUES (?)`, [nome.trim()]
+    );
+
+    return sucesso(res, { id: result.insertId, nome: nome.trim() }, 'Cadastrado com sucesso', 201);
   } catch (err) {
     return erroInterno(res, err);
   }
@@ -350,5 +408,5 @@ async function buscarAuxiliares(req, res) {
 
 module.exports = {
   listarFisicas, buscarFisica, criarFisica, atualizarFisica, adicionarHistorico,
-  listarJuridicas, criarJuridica, buscarAuxiliares, buscarPorCPF
+  listarJuridicas, criarJuridica, buscarAuxiliares, buscarPorCPF, criarAuxiliar
 };
