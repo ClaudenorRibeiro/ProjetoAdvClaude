@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { pessoasAPI } from '../../services/api';
-import { formatarCPF, formatarCNPJ, formatarData } from '../../utils/formatters';
+import { formatarCPF, formatarCNPJ, formatarData, mascaraCPF, validarCPF } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 
 export default function Pessoas() {
@@ -37,9 +37,18 @@ export default function Pessoas() {
   function abrirNovoCadastro() { setPessoaSelecionada(null); setModalAberto(true); }
   function abrirEdicao(pessoa) { setPessoaSelecionada(pessoa); setModalAberto(true); }
 
-  function fecharModal(recarregar) {
+  function fecharModal(recarregar, pessoaParaEditar = null) {
     setModalAberto(false);
-    if (recarregar) carregar();
+    if (pessoaParaEditar) {
+      // CPF duplicado: fecha o form de cadastro e abre o form de edição da pessoa encontrada
+      // Pequeno delay para o React processar o fechamento antes de reabrir
+      setTimeout(() => {
+        setPessoaSelecionada(pessoaParaEditar);
+        setModalAberto(true);
+      }, 50);
+    } else if (recarregar) {
+      carregar();
+    }
   }
 
   const totalPaginas = Math.ceil(total / LIMITE);
@@ -99,6 +108,7 @@ export default function Pessoas() {
           tipo={aba}
           pessoa={pessoaSelecionada}
           onFechar={fecharModal}
+          onAbrirEdicao={(p) => fecharModal(false, p)}
         />
       )}
     </div>
@@ -158,7 +168,7 @@ function TabelaJuridicas({ lista, onEditar }) {
 }
 
 // Modal de cadastro / edição de pessoa
-function ModalPessoa({ tipo, pessoa, onFechar }) {
+function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
   const [form, setForm]         = useState(pessoa || {});
   const [auxiliares, setAux]    = useState({ estados_civis: [], generos: [], profissoes: [] });
   const [salvando, setSalvando] = useState(false);
@@ -214,7 +224,13 @@ function ModalPessoa({ tipo, pessoa, onFechar }) {
             <>
               <div className="grid-2">
                 <Campo label="Nome completo *" value={form.nome||''} onChange={v=>set('nome',v)} />
-                <Campo label="CPF" value={form.cpf||''} onChange={v=>set('cpf',v)} placeholder="000.000.000-00" />
+                {/* CampoCPF aplica máscara, valida algoritmo e verifica duplicata no banco */}
+                <CampoCPF
+                  value={form.cpf||''}
+                  onChange={v=>set('cpf',v)}
+                  pessoaIdAtual={pessoa?.id || null}
+                  onAbrirEdicao={onAbrirEdicao}
+                />
               </div>
               <div className="grid-3">
                 <Campo label="RG" value={form.rg||''} onChange={v=>set('rg',v)} />
@@ -299,6 +315,113 @@ function ModalPessoa({ tipo, pessoa, onFechar }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ============================================================
+// CAMPO CPF — máscara automática + validação + duplicata
+// pessoaIdAtual: id da pessoa em edição (evita alertar sobre ela mesma)
+// onAbrirEdicao: callback chamado com { id, nome, cpf } quando usuário quer editar a duplicata
+// ============================================================
+function CampoCPF({ value, onChange, pessoaIdAtual = null, onAbrirEdicao = null }) {
+  const [erroCpf, setErroCpf]       = useState('');
+  const [verificando, setVerificando] = useState(false);
+  const [duplicata, setDuplicata]   = useState(null); // { id, nome, cpf } se já existe no banco
+
+  // Aplica máscara enquanto o usuário digita
+  function handleChange(e) {
+    const mascarado = mascaraCPF(e.target.value);
+    setErroCpf('');
+    setDuplicata(null);
+    onChange(mascarado);
+  }
+
+  // Ao sair do campo: valida algoritmo e consulta o banco
+  async function handleBlur() {
+    const limpo = (value || '').replace(/\D/g, '');
+
+    // Campo vazio — sem mensagem de erro
+    if (!limpo) { setErroCpf(''); return; }
+
+    // CPF incompleto
+    if (limpo.length < 11) { setErroCpf('CPF incompleto'); return; }
+
+    // Algoritmo dos dígitos verificadores
+    if (!validarCPF(limpo)) { setErroCpf('CPF inválido'); return; }
+
+    // CPF matematicamente válido — verifica se já existe no banco
+    setErroCpf('');
+    setVerificando(true);
+    try {
+      const { data } = await pessoasAPI.verificarCPF(limpo);
+      if (data.ok && data.dados.existe) {
+        const encontrado = data.dados.pessoa;
+        // Ignora se for a própria pessoa que está sendo editada
+        if (pessoaIdAtual && encontrado.id === pessoaIdAtual) return;
+        setDuplicata(encontrado);
+      }
+    } catch {
+      // Falha silenciosa — não bloqueia o cadastro se a verificação der erro
+    } finally {
+      setVerificando(false);
+    }
+  }
+
+  return (
+    <div className="form-group">
+      <label className="form-label">CPF</label>
+      <input
+        type="text"
+        className={`form-control ${erroCpf ? 'is-invalid' : ''}`}
+        value={value}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        placeholder="000.000.000-00"
+        maxLength={14}
+      />
+      {/* Exibe feedback abaixo do campo */}
+      {verificando && (
+        <small style={{ color: '#888', fontSize: '12px' }}>⏳ Verificando CPF...</small>
+      )}
+      {erroCpf && (
+        <small style={{ color: '#e74c3c', fontSize: '12px' }}>⚠️ {erroCpf}</small>
+      )}
+      {/* Alerta de CPF duplicado com opção de abrir edição */}
+      {duplicata && (
+        <div style={{
+          marginTop: '6px', padding: '10px 12px',
+          background: '#fff3cd', border: '1px solid #ffc107',
+          borderRadius: '4px', fontSize: '13px', lineHeight: '1.5'
+        }}>
+          <strong>⚠️ CPF já cadastrado</strong> para <strong>{duplicata.nome}</strong>.
+          {onAbrirEdicao ? (
+            <>
+              <br />Deseja abrir o cadastro para edição?
+              <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ fontSize: '12px', padding: '4px 14px' }}
+                  onClick={() => { setDuplicata(null); onAbrirEdicao(duplicata); }}
+                >
+                  Sim, editar
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  style={{ fontSize: '12px', padding: '4px 14px' }}
+                  onClick={() => setDuplicata(null)}
+                >
+                  Não
+                </button>
+              </div>
+            </>
+          ) : (
+            <span> Use o botão <em>Editar</em> na lista para alterar.</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

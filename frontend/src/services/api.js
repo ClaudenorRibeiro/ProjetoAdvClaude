@@ -64,6 +64,8 @@ export const pessoasAPI = {
   criarFisica:     (dados) => api.post('/pessoas/fisicas', dados),
   atualizarFisica: (id, dados) => api.put(`/pessoas/fisicas/${id}`, dados),
   adicionarHistorico: (id, dados) => api.post(`/pessoas/fisicas/${id}/historico`, dados),
+  // Verifica se CPF já existe — retorna { existe: false } ou { existe: true, pessoa: { id, nome, cpf } }
+  verificarCPF: (cpf) => api.get(`/pessoas/fisicas/cpf/${cpf}`),
   // Jurídicas
   listarJuridicas:  (params) => api.get('/pessoas/juridicas', { params }),
   criarJuridica:    (dados) => api.post('/pessoas/juridicas', dados),

@@ -25,7 +25,8 @@ async function listar(req, res) {
       params.push(req.usuario.id);
     }
 
-    const offset = (pagina - 1) * limite;
+    const limitInt  = parseInt(limite) || 30;
+    const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
 
     const [rows] = await pool.execute(
       `SELECT t.id, t.titulo, t.descricao, t.prioridade, t.data_vencimento,
@@ -42,8 +43,8 @@ async function listar(req, res) {
        ORDER BY t.concluida ASC,
                 FIELD(t.prioridade, 'urgente', 'normal', 'baixa'),
                 t.data_vencimento ASC
-       LIMIT ? OFFSET ?`,
-      [...params, parseInt(limite), parseInt(offset)]
+       LIMIT ${limitInt} OFFSET ${offsetInt}`,
+      params
     );
 
     const [total] = await pool.execute(

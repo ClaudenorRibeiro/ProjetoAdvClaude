@@ -13,7 +13,8 @@ const auditoria = require('../middleware/auditoria');
 async function listarPastas(req, res) {
   try {
     const { busca, pagina = 1, limite = 20 } = req.query;
-    const offset = (pagina - 1) * limite;
+    const limitInt  = parseInt(limite) || 20;
+    const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
     const params = [];
     let where = 'WHERE p.ativa = 1';
 
@@ -43,8 +44,8 @@ async function listarPastas(req, res) {
        FROM pasta p
        ${where}
        ORDER BY p.numero DESC
-       LIMIT ? OFFSET ?`,
-      [...params, parseInt(limite), parseInt(offset)]
+       LIMIT ${limitInt} OFFSET ${offsetInt}`,
+      params
     );
 
     const [total] = await pool.execute(

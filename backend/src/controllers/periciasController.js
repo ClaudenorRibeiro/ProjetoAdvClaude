@@ -11,7 +11,8 @@ const auditoria = require('../middleware/auditoria');
 async function listar(req, res) {
   try {
     const { processo_id, data_de, data_ate, pagina = 1, limite = 30 } = req.query;
-    const offset = (Number(pagina) - 1) * Number(limite);
+    const limitInt  = parseInt(limite) || 30;
+    const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
     const params = [];
     let where = 'WHERE 1=1';
 
@@ -46,8 +47,8 @@ async function listar(req, res) {
       LEFT JOIN pasta    pa ON pr.pasta_id    = pa.id
       ${where}
       ORDER BY pe.data DESC
-      LIMIT ? OFFSET ?
-    `, [...params, Number(limite), Number(offset)]);
+      LIMIT ${limitInt} OFFSET ${offsetInt}
+    `, params);
 
     const [[{ total }]] = await pool.execute(
       `SELECT COUNT(*) AS total FROM pericia pe ${where}`,

@@ -7,12 +7,12 @@ echo ============================================
 echo.
 
 echo [1/2] Iniciando Backend (porta 3001)...
-start "Backend - Sistema Advocacia" cmd /k "cd /d C:\Users\Claudenor\Downloads\ProjetoAdvClaude\backend && node server.js"
+start "Backend - Sistema Advocacia" cmd /k "cd /d C:\Users\Claudio\Downloads\ProjetoAdvClaude\backend && node server.js"
 
 timeout /t 3 /nobreak > nul
 
 echo [2/2] Iniciando Frontend (porta 3000)...
-start "Frontend - Sistema Advocacia" cmd /k "cd /d C:\Users\Claudenor\Downloads\ProjetoAdvClaude\frontend && npm start"
+start "Frontend - Sistema Advocacia" cmd /k "cd /d C:\Users\Claudio\Downloads\ProjetoAdvClaude\frontend && npm start"
 
 echo.
 echo ============================================

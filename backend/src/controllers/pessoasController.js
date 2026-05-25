@@ -13,7 +13,9 @@ const auditoria = require('../middleware/auditoria');
 async function listarFisicas(req, res) {
   try {
     const { busca, pagina = 1, limite = 20 } = req.query;
-    const offset = (pagina - 1) * limite;
+    // parseInt garante valores inteiros seguros para uso direto na query
+    const limitInt  = parseInt(limite)  || 20;
+    const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
     const params = [];
     let where = 'WHERE pf.ativo = 1';
 
@@ -23,6 +25,8 @@ async function listarFisicas(req, res) {
       params.push(`%${busca}%`, `%${busca}%`);
     }
 
+    // Nota: LIMIT e OFFSET são inseridos diretamente na query (já sanitizados com parseInt)
+    // pois o MySQL 8 tem incompatibilidade com parâmetros ? em LIMIT/OFFSET via prepared statements
     const [rows] = await pool.execute(
       `SELECT pf.id, pf.nome, pf.cpf, pf.data_nascimento,
               ec.nome AS estado_civil, g.nome AS genero,
@@ -39,8 +43,8 @@ async function listarFisicas(req, res) {
        LEFT JOIN genero g ON pf.genero_id = g.id
        ${where}
        ORDER BY pf.nome ASC
-       LIMIT ? OFFSET ?`,
-      [...params, parseInt(limite), parseInt(offset)]
+       LIMIT ${limitInt} OFFSET ${offsetInt}`,
+      params
     );
 
     // Conta total para paginação
@@ -226,7 +230,9 @@ async function adicionarHistorico(req, res) {
 async function listarJuridicas(req, res) {
   try {
     const { busca, pagina = 1, limite = 20 } = req.query;
-    const offset = (pagina - 1) * limite;
+    // parseInt garante valores inteiros seguros para uso direto na query
+    const limitInt  = parseInt(limite)  || 20;
+    const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
     const params = [];
     let where = 'WHERE pj.ativo = 1';
 
@@ -235,6 +241,7 @@ async function listarJuridicas(req, res) {
       params.push(`%${busca}%`, `%${busca}%`, `%${busca}%`);
     }
 
+    // Nota: LIMIT e OFFSET inseridos diretamente (sanitizados com parseInt — MySQL 8 não aceita ? em LIMIT/OFFSET)
     const [rows] = await pool.execute(
       `SELECT pj.id, pj.razao_social, pj.nome_fantasia, pj.cnpj, pj.representante_legal,
               (SELECT t.numero FROM telefones_pj t WHERE t.pessoa_id = pj.id AND t.ativo = 1
@@ -243,8 +250,8 @@ async function listarJuridicas(req, res) {
                ORDER BY e.principal DESC LIMIT 1) AS email
        FROM pessoas_juridicas pj ${where}
        ORDER BY pj.razao_social ASC
-       LIMIT ? OFFSET ?`,
-      [...params, parseInt(limite), parseInt(offset)]
+       LIMIT ${limitInt} OFFSET ${offsetInt}`,
+      params
     );
 
     const [total] = await pool.execute(
@@ -308,12 +315,32 @@ async function criarJuridica(req, res) {
   }
 }
 
+// GET /api/pessoas/fisicas/cpf/:cpf — Verifica se CPF já existe no banco
+async function buscarPorCPF(req, res) {
+  try {
+    const cpf = req.params.cpf.replace(/\D/g, '');
+    if (cpf.length !== 11) return erro(res, 'CPF inválido');
+
+    const [rows] = await pool.execute(
+      'SELECT id, nome, cpf FROM pessoas_fisicas WHERE cpf = ? AND ativo = 1',
+      [cpf]
+    );
+
+    if (!rows.length) return sucesso(res, { existe: false });
+
+    // Retorna que existe e dados básicos para o frontend decidir o que fazer
+    return sucesso(res, { existe: true, pessoa: rows[0] });
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
 // GET /api/pessoas/auxiliares — Retorna listas para preencher selects
 async function buscarAuxiliares(req, res) {
   try {
     const [estados_civis] = await pool.execute('SELECT * FROM estado_civil ORDER BY nome');
     const [generos]       = await pool.execute('SELECT * FROM genero ORDER BY nome');
-    const [profissoes]    = await pool.execute('SELECT * FROM profissao WHERE ativo=1 ORDER BY nome');
+    const [profissoes]    = await pool.execute('SELECT * FROM profissao ORDER BY nome');
 
     return sucesso(res, { estados_civis, generos, profissoes });
   } catch (err) {
@@ -323,5 +350,5 @@ async function buscarAuxiliares(req, res) {
 
 module.exports = {
   listarFisicas, buscarFisica, criarFisica, atualizarFisica, adicionarHistorico,
-  listarJuridicas, criarJuridica, buscarAuxiliares
+  listarJuridicas, criarJuridica, buscarAuxiliares, buscarPorCPF
 };

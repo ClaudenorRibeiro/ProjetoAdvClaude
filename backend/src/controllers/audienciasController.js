@@ -23,7 +23,8 @@ async function listar(req, res) {
       where += ' AND a.data < CURDATE() AND a.ata_impressa = 0 AND NOT EXISTS (SELECT 1 FROM ata_audiencia aa WHERE aa.audiencia_id = a.id)';
     }
 
-    const offset = (pagina - 1) * limite;
+    const limitInt  = parseInt(limite) || 30;
+    const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
 
     const [rows] = await pool.execute(
       `SELECT a.id, a.data, a.hora, a.modalidade, a.local, a.plataforma_virtual,
@@ -40,8 +41,8 @@ async function listar(req, res) {
        JOIN pasta pa ON pr.pasta_id = pa.id
        ${where}
        ORDER BY a.data ASC, a.hora ASC
-       LIMIT ? OFFSET ?`,
-      [...params, parseInt(limite), parseInt(offset)]
+       LIMIT ${limitInt} OFFSET ${offsetInt}`,
+      params
     );
 
     const [total] = await pool.execute(

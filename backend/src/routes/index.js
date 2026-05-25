@@ -34,6 +34,8 @@ router.get('/dashboard', autenticar, dashboardCtrl.buscarDados);
 // ---- PESSOAS ----
 router.get('/pessoas/auxiliares',         autenticar, pessoasCtrl.buscarAuxiliares);
 router.get('/pessoas/fisicas',            autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.listarFisicas);
+// IMPORTANTE: rota /cpf/:cpf deve ficar ANTES de /:id para o Express não capturar "cpf" como id
+router.get('/pessoas/fisicas/cpf/:cpf',   autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.buscarPorCPF);
 router.get('/pessoas/fisicas/:id',        autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.buscarFisica);
 router.post('/pessoas/fisicas',           autenticar, verificarPermissao('pessoas','cadastrar'),  pessoasCtrl.criarFisica);
 router.put('/pessoas/fisicas/:id',        autenticar, verificarPermissao('pessoas','alterar'),    pessoasCtrl.atualizarFisica);
