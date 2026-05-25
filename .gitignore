@@ -18,3 +18,8 @@ npm-debug.log*
 # Sistema operacional
 .DS_Store
 Thumbs.db
+
+# Backups do banco de dados — ficam só na máquina local, não vão para o Git
+# (podem conter dados sensíveis dos clientes)
+backups/*.sql
+backups/*.sql.gz
