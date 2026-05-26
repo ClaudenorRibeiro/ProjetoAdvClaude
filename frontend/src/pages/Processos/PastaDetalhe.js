@@ -8,30 +8,38 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { processosAPI, andamentoAPI, prazosAPI, tarefasAPI, audienciasAPI, financeiroAPI } from '../../services/api';
 import { formatarData, formatarNumeroPasta, formatarMoeda, labelStatusPrazo, corPrazo, toTitleCase } from '../../utils/formatters';
-import { ModalNovoProcesso } from './Processos';
+import { ModalNovoProcesso, ModalEditarProcesso } from './Processos';
+import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
 
 export default function PastaDetalhe() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { temPermissao } = useAuth(); // Permissões do usuário logado
+
   const [pasta, setPasta]           = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [abaAtiva, setAbaAtiva]     = useState('processos');
 
-  // Estado por aba
-  const [processoAberto, setProcessoAberto] = useState(null);
-  const [andamentos, setAndamentos]         = useState([]);
-  const [prazos, setPrazos]                 = useState([]);
-  const [tarefas, setTarefas]               = useState([]);
-  const [audiencias, setAudiencias]         = useState([]);
-  const [contaCorrente, setContaCorrente]   = useState(null);
+  // Filtro de processo compartilhado pelas abas — 'todos' ou id (string) do processo
+  const [processoFiltro, setProcessoFiltro] = useState('todos');
+
+  // Dados por aba
+  const [andamentos, setAndamentos]       = useState([]);
+  const [prazos, setPrazos]               = useState([]);
+  const [tarefas, setTarefas]             = useState([]);
+  const [audiencias, setAudiencias]       = useState([]);
+  const [contaCorrente, setContaCorrente] = useState(null);
 
   // Modais
-  const [modalProcesso, setModalProcesso]     = useState(false);
-  const [modalAndamento, setModalAndamento]   = useState(false);
+  const [modalProcesso, setModalProcesso]         = useState(false);
+  const [modalEditar, setModalEditar]             = useState(false);
+  const [processoEditando, setProcessoEditando]   = useState(null);
+  const [modalAndamento, setModalAndamento]       = useState(false);
   const [andamentoEditando, setAndamentoEditando] = useState(null);
-  const [modalLancamento, setModalLancamento] = useState(false);
+  const [modalLancamento, setModalLancamento]     = useState(false);
 
+  // ---- Carrega a pasta ----
   const carregarPasta = useCallback(async () => {
     setCarregando(true);
     try {
@@ -43,43 +51,69 @@ export default function PastaDetalhe() {
 
   useEffect(() => { carregarPasta(); }, [carregarPasta]);
 
-  // Carrega dados da aba ao trocar
+  // ---- Recarrega dados quando muda a aba ou o filtro de processo ----
   useEffect(() => {
     if (!pasta) return;
-    if (abaAtiva === 'andamentos' && processoAberto) carregarAndamentos(processoAberto.id);
-    if (abaAtiva === 'prazos'     && pasta.processos?.length) carregarPrazos(pasta.processos[0].id);
+    if (abaAtiva === 'andamentos') carregarAndamentos();
+    if (abaAtiva === 'prazos')     carregarPrazos();
     if (abaAtiva === 'tarefas')    carregarTarefas();
     if (abaAtiva === 'audiencias') carregarAudiencias();
     if (abaAtiva === 'financeiro') carregarFinanceiro();
-  }, [abaAtiva, pasta]);
+  }, [abaAtiva, pasta, processoFiltro]); // eslint-disable-line
 
-  async function carregarAndamentos(processoId) {
+  // Retorna os IDs dos processos a buscar conforme o filtro atual
+  function idsParaBuscar() {
+    const procs = pasta?.processos || [];
+    if (processoFiltro === 'todos') return procs.map(p => p.id);
+    return [parseInt(processoFiltro)];
+  }
+
+  // ---- Funções de carga (todas respeitam processoFiltro) ----
+
+  async function carregarAndamentos() {
+    const ids = idsParaBuscar();
     try {
-      const { data } = await andamentoAPI.listar(processoId);
-      if (data.ok) setAndamentos(data.dados);
+      const resultados = await Promise.all(ids.map(pid => andamentoAPI.listar(pid)));
+      // Combina todos os andamentos marcando o processo de origem
+      const todos = resultados.flatMap((r, i) =>
+        (r.data.ok ? r.data.dados : []).map(a => ({ ...a, _procId: ids[i] }))
+      );
+      // Ordena por data decrescente
+      todos.sort((a, b) => new Date(b.data_andamento || b.criado_em) - new Date(a.data_andamento || a.criado_em));
+      setAndamentos(todos);
     } catch { toast.error('Erro ao carregar andamentos'); }
   }
 
-  async function carregarPrazos(processoId) {
+  async function carregarPrazos() {
+    const ids = idsParaBuscar();
     try {
-      const { data } = await prazosAPI.listar({ processo_id: processoId, limite: 50 });
-      if (data.ok) setPrazos(data.dados.registros);
+      const resultados = await Promise.all(
+        ids.map(pid => prazosAPI.listar({ processo_id: pid, limite: 50 }))
+      );
+      const todos = resultados.flatMap(r => r.data.ok ? r.data.dados.registros : []);
+      setPrazos(todos);
     } catch { toast.error('Erro ao carregar prazos'); }
   }
 
   async function carregarTarefas() {
+    const ids = idsParaBuscar();
     try {
-      const { data } = await tarefasAPI.listar({ concluida: '', limite: 50 });
-      if (data.ok) setTarefas(data.dados.registros);
+      const resultados = await Promise.all(
+        ids.map(pid => tarefasAPI.listar({ processo_id: pid, concluida: '', limite: 50 }))
+      );
+      const todos = resultados.flatMap(r => r.data.ok ? r.data.dados.registros : []);
+      setTarefas(todos);
     } catch {}
   }
 
   async function carregarAudiencias() {
-    const proc = pasta?.processos?.[0];
-    if (!proc) return;
+    const ids = idsParaBuscar();
     try {
-      const { data } = await audienciasAPI.listar({ processo_id: proc.id, limite: 50 });
-      if (data.ok) setAudiencias(data.dados.registros);
+      const resultados = await Promise.all(
+        ids.map(pid => audienciasAPI.listar({ processo_id: pid, limite: 50 }))
+      );
+      const todos = resultados.flatMap(r => r.data.ok ? r.data.dados.registros : []);
+      setAudiencias(todos);
     } catch {}
   }
 
@@ -95,25 +129,51 @@ export default function PastaDetalhe() {
     try {
       await andamentoAPI.excluir(andId);
       toast.success('Andamento excluído');
-      carregarAndamentos(processoAberto.id);
+      carregarAndamentos();
     } catch { toast.error('Erro ao excluir'); }
   }
 
-  function abrirProcesso(processo) {
-    setProcessoAberto(processo);
-    setAbaAtiva('andamentos');
-    carregarAndamentos(processo.id);
+  async function excluirProcesso(procId) {
+    if (!window.confirm('Tem certeza que deseja excluir este processo?\nEsta ação não pode ser desfeita.')) return;
+    try {
+      await processosAPI.excluirProcesso(procId);
+      toast.success('Processo excluído');
+      carregarPasta(); // Recarrega a pasta para atualizar a listagem
+    } catch (err) {
+      toast.error(err.response?.data?.mensagem || 'Erro ao excluir processo');
+    }
   }
 
-  // Monta o título do processo para exibição nos selects
-  function labelProcesso(pr) {
-    return pr.NomeTituloProc || pr.numProc || `Processo #${pr.id}`;
+  // ---- Helpers ----
+
+  // Processo atualmente selecionado (null quando 'todos')
+  function getProcessoSelecionado(procs) {
+    if (processoFiltro === 'todos') return null;
+    return procs.find(p => p.id === parseInt(processoFiltro)) || null;
   }
 
   if (carregando) return <div className="card"><div className="loading">Carregando pasta...</div></div>;
   if (!pasta)     return <div className="card"><p className="lista-vazia">Pasta não encontrada</p></div>;
 
-  const processos = pasta.processos || [];
+  const processos        = pasta.processos || [];
+  const processoSelecionado = getProcessoSelecionado(processos);
+
+  // Seletor de processo — reutilizado em todas as abas como elemento JSX
+  const selectProcesso = (
+    <select
+      className="form-control"
+      style={{ maxWidth: '340px' }}
+      value={processoFiltro}
+      onChange={e => setProcessoFiltro(e.target.value)}
+    >
+      <option value="todos">— Todos os processos —</option>
+      {processos.map(pr => (
+        <option key={pr.id} value={pr.id}>
+          {pr.numProc || `Processo #${pr.id}`}
+        </option>
+      ))}
+    </select>
+  );
 
   return (
     <div>
@@ -124,8 +184,14 @@ export default function PastaDetalhe() {
             ← Voltar
           </button>
           <div>
-            <div style={{ fontSize: '11px', color: '#888', marginBottom: '2px' }}>
-              Pasta {formatarNumeroPasta(pasta.numPasta)}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <span style={{
+                fontSize: '13px', fontWeight: '700', color: '#fff',
+                background: '#2d6be4', borderRadius: '6px',
+                padding: '2px 10px', letterSpacing: '0.5px'
+              }}>
+                Pasta {formatarNumeroPasta(pasta.numPasta)}
+              </span>
             </div>
             <h2 style={{ margin: 0, fontSize: '18px', color: '#1e2a3a' }}>
               {processos[0]?.NomeTituloProc || `Pasta ${formatarNumeroPasta(pasta.numPasta)}`}
@@ -204,21 +270,44 @@ export default function PastaDetalhe() {
                           {pr.numProc || '—'}
                         </span>
                       </td>
-                      <td>{pr.tipo_nome     ? <span className="badge badge-azul">{pr.tipo_nome}</span> : '—'}</td>
-                      <td>{pr.status_nome   ? <span className="badge badge-cinza">{pr.status_nome}</span> : '—'}</td>
+                      <td>{pr.tipo_nome   ? <span className="badge badge-azul">{pr.tipo_nome}</span>  : '—'}</td>
+                      <td>{pr.status_nome ? <span className="badge badge-cinza">{pr.status_nome}</span> : '—'}</td>
                       <td>{pr.instancia_nome || '—'}</td>
                       <td>
                         <div style={{ fontSize: '13px' }}>{pr.vara_nome || '—'}</div>
                         {pr.forum_nome && <div style={{ fontSize: '11px', color: '#888' }}>{pr.forum_nome}</div>}
                       </td>
                       <td>
-                        <button
-                          className="btn btn-outline"
-                          style={{ fontSize: '12px', padding: '4px 10px' }}
-                          onClick={() => abrirProcesso(pr)}
-                        >
-                          Andamentos
-                        </button>
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                          {/* Andamentos — sempre visível */}
+                          <button
+                            className="btn btn-outline"
+                            style={{ fontSize: '12px', padding: '4px 10px' }}
+                            onClick={() => { setProcessoFiltro(String(pr.id)); setAbaAtiva('andamentos'); }}
+                          >
+                            Andamentos
+                          </button>
+                          {/* Editar — requer permissão processos.alterar */}
+                          {temPermissao('processos', 'alterar') && (
+                            <button
+                              className="btn btn-outline"
+                              style={{ fontSize: '12px', padding: '4px 10px', color: '#2d6be4', borderColor: '#2d6be4' }}
+                              onClick={() => { setProcessoEditando(pr); setModalEditar(true); }}
+                            >
+                              Editar
+                            </button>
+                          )}
+                          {/* Excluir — requer permissão processos.excluir */}
+                          {temPermissao('processos', 'excluir') && (
+                            <button
+                              className="btn btn-danger"
+                              style={{ fontSize: '12px', padding: '4px 10px' }}
+                              onClick={() => excluirProcesso(pr.id)}
+                            >
+                              Excluir
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -235,59 +324,61 @@ export default function PastaDetalhe() {
         {abaAtiva === 'andamentos' && (
           <div>
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
-              <select
-                className="form-control" style={{ maxWidth: '360px' }}
-                value={processoAberto?.id || ''}
-                onChange={e => {
-                  const pr = processos.find(p => String(p.id) === e.target.value);
-                  if (pr) { setProcessoAberto(pr); carregarAndamentos(pr.id); }
-                }}
-              >
-                <option value="">— Selecione o processo —</option>
-                {processos.map(pr => (
-                  <option key={pr.id} value={pr.id}>{labelProcesso(pr)}</option>
-                ))}
-              </select>
-              {processoAberto && (
+              {selectProcesso}
+              {/* Botão de novo andamento só aparece quando um processo específico está selecionado */}
+              {processoSelecionado && (
                 <button className="btn btn-primary"
                   onClick={() => { setAndamentoEditando(null); setModalAndamento(true); }}>
                   + Novo Andamento
                 </button>
               )}
             </div>
-            {processoAberto ? (
-              <div className="tabela-wrapper">
-                <table className="tabela">
-                  <thead>
-                    <tr><th>Data</th><th>Descrição</th><th>Registrado por</th><th>Ações</th></tr>
-                  </thead>
-                  <tbody>
-                    {andamentos.map(a => (
-                      <tr key={a.id}>
-                        <td style={{ whiteSpace: 'nowrap' }}>{formatarData(a.data_andamento)}</td>
-                        <td style={{ maxWidth: '400px' }}>{a.descricao}</td>
-                        <td>{a.usuario_nome}</td>
-                        <td>
-                          <div style={{ display: 'flex', gap: '6px' }}>
-                            <button className="btn btn-outline" style={{ fontSize: '12px', padding: '4px 8px' }}
-                              onClick={() => { setAndamentoEditando(a); setModalAndamento(true); }}>
-                              Editar
-                            </button>
-                            <button className="btn btn-danger" style={{ fontSize: '12px', padding: '4px 8px' }}
-                              onClick={() => excluirAndamento(a.id)}>
-                              ✕
-                            </button>
-                          </div>
+            <div className="tabela-wrapper">
+              <table className="tabela">
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Descrição</th>
+                    {/* Coluna extra de processo só quando "Todos" está ativo */}
+                    {processoFiltro === 'todos' && <th>Processo</th>}
+                    <th>Registrado por</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {andamentos.map(a => (
+                    <tr key={a.id}>
+                      <td style={{ whiteSpace: 'nowrap' }}>{formatarData(a.data_andamento)}</td>
+                      <td style={{ maxWidth: '400px' }}>{a.descricao}</td>
+                      {processoFiltro === 'todos' && (
+                        <td style={{ fontFamily: 'monospace', fontSize: '11px', whiteSpace: 'nowrap', color: '#555' }}>
+                          {processos.find(p => p.id === a._procId)?.numProc || `#${a._procId}`}
                         </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {andamentos.length === 0 && <p className="lista-vazia">Nenhum andamento registrado</p>}
-              </div>
-            ) : (
-              <p className="lista-vazia">Selecione um processo para ver os andamentos</p>
-            )}
+                      )}
+                      <td>{a.usuario_nome}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button className="btn btn-outline" style={{ fontSize: '12px', padding: '4px 8px' }}
+                            onClick={() => {
+                              setAndamentoEditando(a);
+                              // Garante que o processo correto esteja selecionado ao editar
+                              if (processoFiltro === 'todos') setProcessoFiltro(String(a._procId));
+                              setModalAndamento(true);
+                            }}>
+                            Editar
+                          </button>
+                          <button className="btn btn-danger" style={{ fontSize: '12px', padding: '4px 8px' }}
+                            onClick={() => excluirAndamento(a.id)}>
+                            ✕
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {andamentos.length === 0 && <p className="lista-vazia">Nenhum andamento registrado</p>}
+            </div>
           </div>
         )}
 
@@ -295,14 +386,8 @@ export default function PastaDetalhe() {
         {abaAtiva === 'prazos' && (
           <div>
             <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <select className="form-control" style={{ maxWidth: '360px' }}
-                onChange={e => { if (e.target.value) carregarPrazos(e.target.value); }}>
-                <option value="">— Selecione o processo —</option>
-                {processos.map(pr => (
-                  <option key={pr.id} value={pr.id}>{labelProcesso(pr)}</option>
-                ))}
-              </select>
-              <Link to="/prazos" className="btn btn-outline" style={{ fontSize: '12px' }}>
+              {selectProcesso}
+              <Link to="/prazos" className="btn btn-outline" style={{ fontSize: '12px', marginLeft: 'auto' }}>
                 + Novo Prazo (via módulo)
               </Link>
             </div>
@@ -328,7 +413,7 @@ export default function PastaDetalhe() {
                   ))}
                 </tbody>
               </table>
-              {prazos.length === 0 && <p className="lista-vazia">Selecione um processo para ver os prazos</p>}
+              {prazos.length === 0 && <p className="lista-vazia">Nenhum prazo encontrado</p>}
             </div>
           </div>
         )}
@@ -336,8 +421,9 @@ export default function PastaDetalhe() {
         {/* === ABA: TAREFAS === */}
         {abaAtiva === 'tarefas' && (
           <div>
-            <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'flex-end' }}>
-              <Link to="/tarefas" className="btn btn-outline" style={{ fontSize: '12px' }}>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
+              {selectProcesso}
+              <Link to="/tarefas" className="btn btn-outline" style={{ fontSize: '12px', marginLeft: 'auto' }}>
                 + Nova Tarefa (via módulo)
               </Link>
             </div>
@@ -367,8 +453,9 @@ export default function PastaDetalhe() {
         {/* === ABA: AUDIÊNCIAS === */}
         {abaAtiva === 'audiencias' && (
           <div>
-            <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'flex-end' }}>
-              <Link to="/audiencias" className="btn btn-outline" style={{ fontSize: '12px' }}>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
+              {selectProcesso}
+              <Link to="/audiencias" className="btn btn-outline" style={{ fontSize: '12px', marginLeft: 'auto' }}>
                 + Nova Audiência (via módulo)
               </Link>
             </div>
@@ -394,6 +481,7 @@ export default function PastaDetalhe() {
         )}
 
         {/* === ABA: FINANCEIRO === */}
+        {/* Financeiro é por pasta — o seletor de processo é informativo */}
         {abaAtiva === 'financeiro' && (
           <div>
             {contaCorrente ? (
@@ -462,22 +550,37 @@ export default function PastaDetalhe() {
         )}
       </div>
 
-      {/* Modal: Novo Processo (na mesma pasta) */}
+      {/* Modal: Novo Processo (na mesma pasta)
+          processoBase = primeiro processo da pasta, para pré-preencher as partes */}
       {modalProcesso && (
         <ModalNovoProcesso
           pastaId={id}
+          processoBase={processos[0] || null}
           onFechar={(reload) => { setModalProcesso(false); if (reload) carregarPasta(); }}
         />
       )}
 
-      {/* Modal: Andamento */}
-      {modalAndamento && processoAberto && (
+      {/* Modal: Editar Processo */}
+      {modalEditar && processoEditando && (
+        <ModalEditarProcesso
+          processo={processoEditando}
+          onFechar={(reload) => {
+            setModalEditar(false);
+            setProcessoEditando(null);
+            if (reload) carregarPasta();
+          }}
+        />
+      )}
+
+      {/* Modal: Andamento — só abre quando há um processo específico selecionado */}
+      {modalAndamento && processoSelecionado && (
         <ModalAndamento
-          processoId={processoAberto.id}
+          processoId={processoSelecionado.id}
           andamento={andamentoEditando}
           onFechar={(reload) => {
             setModalAndamento(false);
-            if (reload) carregarAndamentos(processoAberto.id);
+            setAndamentoEditando(null);
+            if (reload) carregarAndamentos();
           }}
         />
       )}
@@ -493,9 +596,11 @@ export default function PastaDetalhe() {
   );
 }
 
-// ---- Modal de andamento (criar / editar) ----
+// ============================================================
+// Modal de andamento (criar / editar)
+// ============================================================
 function ModalAndamento({ processoId, andamento, onFechar }) {
-  const [form, setForm]       = useState(andamento || { data_andamento: new Date().toISOString().split('T')[0] });
+  const [form, setForm]         = useState(andamento || { data_andamento: new Date().toISOString().split('T')[0] });
   const [salvando, setSalvando] = useState(false);
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
@@ -548,9 +653,11 @@ function ModalAndamento({ processoId, andamento, onFechar }) {
   );
 }
 
-// ---- Modal de lançamento financeiro ----
+// ============================================================
+// Modal de lançamento financeiro
+// ============================================================
 function ModalLancamento({ pastaId, onFechar }) {
-  const [form, setForm]       = useState({ tipo: 'credito', data_lancamento: new Date().toISOString().split('T')[0] });
+  const [form, setForm]         = useState({ tipo: 'credito', data_lancamento: new Date().toISOString().split('T')[0] });
   const [salvando, setSalvando] = useState(false);
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }

@@ -21,7 +21,7 @@ Thumbs.db
 
 # Backups do banco de dados — ficam só na máquina local, não vão para o Git
 # (podem conter dados sensíveis dos clientes)
-# backups/*.sql
-# backups/*.sql.gz
+backups/*.sql
+backups/*.sql.gz
 # Exceção: .gitkeep garante que a pasta backups/ sempre existe no repositório
 !backups/.gitkeep

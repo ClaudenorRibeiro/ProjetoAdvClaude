@@ -13,7 +13,9 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3000 "') do taskkill /F /PI
 
 echo.
 echo ============================================
-echo   Sistema encerrado com sucesso!
+echo   Sistema encerrado! Fechando janelas...
 echo ============================================
 echo.
-pause
+
+:: Fecha todas as janelas do CMD abertas (inclusive esta)
+taskkill /F /IM cmd.exe /T 2>nul

@@ -61,6 +61,7 @@ router.get('/processos/pastas',                     autenticar, verificarPermiss
 router.get('/processos/pastas/:id',                 autenticar, verificarPermissao('processos','visualizar'), processosCtrl.buscarPasta);
 router.post('/processos',                           autenticar, verificarPermissao('processos','cadastrar'),  processosCtrl.criarProcesso);
 router.put('/processos/:id',                        autenticar, verificarPermissao('processos','alterar'),    processosCtrl.atualizarProcesso);
+router.delete('/processos/:id',                     autenticar, verificarPermissao('processos','excluir'),    processosCtrl.excluirProcesso);
 
 // ---- PRAZOS ----
 router.get('/prazos/tipos',       autenticar, prazosCtrl.buscarTipos);

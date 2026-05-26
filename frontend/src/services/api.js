@@ -88,6 +88,7 @@ export const processosAPI = {
   // Processos
   criarProcesso:     (dados) => api.post('/processos', dados),
   atualizarProcesso: (id, dados) => api.put(`/processos/${id}`, dados),
+  excluirProcesso:   (id) => api.delete(`/processos/${id}`),
   // Auxiliares (leitura)
   auxiliares:        () => api.get('/processos/auxiliares'),
   // Auxiliares (cadastro — admin)

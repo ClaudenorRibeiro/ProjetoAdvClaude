@@ -16,4 +16,7 @@ echo ============================================
 echo   Sistema encerrado com sucesso!
 echo ============================================
 echo.
-pause
+
+:: Fecha todas as janelas do CMD abertas (inclusive esta)
+taskkill /F /IM cmd.exe /T 2>nul
+

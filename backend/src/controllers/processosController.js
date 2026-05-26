@@ -62,14 +62,28 @@ async function listarPastas(req, res) {
          (SELECT pr.numProc
           FROM tblProc pr WHERE pr.pasta_id = pa.id AND pr.ativo = 1
           ORDER BY pr.id DESC LIMIT 1) AS num_proc,
-         (SELECT tp.nome
-          FROM tblProc pr JOIN tblTipoProc tp ON tp.id = pr.tipo_id
-          WHERE pr.pasta_id = pa.id AND pr.ativo = 1
-          ORDER BY pr.id DESC LIMIT 1) AS tipo_nome,
-         (SELECT sp.nome
-          FROM tblProc pr JOIN tblStatusProc sp ON sp.id = pr.status_id
-          WHERE pr.pasta_id = pa.id AND pr.ativo = 1
-          ORDER BY pr.id DESC LIMIT 1) AS status_nome,
+         -- Tipo: exibe o nome somente se TODOS os processos da pasta têm o mesmo tipo
+         CASE
+           WHEN (SELECT COUNT(DISTINCT pr.tipo_id)
+                 FROM tblProc pr WHERE pr.pasta_id = pa.id AND pr.ativo = 1
+                 AND pr.tipo_id IS NOT NULL) = 1
+           THEN (SELECT tp.nome FROM tblProc pr
+                 JOIN tblTipoProc tp ON tp.id = pr.tipo_id
+                 WHERE pr.pasta_id = pa.id AND pr.ativo = 1
+                 AND pr.tipo_id IS NOT NULL LIMIT 1)
+           ELSE NULL
+         END AS tipo_nome,
+         -- Status: exibe o nome somente se TODOS os processos da pasta têm o mesmo status
+         CASE
+           WHEN (SELECT COUNT(DISTINCT pr.status_id)
+                 FROM tblProc pr WHERE pr.pasta_id = pa.id AND pr.ativo = 1
+                 AND pr.status_id IS NOT NULL) = 1
+           THEN (SELECT sp.nome FROM tblProc pr
+                 JOIN tblStatusProc sp ON sp.id = pr.status_id
+                 WHERE pr.pasta_id = pa.id AND pr.ativo = 1
+                 AND pr.status_id IS NOT NULL LIMIT 1)
+           ELSE NULL
+         END AS status_nome,
          (SELECT COUNT(*) FROM tblProc pr WHERE pr.pasta_id = pa.id AND pr.ativo = 1) AS total_processos
        FROM tblPasta pa
        ${where}
@@ -250,6 +264,27 @@ async function criarProcesso(req, res) {
     return erroInterno(res, err);
   } finally {
     conn.release(); // SEMPRE devolve ao pool
+  }
+}
+
+// DELETE /api/processos/:id — Soft-delete do processo (ativo = 0)
+async function excluirProcesso(req, res) {
+  const { id } = req.params;
+  try {
+    const [rows] = await pool.execute(
+      'SELECT id FROM tblProc WHERE id = ? AND ativo = 1', [id]
+    );
+    if (!rows.length) return naoEncontrado(res, 'Processo não encontrado');
+
+    await pool.execute(
+      'UPDATE tblProc SET ativo = 0, alterado_por = ?, alterado_em = NOW() WHERE id = ?',
+      [req.usuario.id, id]
+    );
+
+    await auditoria.registrar(req.usuario.id, 'tblProc', 'excluir', id);
+    return sucesso(res, null, 'Processo excluído com sucesso');
+  } catch (err) {
+    return erroInterno(res, err);
   }
 }
 
@@ -435,6 +470,7 @@ module.exports = {
   buscarPasta,
   criarProcesso,
   atualizarProcesso,
+  excluirProcesso,
   buscarAuxiliares,
   criarForum,
   criarVara,
