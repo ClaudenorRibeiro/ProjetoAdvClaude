@@ -12,7 +12,7 @@ import { useAuth } from '../../context/AuthContext';
 
 // Módulos e ações para a matriz de permissões
 const MODULOS_PERM = [
-  'pessoas', 'processos', 'prazos', 'tarefas',
+  'pessoas', 'processos', 'pastas', 'prazos', 'tarefas',
   'audiencias', 'pericias', 'financeiro',
   'documentos', 'publicacoes', 'relatorios',
 ];

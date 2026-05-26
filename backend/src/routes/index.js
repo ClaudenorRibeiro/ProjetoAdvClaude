@@ -51,13 +51,24 @@ router.delete('/pessoas/juridicas/:id',   autenticar, verificarPermissao('pessoa
 // ATENÇÃO: rotas estáticas (sugerir-pasta, auxiliares, pastas) ANTES de /:id
 router.get('/processos/sugerir-pasta',              autenticar, processosCtrl.sugerirNumeroPasta);
 router.get('/processos/auxiliares',                 autenticar, processosCtrl.buscarAuxiliares);
-// Auxiliares cadastráveis pelo admin (fórum, vara, tipo, status, instância)
-router.post('/processos/auxiliares/foruns',         autenticar, apenasAdmin, processosCtrl.criarForum);
-router.post('/processos/auxiliares/varas',          autenticar, apenasAdmin, processosCtrl.criarVara);
-router.post('/processos/auxiliares/tipos',          autenticar, apenasAdmin, processosCtrl.criarTipo);
-router.post('/processos/auxiliares/status',         autenticar, apenasAdmin, processosCtrl.criarStatusProc);
-router.post('/processos/auxiliares/instancias',     autenticar, apenasAdmin, processosCtrl.criarInstancia);
+// Auxiliares — CRUD completo, permissão por ação (não mais só admin)
+router.post('/processos/auxiliares/foruns',          autenticar, verificarPermissao('processos','cadastrar'), processosCtrl.criarForum);
+router.put('/processos/auxiliares/foruns/:id',       autenticar, verificarPermissao('processos','alterar'),   processosCtrl.atualizarForum);
+router.delete('/processos/auxiliares/foruns/:id',    autenticar, verificarPermissao('processos','excluir'),    processosCtrl.excluirForum);
+router.post('/processos/auxiliares/varas',           autenticar, verificarPermissao('processos','cadastrar'), processosCtrl.criarVara);
+router.put('/processos/auxiliares/varas/:id',        autenticar, verificarPermissao('processos','alterar'),   processosCtrl.atualizarVara);
+router.delete('/processos/auxiliares/varas/:id',     autenticar, verificarPermissao('processos','excluir'),    processosCtrl.excluirVara);
+router.post('/processos/auxiliares/tipos',           autenticar, verificarPermissao('processos','cadastrar'), processosCtrl.criarTipo);
+router.put('/processos/auxiliares/tipos/:id',        autenticar, verificarPermissao('processos','alterar'),   processosCtrl.atualizarTipo);
+router.delete('/processos/auxiliares/tipos/:id',     autenticar, verificarPermissao('processos','excluir'),    processosCtrl.excluirTipo);
+router.post('/processos/auxiliares/status',          autenticar, verificarPermissao('processos','cadastrar'), processosCtrl.criarStatusProc);
+router.put('/processos/auxiliares/status/:id',       autenticar, verificarPermissao('processos','alterar'),   processosCtrl.atualizarStatusProc);
+router.delete('/processos/auxiliares/status/:id',    autenticar, verificarPermissao('processos','excluir'),    processosCtrl.excluirStatusProc);
+router.post('/processos/auxiliares/instancias',      autenticar, verificarPermissao('processos','cadastrar'), processosCtrl.criarInstancia);
+router.put('/processos/auxiliares/instancias/:id',   autenticar, verificarPermissao('processos','alterar'),   processosCtrl.atualizarInstancia);
+router.delete('/processos/auxiliares/instancias/:id',autenticar, verificarPermissao('processos','excluir'),    processosCtrl.excluirInstancia);
 router.get('/processos/pastas',                     autenticar, verificarPermissao('processos','visualizar'), processosCtrl.listarPastas);
+router.put('/processos/pastas/:id/renumerar',       autenticar, verificarPermissao('pastas','alterar'),      processosCtrl.renumerarPasta);
 router.get('/processos/pastas/:id',                 autenticar, verificarPermissao('processos','visualizar'), processosCtrl.buscarPasta);
 router.post('/processos',                           autenticar, verificarPermissao('processos','cadastrar'),  processosCtrl.criarProcesso);
 router.put('/processos/:id',                        autenticar, verificarPermissao('processos','alterar'),    processosCtrl.atualizarProcesso);

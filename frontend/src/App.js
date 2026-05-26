@@ -2,7 +2,7 @@
 // APLICAÇÃO PRINCIPAL — Roteamento e proteção de rotas
 // ============================================================
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -80,6 +80,42 @@ function AppRoutes() {
 }
 
 export default function App() {
+  // Desativa o autocomplete do navegador em todos os inputs do sistema.
+  // O MutationObserver monitora inputs adicionados dinamicamente (modais, etc.)
+  // e aplica autoComplete="off" assim que aparecem no DOM.
+  useEffect(() => {
+    function desativarAutocomplete(root) {
+      root.querySelectorAll('input, textarea').forEach(el => {
+        // "new-password" é o único valor que Chrome respeita de forma confiável.
+        // Para inputs de senha (type=password) mantém o comportamento padrão.
+        if (el.type !== 'password') {
+          el.setAttribute('autocomplete', 'new-password');
+        }
+        el.setAttribute('autocorrect', 'off');
+        el.setAttribute('autocapitalize', 'off');
+        el.setAttribute('spellcheck', 'false');
+      });
+    }
+
+    // Aplica nos elementos já existentes
+    desativarAutocomplete(document);
+
+    // Observa novas inserções no DOM (modais, dropdowns, etc.)
+    const observer = new MutationObserver(mutations => {
+      mutations.forEach(({ addedNodes }) => {
+        addedNodes.forEach(node => {
+          if (node.nodeType === 1) { // Element node
+            desativarAutocomplete(node);
+          }
+        });
+      });
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <BrowserRouter>
       <AuthProvider>

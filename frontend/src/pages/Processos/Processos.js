@@ -7,6 +7,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { processosAPI, pessoasAPI } from '../../services/api';
 import { formatarNumeroPasta, mascaraCNJ, toTitleCase } from '../../utils/formatters';
+import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
 
 export default function Processos() {
@@ -167,6 +168,10 @@ export default function Processos() {
 //   onFechar     — callback(reload, pastaId)
 // ============================================================
 export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
+  const { temPermissao } = useAuth();
+  // Modal auxiliar: null = fechado, string = tipo aberto ('tipos','status','instancias','foruns','varas')
+  const [modalAux, setModalAux] = useState(null);
+
   const [form, setForm] = useState({
     numPasta: '',
     numProc: '',
@@ -266,6 +271,25 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
     setVarasFiltradas(aux.varas.filter(v => String(v.forum_id) === String(forumId)));
   }
 
+  // Recarrega auxiliares após CRUD no ModalGerenciarAux
+  async function recarregarAux() {
+    const r = await processosAPI.auxiliares();
+    if (r.data.ok) {
+      setAux(r.data.dados);
+      // Mantém varas filtradas pelo fórum já selecionado
+      if (form.forum_id) {
+        setVarasFiltradas(r.data.dados.varas.filter(v => String(v.forum_id) === String(form.forum_id)));
+      } else {
+        setVarasFiltradas(r.data.dados.varas);
+      }
+    }
+  }
+
+  // Mostra o botão (...) se tiver pelo menos uma permissão de escrita
+  const podeGerenciarAux = temPermissao('processos','cadastrar')
+    || temPermissao('processos','alterar')
+    || temPermissao('processos','excluir');
+
   // Busca pessoas físicas ou jurídicas conforme o tipo selecionado
   async function buscarPessoas(termo, tipo, setResultados) {
     if (termo.length < 2) { setResultados([]); return; }
@@ -276,16 +300,28 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
     } catch {}
   }
 
-  // Adiciona parte à lista (autor ou réu), evitando duplicatas
-  function adicionarParte(pessoa, tipo, lista, setLista, setBusca, setResultados) {
-    const jaTem = lista.some(p => p.pessoa_id === pessoa.id && p.tipo_pessoa === tipo);
-    if (!jaTem) {
-      setLista([...lista, {
-        pessoa_id:   pessoa.id,
-        tipo_pessoa: tipo,
-        nome:        pessoa.nome || pessoa.razao_social,
-      }]);
+  // Adiciona parte à lista (autor ou réu).
+  // listaOposta = o polo contrário — mesma pessoa não pode estar nos dois polos.
+  // Pessoas com o mesmo nome mas pessoa_id diferente (CPF diferente) são permitidas.
+  function adicionarParte(pessoa, tipo, lista, setLista, listaOposta, setBusca, setResultados) {
+    const nome = pessoa.nome || pessoa.razao_social;
+    // Já está na mesma lista?
+    if (lista.some(p => p.pessoa_id === pessoa.id)) {
+      toast.warn(`${nome} já foi adicionado(a) neste polo`);
+      setBusca(''); setResultados([]);
+      return;
     }
+    // Está no polo oposto?
+    if (listaOposta.some(p => p.pessoa_id === pessoa.id)) {
+      toast.error(`${nome} já está no polo oposto — a mesma pessoa não pode ser autor e réu ao mesmo tempo`);
+      setBusca(''); setResultados([]);
+      return;
+    }
+    setLista([...lista, {
+      pessoa_id:   pessoa.id,
+      tipo_pessoa: tipo,
+      nome,
+    }]);
     setBusca('');
     setResultados([]);
   }
@@ -431,7 +467,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
                       {resultAutor.map(p => (
                         <div key={p.id}
                           style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', fontSize: '13px' }}
-                          onClick={() => adicionarParte(p, tipoAutor, autores, setAutores, setBuscaAutor, setResultAutor)}
+                          onClick={() => adicionarParte(p, tipoAutor, autores, setAutores, reus, setBuscaAutor, setResultAutor)}
                         >
                           {p.nome || p.razao_social}
                         </div>
@@ -487,7 +523,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
                       {resultReu.map(p => (
                         <div key={p.id}
                           style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', fontSize: '13px' }}
-                          onClick={() => adicionarParte(p, tipoReu, reus, setReus, setBuscaReu, setResultReu)}
+                          onClick={() => adicionarParte(p, tipoReu, reus, setReus, autores, setBuscaReu, setResultReu)}
                         >
                           {p.nome || p.razao_social}
                         </div>
@@ -529,51 +565,61 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
             />
           </div>
 
-          {/* Tipo, Status, Instância — 3 selects em linha */}
+          {/* Tipo, Status, Instância — 3 selects com botão (...) */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
             <div className="form-group">
               <label className="form-label">Tipo</label>
-              <select className="form-control" value={form.tipo_id} onChange={e => set('tipo_id', e.target.value)}>
-                <option value="">— Selecione —</option>
-                {aux.tipos?.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-              </select>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <select className="form-control" value={form.tipo_id} onChange={e => set('tipo_id', e.target.value)}>
+                  <option value="">— Selecione —</option>
+                  {aux.tipos?.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+                </select>
+                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('tipos')}>…</button>}
+              </div>
             </div>
             <div className="form-group">
               <label className="form-label">Status</label>
-              <select className="form-control" value={form.status_id} onChange={e => set('status_id', e.target.value)}>
-                <option value="">— Selecione —</option>
-                {aux.status?.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
-              </select>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <select className="form-control" value={form.status_id} onChange={e => set('status_id', e.target.value)}>
+                  <option value="">— Selecione —</option>
+                  {aux.status?.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
+                </select>
+                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('status')}>…</button>}
+              </div>
             </div>
             <div className="form-group">
               <label className="form-label">Instância</label>
-              <select className="form-control" value={form.instancia_id} onChange={e => set('instancia_id', e.target.value)}>
-                <option value="">— Selecione —</option>
-                {aux.instancias?.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
-              </select>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <select className="form-control" value={form.instancia_id} onChange={e => set('instancia_id', e.target.value)}>
+                  <option value="">— Selecione —</option>
+                  {aux.instancias?.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
+                </select>
+                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('instancias')}>…</button>}
+              </div>
             </div>
           </div>
 
-          {/* Fórum e Vara */}
+          {/* Fórum e Vara com botão (...) */}
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Fórum</label>
-              <select className="form-control" value={form.forum_id} onChange={e => mudarForum(e.target.value)}>
-                <option value="">— Selecione —</option>
-                {aux.foruns?.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
-              </select>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <select className="form-control" value={form.forum_id} onChange={e => mudarForum(e.target.value)}>
+                  <option value="">— Selecione —</option>
+                  {aux.foruns?.map(f => <option key={f.id} value={f.id}>{f.abrev_nome || f.nome}</option>)}
+                </select>
+                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('foruns')}>…</button>}
+              </div>
             </div>
             <div className="form-group">
               <label className="form-label">Vara</label>
-              <select
-                className="form-control"
-                value={form.vara_id}
-                onChange={e => set('vara_id', e.target.value)}
-                disabled={!form.forum_id}
-              >
-                <option value="">{form.forum_id ? '— Selecione —' : '— Selecione o fórum primeiro —'}</option>
-                {varasFiltradas.map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
-              </select>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <select className="form-control" value={form.vara_id} onChange={e => set('vara_id', e.target.value)} disabled={!form.forum_id}>
+                  <option value="">{form.forum_id ? '— Selecione —' : '— Selecione o fórum primeiro —'}</option>
+                  {varasFiltradas.map(v => <option key={v.id} value={v.id}>{v.abrev_nome || v.nome}</option>)}
+                </select>
+                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('varas')}>…</button>}
+              </div>
             </div>
           </div>
 
@@ -607,6 +653,21 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
             {salvando ? 'Salvando...' : 'Criar Processo'}
           </button>
         </div>
+
+        {/* Modal auxiliar (tipo, status, instância, fórum, vara) */}
+        {modalAux && (
+          <ModalGerenciarAux
+            tipo={modalAux}
+            itens={modalAux === 'tipos' ? (aux.tipos || [])
+                 : modalAux === 'status' ? (aux.status || [])
+                 : modalAux === 'instancias' ? (aux.instancias || [])
+                 : modalAux === 'foruns' ? (aux.foruns || [])
+                 : (aux.varas || [])}
+            foruns={aux.foruns || []}
+            onFechar={() => setModalAux(null)}
+            onAtualizado={async () => { await recarregarAux(); }}
+          />
+        )}
       </div>
     </div>
   );
@@ -618,6 +679,9 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
 // Recebe o objeto processo completo (com autores, reus, forum_id, etc.)
 // ============================================================
 export function ModalEditarProcesso({ processo, onFechar }) {
+  const { temPermissao } = useAuth();
+  const [modalAux, setModalAux] = useState(null);
+
   const [form, setForm] = useState({
     numProc:           processo.numProc          || '',
     forum_id:          processo.forum_id         ? String(processo.forum_id)      : '',
@@ -683,6 +747,22 @@ export function ModalEditarProcesso({ processo, onFechar }) {
     setVarasFiltradas(aux.varas.filter(v => String(v.forum_id) === String(forumId)));
   }
 
+  async function recarregarAux() {
+    const r = await processosAPI.auxiliares();
+    if (r.data.ok) {
+      setAux(r.data.dados);
+      if (form.forum_id) {
+        setVarasFiltradas(r.data.dados.varas.filter(v => String(v.forum_id) === String(form.forum_id)));
+      } else {
+        setVarasFiltradas(r.data.dados.varas);
+      }
+    }
+  }
+
+  const podeGerenciarAux = temPermissao('processos','cadastrar')
+    || temPermissao('processos','alterar')
+    || temPermissao('processos','excluir');
+
   async function buscarPessoas(termo, tipo, setResultados) {
     if (termo.length < 2) { setResultados([]); return; }
     try {
@@ -692,11 +772,18 @@ export function ModalEditarProcesso({ processo, onFechar }) {
     } catch {}
   }
 
-  function adicionarParte(pessoa, tipo, lista, setLista, setBusca, setResultados) {
-    const jaTem = lista.some(p => p.pessoa_id === pessoa.id && p.tipo_pessoa === tipo);
-    if (!jaTem) {
-      setLista([...lista, { pessoa_id: pessoa.id, tipo_pessoa: tipo, nome: pessoa.nome || pessoa.razao_social }]);
+  // listaOposta = polo contrário — mesma pessoa não pode estar nos dois polos
+  function adicionarParte(pessoa, tipo, lista, setLista, listaOposta, setBusca, setResultados) {
+    const nome = pessoa.nome || pessoa.razao_social;
+    if (lista.some(p => p.pessoa_id === pessoa.id)) {
+      toast.warn(`${nome} já foi adicionado(a) neste polo`);
+      setBusca(''); setResultados([]); return;
     }
+    if (listaOposta.some(p => p.pessoa_id === pessoa.id)) {
+      toast.error(`${nome} já está no polo oposto — a mesma pessoa não pode ser autor e réu ao mesmo tempo`);
+      setBusca(''); setResultados([]); return;
+    }
+    setLista([...lista, { pessoa_id: pessoa.id, tipo_pessoa: tipo, nome }]);
     setBusca('');
     setResultados([]);
   }
@@ -772,7 +859,7 @@ export function ModalEditarProcesso({ processo, onFechar }) {
                   <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #ddd', borderRadius: '6px', zIndex: 20, maxHeight: '160px', overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
                     {resultAutor.map(p => (
                       <div key={p.id} style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', fontSize: '13px' }}
-                        onClick={() => adicionarParte(p, tipoAutor, autores, setAutores, setBuscaAutor, setResultAutor)}>
+                        onClick={() => adicionarParte(p, tipoAutor, autores, setAutores, reus, setBuscaAutor, setResultAutor)}>
                         {p.nome || p.razao_social}
                       </div>
                     ))}
@@ -809,7 +896,7 @@ export function ModalEditarProcesso({ processo, onFechar }) {
                   <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #ddd', borderRadius: '6px', zIndex: 20, maxHeight: '160px', overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
                     {resultReu.map(p => (
                       <div key={p.id} style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', fontSize: '13px' }}
-                        onClick={() => adicionarParte(p, tipoReu, reus, setReus, setBuscaReu, setResultReu)}>
+                        onClick={() => adicionarParte(p, tipoReu, reus, setReus, autores, setBuscaReu, setResultReu)}>
                         {p.nome || p.razao_social}
                       </div>
                     ))}
@@ -839,47 +926,62 @@ export function ModalEditarProcesso({ processo, onFechar }) {
               maxLength={25} style={{ maxWidth: '260px' }} />
           </div>
 
-          {/* Tipo, Status, Instância */}
+          {/* Tipo, Status, Instância com botão (...) */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
             <div className="form-group">
               <label className="form-label">Tipo</label>
-              <select className="form-control" value={form.tipo_id} onChange={e => set('tipo_id', e.target.value)}>
-                <option value="">— Selecione —</option>
-                {aux.tipos?.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-              </select>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <select className="form-control" value={form.tipo_id} onChange={e => set('tipo_id', e.target.value)}>
+                  <option value="">— Selecione —</option>
+                  {aux.tipos?.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+                </select>
+                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('tipos')}>…</button>}
+              </div>
             </div>
             <div className="form-group">
               <label className="form-label">Status</label>
-              <select className="form-control" value={form.status_id} onChange={e => set('status_id', e.target.value)}>
-                <option value="">— Selecione —</option>
-                {aux.status?.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
-              </select>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <select className="form-control" value={form.status_id} onChange={e => set('status_id', e.target.value)}>
+                  <option value="">— Selecione —</option>
+                  {aux.status?.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
+                </select>
+                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('status')}>…</button>}
+              </div>
             </div>
             <div className="form-group">
               <label className="form-label">Instância</label>
-              <select className="form-control" value={form.instancia_id} onChange={e => set('instancia_id', e.target.value)}>
-                <option value="">— Selecione —</option>
-                {aux.instancias?.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
-              </select>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <select className="form-control" value={form.instancia_id} onChange={e => set('instancia_id', e.target.value)}>
+                  <option value="">— Selecione —</option>
+                  {aux.instancias?.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
+                </select>
+                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('instancias')}>…</button>}
+              </div>
             </div>
           </div>
 
-          {/* Fórum e Vara */}
+          {/* Fórum e Vara com botão (...) */}
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Fórum</label>
-              <select className="form-control" value={form.forum_id} onChange={e => mudarForum(e.target.value)}>
-                <option value="">— Selecione —</option>
-                {aux.foruns?.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
-              </select>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <select className="form-control" value={form.forum_id} onChange={e => mudarForum(e.target.value)}>
+                  <option value="">— Selecione —</option>
+                  {aux.foruns?.map(f => <option key={f.id} value={f.id}>{f.abrev_nome || f.nome}</option>)}
+                </select>
+                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('foruns')}>…</button>}
+              </div>
             </div>
             <div className="form-group">
               <label className="form-label">Vara</label>
-              <select className="form-control" value={form.vara_id}
-                onChange={e => set('vara_id', e.target.value)} disabled={!form.forum_id}>
-                <option value="">{form.forum_id ? '— Selecione —' : '— Selecione o fórum primeiro —'}</option>
-                {varasFiltradas.map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
-              </select>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <select className="form-control" value={form.vara_id}
+                  onChange={e => set('vara_id', e.target.value)} disabled={!form.forum_id}>
+                  <option value="">{form.forum_id ? '— Selecione —' : '— Selecione o fórum primeiro —'}</option>
+                  {varasFiltradas.map(v => <option key={v.id} value={v.id}>{v.abrev_nome || v.nome}</option>)}
+                </select>
+                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('varas')}>…</button>}
+              </div>
             </div>
           </div>
 
@@ -907,6 +1009,300 @@ export function ModalEditarProcesso({ processo, onFechar }) {
           <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
             {salvando ? 'Salvando...' : 'Salvar Alterações'}
           </button>
+        </div>
+
+        {/* Modal auxiliar */}
+        {modalAux && (
+          <ModalGerenciarAux
+            tipo={modalAux}
+            itens={modalAux === 'tipos' ? (aux.tipos || [])
+                 : modalAux === 'status' ? (aux.status || [])
+                 : modalAux === 'instancias' ? (aux.instancias || [])
+                 : modalAux === 'foruns' ? (aux.foruns || [])
+                 : (aux.varas || [])}
+            foruns={aux.foruns || []}
+            onFechar={() => setModalAux(null)}
+            onAtualizado={async () => { await recarregarAux(); }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// MODAL DE GERENCIAMENTO DE AUXILIARES
+// Usado para Tipo, Status, Instância, Fórum e Vara.
+// Qualquer usuário com a permissão processos.cadastrar/alterar/excluir
+// pode realizar a ação correspondente.
+// ============================================================
+
+// Configuração de cada tipo de auxiliar
+const AUX_CONFIG = {
+  tipos: {
+    titulo:  'Tipos de Processo',
+    campos:  [{ key: 'nome', label: 'Nome', required: true }],
+    criar:   (d) => processosAPI.criarTipo(d),
+    atualizar:(id, d) => processosAPI.atualizarTipo(id, d),
+    excluir: (id) => processosAPI.excluirTipo(id),
+  },
+  status: {
+    titulo:  'Status de Processo',
+    campos:  [{ key: 'nome', label: 'Nome', required: true }],
+    criar:   (d) => processosAPI.criarStatus(d),
+    atualizar:(id, d) => processosAPI.atualizarStatus(id, d),
+    excluir: (id) => processosAPI.excluirStatus(id),
+  },
+  instancias: {
+    titulo:  'Instâncias',
+    campos:  [{ key: 'nome', label: 'Nome', required: true }],
+    criar:   (d) => processosAPI.criarInstancia(d),
+    atualizar:(id, d) => processosAPI.atualizarInstancia(id, d),
+    excluir: (id) => processosAPI.excluirInstancia(id),
+  },
+  foruns: {
+    titulo:  'Fóruns',
+    campos:  [
+      { key: 'nome',      label: 'Nome',        required: true,  fullWidth: true },
+      { key: 'abrev_nome',label: 'Abreviação',  required: false, fullWidth: true,
+        hint: 'Exibida nos dropdowns — ex: VT/B.Funda' },
+      { key: 'cep',       label: 'CEP',         required: false, maxLength: 8,  style: { maxWidth: '100px' } },
+      { key: 'logradouro',label: 'Logradouro',  required: false, fullWidth: true },
+      { key: 'num_end',   label: 'Número',      required: false, style: { maxWidth: '80px' } },
+      { key: 'compl_end', label: 'Complemento', required: false, style: { maxWidth: '160px' } },
+      { key: 'bairro',    label: 'Bairro',      required: false },
+      { key: 'cidade',    label: 'Cidade',      required: false },
+      { key: 'uf',        label: 'UF',          required: false, maxLength: 2,  style: { maxWidth: '60px' } },
+    ],
+    criar:   (d) => processosAPI.criarForum(d),
+    atualizar:(id, d) => processosAPI.atualizarForum(id, d),
+    excluir: (id) => processosAPI.excluirForum(id),
+  },
+  varas: {
+    titulo:  'Varas',
+    // forum_id é tratado separadamente (select especial abaixo do form)
+    campos:  [
+      { key: 'nome',         label: 'Nome',             required: true,  fullWidth: true },
+      { key: 'abrev_nome',   label: 'Abreviação',       required: false, fullWidth: true,
+        hint: 'Exibida nos dropdowns — ex: 04ªVT/SP-ZL' },
+      { key: 'codVaraNoProc',label: 'Cód. no processo', required: false, style: { maxWidth: '160px' } },
+      { key: 'compl_end',    label: 'Complemento End.', required: false,
+        hint: 'Ex: 4º andar, Bloco B' },
+      { key: 'tel',          label: 'Telefone',         required: false, style: { maxWidth: '160px' } },
+      { key: 'email',        label: 'E-mail',           required: false },
+    ],
+    criar:   (d) => processosAPI.criarVara(d),
+    atualizar:(id, d) => processosAPI.atualizarVara(id, d),
+    excluir: (id) => processosAPI.excluirVara(id),
+  },
+};
+
+export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtualizado }) {
+  const { temPermissao } = useAuth();
+  const cfg = AUX_CONFIG[tipo];
+
+  const podeCadastrar = temPermissao('processos', 'cadastrar');
+  const podeAlterar   = temPermissao('processos', 'alterar');
+  const podeExcluir   = temPermissao('processos', 'excluir');
+
+  // Form de criação / edição
+  const formVazio = cfg.campos.reduce((acc, c) => ({ ...acc, [c.key]: '' }), {});
+  const [editando, setEditando]   = useState(null);  // null = modo criação, objeto = modo edição
+  const [form, setForm]           = useState(formVazio);
+  const [forumId, setForumId]     = useState('');    // só usado para varas
+  const [salvando, setSalvando]   = useState(false);
+
+  function iniciarEdicao(item) {
+    setEditando(item);
+    const f = cfg.campos.reduce((acc, c) => ({ ...acc, [c.key]: item[c.key] || '' }), {});
+    setForm(f);
+    if (tipo === 'varas') setForumId(String(item.forum_id || ''));
+  }
+
+  function cancelarEdicao() {
+    setEditando(null);
+    setForm(formVazio);
+    setForumId('');
+  }
+
+  async function salvar() {
+    for (const c of cfg.campos) {
+      if (c.required && !form[c.key]?.trim()) {
+        return toast.error(`${c.label} é obrigatório`);
+      }
+    }
+    if (tipo === 'varas' && !forumId) return toast.error('Fórum é obrigatório');
+
+    const payload = { ...form };
+    if (tipo === 'varas') payload.forum_id = forumId;
+
+    setSalvando(true);
+    try {
+      if (editando) {
+        await cfg.atualizar(editando.id, payload);
+        toast.success('Atualizado com sucesso!');
+      } else {
+        await cfg.criar(payload);
+        toast.success('Criado com sucesso!');
+      }
+      cancelarEdicao();
+      onAtualizado(); // recarrega auxiliares no modal pai
+    } catch (err) {
+      toast.error(err.response?.data?.mensagem || 'Erro ao salvar');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function excluir(item) {
+    if (!window.confirm(`Excluir "${item.nome}"?`)) return;
+    try {
+      await cfg.excluir(item.id);
+      toast.success('Excluído com sucesso!');
+      onAtualizado();
+    } catch (err) {
+      toast.error(err.response?.data?.mensagem || 'Erro ao excluir');
+    }
+  }
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 1100 }}>
+      <div className="modal-box" style={{ maxWidth: '560px' }}>
+        <div className="modal-header">
+          <h3>{cfg.titulo}</h3>
+          <button className="modal-fechar" onClick={onFechar}>✕</button>
+        </div>
+
+        <div className="modal-body">
+          {/* Lista de itens existentes */}
+          <div style={{ marginBottom: '20px' }}>
+            {itens.length === 0 ? (
+              <p className="lista-vazia">Nenhum item cadastrado</p>
+            ) : (
+              <div style={{ border: '1px solid #e8ecf0', borderRadius: '6px', overflow: 'hidden' }}>
+                {itens.map((item, idx) => (
+                  <div key={item.id} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '8px 12px', fontSize: '13px',
+                    background: idx % 2 === 0 ? '#fff' : '#f9fafb',
+                    borderBottom: idx < itens.length - 1 ? '1px solid #f0f0f0' : 'none',
+                  }}>
+                    <span>
+                      {/* Nome principal: abreviação quando disponível, senão nome completo */}
+                      <strong style={{ fontWeight: '500' }}>{item.abrev_nome || item.nome}</strong>
+                      {/* Se tem abreviação, mostra o nome completo em seguida (menor) */}
+                      {item.abrev_nome && (
+                        <span style={{ color: '#555', marginLeft: '6px', fontSize: '11px' }}>
+                          {item.nome}
+                        </span>
+                      )}
+                      {/* Cidade/UF para fóruns */}
+                      {tipo === 'foruns' && item.cidade && (
+                        <span style={{ color: '#888', marginLeft: '6px', fontSize: '11px' }}>
+                          {item.cidade}{item.uf ? ` - ${item.uf}` : ''}
+                        </span>
+                      )}
+                      {/* Fórum pai para varas */}
+                      {tipo === 'varas' && item.forum_nome && (
+                        <span style={{ color: '#888', marginLeft: '6px', fontSize: '11px' }}>
+                          {item.forum_nome}
+                        </span>
+                      )}
+                    </span>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      {podeAlterar && (
+                        <button className="btn btn-outline"
+                          style={{ fontSize: '11px', padding: '3px 8px', color: '#2d6be4', borderColor: '#2d6be4' }}
+                          onClick={() => iniciarEdicao(item)}>
+                          Editar
+                        </button>
+                      )}
+                      {podeExcluir && (
+                        <button className="btn btn-danger"
+                          style={{ fontSize: '11px', padding: '3px 8px' }}
+                          onClick={() => excluir(item)}>
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Formulário de criação / edição */}
+          {(podeCadastrar || (podeAlterar && editando)) && (
+            <div style={{ background: '#f8fafc', border: '1px solid #e8ecf0', borderRadius: '8px', padding: '14px' }}>
+              <div style={{ fontSize: '13px', fontWeight: '600', color: '#555', marginBottom: '10px' }}>
+                {editando ? `Editando: ${editando.nome}` : `Novo item`}
+              </div>
+
+              {/* Campos dinâmicos por tipo */}
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                {cfg.campos.map(c => (
+                  <div key={c.key} className="form-group" style={{
+                    marginBottom: 0,
+                    // fullWidth ocupa linha inteira; style fixa a largura; senão expande
+                    flex: c.fullWidth ? '0 0 100%' : (c.style ? 'none' : '1'),
+                    minWidth: c.fullWidth ? '100%' : '100px',
+                  }}>
+                    <label className="form-label" style={{ fontSize: '11px' }}>
+                      {c.label}{c.required ? ' *' : ''}
+                      {c.hint && <span style={{ color: '#aaa', fontWeight: '400', marginLeft: '4px' }}>({c.hint})</span>}
+                    </label>
+                    <input
+                      className="form-control"
+                      style={{ fontSize: '13px', ...(c.style || {}) }}
+                      maxLength={c.maxLength}
+                      value={form[c.key]}
+                      onChange={e => setForm(f => ({ ...f, [c.key]: e.target.value }))}
+                      onBlur={() => {
+                        if (c.key === 'nome') setForm(f => ({ ...f, nome: toTitleCase(f.nome) }));
+                        if (c.key === 'uf')   setForm(f => ({ ...f, uf: f.uf.toUpperCase().slice(0, 2) }));
+                      }}
+                    />
+                  </div>
+                ))}
+
+                {/* Select de fórum (só para varas) */}
+                {tipo === 'varas' && (
+                  <div className="form-group" style={{ marginBottom: 0, flex: '1', minWidth: '140px' }}>
+                    <label className="form-label" style={{ fontSize: '11px' }}>Fórum *</label>
+                    <select className="form-control" style={{ fontSize: '13px' }}
+                      value={forumId} onChange={e => setForumId(e.target.value)}>
+                      <option value="">— Selecione —</option>
+                      {foruns.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
+                    </select>
+                  </div>
+                )}
+
+                {/* Botões de ação */}
+                <div style={{ display: 'flex', gap: '6px', paddingBottom: '1px' }}>
+                  <button className="btn btn-primary" style={{ fontSize: '12px', padding: '7px 14px' }}
+                    onClick={salvar} disabled={salvando}>
+                    {salvando ? '...' : editando ? 'Salvar' : 'Adicionar'}
+                  </button>
+                  {editando && (
+                    <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '7px 10px' }}
+                      onClick={cancelarEdicao}>
+                      Cancelar
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!podeCadastrar && !podeAlterar && !podeExcluir && (
+            <p style={{ color: '#888', fontSize: '13px', textAlign: 'center' }}>
+              Você tem acesso somente leitura a estes registros.
+            </p>
+          )}
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onFechar}>Fechar</button>
         </div>
       </div>
     </div>

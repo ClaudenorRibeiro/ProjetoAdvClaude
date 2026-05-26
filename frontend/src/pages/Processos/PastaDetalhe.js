@@ -39,6 +39,11 @@ export default function PastaDetalhe() {
   const [andamentoEditando, setAndamentoEditando] = useState(null);
   const [modalLancamento, setModalLancamento]     = useState(false);
 
+  // Edição inline do número da pasta
+  const [editandoNrPasta, setEditandoNrPasta] = useState(false);
+  const [novaNrPasta, setNovaNrPasta]         = useState('');
+  const [salvandoNrPasta, setSalvandoNrPasta] = useState(false);
+
   // ---- Carrega a pasta ----
   const carregarPasta = useCallback(async () => {
     setCarregando(true);
@@ -133,6 +138,22 @@ export default function PastaDetalhe() {
     } catch { toast.error('Erro ao excluir'); }
   }
 
+  async function salvarNrPasta() {
+    const num = parseInt(novaNrPasta);
+    if (!num || num < 1) return toast.error('Número de pasta inválido');
+    setSalvandoNrPasta(true);
+    try {
+      await processosAPI.renumerarPasta(pasta.id, { numPasta: num });
+      toast.success('Número da pasta atualizado!');
+      setPasta(p => ({ ...p, numPasta: num })); // atualiza local sem recarregar tudo
+      setEditandoNrPasta(false);
+    } catch (err) {
+      toast.error(err.response?.data?.mensagem || 'Erro ao renumerar pasta');
+    } finally {
+      setSalvandoNrPasta(false);
+    }
+  }
+
   async function excluirProcesso(procId) {
     if (!window.confirm('Tem certeza que deseja excluir este processo?\nEsta ação não pode ser desfeita.')) return;
     try {
@@ -185,13 +206,49 @@ export default function PastaDetalhe() {
           </button>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-              <span style={{
-                fontSize: '13px', fontWeight: '700', color: '#fff',
-                background: '#2d6be4', borderRadius: '6px',
-                padding: '2px 10px', letterSpacing: '0.5px'
-              }}>
-                Pasta {formatarNumeroPasta(pasta.numPasta)}
-              </span>
+              {editandoNrPasta ? (
+                /* Modo edição inline do número da pasta */
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#555' }}>Pasta</span>
+                  <input
+                    type="number" min="1"
+                    className="form-control"
+                    style={{ width: '80px', fontSize: '13px', padding: '2px 8px', height: '28px' }}
+                    value={novaNrPasta}
+                    onChange={e => setNovaNrPasta(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') salvarNrPasta(); if (e.key === 'Escape') setEditandoNrPasta(false); }}
+                    autoFocus
+                  />
+                  <button className="btn btn-primary"
+                    style={{ fontSize: '11px', padding: '2px 10px', height: '28px' }}
+                    onClick={salvarNrPasta} disabled={salvandoNrPasta}>
+                    {salvandoNrPasta ? '...' : 'OK'}
+                  </button>
+                  <button className="btn btn-secondary"
+                    style={{ fontSize: '11px', padding: '2px 8px', height: '28px' }}
+                    onClick={() => setEditandoNrPasta(false)}>
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                /* Modo visualização — badge + botão de edição */
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{
+                    fontSize: '13px', fontWeight: '700', color: '#fff',
+                    background: '#2d6be4', borderRadius: '6px',
+                    padding: '2px 10px', letterSpacing: '0.5px'
+                  }}>
+                    Pasta {formatarNumeroPasta(pasta.numPasta)}
+                  </span>
+                  {temPermissao('pastas', 'alterar') && (
+                    <button
+                      title="Alterar número da pasta"
+                      onClick={() => { setNovaNrPasta(String(pasta.numPasta)); setEditandoNrPasta(true); }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#aaa', fontSize: '13px', padding: '0', lineHeight: '1' }}
+                    >✎</button>
+                  )}
+                </div>
+              )}
             </div>
             <h2 style={{ margin: 0, fontSize: '18px', color: '#1e2a3a' }}>
               {processos[0]?.NomeTituloProc || `Pasta ${formatarNumeroPasta(pasta.numPasta)}`}
@@ -274,19 +331,11 @@ export default function PastaDetalhe() {
                       <td>{pr.status_nome ? <span className="badge badge-cinza">{pr.status_nome}</span> : '—'}</td>
                       <td>{pr.instancia_nome || '—'}</td>
                       <td>
-                        <div style={{ fontSize: '13px' }}>{pr.vara_nome || '—'}</div>
-                        {pr.forum_nome && <div style={{ fontSize: '11px', color: '#888' }}>{pr.forum_nome}</div>}
+                        <div style={{ fontSize: '13px' }}>{pr.vara_abrev_nome || pr.vara_nome || '—'}</div>
+                        {pr.forum_nome && <div style={{ fontSize: '11px', color: '#888' }}>{pr.forum_abrev_nome || pr.forum_nome}</div>}
                       </td>
                       <td>
                         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                          {/* Andamentos — sempre visível */}
-                          <button
-                            className="btn btn-outline"
-                            style={{ fontSize: '12px', padding: '4px 10px' }}
-                            onClick={() => { setProcessoFiltro(String(pr.id)); setAbaAtiva('andamentos'); }}
-                          >
-                            Andamentos
-                          </button>
                           {/* Editar — requer permissão processos.alterar */}
                           {temPermissao('processos', 'alterar') && (
                             <button

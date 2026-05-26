@@ -44,7 +44,13 @@
       "Bash(cmd.exe /c backup_banco.bat)",
       "Bash(cmd.exe /c \"for /f \\\\\"usebackq tokens=1,* delims==\\\\\" %a in \\(\\\\\"backend\\\\\\\\.env\\\\\"\\) do @if \\\\\"%a\\\\\"==\\\\\"DB_NAME\\\\\" echo DB_NAME=%b\")",
       "Bash(ls /mnt/c/Users/Claudenor/Downloads/ProjetoAdvClaude/backups/ 2>/dev/null || echo \"PASTA NAO EXISTE OU VAZIA\")",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(powershell -command \"Get-Content 'c7321425-eb43-40e0-b57f-c2941c1276c6.jsonl' | Select-Object -Last 200\")",
+      "Bash(node -e ' *)",
+      "Bash(del \"C:\\\\Users\\\\Claudio\\\\Downloads\\\\ProjetoAdvClaude\\\\temp_img_0.png\" \"C:\\\\Users\\\\Claudio\\\\Downloads\\\\ProjetoAdvClaude\\\\temp_img_1.png\")",
+      "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia -e \"DESCRIBE tarefas;\")",
+      "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia -e \"DELETE FROM tblPasta WHERE id = 2;\")",
+      "Bash(mysqldump -u root -pHR5k6nb8*** sistema_advocacia)"
     ]
   }
 }

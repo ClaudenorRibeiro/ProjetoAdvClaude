@@ -84,6 +84,7 @@ export const processosAPI = {
   // Pastas
   listarPastas:      (params) => api.get('/processos/pastas', { params }),
   buscarPasta:       (id) => api.get(`/processos/pastas/${id}`),
+  renumerarPasta:    (id, dados) => api.put(`/processos/pastas/${id}/renumerar`, dados),
   sugerirPasta:      () => api.get('/processos/sugerir-pasta'),
   // Processos
   criarProcesso:     (dados) => api.post('/processos', dados),
@@ -91,12 +92,22 @@ export const processosAPI = {
   excluirProcesso:   (id) => api.delete(`/processos/${id}`),
   // Auxiliares (leitura)
   auxiliares:        () => api.get('/processos/auxiliares'),
-  // Auxiliares (cadastro — admin)
+  // Auxiliares — CRUD completo (permissão por ação)
   criarForum:        (dados) => api.post('/processos/auxiliares/foruns', dados),
+  atualizarForum:    (id, dados) => api.put(`/processos/auxiliares/foruns/${id}`, dados),
+  excluirForum:      (id) => api.delete(`/processos/auxiliares/foruns/${id}`),
   criarVara:         (dados) => api.post('/processos/auxiliares/varas', dados),
+  atualizarVara:     (id, dados) => api.put(`/processos/auxiliares/varas/${id}`, dados),
+  excluirVara:       (id) => api.delete(`/processos/auxiliares/varas/${id}`),
   criarTipo:         (dados) => api.post('/processos/auxiliares/tipos', dados),
+  atualizarTipo:     (id, dados) => api.put(`/processos/auxiliares/tipos/${id}`, dados),
+  excluirTipo:       (id) => api.delete(`/processos/auxiliares/tipos/${id}`),
   criarStatus:       (dados) => api.post('/processos/auxiliares/status', dados),
+  atualizarStatus:   (id, dados) => api.put(`/processos/auxiliares/status/${id}`, dados),
+  excluirStatus:     (id) => api.delete(`/processos/auxiliares/status/${id}`),
   criarInstancia:    (dados) => api.post('/processos/auxiliares/instancias', dados),
+  atualizarInstancia:(id, dados) => api.put(`/processos/auxiliares/instancias/${id}`, dados),
+  excluirInstancia:  (id) => api.delete(`/processos/auxiliares/instancias/${id}`),
 };
 
 // ============================================================

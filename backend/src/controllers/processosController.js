@@ -13,16 +13,23 @@ const auditoria = require('../middleware/auditoria');
 // ============================================================
 
 // GET /api/processos/sugerir-pasta
-// Retorna o menor numPasta disponível na sequência (gap-finding)
-// Ex: se existem 1,2,3,4,6,7 → retorna 5
+// Retorna o menor numPasta disponível na sequência (gap-finding).
+// Pastas vazias (sem processos ativos) são tratadas como disponíveis —
+// ao cadastrar um novo processo com esse número, a pasta existente é reaproveitada.
 async function sugerirNumeroPasta(req, res) {
   try {
     const [rows] = await pool.execute(`
       SELECT IFNULL(
         (SELECT MIN(t1.numPasta + 1)
          FROM tblPasta t1
-         LEFT JOIN tblPasta t2 ON t2.numPasta = t1.numPasta + 1
-         WHERE t2.numPasta IS NULL),
+         -- t1 precisa ser uma pasta "ocupada" (com processos ativos)
+         WHERE EXISTS (SELECT 1 FROM tblProc p WHERE p.pasta_id = t1.id AND p.ativo = 1)
+         -- o próximo número não pode ser de uma pasta também "ocupada"
+         AND NOT EXISTS (
+           SELECT 1 FROM tblPasta t2
+           WHERE t2.numPasta = t1.numPasta + 1
+           AND EXISTS (SELECT 1 FROM tblProc p WHERE p.pasta_id = t2.id AND p.ativo = 1)
+         )),
         1
       ) AS proximo
     `);
@@ -40,6 +47,9 @@ async function listarPastas(req, res) {
     const offsetInt = (parseInt(pagina) - 1) * limitInt;
     const params = [];
     let where = 'WHERE 1=1';
+
+    // Exibe apenas pastas que têm pelo menos um processo ativo
+    where += ` AND EXISTS (SELECT 1 FROM tblProc p WHERE p.pasta_id = pa.id AND p.ativo = 1)`;
 
     if (busca) {
       // Busca por número da pasta ou pelo título (NomeTituloProc) ou número CNJ
@@ -103,6 +113,58 @@ async function listarPastas(req, res) {
   }
 }
 
+// PUT /api/processos/pastas/:id/renumerar — Altera o numPasta de uma pasta
+// Se o novo número já pertence a uma pasta vazia (sem processos ativos),
+// migra os registros dela para a atual e a remove, liberando o número.
+async function renumerarPasta(req, res) {
+  const { id } = req.params;
+  const num = parseInt(req.body.numPasta);
+  if (!num || num < 1) return erro(res, 'Número de pasta inválido');
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [pasta] = await conn.execute('SELECT id, numPasta FROM tblPasta WHERE id = ?', [id]);
+    if (!pasta.length) { await conn.rollback(); return naoEncontrado(res, 'Pasta não encontrada'); }
+    if (pasta[0].numPasta === num) { await conn.rollback(); return erro(res, 'A pasta já possui este número'); }
+
+    // Verifica se o número já existe em outra pasta
+    const [existente] = await conn.execute('SELECT id FROM tblPasta WHERE numPasta = ? AND id != ?', [num, id]);
+
+    if (existente.length) {
+      const conflitaId = existente[0].id;
+
+      // Só permite se a pasta conflitante não tiver processos ativos
+      const [[{ ativos }]] = await conn.execute(
+        'SELECT COUNT(*) AS ativos FROM tblProc WHERE pasta_id = ? AND ativo = 1', [conflitaId]
+      );
+      if (ativos > 0) {
+        await conn.rollback();
+        return erro(res, `O número ${String(num).padStart(4,'0')} já está em uso por outra pasta com processos ativos`);
+      }
+
+      // Pasta conflitante está vazia — migra todos os registros dependentes para a atual
+      for (const tabela of ['tblProc','tarefas','conta_corrente_pasta','honorarios','log_documentos_gerados']) {
+        await conn.execute(`UPDATE ${tabela} SET pasta_id = ? WHERE pasta_id = ?`, [id, conflitaId]);
+      }
+      await conn.execute('DELETE FROM tblPasta WHERE id = ?', [conflitaId]);
+    }
+
+    // Renumera a pasta
+    await conn.execute('UPDATE tblPasta SET numPasta = ? WHERE id = ?', [num, id]);
+
+    await conn.commit();
+    await auditoria.registrar(req.usuario.id, 'tblPasta', 'renumerar', id);
+    return sucesso(res, { numPasta: num }, 'Número da pasta atualizado com sucesso');
+  } catch (err) {
+    await conn.rollback();
+    return erroInterno(res, err);
+  } finally {
+    conn.release();
+  }
+}
+
 // GET /api/processos/pastas/:id — Pasta completa com todos os processos, autores e réus
 async function buscarPasta(req, res) {
   try {
@@ -115,8 +177,11 @@ async function buscarPasta(req, res) {
     const [processos] = await pool.execute(
       `SELECT
          pr.*,
-         v.nome AS vara_nome, v.codVaraNoProc,
-         f.nome AS forum_nome, f.id AS forum_id,
+         v.nome AS vara_nome, v.abrev_nome AS vara_abrev_nome,
+         v.codVaraNoProc, v.compl_end AS vara_compl_end,
+         v.tel AS vara_tel, v.email AS vara_email,
+         f.nome AS forum_nome, f.abrev_nome AS forum_abrev_nome,
+         f.id AS forum_id, f.cidade AS forum_cidade, f.uf AS forum_uf,
          tp.nome AS tipo_nome,
          sp.nome AS status_nome,
          inst.nome AS instancia_nome
@@ -221,6 +286,19 @@ async function criarProcesso(req, res) {
       }
     }
 
+    // Verifica duplicidade de numProc (ignora null/vazio)
+    const numProcLimpo = numProc?.trim() || null;
+    if (numProcLimpo) {
+      const [duplic] = await conn.execute(
+        'SELECT id FROM tblProc WHERE numProc = ? AND ativo = 1 LIMIT 1',
+        [numProcLimpo]
+      );
+      if (duplic.length) {
+        await conn.rollback();
+        return erro(res, `O número de processo "${numProcLimpo}" já está cadastrado no sistema`);
+      }
+    }
+
     // Cria o processo
     const [procResult] = await conn.execute(
       `INSERT INTO tblProc
@@ -228,7 +306,7 @@ async function criarProcesso(req, res) {
           data_distribuicao, observacoes, criado_por)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [pastaId,
-       numProc          || null,
+       numProcLimpo,
        NomeTituloProc,
        vara_id          || null,
        tipo_id          || null,
@@ -268,6 +346,9 @@ async function criarProcesso(req, res) {
 }
 
 // DELETE /api/processos/:id — Soft-delete do processo (ativo = 0)
+// Bloqueia a exclusão se existir qualquer dado dependente do processo.
+// A pasta NÃO é excluída fisicamente — fica invisível na listagem e seu
+// número volta a ser sugerido pelo sugerirNumeroPasta (sem processos ativos).
 async function excluirProcesso(req, res) {
   const { id } = req.params;
   try {
@@ -276,6 +357,34 @@ async function excluirProcesso(req, res) {
     );
     if (!rows.length) return naoEncontrado(res, 'Processo não encontrado');
 
+    // Verifica dados dependentes que impedem a exclusão
+    const verificacoes = [
+      { tabela: 'andamento_processual', coluna: 'processo_id', label: 'andamento(s) processual(is)' },
+      { tabela: 'audiencia',            coluna: 'processo_id', label: 'audiência(s)'                 },
+      { tabela: 'pericia',              coluna: 'processo_id', label: 'perícia(s)'                   },
+      { tabela: 'prazos_processo',      coluna: 'processo_id', label: 'prazo(s)'                     },
+      { tabela: 'tarefas',              coluna: 'processo_id', label: 'tarefa(s)'                    },
+      { tabela: 'parcerias',            coluna: 'processo_id', label: 'parceria(s)'                  },
+      { tabela: 'log_documentos_gerados', coluna: 'processo_id', label: 'documento(s) gerado(s)'    },
+      { tabela: 'log_comunicacoes',     coluna: 'processo_id', label: 'comunicação(ões) registrada(s)' },
+    ];
+
+    const bloqueios = [];
+    for (const v of verificacoes) {
+      const [[{ total }]] = await pool.execute(
+        `SELECT COUNT(*) AS total FROM ${v.tabela} WHERE ${v.coluna} = ?`, [id]
+      );
+      if (total > 0) bloqueios.push(`${total} ${v.label}`);
+    }
+
+    if (bloqueios.length > 0) {
+      return erro(res,
+        `Não é possível excluir este processo — ele possui: ${bloqueios.join(', ')}. ` +
+        `Remova esses registros antes de excluir o processo.`
+      );
+    }
+
+    // Sem dependentes — pode excluir
     await pool.execute(
       'UPDATE tblProc SET ativo = 0, alterado_por = ?, alterado_em = NOW() WHERE id = ?',
       [req.usuario.id, id]
@@ -306,6 +415,19 @@ async function atualizarProcesso(req, res) {
     if (!antes.length) {
       await conn.rollback();
       return naoEncontrado(res, 'Processo não encontrado');
+    }
+
+    // Verifica duplicidade de numProc (exclui o próprio processo da verificação)
+    const numProcLimpo = numProc?.trim() || null;
+    if (numProcLimpo) {
+      const [duplic] = await conn.execute(
+        'SELECT id FROM tblProc WHERE numProc = ? AND ativo = 1 AND id != ? LIMIT 1',
+        [numProcLimpo, id]
+      );
+      if (duplic.length) {
+        await conn.rollback();
+        return erro(res, `O número de processo "${numProcLimpo}" já está cadastrado em outro processo`);
+      }
     }
 
     await conn.execute(
@@ -389,31 +511,93 @@ async function buscarAuxiliares(req, res) {
   }
 }
 
-// POST /api/processos/auxiliares/foruns (admin)
+// ============================================================
+// AUXILIARES — CRUD COMPLETO
+// Helpers internos para evitar repetição nas tabelas simples
+// ============================================================
+
+// Atualiza uma tabela auxiliar simples (só nome)
+async function _atualizarAuxSimples(req, res, tabela) {
+  const { id } = req.params;
+  const { nome } = req.body;
+  if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
+  try {
+    const [r] = await pool.execute(
+      `UPDATE ${tabela} SET nome=?, alterado_por=?, alterado_em=NOW() WHERE id=? AND ativo=1`,
+      [nome.trim(), req.usuario.id, id]
+    );
+    if (!r.affectedRows) return naoEncontrado(res, 'Registro não encontrado');
+    return sucesso(res, { id: parseInt(id), nome: nome.trim() }, 'Atualizado com sucesso');
+  } catch (err) { return erroInterno(res, err); }
+}
+
+// Exclui (soft) uma tabela auxiliar — bloqueia se estiver em uso
+async function _excluirAuxSimples(req, res, tabela, colunaUso) {
+  const { id } = req.params;
+  try {
+    const [uso] = await pool.execute(
+      `SELECT COUNT(*) AS total FROM tblProc WHERE ${colunaUso}=? AND ativo=1`, [id]
+    );
+    if (uso[0].total > 0)
+      return erro(res, `Não é possível excluir — este registro está vinculado a ${uso[0].total} processo(s) ativo(s)`);
+    await pool.execute(
+      `UPDATE ${tabela} SET ativo=0, alterado_por=?, alterado_em=NOW() WHERE id=?`,
+      [req.usuario.id, id]
+    );
+    await auditoria.registrar(req.usuario.id, tabela, 'excluir', id);
+    return sucesso(res, null, 'Excluído com sucesso');
+  } catch (err) { return erroInterno(res, err); }
+}
+
+// POST /api/processos/auxiliares/foruns
 async function criarForum(req, res) {
   try {
-    const { nome, cidade, estado } = req.body;
-    if (!nome) return erro(res, 'Nome é obrigatório');
+    const { abrev_nome, nome, cep, logradouro, num_end, compl_end, bairro, cidade, uf } = req.body;
+    if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
     const [r] = await pool.execute(
-      'INSERT INTO tblForum (nome, cidade, estado, criado_por) VALUES (?, ?, ?, ?)',
-      [nome.trim(), cidade?.trim() || null, estado?.toUpperCase().slice(0, 2) || null, req.usuario.id]
+      `INSERT INTO tblForum
+         (abrev_nome, nome, cep, logradouro, num_end, compl_end, bairro, cidade, uf, criado_por)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        abrev_nome?.trim()               || null,
+        nome.trim(),
+        cep?.replace(/\D/g, '')          || null,
+        logradouro?.trim()               || null,
+        num_end?.trim()                  || null,
+        compl_end?.trim()                || null,
+        bairro?.trim()                   || null,
+        cidade?.trim()                   || null,
+        uf?.toUpperCase().slice(0, 2)    || null,
+        req.usuario.id,
+      ]
     );
-    return sucesso(res, { id: r.insertId, nome: nome.trim() }, 'Fórum criado com sucesso', 201);
+    return sucesso(res, { id: r.insertId, nome: nome.trim(), abrev_nome: abrev_nome?.trim() || null }, 'Fórum criado com sucesso', 201);
   } catch (err) {
     return erroInterno(res, err);
   }
 }
 
-// POST /api/processos/auxiliares/varas (admin)
+// POST /api/processos/auxiliares/varas
 async function criarVara(req, res) {
   try {
-    const { nome, forum_id, codVaraNoProc } = req.body;
-    if (!nome || !forum_id) return erro(res, 'Nome e fórum são obrigatórios');
+    const { abrev_nome, nome, forum_id, codVaraNoProc, compl_end, tel, email } = req.body;
+    if (!nome?.trim() || !forum_id) return erro(res, 'Nome e fórum são obrigatórios');
     const [r] = await pool.execute(
-      'INSERT INTO tblVara (nome, forum_id, codVaraNoProc, criado_por) VALUES (?, ?, ?, ?)',
-      [nome.trim(), forum_id, codVaraNoProc?.trim() || null, req.usuario.id]
+      `INSERT INTO tblVara
+         (abrev_nome, nome, forum_id, codVaraNoProc, compl_end, tel, email, criado_por)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        abrev_nome?.trim()    || null,
+        nome.trim(),
+        forum_id,
+        codVaraNoProc?.trim() || null,
+        compl_end?.trim()     || null,
+        tel?.trim()           || null,
+        email?.trim()         || null,
+        req.usuario.id,
+      ]
     );
-    return sucesso(res, { id: r.insertId, nome: nome.trim() }, 'Vara criada com sucesso', 201);
+    return sucesso(res, { id: r.insertId, nome: nome.trim(), abrev_nome: abrev_nome?.trim() || null }, 'Vara criada com sucesso', 201);
   } catch (err) {
     return erroInterno(res, err);
   }
@@ -464,17 +648,103 @@ async function criarInstancia(req, res) {
   }
 }
 
+// PUT/DELETE auxiliares — Fórum
+async function atualizarForum(req, res) {
+  const { id } = req.params;
+  const { abrev_nome, nome, cep, logradouro, num_end, compl_end, bairro, cidade, uf } = req.body;
+  if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
+  try {
+    const [r] = await pool.execute(
+      `UPDATE tblForum SET
+         abrev_nome=?, nome=?, cep=?, logradouro=?, num_end=?,
+         compl_end=?, bairro=?, cidade=?, uf=?,
+         alterado_por=?, alterado_em=NOW()
+       WHERE id=? AND ativo=1`,
+      [
+        abrev_nome?.trim()              || null,
+        nome.trim(),
+        cep?.replace(/\D/g, '')         || null,
+        logradouro?.trim()              || null,
+        num_end?.trim()                 || null,
+        compl_end?.trim()               || null,
+        bairro?.trim()                  || null,
+        cidade?.trim()                  || null,
+        uf?.toUpperCase().slice(0, 2)   || null,
+        req.usuario.id,
+        id,
+      ]
+    );
+    if (!r.affectedRows) return naoEncontrado(res, 'Fórum não encontrado');
+    return sucesso(res, { id: parseInt(id), nome: nome.trim(), abrev_nome: abrev_nome?.trim() || null }, 'Fórum atualizado');
+  } catch (err) { return erroInterno(res, err); }
+}
+async function excluirForum(req, res) {
+  const { id } = req.params;
+  try {
+    const [varas] = await pool.execute('SELECT COUNT(*) AS total FROM tblVara WHERE forum_id=? AND ativo=1', [id]);
+    if (varas[0].total > 0)
+      return erro(res, `Não é possível excluir — este fórum tem ${varas[0].total} vara(s) vinculada(s)`);
+    await pool.execute('UPDATE tblForum SET ativo=0, alterado_por=?, alterado_em=NOW() WHERE id=?', [req.usuario.id, id]);
+    await auditoria.registrar(req.usuario.id, 'tblForum', 'excluir', id);
+    return sucesso(res, null, 'Fórum excluído');
+  } catch (err) { return erroInterno(res, err); }
+}
+
+// PUT/DELETE auxiliares — Vara
+async function atualizarVara(req, res) {
+  const { id } = req.params;
+  const { abrev_nome, nome, forum_id, codVaraNoProc, compl_end, tel, email } = req.body;
+  if (!nome?.trim() || !forum_id) return erro(res, 'Nome e fórum são obrigatórios');
+  try {
+    const [r] = await pool.execute(
+      `UPDATE tblVara SET
+         abrev_nome=?, nome=?, forum_id=?, codVaraNoProc=?,
+         compl_end=?, tel=?, email=?,
+         alterado_por=?, alterado_em=NOW()
+       WHERE id=? AND ativo=1`,
+      [
+        abrev_nome?.trim()    || null,
+        nome.trim(),
+        forum_id,
+        codVaraNoProc?.trim() || null,
+        compl_end?.trim()     || null,
+        tel?.trim()           || null,
+        email?.trim()         || null,
+        req.usuario.id,
+        id,
+      ]
+    );
+    if (!r.affectedRows) return naoEncontrado(res, 'Vara não encontrada');
+    return sucesso(res, { id: parseInt(id), nome: nome.trim(), abrev_nome: abrev_nome?.trim() || null }, 'Vara atualizada');
+  } catch (err) { return erroInterno(res, err); }
+}
+async function excluirVara(req, res) { return _excluirAuxSimples(req, res, 'tblVara', 'vara_id'); }
+
+// PUT/DELETE auxiliares — Tipo, Status, Instância (só nome)
+async function atualizarTipo(req, res)       { return _atualizarAuxSimples(req, res, 'tblTipoProc'); }
+async function excluirTipo(req, res)         { return _excluirAuxSimples(req, res, 'tblTipoProc', 'tipo_id'); }
+async function atualizarStatusProc(req, res) { return _atualizarAuxSimples(req, res, 'tblStatusProc'); }
+async function excluirStatusProc(req, res)   { return _excluirAuxSimples(req, res, 'tblStatusProc', 'status_id'); }
+async function atualizarInstancia(req, res)  { return _atualizarAuxSimples(req, res, 'tblInstanciaProc'); }
+async function excluirInstancia(req, res)    { return _excluirAuxSimples(req, res, 'tblInstanciaProc', 'instancia_id'); }
+
 module.exports = {
   sugerirNumeroPasta,
   listarPastas,
+  renumerarPasta,
   buscarPasta,
   criarProcesso,
   atualizarProcesso,
   excluirProcesso,
   buscarAuxiliares,
-  criarForum,
-  criarVara,
-  criarTipo,
-  criarStatusProc,
-  criarInstancia,
+  // Fórum
+  criarForum, atualizarForum, excluirForum,
+  // Vara
+  criarVara, atualizarVara, excluirVara,
+  // Tipo
+  criarTipo, atualizarTipo, excluirTipo,
+  // Status
+  criarStatusProc, atualizarStatusProc, excluirStatusProc,
+  // Instância
+  criarInstancia, atualizarInstancia, excluirInstancia,
 };
