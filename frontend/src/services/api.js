@@ -78,16 +78,24 @@ export const pessoasAPI = {
 };
 
 // ============================================================
-// PROCESSOS E PASTAS
+// PROCESSOS E PASTAS — Novo modelo (tblPasta + tblProc)
 // ============================================================
 export const processosAPI = {
-  listarPastas:       (params) => api.get('/processos/pastas', { params }),
-  buscarPasta:        (id) => api.get(`/processos/pastas/${id}`),
-  criarPasta:         (dados) => api.post('/processos/pastas', dados),
-  buscarProcesso:     (id) => api.get(`/processos/${id}`),
-  criarProcesso:      (dados) => api.post('/processos', dados),
-  atualizarProcesso:  (id, dados) => api.put(`/processos/${id}`, dados),
-  auxiliares:         () => api.get('/processos/auxiliares'),
+  // Pastas
+  listarPastas:      (params) => api.get('/processos/pastas', { params }),
+  buscarPasta:       (id) => api.get(`/processos/pastas/${id}`),
+  sugerirPasta:      () => api.get('/processos/sugerir-pasta'),
+  // Processos
+  criarProcesso:     (dados) => api.post('/processos', dados),
+  atualizarProcesso: (id, dados) => api.put(`/processos/${id}`, dados),
+  // Auxiliares (leitura)
+  auxiliares:        () => api.get('/processos/auxiliares'),
+  // Auxiliares (cadastro — admin)
+  criarForum:        (dados) => api.post('/processos/auxiliares/foruns', dados),
+  criarVara:         (dados) => api.post('/processos/auxiliares/varas', dados),
+  criarTipo:         (dados) => api.post('/processos/auxiliares/tipos', dados),
+  criarStatus:       (dados) => api.post('/processos/auxiliares/status', dados),
+  criarInstancia:    (dados) => api.post('/processos/auxiliares/instancias', dados),
 };
 
 // ============================================================

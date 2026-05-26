@@ -104,6 +104,19 @@ export function validarCNPJ(cnpj) {
   return true;
 }
 
+// Aplica máscara no número CNJ durante digitação
+// Formato: NNNNNNN-DD.AAAA.J.TT.OOOO (20 dígitos no total)
+// Ex: "00012341220235020001" → "0001234-12.2023.5.02.0001"
+export function mascaraCNJ(value) {
+  const d = value.replace(/\D/g, '').slice(0, 20);
+  if (d.length <=  7) return d;
+  if (d.length <=  9) return `${d.slice(0,7)}-${d.slice(7)}`;
+  if (d.length <= 13) return `${d.slice(0,7)}-${d.slice(7,9)}.${d.slice(9)}`;
+  if (d.length <= 14) return `${d.slice(0,7)}-${d.slice(7,9)}.${d.slice(9,13)}.${d.slice(13)}`;
+  if (d.length <= 16) return `${d.slice(0,7)}-${d.slice(7,9)}.${d.slice(9,13)}.${d.slice(13,14)}.${d.slice(14)}`;
+  return `${d.slice(0,7)}-${d.slice(7,9)}.${d.slice(9,13)}.${d.slice(13,14)}.${d.slice(14,16)}.${d.slice(16)}`;
+}
+
 // Formata número de pasta: 42 → "0042"
 export function formatarNumeroPasta(numero) {
   if (!numero) return '—';

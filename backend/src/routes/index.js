@@ -48,13 +48,19 @@ router.post('/pessoas/juridicas',         autenticar, verificarPermissao('pessoa
 router.delete('/pessoas/juridicas/:id',   autenticar, verificarPermissao('pessoas','excluir'),    pessoasCtrl.excluirJuridica);
 
 // ---- PROCESSOS E PASTAS ----
-router.get('/processos/auxiliares',       autenticar, processosCtrl.buscarAuxiliares);
-router.get('/processos/pastas',           autenticar, verificarPermissao('processos','visualizar'), processosCtrl.listarPastas);
-router.get('/processos/pastas/:id',       autenticar, verificarPermissao('processos','visualizar'), processosCtrl.buscarPasta);
-router.post('/processos/pastas',          autenticar, verificarPermissao('processos','cadastrar'),  processosCtrl.criarPasta);
-router.get('/processos/:id',              autenticar, verificarPermissao('processos','visualizar'), processosCtrl.buscarProcesso);
-router.post('/processos',                 autenticar, verificarPermissao('processos','cadastrar'),  processosCtrl.criarProcesso);
-router.put('/processos/:id',              autenticar, verificarPermissao('processos','alterar'),    processosCtrl.atualizarProcesso);
+// ATENÇÃO: rotas estáticas (sugerir-pasta, auxiliares, pastas) ANTES de /:id
+router.get('/processos/sugerir-pasta',              autenticar, processosCtrl.sugerirNumeroPasta);
+router.get('/processos/auxiliares',                 autenticar, processosCtrl.buscarAuxiliares);
+// Auxiliares cadastráveis pelo admin (fórum, vara, tipo, status, instância)
+router.post('/processos/auxiliares/foruns',         autenticar, apenasAdmin, processosCtrl.criarForum);
+router.post('/processos/auxiliares/varas',          autenticar, apenasAdmin, processosCtrl.criarVara);
+router.post('/processos/auxiliares/tipos',          autenticar, apenasAdmin, processosCtrl.criarTipo);
+router.post('/processos/auxiliares/status',         autenticar, apenasAdmin, processosCtrl.criarStatusProc);
+router.post('/processos/auxiliares/instancias',     autenticar, apenasAdmin, processosCtrl.criarInstancia);
+router.get('/processos/pastas',                     autenticar, verificarPermissao('processos','visualizar'), processosCtrl.listarPastas);
+router.get('/processos/pastas/:id',                 autenticar, verificarPermissao('processos','visualizar'), processosCtrl.buscarPasta);
+router.post('/processos',                           autenticar, verificarPermissao('processos','cadastrar'),  processosCtrl.criarProcesso);
+router.put('/processos/:id',                        autenticar, verificarPermissao('processos','alterar'),    processosCtrl.atualizarProcesso);
 
 // ---- PRAZOS ----
 router.get('/prazos/tipos',       autenticar, prazosCtrl.buscarTipos);

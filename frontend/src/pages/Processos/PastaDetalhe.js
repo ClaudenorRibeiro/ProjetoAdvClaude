@@ -1,23 +1,22 @@
 // ============================================================
 // PÁGINA DE DETALHE DA PASTA
-// Mostra todos os processos, andamentos, prazos, tarefas,
-// audiências e financeiro vinculados a uma pasta
+// Mostra os processos vinculados e suas abas:
+// processos, andamentos, prazos, tarefas, audiências, financeiro
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { processosAPI, andamentoAPI, prazosAPI, tarefasAPI, audienciasAPI, financeiroAPI } from '../../services/api';
-import { formatarData, formatarNumeroPasta, labelAreaDireito, formatarMoeda, labelStatusPrazo, corPrazo, toTitleCase } from '../../utils/formatters';
+import { formatarData, formatarNumeroPasta, formatarMoeda, labelStatusPrazo, corPrazo, toTitleCase } from '../../utils/formatters';
+import { ModalNovoProcesso } from './Processos';
 import { toast } from 'react-toastify';
-
-const AREA_COR = { trabalhista:'badge-azul', previdenciario:'badge-verde', familia:'badge-laranja', outro:'badge-cinza' };
 
 export default function PastaDetalhe() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [pasta, setPasta]         = useState(null);
+  const [pasta, setPasta]           = useState(null);
   const [carregando, setCarregando] = useState(true);
-  const [abaAtiva, setAbaAtiva]   = useState('processos');
+  const [abaAtiva, setAbaAtiva]     = useState('processos');
 
   // Estado por aba
   const [processoAberto, setProcessoAberto] = useState(null);
@@ -28,8 +27,8 @@ export default function PastaDetalhe() {
   const [contaCorrente, setContaCorrente]   = useState(null);
 
   // Modais
-  const [modalProcesso, setModalProcesso] = useState(false);
-  const [modalAndamento, setModalAndamento] = useState(false);
+  const [modalProcesso, setModalProcesso]     = useState(false);
+  const [modalAndamento, setModalAndamento]   = useState(false);
   const [andamentoEditando, setAndamentoEditando] = useState(null);
   const [modalLancamento, setModalLancamento] = useState(false);
 
@@ -47,12 +46,9 @@ export default function PastaDetalhe() {
   // Carrega dados da aba ao trocar
   useEffect(() => {
     if (!pasta) return;
-    const processoIds = pasta.processos?.map(p => p.id) || [];
-    if (abaAtiva === 'andamentos' && processoAberto) {
-      carregarAndamentos(processoAberto.id);
-    }
-    if (abaAtiva === 'prazos' && processoIds.length) carregarPrazos(processoIds[0]);
-    if (abaAtiva === 'tarefas') carregarTarefas();
+    if (abaAtiva === 'andamentos' && processoAberto) carregarAndamentos(processoAberto.id);
+    if (abaAtiva === 'prazos'     && pasta.processos?.length) carregarPrazos(pasta.processos[0].id);
+    if (abaAtiva === 'tarefas')    carregarTarefas();
     if (abaAtiva === 'audiencias') carregarAudiencias();
     if (abaAtiva === 'financeiro') carregarFinanceiro();
   }, [abaAtiva, pasta]);
@@ -79,10 +75,10 @@ export default function PastaDetalhe() {
   }
 
   async function carregarAudiencias() {
+    const proc = pasta?.processos?.[0];
+    if (!proc) return;
     try {
-      const processoIds = pasta?.processos?.map(p => p.id) || [];
-      if (!processoIds.length) return;
-      const { data } = await audienciasAPI.listar({ processo_id: processoIds[0], limite: 50 });
+      const { data } = await audienciasAPI.listar({ processo_id: proc.id, limite: 50 });
       if (data.ok) setAudiencias(data.dados.registros);
     } catch {}
   }
@@ -109,47 +105,55 @@ export default function PastaDetalhe() {
     carregarAndamentos(processo.id);
   }
 
+  // Monta o título do processo para exibição nos selects
+  function labelProcesso(pr) {
+    return pr.NomeTituloProc || pr.numProc || `Processo #${pr.id}`;
+  }
+
   if (carregando) return <div className="card"><div className="loading">Carregando pasta...</div></div>;
   if (!pasta)     return <div className="card"><p className="lista-vazia">Pasta não encontrada</p></div>;
 
+  const processos = pasta.processos || [];
+
   return (
     <div>
-      {/* Cabeçalho da pasta */}
-      <div className="card" style={{marginBottom:'16px'}}>
-        <div style={{display:'flex',alignItems:'center',gap:'12px',flexWrap:'wrap'}}>
-          <button className="btn btn-outline" style={{fontSize:'12px'}} onClick={() => navigate('/processos')}>
+      {/* Cabeçalho */}
+      <div className="card" style={{ marginBottom: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <button className="btn btn-outline" style={{ fontSize: '12px' }} onClick={() => navigate('/processos')}>
             ← Voltar
           </button>
           <div>
-            <div style={{fontSize:'11px',color:'#888',marginBottom:'2px'}}>
-              Pasta {formatarNumeroPasta(pasta.numero)}
+            <div style={{ fontSize: '11px', color: '#888', marginBottom: '2px' }}>
+              Pasta {formatarNumeroPasta(pasta.numPasta)}
             </div>
-            <h2 style={{margin:0,fontSize:'18px',color:'#1e2a3a'}}>{pasta.titulo}</h2>
+            <h2 style={{ margin: 0, fontSize: '18px', color: '#1e2a3a' }}>
+              {processos[0]?.NomeTituloProc || `Pasta ${formatarNumeroPasta(pasta.numPasta)}`}
+            </h2>
           </div>
-          <div style={{marginLeft:'auto',display:'flex',gap:'12px',alignItems:'center',flexWrap:'wrap'}}>
-            <div>
-              <span style={{fontSize:'12px',color:'#888'}}>Cliente: </span>
-              <strong style={{fontSize:'13px'}}>{pasta.cliente_nome}</strong>
-            </div>
-            <span className={`badge ${AREA_COR[pasta.area_direito]}`}>
-              {labelAreaDireito(pasta.area_direito)}
-            </span>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+            {processos[0]?.tipo_nome && (
+              <span className="badge badge-azul">{processos[0].tipo_nome}</span>
+            )}
+            {processos[0]?.status_nome && (
+              <span className="badge badge-cinza">{processos[0].status_nome}</span>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Abas de navegação */}
+      {/* Abas */}
       <div className="card">
         <div className="abas-nav">
           {[
-            { key:'processos',  label:'Processos' },
-            { key:'andamentos', label:'Andamentos' },
-            { key:'prazos',     label:'Prazos' },
-            { key:'tarefas',    label:'Tarefas' },
-            { key:'audiencias', label:'Audiências' },
-            { key:'financeiro', label:'Financeiro' },
+            { key: 'processos',  label: 'Processos' },
+            { key: 'andamentos', label: 'Andamentos' },
+            { key: 'prazos',     label: 'Prazos' },
+            { key: 'tarefas',    label: 'Tarefas' },
+            { key: 'audiencias', label: 'Audiências' },
+            { key: 'financeiro', label: 'Financeiro' },
           ].map(({ key, label }) => (
-            <button key={key} className={`aba-btn ${abaAtiva===key?'ativa':''}`}
+            <button key={key} className={`aba-btn ${abaAtiva === key ? 'ativa' : ''}`}
               onClick={() => setAbaAtiva(key)}>
               {label}
             </button>
@@ -159,34 +163,68 @@ export default function PastaDetalhe() {
         {/* === ABA: PROCESSOS === */}
         {abaAtiva === 'processos' && (
           <div>
-            <div style={{display:'flex',justifyContent:'flex-end',marginBottom:'12px'}}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
               <button className="btn btn-primary" onClick={() => setModalProcesso(true)}>
-                + Novo Processo
+                + Novo Processo (mesma pasta)
               </button>
             </div>
             <div className="tabela-wrapper">
               <table className="tabela">
                 <thead>
-                  <tr><th>Nº Processo</th><th>Vara</th><th>Fórum</th><th>Status</th><th>Ações</th></tr>
+                  <tr>
+                    <th>Título</th>
+                    <th>Número CNJ</th>
+                    <th>Tipo</th>
+                    <th>Status</th>
+                    <th>Instância</th>
+                    <th>Vara / Fórum</th>
+                    <th>Ações</th>
+                  </tr>
                 </thead>
                 <tbody>
-                  {pasta.processos?.map(pr => (
+                  {processos.map(pr => (
                     <tr key={pr.id}>
-                      <td><strong>{pr.numero || '(sem número)'}</strong></td>
-                      <td>{pr.vara_nome || '—'}</td>
-                      <td>{pr.forum_nome || '—'}</td>
-                      <td>{pr.status_nome || '—'}</td>
                       <td>
-                        <button className="btn btn-outline" style={{fontSize:'12px',padding:'4px 10px'}}
-                          onClick={() => abrirProcesso(pr)}>
-                          Ver Andamentos
+                        <div style={{ fontWeight: '500' }}>{pr.NomeTituloProc || '—'}</div>
+                        {/* Autores em azul, réus em vermelho */}
+                        <div style={{ fontSize: '11px', marginTop: '3px', display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                          {pr.autores?.map((a, i) => (
+                            <span key={i} style={{ background: '#dbeafe', color: '#1e40af', borderRadius: '10px', padding: '1px 7px' }}>{a.nome}</span>
+                          ))}
+                          {pr.autores?.length > 0 && pr.reus?.length > 0 && (
+                            <span style={{ color: '#888', fontWeight: '700' }}>X</span>
+                          )}
+                          {pr.reus?.map((r, i) => (
+                            <span key={i} style={{ background: '#fee2e2', color: '#991b1b', borderRadius: '10px', padding: '1px 7px' }}>{r.nome}</span>
+                          ))}
+                        </div>
+                      </td>
+                      <td>
+                        <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>
+                          {pr.numProc || '—'}
+                        </span>
+                      </td>
+                      <td>{pr.tipo_nome     ? <span className="badge badge-azul">{pr.tipo_nome}</span> : '—'}</td>
+                      <td>{pr.status_nome   ? <span className="badge badge-cinza">{pr.status_nome}</span> : '—'}</td>
+                      <td>{pr.instancia_nome || '—'}</td>
+                      <td>
+                        <div style={{ fontSize: '13px' }}>{pr.vara_nome || '—'}</div>
+                        {pr.forum_nome && <div style={{ fontSize: '11px', color: '#888' }}>{pr.forum_nome}</div>}
+                      </td>
+                      <td>
+                        <button
+                          className="btn btn-outline"
+                          style={{ fontSize: '12px', padding: '4px 10px' }}
+                          onClick={() => abrirProcesso(pr)}
+                        >
+                          Andamentos
                         </button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {(!pasta.processos || pasta.processos.length === 0) && (
+              {processos.length === 0 && (
                 <p className="lista-vazia">Nenhum processo nesta pasta</p>
               )}
             </div>
@@ -196,17 +234,18 @@ export default function PastaDetalhe() {
         {/* === ABA: ANDAMENTOS === */}
         {abaAtiva === 'andamentos' && (
           <div>
-            {/* Selector de processo */}
-            <div style={{display:'flex',gap:'12px',alignItems:'center',marginBottom:'16px',flexWrap:'wrap'}}>
-              <select className="form-control" style={{maxWidth:'320px'}}
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
+              <select
+                className="form-control" style={{ maxWidth: '360px' }}
                 value={processoAberto?.id || ''}
                 onChange={e => {
-                  const pr = pasta.processos.find(p => String(p.id) === e.target.value);
+                  const pr = processos.find(p => String(p.id) === e.target.value);
                   if (pr) { setProcessoAberto(pr); carregarAndamentos(pr.id); }
-                }}>
-                <option value="">— Selecione um processo —</option>
-                {pasta.processos?.map(pr => (
-                  <option key={pr.id} value={pr.id}>{pr.numero || `Processo #${pr.id}`}</option>
+                }}
+              >
+                <option value="">— Selecione o processo —</option>
+                {processos.map(pr => (
+                  <option key={pr.id} value={pr.id}>{labelProcesso(pr)}</option>
                 ))}
               </select>
               {processoAberto && (
@@ -225,16 +264,16 @@ export default function PastaDetalhe() {
                   <tbody>
                     {andamentos.map(a => (
                       <tr key={a.id}>
-                        <td style={{whiteSpace:'nowrap'}}>{formatarData(a.data_andamento)}</td>
-                        <td style={{maxWidth:'400px'}}>{a.descricao}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>{formatarData(a.data_andamento)}</td>
+                        <td style={{ maxWidth: '400px' }}>{a.descricao}</td>
                         <td>{a.usuario_nome}</td>
                         <td>
-                          <div style={{display:'flex',gap:'6px'}}>
-                            <button className="btn btn-outline" style={{fontSize:'12px',padding:'4px 8px'}}
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button className="btn btn-outline" style={{ fontSize: '12px', padding: '4px 8px' }}
                               onClick={() => { setAndamentoEditando(a); setModalAndamento(true); }}>
                               Editar
                             </button>
-                            <button className="btn btn-danger" style={{fontSize:'12px',padding:'4px 8px'}}
+                            <button className="btn btn-danger" style={{ fontSize: '12px', padding: '4px 8px' }}
                               onClick={() => excluirAndamento(a.id)}>
                               ✕
                             </button>
@@ -255,15 +294,15 @@ export default function PastaDetalhe() {
         {/* === ABA: PRAZOS === */}
         {abaAtiva === 'prazos' && (
           <div>
-            <div style={{display:'flex',gap:'12px',marginBottom:'16px',alignItems:'center',flexWrap:'wrap'}}>
-              <select className="form-control" style={{maxWidth:'320px'}}
-                onChange={e => { if(e.target.value) carregarPrazos(e.target.value); }}>
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <select className="form-control" style={{ maxWidth: '360px' }}
+                onChange={e => { if (e.target.value) carregarPrazos(e.target.value); }}>
                 <option value="">— Selecione o processo —</option>
-                {pasta.processos?.map(pr => (
-                  <option key={pr.id} value={pr.id}>{pr.numero || `Processo #${pr.id}`}</option>
+                {processos.map(pr => (
+                  <option key={pr.id} value={pr.id}>{labelProcesso(pr)}</option>
                 ))}
               </select>
-              <Link to="/prazos" className="btn btn-outline" style={{fontSize:'12px'}}>
+              <Link to="/prazos" className="btn btn-outline" style={{ fontSize: '12px' }}>
                 + Novo Prazo (via módulo)
               </Link>
             </div>
@@ -297,8 +336,8 @@ export default function PastaDetalhe() {
         {/* === ABA: TAREFAS === */}
         {abaAtiva === 'tarefas' && (
           <div>
-            <div style={{marginBottom:'12px',display:'flex',justifyContent:'flex-end'}}>
-              <Link to="/tarefas" className="btn btn-outline" style={{fontSize:'12px'}}>
+            <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'flex-end' }}>
+              <Link to="/tarefas" className="btn btn-outline" style={{ fontSize: '12px' }}>
                 + Nova Tarefa (via módulo)
               </Link>
             </div>
@@ -308,7 +347,7 @@ export default function PastaDetalhe() {
                   <tr><th>Tarefa</th><th>Prioridade</th><th>Vencimento</th><th>Status</th></tr>
                 </thead>
                 <tbody>
-                  {tarefas.filter(t => !t.concluida).slice(0,20).map(t => (
+                  {tarefas.filter(t => !t.concluida).slice(0, 20).map(t => (
                     <tr key={t.id}>
                       <td><strong>{t.titulo}</strong></td>
                       <td>{t.prioridade}</td>
@@ -328,8 +367,8 @@ export default function PastaDetalhe() {
         {/* === ABA: AUDIÊNCIAS === */}
         {abaAtiva === 'audiencias' && (
           <div>
-            <div style={{marginBottom:'12px',display:'flex',justifyContent:'flex-end'}}>
-              <Link to="/audiencias" className="btn btn-outline" style={{fontSize:'12px'}}>
+            <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'flex-end' }}>
+              <Link to="/audiencias" className="btn btn-outline" style={{ fontSize: '12px' }}>
                 + Nova Audiência (via módulo)
               </Link>
             </div>
@@ -342,16 +381,14 @@ export default function PastaDetalhe() {
                   {audiencias.map(a => (
                     <tr key={a.id}>
                       <td>{a.tipo_nome || '—'}</td>
-                      <td>{formatarData(a.data)} {a.hora?.slice(0,5)}</td>
+                      <td>{formatarData(a.data)} {a.hora?.slice(0, 5)}</td>
                       <td>{a.modalidade === 'virtual' ? 'Virtual' : 'Presencial'}</td>
                       <td>{a.local || a.link_virtual || '—'}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {audiencias.length === 0 && (
-                <p className="lista-vazia">Nenhuma audiência encontrada</p>
-              )}
+              {audiencias.length === 0 && <p className="lista-vazia">Nenhuma audiência encontrada</p>}
             </div>
           </div>
         )}
@@ -361,13 +398,12 @@ export default function PastaDetalhe() {
           <div>
             {contaCorrente ? (
               <div>
-                {/* Honorários */}
                 {contaCorrente.honorarios && (
-                  <div className="card" style={{background:'#f8fafc',marginBottom:'16px',border:'1px solid #e8ecf0'}}>
-                    <div style={{display:'flex',gap:'24px',flexWrap:'wrap'}}>
+                  <div className="card" style={{ background: '#f8fafc', marginBottom: '16px', border: '1px solid #e8ecf0' }}>
+                    <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
                       <div>
-                        <div style={{fontSize:'12px',color:'#888'}}>Tipo de honorário</div>
-                        <strong style={{fontSize:'14px'}}>
+                        <div style={{ fontSize: '12px', color: '#888' }}>Tipo de honorário</div>
+                        <strong style={{ fontSize: '14px' }}>
                           {contaCorrente.honorarios.tipo === 'percentual'
                             ? `${contaCorrente.honorarios.percentual}%`
                             : contaCorrente.honorarios.tipo === 'fixo'
@@ -376,23 +412,22 @@ export default function PastaDetalhe() {
                         </strong>
                       </div>
                       <div>
-                        <div style={{fontSize:'12px',color:'#888'}}>Saldo atual</div>
-                        <strong style={{fontSize:'14px',color: contaCorrente.saldo >= 0 ? '#059669' : '#dc2626'}}>
+                        <div style={{ fontSize: '12px', color: '#888' }}>Saldo atual</div>
+                        <strong style={{ fontSize: '14px', color: contaCorrente.saldo >= 0 ? '#059669' : '#dc2626' }}>
                           {formatarMoeda(contaCorrente.saldo)}
                         </strong>
                       </div>
                     </div>
                   </div>
                 )}
-                <div style={{display:'flex',justifyContent:'flex-end',marginBottom:'12px',gap:'8px'}}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px', gap: '8px' }}>
                   <button className="btn btn-primary" onClick={() => setModalLancamento(true)}>
                     + Lançamento
                   </button>
-                  <Link to="/financeiro" className="btn btn-outline" style={{fontSize:'12px'}}>
+                  <Link to="/financeiro" className="btn btn-outline" style={{ fontSize: '12px' }}>
                     Ver completo
                   </Link>
                 </div>
-                {/* Extrato resumido */}
                 <div className="tabela-wrapper">
                   <table className="tabela">
                     <thead>
@@ -427,10 +462,11 @@ export default function PastaDetalhe() {
         )}
       </div>
 
-      {/* Modal: Novo Processo */}
+      {/* Modal: Novo Processo (na mesma pasta) */}
       {modalProcesso && (
-        <ModalNovoProcesso pastaId={id}
-          onFechar={(reload) => { setModalProcesso(false); if(reload) carregarPasta(); }}
+        <ModalNovoProcesso
+          pastaId={id}
+          onFechar={(reload) => { setModalProcesso(false); if (reload) carregarPasta(); }}
         />
       )}
 
@@ -441,104 +477,28 @@ export default function PastaDetalhe() {
           andamento={andamentoEditando}
           onFechar={(reload) => {
             setModalAndamento(false);
-            if(reload) carregarAndamentos(processoAberto.id);
+            if (reload) carregarAndamentos(processoAberto.id);
           }}
         />
       )}
 
       {/* Modal: Lançamento financeiro */}
       {modalLancamento && (
-        <ModalLancamento pastaId={id}
-          onFechar={(reload) => { setModalLancamento(false); if(reload) carregarFinanceiro(); }}
+        <ModalLancamento
+          pastaId={id}
+          onFechar={(reload) => { setModalLancamento(false); if (reload) carregarFinanceiro(); }}
         />
       )}
     </div>
   );
 }
 
-// Modal para criar novo processo dentro da pasta
-function ModalNovoProcesso({ pastaId, onFechar }) {
-  const [form, setForm]       = useState({ pasta_id: pastaId });
-  const [salvando, setSalvando] = useState(false);
-  const [auxiliares, setAux]  = useState({ varas: [], status: [], usuarios: [] });
-
-  useEffect(() => {
-    processosAPI.auxiliares().then(r => {
-      if (r.data.ok) setAux(r.data.dados);
-    });
-  }, []);
-
-  function set(k, v) { setForm(f => ({...f, [k]: v})); }
-
-  async function salvar() {
-    setSalvando(true);
-    try {
-      await processosAPI.criarProcesso({ ...form, pasta_id: pastaId });
-      toast.success('Processo criado!');
-      onFechar(true);
-    } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao criar processo'); }
-    finally { setSalvando(false); }
-  }
-
-  return (
-    <div className="modal-overlay">
-      <div className="modal-box">
-        <div className="modal-header">
-          <h3>Novo Processo</h3>
-          <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
-        </div>
-        <div className="modal-body">
-          <div className="form-group">
-            <label className="form-label">Número do processo (CNJ)</label>
-            <input className="form-control" value={form.numero||''}
-              onChange={e => set('numero', e.target.value)}
-              placeholder="0000000-00.0000.0.00.0000" />
-          </div>
-          <div className="grid-2">
-            <div className="form-group">
-              <label className="form-label">Vara</label>
-              <select className="form-control" value={form.vara_id||''} onChange={e => set('vara_id', e.target.value)}>
-                <option value="">— Selecione —</option>
-                {auxiliares.varas?.map(v => <option key={v.id} value={v.id}>{v.nome} — {v.forum_nome}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Status</label>
-              <select className="form-control" value={form.status_id||''} onChange={e => set('status_id', e.target.value)}>
-                <option value="">— Selecione —</option>
-                {auxiliares.status?.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Data de distribuição</label>
-            <input type="date" className="form-control" value={form.data_distribuicao||''}
-              onChange={e => set('data_distribuicao', e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Observações</label>
-            <textarea className="form-control" rows={2} value={form.observacoes||''}
-              onChange={e => set('observacoes', e.target.value)}
-              onBlur={() => set('observacoes', toTitleCase(form.observacoes))} />
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
-            {salvando ? 'Salvando...' : 'Criar Processo'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Modal para criar/editar andamento
+// ---- Modal de andamento (criar / editar) ----
 function ModalAndamento({ processoId, andamento, onFechar }) {
   const [form, setForm]       = useState(andamento || { data_andamento: new Date().toISOString().split('T')[0] });
   const [salvando, setSalvando] = useState(false);
 
-  function set(k, v) { setForm(f => ({...f, [k]: v})); }
+  function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
   async function salvar() {
     if (!form.descricao) return toast.error('Descrição é obrigatória');
@@ -566,12 +526,12 @@ function ModalAndamento({ processoId, andamento, onFechar }) {
         <div className="modal-body">
           <div className="form-group">
             <label className="form-label">Data *</label>
-            <input type="date" className="form-control" value={form.data_andamento||''}
+            <input type="date" className="form-control" value={form.data_andamento || ''}
               onChange={e => set('data_andamento', e.target.value)} />
           </div>
           <div className="form-group">
             <label className="form-label">Descrição *</label>
-            <textarea className="form-control" rows={4} value={form.descricao||''}
+            <textarea className="form-control" rows={4} value={form.descricao || ''}
               onChange={e => set('descricao', e.target.value)}
               onBlur={() => set('descricao', toTitleCase(form.descricao))}
               placeholder="Descreva o andamento processual..." />
@@ -588,12 +548,12 @@ function ModalAndamento({ processoId, andamento, onFechar }) {
   );
 }
 
-// Modal para novo lançamento financeiro
+// ---- Modal de lançamento financeiro ----
 function ModalLancamento({ pastaId, onFechar }) {
   const [form, setForm]       = useState({ tipo: 'credito', data_lancamento: new Date().toISOString().split('T')[0] });
   const [salvando, setSalvando] = useState(false);
 
-  function set(k, v) { setForm(f => ({...f, [k]: v})); }
+  function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
   async function salvar() {
     if (!form.descricao || !form.valor) return toast.error('Descrição e valor são obrigatórios');
@@ -630,13 +590,13 @@ function ModalLancamento({ pastaId, onFechar }) {
           </div>
           <div className="form-group">
             <label className="form-label">Descrição *</label>
-            <input className="form-control" value={form.descricao||''}
+            <input className="form-control" value={form.descricao || ''}
               onChange={e => set('descricao', e.target.value)}
               onBlur={() => set('descricao', toTitleCase(form.descricao))} />
           </div>
           <div className="form-group">
             <label className="form-label">Valor (R$) *</label>
-            <input type="number" step="0.01" className="form-control" value={form.valor||''}
+            <input type="number" step="0.01" className="form-control" value={form.valor || ''}
               onChange={e => set('valor', e.target.value)} />
           </div>
         </div>
