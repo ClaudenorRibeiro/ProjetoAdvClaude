@@ -210,8 +210,8 @@ export default function Agenda() {
 
       {/* Modal: detalhe do evento clicado */}
       {eventoSelecionado && (
-        <div className="modal-overlay" onClick={() => setEventoSelecionado(null)}>
-          <div className="modal-box modal-pequeno" onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay">
+          <div className="modal-box modal-pequeno">
             <div className="modal-header">
               <h3 style={{textTransform:'capitalize'}}>{eventoSelecionado.tipo}</h3>
               <button className="modal-fechar" onClick={() => setEventoSelecionado(null)}>✕</button>

@@ -111,7 +111,8 @@ async function criarFisica(req, res) {
   const {
     nome, cpf, rg, rg_orgao, pis, ctps_numero, ctps_serie,
     data_nascimento, estado_civil_id, profissao_id,
-    genero_id, cep, logradouro, numero, complemento, bairro, cidade, estado,
+    genero_id, nome_pai, nome_mae,
+    cep, logradouro, numero, complemento, bairro, cidade, estado,
     observacoes, telefones = [], emails = []
   } = req.body;
 
@@ -139,13 +140,15 @@ async function criarFisica(req, res) {
       `INSERT INTO pessoas_fisicas
          (nome, cpf, rg, rg_orgao, pis, ctps_numero, ctps_serie,
           data_nascimento, estado_civil_id, profissao_id, genero_id,
+          nome_pai, nome_mae,
           cep, logradouro, numero, complemento, bairro, cidade, estado, observacoes, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         nome.trim(), cpf?.replace(/\D/g, '') || null, rg || null, rg_orgao || null,
         pis || null, ctps_numero || null, ctps_serie || null,
         data_nascimento || null, estado_civil_id || null, profissao_id || null,
-        genero_id || null, cep || null, logradouro || null, numero || null,
+        genero_id || null, nome_pai || null, nome_mae || null,
+        cep || null, logradouro || null, numero || null,
         complemento || null, bairro || null, cidade || null, estado || null,
         observacoes || null, req.usuario.id
       ]
@@ -191,7 +194,8 @@ async function atualizarFisica(req, res) {
     const {
       nome, cpf, rg, rg_orgao, pis, ctps_numero, ctps_serie,
       data_nascimento, estado_civil_id, profissao_id,
-      genero_id, cep, logradouro, numero, complemento, bairro, cidade, estado, observacoes
+      genero_id, nome_pai, nome_mae,
+      cep, logradouro, numero, complemento, bairro, cidade, estado, observacoes
     } = req.body;
 
     // Busca dados atuais para auditoria
@@ -202,8 +206,10 @@ async function atualizarFisica(req, res) {
       `UPDATE pessoas_fisicas SET
          nome=?, cpf=?, rg=?, rg_orgao=?, pis=?, ctps_numero=?, ctps_serie=?,
          data_nascimento=?, estado_civil_id=?, profissao_id=?,
-         genero_id=?, cep=?, logradouro=?, numero=?, complemento=?, bairro=?,
-         cidade=?, estado=?, observacoes=?
+         genero_id=?, nome_pai=?, nome_mae=?,
+         cep=?, logradouro=?, numero=?, complemento=?, bairro=?,
+         cidade=?, estado=?, observacoes=?,
+         alterado_por=?, alterado_em=NOW()
        WHERE id = ?`,
       [
         nome?.trim(), cpf?.replace(/\D/g, '') || null, rg || null, rg_orgao || null,
@@ -211,14 +217,95 @@ async function atualizarFisica(req, res) {
         // Garante formato YYYY-MM-DD — frontend pode enviar ISO com horário (ex: 1972-03-27T03:00:00.000Z)
         data_nascimento ? data_nascimento.toString().slice(0, 10) : null,
         estado_civil_id || null, profissao_id || null,
-        genero_id || null, cep || null, logradouro || null, numero || null,
+        genero_id || null, nome_pai || null, nome_mae || null,
+        cep || null, logradouro || null, numero || null,
         complemento || null, bairro || null, cidade || null, estado || null,
-        observacoes || null, id
+        observacoes || null,
+        req.usuario.id,   // alterado_por — id de quem fez o update
+        id
       ]
     );
 
     await auditoria.registrar(req.usuario.id, 'pessoas_fisicas', 'editar', id, antes[0]);
     return sucesso(res, null, 'Pessoa atualizada com sucesso');
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// DELETE /api/pessoas/fisicas/:id — Exclui pessoa física SEM vínculos
+// Antes de excluir, verifica em paralelo todas as tabelas relacionadas.
+// Se houver qualquer vínculo, bloqueia e informa o motivo.
+// Telefones e e-mails são removidos automaticamente via CASCADE do banco.
+async function excluirFisica(req, res) {
+  try {
+    const { id } = req.params;
+    const [rows] = await pool.execute(
+      'SELECT nome FROM pessoas_fisicas WHERE id = ? AND ativo = 1', [id]
+    );
+    if (!rows.length) return naoEncontrado(res, 'Pessoa não encontrada');
+
+    // Verifica todos os vínculos em paralelo para performance
+    const [[pastas], [partes], [historico], [comunicacoes]] = await Promise.all([
+      pool.execute('SELECT COUNT(*) AS total FROM pasta WHERE tipo_pessoa = ? AND cliente_id = ?',              ['fisica', id]),
+      pool.execute('SELECT COUNT(*) AS total FROM partes_processo WHERE tipo_pessoa = ? AND pessoa_id = ?',     ['fisica', id]),
+      pool.execute('SELECT COUNT(*) AS total FROM historico_atendimento WHERE tipo_pessoa = ? AND pessoa_id = ?', ['fisica', id]),
+      pool.execute('SELECT COUNT(*) AS total FROM log_comunicacoes WHERE tipo_pessoa = ? AND pessoa_id = ?',   ['fisica', id]),
+    ]);
+
+    // Monta lista de vínculos encontrados para informar o usuário
+    const vinculos = [];
+    if (pastas[0].total > 0)       vinculos.push(`${pastas[0].total} pasta(s) de processo`);
+    if (partes[0].total > 0)       vinculos.push(`${partes[0].total} parte(s) em processo`);
+    if (historico[0].total > 0)    vinculos.push(`${historico[0].total} registro(s) de histórico`);
+    if (comunicacoes[0].total > 0) vinculos.push(`${comunicacoes[0].total} comunicação(ões)`);
+
+    if (vinculos.length > 0) {
+      return erro(res, `Pessoa não pode ser excluída pois possui: ${vinculos.join(', ')}`);
+    }
+
+    // Sem vínculos — DELETE real (telefones e e-mails apagam via CASCADE do banco)
+    await pool.execute('DELETE FROM pessoas_fisicas WHERE id = ?', [id]);
+    await auditoria.registrar(req.usuario.id, 'pessoas_fisicas', 'excluir', id);
+    return sucesso(res, null, 'Pessoa excluída com sucesso');
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// DELETE /api/pessoas/juridicas/:id — Exclui pessoa jurídica SEM vínculos
+// Mesma lógica da física: verifica vínculos em paralelo antes de excluir.
+async function excluirJuridica(req, res) {
+  try {
+    const { id } = req.params;
+    const [rows] = await pool.execute(
+      'SELECT razao_social FROM pessoas_juridicas WHERE id = ? AND ativo = 1', [id]
+    );
+    if (!rows.length) return naoEncontrado(res, 'Pessoa jurídica não encontrada');
+
+    // Verifica todos os vínculos em paralelo para performance
+    const [[pastas], [partes], [historico], [comunicacoes]] = await Promise.all([
+      pool.execute('SELECT COUNT(*) AS total FROM pasta WHERE tipo_pessoa = ? AND cliente_id = ?',              ['juridica', id]),
+      pool.execute('SELECT COUNT(*) AS total FROM partes_processo WHERE tipo_pessoa = ? AND pessoa_id = ?',     ['juridica', id]),
+      pool.execute('SELECT COUNT(*) AS total FROM historico_atendimento WHERE tipo_pessoa = ? AND pessoa_id = ?', ['juridica', id]),
+      pool.execute('SELECT COUNT(*) AS total FROM log_comunicacoes WHERE tipo_pessoa = ? AND pessoa_id = ?',   ['juridica', id]),
+    ]);
+
+    // Monta lista de vínculos encontrados para informar o usuário
+    const vinculos = [];
+    if (pastas[0].total > 0)       vinculos.push(`${pastas[0].total} pasta(s) de processo`);
+    if (partes[0].total > 0)       vinculos.push(`${partes[0].total} parte(s) em processo`);
+    if (historico[0].total > 0)    vinculos.push(`${historico[0].total} registro(s) de histórico`);
+    if (comunicacoes[0].total > 0) vinculos.push(`${comunicacoes[0].total} comunicação(ões)`);
+
+    if (vinculos.length > 0) {
+      return erro(res, `Pessoa não pode ser excluída pois possui: ${vinculos.join(', ')}`);
+    }
+
+    // Sem vínculos — DELETE real (telefones e e-mails apagam via CASCADE do banco)
+    await pool.execute('DELETE FROM pessoas_juridicas WHERE id = ?', [id]);
+    await auditoria.registrar(req.usuario.id, 'pessoas_juridicas', 'excluir', id);
+    return sucesso(res, null, 'Pessoa jurídica excluída com sucesso');
   } catch (err) {
     return erroInterno(res, err);
   }
@@ -415,6 +502,6 @@ async function buscarAuxiliares(req, res) {
 }
 
 module.exports = {
-  listarFisicas, buscarFisica, criarFisica, atualizarFisica, adicionarHistorico,
-  listarJuridicas, criarJuridica, buscarAuxiliares, buscarPorCPF, criarAuxiliar
+  listarFisicas, buscarFisica, criarFisica, atualizarFisica, excluirFisica, adicionarHistorico,
+  listarJuridicas, criarJuridica, excluirJuridica, buscarAuxiliares, buscarPorCPF, criarAuxiliar
 };

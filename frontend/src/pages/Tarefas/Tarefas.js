@@ -154,8 +154,8 @@ function ModalTarefa({ tarefa, onFechar }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={() => onFechar(false)}>
-      <div className="modal-box" onClick={e=>e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-box">
         <div className="modal-header">
           <h3>{tarefa ? 'Editar Tarefa' : 'Nova Tarefa'}</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>

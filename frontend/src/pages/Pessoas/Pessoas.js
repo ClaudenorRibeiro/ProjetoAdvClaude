@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { pessoasAPI } from '../../services/api';
-import { formatarCPF, formatarCNPJ, formatarData, mascaraCPF, validarCPF, toTitleCase } from '../../utils/formatters';
+import { formatarCPF, formatarCNPJ, formatarData, mascaraCPF, validarCPF, mascaraCNPJ, validarCNPJ, toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 
 export default function Pessoas() {
@@ -16,6 +16,8 @@ export default function Pessoas() {
   const [carregando, setCarregando] = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
   const [pessoaSelecionada, setPessoaSelecionada] = useState(null);
+  const [confirmarExclusao, setConfirmarExclusao] = useState(null); // { id, nome } da pessoa a excluir
+  const [excluindo, setExcluindo] = useState(false);
 
   const LIMITE = 20;
 
@@ -36,6 +38,32 @@ export default function Pessoas() {
 
   function abrirNovoCadastro() { setPessoaSelecionada(null); setModalAberto(true); }
   function abrirEdicao(pessoa) { setPessoaSelecionada(pessoa); setModalAberto(true); }
+
+  // Abre o modal de confirmação de exclusão
+  function pedirConfirmacaoExclusao(pessoa) {
+    const nome = pessoa.nome || pessoa.razao_social;
+    setConfirmarExclusao({ id: pessoa.id, nome });
+  }
+
+  // Executa a exclusão após confirmação — bloqueada pelo backend se houver vínculos
+  async function confirmarEExcluir() {
+    if (!confirmarExclusao) return;
+    setExcluindo(true);
+    try {
+      const fn = aba === 'fisicas' ? pessoasAPI.excluirFisica : pessoasAPI.excluirJuridica;
+      await fn(confirmarExclusao.id);
+      toast.success('Pessoa excluída com sucesso');
+      setConfirmarExclusao(null);
+      carregar();
+    } catch (err) {
+      // Exibe a mensagem específica retornada pelo backend (ex: "possui 2 pasta(s) de processo")
+      const mensagem = err.response?.data?.mensagem || 'Erro ao excluir pessoa';
+      toast.error(mensagem);
+      setConfirmarExclusao(null); // Fecha o modal mesmo no bloqueio
+    } finally {
+      setExcluindo(false);
+    }
+  }
 
   function fecharModal(recarregar, pessoaParaEditar = null) {
     setModalAberto(false);
@@ -84,9 +112,9 @@ export default function Pessoas() {
         {carregando ? <div className="loading">Carregando...</div> : (
           <div className="tabela-wrapper">
             {aba === 'fisicas' ? (
-              <TabelaFisicas lista={lista} onEditar={abrirEdicao} />
+              <TabelaFisicas lista={lista} onEditar={abrirEdicao} onExcluir={pedirConfirmacaoExclusao} />
             ) : (
-              <TabelaJuridicas lista={lista} onEditar={abrirEdicao} />
+              <TabelaJuridicas lista={lista} onEditar={abrirEdicao} onExcluir={pedirConfirmacaoExclusao} />
             )}
             {lista.length === 0 && <p className="lista-vazia">Nenhum registro encontrado</p>}
           </div>
@@ -111,12 +139,41 @@ export default function Pessoas() {
           onAbrirEdicao={(p) => fecharModal(false, p)}
         />
       )}
+
+      {/* Modal de confirmação de exclusão */}
+      {confirmarExclusao && (
+        <div className="modal-overlay">
+          <div className="modal" style={{maxWidth:'420px'}}>
+            <h3 style={{marginBottom:'12px'}}>Confirmar exclusão</h3>
+            <p style={{marginBottom:'20px',color:'#555',lineHeight:'1.5'}}>
+              Tem certeza que deseja excluir <strong>{confirmarExclusao.nome}</strong>?
+              <br />
+              <span style={{fontSize:'12px',color:'#888'}}>
+                O registro ficará inativo e não aparecerá mais nas listagens.
+              </span>
+            </p>
+            <div style={{display:'flex',gap:'12px',justifyContent:'flex-end'}}>
+              <button className="btn btn-outline" onClick={() => setConfirmarExclusao(null)} disabled={excluindo}>
+                Cancelar
+              </button>
+              <button
+                className="btn"
+                style={{background:'#dc3545',color:'#fff',border:'none'}}
+                onClick={confirmarEExcluir}
+                disabled={excluindo}
+              >
+                {excluindo ? 'Excluindo...' : 'Excluir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // Tabela de pessoas físicas
-function TabelaFisicas({ lista, onEditar }) {
+function TabelaFisicas({ lista, onEditar, onExcluir }) {
   return (
     <table className="tabela">
       <thead>
@@ -129,9 +186,16 @@ function TabelaFisicas({ lista, onEditar }) {
             <td>{formatarCPF(p.cpf)}</td>
             <td>{p.telefone || '—'}</td>
             <td>{p.email || '—'}</td>
-            <td>
+            <td style={{display:'flex',gap:'6px'}}>
               <button className="btn btn-outline" style={{fontSize:'12px',padding:'4px 10px'}} onClick={() => onEditar(p)}>
                 Editar
+              </button>
+              <button
+                className="btn"
+                style={{fontSize:'12px',padding:'4px 10px',background:'#fff',color:'#dc3545',border:'1px solid #dc3545'}}
+                onClick={() => onExcluir(p)}
+              >
+                Excluir
               </button>
             </td>
           </tr>
@@ -142,7 +206,7 @@ function TabelaFisicas({ lista, onEditar }) {
 }
 
 // Tabela de pessoas jurídicas
-function TabelaJuridicas({ lista, onEditar }) {
+function TabelaJuridicas({ lista, onEditar, onExcluir }) {
   return (
     <table className="tabela">
       <thead>
@@ -155,9 +219,16 @@ function TabelaJuridicas({ lista, onEditar }) {
             <td>{p.nome_fantasia || '—'}</td>
             <td>{formatarCNPJ(p.cnpj)}</td>
             <td>{p.telefone || '—'}</td>
-            <td>
+            <td style={{display:'flex',gap:'6px'}}>
               <button className="btn btn-outline" style={{fontSize:'12px',padding:'4px 10px'}} onClick={() => onEditar(p)}>
                 Editar
+              </button>
+              <button
+                className="btn"
+                style={{fontSize:'12px',padding:'4px 10px',background:'#fff',color:'#dc3545',border:'1px solid #dc3545'}}
+                onClick={() => onExcluir(p)}
+              >
+                Excluir
               </button>
             </td>
           </tr>
@@ -282,8 +353,8 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={() => onFechar(false)}>
-      <div className="modal-box modal-grande" onClick={e => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-box modal-grande">
         <div className="modal-header">
           <h3>{pessoa ? 'Editar' : 'Nova'} {tipo === 'fisicas' ? 'Pessoa Física' : 'Pessoa Jurídica'}</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
@@ -345,6 +416,11 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
                   onNovoItem={item => handleNovoAuxiliar('profissoes', item)}
                 />
               </div>
+              {/* Filiação */}
+              <div className="grid-2">
+                <Campo label="Pai" value={form.nome_pai||''} onChange={v=>set('nome_pai',v)} onBlur={()=>set('nome_pai', toTitleCase(form.nome_pai))} />
+                <Campo label="Mãe" value={form.nome_mae||''} onChange={v=>set('nome_mae',v)} onBlur={()=>set('nome_mae', toTitleCase(form.nome_mae))} />
+              </div>
             </>
           ) : (
             <>
@@ -353,7 +429,7 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
                 <Campo label="Nome Fantasia" value={form.nome_fantasia||''} onChange={v=>set('nome_fantasia',v)} onBlur={()=>set('nome_fantasia', toTitleCase(form.nome_fantasia))} />
               </div>
               <div className="grid-2">
-                <Campo label="CNPJ" value={form.cnpj||''} onChange={v=>set('cnpj',v)} placeholder="00.000.000/0000-00" />
+                <CampoCNPJ value={form.cnpj||''} onChange={v=>set('cnpj',v)} />
                 <Campo label="Representante Legal" value={form.representante_legal||''} onChange={v=>set('representante_legal',v)} onBlur={()=>set('representante_legal', toTitleCase(form.representante_legal))} />
               </div>
             </>
@@ -528,6 +604,46 @@ function CampoCPF({ value, onChange, pessoaIdAtual = null, onAbrirEdicao = null 
             <span> Use o botão <em>Editar</em> na lista para alterar.</span>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// CAMPO CNPJ — máscara automática + validação do algoritmo ao perder foco
+// ============================================================
+function CampoCNPJ({ value, onChange }) {
+  const [erroCnpj, setErroCnpj] = useState('');
+
+  // Aplica máscara enquanto o usuário digita
+  function handleChange(e) {
+    setErroCnpj('');
+    onChange(mascaraCNPJ(e.target.value));
+  }
+
+  // Ao sair do campo: valida o algoritmo dos dígitos verificadores
+  function handleBlur() {
+    const limpo = (value || '').replace(/\D/g, '');
+    if (!limpo) { setErroCnpj(''); return; }
+    if (limpo.length < 14) { setErroCnpj('CNPJ incompleto'); return; }
+    if (!validarCNPJ(limpo)) { setErroCnpj('CNPJ inválido'); return; }
+    setErroCnpj('');
+  }
+
+  return (
+    <div className="form-group">
+      <label className="form-label">CNPJ</label>
+      <input
+        type="text"
+        className={`form-control ${erroCnpj ? 'is-invalid' : ''}`}
+        value={value}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        placeholder="00.000.000/0000-00"
+        maxLength={18}
+      />
+      {erroCnpj && (
+        <small style={{ color: '#e74c3c', fontSize: '12px' }}>⚠️ {erroCnpj}</small>
       )}
     </div>
   );

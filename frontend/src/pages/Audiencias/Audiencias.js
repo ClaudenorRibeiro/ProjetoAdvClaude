@@ -235,8 +235,8 @@ function ModalNovaAudiencia({ tipos, onFechar }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={() => onFechar(false)}>
-      <div className="modal-box modal-grande" onClick={e => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-box modal-grande">
         <div className="modal-header">
           <h3>Nova Audiência</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
@@ -364,8 +364,8 @@ function ModalRegistrarAta({ audiencia, onFechar }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={() => onFechar(false)}>
-      <div className="modal-box modal-grande" onClick={e => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-box modal-grande">
         <div className="modal-header">
           <h3>Registrar Ata — {formatarData(audiencia.data)} {audiencia.hora?.slice(0,5)}</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>

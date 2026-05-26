@@ -481,8 +481,8 @@ function ModalNovoProcesso({ pastaId, onFechar }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={() => onFechar(false)}>
-      <div className="modal-box" onClick={e => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-box">
         <div className="modal-header">
           <h3>Novo Processo</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
@@ -557,8 +557,8 @@ function ModalAndamento({ processoId, andamento, onFechar }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={() => onFechar(false)}>
-      <div className="modal-box" onClick={e => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-box">
         <div className="modal-header">
           <h3>{andamento ? 'Editar Andamento' : 'Novo Andamento'}</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
@@ -607,8 +607,8 @@ function ModalLancamento({ pastaId, onFechar }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={() => onFechar(false)}>
-      <div className="modal-box modal-pequeno" onClick={e => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-box modal-pequeno">
         <div className="modal-header">
           <h3>Novo Lançamento</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>

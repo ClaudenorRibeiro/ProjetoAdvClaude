@@ -269,8 +269,8 @@ function ModalUsuario({ usuario, onFechar }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={() => onFechar(false)}>
-      <div className="modal-box modal-grande" onClick={e => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-box modal-grande">
         <div className="modal-header">
           <h3>{usuario ? 'Editar Usuário' : 'Novo Usuário'}</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>

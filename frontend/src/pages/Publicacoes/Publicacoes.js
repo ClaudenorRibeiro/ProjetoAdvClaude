@@ -182,8 +182,8 @@ export default function Publicacoes() {
 
       {/* Modal: texto completo da publicação */}
       {publicacaoAberta && (
-        <div className="modal-overlay" onClick={() => setPublicacaoAberta(null)}>
-          <div className="modal-box modal-largo" onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay">
+          <div className="modal-box modal-largo">
             <div className="modal-header">
               <h3>Publicação — {formatarData(publicacaoAberta.data_publicacao)}</h3>
               <button className="modal-fechar" onClick={() => setPublicacaoAberta(null)}>✕</button>
@@ -279,8 +279,8 @@ function ModalGerarPrazo({ publicacao, onFechar }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onFechar}>
-      <div className="modal-box" onClick={e => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-box">
         <div className="modal-header">
           <h3>Gerar Prazo da Publicação</h3>
           <button className="modal-fechar" onClick={onFechar}>✕</button>
@@ -363,8 +363,8 @@ function ModalGerarTarefa({ publicacao, onFechar }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onFechar}>
-      <div className="modal-box" onClick={e => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-box">
         <div className="modal-header">
           <h3>Gerar Tarefa da Publicação</h3>
           <button className="modal-fechar" onClick={onFechar}>✕</button>

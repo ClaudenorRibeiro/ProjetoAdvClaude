@@ -63,6 +63,7 @@ export const pessoasAPI = {
   buscarFisica:    (id) => api.get(`/pessoas/fisicas/${id}`),
   criarFisica:     (dados) => api.post('/pessoas/fisicas', dados),
   atualizarFisica: (id, dados) => api.put(`/pessoas/fisicas/${id}`, dados),
+  excluirFisica:   (id) => api.delete(`/pessoas/fisicas/${id}`),
   adicionarHistorico: (id, dados) => api.post(`/pessoas/fisicas/${id}/historico`, dados),
   // Verifica se CPF já existe — retorna { existe: false } ou { existe: true, pessoa: { id, nome, cpf } }
   verificarCPF: (cpf) => api.get(`/pessoas/fisicas/cpf/${cpf}`),
@@ -71,6 +72,7 @@ export const pessoasAPI = {
   // Jurídicas
   listarJuridicas:  (params) => api.get('/pessoas/juridicas', { params }),
   criarJuridica:    (dados) => api.post('/pessoas/juridicas', dados),
+  excluirJuridica:  (id) => api.delete(`/pessoas/juridicas/${id}`),
   // Auxiliares (estados civis, gêneros, profissões)
   auxiliares: () => api.get('/pessoas/auxiliares'),
 };

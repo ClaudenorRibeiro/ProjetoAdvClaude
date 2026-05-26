@@ -248,8 +248,8 @@ function ModalModelo({ modelo, onFechar }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={() => onFechar(false)}>
-      <div className="modal-box modal-largo" onClick={e => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-box modal-largo">
         <div className="modal-header">
           <h3>{modelo ? 'Editar Modelo' : 'Novo Modelo de Documento'}</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>

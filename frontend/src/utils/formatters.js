@@ -71,6 +71,39 @@ export function formatarCNPJ(cnpj) {
   return limpo.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
 }
 
+// Aplica máscara durante digitação: "12345678000195" → "12.345.678/0001-95"
+export function mascaraCNPJ(value) {
+  const limpo = value.replace(/\D/g, '').slice(0, 14);
+  return limpo
+    .replace(/(\d{2})(\d)/, '$1.$2')
+    .replace(/(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/(\d{2})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3/$4')
+    .replace(/(\d{2})\.(\d{3})\.(\d{3})\/(\d{4})(\d)/, '$1.$2.$3/$4-$5');
+}
+
+// Valida CNPJ usando o algoritmo oficial dos dígitos verificadores
+// Rejeita CNPJs com todos os dígitos iguais (00.000.000/0000-00 etc)
+export function validarCNPJ(cnpj) {
+  const limpo = cnpj.replace(/\D/g, '');
+  if (limpo.length !== 14) return false;
+  if (/^(\d)\1+$/.test(limpo)) return false; // todos iguais = inválido
+
+  // Calcula um dígito verificador dado os pesos
+  function calcDigito(base, pesos) {
+    const soma = pesos.reduce((acc, peso, i) => acc + parseInt(base[i]) * peso, 0);
+    const resto = soma % 11;
+    return resto < 2 ? 0 : 11 - resto;
+  }
+
+  const d1 = calcDigito(limpo, [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+  if (d1 !== parseInt(limpo[12])) return false;
+
+  const d2 = calcDigito(limpo, [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+  if (d2 !== parseInt(limpo[13])) return false;
+
+  return true;
+}
+
 // Formata número de pasta: 42 → "0042"
 export function formatarNumeroPasta(numero) {
   if (!numero) return '—';

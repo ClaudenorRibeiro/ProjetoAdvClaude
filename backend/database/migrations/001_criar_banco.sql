@@ -126,6 +126,8 @@ CREATE TABLE IF NOT EXISTS pessoas_fisicas (
   pis                 VARCHAR(20),   -- Número do PIS/PASEP
   ctps_numero         VARCHAR(30),   -- Número da CTPS física, ou "Digital" quando digital
   ctps_serie          VARCHAR(20),   -- Série da CTPS (NULL quando digital)
+  nome_pai            VARCHAR(200),  -- Nome do pai (filiação)
+  nome_mae            VARCHAR(200),  -- Nome da mãe (filiação)
   data_nascimento     DATE,
   estado_civil_id     INT,
   profissao_id        INT,
@@ -141,10 +143,14 @@ CREATE TABLE IF NOT EXISTS pessoas_fisicas (
   observacoes         TEXT,
   ativo               TINYINT(1) DEFAULT 1,
   criado_em           DATETIME DEFAULT NOW(),
-  criado_por          INT,
+  criado_por          INT,           -- Usuário que criou o registro
+  alterado_por        INT,           -- Usuário que fez a última alteração
+  alterado_em         DATETIME,      -- Data/hora da última alteração
   FOREIGN KEY (estado_civil_id) REFERENCES estado_civil(id),
   FOREIGN KEY (profissao_id)    REFERENCES profissao(id),
-  FOREIGN KEY (genero_id)       REFERENCES genero(id)
+  FOREIGN KEY (genero_id)       REFERENCES genero(id),
+  FOREIGN KEY (criado_por)      REFERENCES usuarios(id),
+  FOREIGN KEY (alterado_por)    REFERENCES usuarios(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS pessoas_juridicas (
@@ -164,7 +170,11 @@ CREATE TABLE IF NOT EXISTS pessoas_juridicas (
   observacoes           TEXT,
   ativo                 TINYINT(1) DEFAULT 1,
   criado_em             DATETIME DEFAULT NOW(),
-  criado_por            INT
+  criado_por            INT,         -- Usuário que criou o registro
+  alterado_por          INT,         -- Usuário que fez a última alteração
+  alterado_em           DATETIME,    -- Data/hora da última alteração
+  FOREIGN KEY (criado_por)   REFERENCES usuarios(id),
+  FOREIGN KEY (alterado_por) REFERENCES usuarios(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Telefones — suportam múltiplos por pessoa, nunca excluídos (apenas inativados)

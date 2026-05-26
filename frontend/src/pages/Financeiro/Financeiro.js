@@ -331,8 +331,8 @@ function ModalLancamento({ pastaId, onFechar }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={() => onFechar(false)}>
-      <div className="modal-box modal-pequeno" onClick={e => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-box modal-pequeno">
         <div className="modal-header">
           <h3>Novo Lançamento</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
@@ -399,8 +399,8 @@ function ModalHonorarios({ pastaId, honorarios, onFechar }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={() => onFechar(false)}>
-      <div className="modal-box modal-pequeno" onClick={e => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-box modal-pequeno">
         <div className="modal-header">
           <h3>Configurar Honorários</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
