@@ -23,3 +23,5 @@ Thumbs.db
 # (podem conter dados sensíveis dos clientes)
 backups/*.sql
 backups/*.sql.gz
+# Exceção: .gitkeep garante que a pasta backups/ sempre existe no repositório
+!backups/.gitkeep
