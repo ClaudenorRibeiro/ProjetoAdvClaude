@@ -1,7 +1,7 @@
 ================================================================
  HANDOFF — SISTEMA DE ADVOCACIA
  Documento de continuidade para novo computador / nova sessão
- Gerado em: 27/05/2026
+ Atualizado em: 27/05/2026 — 15:01
 ================================================================
 
 Este arquivo contém TUDO que o próximo Claude precisa saber para
@@ -18,10 +18,15 @@ SEÇÃO 1 — REGRAS ABSOLUTAS (NUNCA IGNORAR)
    O usuário prefere fazer os commits manualmente.
    Frase exata do usuário: "o Git, nunca faça atualização sem
    minha permissão, de preferencia deixa que eu faço manualmente"
+   EXCEÇÃO: quando o usuário pedir explicitamente "sobe no git"
+   ou "salva tudo no git".
 
-3. Todo código deve ser bem comentado (usuário mantém via VSCode).
+3. TODO commit DEVE começar com data e hora: DDMMYY-HHMM
+   Ex.: "270526-1458 — descrição do commit"
 
-4. Pensar à frente para evitar retrabalho — estrutura reutilizável.
+4. Todo código deve ser bem comentado (usuário mantém via VSCode).
+
+5. Pensar à frente para evitar retrabalho — estrutura reutilizável.
 
 
 ================================================================
@@ -103,24 +108,32 @@ PADRÃO DE TRANSAÇÃO:
 SOFT DELETE: campo ativo = 0 (nunca deleta fisicamente)
 
 MIGRATIONS EXECUTADAS (em ordem):
-  [✓] 001_criar_banco.sql          — estrutura completa das tabelas
-  [✓] 002_novo_modelo_processos.sql — tblPasta + tblProc + auxiliares
-  [✓] 003_expandir_forum_vara.sql   — campos novos em tblForum e tblVara
-  [ ] 004_reset_tokens.sql          ← AINDA NÃO EXECUTADA no banco!
+  [✓] 001_criar_banco.sql             — estrutura completa das tabelas
+  [✓] 002_novo_modelo_processos.sql   — tblPasta + tblProc + auxiliares
+  [✓] 003_expandir_forum_vara.sql     — campos novos em tblForum e tblVara
+  [✓] 004_reset_tokens.sql            — tabela reset_tokens (esqueci senha)
+  [✓] 005_popular_forum_varas_ruy_barbosa.sql — 1 fórum + 90 varas TRT-2 SP
+  [ ] 005b_codVaraNoProc_ruy_barbosa.sql      ← UPDATE codVaraNoProc nas varas
+  [ ] 006_codTipoProc_tbltipoproc.sql         ← ADD COLUMN codTipoProc VARCHAR(1)
 
-ATENÇÃO: A migration 004 precisa ser executada para o recurso
-"Esqueci minha senha" funcionar. Arquivo em:
-backend/database/migrations/004_reset_tokens.sql
+  ATENÇÃO: 005b e 006 precisam ser executadas no banco!
+  Sem 006: auto-preenchimento de Tipo pelo CNJ não funciona.
+  Sem 005b: codVaraNoProc fica NULL nas varas já inseridas.
+  Após 006: popular o campo codTipoProc na tabela tblTipoProc
+            (ex: Trabalhista = '5', conforme segmento CNJ).
 
-PRINCIPAIS TABELAS (as mais usadas no código):
+PRINCIPAIS TABELAS:
   tblForum      — fóruns (nome, abrev_nome, endereço completo, uf)
   tblVara       — varas (nome, abrev_nome, forum_id, codVaraNoProc, compl_end, tel, email)
+  tblTipoProc   — tipos de processo (nome, codTipoProc VARCHAR(1))
   tblPasta      — pasta/caso do cliente (numPasta, cliente_id, titulo)
   tblProc       — processos (numProc, pasta_id, vara_id, status_id, tipo_id...)
-  tblTituloProc — partes do processo (autor/réu)
+  tblTituloProcAutor / tblTituloProcReu — partes do processo
   usuarios      — usuários do sistema (nivel: 0=super, 1=admin, 2=normal)
   permissoes    — permissões granulares por usuário e módulo
   reset_tokens  — tokens de redefinição de senha via e-mail
+  pessoas_fisicas / pessoas_juridicas — cadastro de pessoas
+  telefones_pf / telefones_pj         — telefones vinculados
 
 
 ================================================================
@@ -187,80 +200,63 @@ FRONTEND — CSS classes disponíveis (Layout.css):
   .grid-2, .grid-3, .grid-4
   .lista-vazia, .loading
   .abas-nav, .aba-btn, .aba-btn.ativa
+  .menu-grupo, .menu-grupo-header, .menu-subgrupo, .menu-subitem
 
 
 ================================================================
-SEÇÃO 7 — O QUE FOI FEITO NESTA SESSÃO (27/05/2026)
+SEÇÃO 7 — O QUE FOI FEITO EM 27/05/2026
 ================================================================
 
 A. REDEFINIÇÃO DE SENHA — OPÇÃO C (ambos os fluxos):
 
    FLUXO 1 — Admin redefine senha de usuário:
    - Configurações → Usuários → botão 🔑 Senha (âmbar)
-   - Admin digita nova senha + confirmação
-   - Arquivo: frontend/src/pages/Configuracoes/Configuracoes.js
-              (componente ModalRedefinirSenha adicionado)
    - Backend: configuracaoController.js → redefinirSenhaAdmin
    - Rota: PUT /api/configuracoes/usuarios/:id/senha (apenasAdmin)
 
    FLUXO 2 — Usuário esqueceu a senha (e-mail):
-   - Login → "Esqueci minha senha" → modal com campo login/email
-   - Backend gera token (64 hex chars), expira em 1h
-   - Envia e-mail via Gmail SMTP com link /redefinir-senha?token=xxx
-   - Página: frontend/src/pages/ResetSenha/ResetSenha.js (nova)
-   - Rota pública App.js: /redefinir-senha
-   - Arquivos novos/modificados:
-     * backend/src/utils/email.js (novo — nodemailer wrapper)
-     * backend/src/controllers/authController.js (esqueciSenha,
-       validarToken, redefinirSenha)
-     * frontend/src/pages/Login/Login.js (modal esqueci senha)
-     * frontend/src/App.js (rota /redefinir-senha)
+   - Login → "Esqueci minha senha" → modal → e-mail com link token 1h
+   - Página: frontend/src/pages/ResetSenha/ResetSenha.js
+   - MODO DEV: link exibido no console do backend (não falha sem SMTP)
 
-   MODO DEV (sem SMTP): quando NODE_ENV=development e SMTP não
-   configurado, o link é exibido no console do backend (não falha).
+B. TELA CONTROLE — FÓRUNS E VARAS:
+   - Menu lateral com grupo expansível 🗂️ Controle (apenasAdmin)
+   - Sub-páginas: Fóruns (/controle/foruns) e Varas (/controle/varas)
+   - CRUD completo com busca, modais criar/editar, bloqueio de exclusão
 
-   CORREÇÃO APLICADA: coluna nome_escritorio → nome na query
-   dentro de authController.js (linha buscarAuxiliares).
+C. MIGRATIONS TRT-2 (Fórum Trabalhista Ruy Barbosa):
+   - 005: INSERT 1 fórum + 90 varas (email vtspNN, tel 3525-91NN,
+          andar/bloco por padrão, codVaraNoProc 50200NN)
+   - 005b: UPDATE codVaraNoProc nas varas já inseridas
+           (extrai número da vara via REGEXP_REPLACE)
+   - 006: ADD COLUMN codTipoProc VARCHAR(1) em tblTipoProc
 
-B. CONFIGURAÇÃO DE E-MAIL GMAIL:
-   - Conta criada: antonioadv.sistema@gmail.com (exclusiva do sistema)
-   - Senha de App gerada e configurada no .env
-   - .env atualizado com SMTP_HOST=smtp.gmail.com
-   - E-mail de reset funcionando e testado ✅
+D. PRÉ-PREENCHIMENTO AUTOMÁTICO — NOVO PROCESSO (somente cadastro novo):
 
-C. ARQUIVO ConfiguracoesIniciais.txt (novo na raiz):
-   - Guia completo de instalação e configuração
-   - Inclui passo a passo do Gmail App Password
-   - Checklist de instalação
+   Por número CNJ (NNNNNNN-DD.AAAA.J.TT.OOOO — 20 dígitos):
+     Tipo:       dígito J (posição [13]) → busca codTipoProc em aux.tipos
+     Fórum+Vara: J+TT+OOOO (posições [13..19]) → busca codVaraNoProc
 
-D. TELA CONTROLE — FÓRUNS E VARAS (novo módulo):
+   Ao abrir o modal (carrega com auxiliares):
+     Status:    pré-preenche "Conhecimento"
+     Instância: pré-preenche "1ª Instância"
 
-   MENU LATERAL:
-   - Layout.js atualizado com suporte a grupos expansíveis
-   - Novo item 🗂️ Controle → sub-itens 🏛️ Fóruns e 🏢 Varas
-   - Aparece apenas para admins (apenasAdmin: true)
-   - Grupo auto-expande quando rota filho está ativa
-   - Sidebar fechada: clica no ícone → abre sidebar + grupo
-   - Layout.css: adicionado .menu-grupo, .menu-subgrupo, .menu-subitem
+   O usuário sempre pode modificar qualquer campo.
+   Modal de EDIÇÃO: nenhum auto-preenchimento.
 
-   PÁGINAS NOVAS:
-   - frontend/src/pages/Controle/Foruns.js
-     * Lista com busca por nome, abreviação, cidade
-     * Modal criar/editar com todos os campos do tblForum
-     * Excluir com bloqueio se tiver varas vinculadas
-   - frontend/src/pages/Controle/Varas.js
-     * Lista com busca + filtro por fórum
-     * Modal criar/editar com todos os campos do tblVara
-     * Excluir com bloqueio se tiver processos vinculados
+E. FIX — VALIDAÇÃO DE POLO OPOSTO:
+   Bug: pessoa física e jurídica com mesmo id numérico disparavam
+   erro falso "já está no polo oposto".
+   Correção: validação agora compara pessoa_id + tipo_pessoa juntos.
+   Afetou: ModalNovoProcesso e ModalEditarProcesso.
 
-   ROTAS (App.js):
-   - /controle/foruns → Foruns.js
-   - /controle/varas  → Varas.js
-
-   BACKEND: Todos os endpoints já existiam em processosController.js
-   (criarForum, atualizarForum, excluirForum, criarVara,
-   atualizarVara, excluirVara, buscarAuxiliares)
-   Nenhuma alteração no backend necessária.
+F. BUSCA DE PROCESSOS — EXPANDIDA:
+   Antes: buscava só NomeTituloProc (título abreviado) e numProc.
+   Agora: busca em TODOS os polos de TODOS os processos da pasta:
+     - Autores e réus físicos: nome, CPF, telefone
+     - Autores e réus jurídicos: razão social, nome fantasia, CNPJ, telefone
+   CPF/CNPJ buscados sem formatação (dígitos extraídos automaticamente).
+   Arquivo: backend/src/controllers/processosController.js → listarPastas()
 
 
 ================================================================
@@ -288,7 +284,7 @@ Menu em: frontend/src/components/layout/Layout.js → array MENU
 
 
 ================================================================
-SEÇÃO 9 — CAMPOS DO BANCO — tblForum e tblVara (após migration 003)
+SEÇÃO 9 — CAMPOS DO BANCO — tblForum e tblVara
 ================================================================
 
 tblForum:
@@ -301,24 +297,28 @@ tblVara:
   compl_end, tel, email, ativo, criado_por, criado_em,
   alterado_por, alterado_em
 
-abrev_nome: abreviação opcional exibida nos dropdowns/listas.
-  Ex Fórum: "FT/B.Funda"   → nome completo: "Fórum Trabalhista Barra Funda"
-  Ex Vara:  "1ªVT/SP"      → nome completo: "1ª Vara do Trabalho de SP"
-  Se abrev_nome vazio, usa nome completo (fallback em todo frontend)
-  Padrão nos dropdowns: f.abrev_nome || f.nome
+codVaraNoProc: segmento J+TT+OOOO do número CNJ — 7 dígitos.
+  Ex: vara 1 do TRT-2 SP = "5020001"
+  Padrão Fórum Ruy Barbosa: "50200NN" (NN = número da vara, 2 dígitos)
 
-codVaraNoProc: segmento CNJ que identifica a vara no número do
-  processo. Ex: 5.02.0001 (campo extremamente útil para futuro)
+tblTipoProc:
+  id, codTipoProc (VARCHAR 1), nome*, ativo, criado_por...
+  codTipoProc = dígito J do CNJ (ex: '5' = Trabalhista)
+  PENDENTE: popular os valores de codTipoProc no banco.
 
 
 ================================================================
 SEÇÃO 10 — PENDÊNCIAS (o que ainda FALTA fazer)
 ================================================================
 
-IMEDIATO:
-  [ ] Executar migration 004_reset_tokens.sql no banco de dados
-      Localização: backend/database/migrations/004_reset_tokens.sql
-      Sem isso: "Esqueci minha senha" falha com erro de tabela
+IMEDIATO — BANCO DE DADOS:
+  [ ] Executar 005b_codVaraNoProc_ruy_barbosa.sql
+      → UPDATE codVaraNoProc nas varas do Fórum Ruy Barbosa
+  [ ] Executar 006_codTipoProc_tbltipoproc.sql
+      → ADD COLUMN codTipoProc em tblTipoProc
+  [ ] Popular codTipoProc na tabela tblTipoProc
+      → Ex: UPDATE tblTipoProc SET codTipoProc='5' WHERE nome='Trabalhista'
+      → Verificar quais outros segmentos CNJ o escritório usa
 
 MÓDULOS AINDA NÃO IMPLEMENTADOS (ou parcialmente):
   - Agenda / Calendário: tela existe mas pode precisar de ajustes
@@ -329,11 +329,11 @@ MÓDULOS AINDA NÃO IMPLEMENTADOS (ou parcialmente):
   - Deploy AWS Lightsail: tutorial + scripts pendentes
   - Geração de documentos Word/PDF: implementado mas pode ter ajustes
 
-MELHORIAS IDENTIFICADAS (mas não urgentes):
-  - A tela de Controle (Fóruns/Varas) poderia ter paginação
-    se o número de registros crescer muito
-  - Adicionar busca por CEP automática (ViaCEP API) no form de Fórum
+MELHORIAS IDENTIFICADAS:
+  - Tela Controle (Fóruns/Varas): adicionar paginação se crescer muito
+  - Busca por CEP automática (ViaCEP) no cadastro de Fórum
   - Importação em massa de fóruns/varas via CSV
+  - Pre-preencher também o campo Instância via CNJ quando possível
 
 
 ================================================================
@@ -361,46 +361,38 @@ SEÇÃO 12 — VARIÁVEIS DE AMBIENTE (.env) — RESUMO
 
 Arquivo: backend/.env  (NÃO vai para o Git)
 
-Variáveis críticas já configuradas neste PC:
+Variáveis críticas:
   PORT=3001
   NODE_ENV=development
   DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME  ← banco local
   JWT_SECRET  ← trocar em produção por chave gerada aleatoriamente
   SUPER_LOGIN=superadmin
   SUPER_SENHA  ← definido localmente
-  SMTP_HOST=smtp.gmail.com  ← configurado ✅
+  SMTP_HOST=smtp.gmail.com
   SMTP_PORT=587
-  SMTP_USER=antonioadv.sistema@gmail.com  ← configurado ✅
-  SMTP_PASS=[senha de app]  ← configurado ✅
+  SMTP_USER=antonioadv.sistema@gmail.com
+  SMTP_PASS=[senha de app]
   EMAIL_FROM=Advocacia Dr Antonio Ferreira da Costa <antonioadv.sistema@gmail.com>
   FRONTEND_URL=http://localhost:3000
 
 No novo computador: copiar o .env manualmente (não está no Git).
-ATENÇÃO: o banco do novo PC pode ter credenciais diferentes
-(DB_USER, DB_PASSWORD) — ajustar conforme necessário.
+ATENÇÃO: ajustar DB_USER e DB_PASSWORD conforme o MySQL local.
 
 
 ================================================================
 SEÇÃO 13 — GIT / VERSIONAMENTO
 ================================================================
 
-Repositório: Git local + remoto (GitHub ou similar)
+Repositório: https://github.com/ClaudenorRibeiro/ProjetoAdvClaude
 
-Último commit: f07ec9f
-  "Processos: forum/vara expandidos, validações e renumeração de pasta"
-
-O que foi feito nesta sessão (27/05/2026) NÃO foi commitado ainda.
-O usuário fará o commit manualmente quando quiser.
-
-Para ver o status atual:
-  git status
-  git log --oneline -5
-
-Para salvar (quando o usuário pedir):
-  git add [arquivos específicos]
-  git commit -m "mensagem"
+Commits desta sessão (27/05/2026):
+  5afb9a5 — 260527: Reset de senha, Controle Fóruns/Varas, Gmail SMTP
+  d804944 — 270526-1441: Migrations TRT2, pré-preench. CNJ, fix polo oposto
+  d00ab1a — 270526-1458: Busca de processos expandida para todos os polos
+  (este commit) — 270526-1501: Atualização HANDOFF
 
 NUNCA usar: git push sem permissão do usuário.
+SEMPRE incluir data/hora no início da mensagem: DDMMYY-HHMM
 
 
 ================================================================
@@ -409,57 +401,63 @@ SEÇÃO 14 — ARQUIVOS MODIFICADOS/CRIADOS NESTA SESSÃO
 
 NOVOS:
   backend/database/migrations/004_reset_tokens.sql
+  backend/database/migrations/005_popular_forum_varas_ruy_barbosa.sql
+  backend/database/migrations/005b_codVaraNoProc_ruy_barbosa.sql
+  backend/database/migrations/006_codTipoProc_tbltipoproc.sql
   backend/src/utils/email.js
   frontend/src/pages/ResetSenha/ResetSenha.js
   frontend/src/pages/Controle/Foruns.js
   frontend/src/pages/Controle/Varas.js
   ConfiguracoesIniciais.txt
-  HANDOFF_OUTRO_COMPUTADOR.txt  ← este arquivo
+  HANDOFF_OUTRO_COMPUTADOR.txt
 
 MODIFICADOS:
   backend/src/controllers/authController.js
-    → esqueciSenha, validarToken, redefinirSenha (novo)
+    → esqueciSenha, validarToken, redefinirSenha
     → correção: nome_escritorio → nome na query de configuracoes
   backend/src/controllers/configuracaoController.js
-    → redefinirSenhaAdmin (novo)
+    → redefinirSenhaAdmin
+  backend/src/controllers/processosController.js
+    → listarPastas: busca expandida para todos os polos (nome, CPF,
+      CNPJ, razão social, nome fantasia, telefone — autores e réus)
   backend/src/routes/index.js
-    → rotas /auth/esqueci-senha, /auth/validar-token, /auth/redefinir-senha
-    → rota PUT /configuracoes/usuarios/:id/senha
-  backend/.env
-    → SMTP configurado com Gmail
+    → rotas de reset senha e redefinirSenhaAdmin
+    → rotas Controle (Fóruns/Varas) — já existiam no processosController
   frontend/src/services/api.js
     → authAPI: esqueciSenha, validarToken, redefinirSenha
     → configuracaoAPI: redefinirSenhaAdmin
   frontend/src/App.js
-    → import ResetSenha, Foruns, Varas
     → rotas /redefinir-senha, /controle/foruns, /controle/varas
   frontend/src/pages/Login/Login.js
-    → modal "Esqueci minha senha" + handleEsqueci
+    → modal "Esqueci minha senha"
   frontend/src/pages/Configuracoes/Configuracoes.js
-    → botão 🔑 Senha + componente ModalRedefinirSenha
+    → botão 🔑 Senha + ModalRedefinirSenha
     → 'pastas' adicionado ao MODULOS_PERM
+  frontend/src/pages/Processos/Processos.js
+    → preencherTipoPorCNJ: Tipo, Fórum+Vara (apenas novo processo)
+    → defaults Status=Conhecimento, Instância=1ª Instância ao abrir modal
+    → fix polo oposto: compara pessoa_id + tipo_pessoa
+    → modal de edição: sem nenhum auto-preenchimento
   frontend/src/components/layout/Layout.js
-    → suporte a grupos expansíveis (tipo: 'grupo')
-    → grupo 🗂️ Controle com sub-itens Fóruns e Varas
-    → getTituloAtual() atualizado para checar sub-itens
+    → grupo expansível Controle com Fóruns e Varas
   frontend/src/components/layout/Layout.css
-    → estilos: .menu-grupo, .menu-grupo-header, .menu-grupo-chevron
-               .menu-subgrupo, .menu-subitem
+    → estilos .menu-grupo, .menu-subgrupo, .menu-subitem
+  memory/feedback_codigo.md
+    → regra: commit sempre com data/hora DDMMYY-HHMM
+    → regra: nunca commitar sem permissão do usuário
 
 
 ================================================================
 SEÇÃO 15 — INFORMAÇÕES DO ESCRITÓRIO / CONTEXTO
 ================================================================
 
-Escritório: Advocacia Dr. Antonio Ferreira da Costa (nome aproximado)
+Escritório: Advocacia Dr. Antonio Ferreira da Costa
 Especialidade: Trabalhista, Previdenciária, Família
 PC de desenvolvimento: Windows 10/11, VSCode
 MySQL Workbench instalado para gerenciar o banco
 
-Contato de memória do projeto:
-  - Pasta de memórias: ProjetoAdvClaude/memory/*.md
-  - Arquivo índice: memory/MEMORY.md (lista todos os documentos)
-  - Cada módulo tem seu .md com especificações detalhadas
+Memórias do projeto: ProjetoAdvClaude/memory/*.md
+Índice: memory/MEMORY.md
 
 
 ================================================================
@@ -467,32 +465,37 @@ SEÇÃO 16 — COMO CONTINUAR NO NOVO COMPUTADOR
 ================================================================
 
 PASSO 1 — Obter o código:
-  Clonar o repositório Git OU copiar a pasta do pendrive/nuvem
+  git clone https://github.com/ClaudenorRibeiro/ProjetoAdvClaude.git
+  OU copiar pasta do pendrive/nuvem
 
 PASSO 2 — Instalar dependências:
-  Duplo clique em: instalar-dependencias.bat
-  (ou: cd backend && npm install && cd ../frontend && npm install)
+  cd backend  && npm install
+  cd frontend && npm install
 
 PASSO 3 — Configurar o .env:
   Copiar o arquivo backend/.env do PC atual para o novo
   Ajustar DB_USER e DB_PASSWORD conforme o MySQL local
 
-PASSO 4 — Criar o banco de dados:
-  Executar as migrations na ordem (se banco novo):
+PASSO 4 — Criar/atualizar o banco de dados:
+  Executar as migrations na ordem:
     001_criar_banco.sql
     002_novo_modelo_processos.sql
     003_expandir_forum_vara.sql
-    004_reset_tokens.sql   ← OBRIGATÓRIO para "Esqueci minha senha"
+    004_reset_tokens.sql
+    005_popular_forum_varas_ruy_barbosa.sql
+    005b_codVaraNoProc_ruy_barbosa.sql   ← UPDATE codVaraNoProc
+    006_codTipoProc_tbltipoproc.sql      ← ADD COLUMN codTipoProc
+  Depois popular codTipoProc em tblTipoProc conforme segmentos CNJ usados.
 
 PASSO 5 — Iniciar o sistema:
-  Duplo clique em: iniciar_pc_casa.bat  (ou iniciar_pc_escrit.bat)
+  Duplo clique em: iniciar_pc_casa.bat
 
-PASSO 6 — Continuar o desenvolvimento com Claude:
-  Abrir nova sessão do Claude Code e colar o conteúdo deste arquivo
-  como contexto inicial, ou referenciar os arquivos de memória em
-  ProjetoAdvClaude/memory/
+PASSO 6 — Continuar com Claude:
+  Abrir nova sessão do Claude Code — as memórias em memory/*.md
+  são carregadas automaticamente. Se necessário, colar este arquivo
+  como contexto inicial.
 
 ================================================================
  FIM DO HANDOFF
- Data: 27/05/2026
+ Atualizado em: 27/05/2026 — 15:01
 ================================================================
