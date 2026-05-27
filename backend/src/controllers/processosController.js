@@ -52,13 +52,61 @@ async function listarPastas(req, res) {
     where += ` AND EXISTS (SELECT 1 FROM tblProc p WHERE p.pasta_id = pa.id AND p.ativo = 1)`;
 
     if (busca) {
-      // Busca por número da pasta ou pelo título (NomeTituloProc) ou número CNJ
+      // Versão somente dígitos para comparar CPF, CNPJ e telefone armazenados sem formatação
+      const buscaDigitos = busca.replace(/\D/g, '');
+      const bL = `%${busca}%`;
+      const bD = buscaDigitos.length >= 3 ? `%${buscaDigitos}%` : bL;
+
+      // Busca em: nº pasta, título, nº CNJ, e TODOS os polos (autores e réus, físicos e jurídicos)
       where += ` AND (
         LPAD(pa.numPasta, 4, '0') LIKE ?
-        OR EXISTS (SELECT 1 FROM tblProc p WHERE p.pasta_id = pa.id AND p.ativo=1
-                   AND (p.NomeTituloProc LIKE ? OR p.numProc LIKE ?))
+        OR EXISTS (
+          SELECT 1 FROM tblProc p WHERE p.pasta_id = pa.id AND p.ativo = 1
+          AND (
+            p.NomeTituloProc LIKE ? OR p.numProc LIKE ?
+            -- Autores físicos: nome, CPF, telefone
+            OR EXISTS (
+              SELECT 1 FROM tblTituloProcAutor ta
+              JOIN pessoas_fisicas pf ON pf.id = ta.pessoa_id AND ta.tipo_pessoa = 'fisica'
+              WHERE ta.proc_id = p.id
+              AND (pf.nome LIKE ? OR pf.cpf LIKE ?
+                   OR EXISTS (SELECT 1 FROM telefones_pf t WHERE t.pessoa_id = pf.id AND t.numero LIKE ?))
+            )
+            -- Autores jurídicos: razão social, nome fantasia, CNPJ, telefone
+            OR EXISTS (
+              SELECT 1 FROM tblTituloProcAutor ta
+              JOIN pessoas_juridicas pj ON pj.id = ta.pessoa_id AND ta.tipo_pessoa = 'juridica'
+              WHERE ta.proc_id = p.id
+              AND (pj.razao_social LIKE ? OR pj.nome_fantasia LIKE ? OR pj.cnpj LIKE ?
+                   OR EXISTS (SELECT 1 FROM telefones_pj t WHERE t.pessoa_id = pj.id AND t.numero LIKE ?))
+            )
+            -- Réus físicos: nome, CPF, telefone
+            OR EXISTS (
+              SELECT 1 FROM tblTituloProcReu tr
+              JOIN pessoas_fisicas pf ON pf.id = tr.pessoa_id AND tr.tipo_pessoa = 'fisica'
+              WHERE tr.proc_id = p.id
+              AND (pf.nome LIKE ? OR pf.cpf LIKE ?
+                   OR EXISTS (SELECT 1 FROM telefones_pf t WHERE t.pessoa_id = pf.id AND t.numero LIKE ?))
+            )
+            -- Réus jurídicos: razão social, nome fantasia, CNPJ, telefone
+            OR EXISTS (
+              SELECT 1 FROM tblTituloProcReu tr
+              JOIN pessoas_juridicas pj ON pj.id = tr.pessoa_id AND tr.tipo_pessoa = 'juridica'
+              WHERE tr.proc_id = p.id
+              AND (pj.razao_social LIKE ? OR pj.nome_fantasia LIKE ? OR pj.cnpj LIKE ?
+                   OR EXISTS (SELECT 1 FROM telefones_pj t WHERE t.pessoa_id = pj.id AND t.numero LIKE ?))
+            )
+          )
+        )
       )`;
-      params.push(`%${busca}%`, `%${busca}%`, `%${busca}%`);
+      params.push(
+        bL,              // nº pasta
+        bL, bL,          // NomeTituloProc, numProc
+        bL, bD, bD,      // autor físico:   nome, cpf, telefone
+        bL, bL, bD, bD,  // autor jurídico: razao_social, nome_fantasia, cnpj, telefone
+        bL, bD, bD,      // réu físico:     nome, cpf, telefone
+        bL, bL, bD, bD   // réu jurídico:   razao_social, nome_fantasia, cnpj, telefone
+      );
     }
 
     const [rows] = await pool.execute(
