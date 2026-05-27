@@ -1,0 +1,308 @@
+================================================================
+ TUTORIAL DE DEPLOY — AWS LIGHTSAIL
+ Sistema de Advocacia
+ Atualizado em: 27/05/2026
+================================================================
+
+Este tutorial leva você do ZERO até o sistema rodando em produção
+com HTTPS no seu domínio. Siga as fases em ordem.
+
+Tempo estimado: 30-45 minutos
+
+================================================================
+FASE 1 — CRIAR A INSTÂNCIA LIGHTSAIL
+================================================================
+
+1. Acesse: https://lightsail.aws.amazon.com
+   (faça login na sua conta AWS)
+
+2. Clique em "Criar instância"
+
+3. Configure:
+   • Local da instância: São Paulo (sa-east-1) — mais rápido no Brasil
+   • Plataforma: Linux/Unix
+   • Blueprint: Ubuntu 22.04 LTS
+   • Plano: $5/mês (1 GB RAM, 1 vCPU, 20 GB SSD)
+   • Nome da instância: sistema-advocacia (ou qualquer nome)
+
+4. Clique em "Criar instância"
+   Aguarde ~2 minutos até ficar verde (Running)
+
+================================================================
+FASE 2 — IP ESTÁTICO E FIREWALL
+================================================================
+
+SEM IP ESTÁTICO o IP muda toda vez que a instância reinicia.
+
+1. No painel Lightsail → aba "Redes" → "Criar IP estático"
+   • Associe à instância que você criou
+   • Anote o IP (ex: 54.123.45.67) — vai precisar dele no DNS
+
+2. Na instância → aba "Redes" → "Regras de firewall"
+   Verifique se estas portas estão abertas:
+   • SSH (22)   — já deve estar aberta
+   • HTTP (80)  — adicione se não tiver
+   • HTTPS (443) — adicione se não tiver
+
+   NÃO abra a porta 3306 (MySQL) — ela fica só interna.
+
+================================================================
+FASE 3 — CONFIGURAR O DNS DO DOMÍNIO
+================================================================
+
+Acesse o painel do seu provedor de domínio (Registro.br, GoDaddy,
+Hostinger, etc.) e adicione os registros DNS:
+
+   Tipo  | Nome  | Valor
+   ------+-------+---------------------------
+   A     | @     | 54.123.45.67  (seu IP estático)
+   A     | www   | 54.123.45.67  (seu IP estático)
+
+⚠️  A propagação DNS leva 15 minutos a 2 horas.
+    Continue para a Fase 4 enquanto aguarda.
+
+================================================================
+FASE 4 — CONECTAR VIA SSH
+================================================================
+
+No painel Lightsail, clique em "Conectar via SSH" (ícone laranja)
+— abre um terminal direto no navegador. OU use o seu cliente SSH:
+
+   ssh -i LightsailDefaultKey.pem ubuntu@54.123.45.67
+
+(A chave .pem é baixada na aba "Conta" do Lightsail)
+
+================================================================
+FASE 5 — RODAR OS SCRIPTS NO SERVIDOR
+================================================================
+
+Todos os scripts estão na pasta /scripts do repositório.
+Siga a ordem abaixo:
+
+--------------------------------------------------------------
+PASSO 5.1 — Baixar os scripts no servidor
+--------------------------------------------------------------
+
+No terminal SSH, execute:
+
+  git clone https://github.com/ClaudenorRibeiro/ProjetoAdvClaude.git /tmp/setup
+  cd /tmp/setup/scripts
+  chmod +x *.sh
+
+--------------------------------------------------------------
+PASSO 5.2 — Script 1: Setup do servidor
+--------------------------------------------------------------
+
+  bash 1_setup_servidor.sh
+
+O que faz:
+  ✓ Atualiza pacotes do Ubuntu
+  ✓ Cria SWAP de 2GB (essencial para 1GB RAM)
+  ✓ Instala Node.js 20, PM2, MySQL 8, Nginx, Certbot, Git
+  ✓ Configura MySQL para baixo consumo de memória
+  ✓ Cria pasta /var/www/advocacia
+
+Duração: ~5-10 minutos
+
+--------------------------------------------------------------
+PASSO 5.3 — Script 2: Deploy da aplicação
+--------------------------------------------------------------
+
+Antes de rodar, EDITE o script para definir a senha do banco:
+
+  nano 2_deploy_app.sh
+
+  Localize a linha:  DB_PASS=""
+  Preencha:          DB_PASS="SenhaForteAqui123!"
+
+  Salve: Ctrl+X → S → Enter
+
+Depois execute:
+
+  bash 2_deploy_app.sh
+
+O que faz:
+  ✓ Clona o repositório do GitHub
+  ✓ npm install (backend) + npm run build (frontend)
+  ✓ Cria banco MySQL e usuário
+  ✓ Cria arquivo .env de produção
+  ✓ Executa todas as migrations
+  ✓ Inicia backend com PM2
+
+⚠️  O script VAI PAUSAR para você editar o .env.
+    Você precisará preencher:
+    • JWT_SECRET   → qualquer string longa e aleatória
+    • SUPER_SENHA  → senha do superadmin
+    • SMTP_PASS    → senha de app Gmail (se quiser e-mail)
+    • FRONTEND_URL → https://seudominio.com.br
+
+    Para editar: nano /var/www/advocacia/backend/.env
+    Após editar, pressione ENTER para continuar.
+
+Duração: ~5-8 minutos
+
+--------------------------------------------------------------
+PASSO 5.4 — Script 3: Configurar Nginx
+--------------------------------------------------------------
+
+Antes de rodar, EDITE o script para colocar seu domínio:
+
+  nano 3_configurar_nginx.sh
+
+  Localize:  DOMINIO="SEU_DOMINIO_AQUI"
+  Preencha:  DOMINIO="advocaciaantonio.com.br"
+
+  Salve: Ctrl+X → S → Enter
+
+Depois execute:
+
+  bash 3_configurar_nginx.sh
+
+Duração: < 1 minuto
+
+Teste no navegador:  http://seudominio.com.br
+(deve abrir o sistema via HTTP)
+
+--------------------------------------------------------------
+PASSO 5.5 — Script 4: HTTPS (aguarde DNS propagar!)
+--------------------------------------------------------------
+
+Só rode este script após confirmar que http://seudominio.com.br
+já está abrindo o sistema. Isso confirma que o DNS propagou.
+
+Antes de rodar, EDITE o script:
+
+  nano 4_ssl_https.sh
+
+  Preencha DOMINIO e EMAIL_ADMIN
+  Salve: Ctrl+X → S → Enter
+
+Depois execute:
+
+  bash 4_ssl_https.sh
+
+O que faz:
+  ✓ Obtém certificado gratuito Let's Encrypt
+  ✓ Configura Nginx para HTTPS automaticamente
+  ✓ Ativa redirecionamento HTTP → HTTPS
+  ✓ Configura renovação automática do certificado
+
+Duração: < 2 minutos
+
+Teste: https://seudominio.com.br  ← deve abrir com cadeado 🔒
+
+================================================================
+FASE 6 — VERIFICAR SE ESTÁ TUDO OK
+================================================================
+
+No terminal SSH, execute estes comandos de verificação:
+
+  # Verifica se o backend está rodando
+  pm2 status
+
+  # Verifica logs do backend (últimas linhas)
+  pm2 logs advocacia-backend --lines 20
+
+  # Verifica se o Nginx está OK
+  sudo systemctl status nginx
+
+  # Verifica se o MySQL está rodando
+  sudo systemctl status mysql
+
+  # Verifica o uso de memória (importante no 1GB)
+  free -h
+
+Se tudo estiver verde, o sistema está no ar! ✅
+
+================================================================
+FASE 7 — PRIMEIRO ACESSO
+================================================================
+
+1. Abra https://seudominio.com.br
+2. Faça login com o superadmin:
+   • Login: superadmin
+   • Senha: (definida no .env → SUPER_SENHA)
+3. Crie o primeiro usuário administrador
+4. Configure os dados do escritório
+
+================================================================
+ATUALIZAÇÕES FUTURAS
+================================================================
+
+Sempre que fizer novos commits e quiser atualizar o sistema:
+
+  ssh ubuntu@54.123.45.67
+  cd /tmp/setup/scripts    (ou copie o script para outro lugar)
+  bash 5_atualizar.sh
+
+Ou manualmente:
+  cd /var/www/advocacia
+  git pull origin main
+  cd frontend && npm run build
+  pm2 restart advocacia-backend
+
+================================================================
+COMANDOS ÚTEIS NO SERVIDOR
+================================================================
+
+  # Ver status do backend
+  pm2 status
+
+  # Ver logs em tempo real
+  pm2 logs advocacia-backend
+
+  # Reiniciar backend
+  pm2 restart advocacia-backend
+
+  # Ver uso de recursos
+  htop
+
+  # Acessar MySQL
+  mysql -u advocacia_user -p sistema_advocacia
+
+  # Ver logs do Nginx
+  sudo tail -f /var/log/nginx/error.log
+
+  # Recarregar Nginx (após mudar config)
+  sudo systemctl reload nginx
+
+================================================================
+ROLLBACK — Como voltar para versão anterior
+================================================================
+
+Se um deploy quebrar algo:
+
+  cd /var/www/advocacia
+
+  # Ver commits disponíveis
+  git log --oneline -10
+
+  # Voltar para um commit específico (ex: d804944)
+  git checkout d804944
+
+  # Rebuild e reiniciar
+  cd frontend && npm run build
+  pm2 restart advocacia-backend
+
+Para voltar ao normal (último commit):
+  git checkout main
+  git pull origin main
+  cd frontend && npm run build
+  pm2 restart advocacia-backend
+
+================================================================
+BACKUP DO BANCO DE DADOS
+================================================================
+
+Fazer backup manual:
+  mysqldump -u advocacia_user -p sistema_advocacia > backup_$(date +%Y%m%d).sql
+
+Restaurar backup:
+  mysql -u advocacia_user -p sistema_advocacia < backup_20260527.sql
+
+Dica: configure o backup automático pelo painel do Lightsail
+(Instância → aba Snapshots → Habilitar snapshots automáticos)
+
+================================================================
+ FIM DO TUTORIAL
+================================================================
