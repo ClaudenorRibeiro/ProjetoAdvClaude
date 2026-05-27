@@ -1,7 +1,7 @@
 ================================================================
  HANDOFF — SISTEMA DE ADVOCACIA
  Documento de continuidade para novo computador / nova sessão
- Atualizado em: 27/05/2026 — 15:01
+ Atualizado em: 27/05/2026 — 16:45
 ================================================================
 
 Este arquivo contém TUDO que o próximo Claude precisa saber para
@@ -326,7 +326,7 @@ MÓDULOS AINDA NÃO IMPLEMENTADOS (ou parcialmente):
   - Módulo de Publicações AASP: integração com API externa pendente
   - Integração WhatsApp (Z-API): não iniciada
   - Backup automático S3: não iniciado
-  - Deploy AWS Lightsail: tutorial + scripts pendentes
+  - Deploy AWS Lightsail: EM ANDAMENTO — ver Seção 15 abaixo
   - Geração de documentos Word/PDF: implementado mas pode ter ajustes
 
 MELHORIAS IDENTIFICADAS:
@@ -389,7 +389,8 @@ Commits desta sessão (27/05/2026):
   5afb9a5 — 260527: Reset de senha, Controle Fóruns/Varas, Gmail SMTP
   d804944 — 270526-1441: Migrations TRT2, pré-preench. CNJ, fix polo oposto
   d00ab1a — 270526-1458: Busca de processos expandida para todos os polos
-  (este commit) — 270526-1501: Atualização HANDOFF
+  c44418b — 270526-1501: HANDOFF atualizado com sessão completa
+  01da21a — 270526-1626: Scripts e tutorial de deploy AWS Lightsail
 
 NUNCA usar: git push sem permissão do usuário.
 SEMPRE incluir data/hora no início da mensagem: DDMMYY-HHMM
@@ -445,6 +446,101 @@ MODIFICADOS:
   memory/feedback_codigo.md
     → regra: commit sempre com data/hora DDMMYY-HHMM
     → regra: nunca commitar sem permissão do usuário
+
+COMMIT 270526-1626 (esta sessão):
+  DEPLOY_AWS_LIGHTSAIL.txt            ← tutorial completo passo a passo
+  scripts/1_setup_servidor.sh         ← instala Node.js, MySQL, Nginx, PM2
+  scripts/2_deploy_app.sh             ← clona repo, build, banco, .env, PM2
+  scripts/3_configurar_nginx.sh       ← configura Nginx como proxy reverso
+  scripts/4_ssl_https.sh              ← Let's Encrypt SSL gratuito
+  scripts/5_atualizar.sh              ← atualiza sistema após novos commits
+
+
+================================================================
+SEÇÃO 15 — STATUS DO DEPLOY AWS LIGHTSAIL
+================================================================
+
+INSTÂNCIA CRIADA ✅
+  Nome:     sistema-adv-antonio
+  Região:   us-east-1 (Virginia — escolha do usuário para economia)
+  OS:       Ubuntu 22.04 LTS
+  Plano:    $5/mês — 512 MB RAM, 2 vCPUs, 20 GB SSD
+            ⚠️ 512 MB é pouco — o script 1 cria 2 GB de SWAP,
+               o que torna viável. Monitorar uso de memória.
+  Status:   Running ✅
+
+IP ESTÁTICO ✅
+  IP público fixo: 98.86.50.188  ← ANOTAR — IP definitivo do servidor
+  Nome:            Staticip-1
+
+FIREWALL IPv4:
+  SSH   (22)  ✅ já estava aberto
+  HTTP  (80)  ✅ já estava aberto
+  HTTPS (443) ❌ PENDENTE — precisa adicionar "Add rule" → HTTPS
+
+PRÓXIMOS PASSOS (na ordem):
+
+  PASSO A — Adicionar HTTPS no firewall (painel Lightsail):
+    Instância → aba Networking → IPv4 Firewall
+    → "+ Add rule" → Application: HTTPS → Save
+    (fazer o mesmo no IPv6 Firewall se necessário)
+
+  PASSO B — Configurar DNS do domínio:
+    O usuário ainda não informou qual é o domínio.
+    Perguntar: "Qual é o domínio do sistema?" (ex: advocaciaantonio.com.br)
+    No painel do provedor de domínio, criar registros:
+      Tipo A  | @   | 98.86.50.188
+      Tipo A  | www | 98.86.50.188
+    Propagação: 15 min a 2 horas — continuar passo C enquanto aguarda.
+
+  PASSO C — SSH no servidor e rodar os 4 scripts:
+    No painel Lightsail → instância → botão laranja "Connect using SSH"
+    Ou via terminal: ssh -i LightsailDefaultKey.pem ubuntu@98.86.50.188
+
+    1) Baixar scripts do GitHub:
+       git clone https://github.com/ClaudenorRibeiro/ProjetoAdvClaude.git /tmp/setup
+       cd /tmp/setup/scripts
+       chmod +x *.sh
+
+    2) Rodar script 1 (setup do servidor):
+       bash 1_setup_servidor.sh
+       Duração: ~5-10 min
+
+    3) Editar e rodar script 2 (deploy da app):
+       nano 2_deploy_app.sh      ← preencher DB_PASS="SenhaForteAqui123!"
+       bash 2_deploy_app.sh
+       ⚠️ O script VAI PAUSAR para editar o .env — preencher:
+          JWT_SECRET   → string longa aleatória (ex: uuid ou random 64 chars)
+          SUPER_SENHA  → senha do superadmin
+          SMTP_PASS    → senha de app Gmail (opcional)
+          FRONTEND_URL → https://seudominio.com.br
+
+    4) Editar e rodar script 3 (Nginx):
+       nano 3_configurar_nginx.sh   ← preencher DOMINIO="seudominio.com.br"
+       bash 3_configurar_nginx.sh
+       Testar: http://seudominio.com.br (deve abrir o sistema)
+
+    5) Após DNS propagar — rodar script 4 (HTTPS):
+       nano 4_ssl_https.sh          ← preencher DOMINIO e EMAIL_ADMIN
+       bash 4_ssl_https.sh
+       Testar: https://seudominio.com.br (deve abrir com cadeado 🔒)
+
+  PASSO D — Executar migrations pendentes no servidor:
+    Após o deploy, conectar ao MySQL e rodar:
+      mysql -u advocacia_user -p sistema_advocacia < /var/www/advocacia/backend/database/migrations/005b_codVaraNoProc_ruy_barbosa.sql
+      mysql -u advocacia_user -p sistema_advocacia < /var/www/advocacia/backend/database/migrations/006_codTipoProc_tbltipoproc.sql
+    Depois popular codTipoProc:
+      mysql -u advocacia_user -p sistema_advocacia
+      UPDATE tblTipoProc SET codTipoProc='5' WHERE nome LIKE '%Trabalhista%';
+      (verificar outros tipos com o usuário)
+
+ONDE PARAMOS (27/05/2026 ~16:45):
+  - Instância criada e rodando ✅
+  - IP estático configurado ✅
+  - Firewall: faltava HTTPS (443) — usuário foi adicionar e sessão encerrou
+  - DNS: domínio não foi definido ainda — perguntar ao usuário
+  - Scripts: ainda NÃO foram rodados no servidor
+
 
 
 ================================================================
