@@ -227,8 +227,14 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
   useEffect(() => {
     processosAPI.auxiliares().then(r => {
       if (r.data.ok) {
-        setAux(r.data.dados);
-        setVarasFiltradas(r.data.dados.varas);
+        const dados = r.data.dados;
+        setAux(dados);
+        setVarasFiltradas(dados.varas);
+        // Pré-preenche Status = "Conhecimento" e Instância = "1ª Instância" para novo cadastro
+        const statusPadrao = dados.status.find(s => s.nome.toLowerCase().includes('conhecimento'));
+        if (statusPadrao) setForm(f => ({ ...f, status_id: String(statusPadrao.id) }));
+        const instanciaPadrao = dados.instancias.find(i => i.nome.startsWith('1'));
+        if (instanciaPadrao) setForm(f => ({ ...f, instancia_id: String(instanciaPadrao.id) }));
       }
     });
     if (!pastaId) {
@@ -264,6 +270,31 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
   }, [autores, reus]);
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
+
+  // Extrai campos do número CNJ e pré-preenche Tipo, Fórum e Vara.
+  // Formato CNJ: NNNNNNN-DD.AAAA.J.TT.OOOO (20 dígitos brutos)
+  //   Tipo:       dígito J  (posição [13])       → match por codTipoProc
+  //   Fórum+Vara: J+TT+OOOO (posições [13..19])  → match por codVaraNoProc
+  function preencherTipoPorCNJ(valor) {
+    const digits = valor.replace(/\D/g, '');
+
+    // Pré-preenche Tipo quando dígito J estiver disponível (14+ dígitos)
+    if (digits.length >= 14) {
+      const codJ = digits[13];
+      const tipo = aux.tipos.find(t => String(t.codTipoProc) === codJ);
+      if (tipo) set('tipo_id', String(tipo.id));
+    }
+
+    // Pré-preenche Fórum + Vara quando o número estiver completo (20 dígitos)
+    if (digits.length >= 20) {
+      const codVara = digits.slice(13, 20); // 7 dígitos: J + TT + OOOO
+      const vara = aux.varas.find(v => v.codVaraNoProc === codVara);
+      if (vara) {
+        setForm(f => ({ ...f, forum_id: String(vara.forum_id), vara_id: String(vara.id) }));
+        setVarasFiltradas(aux.varas.filter(v => String(v.forum_id) === String(vara.forum_id)));
+      }
+    }
+  }
 
   function mudarForum(forumId) {
     set('forum_id', forumId);
@@ -302,17 +333,18 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
 
   // Adiciona parte à lista (autor ou réu).
   // listaOposta = o polo contrário — mesma pessoa não pode estar nos dois polos.
-  // Pessoas com o mesmo nome mas pessoa_id diferente (CPF diferente) são permitidas.
+  // A comparação usa pessoa_id + tipo_pessoa porque físicas e jurídicas têm
+  // IDs independentes — o mesmo número pode existir nas duas tabelas.
   function adicionarParte(pessoa, tipo, lista, setLista, listaOposta, setBusca, setResultados) {
     const nome = pessoa.nome || pessoa.razao_social;
     // Já está na mesma lista?
-    if (lista.some(p => p.pessoa_id === pessoa.id)) {
+    if (lista.some(p => p.pessoa_id === pessoa.id && p.tipo_pessoa === tipo)) {
       toast.warn(`${nome} já foi adicionado(a) neste polo`);
       setBusca(''); setResultados([]);
       return;
     }
-    // Está no polo oposto?
-    if (listaOposta.some(p => p.pessoa_id === pessoa.id)) {
+    // Está no polo oposto com o mesmo tipo e id?
+    if (listaOposta.some(p => p.pessoa_id === pessoa.id && p.tipo_pessoa === tipo)) {
       toast.error(`${nome} já está no polo oposto — a mesma pessoa não pode ser autor e réu ao mesmo tempo`);
       setBusca(''); setResultados([]);
       return;
@@ -558,7 +590,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
             <input
               className="form-control"
               value={form.numProc}
-              onChange={e => set('numProc', mascaraCNJ(e.target.value))}
+              onChange={e => { set('numProc', mascaraCNJ(e.target.value)); preencherTipoPorCNJ(e.target.value); }}
               placeholder="0000000-00.0000.0.00.0000"
               maxLength={25}
               style={{ maxWidth: '260px' }}
@@ -772,14 +804,15 @@ export function ModalEditarProcesso({ processo, onFechar }) {
     } catch {}
   }
 
-  // listaOposta = polo contrário — mesma pessoa não pode estar nos dois polos
+  // listaOposta = polo contrário — mesma pessoa não pode estar nos dois polos.
+  // Compara pessoa_id + tipo_pessoa porque físicas e jurídicas têm IDs independentes.
   function adicionarParte(pessoa, tipo, lista, setLista, listaOposta, setBusca, setResultados) {
     const nome = pessoa.nome || pessoa.razao_social;
-    if (lista.some(p => p.pessoa_id === pessoa.id)) {
+    if (lista.some(p => p.pessoa_id === pessoa.id && p.tipo_pessoa === tipo)) {
       toast.warn(`${nome} já foi adicionado(a) neste polo`);
       setBusca(''); setResultados([]); return;
     }
-    if (listaOposta.some(p => p.pessoa_id === pessoa.id)) {
+    if (listaOposta.some(p => p.pessoa_id === pessoa.id && p.tipo_pessoa === tipo)) {
       toast.error(`${nome} já está no polo oposto — a mesma pessoa não pode ser autor e réu ao mesmo tempo`);
       setBusca(''); setResultados([]); return;
     }

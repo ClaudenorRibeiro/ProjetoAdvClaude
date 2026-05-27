@@ -29,6 +29,12 @@ Antes de escrever código, sempre analisar e sugerir:
 Usuário mantém o sistema diretamente no VSCode.  
 **How to apply:** Estrutura de pastas clara e intuitiva, nomes de arquivos e variáveis autoexplicativos, sem "magia" desnecessária no código
 
+## Git — Formato Obrigatório de Commit
+
+Todo commit deve começar com data e hora no formato `DDMMYY-HHMM`.  
+**Why:** Padrão do projeto para rastreabilidade cronológica — ex: `260527-1430 — descrição`  
+**How to apply:** Sempre verificar a hora atual antes de criar o commit e incluir no início da mensagem. Nunca omitir a data/hora, mesmo em commits pequenos.
+
 ## Git — Nunca Commitar sem Permissão
 
 Nunca executar `git add`, `git commit`, `git push` ou qualquer operação destrutiva no Git sem permissão explícita do usuário.  
