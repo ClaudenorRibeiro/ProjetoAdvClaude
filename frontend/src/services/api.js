@@ -42,9 +42,12 @@ api.interceptors.response.use(
 // FUNÇÕES DE AUTENTICAÇÃO
 // ============================================================
 export const authAPI = {
-  login: (dados) => api.post('/auth/login', dados),
-  verificar: () => api.get('/auth/verificar'),
-  criarAdmin: (dados) => api.post('/auth/criar-admin', dados),
+  login:          (dados) => api.post('/auth/login', dados),
+  verificar:      () => api.get('/auth/verificar'),
+  criarAdmin:     (dados) => api.post('/auth/criar-admin', dados),
+  esqueciSenha:   (dados) => api.post('/auth/esqueci-senha', dados),
+  validarToken:   (token) => api.get(`/auth/validar-token/${token}`),
+  redefinirSenha: (dados) => api.post('/auth/redefinir-senha', dados),
 };
 
 // ============================================================
@@ -213,6 +216,7 @@ export const configuracaoAPI = {
   listarUsuarios:      () => api.get('/configuracoes/usuarios'),
   criarUsuario:        (dados) => api.post('/configuracoes/usuarios', dados),
   atualizarUsuario:    (id, dados) => api.put(`/configuracoes/usuarios/${id}`, dados),
+  redefinirSenhaAdmin: (id, dados) => api.put(`/configuracoes/usuarios/${id}/senha`, dados),
   buscarPermissoes:    (id) => api.get(`/configuracoes/permissoes/${id}`),
   salvarPermissoes:    (id, dados) => api.put(`/configuracoes/permissoes/${id}`, dados),
   buscarIntegracoes:   () => api.get('/configuracoes/integracoes'),

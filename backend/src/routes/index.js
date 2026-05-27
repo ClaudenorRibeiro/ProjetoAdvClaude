@@ -24,9 +24,13 @@ const dashboardCtrl     = require('../controllers/dashboardController');
 const periciasCtrl      = require('../controllers/periciasController');
 
 // ---- AUTENTICAÇÃO (rotas públicas) ----
-router.post('/auth/login',         authCtrl.login);
-router.post('/auth/criar-admin',   authCtrl.criarPrimeiroAdmin);
-router.get('/auth/verificar',      autenticar, authCtrl.verificarToken);
+router.post('/auth/login',              authCtrl.login);
+router.post('/auth/criar-admin',        authCtrl.criarPrimeiroAdmin);
+router.get('/auth/verificar',           autenticar, authCtrl.verificarToken);
+// Redefinição de senha via e-mail (rotas públicas — sem autenticação)
+router.post('/auth/esqueci-senha',      authCtrl.esqueciSenha);
+router.get('/auth/validar-token/:token',authCtrl.validarToken);
+router.post('/auth/redefinir-senha',    authCtrl.redefinirSenha);
 
 // ---- DASHBOARD ----
 router.get('/dashboard', autenticar, dashboardCtrl.buscarDados);
@@ -142,6 +146,7 @@ router.delete('/configuracoes/feriados/:id',      autenticar, apenasAdmin, confi
 router.get('/configuracoes/usuarios',             autenticar, apenasAdmin, configuracaoCtrl.listarUsuarios);
 router.post('/configuracoes/usuarios',            autenticar, apenasAdmin, configuracaoCtrl.criarUsuario);
 router.put('/configuracoes/usuarios/:id',         autenticar, apenasAdmin, configuracaoCtrl.atualizarUsuario);
+router.put('/configuracoes/usuarios/:id/senha',   autenticar, apenasAdmin, configuracaoCtrl.redefinirSenhaAdmin);
 router.get('/configuracoes/permissoes/:usuarioId', autenticar, apenasAdmin, configuracaoCtrl.buscarPermissoes);
 router.put('/configuracoes/permissoes/:usuarioId', autenticar, apenasAdmin, configuracaoCtrl.salvarPermissoes);
 router.get('/configuracoes/integracoes',          autenticar, apenasAdmin, configuracaoCtrl.buscarIntegracoes);

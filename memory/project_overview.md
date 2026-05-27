@@ -18,9 +18,11 @@ Sistema de gestão para escritórios de advocacia, desenvolvido para substituir 
 ## Stack Técnico
 
 - **Linguagem:** JavaScript
-- **Backend:** Node.js + Express
-- **Frontend:** React
-- **Banco de dados:** MySQL
+- **Backend:** Node.js + Express (porta 3001)
+- **Frontend:** React + Vite (porta 3000)
+- **Banco de dados:** MySQL 8.0.46
+- **Auth:** JWT (localStorage)
+- **HTTP:** Axios com interceptors
 - **Hospedagem:** AWS Lightsail — instância dedicada por escritório
 - **Banco de dados:** MySQL na mesma instância (não usa RDS separado)
 - **Manutenção:** Via VSCode

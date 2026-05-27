@@ -182,10 +182,12 @@ function TabEscritorio() {
 // ABA: USUÁRIOS
 // ============================================================
 function TabUsuarios() {
-  const [usuarios, setUsuarios] = useState([]);
-  const [carregando, setCarregando] = useState(true);
-  const [modalAberto, setModalAberto] = useState(false);
-  const [editando, setEditando]     = useState(null);
+  const [usuarios, setUsuarios]           = useState([]);
+  const [carregando, setCarregando]       = useState(true);
+  const [modalAberto, setModalAberto]     = useState(false);
+  const [editando, setEditando]           = useState(null);
+  const [modalSenha, setModalSenha]       = useState(false);
+  const [usuarioSenha, setUsuarioSenha]   = useState(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -223,10 +225,17 @@ function TabUsuarios() {
                     </span>
                   </td>
                   <td>
-                    <button className="btn btn-outline" style={{fontSize:'12px',padding:'4px 10px'}}
-                      onClick={() => { setEditando(u); setModalAberto(true); }}>
-                      Editar
-                    </button>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button className="btn btn-outline" style={{fontSize:'12px',padding:'4px 10px'}}
+                        onClick={() => { setEditando(u); setModalAberto(true); }}>
+                        Editar
+                      </button>
+                      <button className="btn btn-outline" style={{fontSize:'12px',padding:'4px 10px',color:'#d97706',borderColor:'#d97706'}}
+                        onClick={() => { setUsuarioSenha(u); setModalSenha(true); }}
+                        title="Redefinir senha deste usuário">
+                        🔑 Senha
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -240,6 +249,71 @@ function TabUsuarios() {
         <ModalUsuario usuario={editando}
           onFechar={(reload) => { setModalAberto(false); if(reload) carregar(); }} />
       )}
+
+      {modalSenha && usuarioSenha && (
+        <ModalRedefinirSenha
+          usuario={usuarioSenha}
+          onFechar={() => { setModalSenha(false); setUsuarioSenha(null); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Modal para admin redefinir senha de um usuário
+function ModalRedefinirSenha({ usuario, onFechar }) {
+  const [senha, setSenha]       = useState('');
+  const [confirma, setConfirma] = useState('');
+  const [salvando, setSalvando] = useState(false);
+
+  async function salvar() {
+    if (senha.length < 6)  return toast.error('A senha deve ter no mínimo 6 caracteres');
+    if (senha !== confirma) return toast.error('As senhas não coincidem');
+    setSalvando(true);
+    try {
+      await configuracaoAPI.redefinirSenhaAdmin(usuario.id, { senha });
+      toast.success(`Senha de ${usuario.nome} redefinida com sucesso!`);
+      onFechar();
+    } catch (err) {
+      toast.error(err.response?.data?.mensagem || 'Erro ao redefinir senha');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box" style={{ maxWidth: '400px' }}>
+        <div className="modal-header">
+          <h3>Redefinir Senha</h3>
+          <button className="modal-fechar" onClick={onFechar}>✕</button>
+        </div>
+        <div className="modal-body">
+          <p style={{ margin: '0 0 16px', color: '#555', fontSize: '14px' }}>
+            Definindo nova senha para <strong>{usuario.nome}</strong> ({usuario.login}).
+          </p>
+          <div className="form-group">
+            <label className="form-label">Nova senha *</label>
+            <input type="password" className="form-control"
+              value={senha} onChange={e => setSenha(e.target.value)}
+              placeholder="Mínimo 6 caracteres" autoFocus
+              autoComplete="new-password" />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Confirmar senha *</label>
+            <input type="password" className="form-control"
+              value={confirma} onChange={e => setConfirma(e.target.value)}
+              placeholder="Repita a nova senha"
+              autoComplete="new-password" />
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onFechar}>Cancelar</button>
+          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+            {salvando ? 'Salvando...' : 'Redefinir Senha'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

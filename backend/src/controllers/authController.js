@@ -3,11 +3,13 @@
 // Login, logout e criação do primeiro admin
 // ============================================================
 
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+const bcrypt  = require('bcryptjs');
+const jwt     = require('jsonwebtoken');
+const crypto  = require('crypto');
 const { pool } = require('../config/database');
 const { sucesso, erro, erroInterno, naoAutorizado } = require('../utils/response');
 const { buscarPermissoesUsuario } = require('../middleware/permissoes');
+const { enviarEmail, templateResetSenha } = require('../utils/email');
 
 // POST /api/auth/login
 // Autentica o usuário e retorna o token JWT
@@ -143,4 +145,106 @@ async function verificarToken(req, res) {
   }
 }
 
-module.exports = { login, criarPrimeiroAdmin, verificarToken };
+// POST /api/auth/esqueci-senha
+// Recebe login ou e-mail, gera token e envia link por e-mail.
+// Responde sempre com sucesso genérico (não revela se o usuário existe).
+async function esqueciSenha(req, res) {
+  try {
+    const { loginOuEmail } = req.body;
+    if (!loginOuEmail?.trim()) return erro(res, 'Informe o login ou e-mail cadastrado');
+
+    // Busca o usuário pelo login OU e-mail
+    const [rows] = await pool.execute(
+      'SELECT id, nome, email FROM usuarios WHERE (login = ? OR email = ?) AND ativo = 1 LIMIT 1',
+      [loginOuEmail.trim(), loginOuEmail.trim()]
+    );
+
+    // Resposta genérica — não informa se o usuário existe (segurança)
+    const MSG_GENERICA = 'Se o login ou e-mail estiver cadastrado, você receberá um e-mail com o link de redefinição.';
+
+    if (!rows.length) return sucesso(res, null, MSG_GENERICA);
+
+    const usuario = rows[0];
+    if (!usuario.email) {
+      return erro(res, 'Este usuário não possui e-mail cadastrado. Solicite ao administrador para redefinir sua senha.');
+    }
+
+    // Invalida tokens anteriores deste usuário
+    await pool.execute('UPDATE reset_tokens SET usado = 1 WHERE usuario_id = ?', [usuario.id]);
+
+    // Gera token seguro (32 bytes = 64 hex chars)
+    const token     = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+
+    await pool.execute(
+      'INSERT INTO reset_tokens (usuario_id, token, expires_at) VALUES (?, ?, ?)',
+      [usuario.id, token, expiresAt]
+    );
+
+    // Busca nome do escritório para o e-mail
+    const [conf] = await pool.execute('SELECT nome FROM configuracoes_escritorio LIMIT 1');
+    const escritorio = conf[0]?.nome || 'Sistema de Advocacia';
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const link = `${frontendUrl}/redefinir-senha?token=${token}`;
+
+    await enviarEmail({
+      para:    usuario.email,
+      assunto: `${escritorio} — Redefinição de senha`,
+      html:    templateResetSenha({ nome: usuario.nome, link, escritorio }),
+      linkDev: link, // usado somente em modo dev sem SMTP
+    });
+
+    return sucesso(res, null, MSG_GENERICA);
+  } catch (err) {
+    console.error('Erro ao enviar e-mail de redefinição:', err.message);
+    return erro(res, 'Erro ao enviar e-mail. Solicite ao administrador para redefinir sua senha.');
+  }
+}
+
+// GET /api/auth/validar-token/:token
+// Verifica se um token de redefinição é válido e não expirou.
+async function validarToken(req, res) {
+  try {
+    const { token } = req.params;
+    const [rows] = await pool.execute(
+      `SELECT rt.id, u.nome FROM reset_tokens rt
+       JOIN usuarios u ON u.id = rt.usuario_id
+       WHERE rt.token = ? AND rt.usado = 0 AND rt.expires_at > NOW()`,
+      [token]
+    );
+    if (!rows.length) return erro(res, 'Link inválido ou expirado. Solicite um novo link.');
+    return sucesso(res, { nome: rows[0].nome }, 'Token válido');
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// POST /api/auth/redefinir-senha
+// Recebe token + nova senha, atualiza o hash e invalida o token.
+async function redefinirSenha(req, res) {
+  try {
+    const { token, senha } = req.body;
+    if (!token || !senha) return erro(res, 'Token e nova senha são obrigatórios');
+    if (senha.length < 6)  return erro(res, 'A senha deve ter no mínimo 6 caracteres');
+
+    const [rows] = await pool.execute(
+      `SELECT rt.id, rt.usuario_id FROM reset_tokens rt
+       WHERE rt.token = ? AND rt.usado = 0 AND rt.expires_at > NOW()`,
+      [token]
+    );
+    if (!rows.length) return erro(res, 'Link inválido ou expirado. Solicite um novo link.');
+
+    const { id: tokenId, usuario_id } = rows[0];
+    const novoHash = await bcrypt.hash(senha, 12);
+
+    await pool.execute('UPDATE usuarios SET senha_hash = ? WHERE id = ?', [novoHash, usuario_id]);
+    await pool.execute('UPDATE reset_tokens SET usado = 1 WHERE id = ?',  [tokenId]);
+
+    return sucesso(res, null, 'Senha redefinida com sucesso! Você já pode fazer login.');
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+module.exports = { login, criarPrimeiroAdmin, verificarToken, esqueciSenha, validarToken, redefinirSenha };

@@ -12,6 +12,7 @@ import Layout from './components/layout/Layout';
 
 // Páginas
 import Login         from './pages/Login/Login';
+import ResetSenha    from './pages/ResetSenha/ResetSenha';
 import Dashboard     from './pages/Dashboard/Dashboard';
 import Pessoas       from './pages/Pessoas/Pessoas';
 import Processos     from './pages/Processos/Processos';
@@ -26,6 +27,8 @@ import Publicacoes   from './pages/Publicacoes/Publicacoes';
 import Agenda        from './pages/Agenda/Agenda';
 import Relatorios    from './pages/Relatorios/Relatorios';
 import Configuracoes from './pages/Configuracoes/Configuracoes';
+import Foruns        from './pages/Controle/Foruns';
+import Varas         from './pages/Controle/Varas';
 
 // Rota protegida — redireciona para login se não estiver autenticado
 function RotaProtegida({ children }) {
@@ -53,8 +56,9 @@ function RotaPublica({ children }) {
 function AppRoutes() {
   return (
     <Routes>
-      {/* Rota pública */}
-      <Route path="/login" element={<RotaPublica><Login /></RotaPublica>} />
+      {/* Rotas públicas */}
+      <Route path="/login"           element={<RotaPublica><Login /></RotaPublica>} />
+      <Route path="/redefinir-senha" element={<ResetSenha />} />
 
       {/* Rotas protegidas */}
       <Route path="/dashboard"     element={<RotaProtegida><Dashboard /></RotaProtegida>} />
@@ -70,7 +74,9 @@ function AppRoutes() {
       <Route path="/publicacoes/*" element={<RotaProtegida><Publicacoes /></RotaProtegida>} />
       <Route path="/agenda/*"      element={<RotaProtegida><Agenda /></RotaProtegida>} />
       <Route path="/relatorios/*"  element={<RotaProtegida><Relatorios /></RotaProtegida>} />
-      <Route path="/configuracoes/*" element={<RotaProtegida><Configuracoes /></RotaProtegida>} />
+      <Route path="/configuracoes/*"   element={<RotaProtegida><Configuracoes /></RotaProtegida>} />
+      <Route path="/controle/foruns"  element={<RotaProtegida><Foruns /></RotaProtegida>} />
+      <Route path="/controle/varas"   element={<RotaProtegida><Varas /></RotaProtegida>} />
 
       {/* Redireciona raiz para dashboard */}
       <Route path="/" element={<Navigate to="/dashboard" replace />} />

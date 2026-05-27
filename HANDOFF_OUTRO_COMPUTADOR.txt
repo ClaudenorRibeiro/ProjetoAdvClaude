@@ -1,0 +1,498 @@
+================================================================
+ HANDOFF — SISTEMA DE ADVOCACIA
+ Documento de continuidade para novo computador / nova sessão
+ Gerado em: 27/05/2026
+================================================================
+
+Este arquivo contém TUDO que o próximo Claude precisa saber para
+continuar o desenvolvimento exatamente de onde paramos.
+
+================================================================
+SEÇÃO 1 — REGRAS ABSOLUTAS (NUNCA IGNORAR)
+================================================================
+
+1. SEMPRE atualizar os arquivos locais do projeto imediatamente
+   após qualquer alteração. Nunca deixar para depois.
+
+2. NUNCA fazer commit no Git sem permissão explícita do usuário.
+   O usuário prefere fazer os commits manualmente.
+   Frase exata do usuário: "o Git, nunca faça atualização sem
+   minha permissão, de preferencia deixa que eu faço manualmente"
+
+3. Todo código deve ser bem comentado (usuário mantém via VSCode).
+
+4. Pensar à frente para evitar retrabalho — estrutura reutilizável.
+
+
+================================================================
+SEÇÃO 2 — VISÃO GERAL DO PROJETO
+================================================================
+
+Sistema de gestão para escritório de advocacia.
+Substitui planilhas Excel. Áreas: Trabalhista, Previdenciária
+e Família (SEM Criminal e Tributário).
+
+Escritório atual: ~12 advogados
+Capacidade: até 500 usuários por instância
+
+STACK TÉCNICO:
+  Backend:  Node.js + Express (porta 3001)
+  Frontend: React + Vite (porta 3000)
+  Banco:    MySQL 8.0.46
+  Auth:     JWT (localStorage)
+  HTTP:     Axios com interceptors
+
+ESTRUTURA DE PASTAS:
+  ProjetoAdvClaude/
+  ├── backend/
+  │   ├── src/
+  │   │   ├── controllers/     ← lógica de negócio
+  │   │   ├── middleware/       ← auth.js, permissoes.js
+  │   │   ├── routes/           ← index.js (todas as rotas)
+  │   │   └── utils/            ← email.js, auditoria.js
+  │   ├── database/
+  │   │   └── migrations/       ← SQLs de criação/alteração
+  │   ├── .env                  ← configurações locais (NÃO vai pro Git)
+  │   └── server.js
+  ├── frontend/
+  │   ├── src/
+  │   │   ├── components/layout/ ← Layout.js + Layout.css (menu lateral)
+  │   │   ├── context/            ← AuthContext.js
+  │   │   ├── pages/              ← uma pasta por módulo
+  │   │   └── services/api.js     ← todas as chamadas ao backend
+  │   └── vite.config.js
+  ├── memory/                    ← memórias do projeto (documentação)
+  ├── backups/                   ← backups manuais do banco
+  ├── ConfiguracoesIniciais.txt  ← guia de configuração do sistema
+  ├── iniciar_pc_casa.bat        ← inicia backend + frontend
+  └── HANDOFF_OUTRO_COMPUTADOR.txt ← este arquivo
+
+
+================================================================
+SEÇÃO 3 — COMO RODAR O PROJETO
+================================================================
+
+No PC de casa, use o arquivo: iniciar_pc_casa.bat
+(Duplo clique — já inicia backend e frontend automaticamente)
+
+Manualmente:
+  Backend:  cd backend  → node src/server.js  (ou npm start)
+  Frontend: cd frontend → npm run dev
+
+Acessar: http://localhost:3000
+
+Login padrão (desenvolvimento):
+  Superusuário: superadmin / (senha no .env → SUPER_SENHA)
+  Admin criado: claudio / (senha definida nas configurações)
+
+
+================================================================
+SEÇÃO 4 — BANCO DE DADOS
+================================================================
+
+Banco: sistema_advocacia (MySQL)
+Conexão: pool com mysql2/promise, pool.execute() para prepared statements
+
+PADRÃO DE TRANSAÇÃO:
+  const conn = await pool.getConnection();
+  await conn.beginTransaction();
+  try { ... await conn.commit(); }
+  catch { await conn.rollback(); throw err; }
+  finally { conn.release(); }
+
+SOFT DELETE: campo ativo = 0 (nunca deleta fisicamente)
+
+MIGRATIONS EXECUTADAS (em ordem):
+  [✓] 001_criar_banco.sql          — estrutura completa das tabelas
+  [✓] 002_novo_modelo_processos.sql — tblPasta + tblProc + auxiliares
+  [✓] 003_expandir_forum_vara.sql   — campos novos em tblForum e tblVara
+  [ ] 004_reset_tokens.sql          ← AINDA NÃO EXECUTADA no banco!
+
+ATENÇÃO: A migration 004 precisa ser executada para o recurso
+"Esqueci minha senha" funcionar. Arquivo em:
+backend/database/migrations/004_reset_tokens.sql
+
+PRINCIPAIS TABELAS (as mais usadas no código):
+  tblForum      — fóruns (nome, abrev_nome, endereço completo, uf)
+  tblVara       — varas (nome, abrev_nome, forum_id, codVaraNoProc, compl_end, tel, email)
+  tblPasta      — pasta/caso do cliente (numPasta, cliente_id, titulo)
+  tblProc       — processos (numProc, pasta_id, vara_id, status_id, tipo_id...)
+  tblTituloProc — partes do processo (autor/réu)
+  usuarios      — usuários do sistema (nivel: 0=super, 1=admin, 2=normal)
+  permissoes    — permissões granulares por usuário e módulo
+  reset_tokens  — tokens de redefinição de senha via e-mail
+
+
+================================================================
+SEÇÃO 5 — AUTENTICAÇÃO E PERMISSÕES
+================================================================
+
+HIERARQUIA:
+  Nível 0 → Superusuário (superadmin) — invisível, dono do sistema
+  Nível 1 → Administrador             — acesso total ao escritório
+  Nível 2 → Usuários normais          — permissões configuradas
+
+BACKEND:
+  Middleware autenticar: verifica JWT
+  Middleware apenasAdmin: nivel <= 1
+  verificarPermissao(modulo, acao): checa tabela permissoes
+  Admins (nivel <= 1) têm acesso irrestrito — sem checar permissoes
+
+FRONTEND (AuthContext):
+  const { usuario, ehAdmin, temPermissao } = useAuth();
+  ehAdmin → nivel <= 1
+  temPermissao('modulo', 'acao') → verifica permissão específica
+  Admins sempre retornam true em temPermissao
+
+MÓDULOS DE PERMISSÃO (array em Configuracoes.js → MODULOS_PERM):
+  'pessoas', 'processos', 'pastas', 'prazos', 'tarefas',
+  'audiencias', 'pericias', 'financeiro', 'documentos',
+  'publicacoes', 'relatorios'
+
+AÇÕES: 'visualizar', 'cadastrar', 'alterar', 'excluir'
+
+PERMISSÃO ESPECIAL: 'pastas.alterar' → renumerar pasta
+
+
+================================================================
+SEÇÃO 6 — PADRÕES DE CÓDIGO
+================================================================
+
+BACKEND — Respostas da API (helpers em cada controller):
+  sucesso(res, dados, mensagem, status=200)
+  erro(res, mensagem, status=400)
+  naoEncontrado(res, mensagem)
+  erroInterno(res, err)
+
+BACKEND — Auditoria:
+  await auditoria.registrar(usuario_id, tabela, acao, registro_id)
+
+FRONTEND — API (services/api.js):
+  Instância axios: baseURL = '/api', timeout = 30s
+  Token JWT injetado automaticamente no interceptor de request
+  401 → redireciona para /login automaticamente
+
+FRONTEND — Notificações:
+  import { toast } from 'react-toastify';
+  toast.success / toast.error / toast.warning
+
+FRONTEND — CSS classes disponíveis (Layout.css):
+  .btn, .btn-primary, .btn-secondary, .btn-danger, .btn-warning
+  .btn-outline, .btn-success
+  .form-group, .form-label, .form-label.obrigatorio, .form-control
+  .tabela, .tabela-wrapper, .card, .card-titulo
+  .modal-overlay, .modal-box, .modal-grande, .modal-pequeno
+  .modal-header, .modal-body, .modal-footer, .modal-fechar
+  .badge, .badge-verde, .badge-vermelho, .badge-azul, .badge-cinza
+  .grid-2, .grid-3, .grid-4
+  .lista-vazia, .loading
+  .abas-nav, .aba-btn, .aba-btn.ativa
+
+
+================================================================
+SEÇÃO 7 — O QUE FOI FEITO NESTA SESSÃO (27/05/2026)
+================================================================
+
+A. REDEFINIÇÃO DE SENHA — OPÇÃO C (ambos os fluxos):
+
+   FLUXO 1 — Admin redefine senha de usuário:
+   - Configurações → Usuários → botão 🔑 Senha (âmbar)
+   - Admin digita nova senha + confirmação
+   - Arquivo: frontend/src/pages/Configuracoes/Configuracoes.js
+              (componente ModalRedefinirSenha adicionado)
+   - Backend: configuracaoController.js → redefinirSenhaAdmin
+   - Rota: PUT /api/configuracoes/usuarios/:id/senha (apenasAdmin)
+
+   FLUXO 2 — Usuário esqueceu a senha (e-mail):
+   - Login → "Esqueci minha senha" → modal com campo login/email
+   - Backend gera token (64 hex chars), expira em 1h
+   - Envia e-mail via Gmail SMTP com link /redefinir-senha?token=xxx
+   - Página: frontend/src/pages/ResetSenha/ResetSenha.js (nova)
+   - Rota pública App.js: /redefinir-senha
+   - Arquivos novos/modificados:
+     * backend/src/utils/email.js (novo — nodemailer wrapper)
+     * backend/src/controllers/authController.js (esqueciSenha,
+       validarToken, redefinirSenha)
+     * frontend/src/pages/Login/Login.js (modal esqueci senha)
+     * frontend/src/App.js (rota /redefinir-senha)
+
+   MODO DEV (sem SMTP): quando NODE_ENV=development e SMTP não
+   configurado, o link é exibido no console do backend (não falha).
+
+   CORREÇÃO APLICADA: coluna nome_escritorio → nome na query
+   dentro de authController.js (linha buscarAuxiliares).
+
+B. CONFIGURAÇÃO DE E-MAIL GMAIL:
+   - Conta criada: antonioadv.sistema@gmail.com (exclusiva do sistema)
+   - Senha de App gerada e configurada no .env
+   - .env atualizado com SMTP_HOST=smtp.gmail.com
+   - E-mail de reset funcionando e testado ✅
+
+C. ARQUIVO ConfiguracoesIniciais.txt (novo na raiz):
+   - Guia completo de instalação e configuração
+   - Inclui passo a passo do Gmail App Password
+   - Checklist de instalação
+
+D. TELA CONTROLE — FÓRUNS E VARAS (novo módulo):
+
+   MENU LATERAL:
+   - Layout.js atualizado com suporte a grupos expansíveis
+   - Novo item 🗂️ Controle → sub-itens 🏛️ Fóruns e 🏢 Varas
+   - Aparece apenas para admins (apenasAdmin: true)
+   - Grupo auto-expande quando rota filho está ativa
+   - Sidebar fechada: clica no ícone → abre sidebar + grupo
+   - Layout.css: adicionado .menu-grupo, .menu-subgrupo, .menu-subitem
+
+   PÁGINAS NOVAS:
+   - frontend/src/pages/Controle/Foruns.js
+     * Lista com busca por nome, abreviação, cidade
+     * Modal criar/editar com todos os campos do tblForum
+     * Excluir com bloqueio se tiver varas vinculadas
+   - frontend/src/pages/Controle/Varas.js
+     * Lista com busca + filtro por fórum
+     * Modal criar/editar com todos os campos do tblVara
+     * Excluir com bloqueio se tiver processos vinculados
+
+   ROTAS (App.js):
+   - /controle/foruns → Foruns.js
+   - /controle/varas  → Varas.js
+
+   BACKEND: Todos os endpoints já existiam em processosController.js
+   (criarForum, atualizarForum, excluirForum, criarVara,
+   atualizarVara, excluirVara, buscarAuxiliares)
+   Nenhuma alteração no backend necessária.
+
+
+================================================================
+SEÇÃO 8 — ESTRUTURA DO MENU LATERAL (atual)
+================================================================
+
+Menu em: frontend/src/components/layout/Layout.js → array MENU
+
+  🏠 Dashboard        /dashboard
+  👥 Pessoas          /pessoas         (perm: pessoas.visualizar)
+  📁 Processos        /processos        (perm: processos.visualizar)
+  ⏱️ Prazos           /prazos           (perm: prazos.visualizar)
+  ✅ Tarefas          /tarefas          (perm: tarefas.visualizar)
+  ⚖️ Audiências       /audiencias       (perm: audiencias.visualizar)
+  🔬 Perícias         /pericias         (perm: pericias.visualizar)
+  💰 Financeiro       /financeiro       (perm: financeiro.visualizar)
+  📄 Documentos       /documentos       (perm: documentos.visualizar)
+  📰 Publicações      /publicacoes      (perm: publicacoes.visualizar)
+  📅 Agenda           /agenda
+  📊 Relatórios       /relatorios       (perm: relatorios.visualizar)
+  🗂️ Controle [GRUPO] /controle/*       (apenasAdmin)
+      🏛️ Fóruns        /controle/foruns
+      🏢 Varas         /controle/varas
+  ⚙️ Configurações    /configuracoes    (apenasAdmin)
+
+
+================================================================
+SEÇÃO 9 — CAMPOS DO BANCO — tblForum e tblVara (após migration 003)
+================================================================
+
+tblForum:
+  id, abrev_nome, nome*, cidade, uf, cep, logradouro,
+  num_end, compl_end, bairro, ativo, criado_por, criado_em,
+  alterado_por, alterado_em
+
+tblVara:
+  id, abrev_nome, forum_id*, nome*, codVaraNoProc (VARCHAR 15),
+  compl_end, tel, email, ativo, criado_por, criado_em,
+  alterado_por, alterado_em
+
+abrev_nome: abreviação opcional exibida nos dropdowns/listas.
+  Ex Fórum: "FT/B.Funda"   → nome completo: "Fórum Trabalhista Barra Funda"
+  Ex Vara:  "1ªVT/SP"      → nome completo: "1ª Vara do Trabalho de SP"
+  Se abrev_nome vazio, usa nome completo (fallback em todo frontend)
+  Padrão nos dropdowns: f.abrev_nome || f.nome
+
+codVaraNoProc: segmento CNJ que identifica a vara no número do
+  processo. Ex: 5.02.0001 (campo extremamente útil para futuro)
+
+
+================================================================
+SEÇÃO 10 — PENDÊNCIAS (o que ainda FALTA fazer)
+================================================================
+
+IMEDIATO:
+  [ ] Executar migration 004_reset_tokens.sql no banco de dados
+      Localização: backend/database/migrations/004_reset_tokens.sql
+      Sem isso: "Esqueci minha senha" falha com erro de tabela
+
+MÓDULOS AINDA NÃO IMPLEMENTADOS (ou parcialmente):
+  - Agenda / Calendário: tela existe mas pode precisar de ajustes
+  - Relatórios: tela existe mas relatórios completos pendentes
+  - Módulo de Publicações AASP: integração com API externa pendente
+  - Integração WhatsApp (Z-API): não iniciada
+  - Backup automático S3: não iniciado
+  - Deploy AWS Lightsail: tutorial + scripts pendentes
+  - Geração de documentos Word/PDF: implementado mas pode ter ajustes
+
+MELHORIAS IDENTIFICADAS (mas não urgentes):
+  - A tela de Controle (Fóruns/Varas) poderia ter paginação
+    se o número de registros crescer muito
+  - Adicionar busca por CEP automática (ViaCEP API) no form de Fórum
+  - Importação em massa de fóruns/varas via CSV
+
+
+================================================================
+SEÇÃO 11 — CONFIGURAÇÃO DO SERVIDOR DE E-MAIL
+================================================================
+
+Conta Gmail dedicada: antonioadv.sistema@gmail.com
+(Não é o e-mail pessoal — é exclusivo para envios do sistema)
+
+Configuração no backend/.env:
+  SMTP_HOST=smtp.gmail.com
+  SMTP_PORT=587
+  SMTP_USER=antonioadv.sistema@gmail.com
+  SMTP_PASS=[SENHA DE APP — 16 caracteres, salva só no .env]
+  EMAIL_FROM=Advocacia Dr Antonio Ferreira da Costa <antonioadv.sistema@gmail.com>
+
+Senha de App: gerada em myaccount.google.com/apppasswords
+  Se perder: delete a antiga e gere uma nova, atualize SMTP_PASS no .env
+  e reinicie o backend.
+
+
+================================================================
+SEÇÃO 12 — VARIÁVEIS DE AMBIENTE (.env) — RESUMO
+================================================================
+
+Arquivo: backend/.env  (NÃO vai para o Git)
+
+Variáveis críticas já configuradas neste PC:
+  PORT=3001
+  NODE_ENV=development
+  DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME  ← banco local
+  JWT_SECRET  ← trocar em produção por chave gerada aleatoriamente
+  SUPER_LOGIN=superadmin
+  SUPER_SENHA  ← definido localmente
+  SMTP_HOST=smtp.gmail.com  ← configurado ✅
+  SMTP_PORT=587
+  SMTP_USER=antonioadv.sistema@gmail.com  ← configurado ✅
+  SMTP_PASS=[senha de app]  ← configurado ✅
+  EMAIL_FROM=Advocacia Dr Antonio Ferreira da Costa <antonioadv.sistema@gmail.com>
+  FRONTEND_URL=http://localhost:3000
+
+No novo computador: copiar o .env manualmente (não está no Git).
+ATENÇÃO: o banco do novo PC pode ter credenciais diferentes
+(DB_USER, DB_PASSWORD) — ajustar conforme necessário.
+
+
+================================================================
+SEÇÃO 13 — GIT / VERSIONAMENTO
+================================================================
+
+Repositório: Git local + remoto (GitHub ou similar)
+
+Último commit: f07ec9f
+  "Processos: forum/vara expandidos, validações e renumeração de pasta"
+
+O que foi feito nesta sessão (27/05/2026) NÃO foi commitado ainda.
+O usuário fará o commit manualmente quando quiser.
+
+Para ver o status atual:
+  git status
+  git log --oneline -5
+
+Para salvar (quando o usuário pedir):
+  git add [arquivos específicos]
+  git commit -m "mensagem"
+
+NUNCA usar: git push sem permissão do usuário.
+
+
+================================================================
+SEÇÃO 14 — ARQUIVOS MODIFICADOS/CRIADOS NESTA SESSÃO
+================================================================
+
+NOVOS:
+  backend/database/migrations/004_reset_tokens.sql
+  backend/src/utils/email.js
+  frontend/src/pages/ResetSenha/ResetSenha.js
+  frontend/src/pages/Controle/Foruns.js
+  frontend/src/pages/Controle/Varas.js
+  ConfiguracoesIniciais.txt
+  HANDOFF_OUTRO_COMPUTADOR.txt  ← este arquivo
+
+MODIFICADOS:
+  backend/src/controllers/authController.js
+    → esqueciSenha, validarToken, redefinirSenha (novo)
+    → correção: nome_escritorio → nome na query de configuracoes
+  backend/src/controllers/configuracaoController.js
+    → redefinirSenhaAdmin (novo)
+  backend/src/routes/index.js
+    → rotas /auth/esqueci-senha, /auth/validar-token, /auth/redefinir-senha
+    → rota PUT /configuracoes/usuarios/:id/senha
+  backend/.env
+    → SMTP configurado com Gmail
+  frontend/src/services/api.js
+    → authAPI: esqueciSenha, validarToken, redefinirSenha
+    → configuracaoAPI: redefinirSenhaAdmin
+  frontend/src/App.js
+    → import ResetSenha, Foruns, Varas
+    → rotas /redefinir-senha, /controle/foruns, /controle/varas
+  frontend/src/pages/Login/Login.js
+    → modal "Esqueci minha senha" + handleEsqueci
+  frontend/src/pages/Configuracoes/Configuracoes.js
+    → botão 🔑 Senha + componente ModalRedefinirSenha
+    → 'pastas' adicionado ao MODULOS_PERM
+  frontend/src/components/layout/Layout.js
+    → suporte a grupos expansíveis (tipo: 'grupo')
+    → grupo 🗂️ Controle com sub-itens Fóruns e Varas
+    → getTituloAtual() atualizado para checar sub-itens
+  frontend/src/components/layout/Layout.css
+    → estilos: .menu-grupo, .menu-grupo-header, .menu-grupo-chevron
+               .menu-subgrupo, .menu-subitem
+
+
+================================================================
+SEÇÃO 15 — INFORMAÇÕES DO ESCRITÓRIO / CONTEXTO
+================================================================
+
+Escritório: Advocacia Dr. Antonio Ferreira da Costa (nome aproximado)
+Especialidade: Trabalhista, Previdenciária, Família
+PC de desenvolvimento: Windows 10/11, VSCode
+MySQL Workbench instalado para gerenciar o banco
+
+Contato de memória do projeto:
+  - Pasta de memórias: ProjetoAdvClaude/memory/*.md
+  - Arquivo índice: memory/MEMORY.md (lista todos os documentos)
+  - Cada módulo tem seu .md com especificações detalhadas
+
+
+================================================================
+SEÇÃO 16 — COMO CONTINUAR NO NOVO COMPUTADOR
+================================================================
+
+PASSO 1 — Obter o código:
+  Clonar o repositório Git OU copiar a pasta do pendrive/nuvem
+
+PASSO 2 — Instalar dependências:
+  Duplo clique em: instalar-dependencias.bat
+  (ou: cd backend && npm install && cd ../frontend && npm install)
+
+PASSO 3 — Configurar o .env:
+  Copiar o arquivo backend/.env do PC atual para o novo
+  Ajustar DB_USER e DB_PASSWORD conforme o MySQL local
+
+PASSO 4 — Criar o banco de dados:
+  Executar as migrations na ordem (se banco novo):
+    001_criar_banco.sql
+    002_novo_modelo_processos.sql
+    003_expandir_forum_vara.sql
+    004_reset_tokens.sql   ← OBRIGATÓRIO para "Esqueci minha senha"
+
+PASSO 5 — Iniciar o sistema:
+  Duplo clique em: iniciar_pc_casa.bat  (ou iniciar_pc_escrit.bat)
+
+PASSO 6 — Continuar o desenvolvimento com Claude:
+  Abrir nova sessão do Claude Code e colar o conteúdo deste arquivo
+  como contexto inicial, ou referenciar os arquivos de memória em
+  ProjetoAdvClaude/memory/
+
+================================================================
+ FIM DO HANDOFF
+ Data: 27/05/2026
+================================================================

@@ -50,7 +50,11 @@
       "Bash(del \"C:\\\\Users\\\\Claudio\\\\Downloads\\\\ProjetoAdvClaude\\\\temp_img_0.png\" \"C:\\\\Users\\\\Claudio\\\\Downloads\\\\ProjetoAdvClaude\\\\temp_img_1.png\")",
       "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia -e \"DESCRIBE tarefas;\")",
       "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia -e \"DELETE FROM tblPasta WHERE id = 2;\")",
-      "Bash(mysqldump -u root -pHR5k6nb8*** sistema_advocacia)"
+      "Bash(mysqldump -u root -pHR5k6nb8*** sistema_advocacia)",
+      "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia -e \"DESCRIBE usuarios;\")",
+      "Bash(mysql -u root -pHR5k6nb8*** sistema_advocacia -e \"SHOW TABLES LIKE '%token%';\")",
+      "Bash(xargs grep -l \"nodemailer\\\\|sendMail\\\\|email\")",
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.dependencies, null, 2\\)\\);\")"
     ]
   }
 }

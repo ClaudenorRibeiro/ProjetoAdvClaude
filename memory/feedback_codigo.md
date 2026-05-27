@@ -28,3 +28,9 @@ Antes de escrever código, sempre analisar e sugerir:
 
 Usuário mantém o sistema diretamente no VSCode.  
 **How to apply:** Estrutura de pastas clara e intuitiva, nomes de arquivos e variáveis autoexplicativos, sem "magia" desnecessária no código
+
+## Git — Nunca Commitar sem Permissão
+
+Nunca executar `git add`, `git commit`, `git push` ou qualquer operação destrutiva no Git sem permissão explícita do usuário.  
+**Why:** Usuário prefere fazer commits manualmente — palavras exatas: "o Git, nunca faça atualização sem minha permissão, de preferencia deixa que eu faço manualmente"  
+**How to apply:** Após qualquer alteração de código, apenas listar os arquivos modificados e aguardar instrução. Nunca usar `--no-verify` ou forçar operações.

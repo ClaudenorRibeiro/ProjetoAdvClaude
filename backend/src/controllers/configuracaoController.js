@@ -314,10 +314,32 @@ async function salvarIntegracao(req, res) {
   }
 }
 
+// PUT /api/configuracoes/usuarios/:id/senha — Admin redefine a senha de um usuário
+async function redefinirSenhaAdmin(req, res) {
+  try {
+    const { id } = req.params;
+    const { senha } = req.body;
+    if (!senha || senha.length < 6) return erro(res, 'A senha deve ter no mínimo 6 caracteres');
+
+    const [rows] = await pool.execute('SELECT id FROM usuarios WHERE id = ? AND ativo = 1', [id]);
+    if (!rows.length) return naoEncontrado(res, 'Usuário não encontrado');
+
+    const hash = await bcrypt.hash(senha, 12);
+    await pool.execute('UPDATE usuarios SET senha_hash = ? WHERE id = ?', [hash, id]);
+
+    // Invalida eventuais tokens de reset pendentes deste usuário
+    await pool.execute('UPDATE reset_tokens SET usado = 1 WHERE usuario_id = ?', [id]);
+
+    return sucesso(res, null, 'Senha redefinida com sucesso');
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
 module.exports = {
   buscarEscritorio, atualizarEscritorio, marcarSetupConcluido,
   listarFeriados, criarFeriado, excluirFeriado,
-  listarUsuarios, criarUsuario, atualizarUsuario,
+  listarUsuarios, criarUsuario, atualizarUsuario, redefinirSenhaAdmin,
   buscarPermissoes, salvarPermissoes,
   buscarIntegracoes, salvarIntegracao,
 };
