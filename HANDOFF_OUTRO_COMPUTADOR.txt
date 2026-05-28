@@ -107,20 +107,30 @@ PADRÃO DE TRANSAÇÃO:
 
 SOFT DELETE: campo ativo = 0 (nunca deleta fisicamente)
 
-MIGRATIONS EXECUTADAS (em ordem):
-  [✓] 001_criar_banco.sql             — estrutura completa das tabelas
-  [✓] 002_novo_modelo_processos.sql   — tblPasta + tblProc + auxiliares
-  [✓] 003_expandir_forum_vara.sql     — campos novos em tblForum e tblVara
-  [✓] 004_reset_tokens.sql            — tabela reset_tokens (esqueci senha)
-  [✓] 005_popular_forum_varas_ruy_barbosa.sql — 1 fórum + 90 varas TRT-2 SP
-  [ ] 005b_codVaraNoProc_ruy_barbosa.sql      ← UPDATE codVaraNoProc nas varas
-  [ ] 006_codTipoProc_tbltipoproc.sql         ← ADD COLUMN codTipoProc VARCHAR(1)
+ESTRUTURA DO BANCO:
+  Arquivo único: estrutura_banco.sql (raiz do projeto)
+  Contém as 46 tabelas do sistema. NÃO usamos migrations.
+  Alterações são feitas direto no HeidiSQL.
 
-  ATENÇÃO: 005b e 006 precisam ser executadas no banco!
-  Sem 006: auto-preenchimento de Tipo pelo CNJ não funciona.
-  Sem 005b: codVaraNoProc fica NULL nas varas já inseridas.
-  Após 006: popular o campo codTipoProc na tabela tblTipoProc
-            (ex: Trabalhista = '5', conforme segmento CNJ).
+  Após qualquer ALTER TABLE no HeidiSQL:
+    1. Exportar: Ferramentas → Exportar → Estrutura SQL
+    2. Salvar como estrutura_banco.sql na raiz do projeto
+    3. Commitar no Git
+
+PENDÊNCIAS NO BANCO LOCAL (fazer no HeidiSQL):
+  [ ] Remover tabelas antigas ainda presentes:
+      DROP TABLE forum, vara, pasta, processo, partes_processo,
+                 status_processo, processo_responsaveis,
+                 modelo_comunicado, pesquisas_salvas;
+  [ ] Adicionar area_direito em tblPasta:
+      ALTER TABLE tblPasta ADD COLUMN area_direito VARCHAR(50) NULL
+      COMMENT 'Ex: Trabalhista, Previdenciaria, Familia' AFTER numPasta;
+  [ ] Popular codTipoProc:
+      UPDATE tblTipoProc SET codTipoProc='5' WHERE nome LIKE '%Trabalhista%';
+  [ ] Popular codVaraNoProc nas varas do Fórum Ruy Barbosa se NULL:
+      UPDATE tblVara v JOIN tblForum f ON f.id = v.forum_id
+      SET v.codVaraNoProc = CONCAT('50200', LPAD(CAST(REGEXP_REPLACE(v.nome,'[^0-9]','') AS UNSIGNED),2,'0'))
+      WHERE f.nome = 'Forum Trabalhista Ruy Barbosa' AND v.codVaraNoProc IS NULL;
 
 PRINCIPAIS TABELAS:
   tblForum      — fóruns (nome, abrev_nome, endereço completo, uf)
@@ -311,14 +321,13 @@ tblTipoProc:
 SEÇÃO 10 — PENDÊNCIAS (o que ainda FALTA fazer)
 ================================================================
 
-IMEDIATO — BANCO DE DADOS:
-  [ ] Executar 005b_codVaraNoProc_ruy_barbosa.sql
-      → UPDATE codVaraNoProc nas varas do Fórum Ruy Barbosa
-  [ ] Executar 006_codTipoProc_tbltipoproc.sql
-      → ADD COLUMN codTipoProc em tblTipoProc
-  [ ] Popular codTipoProc na tabela tblTipoProc
-      → Ex: UPDATE tblTipoProc SET codTipoProc='5' WHERE nome='Trabalhista'
-      → Verificar quais outros segmentos CNJ o escritório usa
+IMEDIATO — BANCO DE DADOS (fazer no HeidiSQL, sem migrations):
+  [ ] Dropar tabelas antigas: forum, vara, pasta, processo, partes_processo,
+      status_processo, processo_responsaveis, modelo_comunicado, pesquisas_salvas
+  [ ] ALTER TABLE tblPasta ADD COLUMN area_direito VARCHAR(50) NULL AFTER numPasta;
+  [ ] UPDATE tblTipoProc SET codTipoProc='5' WHERE nome LIKE '%Trabalhista%';
+  [ ] UPDATE tblVara SET codVaraNoProc para varas do Fórum Ruy Barbosa (se NULL)
+  [ ] Após todas as alterações: exportar estrutura_banco.sql e commitar no Git
 
 MÓDULOS AINDA NÃO IMPLEMENTADOS (ou parcialmente):
   - Agenda / Calendário: tela existe mas pode precisar de ajustes

@@ -30,10 +30,9 @@ async function buscarDados(req, res) {
       // Prazos que vencem hoje
       pool.execute(
         `SELECT pp.id, pp.descricao, pp.data_vencimento, pp.status,
-                pr.numero AS processo_numero, pa.titulo AS pasta_titulo
+                pr.numProc AS processo_numero, pr.NomeTituloProc AS pasta_titulo
          FROM prazos_processo pp
-         JOIN processo pr ON pp.processo_id = pr.id
-         JOIN pasta pa ON pr.pasta_id = pa.id
+         JOIN tblProc pr ON pp.processo_id = pr.id
          WHERE pp.data_vencimento = ? AND pp.status != 'concluido'
            AND (pp.delegado_para = ? OR pp.delegado_para IS NULL)`,
         [hoje, userId]
@@ -42,11 +41,10 @@ async function buscarDados(req, res) {
       // Prazos atrasados (vencidos e não concluídos)
       pool.execute(
         `SELECT pp.id, pp.descricao, pp.data_vencimento, pp.status,
-                pr.numero AS processo_numero, pa.titulo AS pasta_titulo,
+                pr.numProc AS processo_numero, pr.NomeTituloProc AS pasta_titulo,
                 DATEDIFF(CURDATE(), pp.data_vencimento) AS dias_atraso
          FROM prazos_processo pp
-         JOIN processo pr ON pp.processo_id = pr.id
-         JOIN pasta pa ON pr.pasta_id = pa.id
+         JOIN tblProc pr ON pp.processo_id = pr.id
          WHERE pp.data_vencimento < ? AND pp.status != 'concluido'
            AND (pp.delegado_para = ? OR pp.delegado_para IS NULL)
          ORDER BY pp.data_vencimento ASC`,
@@ -79,12 +77,11 @@ async function buscarDados(req, res) {
       // Audiências de hoje
       pool.execute(
         `SELECT a.id, a.data, a.hora, a.modalidade, a.local,
-                ta.nome AS tipo, pr.numero AS processo_numero,
-                pa.titulo AS pasta_titulo
+                ta.nome AS tipo, pr.numProc AS processo_numero,
+                pr.NomeTituloProc AS pasta_titulo
          FROM audiencia a
          LEFT JOIN tipo_audiencia ta ON a.tipo_audiencia_id = ta.id
-         JOIN processo pr ON a.processo_id = pr.id
-         JOIN pasta pa ON pr.pasta_id = pa.id
+         JOIN tblProc pr ON a.processo_id = pr.id
          WHERE a.data = ?
          ORDER BY a.hora ASC`,
         [hoje]
@@ -93,10 +90,10 @@ async function buscarDados(req, res) {
       // Audiências de amanhã
       pool.execute(
         `SELECT a.id, a.data, a.hora, a.modalidade,
-                ta.nome AS tipo, pr.numero AS processo_numero
+                ta.nome AS tipo, pr.numProc AS processo_numero
          FROM audiencia a
          LEFT JOIN tipo_audiencia ta ON a.tipo_audiencia_id = ta.id
-         JOIN processo pr ON a.processo_id = pr.id
+         JOIN tblProc pr ON a.processo_id = pr.id
          WHERE a.data = ?
          ORDER BY a.hora ASC`,
         [amanha]
@@ -105,10 +102,10 @@ async function buscarDados(req, res) {
       // Perícias de hoje
       pool.execute(
         `SELECT p.id, p.data, p.hora, p.local,
-                tp.nome AS tipo, pr.numero AS processo_numero
+                tp.nome AS tipo, pr.numProc AS processo_numero
          FROM pericia p
          LEFT JOIN tipo_pericia tp ON p.tipo_pericia_id = tp.id
-         JOIN processo pr ON p.processo_id = pr.id
+         JOIN tblProc pr ON p.processo_id = pr.id
          WHERE p.data = ?`,
         [hoje]
       ),
@@ -116,10 +113,10 @@ async function buscarDados(req, res) {
       // Perícias de amanhã
       pool.execute(
         `SELECT p.id, p.data, p.hora,
-                tp.nome AS tipo, pr.numero AS processo_numero
+                tp.nome AS tipo, pr.numProc AS processo_numero
          FROM pericia p
          LEFT JOIN tipo_pericia tp ON p.tipo_pericia_id = tp.id
-         JOIN processo pr ON p.processo_id = pr.id
+         JOIN tblProc pr ON p.processo_id = pr.id
          WHERE p.data = ?`,
         [amanha]
       ),
@@ -127,12 +124,12 @@ async function buscarDados(req, res) {
       // Audiências sem ata (já ocorreram e não têm ata nem foram marcadas como impressas)
       pool.execute(
         `SELECT a.id, a.data, a.hora, ta.nome AS tipo,
-                pr.numero AS processo_numero, pa.titulo AS pasta_titulo,
-                LPAD(pa.numero, 4, '0') AS pasta_numero_fmt
+                pr.numProc AS processo_numero, pr.NomeTituloProc AS pasta_titulo,
+                LPAD(pa.numPasta, 4, '0') AS pasta_numero_fmt
          FROM audiencia a
          LEFT JOIN tipo_audiencia ta ON a.tipo_audiencia_id = ta.id
-         JOIN processo pr ON a.processo_id = pr.id
-         JOIN pasta pa ON pr.pasta_id = pa.id
+         JOIN tblProc pr ON a.processo_id = pr.id
+         JOIN tblPasta pa ON pr.pasta_id = pa.id
          WHERE a.data < CURDATE()
            AND a.ata_impressa = 0
            AND NOT EXISTS (SELECT 1 FROM ata_audiencia aa WHERE aa.audiencia_id = a.id)
@@ -141,8 +138,8 @@ async function buscarDados(req, res) {
 
       // Processos sem movimentação há X dias (configurável)
       pool.execute(
-        `SELECT pr.id, pr.numero, pa.titulo AS pasta_titulo,
-                LPAD(pa.numero, 4, '0') AS pasta_numero_fmt,
+        `SELECT pr.id, pr.numProc AS numero, pr.NomeTituloProc AS pasta_titulo,
+                LPAD(pa.numPasta, 4, '0') AS pasta_numero_fmt,
                 COALESCE(
                   (SELECT MAX(ap.data) FROM andamento_processual ap WHERE ap.processo_id = pr.id),
                   DATE(pr.criado_em)
@@ -151,12 +148,13 @@ async function buscarDados(req, res) {
                   (SELECT MAX(ap.data) FROM andamento_processual ap WHERE ap.processo_id = pr.id),
                   DATE(pr.criado_em)
                 )) AS dias_sem_movimentacao
-         FROM processo pr
-         JOIN pasta pa ON pr.pasta_id = pa.id
-         WHERE DATEDIFF(CURDATE(), COALESCE(
-           (SELECT MAX(ap.data) FROM andamento_processual ap WHERE ap.processo_id = pr.id),
-           DATE(pr.criado_em)
-         )) >= (SELECT COALESCE(dias_sem_movimentacao, 30) FROM configuracoes_escritorio LIMIT 1)
+         FROM tblProc pr
+         JOIN tblPasta pa ON pr.pasta_id = pa.id
+         WHERE pr.ativo = 1
+           AND DATEDIFF(CURDATE(), COALESCE(
+             (SELECT MAX(ap.data) FROM andamento_processual ap WHERE ap.processo_id = pr.id),
+             DATE(pr.criado_em)
+           )) >= (SELECT COALESCE(dias_sem_movimentacao, 30) FROM configuracoes_escritorio LIMIT 1)
          ORDER BY dias_sem_movimentacao DESC
          LIMIT 20`
       ),

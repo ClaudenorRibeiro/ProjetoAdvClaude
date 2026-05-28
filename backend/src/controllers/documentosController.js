@@ -94,25 +94,29 @@ async function gerar(req, res) {
     // Busca dados do processo/pasta se informados
     if (processo_id) {
       const [proc] = await pool.execute(
-        `SELECT pr.numero, v.nome AS vara, f.nome AS forum,
-                pa.titulo AS pasta_titulo, pa.area_direito,
-                CASE pa.tipo_pessoa
-                  WHEN 'fisica' THEN (SELECT pf.nome FROM pessoas_fisicas pf WHERE pf.id = pa.cliente_id)
-                  WHEN 'juridica' THEN (SELECT pj.razao_social FROM pessoas_juridicas pj WHERE pj.id = pa.cliente_id)
+        `SELECT pr.numProc AS numero, v.nome AS vara, f.nome AS forum,
+                pr.NomeTituloProc AS pasta_titulo, pa.area_direito,
+                -- Pega o primeiro autor como cliente do processo
+                CASE ta.tipo_pessoa
+                  WHEN 'fisica'   THEN (SELECT pf.nome FROM pessoas_fisicas pf WHERE pf.id = ta.pessoa_id)
+                  WHEN 'juridica' THEN (SELECT pj.razao_social FROM pessoas_juridicas pj WHERE pj.id = ta.pessoa_id)
+                  ELSE ''
                 END AS cliente_nome,
-                CASE pa.tipo_pessoa
-                  WHEN 'fisica' THEN (SELECT pf.cpf FROM pessoas_fisicas pf WHERE pf.id = pa.cliente_id)
+                CASE ta.tipo_pessoa
+                  WHEN 'fisica' THEN (SELECT pf.cpf FROM pessoas_fisicas pf WHERE pf.id = ta.pessoa_id)
                   ELSE ''
                 END AS cpf_cliente,
-                CASE pa.tipo_pessoa
-                  WHEN 'fisica' THEN (SELECT pf.endereco FROM pessoas_fisicas pf WHERE pf.id = pa.cliente_id)
+                CASE ta.tipo_pessoa
+                  WHEN 'fisica' THEN (SELECT pf.endereco FROM pessoas_fisicas pf WHERE pf.id = ta.pessoa_id)
                   ELSE ''
                 END AS endereco_cliente
-         FROM processo pr
-         JOIN pasta pa ON pr.pasta_id = pa.id
-         LEFT JOIN vara v ON pr.vara_id = v.id
-         LEFT JOIN forum f ON v.forum_id = f.id
-         WHERE pr.id = ?`,
+         FROM tblProc pr
+         JOIN tblPasta pa ON pr.pasta_id = pa.id
+         LEFT JOIN tblVara v ON pr.vara_id = v.id
+         LEFT JOIN tblForum f ON v.forum_id = f.id
+         LEFT JOIN tblTituloProcAutor ta ON ta.proc_id = pr.id
+         WHERE pr.id = ?
+         LIMIT 1`,
         [processo_id]
       );
 

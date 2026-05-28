@@ -245,10 +245,8 @@ async function excluirFisica(req, res) {
     );
     if (!rows.length) return naoEncontrado(res, 'Pessoa não encontrada');
 
-    // Verifica todos os vínculos em paralelo (tabelas antigas E novas)
-    const [[pastas], [partes], [autoresTbl], [reusTbl], [historico], [comunicacoes]] = await Promise.all([
-      pool.execute('SELECT COUNT(*) AS total FROM pasta WHERE tipo_pessoa = ? AND cliente_id = ?',                  ['fisica', id]),
-      pool.execute('SELECT COUNT(*) AS total FROM partes_processo WHERE tipo_pessoa = ? AND pessoa_id = ?',         ['fisica', id]),
+    // Verifica todos os vínculos em paralelo antes de permitir exclusão
+    const [[autoresTbl], [reusTbl], [historico], [comunicacoes]] = await Promise.all([
       pool.execute('SELECT COUNT(*) AS total FROM tblTituloProcAutor WHERE tipo_pessoa = ? AND pessoa_id = ?',      ['fisica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM tblTituloProcReu WHERE tipo_pessoa = ? AND pessoa_id = ?',        ['fisica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM historico_atendimento WHERE tipo_pessoa = ? AND pessoa_id = ?',   ['fisica', id]),
@@ -257,8 +255,6 @@ async function excluirFisica(req, res) {
 
     // Monta lista de vínculos encontrados para informar o usuário
     const vinculos = [];
-    if (pastas[0].total > 0)       vinculos.push(`${pastas[0].total} pasta(s) de processo (legado)`);
-    if (partes[0].total > 0)       vinculos.push(`${partes[0].total} parte(s) em processo (legado)`);
     if (autoresTbl[0].total > 0)   vinculos.push(`${autoresTbl[0].total} processo(s) como autor`);
     if (reusTbl[0].total > 0)      vinculos.push(`${reusTbl[0].total} processo(s) como réu`);
     if (historico[0].total > 0)    vinculos.push(`${historico[0].total} registro(s) de histórico`);
@@ -287,10 +283,8 @@ async function excluirJuridica(req, res) {
     );
     if (!rows.length) return naoEncontrado(res, 'Pessoa jurídica não encontrada');
 
-    // Verifica todos os vínculos em paralelo (tabelas antigas E novas)
-    const [[pastas], [partes], [autoresTbl], [reusTbl], [historico], [comunicacoes]] = await Promise.all([
-      pool.execute('SELECT COUNT(*) AS total FROM pasta WHERE tipo_pessoa = ? AND cliente_id = ?',                  ['juridica', id]),
-      pool.execute('SELECT COUNT(*) AS total FROM partes_processo WHERE tipo_pessoa = ? AND pessoa_id = ?',         ['juridica', id]),
+    // Verifica todos os vínculos em paralelo antes de permitir exclusão
+    const [[autoresTbl], [reusTbl], [historico], [comunicacoes]] = await Promise.all([
       pool.execute('SELECT COUNT(*) AS total FROM tblTituloProcAutor WHERE tipo_pessoa = ? AND pessoa_id = ?',      ['juridica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM tblTituloProcReu WHERE tipo_pessoa = ? AND pessoa_id = ?',        ['juridica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM historico_atendimento WHERE tipo_pessoa = ? AND pessoa_id = ?',   ['juridica', id]),
@@ -299,8 +293,6 @@ async function excluirJuridica(req, res) {
 
     // Monta lista de vínculos encontrados para informar o usuário
     const vinculos = [];
-    if (pastas[0].total > 0)       vinculos.push(`${pastas[0].total} pasta(s) de processo (legado)`);
-    if (partes[0].total > 0)       vinculos.push(`${partes[0].total} parte(s) em processo (legado)`);
     if (autoresTbl[0].total > 0)   vinculos.push(`${autoresTbl[0].total} processo(s) como autor`);
     if (reusTbl[0].total > 0)      vinculos.push(`${reusTbl[0].total} processo(s) como réu`);
     if (historico[0].total > 0)    vinculos.push(`${historico[0].total} registro(s) de histórico`);

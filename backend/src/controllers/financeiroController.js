@@ -43,11 +43,10 @@ async function buscarContaCorrente(req, res) {
 
     // Busca parcerias
     const [parcerias] = await pool.execute(
-      `SELECT p.*, pr.numero AS processo_numero
+      `SELECT p.*, pr.numProc AS processo_numero
        FROM parcerias p
-       JOIN processo pr ON p.processo_id = pr.id
-       JOIN pasta pa ON pr.pasta_id = pa.id
-       WHERE pa.id = ?`,
+       JOIN tblProc pr ON p.processo_id = pr.id
+       WHERE pr.pasta_id = ?`,
       [pastaId]
     );
 
@@ -130,13 +129,19 @@ async function gerarRecibo(req, res) {
   try {
     const { pastaId } = req.params;
 
-    // Busca dados da pasta e cliente
+    // Busca dados da pasta e cliente principal (primeiro autor do primeiro processo)
     const [pasta] = await pool.execute(
-      `SELECT p.*, CASE p.tipo_pessoa
-         WHEN 'fisica' THEN (SELECT pf.nome FROM pessoas_fisicas pf WHERE pf.id = p.cliente_id)
-         WHEN 'juridica' THEN (SELECT pj.razao_social FROM pessoas_juridicas pj WHERE pj.id = p.cliente_id)
-       END AS cliente_nome
-       FROM pasta p WHERE p.id = ?`,
+      `SELECT pa.id, pa.numPasta, ta.tipo_pessoa,
+              CASE ta.tipo_pessoa
+                WHEN 'fisica'   THEN (SELECT pf.nome FROM pessoas_fisicas pf WHERE pf.id = ta.pessoa_id)
+                WHEN 'juridica' THEN (SELECT pj.razao_social FROM pessoas_juridicas pj WHERE pj.id = ta.pessoa_id)
+                ELSE ''
+              END AS cliente_nome
+       FROM tblPasta pa
+       LEFT JOIN tblProc pr ON pr.pasta_id = pa.id AND pr.ativo = 1
+       LEFT JOIN tblTituloProcAutor ta ON ta.proc_id = pr.id
+       WHERE pa.id = ?
+       LIMIT 1`,
       [pastaId]
     );
     if (!pasta.length) return naoEncontrado(res, 'Pasta não encontrada');
@@ -184,10 +189,14 @@ async function relatorio(req, res) {
 
     const [detalhe] = await pool.execute(
       `SELECT ccp.data, ccp.descricao, ccp.valor, ccp.tipo,
-              p.titulo AS pasta, LPAD(p.numero, 4, '0') AS pasta_numero,
+              COALESCE(
+                (SELECT pr.NomeTituloProc FROM tblProc pr WHERE pr.pasta_id = pa.id AND pr.ativo = 1 ORDER BY pr.id LIMIT 1),
+                ''
+              ) AS pasta,
+              LPAD(pa.numPasta, 4, '0') AS pasta_numero,
               u.nome AS usuario
        FROM conta_corrente_pasta ccp
-       JOIN pasta p ON ccp.pasta_id = p.id
+       JOIN tblPasta pa ON ccp.pasta_id = pa.id
        JOIN usuarios u ON ccp.usuario_id = u.id
        WHERE ccp.data BETWEEN ? AND ?
        ORDER BY ccp.data ASC`,

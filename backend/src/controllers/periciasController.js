@@ -33,8 +33,8 @@ async function listar(req, res) {
         END AS perito_nome,
         u.nome   AS assistente_nome,
         u2.nome  AS criado_por_nome,
-        pr.numero AS processo_numero,
-        pa.titulo AS pasta_titulo,
+        pr.numProc AS processo_numero,
+        pr.NomeTituloProc AS pasta_titulo,
         pa.id     AS pasta_id,
         CASE WHEN pe.data < CURDATE() THEN 'realizada' ELSE 'agendada' END AS status
       FROM pericia pe
@@ -43,8 +43,8 @@ async function listar(req, res) {
       LEFT JOIN pessoas_juridicas pj ON pe.perito_tipo = 'juridica' AND pe.perito_id = pj.id
       LEFT JOIN usuarios u  ON pe.assistente_tecnico_id = u.id
       LEFT JOIN usuarios u2 ON pe.criado_por = u2.id
-      LEFT JOIN processo pr ON pe.processo_id = pr.id
-      LEFT JOIN pasta    pa ON pr.pasta_id    = pa.id
+      LEFT JOIN tblProc pr ON pe.processo_id = pr.id
+      LEFT JOIN tblPasta pa ON pr.pasta_id   = pa.id
       ${where}
       ORDER BY pe.data DESC
       LIMIT ${limitInt} OFFSET ${offsetInt}
@@ -73,15 +73,15 @@ async function buscar(req, res) {
           ELSE NULL
         END AS perito_nome,
         u.nome  AS assistente_nome,
-        pr.numero AS processo_numero,
-        pa.titulo AS pasta_titulo
+        pr.numProc AS processo_numero,
+        pr.NomeTituloProc AS pasta_titulo
       FROM pericia pe
       LEFT JOIN tipo_pericia     tp ON pe.tipo_pericia_id = tp.id
       LEFT JOIN pessoas_fisicas  pf ON pe.perito_tipo = 'fisica'   AND pe.perito_id = pf.id
       LEFT JOIN pessoas_juridicas pj ON pe.perito_tipo = 'juridica' AND pe.perito_id = pj.id
       LEFT JOIN usuarios u  ON pe.assistente_tecnico_id = u.id
-      LEFT JOIN processo pr ON pe.processo_id = pr.id
-      LEFT JOIN pasta    pa ON pr.pasta_id    = pa.id
+      LEFT JOIN tblProc pr ON pe.processo_id = pr.id
+      LEFT JOIN tblPasta pa ON pr.pasta_id   = pa.id
       WHERE pe.id = ?
     `, [req.params.id]);
 

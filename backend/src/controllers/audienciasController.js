@@ -30,15 +30,15 @@ async function listar(req, res) {
       `SELECT a.id, a.data, a.hora, a.modalidade, a.local, a.plataforma_virtual,
               a.link_virtual, a.comunicado_enviado, a.ata_impressa,
               ta.nome AS tipo_nome,
-              pr.numero AS processo_numero,
-              pa.titulo AS pasta_titulo, LPAD(pa.numero, 4, '0') AS pasta_numero_fmt,
+              pr.numProc AS processo_numero,
+              pr.NomeTituloProc AS pasta_titulo, LPAD(pa.numPasta, 4, '0') AS pasta_numero_fmt,
               CASE WHEN aa.id IS NOT NULL THEN 1 ELSE 0 END AS tem_ata,
               DATEDIFF(a.data, CURDATE()) AS dias_para_audiencia
        FROM audiencia a
        LEFT JOIN tipo_audiencia ta ON a.tipo_audiencia_id = ta.id
        LEFT JOIN ata_audiencia aa ON aa.audiencia_id = a.id
-       JOIN processo pr ON a.processo_id = pr.id
-       JOIN pasta pa ON pr.pasta_id = pa.id
+       JOIN tblProc pr ON a.processo_id = pr.id
+       JOIN tblPasta pa ON pr.pasta_id = pa.id
        ${where}
        ORDER BY a.data ASC, a.hora ASC
        LIMIT ${limitInt} OFFSET ${offsetInt}`,
@@ -61,10 +61,10 @@ async function buscar(req, res) {
     const { id } = req.params;
 
     const [rows] = await pool.execute(
-      `SELECT a.*, ta.nome AS tipo_nome, pr.numero AS processo_numero
+      `SELECT a.*, ta.nome AS tipo_nome, pr.numProc AS processo_numero
        FROM audiencia a
        LEFT JOIN tipo_audiencia ta ON a.tipo_audiencia_id = ta.id
-       JOIN processo pr ON a.processo_id = pr.id
+       JOIN tblProc pr ON a.processo_id = pr.id
        WHERE a.id = ?`,
       [id]
     );
@@ -95,9 +95,9 @@ async function criar(req, res) {
     if (!localFinal) {
       const [vara] = await pool.execute(
         `SELECT CONCAT(v.nome, ' - ', f.nome) as local_padrao
-         FROM processo pr
-         JOIN vara v ON pr.vara_id = v.id
-         JOIN forum f ON v.forum_id = f.id
+         FROM tblProc pr
+         JOIN tblVara v ON pr.vara_id = v.id
+         JOIN tblForum f ON v.forum_id = f.id
          WHERE pr.id = ? LIMIT 1`,
         [processo_id]
       );
@@ -171,7 +171,7 @@ async function registrarAta(req, res) {
     // 2. Se houve acordo, lança automaticamente no financeiro da pasta
     if (houve_acordo && valor_acordo) {
       const [proc] = await conn.execute(
-        'SELECT pasta_id FROM processo WHERE id = ?', [processoId]
+        'SELECT pasta_id FROM tblProc WHERE id = ?', [processoId]
       );
       if (proc[0]?.pasta_id) {
         await conn.execute(

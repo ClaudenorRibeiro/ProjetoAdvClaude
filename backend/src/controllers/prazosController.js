@@ -37,15 +37,15 @@ async function listar(req, res) {
               pp.quantidade, pp.tipo_dias, pp.delegado_para,
               ps.nome AS subtipo_nome, tp.nome AS tipo_prazo_nome,
               u.nome AS responsavel_nome,
-              pr.numero AS processo_numero,
-              pa.titulo AS pasta_titulo, LPAD(pa.numero, 4, '0') AS pasta_numero_fmt,
+              pr.numProc AS processo_numero,
+              pr.NomeTituloProc AS pasta_titulo, LPAD(pa.numPasta, 4, '0') AS pasta_numero_fmt,
               DATEDIFF(pp.data_vencimento, CURDATE()) AS dias_restantes
        FROM prazos_processo pp
        LEFT JOIN prazo_subtipo ps ON pp.subtipo_id = ps.id
        LEFT JOIN tipo_prazo tp ON ps.tipo_prazo_id = tp.id
        LEFT JOIN usuarios u ON pp.delegado_para = u.id
-       JOIN processo pr ON pp.processo_id = pr.id
-       JOIN pasta pa ON pr.pasta_id = pa.id
+       JOIN tblProc pr ON pp.processo_id = pr.id
+       JOIN tblPasta pa ON pr.pasta_id = pa.id
        ${where}
        ORDER BY pp.data_vencimento ASC
        LIMIT ${limitInt} OFFSET ${offsetInt}`,
@@ -166,10 +166,10 @@ async function vencemHoje(req, res) {
     const userId = req.usuario.id;
     const [rows] = await pool.execute(
       `SELECT pp.id, pp.descricao, pp.status, pp.data_vencimento,
-              ps.nome AS subtipo, pr.numero AS processo_numero
+              ps.nome AS subtipo, pr.numProc AS processo_numero
        FROM prazos_processo pp
        LEFT JOIN prazo_subtipo ps ON pp.subtipo_id = ps.id
-       JOIN processo pr ON pp.processo_id = pr.id
+       JOIN tblProc pr ON pp.processo_id = pr.id
        WHERE pp.data_vencimento = CURDATE()
          AND pp.status != 'concluido'
          AND (pp.delegado_para = ? OR pp.delegado_para IS NULL)`,

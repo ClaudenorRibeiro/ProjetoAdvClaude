@@ -33,12 +33,12 @@ async function listar(req, res) {
               t.concluida, t.concluida_em, t.criado_em,
               u.nome AS atribuida_para_nome,
               uc.nome AS criado_por_nome,
-              pr.numero AS processo_numero,
+              pr.numProc AS processo_numero,
               DATEDIFF(t.data_vencimento, CURDATE()) AS dias_restantes
        FROM tarefas t
        LEFT JOIN usuarios u ON t.atribuida_para = u.id
        LEFT JOIN usuarios uc ON t.criado_por = uc.id
-       LEFT JOIN processo pr ON t.processo_id = pr.id
+       LEFT JOIN tblProc pr ON t.processo_id = pr.id
        ${where}
        ORDER BY t.concluida ASC,
                 FIELD(t.prioridade, 'urgente', 'normal', 'baixa'),

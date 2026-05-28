@@ -57,7 +57,12 @@
       "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.dependencies, null, 2\\)\\);\")",
       "Bash(git commit -m ' *)",
       "WebFetch(domain:ww2.trt2.jus.br)",
-      "Bash(powershell -Command \"Get-Date -Format 'ddMMyy-HHmm'\")"
+      "Bash(powershell -Command \"Get-Date -Format 'ddMMyy-HHmm'\")",
+      "Bash(Get-Date -Format \"ddMMyy-HHmm\")",
+      "Bash(grep -roh \"FROM \\\\`[a-zA-Z_]*\\\\`\\\\|JOIN \\\\`[a-zA-Z_]*\\\\`\\\\|INTO \\\\`[a-zA-Z_]*\\\\`\\\\|UPDATE \\\\`[a-zA-Z_]*\\\\`\" \"C:\\\\Users\\\\Claudio\\\\Downloads\\\\ProjetoAdvClaude\\\\backend\\\\src\")",
+      "Bash(grep -v \"//\")",
+      "Bash(grep -v \"^$\\\\|^do$\\\\|^no$\\\\|^garante$\\\\|^tipo$\\\\|^the$\")",
+      "Bash(grep \"REFERENCES \\\\`processo\\\\`\\\\|REFERENCES \\\\`pasta\\\\`\\\\|REFERENCES \\\\`forum\\\\`\\\\|REFERENCES \\\\`vara\\\\`\" \"C:/Users/Claudio/Downloads/ProjetoAdvClaude/estrutura_banco.sql\")"
     ]
   }
 }

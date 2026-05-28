@@ -132,33 +132,21 @@ ENVEOF
 fi
 
 # --------------------------------------------------------------
-# 6. Executa as migrations na ordem
+# 6. Cria a estrutura do banco a partir do arquivo único
 # --------------------------------------------------------------
-echo "[6/7] Executando migrations..."
-MIGRATIONS_DIR="$APP_DIR/backend/database/migrations"
+echo "[6/7] Criando estrutura do banco..."
+ESTRUTURA_FILE="$APP_DIR/estrutura_banco.sql"
 
 # Carrega variáveis do .env para usar na conexão
 export $(grep -v '^#' "$ENV_FILE" | grep -v '^$' | xargs)
 
-run_migration() {
-  local file="$1"
-  if [ -f "$MIGRATIONS_DIR/$file" ]; then
-    echo "  → Executando $file..."
-    mysql -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" < "$MIGRATIONS_DIR/$file"
-    echo "     ✓ $file concluída"
-  else
-    echo "  ⚠ $file não encontrada — pulando"
-  fi
-}
-
-run_migration "001_criar_banco.sql"
-run_migration "002_novo_modelo_processos.sql"
-run_migration "003_expandir_forum_vara.sql"
-run_migration "004_reset_tokens.sql"
-run_migration "005_popular_forum_varas_ruy_barbosa.sql"
-run_migration "005b_codVaraNoProc_ruy_barbosa.sql"
-run_migration "006_codTipoProc_tbltipoproc.sql"
-echo "Migrations concluídas."
+if [ -f "$ESTRUTURA_FILE" ]; then
+  mysql -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" < "$ESTRUTURA_FILE"
+  echo "Estrutura criada com sucesso."
+else
+  echo "ERRO: arquivo estrutura_banco.sql não encontrado em $APP_DIR"
+  exit 1
+fi
 
 # --------------------------------------------------------------
 # 7. Cria o arquivo de configuração do PM2 e inicia o backend
