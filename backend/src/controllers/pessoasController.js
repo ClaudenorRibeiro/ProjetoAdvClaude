@@ -452,17 +452,21 @@ async function criarAuxiliar(req, res) {
     const tabela = tabelas[tipo];
     if (!tabela) return erro(res, 'Tipo inválido. Use: generos, estados_civis ou profissoes');
 
+    // Normaliza: primeira letra maiúscula, demais minúsculas
+    const nomeTrimmed = nome.trim();
+    const nomeNormalizado = nomeTrimmed.charAt(0).toUpperCase() + nomeTrimmed.slice(1).toLowerCase();
+
     // Verifica se já existe o mesmo nome (case-insensitive)
     const [dup] = await pool.execute(
-      `SELECT id FROM ${tabela} WHERE LOWER(nome) = LOWER(?)`, [nome.trim()]
+      `SELECT id FROM ${tabela} WHERE LOWER(nome) = LOWER(?)`, [nomeNormalizado]
     );
-    if (dup.length > 0) return erro(res, `"${nome.trim()}" já está cadastrado na lista`);
+    if (dup.length > 0) return erro(res, `"${nomeNormalizado}" já está cadastrado na lista`);
 
     const [result] = await pool.execute(
-      `INSERT INTO ${tabela} (nome) VALUES (?)`, [nome.trim()]
+      `INSERT INTO ${tabela} (nome) VALUES (?)`, [nomeNormalizado]
     );
 
-    return sucesso(res, { id: result.insertId, nome: nome.trim() }, 'Cadastrado com sucesso', 201);
+    return sucesso(res, { id: result.insertId, nome: nomeNormalizado }, 'Cadastrado com sucesso', 201);
   } catch (err) {
     return erroInterno(res, err);
   }
