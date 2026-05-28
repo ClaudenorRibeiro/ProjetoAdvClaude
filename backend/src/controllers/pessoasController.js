@@ -19,10 +19,27 @@ async function listarFisicas(req, res) {
     const params = [];
     let where = 'WHERE pf.ativo = 1';
 
-    // Filtro de busca por nome ou CPF
+    // Filtro de busca abrangente — nome, CPF, RG, PIS, endereço e telefone
     if (busca) {
-      where += ' AND (pf.nome LIKE ? OR pf.cpf LIKE ?)';
-      params.push(`%${busca}%`, `%${busca}%`);
+      // CPF é armazenado só com dígitos; remove máscara digitada para bater com o banco
+      const buscaDigitos = busca.replace(/\D/g, '');
+      const b  = `%${busca}%`;
+      const bD = `%${buscaDigitos || busca}%`;
+
+      where += ` AND (
+        pf.nome       LIKE ? OR
+        pf.cpf        LIKE ? OR
+        pf.rg         LIKE ? OR
+        pf.pis        LIKE ? OR
+        pf.logradouro LIKE ? OR
+        pf.bairro     LIKE ? OR
+        pf.cidade     LIKE ? OR
+        EXISTS (
+          SELECT 1 FROM telefones_pf t
+          WHERE t.pessoa_id = pf.id AND t.ativo = 1 AND t.numero LIKE ?
+        )
+      )`;
+      params.push(b, bD, b, b, b, b, b, b);
     }
 
     // Nota: LIMIT e OFFSET são inseridos diretamente na query (já sanitizados com parseInt)
@@ -343,9 +360,27 @@ async function listarJuridicas(req, res) {
     const params = [];
     let where = 'WHERE pj.ativo = 1';
 
+    // Filtro de busca abrangente — razão social, CNPJ, fantasia, representante, endereço e telefone
     if (busca) {
-      where += ' AND (pj.razao_social LIKE ? OR pj.cnpj LIKE ? OR pj.nome_fantasia LIKE ?)';
-      params.push(`%${busca}%`, `%${busca}%`, `%${busca}%`);
+      // CNPJ é armazenado só com dígitos; remove máscara para bater com o banco
+      const buscaDigitos = busca.replace(/\D/g, '');
+      const b  = `%${busca}%`;
+      const bD = `%${buscaDigitos || busca}%`;
+
+      where += ` AND (
+        pj.razao_social        LIKE ? OR
+        pj.cnpj                LIKE ? OR
+        pj.nome_fantasia       LIKE ? OR
+        pj.representante_legal LIKE ? OR
+        pj.logradouro          LIKE ? OR
+        pj.bairro              LIKE ? OR
+        pj.cidade              LIKE ? OR
+        EXISTS (
+          SELECT 1 FROM telefones_pj t
+          WHERE t.pessoa_id = pj.id AND t.ativo = 1 AND t.numero LIKE ?
+        )
+      )`;
+      params.push(b, bD, b, b, b, b, b, b);
     }
 
     // Nota: LIMIT e OFFSET inseridos diretamente (sanitizados com parseInt — MySQL 8 não aceita ? em LIMIT/OFFSET)

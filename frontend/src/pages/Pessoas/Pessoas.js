@@ -98,7 +98,7 @@ export default function Pessoas() {
         <div style={{display:'flex',gap:'12px',marginBottom:'16px',alignItems:'center',flexWrap:'wrap'}}>
           <input
             className="form-control" style={{maxWidth:'300px'}}
-            placeholder={aba==='fisicas' ? 'Buscar por nome ou CPF...' : 'Buscar por razão social ou CNPJ...'}
+            placeholder={aba==='fisicas' ? 'Buscar por nome, CPF, RG, PIS, telefone, endereço...' : 'Buscar por razão social, CNPJ, telefone, endereço...'}
             value={busca}
             onChange={e => { setBusca(e.target.value); setPagina(1); }}
           />
