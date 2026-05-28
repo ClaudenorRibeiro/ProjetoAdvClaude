@@ -177,7 +177,7 @@ function TabelaFisicas({ lista, onEditar, onExcluir }) {
   return (
     <table className="tabela">
       <thead>
-        <tr><th>Nome</th><th>CPF</th><th>Telefone</th><th>E-mail</th><th>Ações</th></tr>
+        <tr><th>Nome</th><th>CPF</th><th>Telefone</th><th>E-mail</th><th style={{textAlign:'center'}}>Qtde Proc</th><th>Ações</th></tr>
       </thead>
       <tbody>
         {lista.map(p => (
@@ -186,6 +186,7 @@ function TabelaFisicas({ lista, onEditar, onExcluir }) {
             <td>{formatarCPF(p.cpf)}</td>
             <td>{p.telefone || '—'}</td>
             <td>{p.email || '—'}</td>
+            <td style={{textAlign:'center'}}>{p.qtde_proc ?? 0}</td>
             <td style={{display:'flex',gap:'6px'}}>
               <button className="btn btn-outline" style={{fontSize:'12px',padding:'4px 10px'}} onClick={() => onEditar(p)}>
                 Editar
@@ -210,7 +211,7 @@ function TabelaJuridicas({ lista, onEditar, onExcluir }) {
   return (
     <table className="tabela">
       <thead>
-        <tr><th>Razão Social</th><th>Nome Fantasia</th><th>CNPJ</th><th>Telefone</th><th>Ações</th></tr>
+        <tr><th>Razão Social</th><th>Nome Fantasia</th><th>CNPJ</th><th>Telefone</th><th style={{textAlign:'center'}}>Qtde Proc</th><th>Ações</th></tr>
       </thead>
       <tbody>
         {lista.map(p => (
@@ -219,6 +220,7 @@ function TabelaJuridicas({ lista, onEditar, onExcluir }) {
             <td>{p.nome_fantasia || '—'}</td>
             <td>{formatarCNPJ(p.cnpj)}</td>
             <td>{p.telefone || '—'}</td>
+            <td style={{textAlign:'center'}}>{p.qtde_proc ?? 0}</td>
             <td style={{display:'flex',gap:'6px'}}>
               <button className="btn btn-outline" style={{fontSize:'12px',padding:'4px 10px'}} onClick={() => onEditar(p)}>
                 Editar

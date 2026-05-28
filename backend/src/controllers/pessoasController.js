@@ -54,7 +54,13 @@ async function listarFisicas(req, res) {
               -- Pega o e-mail principal
               (SELECT e.email FROM emails_pf e
                WHERE e.pessoa_id = pf.id AND e.ativo = 1
-               ORDER BY e.principal DESC, e.id ASC LIMIT 1) AS email
+               ORDER BY e.principal DESC, e.id ASC LIMIT 1) AS email,
+              -- Total de processos como autor ou réu (sem duplicatas)
+              (SELECT COUNT(*) FROM (
+                SELECT proc_id FROM tbltituloprocautor WHERE tipo_pessoa = 'fisica' AND pessoa_id = pf.id
+                UNION
+                SELECT proc_id FROM tbltituloprocreu   WHERE tipo_pessoa = 'fisica' AND pessoa_id = pf.id
+              ) AS t) AS qtde_proc
        FROM pessoas_fisicas pf
        LEFT JOIN estado_civil ec ON pf.estado_civil_id = ec.id
        LEFT JOIN genero g ON pf.genero_id = g.id
@@ -389,7 +395,13 @@ async function listarJuridicas(req, res) {
               (SELECT t.numero FROM telefones_pj t WHERE t.pessoa_id = pj.id AND t.ativo = 1
                ORDER BY t.principal DESC LIMIT 1) AS telefone,
               (SELECT e.email FROM emails_pj e WHERE e.pessoa_id = pj.id AND e.ativo = 1
-               ORDER BY e.principal DESC LIMIT 1) AS email
+               ORDER BY e.principal DESC LIMIT 1) AS email,
+              -- Total de processos como autor ou réu (sem duplicatas)
+              (SELECT COUNT(*) FROM (
+                SELECT proc_id FROM tbltituloprocautor WHERE tipo_pessoa = 'juridica' AND pessoa_id = pj.id
+                UNION
+                SELECT proc_id FROM tbltituloprocreu   WHERE tipo_pessoa = 'juridica' AND pessoa_id = pj.id
+              ) AS t) AS qtde_proc
        FROM pessoas_juridicas pj ${where}
        ORDER BY pj.razao_social ASC
        LIMIT ${limitInt} OFFSET ${offsetInt}`,
