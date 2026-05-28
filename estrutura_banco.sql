@@ -33,9 +33,9 @@ CREATE TABLE IF NOT EXISTS `andamento_processual` (
   KEY `processo_id` (`processo_id`),
   KEY `criado_por` (`criado_por`),
   KEY `editado_por` (`editado_por`),
-  CONSTRAINT `andamento_processual_ibfk_1` FOREIGN KEY (`processo_id`) REFERENCES `processo` (`id`),
   CONSTRAINT `andamento_processual_ibfk_2` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`),
-  CONSTRAINT `andamento_processual_ibfk_3` FOREIGN KEY (`editado_por`) REFERENCES `usuarios` (`id`)
+  CONSTRAINT `andamento_processual_ibfk_3` FOREIGN KEY (`editado_por`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `fk_andamento_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
@@ -82,9 +82,9 @@ CREATE TABLE IF NOT EXISTS `audiencia` (
   KEY `processo_id` (`processo_id`),
   KEY `tipo_audiencia_id` (`tipo_audiencia_id`),
   KEY `criado_por` (`criado_por`),
-  CONSTRAINT `audiencia_ibfk_1` FOREIGN KEY (`processo_id`) REFERENCES `processo` (`id`),
   CONSTRAINT `audiencia_ibfk_2` FOREIGN KEY (`tipo_audiencia_id`) REFERENCES `tipo_audiencia` (`id`),
-  CONSTRAINT `audiencia_ibfk_3` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
+  CONSTRAINT `audiencia_ibfk_3` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `fk_audiencia_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
@@ -162,8 +162,8 @@ CREATE TABLE IF NOT EXISTS `conta_corrente_pasta` (
   PRIMARY KEY (`id`),
   KEY `pasta_id` (`pasta_id`),
   KEY `usuario_id` (`usuario_id`),
-  CONSTRAINT `conta_corrente_pasta_ibfk_1` FOREIGN KEY (`pasta_id`) REFERENCES `pasta` (`id`),
-  CONSTRAINT `conta_corrente_pasta_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
+  CONSTRAINT `conta_corrente_pasta_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `fk_contacorrente_tblpasta` FOREIGN KEY (`pasta_id`) REFERENCES `tblpasta` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
@@ -220,18 +220,6 @@ CREATE TABLE IF NOT EXISTS `feriados` (
 
 -- Exportação de dados foi desmarcado.
 
--- Copiando estrutura para tabela sistema_advocacia.forum
-CREATE TABLE IF NOT EXISTS `forum` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `nome` varchar(200) NOT NULL,
-  `cidade` varchar(100) DEFAULT NULL,
-  `estado` char(2) DEFAULT NULL,
-  `ativo` tinyint(1) DEFAULT '1',
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
--- Exportação de dados foi desmarcado.
-
 -- Copiando estrutura para tabela sistema_advocacia.genero
 CREATE TABLE IF NOT EXISTS `genero` (
   `id` int NOT NULL AUTO_INCREMENT,
@@ -267,7 +255,7 @@ CREATE TABLE IF NOT EXISTS `honorarios` (
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_pasta_id` (`pasta_id`),
-  CONSTRAINT `honorarios_ibfk_1` FOREIGN KEY (`pasta_id`) REFERENCES `pasta` (`id`)
+  CONSTRAINT `fk_honorarios_tblpasta` FOREIGN KEY (`pasta_id`) REFERENCES `tblpasta` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
@@ -307,7 +295,7 @@ CREATE TABLE IF NOT EXISTS `log_comunicacoes` (
   PRIMARY KEY (`id`),
   KEY `processo_id` (`processo_id`),
   KEY `usuario_id` (`usuario_id`),
-  CONSTRAINT `log_comunicacoes_ibfk_1` FOREIGN KEY (`processo_id`) REFERENCES `processo` (`id`),
+  CONSTRAINT `fk_logcomun_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`),
   CONSTRAINT `log_comunicacoes_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -327,9 +315,9 @@ CREATE TABLE IF NOT EXISTS `log_documentos_gerados` (
   KEY `processo_id` (`processo_id`),
   KEY `pasta_id` (`pasta_id`),
   KEY `usuario_id` (`usuario_id`),
+  CONSTRAINT `fk_logdocs_tblpasta` FOREIGN KEY (`pasta_id`) REFERENCES `tblpasta` (`id`),
+  CONSTRAINT `fk_logdocs_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`),
   CONSTRAINT `log_documentos_gerados_ibfk_1` FOREIGN KEY (`modelo_id`) REFERENCES `modelo_documento` (`id`),
-  CONSTRAINT `log_documentos_gerados_ibfk_2` FOREIGN KEY (`processo_id`) REFERENCES `processo` (`id`),
-  CONSTRAINT `log_documentos_gerados_ibfk_3` FOREIGN KEY (`pasta_id`) REFERENCES `pasta` (`id`),
   CONSTRAINT `log_documentos_gerados_ibfk_4` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -345,24 +333,6 @@ CREATE TABLE IF NOT EXISTS `log_publicacoes` (
   PRIMARY KEY (`id`),
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `log_publicacoes_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
--- Exportação de dados foi desmarcado.
-
--- Copiando estrutura para tabela sistema_advocacia.modelo_comunicado
-CREATE TABLE IF NOT EXISTS `modelo_comunicado` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `tipo_audiencia_id` int DEFAULT NULL,
-  `nome` varchar(150) NOT NULL,
-  `conteudo` text NOT NULL,
-  `ativo` tinyint(1) DEFAULT '1',
-  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
-  `criado_por` int DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `tipo_audiencia_id` (`tipo_audiencia_id`),
-  KEY `criado_por` (`criado_por`),
-  CONSTRAINT `modelo_comunicado_ibfk_1` FOREIGN KEY (`tipo_audiencia_id`) REFERENCES `tipo_audiencia` (`id`),
-  CONSTRAINT `modelo_comunicado_ibfk_2` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
@@ -396,41 +366,8 @@ CREATE TABLE IF NOT EXISTS `parcerias` (
   PRIMARY KEY (`id`),
   KEY `processo_id` (`processo_id`),
   KEY `criado_por` (`criado_por`),
-  CONSTRAINT `parcerias_ibfk_1` FOREIGN KEY (`processo_id`) REFERENCES `processo` (`id`),
+  CONSTRAINT `fk_parcerias_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`),
   CONSTRAINT `parcerias_ibfk_2` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
--- Exportação de dados foi desmarcado.
-
--- Copiando estrutura para tabela sistema_advocacia.partes_processo
-CREATE TABLE IF NOT EXISTS `partes_processo` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `processo_id` int NOT NULL,
-  `tipo_pessoa` varchar(20) DEFAULT NULL,
-  `pessoa_id` int NOT NULL,
-  `polo` varchar(30) DEFAULT NULL,
-  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `processo_id` (`processo_id`),
-  CONSTRAINT `partes_processo_ibfk_1` FOREIGN KEY (`processo_id`) REFERENCES `processo` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
--- Exportação de dados foi desmarcado.
-
--- Copiando estrutura para tabela sistema_advocacia.pasta
-CREATE TABLE IF NOT EXISTS `pasta` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `numero` int NOT NULL,
-  `titulo` varchar(300) NOT NULL,
-  `area_direito` varchar(30) DEFAULT NULL,
-  `tipo_pessoa` varchar(20) DEFAULT NULL,
-  `cliente_id` int NOT NULL,
-  `ativa` tinyint(1) DEFAULT '1',
-  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
-  `criado_por` int DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `criado_por` (`criado_por`),
-  CONSTRAINT `pasta_ibfk_1` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
@@ -455,7 +392,7 @@ CREATE TABLE IF NOT EXISTS `pericia` (
   KEY `tipo_pericia_id` (`tipo_pericia_id`),
   KEY `assistente_tecnico_id` (`assistente_tecnico_id`),
   KEY `criado_por` (`criado_por`),
-  CONSTRAINT `pericia_ibfk_1` FOREIGN KEY (`processo_id`) REFERENCES `processo` (`id`),
+  CONSTRAINT `fk_pericia_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`),
   CONSTRAINT `pericia_ibfk_2` FOREIGN KEY (`tipo_pericia_id`) REFERENCES `tipo_pericia` (`id`),
   CONSTRAINT `pericia_ibfk_3` FOREIGN KEY (`assistente_tecnico_id`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `pericia_ibfk_4` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
@@ -474,22 +411,6 @@ CREATE TABLE IF NOT EXISTS `permissoes` (
   KEY `idx_usuario_modulo` (`usuario_id`,`modulo`,`acao`),
   CONSTRAINT `permissoes_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=41 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
--- Exportação de dados foi desmarcado.
-
--- Copiando estrutura para tabela sistema_advocacia.pesquisas_salvas
-CREATE TABLE IF NOT EXISTS `pesquisas_salvas` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `usuario_id` int NOT NULL,
-  `modulo` varchar(50) NOT NULL,
-  `nome` varchar(150) NOT NULL,
-  `filtros` json NOT NULL,
-  `colunas` json DEFAULT NULL,
-  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `usuario_id` (`usuario_id`),
-  CONSTRAINT `pesquisas_salvas_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -587,7 +508,7 @@ CREATE TABLE IF NOT EXISTS `prazos_processo` (
   KEY `concluido_por` (`concluido_por`),
   KEY `status_alterado_por` (`status_alterado_por`),
   KEY `criado_por` (`criado_por`),
-  CONSTRAINT `prazos_processo_ibfk_1` FOREIGN KEY (`processo_id`) REFERENCES `processo` (`id`),
+  CONSTRAINT `fk_prazos_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`),
   CONSTRAINT `prazos_processo_ibfk_2` FOREIGN KEY (`subtipo_id`) REFERENCES `prazo_subtipo` (`id`),
   CONSTRAINT `prazos_processo_ibfk_3` FOREIGN KEY (`delegado_para`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `prazos_processo_ibfk_4` FOREIGN KEY (`concluido_por`) REFERENCES `usuarios` (`id`),
@@ -609,44 +530,6 @@ CREATE TABLE IF NOT EXISTS `prazo_subtipo` (
   KEY `tipo_prazo_id` (`tipo_prazo_id`),
   CONSTRAINT `prazo_subtipo_ibfk_1` FOREIGN KEY (`tipo_prazo_id`) REFERENCES `tipo_prazo` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=43 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
--- Exportação de dados foi desmarcado.
-
--- Copiando estrutura para tabela sistema_advocacia.processo
-CREATE TABLE IF NOT EXISTS `processo` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `pasta_id` int NOT NULL,
-  `numero` varchar(30) DEFAULT NULL,
-  `vara_id` int DEFAULT NULL,
-  `status_id` int DEFAULT NULL,
-  `data_inicio` date DEFAULT NULL,
-  `observacoes` text,
-  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
-  `criado_por` int DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `pasta_id` (`pasta_id`),
-  KEY `vara_id` (`vara_id`),
-  KEY `status_id` (`status_id`),
-  KEY `criado_por` (`criado_por`),
-  CONSTRAINT `processo_ibfk_1` FOREIGN KEY (`pasta_id`) REFERENCES `pasta` (`id`),
-  CONSTRAINT `processo_ibfk_2` FOREIGN KEY (`vara_id`) REFERENCES `vara` (`id`),
-  CONSTRAINT `processo_ibfk_3` FOREIGN KEY (`status_id`) REFERENCES `status_processo` (`id`),
-  CONSTRAINT `processo_ibfk_4` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
--- Exportação de dados foi desmarcado.
-
--- Copiando estrutura para tabela sistema_advocacia.processo_responsaveis
-CREATE TABLE IF NOT EXISTS `processo_responsaveis` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `processo_id` int NOT NULL,
-  `usuario_id` int NOT NULL,
-  PRIMARY KEY (`id`),
-  KEY `processo_id` (`processo_id`),
-  KEY `usuario_id` (`usuario_id`),
-  CONSTRAINT `processo_responsaveis_ibfk_1` FOREIGN KEY (`processo_id`) REFERENCES `processo` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `processo_responsaveis_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -695,16 +578,6 @@ CREATE TABLE IF NOT EXISTS `reset_tokens` (
 
 -- Exportação de dados foi desmarcado.
 
--- Copiando estrutura para tabela sistema_advocacia.status_processo
-CREATE TABLE IF NOT EXISTS `status_processo` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `nome` varchar(100) NOT NULL,
-  `ativo` tinyint(1) DEFAULT '1',
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
--- Exportação de dados foi desmarcado.
-
 -- Copiando estrutura para tabela sistema_advocacia.tarefas
 CREATE TABLE IF NOT EXISTS `tarefas` (
   `id` int NOT NULL AUTO_INCREMENT,
@@ -728,8 +601,8 @@ CREATE TABLE IF NOT EXISTS `tarefas` (
   KEY `atribuida_para` (`atribuida_para`),
   KEY `concluida_por` (`concluida_por`),
   KEY `criado_por` (`criado_por`),
-  CONSTRAINT `tarefas_ibfk_1` FOREIGN KEY (`processo_id`) REFERENCES `processo` (`id`),
-  CONSTRAINT `tarefas_ibfk_2` FOREIGN KEY (`pasta_id`) REFERENCES `pasta` (`id`),
+  CONSTRAINT `fk_tarefas_tblpasta` FOREIGN KEY (`pasta_id`) REFERENCES `tblpasta` (`id`),
+  CONSTRAINT `fk_tarefas_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`),
   CONSTRAINT `tarefas_ibfk_3` FOREIGN KEY (`prazo_id`) REFERENCES `prazos_processo` (`id`),
   CONSTRAINT `tarefas_ibfk_4` FOREIGN KEY (`atribuida_para`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `tarefas_ibfk_5` FOREIGN KEY (`concluida_por`) REFERENCES `usuarios` (`id`),
@@ -786,6 +659,7 @@ CREATE TABLE IF NOT EXISTS `tblinstanciaproc` (
 CREATE TABLE IF NOT EXISTS `tblpasta` (
   `id` int NOT NULL AUTO_INCREMENT,
   `numPasta` int NOT NULL,
+  `area_direito` varchar(50) DEFAULT NULL COMMENT 'Ex: Trabalhista, Previdenciária, Família',
   `criado_por` int DEFAULT NULL,
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   `alterado_por` int DEFAULT NULL,
@@ -1013,19 +887,6 @@ CREATE TABLE IF NOT EXISTS `usuarios` (
   PRIMARY KEY (`id`),
   KEY `idx_login` (`login`)
 ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
--- Exportação de dados foi desmarcado.
-
--- Copiando estrutura para tabela sistema_advocacia.vara
-CREATE TABLE IF NOT EXISTS `vara` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `forum_id` int NOT NULL,
-  `nome` varchar(200) NOT NULL,
-  `ativo` tinyint(1) DEFAULT '1',
-  PRIMARY KEY (`id`),
-  KEY `forum_id` (`forum_id`),
-  CONSTRAINT `vara_ibfk_1` FOREIGN KEY (`forum_id`) REFERENCES `forum` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
