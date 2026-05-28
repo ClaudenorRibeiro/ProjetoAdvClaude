@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==============================================================
 # DEPLOY COMPLETO — Sistema de Advocacia
-# Versão: 27052026
+# Versão: 28052026
 #
 # Configura um servidor Ubuntu 22.04 do ZERO e sobe a aplicação
 # completa sem nenhuma pergunta interativa.
@@ -75,7 +75,7 @@ sudo apt-get upgrade -y -q \
     -o Dpkg::Options::="--force-confdef" \
     -o Dpkg::Options::="--force-confold"
 sudo apt-get install -y -q \
-    curl wget git build-essential python3 \
+    curl wget git build-essential \
     software-properties-common ca-certificates
 ok "Sistema atualizado"
 
@@ -130,16 +130,15 @@ else
     ok "Repositório clonado"
 fi
 
-# Fix necessário: trust proxy deve ser 1 quando atrás do Nginx
-# (express-rate-limit lança ValidationError com false em proxy)
-python3 - <<PYFIX
-with open('$APP_DIR/backend/server.js', 'r') as f:
-    c = f.read()
-c = c.replace("app.set('trust proxy', false)", "app.set('trust proxy', 1)")
-with open('$APP_DIR/backend/server.js', 'w') as f:
-    f.write(c)
-PYFIX
-ok "Trust proxy corrigido (server.js)"
+# Corrige trust proxy para funcionar atrás do Nginx
+# (express-rate-limit exige trust proxy = 1 quando há proxy reverso)
+if grep -q "trust proxy', false" "$APP_DIR/backend/server.js"; then
+    sed -i "s/app.set('trust proxy', false)/app.set('trust proxy', 1)/" \
+        "$APP_DIR/backend/server.js"
+    ok "Trust proxy corrigido (server.js)"
+else
+    ok "Trust proxy já está correto"
+fi
 
 # ==============================================================
 # 6. DEPENDÊNCIAS E BUILD
@@ -166,9 +165,9 @@ fi
 ok "Build em: frontend/$BUILD_DIR/"
 
 # ==============================================================
-# 7. BANCO DE DADOS, .ENV E MIGRATIONS
+# 7. BANCO DE DADOS, .ENV E ESTRUTURA
 # ==============================================================
-log "[7/9] Configurando banco, .env e migrations..."
+log "[7/9] Configurando banco, .env e estrutura..."
 
 # Cria database e usuário MySQL
 sudo mysql -u root <<SQLEOF
@@ -182,7 +181,6 @@ SQLEOF
 ok "Banco '$DB_NAME' e usuário '$DB_USER' prontos"
 
 # Cria o arquivo .env de produção
-# EMAIL_FROM vai entre aspas para evitar erro no export com angle brackets
 cat > "$APP_DIR/backend/.env" <<ENVEOF
 # ============================================================
 # Produção — Sistema de Advocacia
@@ -219,27 +217,21 @@ FRONTEND_URL=http://${DOMINIO}
 ENVEOF
 ok ".env criado em $APP_DIR/backend/.env"
 
-# Executa migrations SQL na ordem
-MIGRATIONS_DIR="$APP_DIR/backend/database/migrations"
-for MIGRATION in \
-    001_criar_banco.sql \
-    002_novo_modelo_processos.sql \
-    003_expandir_forum_vara.sql \
-    004_reset_tokens.sql \
-    005_popular_forum_varas_ruy_barbosa.sql \
-    005b_codVaraNoProc_ruy_barbosa.sql \
-    006_codTipoProc_tbltipoproc.sql
-do
-    MFILE="$MIGRATIONS_DIR/$MIGRATION"
-    if [ -f "$MFILE" ]; then
-        mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$MFILE"
-        ok "Migration: $MIGRATION"
-    else
-        info "Pulando (não encontrada): $MIGRATION"
-    fi
-done
+# Cria a estrutura do banco (46 tabelas — sem dados)
+mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$APP_DIR/estrutura_banco.sql"
+ok "Estrutura do banco criada (46 tabelas)"
 
-# Executa seeds: calendário (30 anos) + superusuário
+# Popula tabelas de referência (varas, fóruns, tipos, calendário, etc.)
+DADOS_FILE="$APP_DIR/scripts/dados_iniciais.sql"
+if [ -f "$DADOS_FILE" ]; then
+    mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$DADOS_FILE"
+    ok "Dados iniciais carregados (tabelas de referência)"
+else
+    info "⚠️  ATENÇÃO: scripts/dados_iniciais.sql não encontrado!"
+    info "   Rode gerar_dados_iniciais.bat no Windows e faça commit."
+fi
+
+# Executa seeds: calendário (idempotente) + superusuário
 cd "$APP_DIR/backend"
 node database/seeds/run.js
 ok "Seeds executados (calendário + superusuário)"
@@ -340,9 +332,9 @@ echo "  ────────────────────────
 echo "  ⚠️  Próximos passos:"
 echo "  1. Acesse o sistema e faça o SETUP INICIAL"
 echo "  2. Crie o usuário administrador (Dr. Antônio)"
-echo "  3. No Registro.br: aponte antonio.adv.br → ${DOMINIO}"
+echo "  3. No Registro.br: aponte o domínio → ${DOMINIO}"
 echo "  4. Após DNS propagado, rode para ativar HTTPS:"
 echo "     sudo apt install certbot python3-certbot-nginx -y"
-echo "     sudo certbot --nginx -d antonio.adv.br"
+echo "     sudo certbot --nginx -d seu.dominio.com.br"
 echo "  ─────────────────────────────────────────────"
 echo ""
