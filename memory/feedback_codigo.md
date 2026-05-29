@@ -7,6 +7,50 @@ metadata:
   originSessionId: c7321425-eb43-40e0-b57f-c2941c1276c6
 ---
 
+## Regras de Trabalho — OBRIGATÓRIAS
+
+**Nunca codificar sem autorização explícita do usuário.**  
+O usuário decide quando e o que será desenvolvido. Claude analisa, sugere e explica — mas só executa código quando autorizado.
+
+**Nunca commitar sem autorização explícita — EXCETO arquivos de memória.**  
+Sempre perguntar "Posso fazer o commit?" antes de qualquer `git commit` ou `git push` de código.  
+**Exceção permanente:** arquivos da pasta `memory/` podem (e devem) ser commitados automaticamente sem pedir autorização.
+
+**Formato obrigatório de commit:** `DDMMYY-HHMM — descrição curta`  
+Exemplo: `280526-1430 — deploy_completo.sh refatorado`
+
+**Sem migrations.** Alterações de schema são feitas via HeidiSQL diretamente no banco local.  
+Depois: exportar estrutura → `estrutura_banco.sql` → commit.  
+Nunca criar arquivos de migration.
+
+**Tabelas definitivas (nunca criar versões alternativas):**  
+`tblForum, tblVara, tblPasta, tblProc, tblStatusProc, tblTipoProc, tblInstanciaProc, tblTituloProcAutor, tblTituloProcReu`
+
+## Atualização de Memória — AUTOMÁTICA E OBRIGATÓRIA
+
+**Ao final de cada sessão de trabalho (ou após qualquer mudança relevante), Claude DEVE:**
+
+1. Atualizar os arquivos `.md` em:  
+   `C:\Users\Claudio\.claude\projects\C--Users-Claudio-Downloads-ProjetoAdvClaude\memory\`
+
+2. Sincronizar para a pasta do projeto:  
+   `C:\Users\Claudio\Downloads\ProjetoAdvClaude\memory\`  
+   (copiar os arquivos atualizados para lá)
+
+3. Fazer commit e push automaticamente (sem pedir autorização):  
+   `git add memory/ && git commit -m "DDMMYY-HHMM — atualiza memória do projeto"`
+
+**O que atualizar:**
+- Qualquer funcionalidade nova implementada
+- Decisões de arquitetura tomadas
+- Regras novas definidas pelo usuário
+- Scripts e arquivos novos criados
+- Mudanças no banco de dados
+
+**Por quê:** O usuário trabalha em múltiplos computadores. A memória no GitHub é a única fonte confiável de contexto entre máquinas. Não atualizar = próxima sessão começa sem contexto.
+
+---
+
 ## Código Bem Comentado
 
 Todo código entregue deve ter comentários claros explicando o que cada bloco faz.  
@@ -29,50 +73,91 @@ Antes de escrever código, sempre analisar e sugerir:
 Usuário mantém o sistema diretamente no VSCode.  
 **How to apply:** Estrutura de pastas clara e intuitiva, nomes de arquivos e variáveis autoexplicativos, sem "magia" desnecessária no código
 
-## Git — Formato Obrigatório de Commit
+## Performance — Processamento Máximo
 
-Todo commit deve começar com data e hora no formato `DDMMYY-HHMM`.  
-**Why:** Padrão do projeto para rastreabilidade cronológica — ex: `260527-1430 — descrição`  
-**How to apply:** Sempre verificar a hora atual antes de criar o commit e incluir no início da mensagem. Nunca omitir a data/hora, mesmo em commits pequenos.
+O sistema deve ser o mais rápido possível em todas as camadas.  
+**Why:** Exigência direta do dono do sistema  
+**How to apply:**
+- Queries SQL com índices nas colunas usadas em WHERE, JOIN e ORDER BY
+- Nunca buscar mais dados do que o necessário (SELECT * apenas quando realmente precisa de todos os campos)
+- Paginação obrigatória em todas as listagens
+- Subqueries evitadas quando JOIN resolve mais eficiente
+- No frontend: evitar re-renders desnecessários (useCallback, useMemo onde fizer diferença real)
+- Respostas da API enxutas — não carregar dados relacionados que o cliente não pediu
 
-## Banco de Dados — Sem Migrations
+## Transações — Tudo ou Nada
 
-O projeto NÃO usa migrations. Alterações no banco são feitas diretamente no HeidiSQL.
+**Regra absoluta:** Toda operação que envolva mais de um passo no banco (INSERT + INSERT, INSERT + UPDATE, etc.) DEVE usar transação com commit/rollback.  
+**Why:** Queda de energia, erro de rede ou qualquer falha no meio do caminho não pode deixar dados parciais/corrompidos no banco  
 
-**Arquivo de estrutura:** `estrutura_banco.sql` (raiz do projeto)
-  - Contém o CREATE TABLE de todas as 46 tabelas do sistema
-  - É usado pelo deploy no servidor (substitui as migrations)
-  - Deve ser atualizado após qualquer ALTER TABLE no HeidiSQL:
-      HeidiSQL → Ferramentas → Exportar → Estrutura SQL → salvar como estrutura_banco.sql
-  - Depois de atualizar, commit no Git
+**Padrão obrigatório no Node.js/MySQL:**
+```javascript
+const conn = await pool.getConnection();
+try {
+  await conn.beginTransaction();
 
-**Nunca criar arquivos de migration** (pasta backend/database/migrations foi deletada).
-Se precisar de nova tabela ou coluna → faz direto no HeidiSQL e exporta o estrutura_banco.sql.
+  // ... todos os INSERTs/UPDATEs/DELETEs da operação
 
-## Modelo de Banco — Nunca Duplicar Tabelas
+  await conn.commit();         // só grava se TUDO deu certo
+  return sucesso(res, ...);
+} catch (err) {
+  await conn.rollback();       // desfaz tudo se qualquer passo falhou
+  return erroInterno(res, err);
+} finally {
+  conn.release();              // SEMPRE devolve a conexão ao pool
+}
+```
 
-O sistema tem UM único modelo de banco de dados. Nunca criar tabela paralela para o mesmo conceito.
-Se uma tabela existente precisar de novos campos, faça ALTER TABLE — não crie uma "tbl*" nova ao lado da antiga.
+**Quando usar transação:**
+- Criar pessoa com telefones e e-mails (3+ tabelas)
+- Criar processo com partes e responsáveis
+- Registrar ata de audiência (gera prazos, tarefas, lançamento financeiro)
+- Qualquer operação que toque 2 ou mais tabelas em sequência
 
-**Tabelas definitivas do modelo atual:**
-  tblForum, tblVara, tblPasta, tblProc, tblStatusProc, tblTipoProc,
-  tblInstanciaProc, tblTituloProcAutor, tblTituloProcReu
+**Quando NÃO precisa de transação:**
+- SELECT simples (leitura)
+- UPDATE ou DELETE em uma única tabela sem dependências
 
-**Tabelas antigas removidas (NÃO recriar):**
-  forum, vara, pasta, processo, partes_processo, status_processo,
-  processo_responsaveis (migration 007 e 008)
+**Atenção:** Usar `conn` (conexão individual) em vez de `pool.execute()` dentro da transação — o pool pode usar conexões diferentes para cada chamada, o que quebraria a transação
 
-**Why:** Em maio/2026 o sistema tinha dois modelos paralelos gerando bugs e confusão.
-A migration 008 eliminou as tabelas antigas e atualizou todos os controllers.
+**Esta regra é permanente e vale para TODO código novo criado daqui em diante.** Nenhuma operação multi-tabela pode ser escrita sem transação.
 
-## Código — Nunca Escrever sem Autorização Explícita
+## Banco de Dados — Apenas Repositório de Dados
 
-Nunca criar, editar ou modificar arquivos de código sem que o usuário autorize explicitamente.  
-**Why:** Existem situações em que o usuário está apenas conversando, tirando dúvidas ou planejando — e não quer que o Claude saia codando.  
-**How to apply:** Se o assunto envolver código, apenas discutir, analisar ou propor a solução em texto. Só partir para a implementação quando o usuário disser claramente "pode fazer", "implementa", "vai lá" ou expressão equivalente. Em caso de dúvida, perguntar antes de codar.
+**Regra absoluta:** O banco de dados NÃO deve conter nenhuma regra de negócio.  
+**Why:** Exigência direta do dono do sistema — toda validação e regra de negócio fica no código (frontend e backend), nunca no banco  
+**O que NUNCA colocar no banco:**
+- `UNIQUE` constraints (ex: CPF único, login único) — validar no código antes de salvar
+- `ENUM` — usar `VARCHAR` com o tamanho adequado; o código valida os valores permitidos
+- `CHECK` constraints — validar no código
+- Triggers com lógica de negócio
+- Stored procedures com regras de negócio
 
-## Git — Nunca Commitar sem Permissão
+**O que É permitido no banco (estrutural):**
+- `PRIMARY KEY` — identificação de registro
+- `FOREIGN KEY` — **os relacionamentos entre tabelas DEVEM existir e ser mantidos normalmente.** Ex: processo.pasta_id → pasta.id, telefones_pf.pessoa_id → pessoas_fisicas.id, etc. Isso é estrutura, não regra de negócio
+- `INDEX` simples — apenas para performance de busca (não para unicidade)
+- `NOT NULL` — apenas em campos verdadeiramente obrigatórios pelo sistema
+- Tipos de dados adequados (`VARCHAR`, `INT`, `DECIMAL`, `DATE`, etc.)
 
-Nunca executar `git add`, `git commit`, `git push` ou qualquer operação destrutiva no Git sem permissão explícita do usuário.  
-**Why:** Usuário prefere fazer commits manualmente — palavras exatas: "o Git, nunca faça atualização sem minha permissão, de preferencia deixa que eu faço manualmente"  
-**How to apply:** Após qualquer alteração de código, apenas listar os arquivos modificados e aguardar instrução. Nunca usar `--no-verify` ou forçar operações.
+**Como aplicar em novos campos/tabelas:**
+- Sempre usar `VARCHAR` em vez de `ENUM`
+- Nunca adicionar `UNIQUE KEY` — a verificação de duplicidade é feita via `SELECT` no controller antes do `INSERT`
+- Ao criar migration ou nova tabela, revisar e remover qualquer constraint de regra de negócio
+
+## Limpeza de Memória — Sem Sujeira
+
+**Regra absoluta:** Se abriu, fecha. Se fechou, abre. Sem nada pendurado em memória.  
+**Why:** Exigência direta do dono do sistema — sistema precisa ser limpo e sem vazamentos  
+**How to apply no React (frontend):**
+- Todo `useEffect` que cria listener, timer, subscription ou conexão **deve** ter função de cleanup (`return () => { ... }`)
+- Timers com `setTimeout`/`setInterval` devem ter o ID armazenado e cancelados no cleanup
+- States de modais, alertas e overlays devem ser resetados quando fechados (não deixar dados "sujos" para próxima abertura)
+- Componentes desmontados não devem tentar fazer `setState` — cancelar requisições pendentes no cleanup
+- Ao fechar um modal, limpar: formulário, erros, estados de loading, duplicatas encontradas
+
+**How to apply no Node.js (backend):**
+- Conexões com banco obtidas via pool (nunca conexão manual sem devolução ao pool)
+- `pool.execute()` fecha o statement automaticamente — preferir sempre ao `pool.query()` para prepared statements
+- Nunca deixar variáveis globais acumulando dados entre requisições
+- Logs de erro: registrar e deixar o processo continuar limpo (sem crash silencioso nem acúmulo)
