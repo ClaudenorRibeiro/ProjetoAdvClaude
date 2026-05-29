@@ -62,7 +62,8 @@
       "Bash(grep -roh \"FROM \\\\`[a-zA-Z_]*\\\\`\\\\|JOIN \\\\`[a-zA-Z_]*\\\\`\\\\|INTO \\\\`[a-zA-Z_]*\\\\`\\\\|UPDATE \\\\`[a-zA-Z_]*\\\\`\" \"C:\\\\Users\\\\Claudio\\\\Downloads\\\\ProjetoAdvClaude\\\\backend\\\\src\")",
       "Bash(grep -v \"//\")",
       "Bash(grep -v \"^$\\\\|^do$\\\\|^no$\\\\|^garante$\\\\|^tipo$\\\\|^the$\")",
-      "Bash(grep \"REFERENCES \\\\`processo\\\\`\\\\|REFERENCES \\\\`pasta\\\\`\\\\|REFERENCES \\\\`forum\\\\`\\\\|REFERENCES \\\\`vara\\\\`\" \"C:/Users/Claudio/Downloads/ProjetoAdvClaude/estrutura_banco.sql\")"
+      "Bash(grep \"REFERENCES \\\\`processo\\\\`\\\\|REFERENCES \\\\`pasta\\\\`\\\\|REFERENCES \\\\`forum\\\\`\\\\|REFERENCES \\\\`vara\\\\`\" \"C:/Users/Claudio/Downloads/ProjetoAdvClaude/estrutura_banco.sql\")",
+      "Bash(git ls-tree *)"
     ]
   }
 }

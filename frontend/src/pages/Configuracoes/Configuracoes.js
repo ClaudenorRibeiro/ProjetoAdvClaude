@@ -10,11 +10,26 @@ import { formatarData, toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
 
-// Módulos e ações para a matriz de permissões
+// Estrutura de módulos para a matriz de permissões
+// Sub-módulos usam chave composta: 'processos.andamentos'
 const MODULOS_PERM = [
-  'pessoas', 'processos', 'pastas', 'prazos', 'tarefas',
-  'audiencias', 'pericias', 'financeiro',
-  'documentos', 'publicacoes', 'relatorios',
+  { chave: 'pessoas',      label: 'Pessoas' },
+  { chave: 'processos',    label: 'Processos', submodulos: [
+    { chave: 'processos.andamentos', label: 'Andamentos' },
+    { chave: 'processos.prazos',     label: 'Prazos' },
+    { chave: 'processos.tarefas',    label: 'Tarefas' },
+    { chave: 'processos.audiencias', label: 'Audiências' },
+    { chave: 'processos.pericias',   label: 'Perícias' },
+  ]},
+  { chave: 'pastas',       label: 'Pastas' },
+  { chave: 'prazos',       label: 'Prazos (menu)' },
+  { chave: 'tarefas',      label: 'Tarefas (menu)' },
+  { chave: 'audiencias',   label: 'Audiências (menu)' },
+  { chave: 'pericias',     label: 'Perícias (menu)' },
+  { chave: 'financeiro',   label: 'Financeiro' },
+  { chave: 'documentos',   label: 'Documentos' },
+  { chave: 'publicacoes',  label: 'Publicações' },
+  { chave: 'relatorios',   label: 'Relatórios' },
 ];
 const ACOES_PERM = ['visualizar', 'cadastrar', 'alterar', 'excluir'];
 
@@ -434,10 +449,15 @@ function ModalUsuario({ usuario, onFechar }) {
 // ABA: PERMISSÕES
 // ============================================================
 function TabPermissoes() {
-  const [usuarios, setUsuarios]     = useState([]);
-  const [usuarioId, setUsuarioId]   = useState('');
-  const [permissoes, setPermissoes] = useState({});
-  const [salvando, setSalvando]     = useState(false);
+  const [usuarios, setUsuarios]       = useState([]);
+  const [usuarioId, setUsuarioId]     = useState('');
+  const [permissoes, setPermissoes]   = useState({});
+  const [salvando, setSalvando]       = useState(false);
+  const [expandidos, setExpandidos]   = useState({}); // { processos: true/false }
+
+  function toggleExpandir(chave) {
+    setExpandidos(e => ({ ...e, [chave]: !e[chave] }));
+  }
 
   useEffect(() => {
     configuracaoAPI.listarUsuarios().then(r => {
@@ -450,24 +470,59 @@ function TabPermissoes() {
     if (!usuarioId) return;
     configuracaoAPI.buscarPermissoes(usuarioId).then(r => {
       if (r.data.ok) {
-        // Backend já retorna objeto { modulo: { acao: bool } }
-        setPermissoes(r.data.dados || {});
+        const dados = r.data.dados || {};
+        // Garante que TODOS os módulos e sub-módulos têm entradas explícitas (false por padrão).
+        // Sem isso, módulos nunca salvos ficam undefined e são omitidos no próximo save,
+        // deixando o banco sem registro — o que torna o comportamento de permissão indefinido.
+        const completo = {};
+        MODULOS_PERM.forEach(modulo => {
+          completo[modulo.chave] = {};
+          ACOES_PERM.forEach(a => {
+            completo[modulo.chave][a] = dados[modulo.chave]?.[a] ?? false;
+          });
+          (modulo.submodulos || []).forEach(sub => {
+            completo[sub.chave] = {};
+            ACOES_PERM.forEach(a => {
+              completo[sub.chave][a] = dados[sub.chave]?.[a] ?? false;
+            });
+          });
+        });
+        setPermissoes(completo);
       }
     });
   }, [usuarioId]);
 
-  function togglePerm(modulo, acao) {
+  // Alterna uma ação específica de uma chave (pode ser 'pessoas' ou 'processos.andamentos')
+  function togglePerm(chave, acao) {
     setPermissoes(p => ({
       ...p,
-      [modulo]: { ...(p[modulo] || {}), [acao]: !(p[modulo]?.[acao]) }
+      [chave]: { ...(p[chave] || {}), [acao]: !(p[chave]?.[acao]) }
     }));
   }
 
-  // Marca/desmarca todas as ações de um módulo
-  function toggleModulo(modulo, ativo) {
+  // Marca/desmarca todas as ações de uma chave
+  function toggleTodos(chave, ativo) {
     const acoes = {};
     ACOES_PERM.forEach(a => { acoes[a] = ativo; });
-    setPermissoes(p => ({ ...p, [modulo]: acoes }));
+    setPermissoes(p => ({ ...p, [chave]: acoes }));
+  }
+
+  // Marca/desmarca o módulo pai E todos os seus sub-módulos
+  function toggleModuloPai(modulo, ativo) {
+    setPermissoes(p => {
+      const novo = { ...p };
+      // Marca o módulo pai
+      const acoesPai = {};
+      ACOES_PERM.forEach(a => { acoesPai[a] = ativo; });
+      novo[modulo.chave] = acoesPai;
+      // Marca todos os sub-módulos
+      (modulo.submodulos || []).forEach(sub => {
+        const acoesSub = {};
+        ACOES_PERM.forEach(a => { acoesSub[a] = ativo; });
+        novo[sub.chave] = acoesSub;
+      });
+      return novo;
+    });
   }
 
   async function salvar() {
@@ -506,24 +561,63 @@ function TabPermissoes() {
               </thead>
               <tbody>
                 {MODULOS_PERM.map(modulo => {
-                  const todosMarcados = ACOES_PERM.every(a => permissoes[modulo]?.[a]);
+                  // Verifica se TODAS as ações do módulo pai + sub-módulos estão marcadas
+                  const todasChaves   = [modulo, ...(modulo.submodulos || [])];
+                  const todosMarcados = todasChaves.every(m =>
+                    ACOES_PERM.every(a => permissoes[m.chave]?.[a])
+                  );
                   return (
-                    <tr key={modulo}>
-                      <td style={{fontWeight:500,textTransform:'capitalize'}}>{modulo}</td>
-                      {ACOES_PERM.map(acao => (
-                        <td key={acao} style={{textAlign:'center'}}>
-                          <input type="checkbox"
-                            checked={!!permissoes[modulo]?.[acao]}
-                            onChange={() => togglePerm(modulo, acao)} />
+                    <React.Fragment key={modulo.chave}>
+                      {/* Linha do módulo pai */}
+                      <tr style={modulo.submodulos ? {backgroundColor:'#f0f4ff', cursor:'pointer'} : {}}
+                          onClick={modulo.submodulos ? () => toggleExpandir(modulo.chave) : undefined}>
+                        <td style={{fontWeight:600, userSelect:'none'}}>
+                          {modulo.submodulos && (
+                            <span style={{marginRight:'6px', fontSize:'11px', color:'#667'}}>
+                              {expandidos[modulo.chave] ? '▼' : '▶'}
+                            </span>
+                          )}
+                          {modulo.label}
                         </td>
-                      ))}
-                      <td style={{textAlign:'center'}}>
-                        <input type="checkbox"
-                          checked={todosMarcados}
-                          onChange={e => toggleModulo(modulo, e.target.checked)}
-                          title="Marcar/desmarcar todos" />
-                      </td>
-                    </tr>
+                        {ACOES_PERM.map(acao => (
+                          <td key={acao} style={{textAlign:'center'}}>
+                            <input type="checkbox"
+                              checked={!!permissoes[modulo.chave]?.[acao]}
+                              onChange={() => togglePerm(modulo.chave, acao)} />
+                          </td>
+                        ))}
+                        <td style={{textAlign:'center'}}>
+                          <input type="checkbox"
+                            checked={todosMarcados}
+                            onChange={e => toggleModuloPai(modulo, e.target.checked)}
+                            title="Marcar/desmarcar todos (incluindo sub-itens)" />
+                        </td>
+                      </tr>
+                      {/* Sub-módulos indentados — só aparecem quando expandido */}
+                      {expandidos[modulo.chave] && (modulo.submodulos || []).map(sub => {
+                        const subTodos = ACOES_PERM.every(a => permissoes[sub.chave]?.[a]);
+                        return (
+                          <tr key={sub.chave} style={{backgroundColor:'#fafafa'}}>
+                            <td style={{paddingLeft:'28px', color:'#555', fontSize:'13px'}}>
+                              ↳ {sub.label}
+                            </td>
+                            {ACOES_PERM.map(acao => (
+                              <td key={acao} style={{textAlign:'center'}}>
+                                <input type="checkbox"
+                                  checked={!!permissoes[sub.chave]?.[acao]}
+                                  onChange={() => togglePerm(sub.chave, acao)} />
+                              </td>
+                            ))}
+                            <td style={{textAlign:'center'}}>
+                              <input type="checkbox"
+                                checked={subTodos}
+                                onChange={e => toggleTodos(sub.chave, e.target.checked)}
+                                title="Marcar/desmarcar todos" />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </React.Fragment>
                   );
                 })}
               </tbody>

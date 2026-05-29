@@ -109,10 +109,11 @@ router.get('/financeiro/pasta/:pastaId/recibo',      autenticar, verificarPermis
 router.get('/financeiro/relatorio',                  autenticar, apenasAdmin, financeiroCtrl.relatorio);
 
 // ---- ANDAMENTO PROCESSUAL ----
-router.get('/andamento/:processoId',    autenticar, verificarPermissao('processos','visualizar'), andamentoCtrl.listar);
-router.post('/andamento/:processoId',   autenticar, verificarPermissao('processos','alterar'),    andamentoCtrl.criar);
-router.put('/andamento/:id',            autenticar, verificarPermissao('processos','alterar'),    andamentoCtrl.editar);
-router.delete('/andamento/:id',         autenticar, verificarPermissao('processos','excluir'),    andamentoCtrl.excluir);
+// Usa sub-módulo 'andamentos' — permissão granular independente do módulo 'processos'
+router.get('/andamento/:processoId',    autenticar, verificarPermissao('processos','andamentos','visualizar'), andamentoCtrl.listar);
+router.post('/andamento/:processoId',   autenticar, verificarPermissao('processos','andamentos','cadastrar'),  andamentoCtrl.criar);
+router.put('/andamento/:id',            autenticar, verificarPermissao('processos','andamentos','alterar'),    andamentoCtrl.editar);
+router.delete('/andamento/:id',         autenticar, verificarPermissao('processos','andamentos','excluir'),    andamentoCtrl.excluir);
 
 // ---- DOCUMENTOS ----
 router.get('/documentos/modelos',         autenticar, documentosCtrl.listarModelos);

@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS `andamento_processual` (
   CONSTRAINT `andamento_processual_ibfk_2` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `andamento_processual_ibfk_3` FOREIGN KEY (`editado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `fk_andamento_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -274,7 +274,7 @@ CREATE TABLE IF NOT EXISTS `logs_auditoria` (
   KEY `idx_tabela` (`tabela`),
   KEY `idx_usuario` (`usuario_id`),
   KEY `idx_data` (`criado_em`)
-) ENGINE=InnoDB AUTO_INCREMENT=31 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=34 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -405,10 +405,11 @@ CREATE TABLE IF NOT EXISTS `permissoes` (
   `id` int NOT NULL AUTO_INCREMENT,
   `usuario_id` int NOT NULL,
   `modulo` varchar(50) NOT NULL,
+  `submodulo` varchar(50) DEFAULT NULL COMMENT 'Sub-módulo opcional — ex: andamentos, prazos, tarefas, audiencias, pericias',
   `acao` varchar(20) NOT NULL,
   `permitido` tinyint(1) DEFAULT '0',
   PRIMARY KEY (`id`),
-  KEY `idx_usuario_modulo` (`usuario_id`,`modulo`,`acao`),
+  KEY `idx_usuario_modulo` (`usuario_id`,`modulo`,`submodulo`,`acao`),
   CONSTRAINT `permissoes_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=41 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -538,7 +539,7 @@ CREATE TABLE IF NOT EXISTS `profissao` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(100) NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=18 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 

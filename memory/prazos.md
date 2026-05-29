@@ -46,5 +46,13 @@ metadata:
 
 Registra: quem cadastrou, quem assumiu, quem pausou, quem concluiu + data e hora de cada evento
 
+## UI — Modal Novo Prazo (implementado 29/05/2026)
+
+Mesmo padrão de Audiências:
+1. Campo **"Pasta / Processo"** com autocomplete — digita título ou número, lista de pastas aparece abaixo
+2. Seleciona a pasta → aparece `<select>` com os processos daquela pasta
+3. Seleciona o processo → preenche `processo_id` no formulário
+Os campos antigos (texto livre + ID manual) foram substituídos por esse padrão
+
 **Diferença prazo vs tarefa:** Ver [[tarefas]]  
 **Relacionado:** [[processos-pastas]], [[tarefas]]

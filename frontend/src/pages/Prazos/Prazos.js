@@ -116,20 +116,28 @@ export default function Prazos() {
 }
 
 function ModalNovoPrazo({ tipos, onFechar }) {
-  const [form, setForm]     = useState({ tipo_dias: 'uteis', data_inicio: new Date().toISOString().split('T')[0] });
+  const [form, setForm]         = useState({ tipo_dias: 'uteis', data_inicio: new Date().toISOString().split('T')[0] });
   const [salvando, setSalvando] = useState(false);
+  const [pastas, setPastas]     = useState([]);
   const [processos, setProcessos] = useState([]);
-  const [buscaProcesso, setBuscaProcesso] = useState('');
-  const [usuarios, setUsuarios]   = useState([]);
+  const [buscaPasta, setBuscaPasta] = useState('');
+  const [usuarios, setUsuarios] = useState([]);
 
   useEffect(() => {
     processosAPI.auxiliares().then(r => setUsuarios(r.data.dados.usuarios || []));
   }, []);
 
-  async function buscarProcessos(termo) {
-    if (termo.length < 2) return;
+  async function buscarPastas(termo) {
+    if (termo.length < 2) return setPastas([]);
     const { data } = await processosAPI.listarPastas({ busca: termo, limite: 10 });
-    if (data.ok) setProcessos(data.dados.registros.flatMap(p => p.processos || []));
+    if (data.ok) setPastas(data.dados.registros);
+  }
+
+  function selecionarPasta(pasta) {
+    setBuscaPasta(`${pasta.numero} — ${pasta.titulo}`);
+    setPastas([]);
+    setProcessos(pasta.processos || []);
+    set('processo_id', ''); // limpa processo anterior ao trocar pasta
   }
 
   function set(k, v) { setForm(f => ({...f, [k]: v})); }
@@ -157,19 +165,35 @@ function ModalNovoPrazo({ tipos, onFechar }) {
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
         </div>
         <div className="modal-body">
+          {/* Busca de pasta — mesmo padrão de Audiências */}
           <div className="form-group">
-            <label className="form-label">Número do processo *</label>
-            <input className="form-control" placeholder="Digite o nº do processo"
-              value={form.processo_numero || ''}
-              onChange={e => { set('processo_numero', e.target.value); }}
-            />
-            <small style={{color:'#888'}}>Digite o ID do processo diretamente</small>
+            <label className="form-label">Pasta / Processo *</label>
+            <input className="form-control" placeholder="Buscar pasta pelo título ou número..."
+              value={buscaPasta}
+              onChange={e => { setBuscaPasta(e.target.value); buscarPastas(e.target.value); }} />
+            {pastas.length > 0 && (
+              <div style={{border:'1px solid #ddd',borderRadius:'6px',marginTop:'4px',maxHeight:'140px',overflowY:'auto',background:'#fff',zIndex:10,position:'relative'}}>
+                {pastas.map(p => (
+                  <div key={p.id} style={{padding:'8px 12px',cursor:'pointer',borderBottom:'1px solid #f0f0f0'}}
+                    onMouseDown={() => selecionarPasta(p)}>
+                    <strong>{p.numero}</strong> — {p.titulo}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-          <div className="form-group">
-            <label className="form-label">ID do Processo *</label>
-            <input type="number" className="form-control" value={form.processo_id||''}
-              onChange={e => set('processo_id', e.target.value)} placeholder="ID do processo" />
-          </div>
+          {processos.length > 0 && (
+            <div className="form-group">
+              <label className="form-label">Processo *</label>
+              <select className="form-control" value={form.processo_id||''}
+                onChange={e => set('processo_id', e.target.value)}>
+                <option value="">— Selecione o processo —</option>
+                {processos.map(p => (
+                  <option key={p.id} value={p.id}>{p.numero || `#${p.id}`}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Tipo de prazo</label>

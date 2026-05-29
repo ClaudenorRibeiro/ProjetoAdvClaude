@@ -51,7 +51,7 @@ UNLOCK TABLES;
 
 LOCK TABLES `profissao` WRITE;
 /*!40000 ALTER TABLE `profissao` DISABLE KEYS */;
-INSERT  IGNORE INTO `profissao` VALUES (1,'Advogado'),(2,'Mâ”œÂ®dico'),(3,'Engenheiro'),(4,'Professor'),(5,'Empresâ”œÃ­rio'),(6,'Funcionâ”œÃ­rio Pâ”œâ•‘blico'),(7,'Motorista'),(8,'Comerciante'),(9,'Agricultor'),(10,'Aposentado'),(11,'Desempregado'),(12,'Domâ”œÂ®stica'),(13,'Operâ”œÃ­rio'),(14,'Tâ”œÂ®cnico'),(15,'advogada'),(16,'pipoqueiro'),(17,'Negociadora de cobrança');
+INSERT  IGNORE INTO `profissao` VALUES (1,'Advogado'),(2,'Mâ”œÂ®dico'),(3,'Engenheiro'),(4,'Professor'),(5,'Empresâ”œÃ­rio'),(6,'Funcionâ”œÃ­rio Pâ”œâ•‘blico'),(7,'Motorista'),(8,'Comerciante'),(9,'Agricultor'),(10,'Aposentado'),(11,'Desempregado'),(12,'Domâ”œÂ®stica'),(13,'Operâ”œÃ­rio'),(14,'Tâ”œÂ®cnico'),(15,'advogada'),(16,'pipoqueiro'),(17,'Negociadora de cobrança'),(18,'controlador de accesso');
 /*!40000 ALTER TABLE `profissao` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -173,4 +173,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-05-28 10:53:07
+-- Dump completed on 2026-05-29 13:26:10

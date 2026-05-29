@@ -7,7 +7,7 @@ echo ============================================
 echo.
 
 echo [1/2] Iniciando Backend (porta 3001)...
-start "Backend - Sistema Advocacia" cmd /k "cd /d C:\Users\Claudio\Downloads\ProjetoAdvClaude\backend && node server.js"
+start "Backend - Sistema Advocacia" cmd /k "cd /d C:\Users\Claudio\Downloads\ProjetoAdvClaude\backend && npm run dev"
 
 timeout /t 3 /nobreak > nul
 

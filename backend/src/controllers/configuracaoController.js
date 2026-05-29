@@ -239,18 +239,21 @@ async function atualizarUsuario(req, res) {
   }
 }
 
-// GET/PUT /api/configuracoes/permissoes/:usuarioId — Gerencia permissões
+// GET /api/configuracoes/permissoes/:usuarioId — Busca permissões do usuário
+// Retorna objeto com chave composta para sub-módulos: 'processos.andamentos'
 async function buscarPermissoes(req, res) {
   try {
     const { usuarioId } = req.params;
     const [rows] = await pool.execute(
-      'SELECT modulo, acao, permitido FROM permissoes WHERE usuario_id = ?', [usuarioId]
+      'SELECT modulo, submodulo, acao, permitido FROM permissoes WHERE usuario_id = ?',
+      [usuarioId]
     );
-    // Transforma em objeto aninhado
     const permissoes = {};
     rows.forEach(r => {
-      if (!permissoes[r.modulo]) permissoes[r.modulo] = {};
-      permissoes[r.modulo][r.acao] = r.permitido === 1;
+      // Sub-módulos usam chave composta: 'processos.andamentos'
+      const chave = r.submodulo ? `${r.modulo}.${r.submodulo}` : r.modulo;
+      if (!permissoes[chave]) permissoes[chave] = {};
+      permissoes[chave][r.acao] = r.permitido === 1;
     });
     return sucesso(res, permissoes);
   } catch (err) {
@@ -258,19 +261,26 @@ async function buscarPermissoes(req, res) {
   }
 }
 
+// PUT /api/configuracoes/permissoes/:usuarioId — Salva permissões do usuário
+// Recebe: { 'pessoas': { visualizar: true }, 'processos.andamentos': { cadastrar: false }, ... }
 async function salvarPermissoes(req, res) {
   try {
     const { usuarioId } = req.params;
-    const { permissoes } = req.body; // { pessoas: { visualizar: true, cadastrar: false }, ... }
+    const { permissoes } = req.body;
 
-    // Deleta e recria todas as permissões
+    // Deleta e recria todas as permissões do usuário
     await pool.execute('DELETE FROM permissoes WHERE usuario_id = ?', [usuarioId]);
 
-    for (const [modulo, acoes] of Object.entries(permissoes)) {
+    for (const [chave, acoes] of Object.entries(permissoes)) {
+      // Separa 'processos.andamentos' em modulo='processos', submodulo='andamentos'
+      const pontoDot   = chave.indexOf('.');
+      const modulo    = pontoDot >= 0 ? chave.slice(0, pontoDot)  : chave;
+      const submodulo = pontoDot >= 0 ? chave.slice(pontoDot + 1) : null;
+
       for (const [acao, permitido] of Object.entries(acoes)) {
         await pool.execute(
-          'INSERT INTO permissoes (usuario_id, modulo, acao, permitido) VALUES (?, ?, ?, ?)',
-          [usuarioId, modulo, acao, permitido ? 1 : 0]
+          'INSERT INTO permissoes (usuario_id, modulo, submodulo, acao, permitido) VALUES (?, ?, ?, ?, ?)',
+          [usuarioId, modulo, submodulo, acao, permitido ? 1 : 0]
         );
       }
     }

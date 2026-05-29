@@ -84,7 +84,7 @@ export default function PastaDetalhe() {
         (r.data.ok ? r.data.dados : []).map(a => ({ ...a, _procId: ids[i] }))
       );
       // Ordena por data decrescente
-      todos.sort((a, b) => new Date(b.data_andamento || b.criado_em) - new Date(a.data_andamento || a.criado_em));
+      todos.sort((a, b) => new Date(b.data || b.criado_em) - new Date(a.data || a.criado_em));
       setAndamentos(todos);
     } catch { toast.error('Erro ao carregar andamentos'); }
   }
@@ -397,14 +397,14 @@ export default function PastaDetalhe() {
                 <tbody>
                   {andamentos.map(a => (
                     <tr key={a.id}>
-                      <td style={{ whiteSpace: 'nowrap' }}>{formatarData(a.data_andamento)}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{formatarData(a.data)}</td>
                       <td style={{ maxWidth: '400px' }}>{a.descricao}</td>
                       {processoFiltro === 'todos' && (
                         <td style={{ fontFamily: 'monospace', fontSize: '11px', whiteSpace: 'nowrap', color: '#555' }}>
                           {processos.find(p => p.id === a._procId)?.numProc || `#${a._procId}`}
                         </td>
                       )}
-                      <td>{a.usuario_nome}</td>
+                      <td>{a.criado_por_nome}</td>
                       <td>
                         <div style={{ display: 'flex', gap: '6px' }}>
                           <button className="btn btn-outline" style={{ fontSize: '12px', padding: '4px 8px' }}
@@ -436,9 +436,11 @@ export default function PastaDetalhe() {
           <div>
             <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
               {selectProcesso}
-              <Link to="/prazos" className="btn btn-outline" style={{ fontSize: '12px', marginLeft: 'auto' }}>
-                + Novo Prazo (via módulo)
-              </Link>
+              {processoSelecionado && (
+                <Link to="/prazos" className="btn btn-primary">
+                  + Novo Prazo
+                </Link>
+              )}
             </div>
             <div className="tabela-wrapper">
               <table className="tabela">
@@ -472,9 +474,11 @@ export default function PastaDetalhe() {
           <div>
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
               {selectProcesso}
-              <Link to="/tarefas" className="btn btn-outline" style={{ fontSize: '12px', marginLeft: 'auto' }}>
-                + Nova Tarefa (via módulo)
-              </Link>
+              {processoSelecionado && (
+                <Link to="/tarefas" className="btn btn-primary">
+                  + Nova Tarefa
+                </Link>
+              )}
             </div>
             <div className="tabela-wrapper">
               <table className="tabela">
@@ -504,9 +508,11 @@ export default function PastaDetalhe() {
           <div>
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
               {selectProcesso}
-              <Link to="/audiencias" className="btn btn-outline" style={{ fontSize: '12px', marginLeft: 'auto' }}>
-                + Nova Audiência (via módulo)
-              </Link>
+              {processoSelecionado && (
+                <Link to="/audiencias" className="btn btn-primary">
+                  + Nova Audiência
+                </Link>
+              )}
             </div>
             <div className="tabela-wrapper">
               <table className="tabela">
@@ -535,6 +541,15 @@ export default function PastaDetalhe() {
           <div>
             {contaCorrente ? (
               <div>
+                {/* Botões no topo — mesmo padrão das demais abas */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
+                  <button className="btn btn-primary" onClick={() => setModalLancamento(true)}>
+                    + Lançamento
+                  </button>
+                  <Link to="/financeiro" className="btn btn-outline" style={{ fontSize: '12px' }}>
+                    Ver completo
+                  </Link>
+                </div>
                 {contaCorrente.honorarios && (
                   <div className="card" style={{ background: '#f8fafc', marginBottom: '16px', border: '1px solid #e8ecf0' }}>
                     <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
@@ -557,14 +572,6 @@ export default function PastaDetalhe() {
                     </div>
                   </div>
                 )}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px', gap: '8px' }}>
-                  <button className="btn btn-primary" onClick={() => setModalLancamento(true)}>
-                    + Lançamento
-                  </button>
-                  <Link to="/financeiro" className="btn btn-outline" style={{ fontSize: '12px' }}>
-                    Ver completo
-                  </Link>
-                </div>
                 <div className="tabela-wrapper">
                   <table className="tabela">
                     <thead>

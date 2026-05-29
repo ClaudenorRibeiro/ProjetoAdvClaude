@@ -18,6 +18,7 @@ const pool = mysql.createPool({
   queueLimit: 0,              // Sem limite na fila de espera
   charset: 'utf8mb4',         // Suporta emojis e caracteres especiais
   timezone: '-03:00',         // Fuso horário de Brasília
+  dateStrings: true,          // Retorna DATE/DATETIME como string (YYYY-MM-DD) em vez de objeto Date JS
 });
 
 // Testa a conexão ao iniciar — lança erro se o banco não estiver acessível
