@@ -65,9 +65,9 @@ async function listarFisicas(req, res) {
                ORDER BY e.principal DESC, e.id ASC LIMIT 1) AS email,
               -- Total de processos como autor ou réu (sem duplicatas)
               (SELECT COUNT(*) FROM (
-                SELECT proc_id FROM tbltituloprocautor WHERE tipo_pessoa = 'fisica' AND pessoa_id = pf.id
+                SELECT proc_id FROM tblTituloProcAutor WHERE tipo_pessoa = 'fisica' AND pessoa_id = pf.id
                 UNION
-                SELECT proc_id FROM tbltituloprocreu   WHERE tipo_pessoa = 'fisica' AND pessoa_id = pf.id
+                SELECT proc_id FROM tblTituloProcReu   WHERE tipo_pessoa = 'fisica' AND pessoa_id = pf.id
               ) AS t) AS qtde_proc
        FROM pessoas_fisicas pf
        LEFT JOIN estado_civil ec ON pf.estado_civil_id = ec.id
@@ -406,9 +406,9 @@ async function listarJuridicas(req, res) {
                ORDER BY e.principal DESC LIMIT 1) AS email,
               -- Total de processos como autor ou réu (sem duplicatas)
               (SELECT COUNT(*) FROM (
-                SELECT proc_id FROM tbltituloprocautor WHERE tipo_pessoa = 'juridica' AND pessoa_id = pj.id
+                SELECT proc_id FROM tblTituloProcAutor WHERE tipo_pessoa = 'juridica' AND pessoa_id = pj.id
                 UNION
-                SELECT proc_id FROM tbltituloprocreu   WHERE tipo_pessoa = 'juridica' AND pessoa_id = pj.id
+                SELECT proc_id FROM tblTituloProcReu   WHERE tipo_pessoa = 'juridica' AND pessoa_id = pj.id
               ) AS t) AS qtde_proc
        FROM pessoas_juridicas pj ${where}
        ORDER BY pj.razao_social ASC
