@@ -37,3 +37,6 @@ INSTALACAO_AWS_LIGHTSAIL.txt
 
 # Pasta de scripts de deploy — fica só local (contém senhas dos clientes)
 deploy/
+
+# Arquivos de memória do Claude — ficam só local
+memory/
