@@ -1,0 +1,254 @@
+================================================================
+ SISTEMA DE ADVOCACIA — CONFIGURAÇÕES INICIAIS OBRIGATÓRIAS
+ Guia completo para colocar o sistema em funcionamento
+ Atualizado em: 27/05/2026
+================================================================
+
+Este arquivo lista TUDO que precisa ser configurado para o sistema
+funcionar corretamente, tanto no ambiente de desenvolvimento (PC)
+quanto em produção (AWS Lightsail). Siga a ordem indicada.
+
+================================================================
+ETAPA 1 — BANCO DE DADOS (execute as migrations na ordem)
+================================================================
+
+Acesse o MySQL (Workbench ou linha de comando) e execute os
+arquivos na pasta  backend/database/migrations/  nesta ordem:
+
+  [✓] 001_criar_banco.sql          — Cria todas as tabelas
+  [✓] 002_novo_modelo_processos.sql — Estrutura de pastas/processos
+  [✓] 003_expandir_forum_vara.sql   — Campos extras de fórum e vara
+  [ ] 004_reset_tokens.sql          — Tabela de reset de senha ← PENDENTE
+
+ATENÇÃO: Cada arquivo deve ser executado UMA única vez.
+Se o banco já existir com os dados, NÃO execute 001 novamente.
+
+Para executar via linha de comando:
+  mysql -u root -p sistema_advocacia < 004_reset_tokens.sql
+
+
+================================================================
+ETAPA 2 — ARQUIVO .env (backend)
+================================================================
+
+Arquivo: backend/.env
+(Este arquivo NÃO vai para o Git — é local em cada máquina)
+
+------ OBRIGATÓRIO TROCAR ANTES DE IR PARA PRODUÇÃO ------
+
+  JWT_SECRET=
+    → Gere uma chave forte (mínimo 32 caracteres aleatórios).
+    → Sugestão: abra o terminal Node.js e execute:
+        require('crypto').randomBytes(48).toString('hex')
+    → Cole o resultado aqui.
+    → NUNCA use a chave padrão "sua_chave_secreta..." em produção.
+
+  SUPER_SENHA=
+    → Troque a senha do superusuário (superadmin) por algo seguro.
+    → Anote em local seguro — é a conta raiz do sistema.
+    → Em produção: use senha forte (mínimo 16 chars + especiais).
+
+------ E-MAIL (GMAIL) ------
+
+Para usar o Gmail pessoal como servidor de envio de e-mails:
+
+  SMTP_HOST=smtp.gmail.com
+  SMTP_PORT=587
+  SMTP_USER=seu.email@gmail.com
+  SMTP_PASS=xxxx xxxx xxxx xxxx     ← Senha de App (veja Etapa 3)
+  EMAIL_FROM=Nome do Escritório <seu.email@gmail.com>
+
+ATENÇÃO: NÃO use sua senha normal do Gmail. Use a "Senha de App".
+         Veja o passo a passo na Etapa 3.
+
+------ OUTROS OPCIONAIS ------
+
+  NODE_ENV=development              → Mude para "production" no servidor AWS
+  FRONTEND_URL=http://localhost:3000 → Mude para a URL real em produção
+                                       Ex.: https://meuescritorio.com.br
+
+  ZAPI_INSTANCE_ID=                 → Preencher se usar WhatsApp (Z-API)
+  ZAPI_TOKEN=
+  ZAPI_CLIENT_TOKEN=
+
+  AASP_API_URL=https://api.aasp.org.br
+  AASP_TOKEN=                       → Preencher se usar módulo de publicações AASP
+
+  AWS_ACCESS_KEY_ID=                → Preencher se usar backup automático no S3
+  AWS_SECRET_ACCESS_KEY=
+  AWS_REGION=us-east-1
+  S3_BUCKET_NAME=
+  BACKUP_INTERVAL_HOURS=24
+
+
+================================================================
+ETAPA 3 — COMO CRIAR A SENHA DE APP NO GMAIL
+================================================================
+
+(Necessário para o sistema enviar e-mails de redefinição de senha
+ e futuros alertas de prazos, audiências etc.)
+
+PASSO A PASSO:
+
+1. Acesse sua conta Google em: https://myaccount.google.com
+
+2. Clique em "Segurança" no menu lateral esquerdo.
+
+3. Em "Como você faz login no Google", clique em:
+   "Verificação em duas etapas"
+   → Se ainda não estiver ativada, ATIVE agora (obrigatório).
+
+4. Após ativar, volte em "Segurança" e role até o final.
+   Procure por "Senhas de app" (pode estar dentro de
+   "Verificação em duas etapas" também).
+
+5. Em "Selecionar app", escolha "Outro (nome personalizado)".
+   Digite: Sistema Advocacia
+   Clique em "Gerar".
+
+6. O Google vai mostrar uma senha de 16 caracteres (4 grupos de 4).
+   Ex.: abcd efgh ijkl mnop
+   → COPIE essa senha imediatamente (ela não será mostrada novamente).
+
+7. No arquivo backend/.env, coloque:
+   SMTP_PASS=abcd efgh ijkl mnop   (com ou sem espaços, os dois funcionam)
+
+IMPORTANTE:
+  - Cada PC/servidor pode ter sua própria Senha de App.
+  - Se trocar de conta Gmail, gere uma nova senha de app.
+  - Nunca compartilhe essa senha — ela dá acesso ao envio pelo seu Gmail.
+
+
+================================================================
+ETAPA 4 — PRIMEIRA EXECUÇÃO DO SISTEMA
+================================================================
+
+Com o banco criado e o .env configurado, ao abrir o sistema pela
+primeira vez, siga esta sequência dentro da interface:
+
+1. ACESSE com o superusuário:
+   Login: superadmin
+   Senha: (a que você definiu no .env → SUPER_SENHA)
+
+2. VÁ EM "Configurações" → aba "Escritório":
+   → Preencha todos os dados do escritório:
+     • Nome completo do escritório
+     • CNPJ ou CPF do responsável
+     • E-mail do escritório (para contato e envio de documentos)
+     • Telefone
+     • Endereço completo
+   → Salve.
+
+3. VÁ EM "Configurações" → aba "Usuários":
+   → Crie o usuário administrador principal do escritório
+     (diferente do superadmin — este é o advogado/gestor do dia a dia).
+   → Defina login, nome, e-mail e senha.
+   → Marque como "Administrador" (nível 1).
+
+4. VÁ EM "Configurações" → aba "Permissões":
+   → Configure as permissões para cada usuário não-administrador.
+   → Administradores já têm acesso total automaticamente.
+
+5. VÁ EM "Configurações" → aba "Feriados":
+   → O calendário de feriados nacionais já vem pré-populado
+     para 30 anos ao executar a migration 001.
+   → Adicione feriados locais (municipais/estaduais) conforme necessário.
+
+6. CONCLUA O SETUP:
+   → Em "Configurações" → "Escritório", clique em "Concluir Setup".
+   → Após isso, o sistema fica totalmente liberado para uso.
+   → ATENÇÃO: Sem concluir o setup, vários módulos ficam bloqueados.
+
+7. FAÇA LOGIN COM O USUÁRIO ADMINISTRADOR criado no passo 3.
+   → O superadmin é invisível e deve ser usado apenas para
+     manutenção emergencial.
+
+
+================================================================
+ETAPA 5 — CONFIGURAÇÕES DENTRO DO SISTEMA (módulo Configurações)
+================================================================
+
+Após o setup inicial, configure conforme a necessidade do escritório:
+
+ABA ESCRITÓRIO:
+  • Cor principal do tema (hex) — identidade visual do escritório
+  • Horário do alerta diário de prazos (padrão: 18:00)
+  • Dias de antecedência para alertar cliente sobre audiência (padrão: 3)
+  • Dias de antecedência para alertar cliente sobre perícia (padrão: 2)
+  • Dias sem movimentação para alertar no dashboard (padrão: 30)
+
+ABA INTEGRAÇÕES (dentro de Configurações):
+  • WhatsApp (Z-API): Instance ID, Token, Client Token
+  • AASP: URL e Token para busca de publicações
+  (Estas credenciais ficam salvas no banco — não precisam ficar no .env)
+
+
+================================================================
+ETAPA 6 — PRODUÇÃO (AWS LIGHTSAIL) — quando for publicar
+================================================================
+
+Ao migrar para o servidor AWS Lightsail, além de tudo acima:
+
+1. ARQUIVO .env NO SERVIDOR:
+   → NODE_ENV=production
+   → FRONTEND_URL=https://seudominio.com.br  (ou IP do servidor)
+   → JWT_SECRET=  (chave diferente da do desenvolvimento)
+   → SUPER_SENHA= (senha forte e diferente)
+   → SMTP configurado com Gmail ou outro provedor
+
+2. BANCO DE DADOS:
+   → Execute todas as migrations na ordem (001 a 004) no servidor.
+   → Nunca copie o banco de desenvolvimento para produção com dados reais
+     sem antes remover os dados de teste.
+
+3. PM2 (gerenciador de processos):
+   → O backend deve rodar com PM2 para reiniciar automaticamente.
+   → Comando: pm2 start backend/src/server.js --name advocacia
+   → Auto-start: pm2 startup && pm2 save
+
+4. HTTPS:
+   → Configure certificado SSL (Let's Encrypt via Certbot).
+   → Sem HTTPS, o Gmail pode bloquear envios e o navegador alertará.
+
+5. BACKUP:
+   → Configure as credenciais AWS S3 no .env para backup automático.
+   → Ou configure backup manual do MySQL com cron job.
+
+
+================================================================
+RESUMO RÁPIDO — CHECKLIST DE INSTALAÇÃO
+================================================================
+
+BANCO DE DADOS:
+  [ ] Executar 001_criar_banco.sql
+  [ ] Executar 002_novo_modelo_processos.sql
+  [ ] Executar 003_expandir_forum_vara.sql
+  [ ] Executar 004_reset_tokens.sql          ← PENDENTE AGORA
+
+ARQUIVO backend/.env:
+  [ ] JWT_SECRET — trocar por chave forte gerada aleatoriamente
+  [ ] SUPER_SENHA — trocar por senha segura
+  [ ] SMTP_HOST=smtp.gmail.com
+  [ ] SMTP_PORT=587
+  [ ] SMTP_USER=seu@gmail.com
+  [ ] SMTP_PASS=senha de app do Gmail (ver Etapa 3)
+  [ ] EMAIL_FROM=Escritório <seu@gmail.com>
+  [ ] NODE_ENV=production (apenas no servidor AWS)
+  [ ] FRONTEND_URL=URL real (apenas no servidor AWS)
+
+DENTRO DO SISTEMA:
+  [ ] Login com superadmin
+  [ ] Preencher dados do escritório
+  [ ] Criar usuário administrador
+  [ ] Configurar permissões dos usuários
+  [ ] Verificar/adicionar feriados locais
+  [ ] Clicar em "Concluir Setup"
+
+OPCIONAL:
+  [ ] Configurar WhatsApp (Z-API) nas Integrações
+  [ ] Configurar AASP nas Integrações
+  [ ] Configurar backup S3 (produção)
+
+================================================================
+ FIM DO GUIA
+================================================================

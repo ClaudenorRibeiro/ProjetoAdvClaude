@@ -1,0 +1,159 @@
+---
+name: feedback-codigo
+description: Diretrizes obrigatórias de qualidade e estilo de código para o projeto
+metadata: 
+  node_type: memory
+  type: feedback
+  originSessionId: c7321425-eb43-40e0-b57f-c2941c1276c6
+---
+
+## Regras de Trabalho — OBRIGATÓRIAS
+
+**Nunca codificar sem autorização explícita do usuário.**  
+O usuário decide quando e o que será desenvolvido. Claude analisa, sugere e explica — mas só executa código quando autorizado.
+
+**Nunca commitar sem autorização explícita.**  
+⚠️ REGRA ATUALIZADA (05/06/2026): Só subir para o git após o usuário testar e autorizar explicitamente.  
+O fluxo é: codifica local → usuário testa → usuário autoriza → commit + push.  
+**Exceção permanente:** arquivos da pasta `memory/` podem (e devem) ser commitados automaticamente sem pedir autorização.
+
+**A pasta local SEMPRE prevalece sobre o git.**  
+Arquivos deletados localmente e depois commitados saem do git também.
+
+**Formato obrigatório de commit:** `DDMMYY-HHMM — descrição curta`  
+Exemplo: `050626-1430 — deploy: scripts de instalação por partes`
+
+**Sem migrations.** Alterações de schema são feitas via HeidiSQL diretamente no banco local.  
+Depois: exportar estrutura → `estrutura_banco.sql` → commit.  
+Nunca criar arquivos de migration.
+
+**Tabelas definitivas (nunca criar versões alternativas):**  
+`tblForum, tblVara, tblPasta, tblProc, tblStatusProc, tblTipoProc, tblInstanciaProc, tblTituloProcAutor, tblTituloProcReu`
+
+## Atualização de Memória — AUTOMÁTICA E OBRIGATÓRIA
+
+**Ao final de cada sessão de trabalho (ou após qualquer mudança relevante), Claude DEVE:**
+
+1. Atualizar os arquivos `.md` em:  
+   `C:\Users\Claudio\.claude\projects\C--Users-Claudio-Downloads-ProjetoAdvClaude\memory\`
+
+2. Sincronizar para a pasta do projeto:  
+   `C:\Users\Claudio\Downloads\ProjetoAdvClaude\memory\`  
+   (copiar os arquivos atualizados para lá)
+
+3. Fazer commit e push automaticamente (sem pedir autorização):  
+   `git add memory/ && git commit -m "DDMMYY-HHMM — atualiza memória do projeto"`
+
+**O que atualizar:**
+- Qualquer funcionalidade nova implementada
+- Decisões de arquitetura tomadas
+- Regras novas definidas pelo usuário
+- Scripts e arquivos novos criados
+- Mudanças no banco de dados
+
+**Por quê:** O usuário trabalha em múltiplos computadores. A memória no GitHub é a única fonte confiável de contexto entre máquinas. Não atualizar = próxima sessão começa sem contexto.
+
+---
+
+## Código Bem Comentado
+
+Todo código entregue deve ter comentários claros explicando o que cada bloco faz.  
+**Why:** Usuário fará manutenções e ajustes diretamente no VSCode — precisa entender o código sem depender de Claude  
+**How to apply:** Comentar funções, rotas, queries SQL, lógicas de negócio e qualquer trecho não óbvio. Padrão mínimo: comentário no início de cada função e em cada bloco lógico relevante
+
+## Antes de Implementar Qualquer Campo — Verificar se Já Existe
+
+**Regra obrigatória:** Antes de criar qualquer campo novo numa tela (modal, formulário, etc.), **ler o componente inteiro** e mapear todos os campos já existentes.
+
+**Por quê:** Em 09/06/2026, foi criado o campo "Advogado que conduzirá esta audiência" sem perceber que "Responsável pela condução" já existia no mesmo modal com a mesma finalidade. Resultado: campo duplicado e redundante, retrabalho para desfazer tudo.
+
+**Como aplicar:**
+1. Ler o arquivo completo do componente antes de propor qualquer novo campo
+2. Listar os campos existentes e seus propósitos
+3. Só então confirmar se o campo solicitado é realmente novo ou apenas uma renomeação/ajuste de algo que já existe
+4. Se houver dúvida, descrever ao usuário os campos existentes e perguntar qual é o correto
+
+## Auditoria — Gravar Nomes Legíveis na Escrita (regra desde 09/06/2026)
+
+**Regra absoluta:** Ao inserir registros de auditoria campo a campo, **nunca gravar IDs numéricos** — sempre resolver para nomes legíveis no momento da gravação.
+
+**Por quê:** Gravar IDs e resolver na leitura causa N+1 queries. Com 20k clientes e milhares de históricos isso degrada seriamente o desempenho. Resolvendo na escrita, a leitura é sempre 1 query simples.
+
+**Como aplicar:**
+- `tipo_audiencia_id` → buscar nome na tabela `tipo_audiencia` antes do INSERT
+- `vara_id` → buscar `"abrev — forum"` nas tabelas `tblVara`+`tblForum` antes do INSERT
+- `responsavel_id` → buscar nome em `usuarios` ou `advogados_freela` antes do INSERT
+- Campos já legíveis (`data`, `hora`, `modalidade`, status como texto, etc.) → gravar direto
+
+**Padrão implementado:** `audienciasController.js` tem as funções `resolverNomeTipo`, `resolverNomeVara`, `resolverNomeResponsavel` como referência. Ao implementar auditoria em outros módulos, seguir o mesmo padrão.
+
+## Pensar à Frente — Evitar Retrabalho
+
+Antes de escrever código, sempre analisar e sugerir:
+- Funções/utilitários reutilizáveis que servirão para múltiplos módulos
+- Estruturas de dados que evitam refatoração futura
+- Padrões que se aplicam ao projeto todo (ex: tratamento de erros, validações, respostas da API)
+- Avisar quando uma decisão agora pode gerar retrabalho depois
+
+## Manutenção via VSCode
+
+Usuário mantém o sistema diretamente no VSCode.  
+**How to apply:** Estrutura de pastas clara e intuitiva, nomes de arquivos e variáveis autoexplicativos, sem "magia" desnecessária no código
+
+## Performance — Processamento Máximo
+
+O sistema deve ser o mais rápido possível em todas as camadas.  
+**How to apply:**
+- Queries SQL com índices nas colunas usadas em WHERE, JOIN e ORDER BY
+- Nunca buscar mais dados do que o necessário (SELECT * apenas quando realmente precisa de todos os campos)
+- Paginação obrigatória em todas as listagens
+- Subqueries evitadas quando JOIN resolve mais eficiente
+- No frontend: evitar re-renders desnecessários (useCallback, useMemo onde fizer diferença real)
+- Respostas da API enxutas — não carregar dados relacionados que o cliente não pediu
+
+## Transações — Tudo ou Nada
+
+**Regra absoluta:** Toda operação que envolva mais de um passo no banco (INSERT + INSERT, INSERT + UPDATE, etc.) DEVE usar transação com commit/rollback.
+
+**Padrão obrigatório no Node.js/MySQL:**
+```javascript
+const conn = await pool.getConnection();
+try {
+  await conn.beginTransaction();
+  // ... todos os INSERTs/UPDATEs/DELETEs da operação
+  await conn.commit();
+  return sucesso(res, ...);
+} catch (err) {
+  await conn.rollback();
+  return erroInterno(res, err);
+} finally {
+  conn.release();
+}
+```
+
+## Banco de Dados — Apenas Repositório de Dados
+
+**Regra absoluta:** O banco de dados NÃO deve conter nenhuma regra de negócio.  
+**O que NUNCA colocar no banco:** `UNIQUE`, `ENUM`, `CHECK`, triggers com lógica, stored procedures com regras  
+**O que É permitido:** `PRIMARY KEY`, `FOREIGN KEY`, `INDEX` simples, `NOT NULL` estrutural, tipos de dados adequados
+
+## Limpeza de Memória — Sem Sujeira
+
+**Regra absoluta:** Se abriu, fecha. Sem nada pendurado em memória.  
+- Todo `useEffect` com listener deve ter cleanup
+- Modais fechados devem ter estados resetados
+- Conexões de banco sempre devolvidas ao pool
+
+## Interface — Padrões Obrigatórios
+
+- **Sem `window.confirm`** — usar sempre o componente `ModalConfirmar`
+- **Botões padronizados** — seguir o estilo já estabelecido no projeto
+- **Separador de tabela:** `border-bottom: 1px solid #9ca3af` (cinza médio visível)
+
+## Scripts de Deploy — Padrões
+
+- Nunca usar `set -euo pipefail` — usar apenas `set -e` para evitar falhas silenciosas
+- Sempre usar `export DEBIAN_FRONTEND=noninteractive` para suprimir telas interativas
+- Sempre usar `export NEEDRESTART_MODE=a` para suprimir a tela roxa de restart de serviços
+- Seeds com tratamento de erro tolerante: `if node seeds/run.js; then ok; else warn; fi`
+- Scripts de instalação devem ser 100% silenciosos — zero interatividade com o usuário

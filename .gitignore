@@ -1,0 +1,39 @@
+# Arquivos de configuração com senhas — NUNCA enviar para o Git
+backend/.env
+frontend/.env
+frontend/.env.local
+
+# Dependências (muito pesadas, baixadas automaticamente pelo npm)
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Build do frontend (gerado automaticamente)
+frontend/build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# Backups do banco — ficam só local, são grandes e contêm dados reais
+backups/
+
+# Configurações locais do Claude Code
+.claude/settings.local.json
+
+# Arquivos de documentação gerados localmente
+*.docx
+
+# package.json/lock da raiz (não é um pacote npm — é da raiz do projeto)
+package.json
+package-lock.json
+
+# Guias de instalação — ficam só local
+INSTALACAO_AWS_LIGHTSAIL.txt
+
+# Pasta de scripts de deploy — fica só local (contém senhas dos clientes)
+deploy/
