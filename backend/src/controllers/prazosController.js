@@ -396,15 +396,24 @@ async function marcarFazendo(req, res) {
     const venc = String(prazo.data_vencimento).split('T')[0];
     const statusAtual = venc < hoje ? 'atrasado' : venc === hoje ? 'pendente' : 'agendado';
 
-    await pool.execute(
-      'UPDATE prazos_processo SET fazendo_por = ?, fazendo_desde = NOW(), status_antes_fazendo = ? WHERE id = ?',
-      [req.usuario.id, statusAtual, id]
-    );
-
-    await pool.execute(
-      `INSERT INTO auditoria_prazo (prazo_id, status_anterior, status_novo, usuario_id) VALUES (?, ?, 'fazendo', ?)`,
-      [id, statusAtual, req.usuario.id]
-    );
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        'UPDATE prazos_processo SET fazendo_por = ?, fazendo_desde = NOW(), status_antes_fazendo = ? WHERE id = ?',
+        [req.usuario.id, statusAtual, id]
+      );
+      await conn.execute(
+        `INSERT INTO auditoria_prazo (prazo_id, status_anterior, status_novo, usuario_id) VALUES (?, ?, 'fazendo', ?)`,
+        [id, statusAtual, req.usuario.id]
+      );
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
 
     return sucesso(res, null, 'Prazo marcado como "Fazendo"');
   } catch (err) {
@@ -430,15 +439,24 @@ async function liberarFazendo(req, res) {
       return erro(res, 'Apenas o administrador pode liberar o prazo de outro usuário', 403);
     }
 
-    await pool.execute(
-      'UPDATE prazos_processo SET fazendo_por = NULL, fazendo_desde = NULL, status_antes_fazendo = NULL WHERE id = ?',
-      [id]
-    );
-
-    await pool.execute(
-      `INSERT INTO auditoria_prazo (prazo_id, status_anterior, status_novo, usuario_id) VALUES (?, 'fazendo', ?, ?)`,
-      [id, statusAntesFazendo, req.usuario.id]
-    );
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        'UPDATE prazos_processo SET fazendo_por = NULL, fazendo_desde = NULL, status_antes_fazendo = NULL WHERE id = ?',
+        [id]
+      );
+      await conn.execute(
+        `INSERT INTO auditoria_prazo (prazo_id, status_anterior, status_novo, usuario_id) VALUES (?, 'fazendo', ?, ?)`,
+        [id, statusAntesFazendo, req.usuario.id]
+      );
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
 
     return sucesso(res, null, 'Prazo liberado');
   } catch (err) {

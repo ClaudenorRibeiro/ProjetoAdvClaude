@@ -238,8 +238,18 @@ async function redefinirSenha(req, res) {
     const { id: tokenId, usuario_id } = rows[0];
     const novoHash = await bcrypt.hash(senha, 12);
 
-    await pool.execute('UPDATE usuarios SET senha_hash = ? WHERE id = ?', [novoHash, usuario_id]);
-    await pool.execute('UPDATE reset_tokens SET usado = 1 WHERE id = ?',  [tokenId]);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE usuarios SET senha_hash = ? WHERE id = ?', [novoHash, usuario_id]);
+      await conn.execute('UPDATE reset_tokens SET usado = 1 WHERE id = ?',  [tokenId]);
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
 
     return sucesso(res, null, 'Senha redefinida com sucesso! Você já pode fazer login.');
   } catch (err) {
