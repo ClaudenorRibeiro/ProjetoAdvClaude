@@ -108,6 +108,14 @@ const STATUS_LABEL = { agendada:'Agendada', realizada:'Realizada', adiada:'Adiad
 - Audiência remarcada: NÃO pode ser editada, NÃO pode ser excluída
 - Nova audiência criada tem auditoria registrada: `"Criada por remarcação da audiência #X"`
 
+## Histórico — Registro de Criação (10/06/2026)
+
+- Ao cadastrar qualquer audiência, o sistema **sempre** insere o primeiro registro na auditoria:
+  - `campo_alterado = 'cadastrado'`, `valor_novo = 'Audiência cadastrada'`, `usuario_id = quem cadastrou`
+- Isso garante que o histórico nunca fica vazio — a primeira linha sempre mostra quem criou e quando
+- Se houver `obs_auditoria` (data retroativa ou hora incomum), um segundo registro é inserido logo após
+- Frontend: label `'cadastrado'` adicionado ao mapa `CAMPO_LABEL` em `Audiencias.js` → exibe "Cadastrado"
+
 ## Histórico de Alterações (09/06/2026)
 
 - Botão **Histórico** por linha na listagem → `ModalHistoricoAudiencia`

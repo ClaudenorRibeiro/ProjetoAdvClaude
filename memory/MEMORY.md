@@ -7,8 +7,8 @@
 - [Prazos](prazos.md) — Dias úteis/corridos, status com auditoria, alertas e-mail/WhatsApp, 42+ tipos
 - [Tarefas](tarefas.md) — Diferença vs prazo: vínculo livre, sem alerta admin, prioridades 3 níveis
 - [Financeiro](financeiro.md) — Conta corrente por pasta, honorários flexíveis, recibo PDF, relatórios, parcerias
-- [Audiências](audiencias.md) — Comunicado PDF automático, ata gera prazos/tarefas/acordo, editar/excluir com regras por ata+perfil, validações blur no cadastro/edição
-- [Tabelas do Banco de Dados](database_tables.md) — 31 tabelas identificadas; próximo: Bloco 11
+- [Audiências](audiencias.md) — Comunicado PDF automático, ata gera prazos/tarefas/acordo, editar/excluir com regras por ata+perfil, validações blur, histórico sempre mostra quem cadastrou
+- [Tabelas do Banco de Dados](database_tables.md) — 46 tabelas (limpeza 28/05/2026); tabelas tbl* são as definitivas com camelCase exato; calendário vs feriados
 - [Andamento Processual](andamento_processual.md) — Lançamento manual, data/descrição/usuário, auditoria de edições
 - [Documentos e Modelos](documentos_modelos.md) — Gera Word+PDF com variáveis automáticas, admin configura modelos, log de geração salvo
 - [Comunicações](comunicacoes.md) — WhatsApp e e-mail modulares por escritório, envio manual e automático, histórico registrado
@@ -19,5 +19,5 @@
 - [Perícias](pericias.md) — Agendamento, comunicado ao cliente, e-mail ao perito via modelo, sem registro de laudo ou resultado
 - [Integrações e Publicações](integracoes_publicacoes.md) — Tela de publicações AASP por OAB, gera prazo/tarefa, salvamento incremental, CNJ para versão futura
 - [Setup Inicial](setup_inicial.md) — Campos obrigatórios, bloqueio de módulos, calendário pré-populado 30 anos, primeiro admin
-- [Deploy e Versionamento](deploy_versionamento.md) — Tutorial completo AWS Lightsail, scripts de deploy, Git com rollback
-- [Diretrizes de Código](feedback_codigo.md) — Código comentado, pensar à frente para evitar retrabalho, manutenção via VSCode
+- [Deploy e Versionamento](deploy_versionamento.md) — Scripts deploy/atualizacao/ revisados 10/06; git reset --hard (não pull); case sensitivity MySQL; .gitignore package.json fix
+- [Diretrizes de Código](feedback_codigo.md) — ⚠️ LER PRIMEIRO: só codifica com autorização, sem migrations, commits DDMMYY-HHMM, transações obrigatórias, MySQL Linux case-sensitive, git force-push workflow

@@ -265,6 +265,7 @@ export const configuracaoAPI = {
   salvarPermissoes:    (id, dados) => api.put(`/configuracoes/permissoes/${id}`, dados),
   buscarIntegracoes:   () => api.get('/configuracoes/integracoes'),
   salvarIntegracao:    (modulo, dados) => api.put(`/configuracoes/integracoes/${modulo}`, dados),
+  horaServidor:        () => api.get('/configuracoes/servidor-hora'),
 };
 
 export default api;

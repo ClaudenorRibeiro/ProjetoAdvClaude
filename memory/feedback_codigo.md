@@ -157,3 +157,44 @@ try {
 - Sempre usar `export NEEDRESTART_MODE=a` para suprimir a tela roxa de restart de serviços
 - Seeds com tratamento de erro tolerante: `if node seeds/run.js; then ok; else warn; fi`
 - Scripts de instalação devem ser 100% silenciosos — zero interatividade com o usuário
+
+## MySQL Linux — Case Sensitivity (regra desde 10/06/2026)
+
+**ATENÇÃO CRÍTICA:** Linux MySQL é case-sensitive para nomes de tabelas. Windows não é.
+
+**O problema:** HeidiSQL (Windows) exporta nomes de tabelas em minúsculo (`tblproc`, `tblvara`). No Linux, `tblProc` e `tblproc` são tabelas diferentes. O código usa camelCase (`tblProc`, `tblVara`, etc.) — então o SQL importado precisa ser renomeado.
+
+**Solução para instalações novas:** `lower_case_table_names = 1` no MySQL config antes da primeira inicialização (script `2-instalar-servidor.sh`). Com isso, o MySQL trata nomes sem distinção de maiúsculas.
+⚠️ Essa configuração NUNCA pode ser mudada depois que o banco tem dados — o MySQL recusa na inicialização.
+
+**Solução para servidores já rodando:** Usar `RENAME TABLE tblforum TO tblForum;` etc. no HeidiSQL ou CLI. O script `4-deploy-sistema.sh` faz isso automaticamente após importar o SQL.
+
+**Nomes camelCase corretos (definitivos):**
+`tblForum, tblVara, tblPasta, tblProc, tblStatusProc, tblTipoProc, tblInstanciaProc, tblTituloProcAutor, tblTituloProcReu`
+
+**Em todo o código Node.js**, usar SEMPRE esses nomes com camelCase exato — nunca minúsculo.
+
+## Git — Histórico Reescrito (regra desde 10/06/2026)
+
+**Situação:** Quando o usuário autoriza limpar o histórico do git (`git push --force`), o servidor AWS fica com histórico incompatível. `git pull` vai falhar com divergência.
+
+**Comando correto no servidor (script `1-AtualizarSistema.sh`):**
+```bash
+git fetch origin && git reset --hard origin/main
+```
+Isso sempre funciona independentemente de reescrita de histórico.
+
+**NUNCA usar** `git pull` no servidor após qualquer `--force-push` local.
+
+## .gitignore — Cuidado com package.json (regra desde 10/06/2026)
+
+No `.gitignore`, usar `/package.json` (com barra na frente) para ignorar APENAS o da raiz.
+Sem a barra, `package.json` ignora TODOS os package.json do projeto — inclusive `backend/package.json` e `frontend/package.json`, fazendo `npm install` falhar no servidor.
+
+**Correto:**
+```
+/package.json
+/package-lock.json
+```
+
+Os arquivos `backend/package.json`, `backend/package-lock.json`, `frontend/package.json` e `frontend/package-lock.json` DEVEM estar no git.

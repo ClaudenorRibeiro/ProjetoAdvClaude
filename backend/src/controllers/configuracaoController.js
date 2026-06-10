@@ -382,6 +382,20 @@ async function redefinirSenhaAdmin(req, res) {
   }
 }
 
+// Retorna a data/hora atual do servidor e o fuso horário configurado
+function horaServidor(req, res) {
+  const agora    = new Date();
+  const fusoHora = Intl.DateTimeFormat('pt-BR', { timeZoneName: 'short' })
+                       .formatToParts(agora)
+                       .find(p => p.type === 'timeZoneName')?.value || '';
+
+  return sucesso(res, {
+    iso:          agora.toISOString(),       // ex: "2026-06-10T16:54:23.000Z"
+    fuso_horario: Intl.DateTimeFormat().resolvedOptions().timeZone, // ex: "America/Sao_Paulo"
+    fuso_abrev:   fusoHora,                  // ex: "BRT"
+  });
+}
+
 module.exports = {
   infoPublica,
   buscarEscritorio, atualizarEscritorio, marcarSetupConcluido,
@@ -389,4 +403,5 @@ module.exports = {
   listarUsuarios, criarUsuario, atualizarUsuario, redefinirSenhaAdmin,
   buscarPermissoes, salvarPermissoes,
   buscarIntegracoes, salvarIntegracao,
+  horaServidor,
 };

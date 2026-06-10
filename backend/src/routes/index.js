@@ -194,5 +194,6 @@ router.get('/configuracoes/permissoes/:usuarioId', autenticar, apenasAdmin, conf
 router.put('/configuracoes/permissoes/:usuarioId', autenticar, apenasAdmin, configuracaoCtrl.salvarPermissoes);
 router.get('/configuracoes/integracoes',          autenticar, apenasAdmin, configuracaoCtrl.buscarIntegracoes);
 router.put('/configuracoes/integracoes/:modulo',  autenticar, apenasAdmin, configuracaoCtrl.salvarIntegracao);
+router.get('/configuracoes/servidor-hora',        autenticar, apenasAdmin, configuracaoCtrl.horaServidor);
 
 module.exports = router;

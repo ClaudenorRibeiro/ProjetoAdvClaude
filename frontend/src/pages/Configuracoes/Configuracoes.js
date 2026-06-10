@@ -109,6 +109,72 @@ export default function Configuracoes() {
 // ============================================================
 // ABA: ESCRITÓRIO
 // ============================================================
+// ------------------------------------------------------------
+// Painel de Data e Hora do Servidor
+// Busca fuso horário uma vez no mount e exibe relógio ao vivo
+// ------------------------------------------------------------
+function PainelHoraServidor() {
+  const [fusoHorario, setFusoHorario] = useState('');
+  const [fusoAbrev,   setFusoAbrev]   = useState('');
+  const [horaAtual,   setHoraAtual]   = useState(new Date());
+
+  // Busca o fuso horário do servidor uma única vez
+  useEffect(() => {
+    configuracaoAPI.horaServidor().then(r => {
+      if (r.data.ok) {
+        setFusoHorario(r.data.dados.fuso_horario);
+        setFusoAbrev(r.data.dados.fuso_abrev);
+      }
+    }).catch(() => {}); // silencioso — não bloqueia a tela
+  }, []);
+
+  // Atualiza o relógio a cada segundo usando o horário local do navegador
+  // (após o servidor confirmar o fuso, o usuário sabe que está sincronizado)
+  useEffect(() => {
+    const timer = setInterval(() => setHoraAtual(new Date()), 1000);
+    return () => clearInterval(timer); // limpa ao desmontar
+  }, []);
+
+  const diaSemana = horaAtual.toLocaleDateString('pt-BR', { weekday: 'long' });
+  const dataFmt   = horaAtual.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+  const horaFmt   = horaAtual.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+  return (
+    <div style={{
+      background: '#f0f4ff',
+      border: '1px solid #c7d2fe',
+      borderRadius: '8px',
+      padding: '14px 20px',
+      marginBottom: '24px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '16px',
+    }}>
+      {/* Ícone */}
+      <div style={{ fontSize: '28px', lineHeight: 1 }}>🕐</div>
+
+      {/* Informações */}
+      <div>
+        <div style={{ fontSize: '11px', fontWeight: 600, color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>
+          Data e Hora do Servidor
+        </div>
+        <div style={{ fontSize: '15px', fontWeight: 600, color: '#1e2a3a' }}>
+          {/* Capitaliza primeira letra do dia da semana */}
+          {diaSemana.charAt(0).toUpperCase() + diaSemana.slice(1)}, {dataFmt}
+        </div>
+        <div style={{ fontSize: '20px', fontWeight: 700, color: '#1e2a3a', fontVariantNumeric: 'tabular-nums' }}>
+          {horaFmt}
+          {fusoAbrev && (
+            <span style={{ fontSize: '12px', fontWeight: 400, color: '#6b7280', marginLeft: '10px' }}>
+              {fusoAbrev} {fusoHorario && `• ${fusoHorario}`}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TabEscritorio() {
   const [form, setForm]         = useState({});
   const [salvando, setSalvando] = useState(false);
@@ -161,6 +227,7 @@ function TabEscritorio() {
 
   return (
     <div className="card">
+      <PainelHoraServidor />
       <h3 style={{marginBottom:'20px',fontSize:'15px',color:'#1e2a3a'}}>Dados do Escritório</h3>
       <div className="grid-2">
         <div className="form-group">

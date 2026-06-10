@@ -29,18 +29,20 @@ As tabelas antigas (`forum, vara, pasta, processo, partes_processo, status_proce
 | genero | Masculino, feminino, etc. |
 | profissao | Cadastro de profissões |
 
-### Processos e Pastas (tabelas definitivas — prefixo tbl)
+### Processos e Pastas (tabelas definitivas — prefixo tbl, nomes EXATOS com camelCase)
 | Tabela | Descrição |
 |--------|-----------|
-| tblpasta | Pastas dos clientes (campo `area_direito` varchar 50) |
-| tblproc | Processos vinculados às pastas |
-| tblvara | Varas (com `abrev_nome` para dropdowns) |
-| tblforum | Fóruns |
-| tblstatusproc | Status/fases do processo |
-| tbltipoproc | Tipos de processo |
-| tblinstanciaproc | Instâncias processuais |
-| tbltituloprocautor | Autores do processo (tipo_pessoa: fisica/juridica + pessoa_id) |
-| tbltituloprocreu | Réus do processo (tipo_pessoa: fisica/juridica + pessoa_id) |
+| tblPasta | Pastas dos clientes (campo `area_direito` varchar 50) |
+| tblProc | Processos vinculados às pastas |
+| tblVara | Varas (com `abrev_nome` para dropdowns) |
+| tblForum | Fóruns |
+| tblStatusProc | Status/fases do processo |
+| tblTipoProc | Tipos de processo |
+| tblInstanciaProc | Instâncias processuais |
+| tblTituloProcAutor | Autores do processo (tipo_pessoa: fisica/juridica + pessoa_id) |
+| tblTituloProcReu | Réus do processo (tipo_pessoa: fisica/juridica + pessoa_id) |
+
+⚠️ **Linux é case-sensitive:** usar SEMPRE esses nomes com camelCase exato no código Node.js e no banco. HeidiSQL (Windows) exporta em minúsculo — ao importar no Linux, renomear antes de usar. Ver `feedback_codigo.md` seção "MySQL Linux — Case Sensitivity".
 
 ### Prazos e Tarefas
 | Tabela | Descrição |
