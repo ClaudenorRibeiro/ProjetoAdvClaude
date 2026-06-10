@@ -29,8 +29,8 @@ backups/
 *.docx
 
 # package.json/lock da raiz (não é um pacote npm — é da raiz do projeto)
-package.json
-package-lock.json
+/package.json
+/package-lock.json
 
 # Guias de instalação — ficam só local
 INSTALACAO_AWS_LIGHTSAIL.txt
