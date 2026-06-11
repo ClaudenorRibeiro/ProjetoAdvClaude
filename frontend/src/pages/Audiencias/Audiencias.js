@@ -3,7 +3,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { audienciasAPI, processosAPI, pessoasAPI } from '../../services/api';
 import { formatarData, toTitleCase } from '../../utils/formatters';
 import { useAuth } from '../../context/AuthContext';
@@ -31,9 +31,18 @@ const STATUS_LABEL = {
 export default function Audiencias() {
   const { temPermissao, ehAdmin }  = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [lista, setLista]          = useState([]);
   const [total, setTotal]          = useState(0);
-  const [filtros, setFiltros]      = useState({ status: '', data_de: '', data_ate: '', pagina: 1 });
+
+  // Inicializa filtros a partir de query params da URL (ex: vindo do dashboard)
+  const params = new URLSearchParams(location.search);
+  const [filtros, setFiltros] = useState({
+    status:   params.get('status')   || '',
+    data_de:  params.get('data_de')  || '',
+    data_ate: params.get('data_ate') || '',
+    pagina: 1,
+  });
   const [tipos, setTipos]          = useState([]);
   const [carregando, setCarregando] = useState(false);
   const [modalNova, setModalNova]  = useState(false);

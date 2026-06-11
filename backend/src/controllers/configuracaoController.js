@@ -216,11 +216,25 @@ async function listarUsuarios(req, res) {
   }
 }
 
+// Valida requisitos de senha — retorna mensagem de erro ou null se válida
+function validarSenha(senha) {
+  if (!senha || senha.length < 8)   return 'A senha deve ter no mínimo 8 caracteres';
+  if (senha.length > 20)            return 'A senha deve ter no máximo 20 caracteres';
+  if (!/[A-Z]/.test(senha))         return 'A senha deve conter pelo menos 1 letra maiúscula';
+  if (!/[a-z]/.test(senha))         return 'A senha deve conter pelo menos 1 letra minúscula';
+  if (!/[0-9]/.test(senha))         return 'A senha deve conter pelo menos 1 número';
+  if (!/[^A-Za-z0-9]/.test(senha))  return 'A senha deve conter pelo menos 1 caractere especial';
+  return null;
+}
+
 // POST /api/configuracoes/usuarios — Cria usuário
 async function criarUsuario(req, res) {
   try {
     const { nome, login, senha, email, oab, tipo, nivel, ver_todos_processos } = req.body;
     if (!nome || !login || !senha) return erro(res, 'Nome, login e senha são obrigatórios');
+
+    const errSenha = validarSenha(senha);
+    if (errSenha) return erro(res, errSenha);
 
     const [dup] = await pool.execute('SELECT id FROM usuarios WHERE login = ?', [login]);
     if (dup.length) return erro(res, 'Login já está em uso');
@@ -253,8 +267,10 @@ async function atualizarUsuario(req, res) {
     if (!usuario.length) return naoEncontrado(res, 'Usuário não encontrado');
     if (usuario[0].nivel === 0) return erro(res, 'Não é possível alterar o superusuário por aqui', 403);
 
-    // Se foi enviada nova senha, atualiza o hash
+    // Se foi enviada nova senha, valida e atualiza o hash
     if (senha) {
+      const errSenha = validarSenha(senha);
+      if (errSenha) return erro(res, errSenha);
       const novoHash = await bcrypt.hash(senha, 12);
       await pool.execute(
         'UPDATE usuarios SET senha_hash = ? WHERE id = ?', [novoHash, id]
@@ -365,7 +381,9 @@ async function redefinirSenhaAdmin(req, res) {
   try {
     const { id } = req.params;
     const { senha } = req.body;
-    if (!senha || senha.length < 6) return erro(res, 'A senha deve ter no mínimo 6 caracteres');
+    if (!senha) return erro(res, 'A senha é obrigatória');
+    const errSenha = validarSenha(senha);
+    if (errSenha) return erro(res, errSenha);
 
     const [rows] = await pool.execute('SELECT id FROM usuarios WHERE id = ? AND ativo = 1', [id]);
     if (!rows.length) return naoEncontrado(res, 'Usuário não encontrado');

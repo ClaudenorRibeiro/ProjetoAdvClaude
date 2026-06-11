@@ -447,6 +447,19 @@ function TabUsuarios() {
   );
 }
 
+// Valida requisitos de senha — retorna mensagem de erro ou null se válida
+function validarSenha(senha) {
+  if (!senha || senha.length < 8)   return 'A senha deve ter no mínimo 8 caracteres';
+  if (senha.length > 20)            return 'A senha deve ter no máximo 20 caracteres';
+  if (!/[A-Z]/.test(senha))         return 'A senha deve conter pelo menos 1 letra maiúscula';
+  if (!/[a-z]/.test(senha))         return 'A senha deve conter pelo menos 1 letra minúscula';
+  if (!/[0-9]/.test(senha))         return 'A senha deve conter pelo menos 1 número';
+  if (!/[^A-Za-z0-9]/.test(senha))  return 'A senha deve conter pelo menos 1 caractere especial';
+  return null;
+}
+
+const DICA_SENHA = 'Entre 8 e 20 caracteres, com letra maiúscula, minúscula, número e caractere especial.';
+
 // Modal para admin redefinir senha de um usuário
 function ModalRedefinirSenha({ usuario, onFechar }) {
   const [senha, setSenha]       = useState('');
@@ -454,7 +467,8 @@ function ModalRedefinirSenha({ usuario, onFechar }) {
   const [salvando, setSalvando] = useState(false);
 
   async function salvar() {
-    if (senha.length < 6)  return toast.error('A senha deve ter no mínimo 6 caracteres');
+    const errSenha = validarSenha(senha);
+    if (errSenha) return toast.error(errSenha);
     if (senha !== confirma) return toast.error('As senhas não coincidem');
     setSalvando(true);
     try {
@@ -483,8 +497,9 @@ function ModalRedefinirSenha({ usuario, onFechar }) {
             <label className="form-label">Nova senha *</label>
             <input type="password" className="form-control"
               value={senha} onChange={e => setSenha(e.target.value)}
-              placeholder="Mínimo 6 caracteres" autoFocus
+              placeholder="Nova senha" autoFocus
               autoComplete="new-password" />
+            <small style={{ color: '#777', fontSize: '12px' }}>{DICA_SENHA}</small>
           </div>
           <div className="form-group">
             <label className="form-label">Confirmar senha *</label>
@@ -515,6 +530,10 @@ function ModalUsuario({ usuario, onFechar }) {
     if (!form.nome)  return toast.error('Nome é obrigatório');
     if (!form.login) return toast.error('Login é obrigatório');
     if (!usuario && !form.senha) return toast.error('Senha é obrigatória para novo usuário');
+    if (form.senha) {
+      const errSenha = validarSenha(form.senha);
+      if (errSenha) return toast.error(errSenha);
+    }
     setSalvando(true);
     try {
       if (usuario?.id) {
@@ -552,14 +571,18 @@ function ModalUsuario({ usuario, onFechar }) {
             <div className="form-group">
               <label className="form-label">Senha *</label>
               <input type="password" className="form-control" value={form.senha||''}
-                onChange={e => set('senha', e.target.value)} placeholder="Mínimo 6 caracteres" />
+                onChange={e => set('senha', e.target.value)} placeholder="Senha"
+                autoComplete="new-password" />
+              <small style={{ color: '#777', fontSize: '12px' }}>{DICA_SENHA}</small>
             </div>
           )}
           {usuario && (
             <div className="form-group">
               <label className="form-label">Nova senha (deixe em branco para não alterar)</label>
               <input type="password" className="form-control" value={form.senha||''}
-                onChange={e => set('senha', e.target.value)} />
+                onChange={e => set('senha', e.target.value)} placeholder="Nova senha"
+                autoComplete="new-password" />
+              {form.senha && <small style={{ color: '#777', fontSize: '12px' }}>{DICA_SENHA}</small>}
             </div>
           )}
           <div className="grid-3">

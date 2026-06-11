@@ -49,7 +49,7 @@ export default function Dashboard() {
         <CardContador titulo="Prazos Atrasados" valor={contadores.prazos_atrasados}  cor="vermelho" link="/prazos?status=atrasado" />
         <CardContador titulo="Tarefas"          valor={contadores.tarefas_pendentes} cor="laranja"  link="/tarefas" />
         <CardContador titulo="Tarefas Atrasadas"valor={contadores.tarefas_atrasadas} cor="vermelho" link="/tarefas?atrasadas=1" />
-        <CardContador titulo="Audiências Hoje"       valor={contadores.audiencias_hoje}    cor="verde"    link="/audiencias" />
+        <CardContador titulo="Audiências Hoje"       valor={contadores.audiencias_hoje}    cor="verde"    link={`/audiencias?data_de=${new Date().toISOString().slice(0,10)}&data_ate=${new Date().toISOString().slice(0,10)}`} />
         <CardContador titulo="Audiências Sem Adv."  valor={contadores.audiencias_sem_adv} cor="laranja"  link="/audiencias" />
         <CardContador titulo="Perícias Hoje"         valor={contadores.pericias_hoje}      cor="roxo"     link="/pericias" />
       </div>
