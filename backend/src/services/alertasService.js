@@ -9,8 +9,6 @@ const { diasUteisAntes } = require('./calendarioService');
 const { emailPrazosPendentes, emailPrazosAtrasados } = require('./notificacaoService');
 const { liberarFazendoExpirados } = require('../controllers/prazosController');
 
-// Controle em memória para não enviar dois e-mails no mesmo dia
-const enviadoHoje = { pendentes: null, atrasados: null };
 
 // ── Inicia todos os cron jobs do sistema ──────────────────────────────────
 
@@ -45,7 +43,7 @@ function iniciarAlertas() {
 async function verificarHorarioAlertas() {
   try {
     const [config] = await pool.execute(
-      'SELECT horario_alerta_prazos, alerta_atrasado_ativo, alerta_emails, nome FROM configuracoes_escritorio LIMIT 1'
+      'SELECT horario_alerta_prazos, alerta_atrasado_ativo, alerta_emails, nome, alerta_pendentes_enviado, alerta_atrasados_enviado FROM configuracoes_escritorio LIMIT 1'
     );
     if (!config.length || !config[0].horario_alerta_prazos || !config[0].alerta_emails) return;
 
@@ -60,13 +58,21 @@ async function verificarHorarioAlertas() {
     const destinatarios = config[0].alerta_emails.split(',').map(e => e.trim()).filter(Boolean);
     const escritorio    = config[0].nome;
 
-    if (enviadoHoje.pendentes !== hoje) {
+    const toStr = v => v ? (v instanceof Date ? v.toISOString().slice(0,10) : String(v).slice(0,10)) : null;
+    const jaEnviouPendentes = toStr(config[0].alerta_pendentes_enviado) === hoje;
+    const jaEnviouAtrasados = toStr(config[0].alerta_atrasados_enviado) === hoje;
+
+    if (!jaEnviouPendentes) {
       await enviarAlertaPendentes(destinatarios, escritorio);
-      enviadoHoje.pendentes = hoje;
+      await pool.execute(
+        'UPDATE configuracoes_escritorio SET alerta_pendentes_enviado = ? WHERE id = 1', [hoje]
+      );
     }
-    if (config[0].alerta_atrasado_ativo && enviadoHoje.atrasados !== hoje) {
+    if (config[0].alerta_atrasado_ativo && !jaEnviouAtrasados) {
       await enviarAlertaAtrasados(destinatarios, escritorio);
-      enviadoHoje.atrasados = hoje;
+      await pool.execute(
+        'UPDATE configuracoes_escritorio SET alerta_atrasados_enviado = ? WHERE id = 1', [hoje]
+      );
     }
   } catch (err) {
     console.error('Erro ao verificar horário de alertas:', err.message);

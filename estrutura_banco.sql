@@ -11247,12 +11247,14 @@ CREATE TABLE IF NOT EXISTS `configuracoes_escritorio` (
   `alerta_emails` text,
   `prazo_fazendo_timeout` int NOT NULL DEFAULT '60',
   `titulo_aba` varchar(100) DEFAULT NULL COMMENT 'Título exibido na aba do navegador',
+  `alerta_pendentes_enviado` date DEFAULT NULL,
+  `alerta_atrasados_enviado` date DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Copiando dados para a tabela sistema_advocacia.configuracoes_escritorio: ~1 rows (aproximadamente)
-INSERT INTO `configuracoes_escritorio` (`id`, `nome`, `cnpj_cpf`, `email`, `telefone`, `endereco`, `cep`, `logradouro`, `numero`, `bairro`, `cidade`, `estado`, `logo_path`, `cor_principal`, `horario_alerta_prazos`, `dias_alerta_audiencia`, `dias_alerta_pericia`, `dias_sem_movimentacao`, `dias_audiencia_sem_adv`, `setup_concluido`, `criado_em`, `alerta_atrasado_ativo`, `alerta_emails`, `prazo_fazendo_timeout`, `titulo_aba`) VALUES
-	(1, 'Dr. Antonio Ferreira da Costa', '866.204.449-20', 'contato@antonio.adv.br', '654654654', NULL, '03818-030', 'Rua Lagoa D\'anta', '70', 'Parque Císper', 'São Paulo', 'SP', NULL, '#1a56db', '10:00:00', 3, 2, 30, 7, 1, '2026-05-23 00:58:18', 1, 'visaoecultura@gmail.com, ednasvlr@gmail,.com', 60, NULL);
+INSERT INTO `configuracoes_escritorio` (`id`, `nome`, `cnpj_cpf`, `email`, `telefone`, `endereco`, `cep`, `logradouro`, `numero`, `bairro`, `cidade`, `estado`, `logo_path`, `cor_principal`, `horario_alerta_prazos`, `dias_alerta_audiencia`, `dias_alerta_pericia`, `dias_sem_movimentacao`, `dias_audiencia_sem_adv`, `setup_concluido`, `criado_em`, `alerta_atrasado_ativo`, `alerta_emails`, `prazo_fazendo_timeout`, `titulo_aba`, `alerta_pendentes_enviado`, `alerta_atrasados_enviado`) VALUES
+	(1, 'Dr. Antonio Ferreira da Costa', '866.204.449-20', 'contato@antonio.adv.br', '654654654', NULL, '03818-030', 'Rua Lagoa D\'anta', '70', 'Parque Císper', 'São Paulo', 'SP', NULL, '#1a56db', '10:00:00', 3, 2, 30, 7, 1, '2026-05-23 00:58:18', 1, 'visaoecultura@gmail.com, ednasvlr@gmail,.com', 60, NULL, NULL, NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.configuracoes_integracoes
 DROP TABLE IF EXISTS `configuracoes_integracoes`;
@@ -11428,7 +11430,7 @@ CREATE TABLE IF NOT EXISTS `logs_auditoria` (
   KEY `idx_tabela` (`tabela`),
   KEY `idx_usuario` (`usuario_id`),
   KEY `idx_data` (`criado_em`)
-) ENGINE=InnoDB AUTO_INCREMENT=118 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=119 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Copiando dados para a tabela sistema_advocacia.logs_auditoria: ~117 rows (aproximadamente)
 INSERT INTO `logs_auditoria` (`id`, `usuario_id`, `tabela`, `acao`, `registro_id`, `dados_antigos`, `dados_novos`, `criado_em`) VALUES
@@ -11548,7 +11550,8 @@ INSERT INTO `logs_auditoria` (`id`, `usuario_id`, `tabela`, `acao`, `registro_id
 	(114, 2, 'usuarios', 'editar', 3, NULL, NULL, '2026-06-11 09:33:25'),
 	(115, 2, 'usuarios', 'editar', 4, NULL, NULL, '2026-06-11 09:33:42'),
 	(116, 2, 'usuarios', 'editar', 5, NULL, NULL, '2026-06-11 09:33:54'),
-	(117, 2, 'usuarios', 'criar', 7, NULL, NULL, '2026-06-11 09:35:10');
+	(117, 2, 'usuarios', 'criar', 7, NULL, NULL, '2026-06-11 09:35:10'),
+	(118, 2, 'usuarios', 'criar', 8, NULL, NULL, '2026-06-11 10:48:42');
 
 -- Copiando estrutura para tabela sistema_advocacia.log_comunicacoes
 DROP TABLE IF EXISTS `log_comunicacoes`;
@@ -11708,74 +11711,10 @@ CREATE TABLE IF NOT EXISTS `permissoes` (
   PRIMARY KEY (`id`),
   KEY `idx_usuario_modulo` (`usuario_id`,`modulo`,`submodulo`,`acao`),
   CONSTRAINT `permissoes_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=2268 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2363 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Copiando dados para a tabela sistema_advocacia.permissoes: ~439 rows (aproximadamente)
 INSERT INTO `permissoes` (`id`, `usuario_id`, `modulo`, `submodulo`, `acao`, `permitido`) VALUES
-	(585, 5, 'pessoas', NULL, 'visualizar', 1),
-	(586, 5, 'pessoas', NULL, 'cadastrar', 1),
-	(587, 5, 'pessoas', NULL, 'alterar', 1),
-	(588, 5, 'pessoas', NULL, 'excluir', 0),
-	(589, 5, 'processos', NULL, 'visualizar', 1),
-	(590, 5, 'processos', NULL, 'cadastrar', 1),
-	(591, 5, 'processos', NULL, 'alterar', 1),
-	(592, 5, 'processos', NULL, 'excluir', 0),
-	(593, 5, 'processos', 'andamentos', 'visualizar', 1),
-	(594, 5, 'processos', 'andamentos', 'cadastrar', 1),
-	(595, 5, 'processos', 'andamentos', 'alterar', 1),
-	(596, 5, 'processos', 'andamentos', 'excluir', 1),
-	(597, 5, 'processos', 'prazos', 'visualizar', 1),
-	(598, 5, 'processos', 'prazos', 'cadastrar', 1),
-	(599, 5, 'processos', 'prazos', 'alterar', 1),
-	(600, 5, 'processos', 'prazos', 'excluir', 1),
-	(601, 5, 'processos', 'tarefas', 'visualizar', 1),
-	(602, 5, 'processos', 'tarefas', 'cadastrar', 1),
-	(603, 5, 'processos', 'tarefas', 'alterar', 1),
-	(604, 5, 'processos', 'tarefas', 'excluir', 1),
-	(605, 5, 'processos', 'audiencias', 'visualizar', 1),
-	(606, 5, 'processos', 'audiencias', 'cadastrar', 1),
-	(607, 5, 'processos', 'audiencias', 'alterar', 1),
-	(608, 5, 'processos', 'audiencias', 'excluir', 1),
-	(609, 5, 'processos', 'pericias', 'visualizar', 1),
-	(610, 5, 'processos', 'pericias', 'cadastrar', 1),
-	(611, 5, 'processos', 'pericias', 'alterar', 1),
-	(612, 5, 'processos', 'pericias', 'excluir', 1),
-	(613, 5, 'pastas', NULL, 'visualizar', 1),
-	(614, 5, 'pastas', NULL, 'cadastrar', 1),
-	(615, 5, 'pastas', NULL, 'alterar', 1),
-	(616, 5, 'pastas', NULL, 'excluir', 0),
-	(617, 5, 'prazos', NULL, 'visualizar', 1),
-	(618, 5, 'prazos', NULL, 'cadastrar', 1),
-	(619, 5, 'prazos', NULL, 'alterar', 1),
-	(620, 5, 'prazos', NULL, 'excluir', 0),
-	(621, 5, 'tarefas', NULL, 'visualizar', 1),
-	(622, 5, 'tarefas', NULL, 'cadastrar', 1),
-	(623, 5, 'tarefas', NULL, 'alterar', 1),
-	(624, 5, 'tarefas', NULL, 'excluir', 0),
-	(625, 5, 'audiencias', NULL, 'visualizar', 1),
-	(626, 5, 'audiencias', NULL, 'cadastrar', 1),
-	(627, 5, 'audiencias', NULL, 'alterar', 1),
-	(628, 5, 'audiencias', NULL, 'excluir', 0),
-	(629, 5, 'pericias', NULL, 'visualizar', 1),
-	(630, 5, 'pericias', NULL, 'cadastrar', 1),
-	(631, 5, 'pericias', NULL, 'alterar', 1),
-	(632, 5, 'pericias', NULL, 'excluir', 0),
-	(633, 5, 'financeiro', NULL, 'visualizar', 1),
-	(634, 5, 'financeiro', NULL, 'cadastrar', 1),
-	(635, 5, 'financeiro', NULL, 'alterar', 1),
-	(636, 5, 'financeiro', NULL, 'excluir', 0),
-	(637, 5, 'documentos', NULL, 'visualizar', 1),
-	(638, 5, 'documentos', NULL, 'cadastrar', 1),
-	(639, 5, 'documentos', NULL, 'alterar', 1),
-	(640, 5, 'documentos', NULL, 'excluir', 0),
-	(641, 5, 'publicacoes', NULL, 'visualizar', 1),
-	(642, 5, 'publicacoes', NULL, 'cadastrar', 1),
-	(643, 5, 'publicacoes', NULL, 'alterar', 1),
-	(644, 5, 'publicacoes', NULL, 'excluir', 0),
-	(645, 5, 'relatorios', NULL, 'visualizar', 1),
-	(646, 5, 'relatorios', NULL, 'cadastrar', 1),
-	(647, 5, 'relatorios', NULL, 'alterar', 1),
-	(648, 5, 'relatorios', NULL, 'excluir', 0),
 	(853, 4, 'pessoas', NULL, 'visualizar', 1),
 	(854, 4, 'pessoas', NULL, 'cadastrar', 1),
 	(855, 4, 'pessoas', NULL, 'alterar', 1),
@@ -12150,7 +12089,102 @@ INSERT INTO `permissoes` (`id`, `usuario_id`, `modulo`, `submodulo`, `acao`, `pe
 	(2264, 7, 'relatorios', NULL, 'cadastrar', 1),
 	(2265, 7, 'relatorios', NULL, 'alterar', 1),
 	(2266, 7, 'relatorios', NULL, 'excluir', 1),
-	(2267, 7, 'relatorios', NULL, 'historico', 1);
+	(2267, 7, 'relatorios', NULL, 'historico', 1),
+	(2268, 5, 'pessoas', NULL, 'visualizar', 1),
+	(2269, 5, 'pessoas', NULL, 'cadastrar', 1),
+	(2270, 5, 'pessoas', NULL, 'alterar', 1),
+	(2271, 5, 'pessoas', NULL, 'excluir', 0),
+	(2272, 5, 'pessoas', NULL, 'historico', 0),
+	(2273, 5, 'processos', NULL, 'visualizar', 1),
+	(2274, 5, 'processos', NULL, 'cadastrar', 1),
+	(2275, 5, 'processos', NULL, 'alterar', 1),
+	(2276, 5, 'processos', NULL, 'excluir', 0),
+	(2277, 5, 'processos', NULL, 'historico', 0),
+	(2278, 5, 'processos', 'andamentos', 'visualizar', 1),
+	(2279, 5, 'processos', 'andamentos', 'cadastrar', 1),
+	(2280, 5, 'processos', 'andamentos', 'alterar', 1),
+	(2281, 5, 'processos', 'andamentos', 'excluir', 1),
+	(2282, 5, 'processos', 'andamentos', 'historico', 0),
+	(2283, 5, 'processos', 'prazos', 'visualizar', 1),
+	(2284, 5, 'processos', 'prazos', 'cadastrar', 1),
+	(2285, 5, 'processos', 'prazos', 'alterar', 1),
+	(2286, 5, 'processos', 'prazos', 'excluir', 1),
+	(2287, 5, 'processos', 'prazos', 'historico', 0),
+	(2288, 5, 'processos', 'tarefas', 'visualizar', 1),
+	(2289, 5, 'processos', 'tarefas', 'cadastrar', 1),
+	(2290, 5, 'processos', 'tarefas', 'alterar', 1),
+	(2291, 5, 'processos', 'tarefas', 'excluir', 1),
+	(2292, 5, 'processos', 'tarefas', 'historico', 0),
+	(2293, 5, 'processos', 'audiencias', 'visualizar', 1),
+	(2294, 5, 'processos', 'audiencias', 'cadastrar', 1),
+	(2295, 5, 'processos', 'audiencias', 'alterar', 1),
+	(2296, 5, 'processos', 'audiencias', 'excluir', 1),
+	(2297, 5, 'processos', 'audiencias', 'historico', 0),
+	(2298, 5, 'processos', 'pericias', 'visualizar', 1),
+	(2299, 5, 'processos', 'pericias', 'cadastrar', 1),
+	(2300, 5, 'processos', 'pericias', 'alterar', 1),
+	(2301, 5, 'processos', 'pericias', 'excluir', 1),
+	(2302, 5, 'processos', 'pericias', 'historico', 0),
+	(2303, 5, 'pastas', NULL, 'visualizar', 1),
+	(2304, 5, 'pastas', NULL, 'cadastrar', 1),
+	(2305, 5, 'pastas', NULL, 'alterar', 1),
+	(2306, 5, 'pastas', NULL, 'excluir', 0),
+	(2307, 5, 'pastas', NULL, 'historico', 0),
+	(2308, 5, 'prazos', NULL, 'visualizar', 1),
+	(2309, 5, 'prazos', NULL, 'cadastrar', 1),
+	(2310, 5, 'prazos', NULL, 'alterar', 1),
+	(2311, 5, 'prazos', NULL, 'excluir', 0),
+	(2312, 5, 'prazos', NULL, 'historico', 0),
+	(2313, 5, 'prazos', 'ver_todos', 'visualizar', 0),
+	(2314, 5, 'prazos', 'ver_todos', 'cadastrar', 0),
+	(2315, 5, 'prazos', 'ver_todos', 'alterar', 0),
+	(2316, 5, 'prazos', 'ver_todos', 'excluir', 0),
+	(2317, 5, 'prazos', 'ver_todos', 'historico', 0),
+	(2318, 5, 'tarefas', NULL, 'visualizar', 1),
+	(2319, 5, 'tarefas', NULL, 'cadastrar', 1),
+	(2320, 5, 'tarefas', NULL, 'alterar', 1),
+	(2321, 5, 'tarefas', NULL, 'excluir', 0),
+	(2322, 5, 'tarefas', NULL, 'historico', 0),
+	(2323, 5, 'tarefas', 'ver_todos', 'visualizar', 0),
+	(2324, 5, 'tarefas', 'ver_todos', 'cadastrar', 0),
+	(2325, 5, 'tarefas', 'ver_todos', 'alterar', 0),
+	(2326, 5, 'tarefas', 'ver_todos', 'excluir', 0),
+	(2327, 5, 'tarefas', 'ver_todos', 'historico', 0),
+	(2328, 5, 'audiencias', NULL, 'visualizar', 1),
+	(2329, 5, 'audiencias', NULL, 'cadastrar', 1),
+	(2330, 5, 'audiencias', NULL, 'alterar', 1),
+	(2331, 5, 'audiencias', NULL, 'excluir', 0),
+	(2332, 5, 'audiencias', NULL, 'historico', 0),
+	(2333, 5, 'audiencias', 'tipos', 'visualizar', 0),
+	(2334, 5, 'audiencias', 'tipos', 'cadastrar', 0),
+	(2335, 5, 'audiencias', 'tipos', 'alterar', 0),
+	(2336, 5, 'audiencias', 'tipos', 'excluir', 0),
+	(2337, 5, 'audiencias', 'tipos', 'historico', 0),
+	(2338, 5, 'pericias', NULL, 'visualizar', 1),
+	(2339, 5, 'pericias', NULL, 'cadastrar', 1),
+	(2340, 5, 'pericias', NULL, 'alterar', 1),
+	(2341, 5, 'pericias', NULL, 'excluir', 1),
+	(2342, 5, 'pericias', NULL, 'historico', 0),
+	(2343, 5, 'financeiro', NULL, 'visualizar', 1),
+	(2344, 5, 'financeiro', NULL, 'cadastrar', 1),
+	(2345, 5, 'financeiro', NULL, 'alterar', 1),
+	(2346, 5, 'financeiro', NULL, 'excluir', 0),
+	(2347, 5, 'financeiro', NULL, 'historico', 0),
+	(2348, 5, 'documentos', NULL, 'visualizar', 1),
+	(2349, 5, 'documentos', NULL, 'cadastrar', 1),
+	(2350, 5, 'documentos', NULL, 'alterar', 1),
+	(2351, 5, 'documentos', NULL, 'excluir', 0),
+	(2352, 5, 'documentos', NULL, 'historico', 0),
+	(2353, 5, 'publicacoes', NULL, 'visualizar', 1),
+	(2354, 5, 'publicacoes', NULL, 'cadastrar', 1),
+	(2355, 5, 'publicacoes', NULL, 'alterar', 1),
+	(2356, 5, 'publicacoes', NULL, 'excluir', 0),
+	(2357, 5, 'publicacoes', NULL, 'historico', 0),
+	(2358, 5, 'relatorios', NULL, 'visualizar', 1),
+	(2359, 5, 'relatorios', NULL, 'cadastrar', 1),
+	(2360, 5, 'relatorios', NULL, 'alterar', 1),
+	(2361, 5, 'relatorios', NULL, 'excluir', 0),
+	(2362, 5, 'relatorios', NULL, 'historico', 0);
 
 -- Copiando estrutura para tabela sistema_advocacia.pessoas_fisicas
 DROP TABLE IF EXISTS `pessoas_fisicas`;
@@ -12919,17 +12953,18 @@ CREATE TABLE IF NOT EXISTS `usuarios` (
   `notif_tela` tinyint(1) DEFAULT '1',
   PRIMARY KEY (`id`),
   KEY `idx_login` (`login`)
-) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Copiando dados para a tabela sistema_advocacia.usuarios: ~7 rows (aproximadamente)
 INSERT INTO `usuarios` (`id`, `nome`, `login`, `senha_hash`, `email`, `oab`, `tipo`, `nivel`, `ativo`, `ver_todos_processos`, `criado_em`, `criado_por`, `ultimo_acesso`, `notif_email`, `notif_tela`) VALUES
 	(1, 'Superusuário', 'superadmin', '$2a$12$6vzSy/RUw.HOUdaJurzjoei0THb0ZrBmKuHfOxU9A1xpvDnKwv4GW', NULL, NULL, 'administrador', 0, 1, 0, '2026-05-23 00:59:32', NULL, '2026-06-09 20:26:28', 1, 1),
-	(2, 'Claudio', 'claudio', '$2a$12$0SCACm4vro7kpi8QC28jlOnJw6V2J7Ciz4EOOgKpnAaefHhP0shXq', 'claudio@antonio.adv.br', NULL, 'administrador', 1, 1, 1, '2026-05-23 01:06:19', 1, '2026-06-11 08:31:24', 1, 1),
+	(2, 'Claudio', 'claudio', '$2a$12$0SCACm4vro7kpi8QC28jlOnJw6V2J7Ciz4EOOgKpnAaefHhP0shXq', 'claudio@antonio.adv.br', NULL, 'administrador', 1, 1, 1, '2026-05-23 01:06:19', 1, '2026-06-11 10:46:00', 1, 1),
 	(3, 'edna', 'edna', '$2a$12$zHJRLurJ4WOgjWhf6JEvteVrp095BMfRtOZfdxqtMg0dT4OxTiu9G', 'ednasvlr@gmail.com', NULL, 'advogado', 1, 1, 1, '2026-05-23 10:35:04', 1, '2026-06-08 16:24:51', 1, 1),
 	(4, 'Erick', 'erick', '$2a$12$QM8unf8KeJC/qyibJNEiOeNwgZ0ebgm1zay0MBWbpTkMj8nW6Jclm', NULL, NULL, 'advogado', 2, 1, 0, '2026-05-29 13:49:05', 2, '2026-06-02 09:40:14', 1, 1),
 	(5, 'Evellyn', 'evellyn', '$2a$12$ndwGKWme085Gg.qaoB9AQeHEod6MVuOFRT1BOiufCmS0r8EgJGkmy', NULL, NULL, 'advogado', 2, 1, 0, '2026-05-30 00:29:53', 2, '2026-05-31 13:02:21', 1, 1),
 	(6, 'Alysson', 'Alysson', '$2a$12$BYXYvn6T28TeVpbK7tnehea6pHhsZyJGQhjoUswlMsbpDmMH1uUES', 'alysson@antonio.adv.br', NULL, 'advogado', 1, 1, 0, '2026-06-11 09:11:43', 2, NULL, 1, 1),
-	(7, 'Angela', 'Angela', '$2a$12$hMNYVQ4RoUdVcWczn7wbUOTQyvMsO.O/ZfW/UMpouJ9kjddXRvs9y', 'angela@antonio.adv.br', NULL, 'advogado', 2, 1, 0, '2026-06-11 09:35:10', 2, NULL, 1, 1);
+	(7, 'Angela', 'Angela', '$2a$12$hMNYVQ4RoUdVcWczn7wbUOTQyvMsO.O/ZfW/UMpouJ9kjddXRvs9y', 'angela@antonio.adv.br', NULL, 'advogado', 2, 1, 0, '2026-06-11 09:35:10', 2, NULL, 1, 1),
+	(8, 'Teste', 'teste', '$2a$12$OwNh8qnIKm0pUwCfMGISReK2.SdSOI01znccCmOV7xt6Rt8B.i9uO', NULL, NULL, 'advogado', 2, 1, 0, '2026-06-11 10:48:42', 2, NULL, 1, 1);
 
 /*!40103 SET TIME_ZONE=IFNULL(@OLD_TIME_ZONE, 'system') */;
 /*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;

@@ -11,6 +11,16 @@ const { sucesso, erro, erroInterno, naoAutorizado } = require('../utils/response
 const { buscarPermissoesUsuario } = require('../middleware/permissoes');
 const { enviarEmail, templateResetSenha } = require('../utils/email');
 
+function validarSenha(senha) {
+  if (!senha || senha.length < 8)   return 'A senha deve ter no mínimo 8 caracteres';
+  if (senha.length > 20)            return 'A senha deve ter no máximo 20 caracteres';
+  if (!/[A-Z]/.test(senha))         return 'A senha deve conter pelo menos 1 letra maiúscula';
+  if (!/[a-z]/.test(senha))         return 'A senha deve conter pelo menos 1 letra minúscula';
+  if (!/[0-9]/.test(senha))         return 'A senha deve conter pelo menos 1 número';
+  if (!/[^A-Za-z0-9]/.test(senha))  return 'A senha deve conter pelo menos 1 caractere especial';
+  return null;
+}
+
 // POST /api/auth/login
 // Autentica o usuário e retorna o token JWT
 async function login(req, res) {
@@ -107,9 +117,8 @@ async function criarPrimeiroAdmin(req, res) {
     if (!nome || !loginAdmin || !senha) {
       return erro(res, 'Nome, login e senha são obrigatórios');
     }
-    if (senha.length < 6) {
-      return erro(res, 'A senha deve ter no mínimo 6 caracteres');
-    }
+    const errSenha1 = validarSenha(senha);
+    if (errSenha1) return erro(res, errSenha1);
 
     // Verifica se o login já existe
     const [existente] = await pool.execute(
@@ -226,7 +235,8 @@ async function redefinirSenha(req, res) {
   try {
     const { token, senha } = req.body;
     if (!token || !senha) return erro(res, 'Token e nova senha são obrigatórios');
-    if (senha.length < 6)  return erro(res, 'A senha deve ter no mínimo 6 caracteres');
+    const errSenha2 = validarSenha(senha);
+    if (errSenha2) return erro(res, errSenha2);
 
     const [rows] = await pool.execute(
       `SELECT rt.id, rt.usuario_id FROM reset_tokens rt
@@ -265,9 +275,8 @@ async function trocarSenha(req, res) {
     if (!senha_atual || !nova_senha || !confirmar_senha) {
       return erro(res, 'Preencha todos os campos');
     }
-    if (nova_senha.length < 6) {
-      return erro(res, 'A nova senha deve ter no mínimo 6 caracteres');
-    }
+    const errSenha3 = validarSenha(nova_senha);
+    if (errSenha3) return erro(res, errSenha3);
     if (nova_senha !== confirmar_senha) {
       return erro(res, 'A nova senha e a confirmação não coincidem');
     }
