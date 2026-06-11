@@ -11,6 +11,7 @@ import ptBR from 'date-fns/locale/pt-BR';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
 import { prazosAPI, audienciasAPI, tarefasAPI, periciasAPI } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
 
 // Configuração do localizador com pt-BR
@@ -49,14 +50,21 @@ const COR_EVENTO = {
 };
 
 export default function Agenda() {
+  const { usuario } = useAuth();
   const [eventos, setEventos]   = useState([]);
   const [dataAtual, setDataAtual] = useState(new Date());
   const [visao, setVisao]       = useState('month');
   const [carregando, setCarregando] = useState(false);
   const [eventoSelecionado, setEventoSelecionado] = useState(null);
   const [filtros, setFiltros]   = useState({
-    prazos: true, audiencias: true, pericias: true, tarefas: true
+    prazos: true, audiencias: true, pericias: true, tarefas: true, escritorio: false
   });
+
+  // Título dinâmico
+  const titulo = filtros.escritorio ? 'Escritório' : (usuario?.nome || '');
+
+  // ID do usuário logado — null quando modo escritório (sem filtro)
+  const usuarioId = filtros.escritorio ? null : usuario?.id;
 
   // Carrega eventos quando o mês ou filtros mudam
   const carregarEventos = useCallback(async () => {
@@ -69,7 +77,7 @@ export default function Agenda() {
 
       if (filtros.prazos) {
         promises.push(
-          prazosAPI.listar({ data_de, data_ate, limite: 200 })
+          prazosAPI.listar({ data_de, data_ate, limite: 200, ...(usuarioId && { usuario_id: usuarioId }) })
             .then(r => r.data.ok ? r.data.dados.registros.map(p => ({
               id: `prazo-${p.id}`,
               title: `📋 ${p.subtipo_nome || p.descricao || 'Prazo'}`,
@@ -85,7 +93,7 @@ export default function Agenda() {
 
       if (filtros.audiencias) {
         promises.push(
-          audienciasAPI.listar({ data_de, data_ate, limite: 200 })
+          audienciasAPI.listar({ data_de, data_ate, limite: 200, ...(usuarioId && { responsavel_id: usuarioId }) })
             .then(r => r.data.ok ? r.data.dados.registros.map(a => ({
               id: `audiencia-${a.id}`,
               title: `⚖️ ${a.tipo_nome || 'Audiência'} — ${a.processo_numero || ''}`,
@@ -101,7 +109,7 @@ export default function Agenda() {
 
       if (filtros.pericias) {
         promises.push(
-          periciasAPI.listar({ data_de, data_ate, limite: 200 })
+          periciasAPI.listar({ data_de, data_ate, limite: 200, ...(usuarioId && { assistente_id: usuarioId }) })
             .then(r => r.data.ok ? r.data.dados.registros.map(p => ({
               id: `pericia-${p.id}`,
               title: `🔬 ${p.tipo_nome || 'Perícia'} — ${p.processo_numero || ''}`,
@@ -117,7 +125,7 @@ export default function Agenda() {
 
       if (filtros.tarefas) {
         promises.push(
-          tarefasAPI.listar({ concluida: '0', limite: 200 })
+          tarefasAPI.listar({ concluida: '0', limite: 200, ...(usuarioId && { usuario_id: usuarioId }) })
             .then(r => r.data.ok ? r.data.dados.registros
               .filter(t => t.data_vencimento)
               .map(t => ({
@@ -137,7 +145,7 @@ export default function Agenda() {
       setEventos(resultados.flat());
     } catch { toast.error('Erro ao carregar eventos'); }
     finally { setCarregando(false); }
-  }, [dataAtual, filtros]);
+  }, [dataAtual, filtros, usuarioId]);
 
   useEffect(() => { carregarEventos(); }, [carregarEventos]);
 
@@ -161,6 +169,11 @@ export default function Agenda() {
 
   return (
     <div>
+      {/* Título dinâmico */}
+      <h2 style={{fontSize:'18px',fontWeight:700,color:'#1e2a3a',marginBottom:'12px'}}>
+        {titulo}
+      </h2>
+
       {/* Filtros e legenda */}
       <div className="card" style={{marginBottom:'16px'}}>
         <div style={{display:'flex',gap:'16px',flexWrap:'wrap',alignItems:'center'}}>
@@ -180,6 +193,16 @@ export default function Agenda() {
               {label}
             </label>
           ))}
+
+          {/* Separador */}
+          <span style={{borderLeft:'1px solid #e5e7eb',height:'18px'}} />
+
+          {/* Checkbox Escritório */}
+          <label style={{display:'flex',alignItems:'center',gap:'6px',cursor:'pointer',fontSize:'13px',color: filtros.escritorio ? '#1a56db' : '#555',fontWeight: filtros.escritorio ? 600 : 400}}>
+            <input type="checkbox" checked={filtros.escritorio} onChange={() => toggleFiltro('escritorio')} />
+            🏢 Escritório
+          </label>
+
           {carregando && (
             <span style={{marginLeft:'auto',fontSize:'12px',color:'#888'}}>Carregando...</span>
           )}

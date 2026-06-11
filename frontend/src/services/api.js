@@ -50,6 +50,7 @@ export const authAPI = {
   validarToken:   (token) => api.get(`/auth/validar-token/${token}`),
   redefinirSenha: (dados) => api.post('/auth/redefinir-senha', dados),
   trocarSenha:    (dados) => api.put('/auth/trocar-senha', dados),
+  verificarSenha: (dados) => api.post('/auth/verificar-senha', dados),
 };
 
 // ============================================================
@@ -268,6 +269,10 @@ export const configuracaoAPI = {
   buscarIntegracoes:   () => api.get('/configuracoes/integracoes'),
   salvarIntegracao:    (modulo, dados) => api.put(`/configuracoes/integracoes/${modulo}`, dados),
   horaServidor:        () => api.get('/configuracoes/servidor-hora'),
+};
+
+export const calendarioAPI = {
+  verificarDiaUtil: (data) => api.get('/calendario/dia-util', { params: { data } }),
 };
 
 export default api;

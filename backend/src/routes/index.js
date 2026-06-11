@@ -36,6 +36,8 @@ router.post('/auth/esqueci-senha',      authCtrl.esqueciSenha);
 router.get('/auth/validar-token/:token',authCtrl.validarToken);
 router.post('/auth/redefinir-senha',    authCtrl.redefinirSenha);
 router.put('/auth/trocar-senha',        autenticar, authCtrl.trocarSenha);
+router.post('/auth/verificar-senha',   autenticar, authCtrl.verificarSenha);
+router.get('/calendario/dia-util',     autenticar, configuracaoCtrl.verificarDiaUtil);
 
 // ---- DASHBOARD ----
 router.get('/dashboard', autenticar, dashboardCtrl.buscarDados);

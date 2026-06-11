@@ -39,14 +39,15 @@ async function listarAdvogados(req, res) {
 // GET /api/audiencias — Lista audiências com filtros
 async function listar(req, res) {
   try {
-    const { processo_id, data_de, data_ate, status, sem_ata, pagina = 1, limite = 30 } = req.query;
+    const { processo_id, data_de, data_ate, status, sem_ata, responsavel_id, pagina = 1, limite = 30 } = req.query;
     const params = [];
     let where = 'WHERE 1=1';
 
-    if (processo_id) { where += ' AND a.processo_id = ?'; params.push(processo_id); }
-    if (data_de)     { where += ' AND a.data >= ?'; params.push(data_de); }
-    if (data_ate)    { where += ' AND a.data <= ?'; params.push(data_ate); }
-    if (status)      { where += ' AND a.status = ?'; params.push(status); }
+    if (processo_id)    { where += ' AND a.processo_id = ?';   params.push(processo_id); }
+    if (data_de)        { where += ' AND a.data >= ?';          params.push(data_de); }
+    if (data_ate)       { where += ' AND a.data <= ?';          params.push(data_ate); }
+    if (status)         { where += ' AND a.status = ?';         params.push(status); }
+    if (responsavel_id) { where += ' AND a.responsavel_id = ?'; params.push(responsavel_id); }
 
     // Dashboard: audiências agendadas com data passada e sem ata registrada
     if (sem_ata === 'true') {

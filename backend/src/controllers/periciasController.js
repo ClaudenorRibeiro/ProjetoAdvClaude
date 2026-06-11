@@ -10,15 +10,16 @@ const auditoria = require('../middleware/auditoria');
 // GET /api/pericias — Lista perícias com filtros
 async function listar(req, res) {
   try {
-    const { processo_id, data_de, data_ate, pagina = 1, limite = 30 } = req.query;
+    const { processo_id, data_de, data_ate, assistente_id, pagina = 1, limite = 30 } = req.query;
     const limitInt  = parseInt(limite) || 30;
     const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
     const params = [];
     let where = 'WHERE 1=1';
 
-    if (processo_id) { where += ' AND pe.processo_id = ?'; params.push(processo_id); }
-    if (data_de)     { where += ' AND pe.data >= ?';        params.push(data_de); }
-    if (data_ate)    { where += ' AND pe.data <= ?';        params.push(data_ate); }
+    if (processo_id)   { where += ' AND pe.processo_id = ?';           params.push(processo_id); }
+    if (data_de)       { where += ' AND pe.data >= ?';                  params.push(data_de); }
+    if (data_ate)      { where += ' AND pe.data <= ?';                  params.push(data_ate); }
+    if (assistente_id) { where += ' AND pe.assistente_tecnico_id = ?';  params.push(assistente_id); }
 
     const [registros] = await pool.execute(`
       SELECT

@@ -301,4 +301,19 @@ async function trocarSenha(req, res) {
   }
 }
 
-module.exports = { login, criarPrimeiroAdmin, verificarToken, esqueciSenha, validarToken, redefinirSenha, trocarSenha };
+// POST /api/auth/verificar-senha — Confirma a senha do usuário logado
+async function verificarSenha(req, res) {
+  try {
+    const { senha } = req.body;
+    if (!senha) return erro(res, 'Senha é obrigatória');
+    const [rows] = await pool.execute('SELECT senha_hash FROM usuarios WHERE id = ? AND ativo = 1', [req.usuario.id]);
+    if (!rows.length) return erro(res, 'Usuário não encontrado');
+    const correta = await bcrypt.compare(senha, rows[0].senha_hash);
+    if (!correta) return erro(res, 'Senha incorreta', 401);
+    return sucesso(res, null, 'Senha confirmada');
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+module.exports = { login, criarPrimeiroAdmin, verificarToken, esqueciSenha, validarToken, redefinirSenha, trocarSenha, verificarSenha };

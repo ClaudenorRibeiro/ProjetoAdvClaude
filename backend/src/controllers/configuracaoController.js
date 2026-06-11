@@ -7,6 +7,7 @@ const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const bcrypt = require('bcryptjs');
 const auditoria = require('../middleware/auditoria');
+const { ehDiaUtil } = require('../services/calendarioService');
 
 // GET /api/public/info — Retorna nome, logo e título da aba (sem autenticação)
 // Usado na tela de login e para definir document.title no frontend
@@ -459,6 +460,32 @@ async function historicoUsuario(req, res) {
   }
 }
 
+// GET /api/calendario/dia-util?data=YYYY-MM-DD
+async function verificarDiaUtil(req, res) {
+  try {
+    const { data } = req.query;
+    if (!data) return erro(res, 'Data é obrigatória');
+    const util = await ehDiaUtil(data);
+    // Busca descrição do feriado se não for dia útil
+    let descricao = null;
+    if (!util) {
+      const d = new Date(data + 'T12:00:00');
+      const diaSemana = d.getDay();
+      if (diaSemana === 0) descricao = 'domingo';
+      else if (diaSemana === 6) descricao = 'sábado';
+      else {
+        const [rows] = await pool.execute(
+          'SELECT descricao FROM feriados WHERE data = ? LIMIT 1', [data]
+        );
+        descricao = rows[0]?.descricao || 'feriado';
+      }
+    }
+    return sucesso(res, { dia_util: util, descricao });
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
 module.exports = {
   infoPublica,
   buscarEscritorio, atualizarEscritorio, marcarSetupConcluido,
@@ -467,4 +494,5 @@ module.exports = {
   buscarPermissoes, salvarPermissoes,
   buscarIntegracoes, salvarIntegracao,
   horaServidor,
+  verificarDiaUtil,
 };

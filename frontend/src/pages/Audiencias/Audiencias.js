@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { audienciasAPI, processosAPI, pessoasAPI } from '../../services/api';
+import { audienciasAPI, processosAPI, pessoasAPI, authAPI, calendarioAPI } from '../../services/api';
 import { formatarData, toTitleCase } from '../../utils/formatters';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
@@ -870,8 +870,62 @@ function SecaoTestemunhas({ processoId, testemunhas, onChange }) {
   );
 }
 
+// Modal de confirmação de senha para agendamento em dia não útil
+function ModalConfirmarSenhaDiaUtil({ descricao, onCancelar, onConfirmar }) {
+  const [senha, setSenha]         = useState('');
+  const [confirmando, setConfirmando] = useState(false);
+
+  async function confirmar() {
+    if (!senha) return toast.error('Digite sua senha para confirmar');
+    setConfirmando(true);
+    try {
+      const { data } = await authAPI.verificarSenha({ senha });
+      if (data.ok) {
+        await onConfirmar();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.mensagem || 'Senha incorreta');
+    } finally {
+      setConfirmando(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 1100 }}>
+      <div className="modal-box" style={{ maxWidth: '420px' }}>
+        <div className="modal-header">
+          <h3>⚠️ Data não é dia útil</h3>
+          <button className="modal-fechar" onClick={onCancelar}>✕</button>
+        </div>
+        <div className="modal-body">
+          <p style={{ marginBottom: '16px', color: '#555', fontSize: '14px' }}>
+            <strong>{descricao}</strong>. Não há expediente forense nesta data.
+          </p>
+          <p style={{ marginBottom: '16px', color: '#555', fontSize: '14px' }}>
+            Para agendar mesmo assim, confirme sua identidade digitando sua senha:
+          </p>
+          <div className="form-group">
+            <label className="form-label">Sua senha *</label>
+            <input type="password" className="form-control" value={senha}
+              onChange={e => setSenha(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && confirmar()}
+              autoFocus autoComplete="current-password" />
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onCancelar}>Cancelar</button>
+          <button className="btn btn-danger" onClick={confirmar} disabled={confirmando}>
+            {confirmando ? 'Verificando...' : 'Confirmar e Agendar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoInicial }) {
   const { temPermissao } = useAuth();
+  const [modalSenhaDiaUtil, setModalSenhaDiaUtil] = useState(null); // { descricao, obs, onConfirm }
   const [form, setForm]                     = useState({
     modalidade: 'presencial', hora: '09:00',
     ...(processoInicial ? { processo_id: processoInicial.id } : {})
@@ -977,7 +1031,6 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
     const hoje = new Date().toISOString().split('T')[0];
     const h    = parseInt(form.hora.split(':')[0], 10);
 
-    // Coleta todos os alertas presentes
     const alertas = [];
     const obs     = [];
 
@@ -991,7 +1044,23 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
       obs.push(`horário incomum confirmado pelo usuário (${form.hora})`);
     }
 
-    // Se houver alertas, exibe ModalConfirmar (estilizado do sistema) antes de salvar
+    // Verifica se a data é dia útil no calendário do sistema
+    try {
+      const { data: cal } = await calendarioAPI.verificarDiaUtil(form.data);
+      if (cal.ok && !cal.dados.dia_util) {
+        const dataFmt = form.data.split('-').reverse().join('/');
+        const desc    = cal.dados.descricao || 'dia não útil';
+        // Abre modal de confirmação + senha antes de prosseguir
+        setModalSenhaDiaUtil({
+          descricao: `${dataFmt} é ${desc}`,
+          obs: [...obs, `dia não útil (${desc}) confirmado pelo usuário com senha`],
+          alertas,
+        });
+        return;
+      }
+    } catch { /* se falhar a verificação, continua normalmente */ }
+
+    // Se houver outros alertas (data retroativa, hora incomum)
     if (alertas.length > 0) {
       setConfirmar({
         titulo:     'Atenção — dados incomuns',
@@ -1003,7 +1072,6 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
       return;
     }
 
-    // Sem alertas: salva direto
     await executarSalvar([]);
   }
 
@@ -1196,6 +1264,28 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
           onCancelar={() => setConfirmar(null)}
         />
       )}
+      {modalSenhaDiaUtil && (
+        <ModalConfirmarSenhaDiaUtil
+          descricao={modalSenhaDiaUtil.descricao}
+          onCancelar={() => setModalSenhaDiaUtil(null)}
+          onConfirmar={async () => {
+            const obs = modalSenhaDiaUtil.obs;
+            const alertas = modalSenhaDiaUtil.alertas;
+            setModalSenhaDiaUtil(null);
+            if (alertas.length > 0) {
+              setConfirmar({
+                titulo:     'Atenção — dados incomuns',
+                mensagem:   `Foram identificados os seguintes alertas:\n\n${alertas.join('\n')}\n\nDeseja confirmar mesmo assim ou voltar para corrigir?`,
+                textoBotao: 'Confirmar mesmo assim',
+                tipo:       'aviso',
+                acao:       async () => { await executarSalvar(obs); }
+              });
+            } else {
+              await executarSalvar(obs);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1212,6 +1302,7 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
   const [salvando, setSalvando]               = useState(false);
   const [avisos, setAvisos]                   = useState({ data: '', hora: '' });
   const [confirmar, setConfirmar]             = useState(null);
+  const [modalSenhaDiaUtil, setModalSenhaDiaUtil] = useState(null);
   // Advogados (usuários + freelas)
   const [advogados, setAdvogados]             = useState([]);
   // Testemunhas — formato {id, nome, polo, telefone}
@@ -1342,6 +1433,21 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
       alertas.push(`• Horário incomum: ${form.hora} (fóruns geralmente atendem das 08h às 18h)`);
       obs.push(`horário incomum confirmado pelo usuário na edição (${form.hora})`);
     }
+
+    // Verifica se a data é dia útil no calendário do sistema
+    try {
+      const { data: cal } = await calendarioAPI.verificarDiaUtil(form.data);
+      if (cal.ok && !cal.dados.dia_util) {
+        const dataFmt = form.data.split('-').reverse().join('/');
+        const desc    = cal.dados.descricao || 'dia não útil';
+        setModalSenhaDiaUtil({
+          descricao: `${dataFmt} é ${desc}`,
+          obs: [...obs, `dia não útil (${desc}) confirmado pelo usuário com senha na edição`],
+          alertas,
+        });
+        return;
+      }
+    } catch { /* se falhar a verificação, continua normalmente */ }
 
     if (alertas.length > 0) {
       setConfirmar({
@@ -1542,6 +1648,28 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
         <ModalConfirmar
           {...confirmar}
           onCancelar={() => setConfirmar(null)}
+        />
+      )}
+      {modalSenhaDiaUtil && (
+        <ModalConfirmarSenhaDiaUtil
+          descricao={modalSenhaDiaUtil.descricao}
+          onCancelar={() => setModalSenhaDiaUtil(null)}
+          onConfirmar={async () => {
+            const obs     = modalSenhaDiaUtil.obs;
+            const alertas = modalSenhaDiaUtil.alertas;
+            setModalSenhaDiaUtil(null);
+            if (alertas.length > 0) {
+              setConfirmar({
+                titulo:     'Atenção — dados incomuns',
+                mensagem:   `Foram identificados os seguintes alertas:\n\n${alertas.join('\n')}\n\nDeseja confirmar mesmo assim ou voltar para corrigir?`,
+                textoBotao: 'Confirmar mesmo assim',
+                tipo:       'aviso',
+                acao:       async () => { await executarSalvar(obs); },
+              });
+            } else {
+              await executarSalvar(obs);
+            }
+          }}
         />
       )}
     </div>
