@@ -189,7 +189,9 @@ router.delete('/configuracoes/feriados/:id',      autenticar, apenasAdmin, confi
 router.get('/configuracoes/usuarios',             autenticar, apenasAdmin, configuracaoCtrl.listarUsuarios);
 router.post('/configuracoes/usuarios',            autenticar, apenasAdmin, configuracaoCtrl.criarUsuario);
 router.put('/configuracoes/usuarios/:id',         autenticar, apenasAdmin, configuracaoCtrl.atualizarUsuario);
-router.put('/configuracoes/usuarios/:id/senha',   autenticar, apenasAdmin, configuracaoCtrl.redefinirSenhaAdmin);
+router.put('/configuracoes/usuarios/:id/senha',      autenticar, apenasAdmin, configuracaoCtrl.redefinirSenhaAdmin);
+router.delete('/configuracoes/usuarios/:id',         autenticar, apenasAdmin, configuracaoCtrl.excluirUsuario);
+router.get('/configuracoes/usuarios/:id/historico',  autenticar, apenasAdmin, configuracaoCtrl.historicoUsuario);
 router.get('/configuracoes/permissoes/:usuarioId', autenticar, apenasAdmin, configuracaoCtrl.buscarPermissoes);
 router.put('/configuracoes/permissoes/:usuarioId', autenticar, apenasAdmin, configuracaoCtrl.salvarPermissoes);
 router.get('/configuracoes/integracoes',          autenticar, apenasAdmin, configuracaoCtrl.buscarIntegracoes);

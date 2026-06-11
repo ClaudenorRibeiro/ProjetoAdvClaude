@@ -373,12 +373,15 @@ function TabEscritorio() {
 // ABA: USUÁRIOS
 // ============================================================
 function TabUsuarios() {
-  const [usuarios, setUsuarios]           = useState([]);
-  const [carregando, setCarregando]       = useState(true);
-  const [modalAberto, setModalAberto]     = useState(false);
-  const [editando, setEditando]           = useState(null);
-  const [modalSenha, setModalSenha]       = useState(false);
-  const [usuarioSenha, setUsuarioSenha]   = useState(null);
+  const [usuarios, setUsuarios]               = useState([]);
+  const [carregando, setCarregando]           = useState(true);
+  const [modalAberto, setModalAberto]         = useState(false);
+  const [editando, setEditando]               = useState(null);
+  const [modalSenha, setModalSenha]           = useState(false);
+  const [usuarioSenha, setUsuarioSenha]       = useState(null);
+  const [modalHistorico, setModalHistorico]   = useState(false);
+  const [usuarioHistorico, setUsuarioHistorico] = useState(null);
+  const [excluindo, setExcluindo]             = useState(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -389,6 +392,20 @@ function TabUsuarios() {
   }, []);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  async function confirmarExclusao(u) {
+    if (!window.confirm(`Excluir o usuário "${u.nome}"?\n\nEsta ação não pode ser desfeita.`)) return;
+    setExcluindo(u.id);
+    try {
+      const { data } = await configuracaoAPI.excluirUsuario(u.id);
+      toast.success(data.mensagem || 'Usuário excluído');
+      carregar();
+    } catch (err) {
+      toast.error(err.response?.data?.mensagem || 'Erro ao excluir usuário');
+    } finally {
+      setExcluindo(null);
+    }
+  }
 
   return (
     <div className="card">
@@ -426,6 +443,17 @@ function TabUsuarios() {
                         title="Redefinir senha deste usuário">
                         🔑 Senha
                       </button>
+                      <button className="btn btn-outline" style={{fontSize:'12px',padding:'4px 10px',color:'#6366f1',borderColor:'#6366f1'}}
+                        onClick={() => { setUsuarioHistorico(u); setModalHistorico(true); }}
+                        title="Ver histórico de ações deste usuário">
+                        📋 Histórico
+                      </button>
+                      <button className="btn btn-outline" style={{fontSize:'12px',padding:'4px 10px',color:'#dc2626',borderColor:'#dc2626'}}
+                        onClick={() => confirmarExclusao(u)}
+                        disabled={excluindo === u.id}
+                        title="Excluir usuário">
+                        🗑️
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -447,6 +475,96 @@ function TabUsuarios() {
           onFechar={() => { setModalSenha(false); setUsuarioSenha(null); }}
         />
       )}
+      {modalHistorico && usuarioHistorico && (
+        <ModalHistoricoUsuario
+          usuario={usuarioHistorico}
+          onFechar={() => { setModalHistorico(false); setUsuarioHistorico(null); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ModalHistoricoUsuario({ usuario, onFechar }) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const [dataDe,  setDataDe]  = useState('');
+  const [dataAte, setDataAte] = useState(hoje);
+  const [registros, setRegistros] = useState([]);
+  const [carregando, setCarregando] = useState(false);
+
+  const ACAO_LABEL = { criar: 'Criou', editar: 'Editou', excluir: 'Excluiu', visualizar: 'Visualizou' };
+  const ACAO_COR   = { criar: '#16a34a', editar: '#2563eb', excluir: '#dc2626', visualizar: '#6b7280' };
+
+  async function buscar() {
+    setCarregando(true);
+    try {
+      const { data } = await configuracaoAPI.historicoUsuario(usuario.id, { data_de: dataDe, data_ate: dataAte });
+      if (data.ok) setRegistros(data.dados.registros);
+    } catch { toast.error('Erro ao buscar histórico'); }
+    finally { setCarregando(false); }
+  }
+
+  useEffect(() => { buscar(); }, []); // eslint-disable-line
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box modal-grande" style={{ maxWidth: '700px' }}>
+        <div className="modal-header">
+          <h3>Histórico — {usuario.nome}</h3>
+          <button className="modal-fechar" onClick={onFechar}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', marginBottom: '16px' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">De</label>
+              <input type="date" className="form-control" value={dataDe} onChange={e => setDataDe(e.target.value)} />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Até</label>
+              <input type="date" className="form-control" value={dataAte} onChange={e => setDataAte(e.target.value)} />
+            </div>
+            <button className="btn btn-primary" onClick={buscar} disabled={carregando}>
+              {carregando ? 'Buscando...' : 'Buscar'}
+            </button>
+          </div>
+
+          {carregando ? <div className="loading">Carregando...</div> : registros.length === 0
+            ? <p className="lista-vazia">Nenhum registro encontrado para o período</p>
+            : (
+              <div className="tabela-wrapper" style={{ maxHeight: '420px', overflowY: 'auto' }}>
+                <table className="tabela">
+                  <thead>
+                    <tr><th>Data/Hora</th><th>Ação</th><th>Módulo</th><th>Registro</th></tr>
+                  </thead>
+                  <tbody>
+                    {registros.map(r => (
+                      <tr key={r.id}>
+                        <td style={{ whiteSpace: 'nowrap', fontSize: '12px' }}>
+                          {new Date(r.criado_em).toLocaleString('pt-BR')}
+                        </td>
+                        <td>
+                          <span style={{ color: ACAO_COR[r.acao] || '#333', fontWeight: 600, fontSize: '12px' }}>
+                            {ACAO_LABEL[r.acao] || r.acao}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: '12px' }}>{r.tabela}</td>
+                        <td style={{ fontSize: '12px', color: '#666' }}>#{r.registro_id}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p style={{ fontSize: '11px', color: '#999', marginTop: '8px' }}>
+                  {registros.length} registro{registros.length !== 1 ? 's' : ''} encontrado{registros.length !== 1 ? 's' : ''}
+                  {registros.length === 500 ? ' (limite de 500 — refine o período)' : ''}
+                </p>
+              </div>
+            )
+          }
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onFechar}>Fechar</button>
+        </div>
+      </div>
     </div>
   );
 }

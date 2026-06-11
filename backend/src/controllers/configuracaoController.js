@@ -414,11 +414,56 @@ function horaServidor(req, res) {
   });
 }
 
+// DELETE /api/configuracoes/usuarios/:id — Exclui usuário
+async function excluirUsuario(req, res) {
+  try {
+    const { id } = req.params;
+    const [rows] = await pool.execute('SELECT nivel, nome FROM usuarios WHERE id = ?', [id]);
+    if (!rows.length) return naoEncontrado(res, 'Usuário não encontrado');
+    if (rows[0].nivel === 0) return erro(res, 'Não é possível excluir o superusuário', 403);
+    if (parseInt(id) === req.usuario.id) return erro(res, 'Você não pode excluir seu próprio usuário', 403);
+
+    await pool.execute('DELETE FROM usuarios WHERE id = ?', [id]);
+    return sucesso(res, null, `Usuário "${rows[0].nome}" excluído com sucesso`);
+  } catch (err) {
+    if (err.code === 'ER_ROW_IS_REFERENCED_2') {
+      return erro(res, 'Este usuário não pode ser excluído pois possui registros vinculados no sistema');
+    }
+    return erroInterno(res, err);
+  }
+}
+
+// GET /api/configuracoes/usuarios/:id/historico — Histórico de ações do usuário
+async function historicoUsuario(req, res) {
+  try {
+    const { id } = req.params;
+    const { data_de, data_ate } = req.query;
+
+    const [usuario] = await pool.execute('SELECT nome FROM usuarios WHERE id = ?', [id]);
+    if (!usuario.length) return naoEncontrado(res, 'Usuário não encontrado');
+
+    let sql = `
+      SELECT id, tabela, acao, registro_id, criado_em
+      FROM logs_auditoria
+      WHERE usuario_id = ?`;
+    const params = [id];
+
+    if (data_de) { sql += ' AND DATE(criado_em) >= ?'; params.push(data_de); }
+    if (data_ate) { sql += ' AND DATE(criado_em) <= ?'; params.push(data_ate); }
+    sql += ' ORDER BY criado_em DESC LIMIT 500';
+
+    const [rows] = await pool.execute(sql, params);
+    return sucesso(res, { usuario: usuario[0].nome, registros: rows });
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
 module.exports = {
   infoPublica,
   buscarEscritorio, atualizarEscritorio, marcarSetupConcluido,
   listarFeriados, criarFeriado, excluirFeriado,
-  listarUsuarios, criarUsuario, atualizarUsuario, redefinirSenhaAdmin,
+  listarUsuarios, criarUsuario, atualizarUsuario, redefinirSenhaAdmin, excluirUsuario, historicoUsuario,
   buscarPermissoes, salvarPermissoes,
   buscarIntegracoes, salvarIntegracao,
   horaServidor,
