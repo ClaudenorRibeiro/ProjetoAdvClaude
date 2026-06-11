@@ -176,17 +176,25 @@ function PainelHoraServidor() {
 }
 
 function TabEscritorio() {
+  const { ehSuper } = useAuth();
   const [form, setForm]         = useState({});
   const [salvando, setSalvando] = useState(false);
   const [carregando, setCarregando] = useState(true);
   const [buscandoCep, setBuscandoCep] = useState(false);
   const refNumero = React.useRef(null);
 
-  useEffect(() => {
+  const carregar = useCallback(() => {
     configuracaoAPI.buscarEscritorio().then(r => {
       if (r.data.ok) setForm(r.data.dados);
     }).finally(() => setCarregando(false));
   }, []);
+
+  useEffect(() => {
+    carregar();
+    const onFocus = () => carregar();
+    document.addEventListener('visibilitychange', onFocus);
+    return () => document.removeEventListener('visibilitychange', onFocus);
+  }, [carregar]);
 
   function set(k, v) { setForm(f => ({...f, [k]: v})); }
 
@@ -225,83 +233,117 @@ function TabEscritorio() {
 
   if (carregando) return <div className="card"><div className="loading">Carregando...</div></div>;
 
+  // Componente auxiliar para exibir campo somente leitura
+  function CampoLeitura({ label, valor }) {
+    return (
+      <div className="form-group">
+        <label className="form-label">{label}</label>
+        <div style={{ padding: '7px 10px', background: '#f5f5f5', border: '1px solid #e0e0e0', borderRadius: '6px', fontSize: '14px', color: '#333', minHeight: '36px' }}>
+          {valor || <span style={{ color: '#aaa' }}>—</span>}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="card">
       <PainelHoraServidor />
       <h3 style={{marginBottom:'20px',fontSize:'15px',color:'#1e2a3a'}}>Dados do Escritório</h3>
-      <div className="grid-2">
-        <div className="form-group">
-          <label className="form-label">Nome do escritório *</label>
-          <input className="form-control" value={form.nome||''} onChange={e => set('nome', e.target.value)} onBlur={() => set('nome', toTitleCase(form.nome))} />
-        </div>
-        <div className="form-group">
-          <label className="form-label">Título da aba do navegador</label>
-          <input className="form-control" value={form.titulo_aba||''}
-            onChange={e => set('titulo_aba', e.target.value)}
-            placeholder={form.nome || 'Ex: Dr. Antonio | Advocacia'} />
-          <small style={{color:'#888',fontSize:'12px'}}>
-            Se vazio, usa o nome do escritório
-          </small>
-        </div>
-      </div>
-      <div className="grid-2">
-        <div className="form-group">
-          <label className="form-label">CNPJ / CPF</label>
-          <input className="form-control" value={form.cnpj_cpf||''}
-            onChange={e => set('cnpj_cpf', mascaraCnpjCpf(e.target.value))}
-            placeholder="000.000.000-00 ou 00.000.000/0000-00"
-            maxLength={18} />
-        </div>
-      </div>
-      <div className="grid-2">
-        <div className="form-group">
-          <label className="form-label">E-mail principal</label>
-          <input type="email" className="form-control" value={form.email||''} onChange={e => set('email', e.target.value)} />
-        </div>
-        <div className="form-group">
-          <label className="form-label">Telefone</label>
-          <input className="form-control" value={form.telefone||''} onChange={e => set('telefone', e.target.value)}
-            placeholder="(11) 99999-9999" />
-        </div>
-      </div>
-      <div className="grid-3">
-        <div className="form-group">
-          <label className="form-label">CEP</label>
-          <input className="form-control" value={form.cep||''}
-            onChange={e => {
-              const v = e.target.value.replace(/\D/g, '').slice(0, 8);
-              const fmt = v.length > 5 ? v.replace(/(\d{5})(\d)/, '$1-$2') : v;
-              set('cep', fmt);
-              if (v.length === 8) buscarCep(v);
-            }}
-            placeholder="00000-000"
-            maxLength={9}
-            disabled={buscandoCep} />
-        </div>
-        <div className="form-group">
-          <label className="form-label">Logradouro</label>
-          <input className="form-control" value={form.logradouro||''} onChange={e => set('logradouro', e.target.value)} onBlur={() => set('logradouro', toTitleCase(form.logradouro))} />
-        </div>
-        <div className="form-group">
-          <label className="form-label">Número</label>
-          <input ref={refNumero} className="form-control" value={form.numero||''} onChange={e => set('numero', e.target.value)} />
-        </div>
-      </div>
-      <div className="grid-3">
-        <div className="form-group">
-          <label className="form-label">Bairro</label>
-          <input className="form-control" value={form.bairro||''} onChange={e => set('bairro', e.target.value)} onBlur={() => set('bairro', toTitleCase(form.bairro))} />
-        </div>
-        <div className="form-group">
-          <label className="form-label">Cidade</label>
-          <input className="form-control" value={form.cidade||''} onChange={e => set('cidade', e.target.value)} onBlur={() => set('cidade', toTitleCase(form.cidade))} />
-        </div>
-        <div className="form-group">
-          <label className="form-label">Estado</label>
-          <input className="form-control" value={form.estado||''} onChange={e => set('estado', e.target.value)}
-            placeholder="SP" maxLength={2} />
-        </div>
-      </div>
+
+      {ehSuper ? (
+        <>
+          <div className="grid-2">
+            <div className="form-group">
+              <label className="form-label">Nome do escritório *</label>
+              <input className="form-control" value={form.nome||''} onChange={e => set('nome', e.target.value)} onBlur={() => set('nome', toTitleCase(form.nome))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Título da aba do navegador</label>
+              <input className="form-control" value={form.titulo_aba||''}
+                onChange={e => set('titulo_aba', e.target.value)}
+                placeholder={form.nome || 'Ex: Dr. Antonio | Advocacia'} />
+              <small style={{color:'#888',fontSize:'12px'}}>Se vazio, usa o nome do escritório</small>
+            </div>
+          </div>
+          <div className="grid-2">
+            <div className="form-group">
+              <label className="form-label">CNPJ / CPF</label>
+              <input className="form-control" value={form.cnpj_cpf||''}
+                onChange={e => set('cnpj_cpf', mascaraCnpjCpf(e.target.value))}
+                placeholder="000.000.000-00 ou 00.000.000/0000-00" maxLength={18} />
+            </div>
+          </div>
+          <div className="grid-2">
+            <div className="form-group">
+              <label className="form-label">E-mail principal</label>
+              <input type="email" className="form-control" value={form.email||''} onChange={e => set('email', e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Telefone</label>
+              <input className="form-control" value={form.telefone||''} onChange={e => set('telefone', e.target.value)} placeholder="(11) 99999-9999" />
+            </div>
+          </div>
+          <div className="grid-3">
+            <div className="form-group">
+              <label className="form-label">CEP</label>
+              <input className="form-control" value={form.cep||''}
+                onChange={e => {
+                  const v = e.target.value.replace(/\D/g, '').slice(0, 8);
+                  const fmt = v.length > 5 ? v.replace(/(\d{5})(\d)/, '$1-$2') : v;
+                  set('cep', fmt);
+                  if (v.length === 8) buscarCep(v);
+                }}
+                placeholder="00000-000" maxLength={9} disabled={buscandoCep} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Logradouro</label>
+              <input className="form-control" value={form.logradouro||''} onChange={e => set('logradouro', e.target.value)} onBlur={() => set('logradouro', toTitleCase(form.logradouro))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Número</label>
+              <input ref={refNumero} className="form-control" value={form.numero||''} onChange={e => set('numero', e.target.value)} />
+            </div>
+          </div>
+          <div className="grid-3">
+            <div className="form-group">
+              <label className="form-label">Bairro</label>
+              <input className="form-control" value={form.bairro||''} onChange={e => set('bairro', e.target.value)} onBlur={() => set('bairro', toTitleCase(form.bairro))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Cidade</label>
+              <input className="form-control" value={form.cidade||''} onChange={e => set('cidade', e.target.value)} onBlur={() => set('cidade', toTitleCase(form.cidade))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Estado</label>
+              <input className="form-control" value={form.estado||''} onChange={e => set('estado', e.target.value)} placeholder="SP" maxLength={2} />
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="grid-2">
+            <CampoLeitura label="Nome do escritório" valor={form.nome} />
+            <CampoLeitura label="Título da aba do navegador" valor={form.titulo_aba || form.nome} />
+          </div>
+          <div className="grid-2">
+            <CampoLeitura label="CNPJ / CPF" valor={form.cnpj_cpf} />
+          </div>
+          <div className="grid-2">
+            <CampoLeitura label="E-mail principal" valor={form.email} />
+            <CampoLeitura label="Telefone" valor={form.telefone} />
+          </div>
+          <div className="grid-3">
+            <CampoLeitura label="CEP" valor={form.cep} />
+            <CampoLeitura label="Logradouro" valor={form.logradouro} />
+            <CampoLeitura label="Número" valor={form.numero} />
+          </div>
+          <div className="grid-3">
+            <CampoLeitura label="Bairro" valor={form.bairro} />
+            <CampoLeitura label="Cidade" valor={form.cidade} />
+            <CampoLeitura label="Estado" valor={form.estado} />
+          </div>
+        </>
+      )}
 
       <h4 style={{margin:'20px 0 12px',fontSize:'13px',fontWeight:600,color:'#555'}}>Alertas de prazos — e-mail coletivo</h4>
       <div className="grid-2">
@@ -356,11 +398,13 @@ function TabEscritorio() {
         <small style={{color:'#888'}}>O prazo volta ao status anterior se ninguém concluiu no prazo definido</small>
       </div>
 
-      <div style={{marginTop:'8px'}}>
-        <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
-          {salvando ? 'Salvando...' : 'Salvar Configurações'}
-        </button>
-      </div>
+      {ehSuper && (
+        <div style={{marginTop:'8px'}}>
+          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+            {salvando ? 'Salvando...' : 'Salvar Configurações'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

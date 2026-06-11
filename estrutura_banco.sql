@@ -16,10 +16,12 @@
 
 
 -- Copiando estrutura do banco de dados para sistema_advocacia
+DROP DATABASE IF EXISTS `sistema_advocacia`;
 CREATE DATABASE IF NOT EXISTS `sistema_advocacia` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
 USE `sistema_advocacia`;
 
 -- Copiando estrutura para tabela sistema_advocacia.advogados_freela
+DROP TABLE IF EXISTS `advogados_freela`;
 CREATE TABLE IF NOT EXISTS `advogados_freela` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(200) NOT NULL,
@@ -45,6 +47,7 @@ INSERT INTO `advogados_freela` (`id`, `nome`, `oab`, `telefone`, `cep`, `logrado
 	(2, 'juquinha', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '2026-06-09 13:25:13', 2);
 
 -- Copiando estrutura para tabela sistema_advocacia.andamento_processual
+DROP TABLE IF EXISTS `andamento_processual`;
 CREATE TABLE IF NOT EXISTS `andamento_processual` (
   `id` int NOT NULL AUTO_INCREMENT,
   `processo_id` int NOT NULL,
@@ -69,6 +72,7 @@ INSERT INTO `andamento_processual` (`id`, `processo_id`, `data`, `descricao`, `c
 	(7, 4, '2026-05-29', 'Testei e Está Dando Certo', 2, '2026-05-29 14:33:23', NULL, NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.ata_audiencia
+DROP TABLE IF EXISTS `ata_audiencia`;
 CREATE TABLE IF NOT EXISTS `ata_audiencia` (
   `id` int NOT NULL AUTO_INCREMENT,
   `audiencia_id` int NOT NULL,
@@ -92,6 +96,7 @@ CREATE TABLE IF NOT EXISTS `ata_audiencia` (
 -- Copiando dados para a tabela sistema_advocacia.ata_audiencia: ~0 rows (aproximadamente)
 
 -- Copiando estrutura para tabela sistema_advocacia.audiencia
+DROP TABLE IF EXISTS `audiencia`;
 CREATE TABLE IF NOT EXISTS `audiencia` (
   `id` int NOT NULL AUTO_INCREMENT,
   `processo_id` int NOT NULL,
@@ -138,7 +143,7 @@ CREATE TABLE IF NOT EXISTS `audiencia` (
   CONSTRAINT `fk_audiencia_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=14 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.audiencia: ~5 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.audiencia: ~7 rows (aproximadamente)
 INSERT INTO `audiencia` (`id`, `processo_id`, `tipo_audiencia_id`, `data`, `hora`, `modalidade`, `local`, `vara_id`, `plataforma_virtual`, `link_virtual`, `responsavel_id`, `responsavel_freela_id`, `comunicado_enviado`, `ata_impressa`, `criado_em`, `criado_por`, `alterado_por`, `alterado_em`, `advogado_tipo`, `advogado_usuario_id`, `advogado_pessoa_id`, `advogado_freela_id`, `status`, `motivo_status`) VALUES
 	(4, 6, 11, '2026-06-25', '14:00:00', 'presencial', '20ª Vara do Trabalho - Fórum Trabalhista Ruy Barbosa', 273, NULL, NULL, NULL, NULL, 0, 0, '2026-06-08 16:17:15', 2, 2, '2026-06-09 15:34:16', NULL, NULL, NULL, NULL, 'remarcada', 'publica'),
 	(5, 8, NULL, '2026-06-23', '09:00:00', 'virtual', NULL, 309, NULL, NULL, NULL, 2, 0, 0, '2026-06-09 13:25:42', 2, 2, '2026-06-09 15:30:02', NULL, NULL, NULL, NULL, 'remarcada', 'publicação'),
@@ -149,6 +154,7 @@ INSERT INTO `audiencia` (`id`, `processo_id`, `tipo_audiencia_id`, `data`, `hora
 	(13, 6, 10, '2026-06-11', '09:00:00', 'presencial', NULL, 338, NULL, NULL, NULL, NULL, 0, 0, '2026-06-10 10:00:46', 2, NULL, NULL, NULL, NULL, NULL, NULL, 'agendada', NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.audiencia_testemunhas
+DROP TABLE IF EXISTS `audiencia_testemunhas`;
 CREATE TABLE IF NOT EXISTS `audiencia_testemunhas` (
   `id` int NOT NULL AUTO_INCREMENT,
   `audiencia_id` int NOT NULL,
@@ -163,13 +169,14 @@ CREATE TABLE IF NOT EXISTS `audiencia_testemunhas` (
   CONSTRAINT `aut_ibfk_2` FOREIGN KEY (`pessoa_id`) REFERENCES `pessoas_fisicas` (`id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.audiencia_testemunhas: ~2 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.audiencia_testemunhas: ~3 rows (aproximadamente)
 INSERT INTO `audiencia_testemunhas` (`id`, `audiencia_id`, `pessoa_id`, `polo`, `criado_por`, `criado_em`) VALUES
 	(2, 11, 4, 'autor', 2, '2026-06-09 22:52:24'),
 	(3, 11, 6, 'autor', 2, '2026-06-09 22:52:24'),
 	(4, 12, 6, 'autor', 2, '2026-06-10 09:35:42');
 
 -- Copiando estrutura para tabela sistema_advocacia.auditoria_audiencia
+DROP TABLE IF EXISTS `auditoria_audiencia`;
 CREATE TABLE IF NOT EXISTS `auditoria_audiencia` (
   `id` int NOT NULL AUTO_INCREMENT,
   `audiencia_id` int NOT NULL,
@@ -185,7 +192,7 @@ CREATE TABLE IF NOT EXISTS `auditoria_audiencia` (
   CONSTRAINT `audaud_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=28 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.auditoria_audiencia: ~18 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.auditoria_audiencia: ~19 rows (aproximadamente)
 INSERT INTO `auditoria_audiencia` (`id`, `audiencia_id`, `campo_alterado`, `valor_anterior`, `valor_novo`, `usuario_id`, `alterado_em`) VALUES
 	(3, 4, 'hora', '09:00:00', '09:00', 2, '2026-06-09 11:41:46'),
 	(4, 4, 'vara_id', '', '273', 2, '2026-06-09 11:41:46'),
@@ -208,6 +215,7 @@ INSERT INTO `auditoria_audiencia` (`id`, `audiencia_id`, `campo_alterado`, `valo
 	(27, 13, 'cadastrado', NULL, 'Audiência cadastrada', 2, '2026-06-10 10:00:46');
 
 -- Copiando estrutura para tabela sistema_advocacia.auditoria_prazo
+DROP TABLE IF EXISTS `auditoria_prazo`;
 CREATE TABLE IF NOT EXISTS `auditoria_prazo` (
   `id` int NOT NULL AUTO_INCREMENT,
   `prazo_id` int NOT NULL,
@@ -242,6 +250,7 @@ INSERT INTO `auditoria_prazo` (`id`, `prazo_id`, `status_anterior`, `status_novo
 	(15, 6, 'fazendo', 'agendado', 2, '2026-06-03 14:55:14', NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.calendario
+DROP TABLE IF EXISTS `calendario`;
 CREATE TABLE IF NOT EXISTS `calendario` (
   `data` date NOT NULL,
   `dia_util` tinyint(1) NOT NULL DEFAULT '1',
@@ -11211,6 +11220,7 @@ INSERT INTO `calendario` (`data`, `dia_util`) VALUES
 	('2056-04-30', 0);
 
 -- Copiando estrutura para tabela sistema_advocacia.configuracoes_escritorio
+DROP TABLE IF EXISTS `configuracoes_escritorio`;
 CREATE TABLE IF NOT EXISTS `configuracoes_escritorio` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(200) NOT NULL,
@@ -11245,6 +11255,7 @@ INSERT INTO `configuracoes_escritorio` (`id`, `nome`, `cnpj_cpf`, `email`, `tele
 	(1, 'Dr. Antonio Ferreira da Costa', '866.204.449-20', 'contato@antonio.adv.br', '654654654', NULL, '03818-030', 'Rua Lagoa D\'anta', '70', 'Parque Císper', 'São Paulo', 'SP', NULL, '#1a56db', '10:00:00', 3, 2, 30, 7, 1, '2026-05-23 00:58:18', 1, 'visaoecultura@gmail.com, ednasvlr@gmail,.com', 60, NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.configuracoes_integracoes
+DROP TABLE IF EXISTS `configuracoes_integracoes`;
 CREATE TABLE IF NOT EXISTS `configuracoes_integracoes` (
   `id` int NOT NULL AUTO_INCREMENT,
   `modulo` varchar(50) NOT NULL,
@@ -11262,6 +11273,7 @@ INSERT INTO `configuracoes_integracoes` (`id`, `modulo`, `ativo`, `configuracoes
 	(4, 'cnj_datajud', 0, NULL, '2026-05-23 00:58:29');
 
 -- Copiando estrutura para tabela sistema_advocacia.conta_corrente_pasta
+DROP TABLE IF EXISTS `conta_corrente_pasta`;
 CREATE TABLE IF NOT EXISTS `conta_corrente_pasta` (
   `id` int NOT NULL AUTO_INCREMENT,
   `pasta_id` int NOT NULL,
@@ -11281,6 +11293,7 @@ CREATE TABLE IF NOT EXISTS `conta_corrente_pasta` (
 -- Copiando dados para a tabela sistema_advocacia.conta_corrente_pasta: ~0 rows (aproximadamente)
 
 -- Copiando estrutura para tabela sistema_advocacia.emails_pf
+DROP TABLE IF EXISTS `emails_pf`;
 CREATE TABLE IF NOT EXISTS `emails_pf` (
   `id` int NOT NULL AUTO_INCREMENT,
   `pessoa_id` int NOT NULL,
@@ -11301,6 +11314,7 @@ INSERT INTO `emails_pf` (`id`, `pessoa_id`, `email`, `principal`, `ativo`, `cria
 	(6, 5, 'contato@antonio.adv.br', 1, 1, '2026-05-26 13:39:41');
 
 -- Copiando estrutura para tabela sistema_advocacia.emails_pj
+DROP TABLE IF EXISTS `emails_pj`;
 CREATE TABLE IF NOT EXISTS `emails_pj` (
   `id` int NOT NULL AUTO_INCREMENT,
   `pessoa_id` int NOT NULL,
@@ -11316,6 +11330,7 @@ CREATE TABLE IF NOT EXISTS `emails_pj` (
 -- Copiando dados para a tabela sistema_advocacia.emails_pj: ~0 rows (aproximadamente)
 
 -- Copiando estrutura para tabela sistema_advocacia.estado_civil
+DROP TABLE IF EXISTS `estado_civil`;
 CREATE TABLE IF NOT EXISTS `estado_civil` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(50) NOT NULL,
@@ -11334,6 +11349,7 @@ INSERT INTO `estado_civil` (`id`, `nome`) VALUES
 	(8, 'tico tico no fuba');
 
 -- Copiando estrutura para tabela sistema_advocacia.feriados
+DROP TABLE IF EXISTS `feriados`;
 CREATE TABLE IF NOT EXISTS `feriados` (
   `id` int NOT NULL AUTO_INCREMENT,
   `data` date NOT NULL,
@@ -11349,6 +11365,7 @@ INSERT INTO `feriados` (`id`, `data`, `descricao`, `tipo`, `criado_em`, `criado_
 	(2, '2026-06-04', 'Corpus Christi', 'nacional', '2026-05-29 23:42:17', 2);
 
 -- Copiando estrutura para tabela sistema_advocacia.genero
+DROP TABLE IF EXISTS `genero`;
 CREATE TABLE IF NOT EXISTS `genero` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(50) NOT NULL,
@@ -11364,6 +11381,7 @@ INSERT INTO `genero` (`id`, `nome`) VALUES
 	(5, 'baitola');
 
 -- Copiando estrutura para tabela sistema_advocacia.historico_atendimento
+DROP TABLE IF EXISTS `historico_atendimento`;
 CREATE TABLE IF NOT EXISTS `historico_atendimento` (
   `id` int NOT NULL AUTO_INCREMENT,
   `tipo_pessoa` varchar(20) DEFAULT 'fisica',
@@ -11379,6 +11397,7 @@ CREATE TABLE IF NOT EXISTS `historico_atendimento` (
 -- Copiando dados para a tabela sistema_advocacia.historico_atendimento: ~0 rows (aproximadamente)
 
 -- Copiando estrutura para tabela sistema_advocacia.honorarios
+DROP TABLE IF EXISTS `honorarios`;
 CREATE TABLE IF NOT EXISTS `honorarios` (
   `id` int NOT NULL AUTO_INCREMENT,
   `pasta_id` int NOT NULL,
@@ -11395,6 +11414,7 @@ CREATE TABLE IF NOT EXISTS `honorarios` (
 -- Copiando dados para a tabela sistema_advocacia.honorarios: ~0 rows (aproximadamente)
 
 -- Copiando estrutura para tabela sistema_advocacia.logs_auditoria
+DROP TABLE IF EXISTS `logs_auditoria`;
 CREATE TABLE IF NOT EXISTS `logs_auditoria` (
   `id` int NOT NULL AUTO_INCREMENT,
   `usuario_id` int DEFAULT NULL,
@@ -11408,9 +11428,9 @@ CREATE TABLE IF NOT EXISTS `logs_auditoria` (
   KEY `idx_tabela` (`tabela`),
   KEY `idx_usuario` (`usuario_id`),
   KEY `idx_data` (`criado_em`)
-) ENGINE=InnoDB AUTO_INCREMENT=109 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=118 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.logs_auditoria: ~106 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.logs_auditoria: ~117 rows (aproximadamente)
 INSERT INTO `logs_auditoria` (`id`, `usuario_id`, `tabela`, `acao`, `registro_id`, `dados_antigos`, `dados_novos`, `criado_em`) VALUES
 	(1, 1, 'usuarios', 'criar', 2, NULL, NULL, '2026-05-23 01:06:19'),
 	(2, 1, 'usuarios', 'editar', 2, NULL, NULL, '2026-05-23 10:25:38'),
@@ -11519,9 +11539,19 @@ INSERT INTO `logs_auditoria` (`id`, `usuario_id`, `tabela`, `acao`, `registro_id
 	(105, 2, 'audiencia', 'criar', 11, NULL, NULL, '2026-06-09 20:34:00'),
 	(106, 2, 'pessoas_fisicas', 'criar', 6, NULL, NULL, '2026-06-09 22:52:14'),
 	(107, 2, 'audiencia', 'criar', 12, NULL, NULL, '2026-06-10 09:35:42'),
-	(108, 2, 'audiencia', 'criar', 13, NULL, NULL, '2026-06-10 10:00:46');
+	(108, 2, 'audiencia', 'criar', 13, NULL, NULL, '2026-06-10 10:00:46'),
+	(109, 2, 'usuarios', 'criar', 6, NULL, NULL, '2026-06-11 09:11:43'),
+	(110, 2, 'usuarios', 'editar', 6, NULL, NULL, '2026-06-11 09:32:00'),
+	(111, 2, 'usuarios', 'editar', 6, NULL, NULL, '2026-06-11 09:32:20'),
+	(112, 2, 'usuarios', 'editar', 6, NULL, NULL, '2026-06-11 09:32:34'),
+	(113, 2, 'usuarios', 'editar', 2, NULL, NULL, '2026-06-11 09:33:10'),
+	(114, 2, 'usuarios', 'editar', 3, NULL, NULL, '2026-06-11 09:33:25'),
+	(115, 2, 'usuarios', 'editar', 4, NULL, NULL, '2026-06-11 09:33:42'),
+	(116, 2, 'usuarios', 'editar', 5, NULL, NULL, '2026-06-11 09:33:54'),
+	(117, 2, 'usuarios', 'criar', 7, NULL, NULL, '2026-06-11 09:35:10');
 
 -- Copiando estrutura para tabela sistema_advocacia.log_comunicacoes
+DROP TABLE IF EXISTS `log_comunicacoes`;
 CREATE TABLE IF NOT EXISTS `log_comunicacoes` (
   `id` int NOT NULL AUTO_INCREMENT,
   `canal` varchar(20) DEFAULT NULL,
@@ -11545,6 +11575,7 @@ CREATE TABLE IF NOT EXISTS `log_comunicacoes` (
 -- Copiando dados para a tabela sistema_advocacia.log_comunicacoes: ~0 rows (aproximadamente)
 
 -- Copiando estrutura para tabela sistema_advocacia.log_documentos_gerados
+DROP TABLE IF EXISTS `log_documentos_gerados`;
 CREATE TABLE IF NOT EXISTS `log_documentos_gerados` (
   `id` int NOT NULL AUTO_INCREMENT,
   `modelo_id` int NOT NULL,
@@ -11567,6 +11598,7 @@ CREATE TABLE IF NOT EXISTS `log_documentos_gerados` (
 -- Copiando dados para a tabela sistema_advocacia.log_documentos_gerados: ~0 rows (aproximadamente)
 
 -- Copiando estrutura para tabela sistema_advocacia.log_publicacoes
+DROP TABLE IF EXISTS `log_publicacoes`;
 CREATE TABLE IF NOT EXISTS `log_publicacoes` (
   `id` int NOT NULL AUTO_INCREMENT,
   `usuario_id` int NOT NULL,
@@ -11581,6 +11613,7 @@ CREATE TABLE IF NOT EXISTS `log_publicacoes` (
 -- Copiando dados para a tabela sistema_advocacia.log_publicacoes: ~0 rows (aproximadamente)
 
 -- Copiando estrutura para tabela sistema_advocacia.modelo_documento
+DROP TABLE IF EXISTS `modelo_documento`;
 CREATE TABLE IF NOT EXISTS `modelo_documento` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(150) NOT NULL,
@@ -11597,6 +11630,7 @@ CREATE TABLE IF NOT EXISTS `modelo_documento` (
 -- Copiando dados para a tabela sistema_advocacia.modelo_documento: ~0 rows (aproximadamente)
 
 -- Copiando estrutura para tabela sistema_advocacia.notificacoes
+DROP TABLE IF EXISTS `notificacoes`;
 CREATE TABLE IF NOT EXISTS `notificacoes` (
   `id` int NOT NULL AUTO_INCREMENT,
   `usuario_id` int NOT NULL,
@@ -11614,6 +11648,7 @@ CREATE TABLE IF NOT EXISTS `notificacoes` (
 -- Copiando dados para a tabela sistema_advocacia.notificacoes: ~0 rows (aproximadamente)
 
 -- Copiando estrutura para tabela sistema_advocacia.parcerias
+DROP TABLE IF EXISTS `parcerias`;
 CREATE TABLE IF NOT EXISTS `parcerias` (
   `id` int NOT NULL AUTO_INCREMENT,
   `processo_id` int NOT NULL,
@@ -11633,6 +11668,7 @@ CREATE TABLE IF NOT EXISTS `parcerias` (
 -- Copiando dados para a tabela sistema_advocacia.parcerias: ~0 rows (aproximadamente)
 
 -- Copiando estrutura para tabela sistema_advocacia.pericia
+DROP TABLE IF EXISTS `pericia`;
 CREATE TABLE IF NOT EXISTS `pericia` (
   `id` int NOT NULL AUTO_INCREMENT,
   `processo_id` int NOT NULL,
@@ -11661,6 +11697,7 @@ CREATE TABLE IF NOT EXISTS `pericia` (
 -- Copiando dados para a tabela sistema_advocacia.pericia: ~0 rows (aproximadamente)
 
 -- Copiando estrutura para tabela sistema_advocacia.permissoes
+DROP TABLE IF EXISTS `permissoes`;
 CREATE TABLE IF NOT EXISTS `permissoes` (
   `id` int NOT NULL AUTO_INCREMENT,
   `usuario_id` int NOT NULL,
@@ -11671,9 +11708,9 @@ CREATE TABLE IF NOT EXISTS `permissoes` (
   PRIMARY KEY (`id`),
   KEY `idx_usuario_modulo` (`usuario_id`,`modulo`,`submodulo`,`acao`),
   CONSTRAINT `permissoes_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=2173 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2268 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.permissoes: ~344 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.permissoes: ~439 rows (aproximadamente)
 INSERT INTO `permissoes` (`id`, `usuario_id`, `modulo`, `submodulo`, `acao`, `permitido`) VALUES
 	(585, 5, 'pessoas', NULL, 'visualizar', 1),
 	(586, 5, 'pessoas', NULL, 'cadastrar', 1),
@@ -12018,9 +12055,105 @@ INSERT INTO `permissoes` (`id`, `usuario_id`, `modulo`, `submodulo`, `acao`, `pe
 	(2169, 2, 'relatorios', NULL, 'cadastrar', 1),
 	(2170, 2, 'relatorios', NULL, 'alterar', 1),
 	(2171, 2, 'relatorios', NULL, 'excluir', 1),
-	(2172, 2, 'relatorios', NULL, 'historico', 1);
+	(2172, 2, 'relatorios', NULL, 'historico', 1),
+	(2173, 7, 'pessoas', NULL, 'visualizar', 1),
+	(2174, 7, 'pessoas', NULL, 'cadastrar', 1),
+	(2175, 7, 'pessoas', NULL, 'alterar', 1),
+	(2176, 7, 'pessoas', NULL, 'excluir', 1),
+	(2177, 7, 'pessoas', NULL, 'historico', 1),
+	(2178, 7, 'processos', NULL, 'visualizar', 1),
+	(2179, 7, 'processos', NULL, 'cadastrar', 1),
+	(2180, 7, 'processos', NULL, 'alterar', 1),
+	(2181, 7, 'processos', NULL, 'excluir', 1),
+	(2182, 7, 'processos', NULL, 'historico', 1),
+	(2183, 7, 'processos', 'andamentos', 'visualizar', 1),
+	(2184, 7, 'processos', 'andamentos', 'cadastrar', 1),
+	(2185, 7, 'processos', 'andamentos', 'alterar', 1),
+	(2186, 7, 'processos', 'andamentos', 'excluir', 1),
+	(2187, 7, 'processos', 'andamentos', 'historico', 1),
+	(2188, 7, 'processos', 'prazos', 'visualizar', 1),
+	(2189, 7, 'processos', 'prazos', 'cadastrar', 1),
+	(2190, 7, 'processos', 'prazos', 'alterar', 1),
+	(2191, 7, 'processos', 'prazos', 'excluir', 1),
+	(2192, 7, 'processos', 'prazos', 'historico', 1),
+	(2193, 7, 'processos', 'tarefas', 'visualizar', 1),
+	(2194, 7, 'processos', 'tarefas', 'cadastrar', 1),
+	(2195, 7, 'processos', 'tarefas', 'alterar', 1),
+	(2196, 7, 'processos', 'tarefas', 'excluir', 1),
+	(2197, 7, 'processos', 'tarefas', 'historico', 1),
+	(2198, 7, 'processos', 'audiencias', 'visualizar', 1),
+	(2199, 7, 'processos', 'audiencias', 'cadastrar', 1),
+	(2200, 7, 'processos', 'audiencias', 'alterar', 1),
+	(2201, 7, 'processos', 'audiencias', 'excluir', 1),
+	(2202, 7, 'processos', 'audiencias', 'historico', 1),
+	(2203, 7, 'processos', 'pericias', 'visualizar', 1),
+	(2204, 7, 'processos', 'pericias', 'cadastrar', 1),
+	(2205, 7, 'processos', 'pericias', 'alterar', 1),
+	(2206, 7, 'processos', 'pericias', 'excluir', 1),
+	(2207, 7, 'processos', 'pericias', 'historico', 1),
+	(2208, 7, 'pastas', NULL, 'visualizar', 1),
+	(2209, 7, 'pastas', NULL, 'cadastrar', 1),
+	(2210, 7, 'pastas', NULL, 'alterar', 1),
+	(2211, 7, 'pastas', NULL, 'excluir', 1),
+	(2212, 7, 'pastas', NULL, 'historico', 1),
+	(2213, 7, 'prazos', NULL, 'visualizar', 1),
+	(2214, 7, 'prazos', NULL, 'cadastrar', 1),
+	(2215, 7, 'prazos', NULL, 'alterar', 1),
+	(2216, 7, 'prazos', NULL, 'excluir', 1),
+	(2217, 7, 'prazos', NULL, 'historico', 1),
+	(2218, 7, 'prazos', 'ver_todos', 'visualizar', 1),
+	(2219, 7, 'prazos', 'ver_todos', 'cadastrar', 1),
+	(2220, 7, 'prazos', 'ver_todos', 'alterar', 1),
+	(2221, 7, 'prazos', 'ver_todos', 'excluir', 1),
+	(2222, 7, 'prazos', 'ver_todos', 'historico', 1),
+	(2223, 7, 'tarefas', NULL, 'visualizar', 1),
+	(2224, 7, 'tarefas', NULL, 'cadastrar', 1),
+	(2225, 7, 'tarefas', NULL, 'alterar', 1),
+	(2226, 7, 'tarefas', NULL, 'excluir', 1),
+	(2227, 7, 'tarefas', NULL, 'historico', 1),
+	(2228, 7, 'tarefas', 'ver_todos', 'visualizar', 1),
+	(2229, 7, 'tarefas', 'ver_todos', 'cadastrar', 1),
+	(2230, 7, 'tarefas', 'ver_todos', 'alterar', 1),
+	(2231, 7, 'tarefas', 'ver_todos', 'excluir', 1),
+	(2232, 7, 'tarefas', 'ver_todos', 'historico', 1),
+	(2233, 7, 'audiencias', NULL, 'visualizar', 1),
+	(2234, 7, 'audiencias', NULL, 'cadastrar', 1),
+	(2235, 7, 'audiencias', NULL, 'alterar', 1),
+	(2236, 7, 'audiencias', NULL, 'excluir', 1),
+	(2237, 7, 'audiencias', NULL, 'historico', 1),
+	(2238, 7, 'audiencias', 'tipos', 'visualizar', 1),
+	(2239, 7, 'audiencias', 'tipos', 'cadastrar', 1),
+	(2240, 7, 'audiencias', 'tipos', 'alterar', 1),
+	(2241, 7, 'audiencias', 'tipos', 'excluir', 1),
+	(2242, 7, 'audiencias', 'tipos', 'historico', 1),
+	(2243, 7, 'pericias', NULL, 'visualizar', 1),
+	(2244, 7, 'pericias', NULL, 'cadastrar', 1),
+	(2245, 7, 'pericias', NULL, 'alterar', 1),
+	(2246, 7, 'pericias', NULL, 'excluir', 1),
+	(2247, 7, 'pericias', NULL, 'historico', 1),
+	(2248, 7, 'financeiro', NULL, 'visualizar', 1),
+	(2249, 7, 'financeiro', NULL, 'cadastrar', 1),
+	(2250, 7, 'financeiro', NULL, 'alterar', 1),
+	(2251, 7, 'financeiro', NULL, 'excluir', 1),
+	(2252, 7, 'financeiro', NULL, 'historico', 1),
+	(2253, 7, 'documentos', NULL, 'visualizar', 1),
+	(2254, 7, 'documentos', NULL, 'cadastrar', 1),
+	(2255, 7, 'documentos', NULL, 'alterar', 1),
+	(2256, 7, 'documentos', NULL, 'excluir', 1),
+	(2257, 7, 'documentos', NULL, 'historico', 1),
+	(2258, 7, 'publicacoes', NULL, 'visualizar', 1),
+	(2259, 7, 'publicacoes', NULL, 'cadastrar', 1),
+	(2260, 7, 'publicacoes', NULL, 'alterar', 1),
+	(2261, 7, 'publicacoes', NULL, 'excluir', 1),
+	(2262, 7, 'publicacoes', NULL, 'historico', 1),
+	(2263, 7, 'relatorios', NULL, 'visualizar', 1),
+	(2264, 7, 'relatorios', NULL, 'cadastrar', 1),
+	(2265, 7, 'relatorios', NULL, 'alterar', 1),
+	(2266, 7, 'relatorios', NULL, 'excluir', 1),
+	(2267, 7, 'relatorios', NULL, 'historico', 1);
 
 -- Copiando estrutura para tabela sistema_advocacia.pessoas_fisicas
+DROP TABLE IF EXISTS `pessoas_fisicas`;
 CREATE TABLE IF NOT EXISTS `pessoas_fisicas` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(200) NOT NULL,
@@ -12072,6 +12205,7 @@ INSERT INTO `pessoas_fisicas` (`id`, `nome`, `cpf`, `rg`, `rg_orgao`, `pis`, `ct
 	(6, 'pedro', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1, '2026-06-09 22:52:14', 2, NULL, NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.pessoas_juridicas
+DROP TABLE IF EXISTS `pessoas_juridicas`;
 CREATE TABLE IF NOT EXISTS `pessoas_juridicas` (
   `id` int NOT NULL AUTO_INCREMENT,
   `razao_social` varchar(200) NOT NULL,
@@ -12099,6 +12233,7 @@ INSERT INTO `pessoas_juridicas` (`id`, `razao_social`, `nome_fantasia`, `cnpj`, 
 	(2, 'Via Varejo S/a', NULL, '33041260000164', NULL, NULL, '09520-010', 'Rua João Pessoa', '83', NULL, 'Centro', 'São Caetano do Sul', 'SP', NULL, 1, '2026-05-26 13:40:40', 2);
 
 -- Copiando estrutura para tabela sistema_advocacia.prazos_processo
+DROP TABLE IF EXISTS `prazos_processo`;
 CREATE TABLE IF NOT EXISTS `prazos_processo` (
   `id` int NOT NULL AUTO_INCREMENT,
   `processo_id` int NOT NULL,
@@ -12149,6 +12284,7 @@ INSERT INTO `prazos_processo` (`id`, `processo_id`, `subtipo_id`, `descricao`, `
 	(8, 4, 2, NULL, '2026-05-12', 5, 'uteis', '2026-05-18', 5, 'aberto', NULL, NULL, NULL, NULL, '2026-05-31 12:50:41', 2, NULL, NULL, NULL, NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.prazo_subtipo
+DROP TABLE IF EXISTS `prazo_subtipo`;
 CREATE TABLE IF NOT EXISTS `prazo_subtipo` (
   `id` int NOT NULL AUTO_INCREMENT,
   `tipo_prazo_id` int NOT NULL,
@@ -12193,6 +12329,7 @@ INSERT INTO `prazo_subtipo` (`id`, `tipo_prazo_id`, `nome`, `ativo`) VALUES
 	(30, 5, 'Cumprimento De Obrigação De Fazer/Não Fazer', 1);
 
 -- Copiando estrutura para tabela sistema_advocacia.profissao
+DROP TABLE IF EXISTS `profissao`;
 CREATE TABLE IF NOT EXISTS `profissao` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(100) NOT NULL,
@@ -12221,6 +12358,7 @@ INSERT INTO `profissao` (`id`, `nome`) VALUES
 	(18, 'controlador de accesso');
 
 -- Copiando estrutura para tabela sistema_advocacia.publicacoes
+DROP TABLE IF EXISTS `publicacoes`;
 CREATE TABLE IF NOT EXISTS `publicacoes` (
   `id` int NOT NULL AUTO_INCREMENT,
   `data_publicacao` date NOT NULL,
@@ -12241,6 +12379,7 @@ CREATE TABLE IF NOT EXISTS `publicacoes` (
 -- Copiando dados para a tabela sistema_advocacia.publicacoes: ~0 rows (aproximadamente)
 
 -- Copiando estrutura para tabela sistema_advocacia.reset_tokens
+DROP TABLE IF EXISTS `reset_tokens`;
 CREATE TABLE IF NOT EXISTS `reset_tokens` (
   `id` int NOT NULL AUTO_INCREMENT,
   `usuario_id` int NOT NULL,
@@ -12264,6 +12403,7 @@ INSERT INTO `reset_tokens` (`id`, `usuario_id`, `token`, `expires_at`, `usado`, 
 	(6, 3, 'f15b9824dae62ec4fba0d66f7c575dd6950824b0221047c29a18d40ed2bc8253', '2026-06-08 17:18:00', 0, '2026-06-08 16:18:00');
 
 -- Copiando estrutura para tabela sistema_advocacia.tarefas
+DROP TABLE IF EXISTS `tarefas`;
 CREATE TABLE IF NOT EXISTS `tarefas` (
   `id` int NOT NULL AUTO_INCREMENT,
   `titulo` varchar(300) NOT NULL,
@@ -12301,6 +12441,7 @@ INSERT INTO `tarefas` (`id`, `titulo`, `descricao`, `prioridade`, `processo_id`,
 	(7, 'Q4w3rkuhtqwelkiuglweaijhfugwale', NULL, 'normal', NULL, NULL, NULL, NULL, NULL, 0, NULL, NULL, '2026-06-03 14:58:14', 2);
 
 -- Copiando estrutura para tabela sistema_advocacia.tblforum
+DROP TABLE IF EXISTS `tblforum`;
 CREATE TABLE IF NOT EXISTS `tblforum` (
   `id` int NOT NULL AUTO_INCREMENT,
   `abrev_nome` varchar(50) DEFAULT NULL COMMENT 'Abreviação para dropdowns/mensagens — ex: VT/B.Funda',
@@ -12330,6 +12471,7 @@ INSERT INTO `tblforum` (`id`, `abrev_nome`, `nome`, `cidade`, `cep`, `logradouro
 	(5, '', 'Fórum Trabalhista Ruy Barbosa', 'São Paulo', '01139001', 'Av. Marquês de São Vicente', '235', NULL, 'Barra Funda', 'SP', 1, NULL, '2026-05-27 13:51:19', NULL, NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.tblinstanciaproc
+DROP TABLE IF EXISTS `tblinstanciaproc`;
 CREATE TABLE IF NOT EXISTS `tblinstanciaproc` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(100) NOT NULL,
@@ -12356,6 +12498,7 @@ INSERT INTO `tblinstanciaproc` (`id`, `nome`, `ativo`, `criado_por`, `criado_em`
 	(7, 'TRF', 1, NULL, '2026-05-26 00:58:04', NULL, NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.tblpasta
+DROP TABLE IF EXISTS `tblpasta`;
 CREATE TABLE IF NOT EXISTS `tblpasta` (
   `id` int NOT NULL AUTO_INCREMENT,
   `numPasta` int NOT NULL,
@@ -12381,6 +12524,7 @@ INSERT INTO `tblpasta` (`id`, `numPasta`, `area_direito`, `criado_por`, `criado_
 	(8, 10, NULL, 3, '2026-05-31 12:16:07', NULL, NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.tblproc
+DROP TABLE IF EXISTS `tblproc`;
 CREATE TABLE IF NOT EXISTS `tblproc` (
   `id` int NOT NULL AUTO_INCREMENT,
   `pasta_id` int NOT NULL,
@@ -12426,6 +12570,7 @@ INSERT INTO `tblproc` (`id`, `pasta_id`, `numProc`, `NomeTituloProc`, `vara_id`,
 	(8, 8, '5555555-55.5555.5.55.5555', 'Via Varejo S/a X Edna Silva Vieira de Lima Ribeiro', 298, 1, 7, 1, NULL, NULL, 1, 3, '2026-05-31 12:16:07', NULL, NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.tblstatusproc
+DROP TABLE IF EXISTS `tblstatusproc`;
 CREATE TABLE IF NOT EXISTS `tblstatusproc` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(100) NOT NULL,
@@ -12452,6 +12597,7 @@ INSERT INTO `tblstatusproc` (`id`, `nome`, `ativo`, `criado_por`, `criado_em`, `
 	(7, 'Conhecimento', 1, 2, '2026-05-27 13:56:16', NULL, NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.tbltipoproc
+DROP TABLE IF EXISTS `tbltipoproc`;
 CREATE TABLE IF NOT EXISTS `tbltipoproc` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(100) NOT NULL,
@@ -12479,6 +12625,7 @@ INSERT INTO `tbltipoproc` (`id`, `nome`, `codTipoProc`, `ativo`, `criado_por`, `
 	(7, 'Outro', NULL, 0, NULL, '2026-05-26 00:58:03', 2, '2026-05-26 14:13:25');
 
 -- Copiando estrutura para tabela sistema_advocacia.tbltituloprocautor
+DROP TABLE IF EXISTS `tbltituloprocautor`;
 CREATE TABLE IF NOT EXISTS `tbltituloprocautor` (
   `id` int NOT NULL AUTO_INCREMENT,
   `proc_id` int NOT NULL,
@@ -12510,6 +12657,7 @@ INSERT INTO `tbltituloprocautor` (`id`, `proc_id`, `tipo_pessoa`, `pessoa_id`, `
 	(29, 6, 'fisica', 3, 2, '2026-06-09 11:01:24');
 
 -- Copiando estrutura para tabela sistema_advocacia.tbltituloprocreu
+DROP TABLE IF EXISTS `tbltituloprocreu`;
 CREATE TABLE IF NOT EXISTS `tbltituloprocreu` (
   `id` int NOT NULL AUTO_INCREMENT,
   `proc_id` int NOT NULL,
@@ -12536,6 +12684,7 @@ INSERT INTO `tbltituloprocreu` (`id`, `proc_id`, `tipo_pessoa`, `pessoa_id`, `cr
 	(16, 6, 'juridica', 2, 2, '2026-06-09 11:01:24');
 
 -- Copiando estrutura para tabela sistema_advocacia.tblvara
+DROP TABLE IF EXISTS `tblvara`;
 CREATE TABLE IF NOT EXISTS `tblvara` (
   `id` int NOT NULL AUTO_INCREMENT,
   `abrev_nome` varchar(50) DEFAULT NULL COMMENT 'Abreviação para dropdowns/mensagens — ex: 04ªVT/SP-ZL',
@@ -12559,7 +12708,7 @@ CREATE TABLE IF NOT EXISTS `tblvara` (
   CONSTRAINT `tblvara_ibfk_3` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=362 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.tblvara: ~0 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.tblvara: ~91 rows (aproximadamente)
 INSERT INTO `tblvara` (`id`, `abrev_nome`, `forum_id`, `nome`, `codVaraNoProc`, `compl_end`, `tel`, `email`, `ativo`, `criado_por`, `criado_em`, `alterado_por`, `alterado_em`) VALUES
 	(1, '01ªVT/SP-B.Funda', 1, '01ª Vara do Trabalho', '', '01ª Andar', NULL, NULL, 0, 2, '2026-05-26 15:27:26', 2, '2026-06-09 10:27:23'),
 	(272, '1ªVT/SP', 5, '1ª Vara do Trabalho', '5020001', '3º andar Bloco A', '(11) 3525-9101', 'vtsp01@trtsp.jus.br', 1, NULL, '2026-05-27 13:51:19', NULL, NULL),
@@ -12654,6 +12803,7 @@ INSERT INTO `tblvara` (`id`, `abrev_nome`, `forum_id`, `nome`, `codVaraNoProc`, 
 	(361, '90ªVT/SP', 5, '90ª Vara do Trabalho', '5020090', '18º andar Bloco B', '(11) 3525-9190', 'vtsp90@trtsp.jus.br', 1, NULL, '2026-05-27 13:51:19', NULL, NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.telefones_pf
+DROP TABLE IF EXISTS `telefones_pf`;
 CREATE TABLE IF NOT EXISTS `telefones_pf` (
   `id` int NOT NULL AUTO_INCREMENT,
   `pessoa_id` int NOT NULL,
@@ -12677,6 +12827,7 @@ INSERT INTO `telefones_pf` (`id`, `pessoa_id`, `numero`, `tipo`, `principal`, `a
 	(9, 5, '(11) 91457-6512', 'Everton', 0, 1, '2026-05-26 13:39:41');
 
 -- Copiando estrutura para tabela sistema_advocacia.telefones_pj
+DROP TABLE IF EXISTS `telefones_pj`;
 CREATE TABLE IF NOT EXISTS `telefones_pj` (
   `id` int NOT NULL AUTO_INCREMENT,
   `pessoa_id` int NOT NULL,
@@ -12693,6 +12844,7 @@ CREATE TABLE IF NOT EXISTS `telefones_pj` (
 -- Copiando dados para a tabela sistema_advocacia.telefones_pj: ~0 rows (aproximadamente)
 
 -- Copiando estrutura para tabela sistema_advocacia.tipo_audiencia
+DROP TABLE IF EXISTS `tipo_audiencia`;
 CREATE TABLE IF NOT EXISTS `tipo_audiencia` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(100) NOT NULL,
@@ -12712,6 +12864,7 @@ INSERT INTO `tipo_audiencia` (`id`, `nome`, `ativo`) VALUES
 	(12, 'Oitiva de Testemunha', 1);
 
 -- Copiando estrutura para tabela sistema_advocacia.tipo_pericia
+DROP TABLE IF EXISTS `tipo_pericia`;
 CREATE TABLE IF NOT EXISTS `tipo_pericia` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(100) NOT NULL,
@@ -12730,6 +12883,7 @@ INSERT INTO `tipo_pericia` (`id`, `nome`, `ativo`) VALUES
 	(7, 'Tâ”œÂ®cnica', 1);
 
 -- Copiando estrutura para tabela sistema_advocacia.tipo_prazo
+DROP TABLE IF EXISTS `tipo_prazo`;
 CREATE TABLE IF NOT EXISTS `tipo_prazo` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(100) NOT NULL,
@@ -12746,6 +12900,7 @@ INSERT INTO `tipo_prazo` (`id`, `nome`, `ativo`) VALUES
 	(5, 'Execução', 1);
 
 -- Copiando estrutura para tabela sistema_advocacia.usuarios
+DROP TABLE IF EXISTS `usuarios`;
 CREATE TABLE IF NOT EXISTS `usuarios` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(150) NOT NULL,
@@ -12764,15 +12919,17 @@ CREATE TABLE IF NOT EXISTS `usuarios` (
   `notif_tela` tinyint(1) DEFAULT '1',
   PRIMARY KEY (`id`),
   KEY `idx_login` (`login`)
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.usuarios: ~5 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.usuarios: ~7 rows (aproximadamente)
 INSERT INTO `usuarios` (`id`, `nome`, `login`, `senha_hash`, `email`, `oab`, `tipo`, `nivel`, `ativo`, `ver_todos_processos`, `criado_em`, `criado_por`, `ultimo_acesso`, `notif_email`, `notif_tela`) VALUES
 	(1, 'Superusuário', 'superadmin', '$2a$12$6vzSy/RUw.HOUdaJurzjoei0THb0ZrBmKuHfOxU9A1xpvDnKwv4GW', NULL, NULL, 'administrador', 0, 1, 0, '2026-05-23 00:59:32', NULL, '2026-06-09 20:26:28', 1, 1),
-	(2, 'Claudio', 'claudio', '$2a$12$R6hWG171ZHRU891Pv54Cp.hu/iGz3pi3Zj3kt3lzmMpv9EWeif5OW', 'claudio@antonio.adv.br', '222418', 'administrador', 1, 1, 1, '2026-05-23 01:06:19', 1, '2026-06-10 09:34:01', 1, 1),
-	(3, 'edna', 'edna', '$2a$12$7dGUcfBvEXpcn..cHJ660e1/s9CR.ph.PnY/CAkQAZu6mXXF3DEEG', 'ednasvlr@gmail.com', NULL, 'advogado', 1, 1, 1, '2026-05-23 10:35:04', 1, '2026-06-08 16:24:51', 1, 1),
-	(4, 'Erick', 'erick', '$2a$12$qxQnhjOX5k8XdjSjwv/kA.jRkYj7BObWFiyld8uiJRB6oGLiZYPSi', NULL, NULL, 'advogado', 2, 1, 0, '2026-05-29 13:49:05', 2, '2026-06-02 09:40:14', 1, 1),
-	(5, 'Evellyn', 'evellyn', '$2a$12$KZiHwJNwCnEEf2qwJh6VHu/daIfefrssoBQukB4I866UhSFdiZoYe', NULL, NULL, 'advogado', 2, 1, 0, '2026-05-30 00:29:53', 2, '2026-05-31 13:02:21', 1, 1);
+	(2, 'Claudio', 'claudio', '$2a$12$0SCACm4vro7kpi8QC28jlOnJw6V2J7Ciz4EOOgKpnAaefHhP0shXq', 'claudio@antonio.adv.br', NULL, 'administrador', 1, 1, 1, '2026-05-23 01:06:19', 1, '2026-06-11 08:31:24', 1, 1),
+	(3, 'edna', 'edna', '$2a$12$zHJRLurJ4WOgjWhf6JEvteVrp095BMfRtOZfdxqtMg0dT4OxTiu9G', 'ednasvlr@gmail.com', NULL, 'advogado', 1, 1, 1, '2026-05-23 10:35:04', 1, '2026-06-08 16:24:51', 1, 1),
+	(4, 'Erick', 'erick', '$2a$12$QM8unf8KeJC/qyibJNEiOeNwgZ0ebgm1zay0MBWbpTkMj8nW6Jclm', NULL, NULL, 'advogado', 2, 1, 0, '2026-05-29 13:49:05', 2, '2026-06-02 09:40:14', 1, 1),
+	(5, 'Evellyn', 'evellyn', '$2a$12$ndwGKWme085Gg.qaoB9AQeHEod6MVuOFRT1BOiufCmS0r8EgJGkmy', NULL, NULL, 'advogado', 2, 1, 0, '2026-05-30 00:29:53', 2, '2026-05-31 13:02:21', 1, 1),
+	(6, 'Alysson', 'Alysson', '$2a$12$BYXYvn6T28TeVpbK7tnehea6pHhsZyJGQhjoUswlMsbpDmMH1uUES', 'alysson@antonio.adv.br', NULL, 'advogado', 1, 1, 0, '2026-06-11 09:11:43', 2, NULL, 1, 1),
+	(7, 'Angela', 'Angela', '$2a$12$hMNYVQ4RoUdVcWczn7wbUOTQyvMsO.O/ZfW/UMpouJ9kjddXRvs9y', 'angela@antonio.adv.br', NULL, 'advogado', 2, 1, 0, '2026-06-11 09:35:10', 2, NULL, 1, 1);
 
 /*!40103 SET TIME_ZONE=IFNULL(@OLD_TIME_ZONE, 'system') */;
 /*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;
