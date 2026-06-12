@@ -70,11 +70,12 @@ SMTP_PASS=goovjyiunyprdbfu   ← App Password (gerada 12/06/2026)
 - Se invalidada (troca de senha, revogação manual), o sistema retorna erro `535-5.7.8 Invalid login`
 - Nesse caso: gerar nova App Password → atualizar `.env` no servidor via WinSCP → `pm2 restart advocacia-backend --update-env`
 
-### Problema detectado — Vírgula sobrando no campo alerta_emails (12/06/2026)
-O campo `alerta_emails` nas Configurações tinha: `visaoecultura@gmail.com, ednasvlr@gmail.com,.com`
-- O `.com` era tratado como destinatário inválido mas passava pelo `filter(Boolean)`
-- **Correção: usuário deve acessar a tela de Configurações e remover o `.com` sobrante**
-- Isso explica por que só 1 dos 2 e-mails chegava (o `.com` recebia silenciosamente e falhava)
+### Problema — alerta_emails quebrado (ATUALIZADO 12/06/2026 tarde)
+O valor real no banco (conferido no backup) é PIOR do que parecia:
+`visaoecultura@gmail.com, ednasvlr@gmail,.com` — o e-mail da Edna está TRUNCADO (sem `.com`).
+- **Correção: já incluída no script `scripts/fase2_1_correcao_dados.sql`** (UPDATE no banco) —
+  o usuário roda no HeidiSQL; NÃO precisa mais corrigir pela tela
+- Valor correto: `visaoecultura@gmail.com, ednasvlr@gmail.com`
 
 ## Log de E-mails — backend/src/utils/email.js (implementado 12/06/2026)
 

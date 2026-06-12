@@ -1,25 +1,25 @@
 # Memory Index — Sistema de Advocacia
 
-- [Visão Geral do Projeto](project_overview.md) — JS, Node+React+MySQL, AWS Lightsail 98.86.50.188, ~4% concluído, WhatsApp descartado por ora
-- [Diretrizes de Código](feedback_codigo.md) — ⚠️ LER PRIMEIRO: só codifica com autorização, sem migrations, commits DDMMYY-HHMM, transações obrigatórias
+- [Pendências Próxima Sessão](pendencias_proxima_sessao.md) — 🔴 HANDOFF 12/06/2026: LER PRIMEIRO — fases 1-4 codadas (13 arquivos backend + Layout, SEM commit), 3 scripts SQL aguardando, sequência de deploy obrigatória, 4 bugs corrigidos
+- [Diretrizes de Código](feedback_codigo.md) — ⚠️ LER SEGUNDO: Claude NUNCA mexe no git nem no banco (usuário faz tudo manualmente); só codifica com autorização; transações obrigatórias; hojeBrasilia() + timezone nos crons; auditoria com conn
+- [Visão Geral do Projeto](project_overview.md) — JS, Node+Express+React(Vite)+MySQL, AWS Lightsail 98.85.19.2, instância Dr. Antonio
+- [Tabelas do Banco de Dados](database_tables.md) — 51 tabelas; scripts fase2_1/2_2/2_3 criados 12/06 aguardando execução; pesquisas_salvas NÃO existe
+- [Deploy e Versionamento](deploy_versionamento.md) — PM2: "advocacia-backend"; servidor em /var/www/advocacia/; WinSCP documentado
 - [Usuários e Permissões](user_permissions.md) — Hierarquia 3 níveis, superusuário invisível (nivel=0), permissões granulares
 - [Cadastro de Pessoas](cadastro_pessoas.md) — Papel definido pelo contexto; busca abrangente (CPF/RG/PIS/tel/endereço); coluna Qtde Proc
 - [Processos e Pastas](processos_pastas.md) — PESSOA → CLIENTE → PASTA → PROCESSO; tabelas definitivas com prefixo tbl
-- [Tabelas do Banco de Dados](database_tables.md) — 47 tabelas; log_emails adicionada 12/06/2026; 3 índices novos criados
-- [Deploy e Versionamento](deploy_versionamento.md) — PM2: "advocacia-backend"; servidor em /var/www/advocacia/; WinSCP documentado
 - [Prazos](prazos.md) — Dias úteis/corridos, status com auditoria, alertas e-mail, 42+ tipos
-- [Tarefas](tarefas.md) — Diferença vs prazo: vínculo livre, sem alerta admin, prioridades 3 níveis
-- [Financeiro](financeiro.md) — Conta corrente por pasta, honorários flexíveis, recibo PDF, relatórios, parcerias
-- [Audiências](audiencias.md) — Comunicado PDF automático, ata gera prazos/tarefas/acordo; validação dia útil + senha obrigatória
-- [Validação de Senha](validacao_senha.md) — Regras (8-20, maiúscula+minúscula+número+especial), onde está implementado, verificarSenha
+- [Tarefas](tarefas.md) — Diferença vs prazo: vínculo livre, sem alerta admin; transações desde 12/06
+- [Financeiro](financeiro.md) — Conta corrente por pasta, honorários flexíveis; bug honorários duplicados corrigido 12/06
+- [Audiências](audiencias.md) — Status/ata/remarcação; dia útil + senha; colunas advogado_* removidas do código 12/06 (banco via script fase2_3)
+- [Validação de Senha](validacao_senha.md) — Regras (8-20, maiúscula+minúscula+número+especial), verificarSenha
 - [Andamento Processual](andamento_processual.md) — Lançamento manual, data/descrição/usuário, auditoria de edições
-- [Documentos e Modelos](documentos_modelos.md) — Gera Word+PDF com variáveis automáticas, admin configura modelos, log de geração salvo
-- [Comunicações](comunicacoes.md) — E-mail (ativo via Gmail SMTP) e WhatsApp (futuro/Z-API), histórico registrado
-- [Agenda e Calendário](agenda_calendario.md) — Padrão: só eventos do usuário logado; checkbox "Escritório" mostra todos
-- [Relatórios e Pesquisas](relatorios.md) — Pesquisa flexível estilo AutoFiltro Excel, por módulo e unificada, exporta PDF/Excel/Word
-- [Configurações do Escritório](configuracoes_escritorio.md) — Dados só editáveis pelo superusuário; excluir/histórico de usuários; alertas e-mail no banco
-- [Dashboard](dashboard.md) — Cards do dia (prazos, tarefas, audiências, perícias), audiências sem ata, atalhos rápidos
-- [Perícias](pericias.md) — Agendamento, comunicado ao cliente, e-mail ao perito via modelo, sem laudo
-- [Integrações e Publicações](integracoes_publicacoes.md) — Publicações AASP por OAB, gera prazo/tarefa, CNJ para versão futura
-- [Setup Inicial](setup_inicial.md) — Campos obrigatórios, bloqueio de módulos, calendário pré-populado 30 anos, primeiro admin
-- [Pendências Próxima Sessão](pendencias_proxima_sessao.md) — Deploy pendente (email.js, alertasService.js, configuracaoCtrl, Audiencias.js); vírgula no alerta_emails
+- [Documentos e Modelos](documentos_modelos.md) — Word+PDF com variáveis; bug pf.endereco corrigido 12/06; UI é a próxima etapa (Fase 5)
+- [Comunicações](comunicacoes.md) — Gmail SMTP ativo; alerta_emails truncado corrige via script fase2_1; log_emails sem UI
+- [Agenda e Calendário](agenda_calendario.md) — Padrão: só eventos do usuário logado; checkbox "Escritório"; nome de freela resolvido 12/06
+- [Relatórios e Pesquisas](relatorios.md) — AutoFiltro estilo Excel; criar tabela pesquisas_salvas quando iniciar (Fase 5)
+- [Configurações do Escritório](configuracoes_escritorio.md) — Timezone obrigatório nos crons (12/06); cron exato reagendável; usuários
+- [Dashboard](dashboard.md) — Cards do dia; hoje/amanhã via hojeBrasilia desde 12/06; responsivo 2 colunas no celular
+- [Perícias](pericias.md) — Agendamento, comunicado ao cliente; transações desde 12/06
+- [Integrações e Publicações](integracoes_publicacoes.md) — Publicações AASP por OAB, gera prazo/tarefa, CNJ futuro
+- [Setup Inicial](setup_inicial.md) — Campos obrigatórios, bloqueio de módulos, calendário 30 anos, primeiro admin

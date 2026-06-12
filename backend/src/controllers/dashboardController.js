@@ -5,13 +5,14 @@
 
 const { pool } = require('../config/database');
 const { sucesso, erroInterno } = require('../utils/response');
+const { hojeBrasilia } = require('../utils/helpers');
 
 // GET /api/dashboard — Retorna todos os dados do dashboard
 async function buscarDados(req, res) {
   try {
     const userId = req.usuario.id;
-    const hoje = new Date().toISOString().split('T')[0];
-    const amanha = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+    const hoje = hojeBrasilia();
+    const amanha = hojeBrasilia(1);
 
     // Executa todas as consultas em paralelo para máxima performance
     const [

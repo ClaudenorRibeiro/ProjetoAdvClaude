@@ -234,6 +234,30 @@ body {
   flex-shrink: 0;
 }
 
+.header-esquerda {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0; /* permite o título encolher com ellipsis */
+}
+
+/* Hambúrguer — escondido no desktop, aparece só no celular (media query abaixo) */
+.btn-hamburger {
+  display: none;
+  background: none;
+  border: none;
+  font-size: 22px;
+  color: #374151;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  line-height: 1;
+}
+
+.btn-hamburger:active {
+  background: #f1f5f9;
+}
+
 .pagina-titulo {
   font-size: 17px;
   font-weight: 600;
@@ -485,6 +509,23 @@ body {
   gap: 16px;
 }
 
+/* Linha de filtros/ações — padrão para todas as páginas:
+   no desktop ficam lado a lado, no celular quebram linha naturalmente */
+.filtros-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+/* Fundo escurecido atrás do menu off-canvas (celular) — invisível no desktop */
+.sidebar-backdrop {
+  display: none;
+}
+
+/* ============================================================
+   RESPONSIVO — TABLETS E CELULARES (até 768px)
+   ============================================================ */
 @media (max-width: 768px) {
 
   .grid-2,
@@ -494,7 +535,103 @@ body {
   }
 
   .conteudo {
-    padding: 16px;
+    padding: 12px;
+  }
+
+  /* ---- Sidebar vira menu off-canvas ---- */
+  /* Fica fora da tela à esquerda; o hambúrguer a traz de volta */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 270px !important; /* sempre expandida no celular (com rótulos) */
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.25);
+  }
+
+  .layout.sidebar-mobile-aberta .sidebar {
+    transform: translateX(0);
+  }
+
+  /* Fundo escurecido — clicar fora fecha o menu */
+  .layout.sidebar-mobile-aberta .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 99; /* abaixo da sidebar (100), acima do conteúdo */
+  }
+
+  /* Botão de recolher (◀/▶) não faz sentido no celular */
+  .btn-toggle-sidebar {
+    display: none;
+  }
+
+  /* ---- Header compacto ---- */
+  .header {
+    padding: 0 12px;
+  }
+
+  .btn-hamburger {
+    display: block;
+  }
+
+  .pagina-titulo {
+    font-size: 15px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .header-direita {
+    gap: 8px;
+  }
+
+  /* Nome do usuário encurta com "..." para não estourar o header */
+  .usuario-nome-header {
+    max-width: 90px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ---- Modais ocupam quase toda a tela ---- */
+  .modal-overlay {
+    padding: 8px;
+  }
+
+  .modal-box,
+  .modal-box.modal-grande,
+  .modal-box.modal-largo {
+    max-width: 100%;
+    max-height: 95vh;
+  }
+
+  .modal-body {
+    padding: 14px;
+  }
+
+  /* ---- Abas com scroll horizontal se não couberem ---- */
+  .abas-nav {
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .aba-btn {
+    padding: 10px 12px;
+    flex-shrink: 0;
+  }
+
+  /* ---- Botões e células um pouco mais compactos ---- */
+  .btn {
+    padding: 8px 12px;
+  }
+
+  .tabela th,
+  .tabela td {
+    padding: 8px 8px;
   }
 }
 

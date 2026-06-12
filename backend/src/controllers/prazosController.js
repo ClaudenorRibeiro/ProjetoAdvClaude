@@ -7,6 +7,7 @@ const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const { calcularVencimento } = require('../services/calendarioService');
 const { criarNotificacao, emailPrazoDelegado } = require('../services/notificacaoService');
+const { hojeBrasilia } = require('../utils/helpers');
 const auditoria = require('../middleware/auditoria');
 
 // Libera prazos com "Fazendo" expirado pelo timeout configurado — exportada para uso no cron
@@ -392,7 +393,7 @@ async function marcarFazendo(req, res) {
     }
 
     // Determina o status atual para restaurar caso o timeout expire
-    const hoje = new Date().toISOString().split('T')[0];
+    const hoje = hojeBrasilia();
     const venc = String(prazo.data_vencimento).split('T')[0];
     const statusAtual = venc < hoje ? 'atrasado' : venc === hoje ? 'pendente' : 'agendado';
 

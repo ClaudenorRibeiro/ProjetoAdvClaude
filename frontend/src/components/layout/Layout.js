@@ -62,6 +62,8 @@ export default function Layout({ children }) {
   const location  = useLocation();
   const navigate  = useNavigate();
   const [sidebarAberta, setSidebarAberta] = useState(true);
+  // Sidebar no celular: vira menu off-canvas (escondido por padrão, abre pelo hambúrguer)
+  const [sidebarMobile, setSidebarMobile] = useState(false);
   const [qtdNotif, setQtdNotif]   = useState(0);
   const [notifs, setNotifs]       = useState([]);
   const [sinoAberto, setSinoAberto]       = useState(false);
@@ -76,6 +78,11 @@ export default function Layout({ children }) {
     const intervalo = setInterval(buscarContagem, 120000);
     return () => clearInterval(intervalo);
   }, []);
+
+  // Celular: fecha o menu off-canvas automaticamente ao navegar para outra página
+  useEffect(() => {
+    setSidebarMobile(false);
+  }, [location.pathname]);
 
   // Fecha painéis ao clicar fora
   useEffect(() => {
@@ -147,8 +154,17 @@ export default function Layout({ children }) {
     return true;
   }
 
+  // Abre o menu no celular — garante a sidebar expandida para os rótulos aparecerem
+  function abrirMenuMobile() {
+    setSidebarAberta(true);
+    setSidebarMobile(true);
+  }
+
   return (
-    <div className={`layout ${sidebarAberta ? 'sidebar-aberta' : 'sidebar-fechada'}`}>
+    <div className={`layout ${sidebarAberta ? 'sidebar-aberta' : 'sidebar-fechada'} ${sidebarMobile ? 'sidebar-mobile-aberta' : ''}`}>
+
+      {/* Fundo escurecido atrás do menu no celular — clicar fora fecha */}
+      <div className="sidebar-backdrop" onClick={() => setSidebarMobile(false)} />
 
       {/* SIDEBAR */}
       <aside className="sidebar">
@@ -235,6 +251,10 @@ export default function Layout({ children }) {
         {/* HEADER */}
         <header className="header">
           <div className="header-esquerda">
+            {/* Hambúrguer — só aparece em telas pequenas (controlado pelo CSS) */}
+            <button className="btn-hamburger" onClick={abrirMenuMobile} title="Abrir menu">
+              ☰
+            </button>
             <h2 className="pagina-titulo">
               {location.pathname.startsWith('/dashboard')
                 ? `${saudacao()}, ${usuario?.nome?.split(' ')[0]}! 👋`
@@ -261,6 +281,7 @@ export default function Layout({ children }) {
               {sinoAberto && (
                 <div style={{
                   position:'absolute',right:0,top:'110%',width:'340px',
+                  maxWidth:'calc(100vw - 24px)', // celular: nunca passa da largura da tela
                   background:'#fff',border:'1px solid #e5e7eb',borderRadius:'8px',
                   boxShadow:'0 8px 24px rgba(0,0,0,0.15)',zIndex:1000
                 }}>
@@ -298,7 +319,7 @@ export default function Layout({ children }) {
                 onMouseEnter={e => e.currentTarget.style.background='#f1f5f9'}
                 onMouseLeave={e => e.currentTarget.style.background='none'}>
                 <span>👤</span>
-                <span style={{fontWeight:500}}>{usuario?.nome}</span>
+                <span className="usuario-nome-header" style={{fontWeight:500}}>{usuario?.nome}</span>
                 <span style={{fontSize:'10px',color:'#94a3b8'}}>{menuUsuario ? '▲' : '▼'}</span>
               </button>
               {menuUsuario && (

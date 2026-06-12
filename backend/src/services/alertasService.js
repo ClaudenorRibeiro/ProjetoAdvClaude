@@ -8,6 +8,11 @@ const { pool } = require('../config/database');
 const { diasUteisAntes } = require('./calendarioService');
 const { emailPrazosPendentes, emailPrazosAtrasados } = require('./notificacaoService');
 const { liberarFazendoExpirados } = require('../controllers/prazosController');
+const { hojeBrasilia } = require('../utils/helpers');
+
+// Fuso horário de todos os crons — sem isso, no servidor (Ubuntu/UTC) o cron
+// dispararia 3 horas mais cedo que o horário configurado pelo escritório
+const OPCOES_CRON = { timezone: 'America/Sao_Paulo' };
 
 // Referência do cron de prazos — guardada para poder destruir e recriar quando o horário mudar
 let cronPrazos = null;
@@ -21,19 +26,32 @@ async function iniciarAlertas() {
   // Libera prazos "Fazendo" expirados — roda a cada 5 minutos
   cron.schedule('*/5 * * * *', async () => {
     await liberarFazendoExpirados();
-  });
+  }, OPCOES_CRON);
 
   // Verifica audiências para alertar clientes (todo dia às 8h)
   cron.schedule('0 8 * * *', async () => {
     console.log('⏰ Cron: verificando alertas de audiências...');
     await verificarAlertasAudiencias();
-  });
+  }, OPCOES_CRON);
 
   // Verifica perícias para alertar clientes (todo dia às 8h05)
   cron.schedule('5 8 * * *', async () => {
     console.log('⏰ Cron: verificando alertas de perícias...');
     await verificarAlertasPericias();
-  });
+  }, OPCOES_CRON);
+
+  // Limpeza diária: remove tokens de redefinição de senha já usados ou expirados (3h)
+  // Sem isso a tabela reset_tokens cresce indefinidamente
+  cron.schedule('0 3 * * *', async () => {
+    try {
+      const [r] = await pool.execute(
+        'DELETE FROM reset_tokens WHERE usado = 1 OR expires_at < NOW()'
+      );
+      if (r.affectedRows) console.log(`🧹 reset_tokens: ${r.affectedRows} token(s) antigo(s) removido(s)`);
+    } catch (err) {
+      console.error('Erro na limpeza de reset_tokens:', err.message);
+    }
+  }, OPCOES_CRON);
 
   console.log('✅ Serviço de alertas iniciado');
 }
@@ -70,7 +88,7 @@ async function reagendarCronPrazos() {
     cronPrazos = cron.schedule(expressao, async () => {
       console.log(`⏰ Cron prazos: disparando às ${horario}...`);
       await executarAlertasPrazos();
-    });
+    }, OPCOES_CRON);
 
     console.log(`⏰ Cron de prazos agendado para ${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')} todos os dias`);
   } catch (err) {
@@ -87,7 +105,7 @@ async function executarAlertasPrazos() {
     );
     if (!config.length || !config[0].alerta_emails) return;
 
-    const hoje          = new Date().toISOString().split('T')[0];
+    const hoje          = hojeBrasilia();
     const destinatarios = config[0].alerta_emails.split(',').map(e => e.trim()).filter(Boolean);
     const escritorio    = config[0].nome;
 
@@ -113,7 +131,7 @@ async function executarAlertasPrazos() {
 }
 
 async function enviarAlertaPendentes(destinatarios, escritorio) {
-  const hoje = new Date().toISOString().split('T')[0];
+  const hoje = hojeBrasilia();
   const [prazos] = await pool.execute(
     `SELECT pp.descricao, pp.data_vencimento,
             ps.nome AS subtipo_nome,
@@ -159,7 +177,7 @@ async function verificarAlertasAudiencias() {
   try {
     const [config] = await pool.execute('SELECT dias_alerta_audiencia FROM configuracoes_escritorio LIMIT 1');
     const diasAlerta = config[0]?.dias_alerta_audiencia || 3;
-    const hoje = new Date().toISOString().split('T')[0];
+    const hoje = hojeBrasilia();
     const [audiencias] = await pool.execute(
       `SELECT a.id, a.data FROM audiencia a WHERE a.comunicado_enviado = 0 AND a.data > ? ORDER BY a.data ASC`,
       [hoje]
@@ -178,7 +196,7 @@ async function verificarAlertasPericias() {
   try {
     const [config] = await pool.execute('SELECT dias_alerta_pericia FROM configuracoes_escritorio LIMIT 1');
     const diasAlerta = config[0]?.dias_alerta_pericia || 2;
-    const hoje = new Date().toISOString().split('T')[0];
+    const hoje = hojeBrasilia();
     const [pericias] = await pool.execute(
       `SELECT p.id, p.data FROM pericia p WHERE p.comunicado_enviado = 0 AND p.data > ?`,
       [hoje]

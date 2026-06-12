@@ -58,6 +58,13 @@ Cada tabela tem seu próprio módulo e telas de CRUD separadas (não ficam dentr
 - Quantidade de dias úteis antes da audiência para notificar o cliente — configurável por escritório (padrão: 3 dias úteis)
 - Quantidade de dias úteis antes da perícia para notificar o cliente — configurável por escritório (padrão: 2 dias úteis)
 
+## Timezone dos Crons — OBRIGATÓRIO (12/06/2026 tarde)
+
+Todos os `cron.schedule` do alertasService.js recebem a constante
+`OPCOES_CRON = { timezone: 'America/Sao_Paulo' }`. Sem isso, no servidor (Ubuntu = UTC)
+o cron das 18h dispararia às 15h de Brasília. Datas "hoje" usam `hojeBrasilia()` de helpers.js.
+Cron novo: limpeza diária de reset_tokens usados/expirados às 3h.
+
 ## Cron de Alertas — alertasService.js (reescrito 12/06/2026)
 
 ### Problema anterior

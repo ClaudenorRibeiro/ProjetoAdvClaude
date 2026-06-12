@@ -4,6 +4,7 @@
 
 const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
+const { hojeBrasilia } = require('../utils/helpers');
 const auditoria = require('../middleware/auditoria');
 
 // GET /api/andamento/:processoId — Lista andamentos do processo
@@ -37,7 +38,7 @@ async function criar(req, res) {
 
     if (!descricao) return erro(res, 'A descrição é obrigatória');
 
-    const dataAndamento = data || new Date().toISOString().split('T')[0];
+    const dataAndamento = data || hojeBrasilia();
 
     const [result] = await pool.execute(
       `INSERT INTO andamento_processual (processo_id, data, descricao, criado_por)

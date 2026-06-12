@@ -46,6 +46,15 @@ function agora() {
   return new Date().toLocaleString('sv-SE', { timeZone: 'America/Sao_Paulo' }).replace(' ', 'T');
 }
 
+// Retorna a data de hoje (YYYY-MM-DD) no fuso de Brasília
+// maisDias: deslocamento opcional em dias (ex: 1 = amanhã, -1 = ontem)
+// IMPORTANTE: nunca usar new Date().toISOString() para "hoje" — retorna a data
+// em UTC, que no servidor (Ubuntu/UTC) vira o dia seguinte após as 21h de Brasília
+function hojeBrasilia(maisDias = 0) {
+  return new Date(Date.now() + maisDias * 86400000)
+    .toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+}
+
 // Trunca um texto longo adicionando "..." no final
 function truncar(texto, limite = 100) {
   if (!texto) return '';
@@ -65,6 +74,7 @@ module.exports = {
   formatarDataHora,
   dataParaMySQL,
   agora,
+  hojeBrasilia,
   truncar,
   formatarNumeroPasta,
 };

@@ -68,24 +68,18 @@ async function listar(req, res) {
               LPAD(pa.numPasta, 4, '0') AS pasta_numero_fmt,
               CASE WHEN aa.id IS NOT NULL THEN 1 ELSE 0 END AS tem_ata,
               DATEDIFF(a.data, CURDATE()) AS dias_para_audiencia,
-              -- Responsável
-              ur.nome AS responsavel_nome,
-              -- Advogado conforme tipo
-              uadv.nome AS adv_usuario_nome,
-              pf.nome  AS adv_pessoa_nome,
-              af.nome  AS adv_freela_nome,
+              -- Responsável: usuário do sistema ou advogado freelancer
+              COALESCE(ur.nome, CONCAT(rf.nome, ' (freelancer)')) AS responsavel_nome,
               -- Vara e fórum do local da audiência
               vr.nome AS vara_nome, vr.abrev_nome AS vara_abrev_nome,
               fr.nome AS vara_forum_nome
        FROM audiencia a
-       LEFT JOIN tipo_audiencia ta    ON a.tipo_audiencia_id   = ta.id
-       LEFT JOIN ata_audiencia aa     ON aa.audiencia_id        = a.id
-       LEFT JOIN usuarios ur          ON a.responsavel_id       = ur.id
-       LEFT JOIN usuarios uadv        ON a.advogado_usuario_id  = uadv.id
-       LEFT JOIN pessoas_fisicas pf   ON a.advogado_pessoa_id   = pf.id
-       LEFT JOIN advogados_freela af  ON a.advogado_freela_id   = af.id
-       LEFT JOIN tblVara vr           ON a.vara_id              = vr.id
-       LEFT JOIN tblForum fr          ON vr.forum_id            = fr.id
+       LEFT JOIN tipo_audiencia ta    ON a.tipo_audiencia_id    = ta.id
+       LEFT JOIN ata_audiencia aa     ON aa.audiencia_id         = a.id
+       LEFT JOIN usuarios ur          ON a.responsavel_id        = ur.id
+       LEFT JOIN advogados_freela rf  ON a.responsavel_freela_id = rf.id
+       LEFT JOIN tblVara vr           ON a.vara_id               = vr.id
+       LEFT JOIN tblForum fr          ON vr.forum_id             = fr.id
        JOIN tblProc pr ON a.processo_id = pr.id
        JOIN tblPasta pa ON pr.pasta_id = pa.id
        ${where}
@@ -111,23 +105,18 @@ async function buscar(req, res) {
 
     const [rows] = await pool.execute(
       `SELECT a.*, ta.nome AS tipo_nome, pr.numProc AS processo_numero,
-              ur.nome AS responsavel_nome,
-              uadv.nome AS adv_usuario_nome,
-              pf.nome   AS adv_pessoa_nome,
-              af.nome   AS adv_freela_nome, af.oab AS adv_freela_oab,
+              COALESCE(ur.nome, CONCAT(rf.nome, ' (freelancer)')) AS responsavel_nome,
               vr.nome AS vara_nome, vr.abrev_nome AS vara_abrev_nome, vr.compl_end AS vara_compl_end,
               fr.nome AS vara_forum_nome,
               fr.logradouro AS vara_forum_logradouro, fr.num_end AS vara_forum_num_end,
               fr.bairro AS vara_forum_bairro, fr.cidade AS vara_forum_cidade,
               fr.uf AS vara_forum_uf, fr.cep AS vara_forum_cep
        FROM audiencia a
-       LEFT JOIN tipo_audiencia ta   ON a.tipo_audiencia_id  = ta.id
-       LEFT JOIN usuarios ur         ON a.responsavel_id      = ur.id
-       LEFT JOIN usuarios uadv       ON a.advogado_usuario_id = uadv.id
-       LEFT JOIN pessoas_fisicas pf  ON a.advogado_pessoa_id  = pf.id
-       LEFT JOIN advogados_freela af ON a.advogado_freela_id  = af.id
-       LEFT JOIN tblVara vr          ON a.vara_id             = vr.id
-       LEFT JOIN tblForum fr         ON vr.forum_id           = fr.id
+       LEFT JOIN tipo_audiencia ta   ON a.tipo_audiencia_id     = ta.id
+       LEFT JOIN usuarios ur         ON a.responsavel_id         = ur.id
+       LEFT JOIN advogados_freela rf ON a.responsavel_freela_id  = rf.id
+       LEFT JOIN tblVara vr          ON a.vara_id                = vr.id
+       LEFT JOIN tblForum fr         ON vr.forum_id              = fr.id
        JOIN tblProc pr ON a.processo_id = pr.id
        WHERE a.id = ?`,
       [id]
@@ -985,7 +974,7 @@ async function atualizarFreela(req, res) {
 async function excluirFreela(req, res) {
   try {
     const { id } = req.params;
-    const [uso] = await pool.execute('SELECT id FROM audiencia WHERE advogado_freela_id = ? LIMIT 1', [id]);
+    const [uso] = await pool.execute('SELECT id FROM audiencia WHERE responsavel_freela_id = ? LIMIT 1', [id]);
     if (uso.length) return erro(res, 'Freelancer está vinculado a audiências e não pode ser excluído');
     await pool.execute('DELETE FROM advogados_freela WHERE id = ?', [id]);
     return sucesso(res, null, 'Freelancer removido');

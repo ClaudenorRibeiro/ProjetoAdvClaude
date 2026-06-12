@@ -9,6 +9,15 @@ metadata:
 
 ## Bloco 11 — Documentos e Modelos
 
+## Correção de 12/06/2026 (documentosController.js — local, aguardando deploy)
+
+- **Bug corrigido:** a query de variáveis usava `pf.endereco`, coluna que NÃO existe em
+  pessoas_fisicas — geraria erro SQL ao gerar documento vinculado a processo.
+  Agora monta o endereço com CONCAT_WS (logradouro, numero, complemento, bairro, cidade-estado),
+  tanto para pessoa física quanto jurídica.
+- A variável `{{endereco_cliente}}` era selecionada mas nunca atribuída — agora é preenchida.
+- **Próximo passo (Fase 5):** construir a UI deste módulo — backend já está pronto.
+
 ## Formato
 
 - Gera **Word (.docx)** editável

@@ -1,16 +1,45 @@
 ---
 name: pendencias-proxima-sessao
-description: Itens pendentes — deploy, scripts SQL das fases 2.1/2.2/2.3 e sequência obrigatória (script 2.3 só após deploy)
+description: "HANDOFF COMPLETO sessão 12/06/2026 (tarde) — LER PRIMEIRO: fases 1-4 codadas, scripts SQL, sequência de deploy, próximos passos"
 metadata: 
   node_type: memory
   type: project
   originSessionId: a17aec30-7d20-496a-81a0-792eca6b27e8
 ---
 
-## Sessão 12/06/2026 (tarde) — Fases 1 a 3 do plano de melhorias CONCLUÍDAS no código local
+# 🔴 HANDOFF — Sessão 12/06/2026 (tarde) — LER ESTE ARQUIVO PRIMEIRO
 
-Plano aprovado pelo usuário em 12/06/2026: Fase 1 (timezone/deploy), Fase 2 (limpeza banco),
-Fase 3 (transações), Fase 4 (responsividade), Fase 5 (módulos novos: Documentos UI → Relatórios → AASP → Comunicações UI).
+O usuário trabalha em múltiplos computadores. Esta sessão fez MUITAS alterações no código local
+(ainda NÃO commitadas — o usuário commita/sobe manualmente). Este arquivo explica tudo.
+
+## Contexto da sessão
+
+1. Análise completa do projeto + banco (backup `backups/bkp-BD-120626-1539.sql`, 51 tabelas)
+2. Usuário aprovou um plano de 5 fases, nesta ordem:
+   - **Fase 1** — timezone/datas (bug de produção) → ✅ CODADA
+   - **Fase 2** — limpeza/otimização do banco → ✅ SCRIPTS CRIADOS (usuário roda no HeidiSQL)
+   - **Fase 3** — transações + bugs encontrados → ✅ CODADA
+   - **Fase 4** — responsividade → ✅ FUNDAÇÃO CODADA (restante é gradual)
+   - **Fase 5** — módulos novos: Documentos UI → Relatórios → Publicações AASP → Comunicações UI → ⏳ NÃO INICIADA
+3. Tudo validado: `node --check` nos 13 arquivos backend + `npm run build` (Vite) sem erros
+4. ⚠️ REGRA ABSOLUTA reforçada pelo usuário em 12/06: **Claude NUNCA executa NADA no git
+   (nem commit de memória — exceção antiga REVOGADA) nem no banco. O usuário faz TUDO manualmente, sempre.**
+   Mudanças de banco = entregar script SQL para ele colar no HeidiSQL. Ver [[feedback-codigo]]
+
+## 4 bugs reais encontrados e corrigidos (além do plano)
+
+1. **Honorários duplicados** (`financeiroController.salvarHonorarios`): usava `ON DUPLICATE KEY UPDATE`
+   que depende de UNIQUE em `honorarios.pasta_id` — que não existe (regra do projeto: sem UNIQUE no banco).
+   Cada salvamento criava linha nova. → Virou upsert manual (SELECT → UPDATE ou INSERT) em transação.
+2. **Excluir freelancer em uso** (`audienciasController.excluirFreela`): checava a coluna morta
+   `advogado_freela_id` (100% NULL) em vez de `responsavel_freela_id` — permitia excluir freela vinculado
+   e a FK ON DELETE SET NULL apagava o vínculo em silêncio. → Corrigido.
+3. **`pf.endereco` inexistente** (`documentosController`): a query de variáveis usava coluna que não existe
+   em pessoas_fisicas — geraria erro ao gerar documento com processo. → CONCAT_WS dos campos reais
+   (logradouro, numero, complemento, bairro, cidade-estado), para PF E PJ; e a variável `{{endereco_cliente}}`
+   que era calculada mas nunca atribuída agora é preenchida.
+4. **Agenda sem nome do responsável freelancer**: listar/buscar de audiências só resolvia nome de usuário.
+   → `COALESCE(ur.nome, CONCAT(rf.nome, ' (freelancer)')) AS responsavel_nome`.
 
 ## Arquivos Modificados Localmente — Deploy Pendente
 
@@ -56,11 +85,35 @@ Script 2.3 também: remove configuracoes_escritorio.endereco, adiciona alterado_
 
 - Exportar estrutura via HeidiSQL → sobrescrever `estrutura_banco.sql` → commit (pedir autorização)
 
+## Fase 4 — Responsividade: FUNDAÇÃO PRONTA (12/06/2026)
+
+Implementado (build Vite OK, aguardando teste do usuário):
+- **Layout.js**: estado `sidebarMobile`, botão hambúrguer ☰ no header (só aparece ≤768px),
+  backdrop clicável, menu fecha sozinho ao navegar, painel de notificações com maxWidth na tela
+- **Layout.css**: bloco `@media (max-width: 768px)` — sidebar off-canvas (desliza da esquerda),
+  modais quase tela cheia, abas com scroll horizontal, header compacto, classe utilitária `.filtros-row`
+- **Dashboard.css**: breakpoint 600px (cards 2 colunas)
+- Já existia e foi mantido: `.tabela-wrapper` (overflow-x) usado pelas 16 páginas, `.grid-2/3/4` viram 1 coluna
+
+### Fase 4 — restante (gradual, por página)
+- Migrar os ~427 estilos inline das páginas para classes/.css por página (padrão: como Dashboard/Login)
+- Usar `.filtros-row` nas barras de filtro das páginas
+- Quebrar Audiencias.js (99KB) em componentes quando for mexer nele
+- Testar no celular real: menu hambúrguer, modais, tabelas com scroll
+
+## Backlog da análise de 12/06 (itens de baixa prioridade, deixados de fora de propósito)
+
+- Revisar os ~30 `SELECT *` nos controllers (maioria é busca por ID — impacto pequeno)
+- Collation mista: log_emails/notificacoes/reset_tokens em utf8mb4_unicode_ci, resto 0900_ai_ci — não quebra nada (JOINs por int); padronizar nas tabelas novas
+- Registros antigos de auditoria_audiencia com IDs crus e um status vazio — histórico aceito, não mexer
+- Backup do HeidiSQL começa com DROP DATABASE — cuidado ao restaurar conectado na produção
+- tblproc.numProc permite duplicatas (sem UNIQUE, por regra) — validação fica no app se um dia for exigida
+
 ## Pendências Abertas (próximas fases)
 
-- **Fase 4 — Responsividade**: só 2 @media no projeto; 427+ estilos inline nas páginas; decidir padrão CSS (arquivo .css por página) ANTES dos módulos novos. Audiencias.js tem 99KB (monolítico)
-- **Fase 5 — Módulos**: Documentos UI (backend pronto) → Relatórios (criar tabela `pesquisas_salvas` — está nas memórias mas NÃO existe no banco) → Publicações AASP → Comunicações UI
-- Commit/push do código: SOMENTE com autorização do usuário após ele testar
+- **Fase 5 — Módulos**: Documentos UI (backend pronto; bug pf.endereco já corrigido) → Relatórios
+  (criar tabela `pesquisas_salvas` — está nas memórias mas NÃO existe no banco) → Publicações AASP → Comunicações UI
+- ⚠️ REGRA ABSOLUTA (12/06): Claude NUNCA mexe no git (nem commit de memória) nem no banco — usuário faz tudo manualmente. Ver [[feedback-codigo]]
 
 ## Itens já resolvidos (não refazer)
 - Tabela log_emails + 3 índices (12/06 ✅), SMTP_PASS novo no servidor (12/06 ✅)

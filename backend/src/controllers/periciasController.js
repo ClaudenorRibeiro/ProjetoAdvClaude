@@ -94,17 +94,21 @@ async function buscar(req, res) {
 }
 
 // POST /api/pericias — Cria perícia
+// Transação: INSERT da perícia + registro de auditoria (tudo ou nada)
 async function criar(req, res) {
+  const {
+    processo_id, tipo_pericia_id, data, hora,
+    local, perito_tipo, perito_id, assistente_tecnico_id
+  } = req.body;
+
+  if (!processo_id) return erro(res, 'Processo é obrigatório');
+  if (!data)        return erro(res, 'Data é obrigatória');
+
+  const conn = await pool.getConnection();
   try {
-    const {
-      processo_id, tipo_pericia_id, data, hora,
-      local, perito_tipo, perito_id, assistente_tecnico_id
-    } = req.body;
+    await conn.beginTransaction();
 
-    if (!processo_id) return erro(res, 'Processo é obrigatório');
-    if (!data)        return erro(res, 'Data é obrigatória');
-
-    const [r] = await pool.execute(
+    const [r] = await conn.execute(
       `INSERT INTO pericia
         (processo_id, tipo_pericia_id, data, hora, local, perito_tipo, perito_id, assistente_tecnico_id, criado_por)
        VALUES (?,?,?,?,?,?,?,?,?)`,
@@ -120,25 +124,33 @@ async function criar(req, res) {
         req.usuario.id
       ]
     );
+    await auditoria.registrar(req.usuario.id, 'pericia', 'criar', r.insertId, null, null, conn);
 
-    await auditoria.registrar(req.usuario.id, 'pericia', 'criar', r.insertId);
+    await conn.commit();
     return sucesso(res, { id: r.insertId }, 'Perícia criada com sucesso', 201);
   } catch (e) {
+    await conn.rollback();
     return erroInterno(res, e);
+  } finally {
+    conn.release();
   }
 }
 
 // PUT /api/pericias/:id — Atualiza perícia
+// Transação: UPDATE da perícia + registro de auditoria (tudo ou nada)
 async function atualizar(req, res) {
+  const {
+    tipo_pericia_id, data, hora,
+    local, perito_tipo, perito_id, assistente_tecnico_id
+  } = req.body;
+
+  if (!data) return erro(res, 'Data é obrigatória');
+
+  const conn = await pool.getConnection();
   try {
-    const {
-      tipo_pericia_id, data, hora,
-      local, perito_tipo, perito_id, assistente_tecnico_id
-    } = req.body;
+    await conn.beginTransaction();
 
-    if (!data) return erro(res, 'Data é obrigatória');
-
-    const [r] = await pool.execute(
+    const [r] = await conn.execute(
       `UPDATE pericia SET
         tipo_pericia_id=?, data=?, hora=?, local=?,
         perito_tipo=?, perito_id=?, assistente_tecnico_id=?
@@ -155,11 +167,19 @@ async function atualizar(req, res) {
       ]
     );
 
-    if (!r.affectedRows) return naoEncontrado(res, 'Perícia não encontrada');
-    await auditoria.registrar(req.usuario.id, 'pericia', 'atualizar', req.params.id);
+    if (!r.affectedRows) {
+      await conn.rollback();
+      return naoEncontrado(res, 'Perícia não encontrada');
+    }
+    await auditoria.registrar(req.usuario.id, 'pericia', 'atualizar', req.params.id, null, null, conn);
+
+    await conn.commit();
     return sucesso(res, null, 'Perícia atualizada com sucesso');
   } catch (e) {
+    await conn.rollback();
     return erroInterno(res, e);
+  } finally {
+    conn.release();
   }
 }
 

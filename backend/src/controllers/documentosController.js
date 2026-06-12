@@ -106,8 +106,22 @@ async function gerar(req, res) {
                   WHEN 'fisica' THEN (SELECT pf.cpf FROM pessoas_fisicas pf WHERE pf.id = ta.pessoa_id)
                   ELSE ''
                 END AS cpf_cliente,
+                -- Monta o endereço completo a partir dos campos separados do cadastro
                 CASE ta.tipo_pessoa
-                  WHEN 'fisica' THEN (SELECT pf.endereco FROM pessoas_fisicas pf WHERE pf.id = ta.pessoa_id)
+                  WHEN 'fisica' THEN (
+                    SELECT CONCAT_WS(', ',
+                             NULLIF(CONCAT_WS(', ', pf.logradouro, pf.numero), ''),
+                             NULLIF(pf.complemento, ''),
+                             NULLIF(pf.bairro, ''),
+                             NULLIF(CONCAT_WS(' - ', pf.cidade, pf.estado), ''))
+                    FROM pessoas_fisicas pf WHERE pf.id = ta.pessoa_id)
+                  WHEN 'juridica' THEN (
+                    SELECT CONCAT_WS(', ',
+                             NULLIF(CONCAT_WS(', ', pj.logradouro, pj.numero), ''),
+                             NULLIF(pj.complemento, ''),
+                             NULLIF(pj.bairro, ''),
+                             NULLIF(CONCAT_WS(' - ', pj.cidade, pj.estado), ''))
+                    FROM pessoas_juridicas pj WHERE pj.id = ta.pessoa_id)
                   ELSE ''
                 END AS endereco_cliente
          FROM tblProc pr
@@ -121,11 +135,12 @@ async function gerar(req, res) {
       );
 
       if (proc.length) {
-        variaveis.numero_processo = proc[0].numero || '';
-        variaveis.vara            = proc[0].vara || '';
-        variaveis.forum           = proc[0].forum || '';
-        variaveis.nome_cliente    = proc[0].cliente_nome || '';
-        variaveis.cpf_cliente     = proc[0].cpf_cliente || '';
+        variaveis.numero_processo  = proc[0].numero || '';
+        variaveis.vara             = proc[0].vara || '';
+        variaveis.forum            = proc[0].forum || '';
+        variaveis.nome_cliente     = proc[0].cliente_nome || '';
+        variaveis.cpf_cliente      = proc[0].cpf_cliente || '';
+        variaveis.endereco_cliente = proc[0].endereco_cliente || '';
       }
     }
 

@@ -12,10 +12,12 @@ metadata:
 **Nunca codificar sem autorização explícita do usuário.**  
 O usuário decide quando e o que será desenvolvido. Claude analisa, sugere e explica — mas só executa código quando autorizado.
 
-**Nunca commitar sem autorização explícita.**  
-⚠️ REGRA ATUALIZADA (05/06/2026): Só subir para o git após o usuário testar e autorizar explicitamente.  
-O fluxo é: codifica local → usuário testa → usuário autoriza → commit + push.  
-**Exceção permanente:** arquivos da pasta `memory/` podem (e devem) ser commitados automaticamente sem pedir autorização.
+**Git e Banco de Dados: Claude NUNCA executa NADA — o usuário faz TUDO manualmente, SEMPRE.**  
+⚠️ REGRA ABSOLUTA (reforçada em 12/06/2026, substitui as regras anteriores):
+- Claude **nunca** faz commit, push ou qualquer comando git que altere o repositório — nem da pasta `memory/` (a exceção antiga foi REVOGADA pelo usuário)
+- Claude **nunca** executa nada no banco de dados — mudanças de schema/dados são entregues como script SQL para o usuário colar no HeidiSQL
+- O fluxo é: Claude codifica local → usuário testa → usuário commita/sobe quando quiser
+- Claude pode usar git somente para LEITURA (status, log, diff)
 
 **A pasta local SEMPRE prevalece sobre o git.**  
 Arquivos deletados localmente e depois commitados saem do git também.

@@ -6,6 +6,7 @@
 const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const { gerarReciboFinanceiro } = require('../services/pdfService');
+const { hojeBrasilia } = require('../utils/helpers');
 const auditoria = require('../middleware/auditoria');
 
 // GET /api/financeiro/pasta/:pastaId — Busca lançamentos da pasta com saldo
@@ -62,65 +63,104 @@ async function buscarContaCorrente(req, res) {
 }
 
 // POST /api/financeiro/pasta/:pastaId/lancamento — Registra lançamento
+// Transação: INSERT do lançamento + registro de auditoria (tudo ou nada)
 async function lancar(req, res) {
+  const { pastaId } = req.params;
+  const { data, descricao, valor, tipo } = req.body;
+
+  if (!descricao || !valor || !tipo) {
+    return erro(res, 'Descrição, valor e tipo são obrigatórios');
+  }
+  if (!['debito', 'credito'].includes(tipo)) {
+    return erro(res, 'Tipo deve ser "debito" ou "credito"');
+  }
+
+  const conn = await pool.getConnection();
   try {
-    const { pastaId } = req.params;
-    const { data, descricao, valor, tipo } = req.body;
+    await conn.beginTransaction();
 
-    if (!descricao || !valor || !tipo) {
-      return erro(res, 'Descrição, valor e tipo são obrigatórios');
-    }
-    if (!['debito', 'credito'].includes(tipo)) {
-      return erro(res, 'Tipo deve ser "debito" ou "credito"');
-    }
-
-    const [result] = await pool.execute(
+    const [result] = await conn.execute(
       `INSERT INTO conta_corrente_pasta (pasta_id, data, descricao, valor, tipo, usuario_id)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [pastaId, data || new Date().toISOString().split('T')[0],
+      [pastaId, data || hojeBrasilia(),
        descricao.trim(), valor, tipo, req.usuario.id]
     );
+    await auditoria.registrar(req.usuario.id, 'conta_corrente_pasta', 'criar', result.insertId, null, null, conn);
 
-    await auditoria.registrar(req.usuario.id, 'conta_corrente_pasta', 'criar', result.insertId);
+    await conn.commit();
     return sucesso(res, { id: result.insertId }, 'Lançamento registrado com sucesso', 201);
   } catch (err) {
+    await conn.rollback();
     return erroInterno(res, err);
+  } finally {
+    conn.release();
   }
 }
 
 // DELETE /api/financeiro/lancamento/:id — Remove lançamento
+// Transação: DELETE do lançamento + registro de auditoria com os dados antigos (tudo ou nada)
 async function excluirLancamento(req, res) {
-  try {
-    const { id } = req.params;
-    const [antes] = await pool.execute('SELECT * FROM conta_corrente_pasta WHERE id = ?', [id]);
-    if (!antes.length) return naoEncontrado(res, 'Lançamento não encontrado');
+  const { id } = req.params;
+  const [antes] = await pool.execute('SELECT * FROM conta_corrente_pasta WHERE id = ?', [id]);
+  if (!antes.length) return naoEncontrado(res, 'Lançamento não encontrado');
 
-    await pool.execute('DELETE FROM conta_corrente_pasta WHERE id = ?', [id]);
-    await auditoria.registrar(req.usuario.id, 'conta_corrente_pasta', 'excluir', id, antes[0]);
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    await conn.execute('DELETE FROM conta_corrente_pasta WHERE id = ?', [id]);
+    await auditoria.registrar(req.usuario.id, 'conta_corrente_pasta', 'excluir', id, antes[0], null, conn);
+
+    await conn.commit();
     return sucesso(res, null, 'Lançamento removido com sucesso');
   } catch (err) {
+    await conn.rollback();
     return erroInterno(res, err);
+  } finally {
+    conn.release();
   }
 }
 
 // POST /api/financeiro/pasta/:pastaId/honorarios — Salva/atualiza honorários
+// Upsert manual em transação: o ON DUPLICATE KEY UPDATE anterior dependia de uma
+// chave UNIQUE em pasta_id que não existe no banco (regra do projeto: sem UNIQUE) —
+// na prática cada salvamento criava uma linha duplicada de honorários
 async function salvarHonorarios(req, res) {
-  try {
-    const { pastaId } = req.params;
-    const { tipo, percentual, valor_fixo, observacoes } = req.body;
+  const { pastaId } = req.params;
+  const { tipo, percentual, valor_fixo, observacoes } = req.body;
 
-    // Upsert: atualiza se existir, insere se não existir
-    await pool.execute(
-      `INSERT INTO honorarios (pasta_id, tipo, percentual, valor_fixo, observacoes)
-       VALUES (?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE tipo=VALUES(tipo), percentual=VALUES(percentual),
-         valor_fixo=VALUES(valor_fixo), observacoes=VALUES(observacoes)`,
-      [pastaId, tipo || 'sem_honorarios', percentual || null, valor_fixo || null, observacoes || null]
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // Verifica se a pasta já tem honorários cadastrados (regra: 1 registro por pasta)
+    const [existente] = await conn.execute(
+      'SELECT id FROM honorarios WHERE pasta_id = ? LIMIT 1', [pastaId]
     );
 
+    if (existente.length) {
+      await conn.execute(
+        `UPDATE honorarios SET tipo = ?, percentual = ?, valor_fixo = ?, observacoes = ?
+         WHERE id = ?`,
+        [tipo || 'sem_honorarios', percentual || null, valor_fixo || null,
+         observacoes || null, existente[0].id]
+      );
+    } else {
+      await conn.execute(
+        `INSERT INTO honorarios (pasta_id, tipo, percentual, valor_fixo, observacoes)
+         VALUES (?, ?, ?, ?, ?)`,
+        [pastaId, tipo || 'sem_honorarios', percentual || null,
+         valor_fixo || null, observacoes || null]
+      );
+    }
+
+    await conn.commit();
     return sucesso(res, null, 'Honorários salvos com sucesso');
   } catch (err) {
+    await conn.rollback();
     return erroInterno(res, err);
+  } finally {
+    conn.release();
   }
 }
 

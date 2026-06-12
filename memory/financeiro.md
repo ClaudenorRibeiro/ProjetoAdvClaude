@@ -7,6 +7,14 @@ metadata:
   originSessionId: c7321425-eb43-40e0-b57f-c2941c1276c6
 ---
 
+## Correções de 12/06/2026 (financeiroController.js — local, aguardando deploy)
+
+- **Bug honorários duplicados corrigido:** `salvarHonorarios` usava `ON DUPLICATE KEY UPDATE`,
+  que depende de UNIQUE em `pasta_id` — inexistente (regra: sem UNIQUE no banco). Cada salvamento
+  criava uma linha nova. Agora é upsert manual (SELECT → UPDATE ou INSERT) dentro de transação.
+- `lancar` e `excluirLancamento` agora usam transação (operação + auditoria = tudo ou nada)
+- Data padrão do lançamento via `hojeBrasilia()` (antes era UTC — dia errado à noite no servidor)
+
 ## Conta Corrente por Pasta
 
 | Campo | Descrição |

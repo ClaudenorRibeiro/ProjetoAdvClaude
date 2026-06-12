@@ -2,7 +2,7 @@
 -- Servidor:                     127.0.0.1
 -- Versão do servidor:           8.0.46 - MySQL Community Server - GPL
 -- OS do Servidor:               Win64
--- HeidiSQL Versão:              12.7.0.6850
+-- HeidiSQL Versão:              12.5.0.6677
 -- --------------------------------------------------------
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
@@ -116,10 +116,6 @@ CREATE TABLE IF NOT EXISTS `audiencia` (
   `criado_por` int NOT NULL,
   `alterado_por` int DEFAULT NULL,
   `alterado_em` datetime DEFAULT NULL,
-  `advogado_tipo` enum('usuario','pessoa','freela') DEFAULT NULL,
-  `advogado_usuario_id` int DEFAULT NULL,
-  `advogado_pessoa_id` int DEFAULT NULL,
-  `advogado_freela_id` int DEFAULT NULL,
   `status` varchar(20) NOT NULL DEFAULT 'agendada',
   `motivo_status` text,
   PRIMARY KEY (`id`),
@@ -127,31 +123,27 @@ CREATE TABLE IF NOT EXISTS `audiencia` (
   KEY `tipo_audiencia_id` (`tipo_audiencia_id`),
   KEY `criado_por` (`criado_por`),
   KEY `aud_ibfk_alterado_por` (`alterado_por`),
-  KEY `aud_ibfk_adv_usuario` (`advogado_usuario_id`),
-  KEY `aud_ibfk_adv_pessoa` (`advogado_pessoa_id`),
-  KEY `aud_ibfk_adv_freela` (`advogado_freela_id`),
   KEY `aud_ibfk_responsavel` (`responsavel_id`),
   KEY `aud_ibfk_resp_freela` (`responsavel_freela_id`),
-  CONSTRAINT `aud_ibfk_adv_freela` FOREIGN KEY (`advogado_freela_id`) REFERENCES `advogados_freela` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `aud_ibfk_adv_pessoa` FOREIGN KEY (`advogado_pessoa_id`) REFERENCES `pessoas_fisicas` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `aud_ibfk_adv_usuario` FOREIGN KEY (`advogado_usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  KEY `idx_aud_data_status` (`data`,`status`),
   CONSTRAINT `aud_ibfk_alterado_por` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `aud_ibfk_resp_freela` FOREIGN KEY (`responsavel_freela_id`) REFERENCES `advogados_freela` (`id`) ON DELETE SET NULL,
   CONSTRAINT `aud_ibfk_responsavel` FOREIGN KEY (`responsavel_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `audiencia_ibfk_2` FOREIGN KEY (`tipo_audiencia_id`) REFERENCES `tipo_audiencia` (`id`),
   CONSTRAINT `audiencia_ibfk_3` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `fk_audiencia_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=14 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=15 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.audiencia: ~7 rows (aproximadamente)
-INSERT INTO `audiencia` (`id`, `processo_id`, `tipo_audiencia_id`, `data`, `hora`, `modalidade`, `local`, `vara_id`, `plataforma_virtual`, `link_virtual`, `responsavel_id`, `responsavel_freela_id`, `comunicado_enviado`, `ata_impressa`, `criado_em`, `criado_por`, `alterado_por`, `alterado_em`, `advogado_tipo`, `advogado_usuario_id`, `advogado_pessoa_id`, `advogado_freela_id`, `status`, `motivo_status`) VALUES
-	(4, 6, 11, '2026-06-25', '14:00:00', 'presencial', '20ª Vara do Trabalho - Fórum Trabalhista Ruy Barbosa', 273, NULL, NULL, NULL, NULL, 0, 0, '2026-06-08 16:17:15', 2, 2, '2026-06-09 15:34:16', NULL, NULL, NULL, NULL, 'remarcada', 'publica'),
-	(5, 8, NULL, '2026-06-23', '09:00:00', 'virtual', NULL, 309, NULL, NULL, NULL, 2, 0, 0, '2026-06-09 13:25:42', 2, 2, '2026-06-09 15:30:02', NULL, NULL, NULL, NULL, 'remarcada', 'publicação'),
-	(7, 8, NULL, '2026-06-17', '13:00:00', 'virtual', NULL, 309, NULL, NULL, NULL, 2, 0, 0, '2026-06-09 15:30:02', 2, 2, '2026-06-09 15:32:10', NULL, NULL, NULL, NULL, 'remarcada', 'publicacao'),
-	(10, 6, 10, '2026-06-10', '14:00:00', 'presencial', NULL, 292, NULL, NULL, NULL, NULL, 0, 0, '2026-06-09 20:19:54', 2, 2, '2026-06-09 20:38:03', NULL, NULL, NULL, NULL, 'agendada', NULL),
-	(11, 8, 5, '2026-06-11', '09:00:00', 'presencial', NULL, 320, NULL, NULL, NULL, NULL, 0, 0, '2026-06-09 20:34:00', 2, 2, '2026-06-09 22:52:24', NULL, NULL, NULL, NULL, 'agendada', NULL),
-	(12, 6, 3, '2026-06-11', '09:00:00', 'virtual', NULL, NULL, 'zoom', 'https://zoom.us/j/4060402291?pwd=VXp1NWFjZi9qYStNZGxTS3o0Qmwydz09', NULL, NULL, 0, 0, '2026-06-10 09:35:42', 2, NULL, NULL, NULL, NULL, NULL, NULL, 'agendada', NULL),
-	(13, 6, 10, '2026-06-11', '09:00:00', 'presencial', NULL, 338, NULL, NULL, NULL, NULL, 0, 0, '2026-06-10 10:00:46', 2, NULL, NULL, NULL, NULL, NULL, NULL, 'agendada', NULL);
+-- Copiando dados para a tabela sistema_advocacia.audiencia: ~8 rows (aproximadamente)
+INSERT INTO `audiencia` (`id`, `processo_id`, `tipo_audiencia_id`, `data`, `hora`, `modalidade`, `local`, `vara_id`, `plataforma_virtual`, `link_virtual`, `responsavel_id`, `responsavel_freela_id`, `comunicado_enviado`, `ata_impressa`, `criado_em`, `criado_por`, `alterado_por`, `alterado_em`, `status`, `motivo_status`) VALUES
+	(4, 6, 11, '2026-06-25', '14:00:00', 'presencial', '20ª Vara do Trabalho - Fórum Trabalhista Ruy Barbosa', 273, NULL, NULL, NULL, NULL, 0, 0, '2026-06-08 16:17:15', 2, 2, '2026-06-09 15:34:16', 'remarcada', 'publica'),
+	(5, 8, NULL, '2026-06-23', '09:00:00', 'virtual', NULL, 309, NULL, NULL, NULL, 2, 0, 0, '2026-06-09 13:25:42', 2, 2, '2026-06-09 15:30:02', 'remarcada', 'publicação'),
+	(7, 8, NULL, '2026-06-17', '13:00:00', 'virtual', NULL, 309, NULL, NULL, NULL, 2, 0, 0, '2026-06-09 15:30:02', 2, 2, '2026-06-09 15:32:10', 'remarcada', 'publicacao'),
+	(10, 6, 10, '2026-06-10', '14:00:00', 'presencial', NULL, 292, NULL, NULL, NULL, NULL, 0, 0, '2026-06-09 20:19:54', 2, 2, '2026-06-09 20:38:03', 'agendada', NULL),
+	(11, 8, 5, '2026-06-11', '09:00:00', 'presencial', NULL, 320, NULL, NULL, NULL, NULL, 0, 0, '2026-06-09 20:34:00', 2, 2, '2026-06-09 22:52:24', 'agendada', NULL),
+	(12, 6, 3, '2026-06-11', '09:00:00', 'virtual', NULL, NULL, 'zoom', 'https://zoom.us/j/4060402291?pwd=VXp1NWFjZi9qYStNZGxTS3o0Qmwydz09', NULL, NULL, 0, 0, '2026-06-10 09:35:42', 2, NULL, NULL, 'agendada', NULL),
+	(13, 6, 10, '2026-12-12', '09:00:00', 'presencial', NULL, 338, NULL, NULL, NULL, NULL, 0, 0, '2026-06-10 10:00:46', 2, 2, '2026-06-11 16:21:09', 'agendada', NULL),
+	(14, 5, 11, '2026-08-29', '09:00:00', 'presencial', NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, '2026-06-11 16:20:54', 2, NULL, NULL, 'agendada', NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.audiencia_testemunhas
 DROP TABLE IF EXISTS `audiencia_testemunhas`;
@@ -190,9 +182,9 @@ CREATE TABLE IF NOT EXISTS `auditoria_audiencia` (
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `audaud_ibfk_1` FOREIGN KEY (`audiencia_id`) REFERENCES `audiencia` (`id`) ON DELETE CASCADE,
   CONSTRAINT `audaud_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=28 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=34 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.auditoria_audiencia: ~19 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.auditoria_audiencia: ~25 rows (aproximadamente)
 INSERT INTO `auditoria_audiencia` (`id`, `audiencia_id`, `campo_alterado`, `valor_anterior`, `valor_novo`, `usuario_id`, `alterado_em`) VALUES
 	(3, 4, 'hora', '09:00:00', '09:00', 2, '2026-06-09 11:41:46'),
 	(4, 4, 'vara_id', '', '273', 2, '2026-06-09 11:41:46'),
@@ -212,7 +204,13 @@ INSERT INTO `auditoria_audiencia` (`id`, `audiencia_id`, `campo_alterado`, `valo
 	(24, 10, 'data', '2026-06-24', '2026-06-10', 2, '2026-06-09 20:38:03'),
 	(25, 11, 'data', '2026-07-15', '2026-06-11', 2, '2026-06-09 20:38:32'),
 	(26, 11, 'vara_id', '', '25ªVT/SP — Fórum Trabalhista Ruy Barbosa', 2, '2026-06-09 22:31:36'),
-	(27, 13, 'cadastrado', NULL, 'Audiência cadastrada', 2, '2026-06-10 10:00:46');
+	(27, 13, 'cadastrado', NULL, 'Audiência cadastrada', 2, '2026-06-10 10:00:46'),
+	(28, 13, 'data', '2026-06-11', '2026-08-01', 2, '2026-06-11 16:02:03'),
+	(29, 13, 'data', '2026-08-01', '2026-08-08', 2, '2026-06-11 16:18:58'),
+	(30, 13, 'data', '2026-08-08', '2026-08-01', 2, '2026-06-11 16:20:09'),
+	(31, 14, 'cadastrado', NULL, 'Audiência cadastrada', 2, '2026-06-11 16:20:54'),
+	(32, 14, 'criacao', NULL, 'dia não útil (sábado) confirmado pelo usuário com senha', 2, '2026-06-11 16:20:54'),
+	(33, 13, 'data', '2026-08-01', '2026-12-12', 2, '2026-06-11 16:21:09');
 
 -- Copiando estrutura para tabela sistema_advocacia.auditoria_prazo
 DROP TABLE IF EXISTS `auditoria_prazo`;
@@ -11227,7 +11225,6 @@ CREATE TABLE IF NOT EXISTS `configuracoes_escritorio` (
   `cnpj_cpf` varchar(20) DEFAULT NULL,
   `email` varchar(150) DEFAULT NULL,
   `telefone` varchar(20) DEFAULT NULL,
-  `endereco` varchar(300) DEFAULT NULL,
   `cep` varchar(9) DEFAULT NULL,
   `logradouro` varchar(200) DEFAULT NULL,
   `numero` varchar(20) DEFAULT NULL,
@@ -11253,8 +11250,8 @@ CREATE TABLE IF NOT EXISTS `configuracoes_escritorio` (
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Copiando dados para a tabela sistema_advocacia.configuracoes_escritorio: ~1 rows (aproximadamente)
-INSERT INTO `configuracoes_escritorio` (`id`, `nome`, `cnpj_cpf`, `email`, `telefone`, `endereco`, `cep`, `logradouro`, `numero`, `bairro`, `cidade`, `estado`, `logo_path`, `cor_principal`, `horario_alerta_prazos`, `dias_alerta_audiencia`, `dias_alerta_pericia`, `dias_sem_movimentacao`, `dias_audiencia_sem_adv`, `setup_concluido`, `criado_em`, `alerta_atrasado_ativo`, `alerta_emails`, `prazo_fazendo_timeout`, `titulo_aba`, `alerta_pendentes_enviado`, `alerta_atrasados_enviado`) VALUES
-	(1, 'Dr. Antonio Ferreira da Costa', '866.204.449-20', 'contato@antonio.adv.br', '654654654', NULL, '03818-030', 'Rua Lagoa D\'anta', '70', 'Parque Císper', 'São Paulo', 'SP', NULL, '#1a56db', '10:00:00', 3, 2, 30, 7, 1, '2026-05-23 00:58:18', 1, 'visaoecultura@gmail.com, ednasvlr@gmail,.com', 60, NULL, NULL, NULL);
+INSERT INTO `configuracoes_escritorio` (`id`, `nome`, `cnpj_cpf`, `email`, `telefone`, `cep`, `logradouro`, `numero`, `bairro`, `cidade`, `estado`, `logo_path`, `cor_principal`, `horario_alerta_prazos`, `dias_alerta_audiencia`, `dias_alerta_pericia`, `dias_sem_movimentacao`, `dias_audiencia_sem_adv`, `setup_concluido`, `criado_em`, `alerta_atrasado_ativo`, `alerta_emails`, `prazo_fazendo_timeout`, `titulo_aba`, `alerta_pendentes_enviado`, `alerta_atrasados_enviado`) VALUES
+	(1, 'Dr. Antonio Ferreira da Costa', '866.204.449-20', 'contato@antonio.adv.br', '654654654', '03818-030', 'Rua Lagoa D\'anta', '70', 'Parque Císper', 'São Paulo', 'SP', NULL, '#1a56db', '10:00:00', 3, 2, 30, 7, 1, '2026-05-23 00:58:18', 1, 'visaoecultura@gmail.com, ednasvlr@gmail.com', 60, NULL, '2026-06-12', '2026-06-12');
 
 -- Copiando estrutura para tabela sistema_advocacia.configuracoes_integracoes
 DROP TABLE IF EXISTS `configuracoes_integracoes`;
@@ -11339,16 +11336,15 @@ CREATE TABLE IF NOT EXISTS `estado_civil` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.estado_civil: ~8 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.estado_civil: ~7 rows (aproximadamente)
 INSERT INTO `estado_civil` (`id`, `nome`) VALUES
 	(1, 'Solteiro(a)'),
 	(2, 'Casado(a)'),
 	(3, 'Divorciado(a)'),
-	(4, 'Viâ”œâ•‘vo(a)'),
-	(5, 'Uniâ”œÃºo Estâ”œÃ­vel'),
+	(4, 'Viúvo(a)'),
+	(5, 'União Estável'),
 	(6, 'Separado(a)'),
-	(7, 'disquitado'),
-	(8, 'tico tico no fuba');
+	(7, 'Desquitado(a)');
 
 -- Copiando estrutura para tabela sistema_advocacia.feriados
 DROP TABLE IF EXISTS `feriados`;
@@ -11359,10 +11355,12 @@ CREATE TABLE IF NOT EXISTS `feriados` (
   `tipo` varchar(30) DEFAULT 'nacional',
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   `criado_por` int DEFAULT NULL,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  KEY `fk_feriados_criado_por` (`criado_por`),
+  CONSTRAINT `fk_feriados_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.feriados: ~1 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.feriados: ~0 rows (aproximadamente)
 INSERT INTO `feriados` (`id`, `data`, `descricao`, `tipo`, `criado_em`, `criado_por`) VALUES
 	(2, '2026-06-04', 'Corpus Christi', 'nacional', '2026-05-29 23:42:17', 2);
 
@@ -11374,13 +11372,12 @@ CREATE TABLE IF NOT EXISTS `genero` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.genero: ~5 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.genero: ~4 rows (aproximadamente)
 INSERT INTO `genero` (`id`, `nome`) VALUES
 	(1, 'Masculino'),
 	(2, 'Feminino'),
-	(3, 'NÃ£o informado'),
-	(4, 'Outro'),
-	(5, 'baitola');
+	(3, 'Não informado'),
+	(4, 'Outro');
 
 -- Copiando estrutura para tabela sistema_advocacia.historico_atendimento
 DROP TABLE IF EXISTS `historico_atendimento`;
@@ -11429,10 +11426,11 @@ CREATE TABLE IF NOT EXISTS `logs_auditoria` (
   PRIMARY KEY (`id`),
   KEY `idx_tabela` (`tabela`),
   KEY `idx_usuario` (`usuario_id`),
-  KEY `idx_data` (`criado_em`)
-) ENGINE=InnoDB AUTO_INCREMENT=119 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  KEY `idx_data` (`criado_em`),
+  KEY `idx_usuario_data` (`usuario_id`,`criado_em`)
+) ENGINE=InnoDB AUTO_INCREMENT=120 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.logs_auditoria: ~117 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.logs_auditoria: ~119 rows (aproximadamente)
 INSERT INTO `logs_auditoria` (`id`, `usuario_id`, `tabela`, `acao`, `registro_id`, `dados_antigos`, `dados_novos`, `criado_em`) VALUES
 	(1, 1, 'usuarios', 'criar', 2, NULL, NULL, '2026-05-23 01:06:19'),
 	(2, 1, 'usuarios', 'editar', 2, NULL, NULL, '2026-05-23 10:25:38'),
@@ -11551,7 +11549,8 @@ INSERT INTO `logs_auditoria` (`id`, `usuario_id`, `tabela`, `acao`, `registro_id
 	(115, 2, 'usuarios', 'editar', 4, NULL, NULL, '2026-06-11 09:33:42'),
 	(116, 2, 'usuarios', 'editar', 5, NULL, NULL, '2026-06-11 09:33:54'),
 	(117, 2, 'usuarios', 'criar', 7, NULL, NULL, '2026-06-11 09:35:10'),
-	(118, 2, 'usuarios', 'criar', 8, NULL, NULL, '2026-06-11 10:48:42');
+	(118, 2, 'usuarios', 'criar', 8, NULL, NULL, '2026-06-11 10:48:42'),
+	(119, 2, 'audiencia', 'criar', 14, NULL, NULL, '2026-06-11 16:20:54');
 
 -- Copiando estrutura para tabela sistema_advocacia.log_comunicacoes
 DROP TABLE IF EXISTS `log_comunicacoes`;
@@ -11599,6 +11598,26 @@ CREATE TABLE IF NOT EXISTS `log_documentos_gerados` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Copiando dados para a tabela sistema_advocacia.log_documentos_gerados: ~0 rows (aproximadamente)
+
+-- Copiando estrutura para tabela sistema_advocacia.log_emails
+DROP TABLE IF EXISTS `log_emails`;
+CREATE TABLE IF NOT EXISTS `log_emails` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `enviado_em` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `para` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `assunto` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `status` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `erro` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  PRIMARY KEY (`id`),
+  KEY `idx_log_emails_enviado_em` (`enviado_em`),
+  KEY `idx_log_emails_status` (`status`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Copiando dados para a tabela sistema_advocacia.log_emails: ~3 rows (aproximadamente)
+INSERT INTO `log_emails` (`id`, `enviado_em`, `para`, `assunto`, `status`, `erro`) VALUES
+	(1, '2026-06-12 10:00:03', 'visaoecultura@gmail.com', 'PRAZO ATRASADO', 'falha', 'Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials af79cd13be357-9161a006426sm199020385a.22 - gsmtp'),
+	(2, '2026-06-12 10:00:04', 'ednasvlr@gmail', 'PRAZO ATRASADO', 'falha', 'Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials 6a1803df08f44-8d3045781d9sm22652746d6.30 - gsmtp'),
+	(3, '2026-06-12 10:00:05', '.com', 'PRAZO ATRASADO', 'falha', 'Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials 6a1803df08f44-8d304b58edesm21711506d6.37 - gsmtp');
 
 -- Copiando estrutura para tabela sistema_advocacia.log_publicacoes
 DROP TABLE IF EXISTS `log_publicacoes`;
@@ -11691,6 +11710,7 @@ CREATE TABLE IF NOT EXISTS `pericia` (
   KEY `tipo_pericia_id` (`tipo_pericia_id`),
   KEY `assistente_tecnico_id` (`assistente_tecnico_id`),
   KEY `criado_por` (`criado_por`),
+  KEY `idx_per_data` (`data`),
   CONSTRAINT `fk_pericia_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`),
   CONSTRAINT `pericia_ibfk_2` FOREIGN KEY (`tipo_pericia_id`) REFERENCES `tipo_pericia` (`id`),
   CONSTRAINT `pericia_ibfk_3` FOREIGN KEY (`assistente_tecnico_id`) REFERENCES `usuarios` (`id`),
@@ -11713,7 +11733,7 @@ CREATE TABLE IF NOT EXISTS `permissoes` (
   CONSTRAINT `permissoes_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=2363 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.permissoes: ~439 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.permissoes: ~470 rows (aproximadamente)
 INSERT INTO `permissoes` (`id`, `usuario_id`, `modulo`, `submodulo`, `acao`, `permitido`) VALUES
 	(853, 4, 'pessoas', NULL, 'visualizar', 1),
 	(854, 4, 'pessoas', NULL, 'cadastrar', 1),
@@ -12223,6 +12243,7 @@ CREATE TABLE IF NOT EXISTS `pessoas_fisicas` (
   KEY `genero_id` (`genero_id`),
   KEY `fk_pf_criado_por` (`criado_por`),
   KEY `fk_pf_alterado_por` (`alterado_por`),
+  KEY `idx_pf_cpf` (`cpf`),
   CONSTRAINT `fk_pf_alterado_por` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `fk_pf_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `pessoas_fisicas_ibfk_1` FOREIGN KEY (`estado_civil_id`) REFERENCES `estado_civil` (`id`),
@@ -12232,7 +12253,7 @@ CREATE TABLE IF NOT EXISTS `pessoas_fisicas` (
 
 -- Copiando dados para a tabela sistema_advocacia.pessoas_fisicas: ~5 rows (aproximadamente)
 INSERT INTO `pessoas_fisicas` (`id`, `nome`, `cpf`, `rg`, `rg_orgao`, `pis`, `ctps_numero`, `ctps_serie`, `nome_pai`, `nome_mae`, `data_nascimento`, `estado_civil_id`, `profissao_id`, `genero_id`, `cep`, `logradouro`, `numero`, `complemento`, `bairro`, `cidade`, `estado`, `foto_path`, `observacoes`, `ativo`, `criado_em`, `criado_por`, `alterado_por`, `alterado_em`) VALUES
-	(2, 'Edna Silva Vieira de Lima Ribeiro', '25570626859', '23390098-6', 'SSp/sp', NULL, NULL, NULL, NULL, NULL, '1972-03-27', 7, 6, 5, '03818-030', 'Rua Lagoa D\'anta', '70', NULL, 'Parque Cisper', 'Sao Paulo', 'SP', NULL, NULL, 1, '2026-05-25 19:21:08', 2, NULL, NULL),
+	(2, 'Edna Silva Vieira de Lima Ribeiro', '25570626859', '23390098-6', 'SSp/sp', NULL, NULL, NULL, NULL, NULL, '1972-03-27', 7, 6, 2, '03818-030', 'Rua Lagoa D\'anta', '70', NULL, 'Parque Cisper', 'Sao Paulo', 'SP', NULL, NULL, 1, '2026-05-25 19:21:08', 2, NULL, NULL),
 	(3, 'Erick Silva Ribeiro', '86620444920', NULL, NULL, NULL, '654654', '5654-SP', NULL, NULL, '1999-05-15', 2, 1, 1, '03818-030', 'Rua Lagoa D\'anta', '30', NULL, 'Parque Císper', 'São Paulo', 'SP', NULL, NULL, 1, '2026-05-25 20:35:50', 2, NULL, NULL),
 	(4, 'Claudenor de Lima Ribeiro', '13667952880', '23.390.098-6', 'ssp/sp', '654654654654654', 'Digital', NULL, 'Jesuino Batista Ribeiro', 'Leonor Maria de Lima Ribeiro', '1972-03-27', 2, 9, 1, '03820-200', 'Rua Ibirajuba', '2', 'Apto 22, Bloco F-3', 'Vila Sílvia', 'São Paulo', 'SP', NULL, 'Teste de Observações', 1, '2026-05-26 09:12:50', 2, 2, '2026-06-09 12:11:32'),
 	(5, 'Adelaide Camilo de Carvalho', '43812289873', NULL, NULL, NULL, NULL, NULL, NULL, NULL, '1994-08-31', 3, 17, 2, '08490-006', 'Rua Inácio Monteiro', '600', NULL, 'Vila Hortência', 'São Paulo', 'SP', NULL, NULL, 1, '2026-05-26 13:39:41', 2, NULL, NULL),
@@ -12258,13 +12279,20 @@ CREATE TABLE IF NOT EXISTS `pessoas_juridicas` (
   `ativo` tinyint(1) DEFAULT '1',
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   `criado_por` int DEFAULT NULL,
-  PRIMARY KEY (`id`)
+  `alterado_por` int DEFAULT NULL,
+  `alterado_em` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_pj_cnpj` (`cnpj`),
+  KEY `fk_pj_criado_por` (`criado_por`),
+  KEY `fk_pj_alterado_por` (`alterado_por`),
+  CONSTRAINT `fk_pj_alterado_por` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `fk_pj_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Copiando dados para a tabela sistema_advocacia.pessoas_juridicas: ~2 rows (aproximadamente)
-INSERT INTO `pessoas_juridicas` (`id`, `razao_social`, `nome_fantasia`, `cnpj`, `inscricao_estadual`, `representante_legal`, `cep`, `logradouro`, `numero`, `complemento`, `bairro`, `cidade`, `estado`, `observacoes`, `ativo`, `criado_em`, `criado_por`) VALUES
-	(1, 'Flex Gestão de Relacionamentos', NULL, '10851805001255', NULL, NULL, '03501-000', 'Avenida Conde de Frontin', '2', NULL, 'Tatuapé', 'São Paulo', 'SP', NULL, 1, '2026-05-26 09:14:43', 2),
-	(2, 'Via Varejo S/a', NULL, '33041260000164', NULL, NULL, '09520-010', 'Rua João Pessoa', '83', NULL, 'Centro', 'São Caetano do Sul', 'SP', NULL, 1, '2026-05-26 13:40:40', 2);
+INSERT INTO `pessoas_juridicas` (`id`, `razao_social`, `nome_fantasia`, `cnpj`, `inscricao_estadual`, `representante_legal`, `cep`, `logradouro`, `numero`, `complemento`, `bairro`, `cidade`, `estado`, `observacoes`, `ativo`, `criado_em`, `criado_por`, `alterado_por`, `alterado_em`) VALUES
+	(1, 'Flex Gestão de Relacionamentos', NULL, '10851805001255', NULL, NULL, '03501-000', 'Avenida Conde de Frontin', '2', NULL, 'Tatuapé', 'São Paulo', 'SP', NULL, 1, '2026-05-26 09:14:43', 2, NULL, NULL),
+	(2, 'Via Varejo S/a', NULL, '33041260000164', NULL, NULL, '09520-010', 'Rua João Pessoa', '83', NULL, 'Centro', 'São Caetano do Sul', 'SP', NULL, 1, '2026-05-26 13:40:40', 2, NULL, NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.prazos_processo
 DROP TABLE IF EXISTS `prazos_processo`;
@@ -12297,6 +12325,7 @@ CREATE TABLE IF NOT EXISTS `prazos_processo` (
   KEY `status_alterado_por` (`status_alterado_por`),
   KEY `criado_por` (`criado_por`),
   KEY `fk_pp_fazendo_por` (`fazendo_por`),
+  KEY `idx_vencimento_status` (`data_vencimento`,`status`),
   CONSTRAINT `fk_pp_fazendo_por` FOREIGN KEY (`fazendo_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_prazos_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`),
   CONSTRAINT `prazos_processo_ibfk_2` FOREIGN KEY (`subtipo_id`) REFERENCES `prazo_subtipo` (`id`),
@@ -12370,26 +12399,24 @@ CREATE TABLE IF NOT EXISTS `profissao` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.profissao: ~18 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.profissao: ~16 rows (aproximadamente)
 INSERT INTO `profissao` (`id`, `nome`) VALUES
 	(1, 'Advogado'),
-	(2, 'Mâ”œÂ®dico'),
+	(2, 'Médico'),
 	(3, 'Engenheiro'),
 	(4, 'Professor'),
-	(5, 'Empresâ”œÃ­rio'),
-	(6, 'Funcionâ”œÃ­rio Pâ”œâ•‘blico'),
+	(5, 'Empresário'),
+	(6, 'Funcionário Público'),
 	(7, 'Motorista'),
 	(8, 'Comerciante'),
 	(9, 'Agricultor'),
 	(10, 'Aposentado'),
 	(11, 'Desempregado'),
-	(12, 'Domâ”œÂ®stica'),
-	(13, 'Operâ”œÃ­rio'),
-	(14, 'Tâ”œÂ®cnico'),
-	(15, 'advogada'),
-	(16, 'pipoqueiro'),
-	(17, 'Negociadora de cobrança'),
-	(18, 'controlador de accesso');
+	(12, 'Doméstica'),
+	(13, 'Operário'),
+	(14, 'Técnico'),
+	(17, 'Negociadora de Cobrança'),
+	(18, 'Controlador de Acesso');
 
 -- Copiando estrutura para tabela sistema_advocacia.publicacoes
 DROP TABLE IF EXISTS `publicacoes`;
@@ -12460,6 +12487,7 @@ CREATE TABLE IF NOT EXISTS `tarefas` (
   KEY `atribuida_para` (`atribuida_para`),
   KEY `concluida_por` (`concluida_por`),
   KEY `criado_por` (`criado_por`),
+  KEY `idx_concluida_vencimento` (`concluida`,`data_vencimento`),
   CONSTRAINT `fk_tarefas_tblpasta` FOREIGN KEY (`pasta_id`) REFERENCES `tblpasta` (`id`),
   CONSTRAINT `fk_tarefas_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`),
   CONSTRAINT `tarefas_ibfk_3` FOREIGN KEY (`prazo_id`) REFERENCES `prazos_processo` (`id`),
@@ -12583,6 +12611,7 @@ CREATE TABLE IF NOT EXISTS `tblproc` (
   KEY `instancia_id` (`instancia_id`),
   KEY `criado_por` (`criado_por`),
   KEY `alterado_por` (`alterado_por`),
+  KEY `idx_proc_numproc` (`numProc`),
   CONSTRAINT `tblproc_ibfk_1` FOREIGN KEY (`pasta_id`) REFERENCES `tblpasta` (`id`),
   CONSTRAINT `tblproc_ibfk_2` FOREIGN KEY (`vara_id`) REFERENCES `tblvara` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblproc_ibfk_3` FOREIGN KEY (`tipo_id`) REFERENCES `tbltipoproc` (`id`) ON DELETE SET NULL,
@@ -12886,13 +12915,11 @@ CREATE TABLE IF NOT EXISTS `tipo_audiencia` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.tipo_audiencia: ~8 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.tipo_audiencia: ~6 rows (aproximadamente)
 INSERT INTO `tipo_audiencia` (`id`, `nome`, `ativo`) VALUES
 	(1, 'Una', 1),
 	(3, 'Inicial', 1),
 	(5, 'Julgamento', 1),
-	(8, 'Julgamento', 0),
-	(9, 'Julgamento-197', 1),
 	(10, 'Instrução', 1),
 	(11, 'Conciliação', 1),
 	(12, 'Oitiva de Testemunha', 1);
@@ -12908,13 +12935,13 @@ CREATE TABLE IF NOT EXISTS `tipo_pericia` (
 
 -- Copiando dados para a tabela sistema_advocacia.tipo_pericia: ~7 rows (aproximadamente)
 INSERT INTO `tipo_pericia` (`id`, `nome`, `ativo`) VALUES
-	(1, 'Mâ”œÂ®dica', 1),
-	(2, 'Contâ”œÃ­bil', 1),
+	(1, 'Médica', 1),
+	(2, 'Contábil', 1),
 	(3, 'Insalubridade', 1),
 	(4, 'Periculosidade', 1),
-	(5, 'Ergonâ”œâ”¤mica', 1),
+	(5, 'Ergonômica', 1),
 	(6, 'Ambiental', 1),
-	(7, 'Tâ”œÂ®cnica', 1);
+	(7, 'Técnica', 1);
 
 -- Copiando estrutura para tabela sistema_advocacia.tipo_prazo
 DROP TABLE IF EXISTS `tipo_prazo`;
@@ -12952,13 +12979,15 @@ CREATE TABLE IF NOT EXISTS `usuarios` (
   `notif_email` tinyint(1) DEFAULT '1',
   `notif_tela` tinyint(1) DEFAULT '1',
   PRIMARY KEY (`id`),
-  KEY `idx_login` (`login`)
+  KEY `idx_login` (`login`),
+  KEY `fk_usuarios_criado_por` (`criado_por`),
+  CONSTRAINT `fk_usuarios_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.usuarios: ~7 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.usuarios: ~8 rows (aproximadamente)
 INSERT INTO `usuarios` (`id`, `nome`, `login`, `senha_hash`, `email`, `oab`, `tipo`, `nivel`, `ativo`, `ver_todos_processos`, `criado_em`, `criado_por`, `ultimo_acesso`, `notif_email`, `notif_tela`) VALUES
 	(1, 'Superusuário', 'superadmin', '$2a$12$6vzSy/RUw.HOUdaJurzjoei0THb0ZrBmKuHfOxU9A1xpvDnKwv4GW', NULL, NULL, 'administrador', 0, 1, 0, '2026-05-23 00:59:32', NULL, '2026-06-09 20:26:28', 1, 1),
-	(2, 'Claudio', 'claudio', '$2a$12$0SCACm4vro7kpi8QC28jlOnJw6V2J7Ciz4EOOgKpnAaefHhP0shXq', 'claudio@antonio.adv.br', NULL, 'administrador', 1, 1, 1, '2026-05-23 01:06:19', 1, '2026-06-11 10:46:00', 1, 1),
+	(2, 'Claudio', 'claudio', '$2a$12$0SCACm4vro7kpi8QC28jlOnJw6V2J7Ciz4EOOgKpnAaefHhP0shXq', 'claudio@antonio.adv.br', NULL, 'administrador', 1, 1, 1, '2026-05-23 01:06:19', 1, '2026-06-12 09:16:09', 1, 1),
 	(3, 'edna', 'edna', '$2a$12$zHJRLurJ4WOgjWhf6JEvteVrp095BMfRtOZfdxqtMg0dT4OxTiu9G', 'ednasvlr@gmail.com', NULL, 'advogado', 1, 1, 1, '2026-05-23 10:35:04', 1, '2026-06-08 16:24:51', 1, 1),
 	(4, 'Erick', 'erick', '$2a$12$QM8unf8KeJC/qyibJNEiOeNwgZ0ebgm1zay0MBWbpTkMj8nW6Jclm', NULL, NULL, 'advogado', 2, 1, 0, '2026-05-29 13:49:05', 2, '2026-06-02 09:40:14', 1, 1),
 	(5, 'Evellyn', 'evellyn', '$2a$12$ndwGKWme085Gg.qaoB9AQeHEod6MVuOFRT1BOiufCmS0r8EgJGkmy', NULL, NULL, 'advogado', 2, 1, 0, '2026-05-30 00:29:53', 2, '2026-05-31 13:02:21', 1, 1),

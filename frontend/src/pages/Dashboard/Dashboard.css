@@ -89,3 +89,10 @@
   .dashboard-contadores { grid-template-columns: repeat(3, 1fr); }
   .dashboard-grid { grid-template-columns: 1fr; }
 }
+
+/* Celular: 2 cards por linha e saudação menor */
+@media (max-width: 600px) {
+  .dashboard-contadores { grid-template-columns: repeat(2, 1fr); }
+  .dashboard-saudacao { font-size: 18px; }
+  .contador-valor { font-size: 22px; }
+}

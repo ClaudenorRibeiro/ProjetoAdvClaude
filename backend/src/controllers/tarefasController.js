@@ -72,14 +72,18 @@ async function listar(req, res) {
 }
 
 // POST /api/tarefas — Cria nova tarefa
+// Transação: INSERT da tarefa + registro de auditoria (tudo ou nada)
 async function criar(req, res) {
+  const { titulo, descricao, prioridade, processo_id, pasta_id, prazo_id,
+          atribuida_para, data_vencimento } = req.body;
+
+  if (!titulo) return erro(res, 'O título é obrigatório');
+
+  const conn = await pool.getConnection();
   try {
-    const { titulo, descricao, prioridade, processo_id, pasta_id, prazo_id,
-            atribuida_para, data_vencimento } = req.body;
+    await conn.beginTransaction();
 
-    if (!titulo) return erro(res, 'O título é obrigatório');
-
-    const [result] = await pool.execute(
+    const [result] = await conn.execute(
       `INSERT INTO tarefas
          (titulo, descricao, prioridade, processo_id, pasta_id, prazo_id,
           atribuida_para, data_vencimento, criado_por)
@@ -93,44 +97,67 @@ async function criar(req, res) {
       ]
     );
 
-    await auditoria.registrar(req.usuario.id, 'tarefas', 'criar', result.insertId);
+    await auditoria.registrar(req.usuario.id, 'tarefas', 'criar', result.insertId, null, null, conn);
+
+    await conn.commit();
     return sucesso(res, { id: result.insertId }, 'Tarefa criada com sucesso', 201);
   } catch (err) {
+    await conn.rollback();
     return erroInterno(res, err);
+  } finally {
+    conn.release();
   }
 }
 
 // PUT /api/tarefas/:id/concluir — Marca tarefa como concluída
+// Transação: UPDATE da tarefa + registro de auditoria (tudo ou nada)
 async function concluir(req, res) {
-  try {
-    const { id } = req.params;
-    const [exists] = await pool.execute('SELECT id FROM tarefas WHERE id = ?', [id]);
-    if (!exists.length) return naoEncontrado(res, 'Tarefa não encontrada');
+  const { id } = req.params;
+  const [exists] = await pool.execute('SELECT id FROM tarefas WHERE id = ?', [id]);
+  if (!exists.length) return naoEncontrado(res, 'Tarefa não encontrada');
 
-    await pool.execute(
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    await conn.execute(
       'UPDATE tarefas SET concluida = 1, concluida_por = ?, concluida_em = NOW() WHERE id = ?',
       [req.usuario.id, id]
     );
+    await auditoria.registrar(req.usuario.id, 'tarefas', 'concluir', id, null, null, conn);
 
-    await auditoria.registrar(req.usuario.id, 'tarefas', 'concluir', id);
+    await conn.commit();
     return sucesso(res, null, 'Tarefa concluída');
   } catch (err) {
+    await conn.rollback();
     return erroInterno(res, err);
+  } finally {
+    conn.release();
   }
 }
 
 // PUT /api/tarefas/:id/reabrir — Reabre uma tarefa concluída
+// Transação: UPDATE da tarefa + registro de auditoria (tudo ou nada)
 async function reabrir(req, res) {
+  const { id } = req.params;
+
+  const conn = await pool.getConnection();
   try {
-    const { id } = req.params;
-    await pool.execute(
+    await conn.beginTransaction();
+
+    await conn.execute(
       'UPDATE tarefas SET concluida = 0, concluida_por = NULL, concluida_em = NULL WHERE id = ?',
       [id]
     );
-    await auditoria.registrar(req.usuario.id, 'tarefas', 'reabrir', id);
+    await auditoria.registrar(req.usuario.id, 'tarefas', 'reabrir', id, null, null, conn);
+
+    await conn.commit();
     return sucesso(res, null, 'Tarefa reaberta');
   } catch (err) {
+    await conn.rollback();
     return erroInterno(res, err);
+  } finally {
+    conn.release();
   }
 }
 
@@ -200,28 +227,41 @@ async function buscarHistorico(req, res) {
 }
 
 // DELETE /api/tarefas/:id — Exclui tarefa
+// Transação: DELETE da tarefa + registro de auditoria (tudo ou nada)
 async function excluir(req, res) {
-  try {
-    const { id } = req.params;
-    const [exists] = await pool.execute('SELECT id FROM tarefas WHERE id = ?', [id]);
-    if (!exists.length) return naoEncontrado(res, 'Tarefa não encontrada');
+  const { id } = req.params;
+  const [exists] = await pool.execute('SELECT id FROM tarefas WHERE id = ?', [id]);
+  if (!exists.length) return naoEncontrado(res, 'Tarefa não encontrada');
 
-    await pool.execute('DELETE FROM tarefas WHERE id = ?', [id]);
-    await auditoria.registrar(req.usuario.id, 'tarefas', 'excluir', id);
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    await conn.execute('DELETE FROM tarefas WHERE id = ?', [id]);
+    await auditoria.registrar(req.usuario.id, 'tarefas', 'excluir', id, null, null, conn);
+
+    await conn.commit();
     return sucesso(res, null, 'Tarefa excluída');
   } catch (err) {
+    await conn.rollback();
     return erroInterno(res, err);
+  } finally {
+    conn.release();
   }
 }
 
 // PUT /api/tarefas/:id — Atualiza tarefa
+// Transação: UPDATE da tarefa + registro de auditoria (tudo ou nada)
 async function atualizar(req, res) {
-  try {
-    const { id } = req.params;
-    const { titulo, descricao, prioridade, atribuida_para, data_vencimento,
-            pasta_id, processo_id } = req.body;
+  const { id } = req.params;
+  const { titulo, descricao, prioridade, atribuida_para, data_vencimento,
+          pasta_id, processo_id } = req.body;
 
-    await pool.execute(
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    await conn.execute(
       `UPDATE tarefas SET titulo=?, descricao=?, prioridade=?,
        atribuida_para=?, data_vencimento=?, pasta_id=?, processo_id=?
        WHERE id = ?`,
@@ -229,11 +269,15 @@ async function atualizar(req, res) {
        atribuida_para || null, data_vencimento || null,
        pasta_id || null, processo_id || null, id]
     );
+    await auditoria.registrar(req.usuario.id, 'tarefas', 'alterar', id, null, null, conn);
 
-    await auditoria.registrar(req.usuario.id, 'tarefas', 'alterar', id);
+    await conn.commit();
     return sucesso(res, null, 'Tarefa atualizada');
   } catch (err) {
+    await conn.rollback();
     return erroInterno(res, err);
+  } finally {
+    conn.release();
   }
 }
 
