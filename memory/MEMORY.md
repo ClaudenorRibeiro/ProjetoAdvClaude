@@ -1,0 +1,25 @@
+# Memory Index — Sistema de Advocacia
+
+- [Visão Geral do Projeto](project_overview.md) — JS, Node+React+MySQL, AWS Lightsail 98.86.50.188, ~4% concluído, WhatsApp descartado por ora
+- [Diretrizes de Código](feedback_codigo.md) — ⚠️ LER PRIMEIRO: só codifica com autorização, sem migrations, commits DDMMYY-HHMM, transações obrigatórias
+- [Usuários e Permissões](user_permissions.md) — Hierarquia 3 níveis, superusuário invisível (nivel=0), permissões granulares
+- [Cadastro de Pessoas](cadastro_pessoas.md) — Papel definido pelo contexto; busca abrangente (CPF/RG/PIS/tel/endereço); coluna Qtde Proc
+- [Processos e Pastas](processos_pastas.md) — PESSOA → CLIENTE → PASTA → PROCESSO; tabelas definitivas com prefixo tbl
+- [Tabelas do Banco de Dados](database_tables.md) — 47 tabelas; log_emails adicionada 12/06/2026; 3 índices novos criados
+- [Deploy e Versionamento](deploy_versionamento.md) — PM2: "advocacia-backend"; servidor em /var/www/advocacia/; WinSCP documentado
+- [Prazos](prazos.md) — Dias úteis/corridos, status com auditoria, alertas e-mail, 42+ tipos
+- [Tarefas](tarefas.md) — Diferença vs prazo: vínculo livre, sem alerta admin, prioridades 3 níveis
+- [Financeiro](financeiro.md) — Conta corrente por pasta, honorários flexíveis, recibo PDF, relatórios, parcerias
+- [Audiências](audiencias.md) — Comunicado PDF automático, ata gera prazos/tarefas/acordo; validação dia útil + senha obrigatória
+- [Validação de Senha](validacao_senha.md) — Regras (8-20, maiúscula+minúscula+número+especial), onde está implementado, verificarSenha
+- [Andamento Processual](andamento_processual.md) — Lançamento manual, data/descrição/usuário, auditoria de edições
+- [Documentos e Modelos](documentos_modelos.md) — Gera Word+PDF com variáveis automáticas, admin configura modelos, log de geração salvo
+- [Comunicações](comunicacoes.md) — E-mail (ativo via Gmail SMTP) e WhatsApp (futuro/Z-API), histórico registrado
+- [Agenda e Calendário](agenda_calendario.md) — Padrão: só eventos do usuário logado; checkbox "Escritório" mostra todos
+- [Relatórios e Pesquisas](relatorios.md) — Pesquisa flexível estilo AutoFiltro Excel, por módulo e unificada, exporta PDF/Excel/Word
+- [Configurações do Escritório](configuracoes_escritorio.md) — Dados só editáveis pelo superusuário; excluir/histórico de usuários; alertas e-mail no banco
+- [Dashboard](dashboard.md) — Cards do dia (prazos, tarefas, audiências, perícias), audiências sem ata, atalhos rápidos
+- [Perícias](pericias.md) — Agendamento, comunicado ao cliente, e-mail ao perito via modelo, sem laudo
+- [Integrações e Publicações](integracoes_publicacoes.md) — Publicações AASP por OAB, gera prazo/tarefa, CNJ para versão futura
+- [Setup Inicial](setup_inicial.md) — Campos obrigatórios, bloqueio de módulos, calendário pré-populado 30 anos, primeiro admin
+- [Pendências Próxima Sessão](pendencias_proxima_sessao.md) — Deploy pendente (email.js, alertasService.js, configuracaoCtrl, Audiencias.js); vírgula no alerta_emails
