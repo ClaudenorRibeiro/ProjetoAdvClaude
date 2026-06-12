@@ -203,6 +203,18 @@ Chamados em `atualizar()` antes do INSERT na auditoria.
 - `audienciasController.listar()` aceita parâmetro `responsavel_id`
 - Usado pela Agenda para mostrar apenas audiências do usuário logado
 
+## Limpeza das colunas advogado_* (12/06/2026)
+
+- As colunas `advogado_tipo/advogado_usuario_id/advogado_pessoa_id/advogado_freela_id` eram resquício
+  do campo duplicado de 09/06 — 100% NULL, sistema vivo usa `responsavel_id`/`responsavel_freela_id`
+- **Código** (já feito): JOINs e aliases `adv_*_nome` removidos de listar() e buscar()
+- **Banco** (pendente): colunas removidas pelo `scripts/fase2_3_redundancias.sql` — produção só após deploy
+- `responsavel_nome` agora resolve TAMBÉM freelancer: `COALESCE(ur.nome, CONCAT(rf.nome, ' (freelancer)'))`
+  — antes a Agenda mostrava vazio quando o responsável era freela
+- **Fix excluirFreela**: a checagem "freela vinculado a audiências" usava a coluna morta
+  `advogado_freela_id` (sempre NULL) — permitia excluir freela em uso e a FK SET NULL apagava o vínculo
+  silenciosamente. Corrigido para `responsavel_freela_id`
+
 ## Rotas Backend
 
 ```

@@ -137,6 +137,25 @@ try {
 **O que NUNCA colocar no banco:** `UNIQUE`, `ENUM`, `CHECK`, triggers com lógica, stored procedures com regras  
 **O que É permitido:** `PRIMARY KEY`, `FOREIGN KEY`, `INDEX` simples, `NOT NULL` estrutural, tipos de dados adequados
 
+## Datas e Crons — SEMPRE Fuso de Brasília (regra desde 12/06/2026)
+
+**Problema:** o servidor (Ubuntu/Lightsail) roda em UTC. `new Date().toISOString()` retorna a data UTC —
+após as 21h de Brasília já é "amanhã", e crons sem timezone disparam 3h adiantados.
+
+**Como aplicar:**
+- "Hoje" no backend: SEMPRE `hojeBrasilia()` de `utils/helpers.js` (aceita offset: `hojeBrasilia(1)` = amanhã)
+- NUNCA `new Date().toISOString().split('T')[0]` para data de negócio
+- Todo `cron.schedule` DEVE receber `{ timezone: 'America/Sao_Paulo' }` (em alertasService: constante `OPCOES_CRON`)
+- O pool MySQL já está em `-03:00` (`CURDATE()`/`NOW()` do MySQL são consistentes com Brasília)
+
+## Auditoria Dentro de Transação — Padrão (desde 12/06/2026)
+
+`auditoria.registrar()` aceita um 7º parâmetro opcional `conn`:
+- Com `conn`: o INSERT em logs_auditoria participa da transação do chamador — falha provoca rollback (tudo ou nada)
+- Sem `conn`: comportamento tolerante antigo (loga erro, não derruba a operação)
+- Em toda operação de escrita + auditoria: usar o padrão transacional com `conn`
+- Referência do padrão: `tarefasController.js`, `periciasController.js`, `financeiroController.js`
+
 ## Limpeza de Memória — Sem Sujeira
 
 **Regra absoluta:** Se abriu, fecha. Sem nada pendurado em memória.  

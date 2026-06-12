@@ -131,6 +131,20 @@ ALTER TABLE `tarefas`         ADD INDEX `idx_concluida_vencimento` (`concluida`,
 ALTER TABLE `logs_auditoria`  ADD INDEX `idx_usuario_data` (`usuario_id`, `criado_em`);
 ```
 
+## Scripts Fase 2 — Criados em 12/06/2026 (pasta scripts/, aguardando execução pelo usuário)
+
+- `fase2_1_correcao_dados.sql` — mojibake + dados de teste ("baitola", "tico tico"...) + alerta_emails
+- `fase2_2_indices.sql` — idx_pf_cpf, idx_pj_cnpj, idx_proc_numproc, idx_aud_data_status, idx_per_data
+- `fase2_3_redundancias.sql` — ⚠️ produção só APÓS deploy do backend: remove audiencia.advogado_* (4 colunas
+  órfãs do campo duplicado de 09/06) e configuracoes_escritorio.endereco; adiciona pessoas_juridicas.alterado_por/em
+  + FKs (pj.criado_por, feriados.criado_por SET NULL, usuarios.criado_por RESTRICT)
+- Após rodar no banco local: exportar estrutura → `estrutura_banco.sql` → commit (com autorização)
+
+## ⚠️ pesquisas_salvas — NÃO EXISTE no banco
+
+Listada nas memórias (módulo Relatórios) mas ausente no backup de 12/06/2026 (51 tabelas conferidas).
+Será criada quando o módulo Relatórios for desenvolvido (Fase 5).
+
 ## Observações Importantes
 
 - `calendarioService.js` só consulta a tabela `calendario` — nunca `feriados` diretamente
