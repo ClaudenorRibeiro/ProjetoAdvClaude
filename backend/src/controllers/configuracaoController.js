@@ -8,6 +8,7 @@ const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response
 const bcrypt = require('bcryptjs');
 const auditoria = require('../middleware/auditoria');
 const { ehDiaUtil } = require('../services/calendarioService');
+const { reagendarCronPrazos } = require('../services/alertasService');
 
 // GET /api/public/info — Retorna nome, logo e título da aba (sem autenticação)
 // Usado na tela de login e para definir document.title no frontend
@@ -78,6 +79,9 @@ async function atualizarEscritorio(req, res) {
         titulo_aba || null
       ]
     );
+
+    // Reagenda o cron de prazos caso o horário tenha mudado
+    await reagendarCronPrazos();
 
     return sucesso(res, null, 'Configurações atualizadas com sucesso');
   } catch (err) {

@@ -5,7 +5,8 @@
 // entra em modo DEV: loga o link no console do servidor ao invés de falhar.
 // ============================================================
 
-const nodemailer = require('nodemailer');
+const nodemailer   = require('nodemailer');
+const { pool }     = require('../config/database');
 
 // Hosts que indicam SMTP ainda não configurado (placeholders)
 const HOSTS_INVALIDOS = ['smtp.example.com', 'example.com', '', undefined, null];
@@ -29,13 +30,27 @@ function criarTransporte() {
   });
 }
 
+// Grava o resultado do envio na tabela log_emails (nunca lança exceção)
+async function registrarLog(para, assunto, status, erro) {
+  try {
+    await pool.execute(
+      'INSERT INTO log_emails (para, assunto, status, erro) VALUES (?, ?, ?, ?)',
+      [para, assunto, status, erro || null]
+    );
+  } catch (e) {
+    console.error('Erro ao gravar log_emails:', e.message);
+  }
+}
+
 // Envia um e-mail genérico.
 // Parâmetros: { para, assunto, html, linkDev? }
 // Em desenvolvimento sem SMTP, imprime o link no console e retorna sem erro.
 async function enviarEmail({ para, assunto, html, linkDev }) {
   if (!smtpConfigurado()) {
     if (process.env.NODE_ENV === 'production') {
-      throw new Error('Servidor de e-mail não configurado. Configure SMTP_HOST no arquivo .env');
+      const msg = 'Servidor de e-mail não configurado. Configure SMTP_HOST no arquivo .env';
+      await registrarLog(para, assunto, 'falha', msg);
+      throw new Error(msg);
     }
     // Modo desenvolvimento: exibe o link no console para teste
     console.log('\n========================================');
@@ -44,15 +59,21 @@ async function enviarEmail({ para, assunto, html, linkDev }) {
     console.log(`Assunto: ${assunto}`);
     if (linkDev) console.log(`Link:    ${linkDev}`);
     console.log('========================================\n');
-    return; // simula envio sem erros
+    return;
   }
   const transporte = criarTransporte();
-  await transporte.sendMail({
-    from:    process.env.EMAIL_FROM || 'Sistema Advocacia <noreply@advocacia.com>',
-    to:      para,
-    subject: assunto,
-    html,
-  });
+  try {
+    await transporte.sendMail({
+      from:    process.env.EMAIL_FROM || 'Sistema Advocacia <noreply@advocacia.com>',
+      to:      para,
+      subject: assunto,
+      html,
+    });
+    await registrarLog(para, assunto, 'sucesso', null);
+  } catch (err) {
+    await registrarLog(para, assunto, 'falha', err.message);
+    throw err; // repropaga para o chamador tratar normalmente
+  }
 }
 
 // Template HTML para o e-mail de redefinição de senha

@@ -9,14 +9,14 @@ const { diasUteisAntes } = require('./calendarioService');
 const { emailPrazosPendentes, emailPrazosAtrasados } = require('./notificacaoService');
 const { liberarFazendoExpirados } = require('../controllers/prazosController');
 
+// Referência do cron de prazos — guardada para poder destruir e recriar quando o horário mudar
+let cronPrazos = null;
 
 // ── Inicia todos os cron jobs do sistema ──────────────────────────────────
 
-function iniciarAlertas() {
-  // Roda a cada minuto e verifica se chegou o horário configurado para alertas de prazo
-  cron.schedule('* * * * *', async () => {
-    await verificarHorarioAlertas();
-  });
+async function iniciarAlertas() {
+  // Lê o horário configurado no banco e agenda o cron de prazos
+  await reagendarCronPrazos();
 
   // Libera prazos "Fazendo" expirados — roda a cada 5 minutos
   cron.schedule('*/5 * * * *', async () => {
@@ -38,23 +38,56 @@ function iniciarAlertas() {
   console.log('✅ Serviço de alertas iniciado');
 }
 
-// ── Alertas de prazos ─────────────────────────────────────────────────────
+// ── Reagendamento do cron de prazos ──────────────────────────────────────
+// Chamado na inicialização e sempre que o admin salvar um novo horário
 
-async function verificarHorarioAlertas() {
+async function reagendarCronPrazos() {
   try {
     const [config] = await pool.execute(
-      'SELECT horario_alerta_prazos, alerta_atrasado_ativo, alerta_emails, nome, alerta_pendentes_enviado, alerta_atrasados_enviado FROM configuracoes_escritorio LIMIT 1'
+      'SELECT horario_alerta_prazos FROM configuracoes_escritorio LIMIT 1'
     );
-    if (!config.length || !config[0].horario_alerta_prazos || !config[0].alerta_emails) return;
+    const horario = config[0]?.horario_alerta_prazos; // formato HH:MM:00
 
-    const agora     = new Date();
-    const hh        = String(agora.getHours()).padStart(2, '0');
-    const mm        = String(agora.getMinutes()).padStart(2, '0');
-    const horaAtual = `${hh}:${mm}:00`;
-    const hoje      = agora.toISOString().split('T')[0];
+    // Destroi o cron anterior se existir
+    if (cronPrazos) {
+      cronPrazos.stop();
+      cronPrazos = null;
+    }
 
-    if (horaAtual !== config[0].horario_alerta_prazos) return;
+    if (!horario) return;
 
+    // Converte "HH:MM:00" para expressão cron "MM HH * * *"
+    const partes = horario.split(':');
+    const hh = parseInt(partes[0], 10);
+    const mm = parseInt(partes[1], 10);
+
+    if (isNaN(hh) || isNaN(mm)) {
+      console.error(`⚠️ Horário de alerta inválido no banco: "${horario}"`);
+      return;
+    }
+
+    const expressao = `${mm} ${hh} * * *`;
+    cronPrazos = cron.schedule(expressao, async () => {
+      console.log(`⏰ Cron prazos: disparando às ${horario}...`);
+      await executarAlertasPrazos();
+    });
+
+    console.log(`⏰ Cron de prazos agendado para ${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')} todos os dias`);
+  } catch (err) {
+    console.error('Erro ao reagendar cron de prazos:', err.message);
+  }
+}
+
+// ── Alertas de prazos ─────────────────────────────────────────────────────
+
+async function executarAlertasPrazos() {
+  try {
+    const [config] = await pool.execute(
+      'SELECT alerta_atrasado_ativo, alerta_emails, nome, alerta_pendentes_enviado, alerta_atrasados_enviado FROM configuracoes_escritorio LIMIT 1'
+    );
+    if (!config.length || !config[0].alerta_emails) return;
+
+    const hoje          = new Date().toISOString().split('T')[0];
     const destinatarios = config[0].alerta_emails.split(',').map(e => e.trim()).filter(Boolean);
     const escritorio    = config[0].nome;
 
@@ -75,7 +108,7 @@ async function verificarHorarioAlertas() {
       );
     }
   } catch (err) {
-    console.error('Erro ao verificar horário de alertas:', err.message);
+    console.error('Erro ao executar alertas de prazos:', err.message);
   }
 }
 
@@ -132,7 +165,7 @@ async function verificarAlertasAudiencias() {
       [hoje]
     );
     for (const a of audiencias) {
-      const dataA     = typeof a.data === 'string' ? a.data.split('T')[0] : a.data.toISOString().split('T')[0];
+      const dataA      = typeof a.data === 'string' ? a.data.split('T')[0] : a.data.toISOString().split('T')[0];
       const dataAlerta = await diasUteisAntes(dataA, diasAlerta);
       if (dataAlerta === hoje) console.log(`📅 Alerta audiência ${a.id} em ${dataA}`);
     }
@@ -151,11 +184,11 @@ async function verificarAlertasPericias() {
       [hoje]
     );
     for (const p of pericias) {
-      const dataP     = typeof p.data === 'string' ? p.data.split('T')[0] : p.data.toISOString().split('T')[0];
+      const dataP      = typeof p.data === 'string' ? p.data.split('T')[0] : p.data.toISOString().split('T')[0];
       const dataAlerta = await diasUteisAntes(dataP, diasAlerta);
       if (dataAlerta === hoje) console.log(`🔬 Alerta perícia ${p.id} em ${dataP}`);
     }
   } catch (err) { console.error('Erro alertas perícias:', err.message); }
 }
 
-module.exports = { iniciarAlertas };
+module.exports = { iniciarAlertas, reagendarCronPrazos };
