@@ -3,7 +3,11 @@
 // Inicializa Express, banco de dados e todos os serviços
 // ============================================================
 
-require('dotenv').config(); // Carrega variáveis do arquivo .env
+// override: true faz o .env SEMPRE prevalecer sobre variáveis já presentes no
+// process.env (ex.: valores antigos que o PM2 injeta a partir do dump.pm2).
+// Sem isso, uma senha SMTP velha guardada pelo PM2 sobrepunha a do .env e
+// causava "BadCredentials" mesmo com o .env correto.
+require('dotenv').config({ override: true }); // Carrega variáveis do .env (sobrescrevendo o ambiente)
 
 const express    = require('express');
 const cors       = require('cors');

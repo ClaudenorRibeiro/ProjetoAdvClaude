@@ -151,6 +151,22 @@ Implementado (build Vite OK, aguardando teste do usuário):
 - Lembrete operacional: o deploy do usuário (`1-AtualizarSistema.sh`) faz `pm2 restart` SEM --update-env,
   mas como SMTP_PASS vem do dotenv (.env) e não do env do PM2, o restart simples já recarrega o .env.
 
+## CAUSA RAIZ do e-mail (13/06, descoberta definitiva) + fix override
+
+- **CAUSA RAIZ:** o PM2 tinha a senha SMTP ANTIGA (`zlvx aeyo zwqp phyn`, com espaços) gravada no
+  ambiente do app (memória do daemon + `~/.pm2/dump.pm2`). `dotenv.config()` por padrão NÃO sobrescreve
+  variável já presente no process.env → a senha do .env (hzoqsbzugacgyoqe) era IGNORADA → BadCredentials
+  em TODO restart/deploy, independente do .env. Testes `node -e` funcionavam por rodarem em sessão sem essa injeção.
+  Confirmado via `pm2 jlist` (env do app mostrava SMTP_PASS=zlvx...).
+- **FIX CODADO no LOCAL (server.js):** `require('dotenv').config({ override: true })` — faz o .env SEMPRE
+  vencer o ambiente injetado pelo PM2. `node --check` OK. Resolve de vez e sobrevive a deploy (vai pelo git).
+  (Eu havia retirado essa sugestão antes por uma leitura de /proc equivocada — estava errado; pm2 jlist provou.)
+- Após deploy (git reset --hard + pm2 restart): processo sobe, PM2 injeta zlvx, mas dotenv override sobrescreve
+  com hzoq do .env → funciona. OPCIONAL (higiene): purgar o env velho do PM2 com
+  `pm2 delete advocacia-backend && cd /var/www/advocacia && unset SMTP_PASS && pm2 start ecosystem.config.js && pm2 save`.
+- LIÇÃO: PM2 captura o ambiente do shell no momento do `pm2 start`/`pm2 save` e reinjeta sempre. Usar
+  sempre `dotenv.config({ override:true })` em apps sob PM2 que leem segredos do .env.
+
 ## Itens já resolvidos (não refazer)
 - Tabela log_emails + 3 índices (12/06 ✅), SMTP_PASS novo no servidor (12/06 ✅)
 - Correção alerta_emails: incluída no script fase2_1 (não precisa mais ir pela tela)
