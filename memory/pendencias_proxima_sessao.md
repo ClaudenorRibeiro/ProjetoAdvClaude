@@ -133,6 +133,24 @@ Implementado (build Vite OK, aguardando teste do usuário):
 - ⚠️ REGRA NOVA gravada em feedback_codigo: fluxo LOCAL-PRIMEIRO — usuário NUNCA atualiza direto no
   servidor; tudo é feito no local e ele faz deploy manual de sistema e banco. SSH só para leitura/diagnóstico.
 
+## Sessão 13/06 — e-mail de alertas RESOLVIDO + correção throttling
+
+- **Causa do "e-mail não chegava":** o processo PM2 ficou rodando com a senha SMTP antiga em memória
+  (subiu antes da senha do .env do servidor ser corrigida e nunca mais reiniciou). `pm2 restart` resolveu.
+  CONFIRMADO funcionando: visaoecultura@gmail.com e ednasvlr@gmail.com receberam (status sucesso em log_emails).
+- **Falhas intermitentes (535 BadCredentials) eram THROTTLING do Gmail** — bloqueio temporário por excesso
+  de logins durante os testes (cada destinatário abria conexão/login própria). Liberou sozinho em ~40 min.
+- **CORRIGIDO no LOCAL (deploy pendente — usuário faz manual):**
+  - `backend/src/utils/email.js`: `criarTransporte(extra)` aceita opções; NOVA `enviarEmailColetivo({destinatarios,assunto,html})`
+    usa pool com maxConnections:1 = UM login para todos os destinatários (evita throttling); fecha o pool no finally;
+    mantém 1 linha de log_emails por destinatário; retorna nº de sucessos. Exportada.
+  - `backend/src/services/notificacaoService.js`: emailPrazosPendentes/emailPrazosAtrasados agora chamam
+    enviarEmailColetivo (sem o for-loop que relogava a cada e-mail). `node --check` OK nos dois.
+- IMPORTANTE confirmado pelo usuário 13/06: `.env` do servidor NÃO está no git → sobrevive ao deploy
+  (git reset --hard). Demais arquivos: deploy sobrescreve, então só corrigir no LOCAL. Ver [[feedback-codigo]].
+- Lembrete operacional: o deploy do usuário (`1-AtualizarSistema.sh`) faz `pm2 restart` SEM --update-env,
+  mas como SMTP_PASS vem do dotenv (.env) e não do env do PM2, o restart simples já recarrega o .env.
+
 ## Itens já resolvidos (não refazer)
 - Tabela log_emails + 3 índices (12/06 ✅), SMTP_PASS novo no servidor (12/06 ✅)
 - Correção alerta_emails: incluída no script fase2_1 (não precisa mais ir pela tela)

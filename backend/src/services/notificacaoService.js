@@ -3,8 +3,8 @@
 // Centraliza criação de notificações na tela e envio de e-mails de prazo
 // ============================================================
 
-const { pool }        = require('../config/database');
-const { enviarEmail } = require('../utils/email');
+const { pool }                        = require('../config/database');
+const { enviarEmail, enviarEmailColetivo } = require('../utils/email');
 
 // ── Notificação na tela ────────────────────────────────────────────────────
 
@@ -90,17 +90,9 @@ async function emailPrazosPendentes({ destinatarios, prazos, escritorio }) {
     </div>
   </div>`;
 
-  // Envia para cada destinatário individualmente e conta os sucessos
-  let enviados = 0;
-  for (const email of destinatarios) {
-    try {
-      await enviarEmail({ para: email.trim(), assunto: 'PRAZO PENDENTE HOJE', html });
-      enviados++;
-    } catch (err) {
-      console.error(`Erro ao enviar e-mail para ${email}:`, err.message);
-    }
-  }
-  return enviados;
+  // Envio coletivo: UMA conexão/login para todos os destinatários (evita throttling do Gmail).
+  // Retorna quantos saíram com sucesso.
+  return enviarEmailColetivo({ destinatarios, assunto: 'PRAZO PENDENTE HOJE', html });
 }
 
 // E-mail "PRAZO ATRASADO" — lista de prazos com vencimento passado e não concluídos
@@ -140,17 +132,9 @@ async function emailPrazosAtrasados({ destinatarios, prazos, escritorio }) {
     </div>
   </div>`;
 
-  // Envia para cada destinatário individualmente e conta os sucessos
-  let enviados = 0;
-  for (const email of destinatarios) {
-    try {
-      await enviarEmail({ para: email.trim(), assunto: 'PRAZO ATRASADO', html });
-      enviados++;
-    } catch (err) {
-      console.error(`Erro ao enviar e-mail para ${email}:`, err.message);
-    }
-  }
-  return enviados;
+  // Envio coletivo: UMA conexão/login para todos os destinatários (evita throttling do Gmail).
+  // Retorna quantos saíram com sucesso.
+  return enviarEmailColetivo({ destinatarios, assunto: 'PRAZO ATRASADO', html });
 }
 
 module.exports = {

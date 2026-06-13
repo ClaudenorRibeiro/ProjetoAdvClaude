@@ -19,6 +19,10 @@ no banco LOCAL via HeidiSQL. Depois o usuário, manualmente e quando quiser, faz
 sistema (WinSCP) e do banco para a produção. Claude nunca deve propor correção direto na
 produção — sempre propor a correção local + instruir o que levar no deploy.
 Acesso SSH ao servidor é permitido a Claude SOMENTE para leitura/diagnóstico (logs, conferir deploy).
+⚠️ QUALQUER alteração de código/banco feita na instância AWS é EFÊMERA: o deploy do usuário
+(`git reset --hard origin/main` + import do SQL no HeidiSQL) SOBRESCREVE tudo. Portanto Claude
+NUNCA corrige código/dados direto na AWS — só local. Exceção que sobrevive ao deploy: o `.env`
+do servidor (não está no git; editado à parte via WinSCP). pm2 restart/testes na AWS são OK (não são arquivos).
 
 **Git e Banco de Dados: Claude NUNCA executa NADA — o usuário faz TUDO manualmente, SEMPRE.**  
 ⚠️ REGRA ABSOLUTA (reforçada em 12/06/2026, substitui as regras anteriores):

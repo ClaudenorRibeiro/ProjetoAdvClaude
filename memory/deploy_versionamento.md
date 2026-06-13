@@ -7,6 +7,19 @@ metadata:
   originSessionId: c7321425-eb43-40e0-b57f-c2941c1276c6
 ---
 
+## ⭐ FLUXO REAL DE DEPLOY DO USUÁRIO (confirmado 12/06/2026 — é assim que ele faz SEMPRE)
+
+1. **Banco:** exporta o SQL do banco LOCAL (HeidiSQL) → abre o banco da instância AWS no
+   HeidiSQL → roda o arquivo SQL → bancos ficam idênticos (local = produção)
+2. **Código:** roda `salvar_pc_casa_no_Git.bat` (ou `salvar_pc_escrit_no_Git.bat`) →
+   git add -A + commit "DDMMYY-HHMM — descrição" + push origin main
+3. **Servidor:** via SSH roda `bash /home/ubuntu/1-AtualizarSistema.sh`
+   (em `Deploy/atualizacao/`) → git fetch + reset --hard origin/main → npm install backend
+   → build frontend → pm2 restart
+
+O Git é o CANAL DE DEPLOY do código. WinSCP é só para casos pontuais (ex: editar .env).
+Claude nunca executa nenhum desses passos — só o usuário. SSH de Claude = leitura/diagnóstico.
+
 ## Scripts Locais (Desenvolvimento — Windows)
 
 | Arquivo | Função |

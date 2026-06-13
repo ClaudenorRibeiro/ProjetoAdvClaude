@@ -15,7 +15,9 @@ function smtpConfigurado() {
   return !HOSTS_INVALIDOS.includes(process.env.SMTP_HOST?.trim());
 }
 
-function criarTransporte() {
+// Cria o transporte SMTP. `extra` permite mesclar opções adicionais
+// (ex.: { pool: true, maxConnections: 1 } no envio coletivo).
+function criarTransporte(extra = {}) {
   if (!smtpConfigurado()) {
     throw new Error('SMTP_NAO_CONFIGURADO');
   }
@@ -27,6 +29,7 @@ function criarTransporte() {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
+    ...extra,
   });
 }
 
@@ -76,6 +79,55 @@ async function enviarEmail({ para, assunto, html, linkDev }) {
   }
 }
 
+// Envia o MESMO conteúdo para vários destinatários reutilizando UMA ÚNICA
+// conexão/login SMTP (pool com maxConnections: 1). Isso evita o bloqueio
+// anti-abuso do Gmail, que recusa autenticações quando recebe muitos logins
+// em sequência — o que acontecia quando cada destinatário abria sua própria
+// conexão. Cada destinatário continua recebendo um e-mail individual e
+// gerando sua própria linha em log_emails. Retorna quantos saíram com sucesso.
+async function enviarEmailColetivo({ destinatarios, assunto, html }) {
+  const lista = (destinatarios || []).map(e => String(e).trim()).filter(Boolean);
+  if (!lista.length) return 0;
+
+  // SMTP não configurado: mesmo tratamento do enviarEmail
+  if (!smtpConfigurado()) {
+    if (process.env.NODE_ENV === 'production') {
+      const msg = 'Servidor de e-mail não configurado. Configure SMTP_HOST no arquivo .env';
+      for (const para of lista) await registrarLog(para, assunto, 'falha', msg);
+      throw new Error(msg);
+    }
+    // Modo desenvolvimento: apenas loga no console
+    console.log(`\n📧  E-MAIL COLETIVO (modo dev — SMTP não configurado)`);
+    console.log(`Assunto: ${assunto}`);
+    console.log(`Para:    ${lista.join(', ')}\n`);
+    return 0;
+  }
+
+  // UM transporte com pool de UMA conexão = UM login reaproveitado em todos os envios
+  const transporte = criarTransporte({ pool: true, maxConnections: 1 });
+  let enviados = 0;
+  try {
+    for (const para of lista) {
+      try {
+        await transporte.sendMail({
+          from:    process.env.EMAIL_FROM || 'Sistema Advocacia <noreply@advocacia.com>',
+          to:      para,
+          subject: assunto,
+          html,
+        });
+        await registrarLog(para, assunto, 'sucesso', null);
+        enviados++;
+      } catch (err) {
+        await registrarLog(para, assunto, 'falha', err.message);
+        console.error(`Erro ao enviar e-mail para ${para}:`, err.message);
+      }
+    }
+  } finally {
+    transporte.close(); // fecha o pool e libera a conexão — nada pendurado em memória
+  }
+  return enviados;
+}
+
 // Template HTML para o e-mail de redefinição de senha
 function templateResetSenha({ nome, link, escritorio }) {
   return `
@@ -112,4 +164,4 @@ function templateResetSenha({ nome, link, escritorio }) {
   </html>`;
 }
 
-module.exports = { enviarEmail, templateResetSenha };
+module.exports = { enviarEmail, enviarEmailColetivo, templateResetSenha };
