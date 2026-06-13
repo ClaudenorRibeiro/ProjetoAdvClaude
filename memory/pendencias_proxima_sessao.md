@@ -180,9 +180,13 @@ Implementado (build Vite OK, aguardando teste do usuário):
     incluído no INSERT/ON DUPLICATE (21 placeholders agora).
   - `Configuracoes.js`: 2º campo "Segundo horário — opcional"; helper minutosDoHorario; aviso na tela +
     bloqueio do salvar se <1h (validação real no backend).
-- **Ajuste 1 (pausa entre e-mails) — PENDENTE, decidido 5s:** intervalo de 5 segundos entre cada e-mail
-  enviado (não 1 min). Fazer como CONSTANTE nomeada/comentada no código (ajustável no VSCode). Toca o núcleo
-  (email.js/notificacaoService/alertasService) — fazer com cuidado DEPOIS que o Ajuste 2 estiver firme.
+- **Ajuste 2 testado e funcionando (confirmado pelo usuário 13/06).**
+- **Ajuste 1 (pausa entre e-mails) — FEITO (Opção A), validado node --check:** em `email.js`, constante
+  `PAUSA_ENTRE_EMAILS_MS = 5000` + helper `sleep`; dentro de `enviarEmailColetivo` espera 5s entre cada
+  envio (não após o último). Mantém ordem por TIPO (pendentes p/ todos, depois atrasados p/ todos) — Opção A
+  escolhida pelo usuário. Núcleo (override, login único, pool) intacto. Ajustável no VSCode pela constante.
+  Obs: os 5s são entre destinatários dentro de cada tipo; entre os dois tipos há só o intervalo natural.
+  DEPLOY PENDENTE (usuário faz manual). Não precisa de banco.
 
 ## Itens já resolvidos (não refazer)
 - Tabela log_emails + 3 índices (12/06 ✅), SMTP_PASS novo no servidor (12/06 ✅)

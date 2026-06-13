@@ -11,6 +11,11 @@ const { pool }     = require('../config/database');
 // Hosts que indicam SMTP ainda não configurado (placeholders)
 const HOSTS_INVALIDOS = ['smtp.example.com', 'example.com', '', undefined, null];
 
+// Pausa (em ms) entre o envio de cada e-mail no disparo coletivo. Espaça os
+// envios para não disparar o anti-abuso do Gmail em rajadas. Ajuste aqui se quiser.
+const PAUSA_ENTRE_EMAILS_MS = 5000; // 5 segundos
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
 function smtpConfigurado() {
   return !HOSTS_INVALIDOS.includes(process.env.SMTP_HOST?.trim());
 }
@@ -107,7 +112,8 @@ async function enviarEmailColetivo({ destinatarios, assunto, html }) {
   const transporte = criarTransporte({ pool: true, maxConnections: 1 });
   let enviados = 0;
   try {
-    for (const para of lista) {
+    for (let i = 0; i < lista.length; i++) {
+      const para = lista[i];
       try {
         await transporte.sendMail({
           from:    process.env.EMAIL_FROM || 'Sistema Advocacia <noreply@advocacia.com>',
@@ -121,6 +127,8 @@ async function enviarEmailColetivo({ destinatarios, assunto, html }) {
         await registrarLog(para, assunto, 'falha', err.message);
         console.error(`Erro ao enviar e-mail para ${para}:`, err.message);
       }
+      // Pausa antes do próximo e-mail (não espera após o último)
+      if (i < lista.length - 1) await sleep(PAUSA_ENTRE_EMAILS_MS);
     }
   } finally {
     transporte.close(); // fecha o pool e libera a conexão — nada pendurado em memória
