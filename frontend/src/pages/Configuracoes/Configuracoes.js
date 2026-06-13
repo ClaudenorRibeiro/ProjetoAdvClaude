@@ -50,6 +50,13 @@ const TIPO_USUARIO = {
   administrador: 'Administrador',
 };
 
+// Converte "HH:MM" (ou "HH:MM:SS") em minutos desde a meia-noite. Retorna null se vazio.
+function minutosDoHorario(h) {
+  if (!h) return null;
+  const [hh, mm] = String(h).split(':');
+  return parseInt(hh, 10) * 60 + parseInt(mm, 10);
+}
+
 // Aplica máscara CPF (000.000.000-00) ou CNPJ (00.000.000/0000-00) conforme o tamanho
 function mascaraCnpjCpf(valor) {
   const d = valor.replace(/\D/g, '').slice(0, 14);
@@ -221,8 +228,18 @@ function TabEscritorio() {
     finally { setBuscandoCep(false); }
   }
 
+  // Valida na tela: se os dois horários estiverem preenchidos, exigir 1h de diferença
+  const horariosInvalidos = !!(
+    form.horario_alerta_prazos && form.horario_alerta_prazos_2 &&
+    Math.abs(minutosDoHorario(form.horario_alerta_prazos) - minutosDoHorario(form.horario_alerta_prazos_2)) < 60
+  );
+
   async function salvar() {
     if (!form.nome) return toast.error('Nome do escritório é obrigatório');
+    // Bloqueia o salvamento quando os dois horários estão a menos de 1h (mesma regra do backend)
+    if (horariosInvalidos) {
+      return toast.error('Os dois horários de alerta devem ter no mínimo 1 hora de diferença');
+    }
     setSalvando(true);
     try {
       await configuracaoAPI.atualizarEscritorio(form);
@@ -313,15 +330,25 @@ function TabEscritorio() {
           <label className="form-label">Horário do e-mail diário</label>
           <input type="time" className="form-control" value={form.horario_alerta_prazos||'18:00'}
             onChange={e => set('horario_alerta_prazos', e.target.value)} />
-          <small style={{color:'#888'}}>Envia "PRAZO PENDENTE HOJE" neste horário</small>
+          <small style={{color:'#888'}}>Envia "PRAZO PENDENTE HOJE" (e atrasado) neste horário</small>
         </div>
         <div className="form-group">
-          <label className="form-label">E-mails dos destinatários</label>
-          <input type="text" className="form-control" value={form.alerta_emails||''}
-            onChange={e => set('alerta_emails', e.target.value)}
-            placeholder="email1@ex.com, email2@ex.com" />
-          <small style={{color:'#888'}}>Separe por vírgula</small>
+          <label className="form-label">Segundo horário — opcional</label>
+          <input type="time" className="form-control" value={form.horario_alerta_prazos_2||''}
+            onChange={e => set('horario_alerta_prazos_2', e.target.value)} />
+          <small style={{color: horariosInvalidos ? '#dc2626' : '#888'}}>
+            {horariosInvalidos
+              ? 'Mínimo de 1 hora de diferença entre os dois horários'
+              : 'Dispara os mesmos alertas. Deixe vazio para usar só um horário'}
+          </small>
         </div>
+      </div>
+      <div className="form-group">
+        <label className="form-label">E-mails dos destinatários</label>
+        <input type="text" className="form-control" value={form.alerta_emails||''}
+          onChange={e => set('alerta_emails', e.target.value)}
+          placeholder="email1@ex.com, email2@ex.com" />
+        <small style={{color:'#888'}}>Separe por vírgula</small>
       </div>
       <div className="form-group">
         <label style={{display:'flex',alignItems:'center',gap:'10px',cursor:'pointer'}}>

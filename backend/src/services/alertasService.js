@@ -14,8 +14,9 @@ const { hojeBrasilia } = require('../utils/helpers');
 // dispararia 3 horas mais cedo que o horário configurado pelo escritório
 const OPCOES_CRON = { timezone: 'America/Sao_Paulo' };
 
-// Referência do cron de prazos — guardada para poder destruir e recriar quando o horário mudar
-let cronPrazos = null;
+// Referências dos crons de prazos — uma por horário configurado (1 ou 2).
+// Guardadas para poder destruir e recriar quando os horários mudarem.
+let cronsPrazos = [];
 
 // ── Inicia todos os cron jobs do sistema ──────────────────────────────────
 
@@ -62,38 +63,45 @@ async function iniciarAlertas() {
 async function reagendarCronPrazos() {
   try {
     const [config] = await pool.execute(
-      'SELECT horario_alerta_prazos FROM configuracoes_escritorio LIMIT 1'
+      'SELECT horario_alerta_prazos, horario_alerta_prazos_2 FROM configuracoes_escritorio LIMIT 1'
     );
-    const horario = config[0]?.horario_alerta_prazos; // formato HH:MM:00
 
-    // Destroi o cron anterior se existir
-    if (cronPrazos) {
-      cronPrazos.stop();
-      cronPrazos = null;
-    }
+    // Destroi TODOS os crons de prazos anteriores antes de recriar
+    cronsPrazos.forEach(c => c.stop());
+    cronsPrazos = [];
 
-    if (!horario) return;
-
-    // Converte "HH:MM:00" para expressão cron "MM HH * * *"
-    const partes = horario.split(':');
-    const hh = parseInt(partes[0], 10);
-    const mm = parseInt(partes[1], 10);
-
-    if (isNaN(hh) || isNaN(mm)) {
-      console.error(`⚠️ Horário de alerta inválido no banco: "${horario}"`);
-      return;
-    }
-
-    const expressao = `${mm} ${hh} * * *`;
-    cronPrazos = cron.schedule(expressao, async () => {
-      console.log(`⏰ Cron prazos: disparando às ${horario}...`);
-      await executarAlertasPrazos();
-    }, OPCOES_CRON);
-
-    console.log(`⏰ Cron de prazos agendado para ${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')} todos os dias`);
+    // Agenda um cron para cada horário preenchido (o 2º é opcional).
+    // Ambos disparam os mesmos alertas (pendentes + atrasados).
+    agendarUmCronPrazos(config[0]?.horario_alerta_prazos);    // formato HH:MM:00
+    agendarUmCronPrazos(config[0]?.horario_alerta_prazos_2);  // opcional — null se não usado
   } catch (err) {
     console.error('Erro ao reagendar cron de prazos:', err.message);
   }
+}
+
+// Agenda um único cron de prazos para o horário "HH:MM:00".
+// Ignora silenciosamente se vier vazio (horário não configurado) ou inválido.
+function agendarUmCronPrazos(horario) {
+  if (!horario) return;
+
+  // Converte "HH:MM:00" para expressão cron "MM HH * * *"
+  const partes = horario.split(':');
+  const hh = parseInt(partes[0], 10);
+  const mm = parseInt(partes[1], 10);
+
+  if (isNaN(hh) || isNaN(mm)) {
+    console.error(`⚠️ Horário de alerta inválido no banco: "${horario}"`);
+    return;
+  }
+
+  const expressao = `${mm} ${hh} * * *`;
+  const tarefa = cron.schedule(expressao, async () => {
+    console.log(`⏰ Cron prazos: disparando às ${horario}...`);
+    await executarAlertasPrazos();
+  }, OPCOES_CRON);
+
+  cronsPrazos.push(tarefa);
+  console.log(`⏰ Cron de prazos agendado para ${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')} todos os dias`);
 }
 
 // ── Alertas de prazos ─────────────────────────────────────────────────────

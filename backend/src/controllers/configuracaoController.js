@@ -39,7 +39,7 @@ async function atualizarEscritorio(req, res) {
     const {
       nome, cnpj_cpf, email, telefone,
       cep, logradouro, numero, bairro, cidade, estado,
-      cor_principal, horario_alerta_prazos,
+      cor_principal, horario_alerta_prazos, horario_alerta_prazos_2,
       alerta_atrasado_ativo, alerta_emails,
       dias_alerta_audiencia, dias_alerta_pericia, dias_sem_movimentacao,
       prazo_fazendo_timeout, dias_audiencia_sem_adv,
@@ -48,22 +48,36 @@ async function atualizarEscritorio(req, res) {
 
     if (!nome) return erro(res, 'Nome do escritório é obrigatório');
 
+    // Validação: se os DOIS horários de alerta estiverem preenchidos, eles
+    // precisam ter no mínimo 1 hora (60 min) de diferença entre si.
+    // (comparação só por horário, dentro do mesmo dia — sem lógica de data)
+    if (horario_alerta_prazos && horario_alerta_prazos_2) {
+      const emMinutos = h => {
+        const [hh, mm] = String(h).split(':');
+        return parseInt(hh, 10) * 60 + parseInt(mm, 10);
+      };
+      if (Math.abs(emMinutos(horario_alerta_prazos) - emMinutos(horario_alerta_prazos_2)) < 60) {
+        return erro(res, 'Os dois horários de alerta devem ter no mínimo 1 hora de diferença');
+      }
+    }
+
     // INSERT se não existir registro, UPDATE se já existir (id=1 fixo)
     // Garante funcionamento mesmo em instalações novas sem registro inicial
     await pool.execute(
       `INSERT INTO configuracoes_escritorio
          (id, nome, cnpj_cpf, email, telefone,
           cep, logradouro, numero, bairro, cidade, estado,
-          cor_principal, horario_alerta_prazos,
+          cor_principal, horario_alerta_prazos, horario_alerta_prazos_2,
           alerta_atrasado_ativo, alerta_emails,
           dias_alerta_audiencia, dias_alerta_pericia, dias_sem_movimentacao,
           prazo_fazendo_timeout, dias_audiencia_sem_adv, titulo_aba, setup_concluido)
-       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
        ON DUPLICATE KEY UPDATE
          nome=VALUES(nome), cnpj_cpf=VALUES(cnpj_cpf), email=VALUES(email), telefone=VALUES(telefone),
          cep=VALUES(cep), logradouro=VALUES(logradouro), numero=VALUES(numero),
          bairro=VALUES(bairro), cidade=VALUES(cidade), estado=VALUES(estado),
          cor_principal=VALUES(cor_principal), horario_alerta_prazos=VALUES(horario_alerta_prazos),
+         horario_alerta_prazos_2=VALUES(horario_alerta_prazos_2),
          alerta_atrasado_ativo=VALUES(alerta_atrasado_ativo), alerta_emails=VALUES(alerta_emails),
          dias_alerta_audiencia=VALUES(dias_alerta_audiencia), dias_alerta_pericia=VALUES(dias_alerta_pericia),
          dias_sem_movimentacao=VALUES(dias_sem_movimentacao), prazo_fazendo_timeout=VALUES(prazo_fazendo_timeout),
@@ -72,7 +86,7 @@ async function atualizarEscritorio(req, res) {
       [
         nome, cnpj_cpf || null, email || null, telefone || null,
         cep || null, logradouro || null, numero || null, bairro || null, cidade || null, estado || null,
-        cor_principal || '#1a56db', horario_alerta_prazos || '18:00:00',
+        cor_principal || '#1a56db', horario_alerta_prazos || '18:00:00', horario_alerta_prazos_2 || null,
         alerta_atrasado_ativo ? 1 : 0, alerta_emails || null,
         dias_alerta_audiencia || 3, dias_alerta_pericia || 2, dias_sem_movimentacao || 30,
         parseInt(prazo_fazendo_timeout) || 60, parseInt(dias_audiencia_sem_adv) || 7,

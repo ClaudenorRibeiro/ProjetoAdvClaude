@@ -167,6 +167,23 @@ Implementado (build Vite OK, aguardando teste do usuário):
 - LIÇÃO: PM2 captura o ambiente do shell no momento do `pm2 start`/`pm2 save` e reinjeta sempre. Usar
   sempre `dotenv.config({ override:true })` em apps sob PM2 que leem segredos do .env.
 
+## Ajustes de alertas de prazo (13/06) — Ajuste 2 FEITO, Ajuste 1 pendente
+
+- **Ajuste 2 (DOIS horários de alerta) — CODADO no LOCAL, validado (node --check + build OK):**
+  - DB: nova coluna `horario_alerta_prazos_2 TIME NULL` em configuracoes_escritorio (opcional). Usuário já rodou
+    o ALTER no HeidiSQL LOCAL — CONFERIR se rodou também na PRODUÇÃO antes do deploy do backend (senão o
+    SELECT horario_alerta_prazos_2 quebra). SQL: `ALTER TABLE configuracoes_escritorio ADD COLUMN horario_alerta_prazos_2 TIME NULL AFTER horario_alerta_prazos;`
+  - `alertasService.js`: `cronPrazos` (1) virou `cronsPrazos` (array); reagendarCronPrazos agenda 1 cron por
+    horário preenchido via novo helper `agendarUmCronPrazos()`. Ambos disparam os mesmos alertas. Só horário
+    comparado (sem data) — comportamento natural: 1° pode cair hoje e 2° amanhã conforme a hora atual.
+  - `configuracaoController.js`: aceita horario_alerta_prazos_2; valida ≥60min entre os dois (erro se <1h);
+    incluído no INSERT/ON DUPLICATE (21 placeholders agora).
+  - `Configuracoes.js`: 2º campo "Segundo horário — opcional"; helper minutosDoHorario; aviso na tela +
+    bloqueio do salvar se <1h (validação real no backend).
+- **Ajuste 1 (pausa entre e-mails) — PENDENTE, decidido 5s:** intervalo de 5 segundos entre cada e-mail
+  enviado (não 1 min). Fazer como CONSTANTE nomeada/comentada no código (ajustável no VSCode). Toca o núcleo
+  (email.js/notificacaoService/alertasService) — fazer com cuidado DEPOIS que o Ajuste 2 estiver firme.
+
 ## Itens já resolvidos (não refazer)
 - Tabela log_emails + 3 índices (12/06 ✅), SMTP_PASS novo no servidor (12/06 ✅)
 - Correção alerta_emails: incluída no script fase2_1 (não precisa mais ir pela tela)
