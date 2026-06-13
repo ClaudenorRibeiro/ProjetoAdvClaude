@@ -101,29 +101,19 @@ async function reagendarCronPrazos() {
 async function executarAlertasPrazos() {
   try {
     const [config] = await pool.execute(
-      'SELECT alerta_atrasado_ativo, alerta_emails, nome, alerta_pendentes_enviado, alerta_atrasados_enviado FROM configuracoes_escritorio LIMIT 1'
+      'SELECT alerta_atrasado_ativo, alerta_emails, nome FROM configuracoes_escritorio LIMIT 1'
     );
     if (!config.length || !config[0].alerta_emails) return;
 
-    const hoje          = hojeBrasilia();
     const destinatarios = config[0].alerta_emails.split(',').map(e => e.trim()).filter(Boolean);
     const escritorio    = config[0].nome;
 
-    const toStr = v => v ? (v instanceof Date ? v.toISOString().slice(0,10) : String(v).slice(0,10)) : null;
-    const jaEnviouPendentes = toStr(config[0].alerta_pendentes_enviado) === hoje;
-    const jaEnviouAtrasados = toStr(config[0].alerta_atrasados_enviado) === hoje;
-
-    if (!jaEnviouPendentes) {
-      await enviarAlertaPendentes(destinatarios, escritorio);
-      await pool.execute(
-        'UPDATE configuracoes_escritorio SET alerta_pendentes_enviado = ? WHERE id = 1', [hoje]
-      );
-    }
-    if (config[0].alerta_atrasado_ativo && !jaEnviouAtrasados) {
+    // SEM trava diária (regra de negócio 12/06): TODO disparo do cron envia.
+    // Se o admin mudar o horário no mesmo dia, o alerta é reenviado no novo
+    // horário. Cada tentativa fica registrada na tabela log_emails.
+    await enviarAlertaPendentes(destinatarios, escritorio);
+    if (config[0].alerta_atrasado_ativo) {
       await enviarAlertaAtrasados(destinatarios, escritorio);
-      await pool.execute(
-        'UPDATE configuracoes_escritorio SET alerta_atrasados_enviado = ? WHERE id = 1', [hoje]
-      );
     }
   } catch (err) {
     console.error('Erro ao executar alertas de prazos:', err.message);
@@ -146,9 +136,12 @@ async function enviarAlertaPendentes(destinatarios, escritorio) {
      ORDER BY pr.numProc`,
     [hoje]
   );
-  if (!prazos.length) { console.log('📋 Nenhum prazo pendente hoje'); return; }
+  if (!prazos.length) { console.log('📋 Nenhum prazo pendente hoje'); return 0; }
   console.log(`📋 Enviando alerta de ${prazos.length} prazo(s) pendente(s)...`);
-  await emailPrazosPendentes({ destinatarios, prazos, escritorio });
+  // Retorna quantos e-mails saíram com sucesso — usado para marcar a trava do dia
+  const enviados = await emailPrazosPendentes({ destinatarios, prazos, escritorio });
+  if (!enviados) console.error('⚠️ Alerta de pendentes: NENHUM e-mail saiu (verificar SMTP/destinatários) — será tentado no próximo disparo');
+  return enviados;
 }
 
 async function enviarAlertaAtrasados(destinatarios, escritorio) {
@@ -166,9 +159,12 @@ async function enviarAlertaAtrasados(destinatarios, escritorio) {
        AND pp.status NOT IN ('concluido','cancelado')
      ORDER BY pp.data_vencimento ASC`
   );
-  if (!prazos.length) { console.log('✅ Nenhum prazo atrasado'); return; }
+  if (!prazos.length) { console.log('✅ Nenhum prazo atrasado'); return 0; }
   console.log(`🚨 Enviando alerta de ${prazos.length} prazo(s) atrasado(s)...`);
-  await emailPrazosAtrasados({ destinatarios, prazos, escritorio });
+  // Retorna quantos e-mails saíram com sucesso — usado para marcar a trava do dia
+  const enviados = await emailPrazosAtrasados({ destinatarios, prazos, escritorio });
+  if (!enviados) console.error('⚠️ Alerta de atrasados: NENHUM e-mail saiu (verificar SMTP/destinatários) — será tentado no próximo disparo');
+  return enviados;
 }
 
 // ── Alertas de audiências ─────────────────────────────────────────────────

@@ -115,6 +115,24 @@ Implementado (build Vite OK, aguardando teste do usuário):
   (criar tabela `pesquisas_salvas` — está nas memórias mas NÃO existe no banco) → Publicações AASP → Comunicações UI
 - ⚠️ REGRA ABSOLUTA (12/06): Claude NUNCA mexe no git (nem commit de memória) nem no banco — usuário faz tudo manualmente. Ver [[feedback-codigo]]
 
+## Sessão 12/06 (noite) — alertas de e-mail
+
+- Deploy das fases 1-4 CONFIRMADO no servidor (verificado via SSH leitura). Usuário igualou código E banco
+  da produção com o local; SMTP_PASS atualizado nos dois. Scripts fase2_1/2_2/2_3 JÁ aplicados no banco
+  local (conferido no backup bkp-BD-120626-1656.sql) — não rodar de novo.
+- Causa do "e-mail não chega": trava alerta_*_enviado marcada no disparo das 12:30 (que falhou com
+  alerta_emails quebrado) → disparos seguintes pulavam em silêncio.
+- **REGRA DE NEGÓCIO definida pelo usuário 12/06 noite: NÃO existe trava diária de alertas.**
+  TODO disparo do cron envia — se o admin mudar o horário no mesmo dia, reenvia no novo horário.
+- **Codado 12/06 noite (local, deploy pendente):** `alertasService.js` — trava diária REMOVIDA por
+  completo; `notificacaoService.js` — funções coletivas retornam contagem de sucessos SMTP e o
+  alertasService loga "⚠️ NENHUM e-mail saiu" quando todos falham. `node --check` OK.
+- **SQL entregue ao usuário (rodar local → produção):** DROP das colunas
+  `alerta_pendentes_enviado` e `alerta_atrasados_enviado` de configuracoes_escritorio.
+  Depois: exportar estrutura → estrutura_banco.sql.
+- ⚠️ REGRA NOVA gravada em feedback_codigo: fluxo LOCAL-PRIMEIRO — usuário NUNCA atualiza direto no
+  servidor; tudo é feito no local e ele faz deploy manual de sistema e banco. SSH só para leitura/diagnóstico.
+
 ## Itens já resolvidos (não refazer)
 - Tabela log_emails + 3 índices (12/06 ✅), SMTP_PASS novo no servidor (12/06 ✅)
 - Correção alerta_emails: incluída no script fase2_1 (não precisa mais ir pela tela)

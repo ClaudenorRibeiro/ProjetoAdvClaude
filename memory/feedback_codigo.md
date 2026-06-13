@@ -12,6 +12,14 @@ metadata:
 **Nunca codificar sem autorização explícita do usuário.**  
 O usuário decide quando e o que será desenvolvido. Claude analisa, sugere e explica — mas só executa código quando autorizado.
 
+**Fluxo de trabalho LOCAL-PRIMEIRO (regra absoluta, 12/06/2026):**
+O usuário NUNCA fará nenhuma atualização direto no servidor. TODA mudança (código e banco)
+é feita primeiro LOCALMENTE — Claude codifica na pasta local, scripts SQL são rodados primeiro
+no banco LOCAL via HeidiSQL. Depois o usuário, manualmente e quando quiser, faz o deploy do
+sistema (WinSCP) e do banco para a produção. Claude nunca deve propor correção direto na
+produção — sempre propor a correção local + instruir o que levar no deploy.
+Acesso SSH ao servidor é permitido a Claude SOMENTE para leitura/diagnóstico (logs, conferir deploy).
+
 **Git e Banco de Dados: Claude NUNCA executa NADA — o usuário faz TUDO manualmente, SEMPRE.**  
 ⚠️ REGRA ABSOLUTA (reforçada em 12/06/2026, substitui as regras anteriores):
 - Claude **nunca** faz commit, push ou qualquer comando git que altere o repositório — nem da pasta `memory/` (a exceção antiga foi REVOGADA pelo usuário)

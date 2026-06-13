@@ -56,8 +56,11 @@ async function emailPrazoDelegado({ para, nomePara, prazo, escritorio }) {
 // ── E-mails coletivos (chamados pelo job diário) ──────────────────────────
 
 // E-mail "PRAZO PENDENTE HOJE" — lista de prazos que vencem hoje
+// Retorna o número de e-mails enviados com SUCESSO — o chamador usa esse
+// retorno para só marcar "enviado hoje" quando houve envio real (falha de
+// SMTP não pode silenciar os alertas até o dia seguinte)
 async function emailPrazosPendentes({ destinatarios, prazos, escritorio }) {
-  if (!destinatarios?.length || !prazos?.length) return;
+  if (!destinatarios?.length || !prazos?.length) return 0;
 
   const linhas = prazos.map(p => `
     <tr>
@@ -87,18 +90,23 @@ async function emailPrazosPendentes({ destinatarios, prazos, escritorio }) {
     </div>
   </div>`;
 
+  // Envia para cada destinatário individualmente e conta os sucessos
+  let enviados = 0;
   for (const email of destinatarios) {
     try {
       await enviarEmail({ para: email.trim(), assunto: 'PRAZO PENDENTE HOJE', html });
+      enviados++;
     } catch (err) {
       console.error(`Erro ao enviar e-mail para ${email}:`, err.message);
     }
   }
+  return enviados;
 }
 
 // E-mail "PRAZO ATRASADO" — lista de prazos com vencimento passado e não concluídos
+// Retorna o número de e-mails enviados com SUCESSO (mesma lógica do pendentes)
 async function emailPrazosAtrasados({ destinatarios, prazos, escritorio }) {
-  if (!destinatarios?.length || !prazos?.length) return;
+  if (!destinatarios?.length || !prazos?.length) return 0;
 
   const linhas = prazos.map(p => `
     <tr>
@@ -132,13 +140,17 @@ async function emailPrazosAtrasados({ destinatarios, prazos, escritorio }) {
     </div>
   </div>`;
 
+  // Envia para cada destinatário individualmente e conta os sucessos
+  let enviados = 0;
   for (const email of destinatarios) {
     try {
       await enviarEmail({ para: email.trim(), assunto: 'PRAZO ATRASADO', html });
+      enviados++;
     } catch (err) {
       console.error(`Erro ao enviar e-mail para ${email}:`, err.message);
     }
   }
+  return enviados;
 }
 
 module.exports = {
