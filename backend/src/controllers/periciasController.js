@@ -76,8 +76,8 @@ async function listar(req, res) {
       LEFT JOIN usuarios ur ON pe.responsavel_id          = ur.id
       LEFT JOIN advogados_freela rf ON pe.responsavel_freela_id = rf.id
       LEFT JOIN usuarios u2 ON pe.criado_por = u2.id
-      LEFT JOIN tblProc pr ON pe.processo_id = pr.id
-      LEFT JOIN tblPasta pa ON pr.pasta_id   = pa.id
+      LEFT JOIN tblproc pr ON pe.processo_id = pr.id
+      LEFT JOIN tblpasta pa ON pr.pasta_id   = pa.id
       ${where}
       ORDER BY pe.data DESC
       LIMIT ${limitInt} OFFSET ${offsetInt}
@@ -122,7 +122,7 @@ async function buscar(req, res) {
       LEFT JOIN usuarios u  ON pe.assistente_tecnico_id   = u.id
       LEFT JOIN usuarios ur ON pe.responsavel_id          = ur.id
       LEFT JOIN advogados_freela rf ON pe.responsavel_freela_id = rf.id
-      LEFT JOIN tblProc pr ON pe.processo_id = pr.id
+      LEFT JOIN tblproc pr ON pe.processo_id = pr.id
       WHERE pe.id = ?
     `, [req.params.id]);
 

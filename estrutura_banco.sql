@@ -14032,7 +14032,7 @@ CREATE TABLE IF NOT EXISTS `usuarios` (
 -- Copiando dados para a tabela sistema_advocacia.usuarios: ~9 rows (aproximadamente)
 INSERT INTO `usuarios` (`id`, `nome`, `login`, `senha_hash`, `email`, `oab`, `tipo`, `nivel`, `ativo`, `ver_todos_processos`, `criado_em`, `criado_por`, `ultimo_acesso`, `notif_email`, `notif_tela`) VALUES
 	(1, 'Superusuário', 'superadmin', '$2a$12$6vzSy/RUw.HOUdaJurzjoei0THb0ZrBmKuHfOxU9A1xpvDnKwv4GW', NULL, NULL, 'administrador', 0, 1, 0, '2026-05-23 00:59:32', NULL, '2026-06-09 20:26:28', 1, 1),
-	(2, 'Claudio', 'claudio', '$2a$12$0SCACm4vro7kpi8QC28jlOnJw6V2J7Ciz4EOOgKpnAaefHhP0shXq', 'claudio@antonio.adv.br', NULL, 'administrador', 1, 1, 1, '2026-05-23 01:06:19', 1, '2026-06-22 13:43:19', 1, 1),
+	(2, 'Claudio', 'claudio', '$2a$12$0SCACm4vro7kpi8QC28jlOnJw6V2J7Ciz4EOOgKpnAaefHhP0shXq', 'claudio@antonio.adv.br', NULL, 'administrador', 1, 1, 1, '2026-05-23 01:06:19', 1, '2026-06-22 14:57:24', 1, 1),
 	(3, 'edna', 'edna', '$2a$12$zHJRLurJ4WOgjWhf6JEvteVrp095BMfRtOZfdxqtMg0dT4OxTiu9G', 'ednasvlr@gmail.com', NULL, 'advogado', 1, 1, 1, '2026-05-23 10:35:04', 1, '2026-06-22 14:07:35', 1, 1),
 	(4, 'Erick', 'erick', '$2a$12$QM8unf8KeJC/qyibJNEiOeNwgZ0ebgm1zay0MBWbpTkMj8nW6Jclm', NULL, NULL, 'advogado', 2, 1, 0, '2026-05-29 13:49:05', 2, '2026-06-22 14:14:22', 1, 1),
 	(5, 'Evellyn', 'evellyn', '$2a$12$ndwGKWme085Gg.qaoB9AQeHEod6MVuOFRT1BOiufCmS0r8EgJGkmy', NULL, NULL, 'advogado', 2, 1, 0, '2026-05-30 00:29:53', 2, '2026-05-31 13:02:21', 1, 1),

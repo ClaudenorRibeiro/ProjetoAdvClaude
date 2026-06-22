@@ -138,7 +138,7 @@ async function enviarAlertaPendentes(destinatarios, escritorio) {
      FROM prazos_processo pp
      LEFT JOIN prazo_subtipo ps ON pp.subtipo_id = ps.id
      LEFT JOIN usuarios u       ON pp.delegado_para = u.id
-     JOIN tblProc pr            ON pp.processo_id = pr.id
+     JOIN tblproc pr            ON pp.processo_id = pr.id
      WHERE pp.data_vencimento = ?
        AND pp.status NOT IN ('concluido','cancelado')
      ORDER BY pr.numProc`,
@@ -162,7 +162,7 @@ async function enviarAlertaAtrasados(destinatarios, escritorio) {
      FROM prazos_processo pp
      LEFT JOIN prazo_subtipo ps ON pp.subtipo_id = ps.id
      LEFT JOIN usuarios u       ON pp.delegado_para = u.id
-     JOIN tblProc pr            ON pp.processo_id = pr.id
+     JOIN tblproc pr            ON pp.processo_id = pr.id
      WHERE pp.data_vencimento < CURDATE()
        AND pp.status NOT IN ('concluido','cancelado')
      ORDER BY pp.data_vencimento ASC`

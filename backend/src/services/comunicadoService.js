@@ -14,11 +14,11 @@ const { enviarEmail } = require('../utils/email');
 // Busca os clientes do processo (autor OU réu, conforme cliente_polo) com e-mail principal.
 // Retorna { polo, clientes: [{ tipo_pessoa, pessoa_id, nome, email }] }
 async function buscarClientesDoProcesso(processoId) {
-  const [proc] = await pool.execute('SELECT cliente_polo FROM tblProc WHERE id = ?', [processoId]);
+  const [proc] = await pool.execute('SELECT cliente_polo FROM tblproc WHERE id = ?', [processoId]);
   if (!proc.length || !proc[0].cliente_polo) return { polo: null, clientes: [] };
 
   const polo   = proc[0].cliente_polo;
-  const tabela = polo === 'reu' ? 'tblTituloProcReu' : 'tblTituloProcAutor';
+  const tabela = polo === 'reu' ? 'tbltituloprocreu' : 'tbltituloprocautor';
 
   const [partes] = await pool.execute(
     `SELECT tipo_pessoa, pessoa_id FROM ${tabela} WHERE proc_id = ?`, [processoId]
@@ -117,7 +117,7 @@ async function enviarComunicadoPericia(periciaId, tipoEvento, usuarioId) {
     LEFT JOIN tipo_pericia tp ON pe.tipo_pericia_id = tp.id
     LEFT JOIN pessoas_fisicas pf ON pe.perito_tipo='fisica' AND pe.perito_id=pf.id
     LEFT JOIN pessoas_juridicas pj ON pe.perito_tipo='juridica' AND pe.perito_id=pj.id
-    LEFT JOIN tblProc pr ON pe.processo_id = pr.id
+    LEFT JOIN tblproc pr ON pe.processo_id = pr.id
     WHERE pe.id = ?`, [periciaId]);
   if (!rows.length) return { enviados: 0, semCliente: true, semEmail: false, polo: null };
   const pe = rows[0];

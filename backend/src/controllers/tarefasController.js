@@ -50,9 +50,9 @@ async function listar(req, res) {
        FROM tarefas t
        LEFT JOIN usuarios u   ON t.atribuida_para = u.id
        LEFT JOIN usuarios uc  ON t.criado_por = uc.id
-       LEFT JOIN tblPasta pa  ON t.pasta_id = pa.id
-       LEFT JOIN tblProc pr   ON t.processo_id = pr.id
-       LEFT JOIN tblPasta pa2 ON pr.pasta_id = pa2.id
+       LEFT JOIN tblpasta pa  ON t.pasta_id = pa.id
+       LEFT JOIN tblproc pr   ON t.processo_id = pr.id
+       LEFT JOIN tblpasta pa2 ON pr.pasta_id = pa2.id
        ${where}
        ORDER BY t.concluida ASC,
                 FIELD(t.prioridade, 'urgente', 'normal', 'baixa'),

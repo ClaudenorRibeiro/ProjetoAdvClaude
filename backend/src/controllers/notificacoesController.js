@@ -17,7 +17,7 @@ async function listar(req, res) {
        FROM notificacoes n
        LEFT JOIN prazos_processo pp ON n.prazo_id = pp.id
        LEFT JOIN prazo_subtipo ps   ON pp.subtipo_id = ps.id
-       LEFT JOIN tblProc pr         ON pp.processo_id = pr.id
+       LEFT JOIN tblproc pr         ON pp.processo_id = pr.id
        WHERE n.usuario_id = ? AND n.lida = 0
        ORDER BY n.criado_em DESC
        LIMIT 20`,

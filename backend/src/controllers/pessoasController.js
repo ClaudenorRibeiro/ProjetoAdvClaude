@@ -65,9 +65,9 @@ async function listarFisicas(req, res) {
                ORDER BY e.principal DESC, e.id ASC LIMIT 1) AS email,
               -- Total de processos como autor ou réu (sem duplicatas)
               (SELECT COUNT(*) FROM (
-                SELECT proc_id FROM tblTituloProcAutor WHERE tipo_pessoa = 'fisica' AND pessoa_id = pf.id
+                SELECT proc_id FROM tbltituloprocautor WHERE tipo_pessoa = 'fisica' AND pessoa_id = pf.id
                 UNION
-                SELECT proc_id FROM tblTituloProcReu   WHERE tipo_pessoa = 'fisica' AND pessoa_id = pf.id
+                SELECT proc_id FROM tbltituloprocreu   WHERE tipo_pessoa = 'fisica' AND pessoa_id = pf.id
               ) AS t) AS qtde_proc,
               -- Existe modelo "comum" gerável a partir de uma pessoa? (controla o botão "Gerar Doc")
               EXISTS(
@@ -284,8 +284,8 @@ async function excluirFisica(req, res) {
 
     // Verifica todos os vínculos em paralelo antes de permitir exclusão
     const [[autoresTbl], [reusTbl], [historico], [comunicacoes]] = await Promise.all([
-      pool.execute('SELECT COUNT(*) AS total FROM tblTituloProcAutor WHERE tipo_pessoa = ? AND pessoa_id = ?',      ['fisica', id]),
-      pool.execute('SELECT COUNT(*) AS total FROM tblTituloProcReu WHERE tipo_pessoa = ? AND pessoa_id = ?',        ['fisica', id]),
+      pool.execute('SELECT COUNT(*) AS total FROM tbltituloprocautor WHERE tipo_pessoa = ? AND pessoa_id = ?',      ['fisica', id]),
+      pool.execute('SELECT COUNT(*) AS total FROM tbltituloprocreu WHERE tipo_pessoa = ? AND pessoa_id = ?',        ['fisica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM historico_atendimento WHERE tipo_pessoa = ? AND pessoa_id = ?',   ['fisica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM log_comunicacoes WHERE tipo_pessoa = ? AND pessoa_id = ?',        ['fisica', id]),
     ]);
@@ -322,8 +322,8 @@ async function excluirJuridica(req, res) {
 
     // Verifica todos os vínculos em paralelo antes de permitir exclusão
     const [[autoresTbl], [reusTbl], [historico], [comunicacoes]] = await Promise.all([
-      pool.execute('SELECT COUNT(*) AS total FROM tblTituloProcAutor WHERE tipo_pessoa = ? AND pessoa_id = ?',      ['juridica', id]),
-      pool.execute('SELECT COUNT(*) AS total FROM tblTituloProcReu WHERE tipo_pessoa = ? AND pessoa_id = ?',        ['juridica', id]),
+      pool.execute('SELECT COUNT(*) AS total FROM tbltituloprocautor WHERE tipo_pessoa = ? AND pessoa_id = ?',      ['juridica', id]),
+      pool.execute('SELECT COUNT(*) AS total FROM tbltituloprocreu WHERE tipo_pessoa = ? AND pessoa_id = ?',        ['juridica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM historico_atendimento WHERE tipo_pessoa = ? AND pessoa_id = ?',   ['juridica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM log_comunicacoes WHERE tipo_pessoa = ? AND pessoa_id = ?',        ['juridica', id]),
     ]);
@@ -412,9 +412,9 @@ async function listarJuridicas(req, res) {
                ORDER BY e.principal DESC LIMIT 1) AS email,
               -- Total de processos como autor ou réu (sem duplicatas)
               (SELECT COUNT(*) FROM (
-                SELECT proc_id FROM tblTituloProcAutor WHERE tipo_pessoa = 'juridica' AND pessoa_id = pj.id
+                SELECT proc_id FROM tbltituloprocautor WHERE tipo_pessoa = 'juridica' AND pessoa_id = pj.id
                 UNION
-                SELECT proc_id FROM tblTituloProcReu   WHERE tipo_pessoa = 'juridica' AND pessoa_id = pj.id
+                SELECT proc_id FROM tbltituloprocreu   WHERE tipo_pessoa = 'juridica' AND pessoa_id = pj.id
               ) AS t) AS qtde_proc,
               -- Existe modelo "comum" gerável a partir de uma pessoa? (controla o botão "Gerar Doc")
               EXISTS(

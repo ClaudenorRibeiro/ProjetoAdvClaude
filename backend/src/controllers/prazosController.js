@@ -106,8 +106,8 @@ async function listar(req, res) {
        LEFT JOIN usuarios u       ON pp.delegado_para = u.id
        LEFT JOIN usuarios uc      ON pp.criado_por = uc.id
        LEFT JOIN usuarios uf      ON pp.fazendo_por = uf.id
-       JOIN tblProc pr            ON pp.processo_id = pr.id
-       JOIN tblPasta pa           ON pr.pasta_id = pa.id
+       JOIN tblproc pr            ON pp.processo_id = pr.id
+       JOIN tblpasta pa           ON pr.pasta_id = pa.id
        ${where}
        ORDER BY
          pp.data_vencimento ASC,
@@ -292,7 +292,7 @@ async function vencemHoje(req, res) {
               ps.nome AS subtipo, pr.numProc AS processo_numero
        FROM prazos_processo pp
        LEFT JOIN prazo_subtipo ps ON pp.subtipo_id = ps.id
-       JOIN tblProc pr ON pp.processo_id = pr.id
+       JOIN tblproc pr ON pp.processo_id = pr.id
        WHERE pp.data_vencimento = CURDATE()
          AND pp.status NOT IN ('concluido','cancelado')
          AND (pp.delegado_para = ? OR pp.delegado_para IS NULL)`,

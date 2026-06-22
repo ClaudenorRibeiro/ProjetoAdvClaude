@@ -35,8 +35,8 @@ async function buscarDados(req, res) {
                 pr.id AS processo_id, pr.numProc AS processo_numero, pr.NomeTituloProc AS pasta_titulo,
                 pa.id AS pasta_id
          FROM prazos_processo pp
-         JOIN tblProc pr  ON pp.processo_id = pr.id
-         JOIN tblPasta pa ON pr.pasta_id = pa.id
+         JOIN tblproc pr  ON pp.processo_id = pr.id
+         JOIN tblpasta pa ON pr.pasta_id = pa.id
          WHERE pp.data_vencimento = ? AND pp.status NOT IN ('concluido','cancelado')
            AND (pp.delegado_para = ? OR pp.delegado_para IS NULL)`,
         [hoje, userId]
@@ -49,8 +49,8 @@ async function buscarDados(req, res) {
                 pa.id AS pasta_id,
                 DATEDIFF(CURDATE(), pp.data_vencimento) AS dias_atraso
          FROM prazos_processo pp
-         JOIN tblProc pr  ON pp.processo_id = pr.id
-         JOIN tblPasta pa ON pr.pasta_id = pa.id
+         JOIN tblproc pr  ON pp.processo_id = pr.id
+         JOIN tblpasta pa ON pr.pasta_id = pa.id
          WHERE pp.data_vencimento < ? AND pp.status NOT IN ('concluido','cancelado')
            AND (pp.delegado_para = ? OR pp.delegado_para IS NULL)
          ORDER BY pp.data_vencimento ASC`,
@@ -88,7 +88,7 @@ async function buscarDados(req, res) {
                 pr.pasta_id
          FROM audiencia a
          LEFT JOIN tipo_audiencia ta ON a.tipo_audiencia_id = ta.id
-         JOIN tblProc pr ON a.processo_id = pr.id
+         JOIN tblproc pr ON a.processo_id = pr.id
          WHERE a.data = ?
          ORDER BY a.hora ASC`,
         [hoje]
@@ -101,7 +101,7 @@ async function buscarDados(req, res) {
                 pr.pasta_id
          FROM audiencia a
          LEFT JOIN tipo_audiencia ta ON a.tipo_audiencia_id = ta.id
-         JOIN tblProc pr ON a.processo_id = pr.id
+         JOIN tblproc pr ON a.processo_id = pr.id
          WHERE a.data = ?
          ORDER BY a.hora ASC`,
         [amanha]
@@ -113,7 +113,7 @@ async function buscarDados(req, res) {
                 tp.nome AS tipo, pr.numProc AS processo_numero
          FROM pericia p
          LEFT JOIN tipo_pericia tp ON p.tipo_pericia_id = tp.id
-         JOIN tblProc pr ON p.processo_id = pr.id
+         JOIN tblproc pr ON p.processo_id = pr.id
          WHERE p.data = ?`,
         [hoje]
       ),
@@ -124,7 +124,7 @@ async function buscarDados(req, res) {
                 tp.nome AS tipo, pr.numProc AS processo_numero
          FROM pericia p
          LEFT JOIN tipo_pericia tp ON p.tipo_pericia_id = tp.id
-         JOIN tblProc pr ON p.processo_id = pr.id
+         JOIN tblproc pr ON p.processo_id = pr.id
          WHERE p.data = ?`,
         [amanha]
       ),
@@ -136,8 +136,8 @@ async function buscarDados(req, res) {
                 LPAD(pa.numPasta, 4, '0') AS pasta_numero_fmt
          FROM audiencia a
          LEFT JOIN tipo_audiencia ta ON a.tipo_audiencia_id = ta.id
-         JOIN tblProc pr ON a.processo_id = pr.id
-         JOIN tblPasta pa ON pr.pasta_id = pa.id
+         JOIN tblproc pr ON a.processo_id = pr.id
+         JOIN tblpasta pa ON pr.pasta_id = pa.id
          WHERE a.data < CURDATE()
            AND a.ata_impressa = 0
            AND NOT EXISTS (SELECT 1 FROM ata_audiencia aa WHERE aa.audiencia_id = a.id)
@@ -152,8 +152,8 @@ async function buscarDados(req, res) {
                 DATEDIFF(a.data, CURDATE()) AS dias_para_audiencia
          FROM audiencia a
          LEFT JOIN tipo_audiencia ta ON a.tipo_audiencia_id = ta.id
-         JOIN tblProc pr ON a.processo_id = pr.id
-         JOIN tblPasta pa ON pr.pasta_id = pa.id
+         JOIN tblproc pr ON a.processo_id = pr.id
+         JOIN tblpasta pa ON pr.pasta_id = pa.id
          WHERE a.status NOT IN ('cancelada', 'remarcada')
            AND a.data >= CURDATE()
            AND a.responsavel_id IS NULL AND a.responsavel_freela_id IS NULL
@@ -175,8 +175,8 @@ async function buscarDados(req, res) {
                   (SELECT MAX(ap.data) FROM andamento_processual ap WHERE ap.processo_id = pr.id),
                   DATE(pr.criado_em)
                 )) AS dias_sem_movimentacao
-         FROM tblProc pr
-         JOIN tblPasta pa ON pr.pasta_id = pa.id
+         FROM tblproc pr
+         JOIN tblpasta pa ON pr.pasta_id = pa.id
          WHERE pr.ativo = 1
            AND DATEDIFF(CURDATE(), COALESCE(
              (SELECT MAX(ap.data) FROM andamento_processual ap WHERE ap.processo_id = pr.id),

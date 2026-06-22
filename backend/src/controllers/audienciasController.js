@@ -86,10 +86,10 @@ async function listar(req, res) {
        LEFT JOIN ata_audiencia aa     ON aa.audiencia_id         = a.id
        LEFT JOIN usuarios ur          ON a.responsavel_id        = ur.id
        LEFT JOIN advogados_freela rf  ON a.responsavel_freela_id = rf.id
-       LEFT JOIN tblVara vr           ON a.vara_id               = vr.id
-       LEFT JOIN tblForum fr          ON vr.forum_id             = fr.id
-       JOIN tblProc pr ON a.processo_id = pr.id
-       JOIN tblPasta pa ON pr.pasta_id = pa.id
+       LEFT JOIN tblvara vr           ON a.vara_id               = vr.id
+       LEFT JOIN tblforum fr          ON vr.forum_id             = fr.id
+       JOIN tblproc pr ON a.processo_id = pr.id
+       JOIN tblpasta pa ON pr.pasta_id = pa.id
        ${where}
        ORDER BY a.data ASC, a.hora ASC
        LIMIT ${limitInt} OFFSET ${offsetInt}`,
@@ -123,9 +123,9 @@ async function buscar(req, res) {
        LEFT JOIN tipo_audiencia ta   ON a.tipo_audiencia_id     = ta.id
        LEFT JOIN usuarios ur         ON a.responsavel_id         = ur.id
        LEFT JOIN advogados_freela rf ON a.responsavel_freela_id  = rf.id
-       LEFT JOIN tblVara vr          ON a.vara_id                = vr.id
-       LEFT JOIN tblForum fr         ON vr.forum_id              = fr.id
-       JOIN tblProc pr ON a.processo_id = pr.id
+       LEFT JOIN tblvara vr          ON a.vara_id                = vr.id
+       LEFT JOIN tblforum fr         ON vr.forum_id              = fr.id
+       JOIN tblproc pr ON a.processo_id = pr.id
        WHERE a.id = ?`,
       [id]
     );
@@ -178,7 +178,7 @@ async function resolverNomeVara(id) {
   if (!id) return '';
   const [r] = await pool.execute(
     `SELECT COALESCE(v.abrev_nome, v.nome) AS nome, f.nome AS forum_nome
-     FROM tblVara v LEFT JOIN tblForum f ON v.forum_id = f.id WHERE v.id = ?`, [id]
+     FROM tblvara v LEFT JOIN tblforum f ON v.forum_id = f.id WHERE v.id = ?`, [id]
   );
   return r.length ? `${r[0].nome}${r[0].forum_nome ? ` — ${r[0].forum_nome}` : ''}` : String(id);
 }
@@ -242,10 +242,10 @@ async function criar(req, res) {
     // Valida que nenhuma testemunha é parte do processo (autor ou réu)
     if (testemunhas.length > 0) {
       const [autores] = await conn.execute(
-        `SELECT pessoa_id FROM tblTituloProcAutor WHERE proc_id = ? AND tipo_pessoa = 'fisica'`, [processo_id]
+        `SELECT pessoa_id FROM tbltituloprocautor WHERE proc_id = ? AND tipo_pessoa = 'fisica'`, [processo_id]
       );
       const [reus] = await conn.execute(
-        `SELECT pessoa_id FROM tblTituloProcReu WHERE proc_id = ? AND tipo_pessoa = 'fisica'`, [processo_id]
+        `SELECT pessoa_id FROM tbltituloprocreu WHERE proc_id = ? AND tipo_pessoa = 'fisica'`, [processo_id]
       );
       const partesIds = new Set([
         ...autores.map(a => Number(a.pessoa_id)),
@@ -402,10 +402,10 @@ async function atualizar(req, res) {
     if (testemunhas.length > 0) {
       const processoId = antes[0].processo_id;
       const [autores] = await conn.execute(
-        `SELECT pessoa_id FROM tblTituloProcAutor WHERE proc_id = ? AND tipo_pessoa = 'fisica'`, [processoId]
+        `SELECT pessoa_id FROM tbltituloprocautor WHERE proc_id = ? AND tipo_pessoa = 'fisica'`, [processoId]
       );
       const [reus] = await conn.execute(
-        `SELECT pessoa_id FROM tblTituloProcReu WHERE proc_id = ? AND tipo_pessoa = 'fisica'`, [processoId]
+        `SELECT pessoa_id FROM tbltituloprocreu WHERE proc_id = ? AND tipo_pessoa = 'fisica'`, [processoId]
       );
       const partesIds = new Set([
         ...autores.map(a => Number(a.pessoa_id)),
@@ -671,14 +671,14 @@ async function buscarPartesProcesso(req, res) {
 
     const [autores] = await pool.execute(
       `SELECT pa.pessoa_id, pf.nome, 'autor' AS polo
-       FROM tblTituloProcAutor pa
+       FROM tbltituloprocautor pa
        JOIN pessoas_fisicas pf ON pf.id = pa.pessoa_id
        WHERE pa.proc_id = ? AND pa.tipo_pessoa = 'fisica'`,
       [processo_id]
     );
     const [reus] = await pool.execute(
       `SELECT pr.pessoa_id, pf.nome, 'reu' AS polo
-       FROM tblTituloProcReu pr
+       FROM tbltituloprocreu pr
        JOIN pessoas_fisicas pf ON pf.id = pr.pessoa_id
        WHERE pr.proc_id = ? AND pr.tipo_pessoa = 'fisica'`,
       [processo_id]
@@ -708,11 +708,11 @@ async function adicionarTestemunha(req, res) {
 
     // Verifica se a pessoa é parte do processo
     const [autores] = await pool.execute(
-      `SELECT pessoa_id FROM tblTituloProcAutor WHERE proc_id = ? AND tipo_pessoa = 'fisica' AND pessoa_id = ?`,
+      `SELECT pessoa_id FROM tbltituloprocautor WHERE proc_id = ? AND tipo_pessoa = 'fisica' AND pessoa_id = ?`,
       [aud[0].processo_id, pessoa_id]
     );
     const [reus] = await pool.execute(
-      `SELECT pessoa_id FROM tblTituloProcReu WHERE proc_id = ? AND tipo_pessoa = 'fisica' AND pessoa_id = ?`,
+      `SELECT pessoa_id FROM tbltituloprocreu WHERE proc_id = ? AND tipo_pessoa = 'fisica' AND pessoa_id = ?`,
       [aud[0].processo_id, pessoa_id]
     );
     if (autores.length || reus.length) {
