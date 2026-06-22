@@ -239,4 +239,8 @@ PUT    /api/audiencias/freelas/:id        → atualizar freelancer
 DELETE /api/audiencias/freelas/:id        → excluir freelancer
 ```
 
+## Sessão 20/06/2026 — coluna "Responsável" na listagem
+- Adicionada a coluna **"Responsável"** na tabela de Audiências (entre Modalidade e Status). Só frontend (`Audiencias.js`);
+  o backend `listar` já retornava `responsavel_nome` (COALESCE usuário / "Nome (freelancer)"). Sem SQL.
+
 **Relacionado:** [[processos-pastas]], [[prazos]], [[financeiro]], [[agenda-calendario]]

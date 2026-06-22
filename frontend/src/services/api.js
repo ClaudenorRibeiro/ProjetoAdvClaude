@@ -19,6 +19,15 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    // Para uploads (FormData), remove o Content-Type JSON padrão: assim o
+    // navegador define automaticamente o multipart/form-data com o boundary correto.
+    if (config.data instanceof FormData) {
+      if (config.headers && typeof config.headers.delete === 'function') {
+        config.headers.delete('Content-Type');
+      } else if (config.headers) {
+        delete config.headers['Content-Type'];
+      }
+    }
     return config;
   },
   error => Promise.reject(error)
@@ -195,13 +204,41 @@ export const audienciasAPI = {
 // ============================================================
 // FINANCEIRO
 // ============================================================
+// Financeiro POR PROCESSO (reescrito 15/06): conta corrente + acordo parcelado + baixa
 export const financeiroAPI = {
-  buscarConta:   (pastaId, params) => api.get(`/financeiro/pasta/${pastaId}`, { params }),
-  lancar:        (pastaId, dados) => api.post(`/financeiro/pasta/${pastaId}/lancamento`, dados),
-  excluirLanc:   (id) => api.delete(`/financeiro/lancamento/${id}`),
-  salvarHonorarios: (pastaId, dados) => api.post(`/financeiro/pasta/${pastaId}/honorarios`, dados),
-  gerarRecibo:   (pastaId) => api.get(`/financeiro/pasta/${pastaId}/recibo`, { responseType: 'blob' }),
-  relatorio:     (params) => api.get('/financeiro/relatorio', { params }),
+  // Conta corrente
+  buscarConta:     (processoId, params) => api.get(`/financeiro/processo/${processoId}`, { params }),
+  lancar:          (processoId, dados) => api.post(`/financeiro/processo/${processoId}/lancamento`, dados),
+  editarLanc:      (id, dados) => api.put(`/financeiro/lancamento/${id}`, dados),
+  excluirLanc:     (id) => api.delete(`/financeiro/lancamento/${id}`),
+  // Acordo + parcelas
+  listarAcordos:   (processoId) => api.get(`/financeiro/processo/${processoId}/acordos`),
+  previaParcelas:  (dados) => api.post('/financeiro/acordo/previa', dados),
+  criarAcordo:     (processoId, dados) => api.post(`/financeiro/processo/${processoId}/acordo`, dados),
+  buscarAcordo:    (id) => api.get(`/financeiro/acordo/${id}`),
+  atualizarAcordo: (id, dados) => api.put(`/financeiro/acordo/${id}`, dados),
+  excluirAcordo:   (id) => api.delete(`/financeiro/acordo/${id}`),
+  cancelarAcordo:  (id, dados) => api.put(`/financeiro/acordo/${id}/cancelar`, dados),
+  // Baixa
+  pagarParcela:    (id, dados) => api.put(`/financeiro/parcela/${id}/pagar`, dados),
+  desfazerParcela: (id) => api.put(`/financeiro/parcela/${id}/desfazer`),
+  // Histórico da parcela
+  historicoParcela: (id) => api.get(`/financeiro/parcela/${id}/historico`),
+  // Histórico do lançamento da conta corrente
+  historicoLancamento: (id) => api.get(`/financeiro/lancamento/${id}/historico`),
+  // Repasses ao cliente/parceiro (2º tempo) + worklist global
+  repassesPendentes:  () => api.get('/financeiro/repasses-pendentes'),
+  repassesConcluidos: () => api.get('/financeiro/repasses-concluidos'),
+  // Consulta / relatório
+  consultaFinanceiro: (params) => api.get('/financeiro/consulta', { params }),
+  exportarConsulta:   (params) => api.get('/financeiro/consulta/exportar', { params, responseType: 'blob', timeout: 120000 }),
+  registrarRepasse:   (id, dados) => api.put(`/financeiro/parcela/${id}/repasse`, dados),
+  desfazerRepasse:    (id, tipo) => api.put(`/financeiro/parcela/${id}/repasse/desfazer`, { tipo }),
+  // Formas de pagamento (cadastro no Controle + select do recebimento/repasse)
+  formasPagamento:        () => api.get('/financeiro/formas-pagamento'),
+  criarFormaPagamento:    (dados) => api.post('/financeiro/formas-pagamento', dados),
+  atualizarFormaPagamento:(id, dados) => api.put(`/financeiro/formas-pagamento/${id}`, dados),
+  excluirFormaPagamento:  (id) => api.delete(`/financeiro/formas-pagamento/${id}`),
 };
 
 // ============================================================
@@ -218,20 +255,49 @@ export const andamentoAPI = {
 // DOCUMENTOS
 // ============================================================
 export const documentosAPI = {
-  listarModelos:    () => api.get('/documentos/modelos'),
+  // Catálogo de variáveis (referência para montar o modelo no Word)
+  catalogoVariaveis: () => api.get('/documentos/variaveis'),
+  // Catálogo das variáveis POR PESSOA (modelos "Documento de partes")
+  catalogoVariaveisPartes: () => api.get('/documentos/variaveis-partes'),
+  // Modelos — listar (incluirInativos=true traz também os desativados, para a tela de gestão)
+  listarModelos:    (incluirInativos = false) =>
+    api.get('/documentos/modelos', { params: incluirInativos ? { incluir_inativos: 1 } : {} }),
   buscarModelo:     (id) => api.get(`/documentos/modelos/${id}`),
-  criarModelo:      (dados) => api.post('/documentos/modelos', dados),
-  atualizarModelo:  (id, dados) => api.put(`/documentos/modelos/${id}`, dados),
+  baixarModelo:     (id) => api.get(`/documentos/modelos/${id}/arquivo`, { responseType: 'blob' }),
+  // criar/atualizar recebem um FormData (campos + arquivo .docx)
+  criarModelo:      (formData) => api.post('/documentos/modelos', formData),
+  atualizarModelo:  (id, formData) => api.put(`/documentos/modelos/${id}`, formData),
+  desativarModelo:  (id) => api.put(`/documentos/modelos/${id}/desativar`),
+  reativarModelo:   (id) => api.put(`/documentos/modelos/${id}/reativar`),
+  // Exclusão DEFINITIVA (apaga do banco + arquivo do S3; não dá para reativar)
+  excluirModelo:    (id) => api.delete(`/documentos/modelos/${id}`),
+  // Opções para o "destino" do modelo (tipos de audiência/perícia, subtipos de prazo)
+  destinosOpcoes:   () => api.get('/documentos/destinos-opcoes'),
+  // Geração de documentos a partir de uma âncora (audiência, processo, etc.)
+  modelosParaGerar: (ancora, ancoraId, beneficiario) => api.get('/documentos/modelos-gerar', { params: { ancora, ancora_id: ancoraId, beneficiario } }),
   gerar:            (dados) => api.post('/documentos/gerar', dados, { responseType: 'blob' }),
+  // Geração de "Documento de partes" (vários autores × réus; sem âncora). Devolve blob (docx/pdf).
+  gerarMultipessoas: (dados) => api.post('/documentos/gerar-multipessoas', dados, { responseType: 'blob' }),
+  // Geração em LOTE (audiências/perícias):
+  // 1) preparar: agrupa os selecionados por tipo e devolve os modelos disponíveis de cada grupo
+  prepararLote:     (ancora_tipo, ancora_ids) => api.post('/documentos/lote/preparar', { ancora_tipo, ancora_ids }),
+  // 2) gerar: devolve um ZIP. Timeout estendido (10 min) — um lote de PDFs pode levar minutos.
+  gerarLote:        (dados) => api.post('/documentos/lote/gerar', dados, { responseType: 'blob', timeout: 600000 }),
+  // Histórico de documentos gerados
+  historico:        (params) => api.get('/documentos/historico', { params }),
 };
 
 // ============================================================
 // PUBLICAÇÕES AASP
 // ============================================================
 export const publicacoesAPI = {
+  statusAasp:   () => api.get('/publicacoes/aasp/status'),
+  usuarios:     () => api.get('/publicacoes/usuarios'),
   listar:       (params) => api.get('/publicacoes', { params }),
-  buscarAasp:   (dados) => api.post('/publicacoes/buscar-aasp', dados),
-  marcarTratada:(id) => api.put(`/publicacoes/${id}/tratar`),
+  importar:     (dados) => api.post('/publicacoes/importar', dados),
+  direcionar:   (id, dados) => api.put(`/publicacoes/${id}/direcionar`, dados),
+  tratar:       (id, dados) => api.put(`/publicacoes/${id}/tratar`, dados),
+  historico:    (id) => api.get(`/publicacoes/${id}/historico`),
   excluir:      (id) => api.delete(`/publicacoes/${id}`),
 };
 
@@ -239,13 +305,21 @@ export const publicacoesAPI = {
 // PERÍCIAS
 // ============================================================
 export const periciasAPI = {
-  listar:           (params) => api.get('/pericias', { params }),
-  buscar:           (id) => api.get(`/pericias/${id}`),
-  criar:            (dados) => api.post('/pericias', dados),
-  atualizar:        (id, dados) => api.put(`/pericias/${id}`, dados),
-  tipos:            () => api.get('/pericias/tipos'),
-  marcarEmailPerito:(id) => api.put(`/pericias/${id}/email-perito`),
-  marcarComunicado: (id) => api.put(`/pericias/${id}/comunicado`),
+  listar:            (params) => api.get('/pericias', { params }),
+  buscar:            (id) => api.get(`/pericias/${id}`),
+  criar:             (dados) => api.post('/pericias', dados),
+  atualizar:         (id, dados) => api.put(`/pericias/${id}`, dados),
+  tipos:             () => api.get('/pericias/tipos'),
+  criarTipo:         (dados) => api.post('/pericias/tipos', dados),
+  atualizarTipo:     (id, dados) => api.put(`/pericias/tipos/${id}`, dados),
+  excluirTipo:       (id) => api.delete(`/pericias/tipos/${id}`),
+  peritosProcesso:   (processoId) => api.get('/pericias/peritos-processo', { params: { processo_id: processoId } }),
+  marcarRealizada:   (id) => api.put(`/pericias/${id}/realizada`),
+  cancelar:          (id, motivo) => api.put(`/pericias/${id}/cancelar`, { motivo }),
+  remarcar:          (id, dados) => api.put(`/pericias/${id}/remarcar`, dados),
+  excluir:           (id) => api.delete(`/pericias/${id}`),
+  historico:         (id) => api.get(`/pericias/${id}/historico`),
+  enviarComunicado:  (id) => api.post(`/pericias/${id}/comunicado`),
 };
 
 // ============================================================
@@ -273,6 +347,16 @@ export const configuracaoAPI = {
 
 export const calendarioAPI = {
   verificarDiaUtil: (data) => api.get('/calendario/dia-util', { params: { data } }),
+};
+
+// ============================================================
+// AGENDA — compromissos pessoais/avulsos
+// ============================================================
+export const agendaAPI = {
+  listarCompromissos:   (params) => api.get('/agenda/compromissos', { params }),
+  criarCompromisso:     (dados) => api.post('/agenda/compromissos', dados),
+  atualizarCompromisso: (id, dados) => api.put(`/agenda/compromissos/${id}`, dados),
+  excluirCompromisso:   (id) => api.delete(`/agenda/compromissos/${id}`),
 };
 
 export default api;

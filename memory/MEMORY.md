@@ -1,9 +1,9 @@
 # Memory Index — Sistema de Advocacia
 
-- [Pendências Próxima Sessão](pendencias_proxima_sessao.md) — 🔴 HANDOFF 12/06/2026: LER PRIMEIRO — fases 1-4 codadas (13 arquivos backend + Layout, SEM commit), 3 scripts SQL aguardando, sequência de deploy obrigatória, 4 bugs corrigidos
+- [Pendências Próxima Sessão](pendencias_proxima_sessao.md) — 🔵 HANDOFF: LER PRIMEIRO. TOPO 21/06: (A) FEATURE "Documento de partes" (modelos .docx multi autores×réus, botão na tela de Pessoas, SEM SQL) — ver [[documentos-modelos]]; (B) módulo PUBLICAÇÕES AASP REFEITO DO ZERO (API real, dedup por hash do texto, direcionar a usuários, chave em Integrações) — **PRECISA RODAR SQL** (recria publicacoes + publicacao_usuario) — ver [[integracoes-publicacoes]]. Também 21/06: análise do banco — Item 1 (logs_auditoria.acao→VARCHAR(30)) e Item 4 (collation→0900_ai_ci) FEITOS no LOCAL, FALTA produção; Item 2 (UNIQUE numPasta) e Item 3 (ENUM tipo_pessoa) mantidos; infra AWS Node 24 + LibreOffice instalados; diagnóstico de capacidade (512MB, subir RAM). RE-EXPORTAR estrutura_banco.sql. Abaixo 20/06: Financeiro pagamento de 2 TEMPOS (recebimento→repasses independentes cliente/parceiro), ALVARÁ via acordo.tipo, RECIBOS via Documentos, aba CONSULTA (=relatório, etapa 6 FEITA), Agenda compromissos+clicar no dia (Etapa C deep-link PENDENTE), fix rate limit. ⚠️ SQL de 20/06 NÃO rodado ainda (forma_pagamento, alterações acordo_parcela, acordo.tipo, agenda_compromisso). ⚠️ Reforma S3+docx+PDF dos modelos OBSERVADA mas não confirmada. Abaixo: 17/06, 15/06, 13/06, 12/06
 - [Diretrizes de Código](feedback_codigo.md) — ⚠️ LER SEGUNDO: Claude NUNCA mexe no git nem no banco (usuário faz tudo manualmente); só codifica com autorização; transações obrigatórias; hojeBrasilia() + timezone nos crons; auditoria com conn
 - [Visão Geral do Projeto](project_overview.md) — JS, Node+Express+React(Vite)+MySQL, AWS Lightsail 98.85.19.2, instância Dr. Antonio
-- [Tabelas do Banco de Dados](database_tables.md) — 51 tabelas; scripts fase2_1/2_2/2_3 criados 12/06 aguardando execução; pesquisas_salvas NÃO existe
+- [Tabelas do Banco de Dados](database_tables.md) — 58 tabelas (21/06); financeiro reescrito (conta_corrente/acordo/acordo_parcela/forma_pagamento); agenda_compromisso; modelo_documento usa arquivo_s3_key; logs_auditoria.acao→VARCHAR(30) e collation 0900 (21/06, falta produção); pesquisas_salvas NÃO existe
 - [Deploy e Versionamento](deploy_versionamento.md) — PM2: "advocacia-backend"; servidor em /var/www/advocacia/; WinSCP documentado
 - [Usuários e Permissões](user_permissions.md) — Hierarquia 3 níveis, superusuário invisível (nivel=0), permissões granulares
 - [Cadastro de Pessoas](cadastro_pessoas.md) — Papel definido pelo contexto; busca abrangente (CPF/RG/PIS/tel/endereço); coluna Qtde Proc
@@ -14,12 +14,12 @@
 - [Audiências](audiencias.md) — Status/ata/remarcação; dia útil + senha; colunas advogado_* removidas do código 12/06 (banco via script fase2_3)
 - [Validação de Senha](validacao_senha.md) — Regras (8-20, maiúscula+minúscula+número+especial), verificarSenha
 - [Andamento Processual](andamento_processual.md) — Lançamento manual, data/descrição/usuário, auditoria de edições
-- [Documentos e Modelos](documentos_modelos.md) — Word+PDF com variáveis; bug pf.endereco corrigido 12/06; UI é a próxima etapa (Fase 5)
+- [Documentos e Modelos](documentos_modelos.md) — modelos .docx no S3, gera Word/PDF (LibreOffice); recibos; NOVO 21/06 "Documento de partes" (multipessoas: regiões {{#autores}}/{{#reus}}, botão na tela de Pessoas, sem SQL)
 - [Comunicações](comunicacoes.md) — Gmail SMTP ativo; alerta_emails truncado corrige via script fase2_1; log_emails sem UI
 - [Agenda e Calendário](agenda_calendario.md) — Padrão: só eventos do usuário logado; checkbox "Escritório"; nome de freela resolvido 12/06
 - [Relatórios e Pesquisas](relatorios.md) — AutoFiltro estilo Excel; criar tabela pesquisas_salvas quando iniciar (Fase 5)
 - [Configurações do Escritório](configuracoes_escritorio.md) — Timezone obrigatório nos crons (12/06); cron exato reagendável; usuários
 - [Dashboard](dashboard.md) — Cards do dia; hoje/amanhã via hojeBrasilia desde 12/06; responsivo 2 colunas no celular
-- [Perícias](pericias.md) — Agendamento, comunicado ao cliente; transações desde 12/06
-- [Integrações e Publicações](integracoes_publicacoes.md) — Publicações AASP por OAB, gera prazo/tarefa, CNJ futuro
+- [Perícias](pericias.md) — REESCRITO 13/06: fluxo audiência (status/cancelar/remarcar/histórico, sem ata) + endereço CEP + responsável + perito do processo + comunicado ao cliente. Feature A+B+C no local, não testada/deployada
+- [Integrações e Publicações](integracoes_publicacoes.md) — REFEITO 21/06: AASP API real (chave em Integrações), importar por dia, dedup fiel por hash do texto, direcionar a vários usuários, pesquisa+realce, histórico via colunas; PRECISA RODAR SQL (publicacoes + publicacao_usuario); CNJ futuro
 - [Setup Inicial](setup_inicial.md) — Campos obrigatórios, bloqueio de módulos, calendário 30 anos, primeiro admin

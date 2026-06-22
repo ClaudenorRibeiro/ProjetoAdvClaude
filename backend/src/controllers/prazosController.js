@@ -94,7 +94,12 @@ async function listar(req, res) {
                 WHEN pp.data_vencimento < CURDATE() THEN 'atrasado'
                 WHEN pp.data_vencimento = CURDATE() THEN 'pendente'
                 ELSE 'agendado'
-              END AS status
+              END AS status,
+              -- Existe modelo de documento para o subtipo deste prazo? (controla o botão "Gerar Doc")
+              EXISTS(
+                SELECT 1 FROM modelo_documento md
+                WHERE md.ativo = 1 AND md.destino = 'prazo' AND md.subtipo_prazo_id <=> pp.subtipo_id
+              ) AS tem_modelo_doc
        FROM prazos_processo pp
        LEFT JOIN prazo_subtipo ps ON pp.subtipo_id = ps.id
        LEFT JOIN tipo_prazo tp    ON ps.tipo_prazo_id = tp.id

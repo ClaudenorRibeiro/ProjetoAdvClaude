@@ -10,9 +10,11 @@ import { format, parse, startOfWeek, getDay, startOfMonth, endOfMonth } from 'da
 import ptBR from 'date-fns/locale/pt-BR';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
-import { prazosAPI, audienciasAPI, tarefasAPI, periciasAPI } from '../../services/api';
+import { prazosAPI, audienciasAPI, tarefasAPI, periciasAPI, agendaAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import ModalConfirmar from '../../components/ui/ModalConfirmar';
 
 // Configuração do localizador com pt-BR
 const locales = { 'pt-BR': ptBR };
@@ -43,21 +45,26 @@ const mensagens = {
 
 // Cor por tipo de evento
 const COR_EVENTO = {
-  prazo:     '#dc2626', // vermelho
-  audiencia: '#1a56db', // azul
-  pericia:   '#7c3aed', // roxo
-  tarefa:    '#d97706', // laranja
+  prazo:       '#dc2626', // vermelho
+  audiencia:   '#1a56db', // azul
+  pericia:     '#7c3aed', // roxo
+  tarefa:      '#d97706', // laranja
+  compromisso: '#0891b2', // ciano — compromissos pessoais da agenda
 };
 
 export default function Agenda() {
   const { usuario } = useAuth();
+  const navigate = useNavigate();
   const [eventos, setEventos]   = useState([]);
   const [dataAtual, setDataAtual] = useState(new Date());
   const [visao, setVisao]       = useState('month');
   const [carregando, setCarregando] = useState(false);
   const [eventoSelecionado, setEventoSelecionado] = useState(null);
+  const [modalCompromisso, setModalCompromisso] = useState(null); // null | {} (novo) | {dataInicial} | {compromisso} (editar)
+  const [confirmarExcluir, setConfirmarExcluir] = useState(null); // compromisso aguardando confirmação de exclusão
+  const [diaSelecionado, setDiaSelecionado] = useState(null);     // dia clicado no calendário (para adicionar)
   const [filtros, setFiltros]   = useState({
-    prazos: true, audiencias: true, pericias: true, tarefas: true, escritorio: false
+    prazos: true, audiencias: true, pericias: true, tarefas: true, compromissos: true, escritorio: false
   });
 
   // Título dinâmico
@@ -97,8 +104,9 @@ export default function Agenda() {
             .then(r => r.data.ok ? r.data.dados.registros.map(a => ({
               id: `audiencia-${a.id}`,
               title: `⚖️ ${a.tipo_nome || 'Audiência'} — ${a.processo_numero || ''}`,
-              start: new Date(`${a.data}T${a.hora || '00:00'}:00`),
-              end:   new Date(`${a.data}T${a.hora || '01:00'}:00`),
+              // a.hora vem como 'HH:MM:SS' do banco → normaliza p/ 'HH:MM' (senão a data fica inválida)
+              start: new Date(`${String(a.data).slice(0, 10)}T${(a.hora || '00:00').slice(0, 5)}:00`),
+              end:   new Date(`${String(a.data).slice(0, 10)}T${(a.hora || '01:00').slice(0, 5)}:00`),
               allDay: false,
               tipo: 'audiencia',
               dados: a,
@@ -113,8 +121,9 @@ export default function Agenda() {
             .then(r => r.data.ok ? r.data.dados.registros.map(p => ({
               id: `pericia-${p.id}`,
               title: `🔬 ${p.tipo_nome || 'Perícia'} — ${p.processo_numero || ''}`,
-              start: new Date(`${p.data}T${p.hora || '00:00'}:00`),
-              end:   new Date(`${p.data}T${p.hora || '01:00'}:00`),
+              // p.hora vem como 'HH:MM:SS' do banco → normaliza p/ 'HH:MM' (senão a data fica inválida)
+              start: new Date(`${String(p.data).slice(0, 10)}T${(p.hora || '00:00').slice(0, 5)}:00`),
+              end:   new Date(`${String(p.data).slice(0, 10)}T${(p.hora || '01:00').slice(0, 5)}:00`),
               allDay: !p.hora,
               tipo: 'pericia',
               dados: p,
@@ -137,6 +146,27 @@ export default function Agenda() {
                 tipo: 'tarefa',
                 dados: t,
               })) : [])
+            .catch(() => [])
+        );
+      }
+
+      if (filtros.compromissos) {
+        promises.push(
+          agendaAPI.listarCompromissos({ de: data_de, ate: data_ate, escritorio: filtros.escritorio ? 1 : 0 })
+            .then(r => r.data.ok ? r.data.dados.map(c => {
+              const horaIni = (!c.dia_todo && c.hora_inicio) ? c.hora_inicio.slice(0, 5) : '00:00';
+              const horaFim = (!c.dia_todo && c.hora_fim) ? c.hora_fim.slice(0, 5)
+                            : (!c.dia_todo && c.hora_inicio) ? c.hora_inicio.slice(0, 5) : '23:59';
+              return {
+                id: `compromisso-${c.id}`,
+                title: `📌 ${c.titulo}`,
+                start: new Date(`${String(c.data).slice(0, 10)}T${horaIni}:00`),
+                end:   new Date(`${String(c.data).slice(0, 10)}T${horaFim}:00`),
+                allDay: !!c.dia_todo,
+                tipo: 'compromisso',
+                dados: c,
+              };
+            }) : [])
             .catch(() => [])
         );
       }
@@ -183,6 +213,7 @@ export default function Agenda() {
             { key:'audiencias',label:'Audiências',cor: COR_EVENTO.audiencia },
             { key:'pericias',  label:'Perícias',  cor: COR_EVENTO.pericia },
             { key:'tarefas',   label:'Tarefas',   cor: COR_EVENTO.tarefa },
+            { key:'compromissos', label:'Compromissos', cor: COR_EVENTO.compromisso },
           ].map(({ key, label, cor }) => (
             <label key={key} style={{display:'flex',alignItems:'center',gap:'6px',cursor:'pointer',fontSize:'13px'}}>
               <input type="checkbox" checked={filtros[key]} onChange={() => toggleFiltro(key)} />
@@ -203,8 +234,14 @@ export default function Agenda() {
             🏢 Escritório
           </label>
 
+          <button className="btn btn-primary" style={{marginLeft:'auto',fontSize:'13px',padding:'6px 12px'}}
+            onClick={() => setModalCompromisso({})}>
+            + Novo compromisso
+          </button>
           {carregando && (
-            <span style={{marginLeft:'auto',fontSize:'12px',color:'#888'}}>Carregando...</span>
+            <span style={{display:'inline-flex',alignItems:'center',gap:'6px',fontSize:'12px',color:'#1a56db',fontWeight:600}}>
+              <span className="spinner-mini" /> Carregando...
+            </span>
           )}
         </div>
       </div>
@@ -224,6 +261,8 @@ export default function Agenda() {
             culture="pt-BR"
             messages={mensagens}
             eventPropGetter={eventPropGetter}
+            selectable
+            onSelectSlot={({ start }) => setDiaSelecionado(start)}
             onSelectEvent={ev => setEventoSelecionado(ev)}
             popup
             style={{height:'100%'}}
@@ -243,12 +282,78 @@ export default function Agenda() {
               <EventoDetalhe evento={eventoSelecionado} />
             </div>
             <div className="modal-footer">
+              {/* Compromisso próprio: pode editar/excluir direto na agenda */}
+              {eventoSelecionado.tipo === 'compromisso' && eventoSelecionado.dados.usuario_id === usuario?.id && (
+                <>
+                  <button className="btn btn-danger" style={{ marginRight: 'auto' }}
+                    onClick={() => { setConfirmarExcluir(eventoSelecionado.dados); setEventoSelecionado(null); }}>
+                    Excluir
+                  </button>
+                  <button className="btn btn-primary"
+                    onClick={() => { setModalCompromisso(eventoSelecionado.dados); setEventoSelecionado(null); }}>
+                    Editar
+                  </button>
+                </>
+              )}
               <button className="btn btn-secondary" onClick={() => setEventoSelecionado(null)}>
                 Fechar
               </button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal: criar / editar compromisso pessoal */}
+      {modalCompromisso && (
+        <ModalCompromisso
+          compromisso={modalCompromisso.id ? modalCompromisso : null}
+          dataInicial={modalCompromisso.dataInicial}
+          onFechar={(reload) => { setModalCompromisso(null); if (reload) carregarEventos(); }}
+        />
+      )}
+
+      {/* Clique num dia → escolher o que adicionar */}
+      {diaSelecionado && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setDiaSelecionado(null); }}>
+          <div className="modal-box modal-pequeno">
+            <div className="modal-header">
+              <h3>Adicionar em {format(diaSelecionado, 'dd/MM/yyyy')}</h3>
+              <button className="modal-fechar" onClick={() => setDiaSelecionado(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ color: '#6b7280', fontSize: 13, marginTop: 0 }}>O que você quer adicionar neste dia?</p>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button className="btn btn-primary"
+                  onClick={() => { setModalCompromisso({ dataInicial: format(diaSelecionado, 'yyyy-MM-dd') }); setDiaSelecionado(null); }}>
+                  📌 Novo compromisso
+                </button>
+                <button className="btn btn-outline"
+                  onClick={() => { navigate(`/tarefas?nova=1&data=${format(diaSelecionado, 'yyyy-MM-dd')}`); setDiaSelecionado(null); }}>
+                  ✅ Nova tarefa
+                </button>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setDiaSelecionado(null)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      {/* Confirmação de exclusão de compromisso */}
+      {confirmarExcluir && (
+        <ModalConfirmar
+          titulo="Excluir compromisso"
+          mensagem={`Excluir o compromisso "${confirmarExcluir.titulo}"? Esta ação não pode ser desfeita.`}
+          textoBotao="🗑️ Excluir"
+          tipo="perigo"
+          acao={async () => {
+            try { await agendaAPI.excluirCompromisso(confirmarExcluir.id); toast.success('Compromisso excluído'); carregarEventos(); }
+            catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao excluir'); }
+          }}
+          onCancelar={() => setConfirmarExcluir(null)}
+        />
       )}
     </div>
   );
@@ -288,6 +393,14 @@ function EventoDetalhe({ evento }) {
     linhas.push(['Prioridade', dados.prioridade]);
     if (dados.data_vencimento) linhas.push(['Vencimento', dados.data_vencimento]);
     if (dados.atribuida_para_nome) linhas.push(['Atribuída para', dados.atribuida_para_nome]);
+  } else if (tipo === 'compromisso') {
+    linhas.push(['Título', dados.titulo]);
+    if (dados.descricao) linhas.push(['Descrição', dados.descricao]);
+    linhas.push(['Data', String(dados.data).slice(0, 10).split('-').reverse().join('/')]);
+    if (dados.dia_todo) linhas.push(['Período', 'Dia todo']);
+    else if (dados.hora_inicio) linhas.push(['Hora', `${dados.hora_inicio.slice(0, 5)}${dados.hora_fim ? ' às ' + dados.hora_fim.slice(0, 5) : ''}`]);
+    if (dados.escritorio) linhas.push(['Visibilidade', 'Escritório (compartilhado)']);
+    if (dados.usuario_nome) linhas.push(['De', dados.usuario_nome]);
   }
 
   return (
@@ -303,3 +416,97 @@ function EventoDetalhe({ evento }) {
     </table>
   );
 }
+
+// ============================================================
+// MODAL: criar / editar compromisso pessoal da agenda
+// `compromisso` = registro p/ editar (ou null p/ novo). `dataInicial` (opcional) pré-preenche a data.
+// ============================================================
+function ModalCompromisso({ compromisso, dataInicial, onFechar }) {
+  const editando = !!(compromisso && compromisso.id);
+  const [form, setForm] = useState({
+    titulo: compromisso?.titulo || '',
+    descricao: compromisso?.descricao || '',
+    data: compromisso?.data ? String(compromisso.data).slice(0, 10) : (dataInicial || format(new Date(), 'yyyy-MM-dd')),
+    dia_todo: compromisso?.dia_todo ? true : false,
+    hora_inicio: compromisso?.hora_inicio ? compromisso.hora_inicio.slice(0, 5) : '',
+    hora_fim: compromisso?.hora_fim ? compromisso.hora_fim.slice(0, 5) : '',
+    escritorio: compromisso?.escritorio ? true : false,
+  });
+  const [salvando, setSalvando] = useState(false);
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  async function salvar() {
+    if (!form.titulo.trim()) return toast.error('Informe o título');
+    if (!form.data) return toast.error('Informe a data');
+    setSalvando(true);
+    try {
+      if (editando) await agendaAPI.atualizarCompromisso(compromisso.id, form);
+      else          await agendaAPI.criarCompromisso(form);
+      toast.success(editando ? 'Compromisso atualizado' : 'Compromisso criado');
+      onFechar(true);
+    } catch (err) {
+      toast.error(err.response?.data?.mensagem || 'Erro ao salvar');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 1100 }}>
+      <div className="modal-box" style={{ maxWidth: '460px' }}>
+        <div className="modal-header">
+          <h3>{editando ? 'Editar compromisso' : 'Novo compromisso'}</h3>
+          <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div className="form-group">
+            <label className="form-label obrigatorio">Título</label>
+            <input className="form-control" value={form.titulo} onChange={e => set('titulo', e.target.value)}
+              placeholder="Ex.: Reunião com cliente" autoFocus />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Descrição</label>
+            <textarea className="form-control" rows={2} value={form.descricao} onChange={e => set('descricao', e.target.value)} />
+          </div>
+          <div className="grid-2">
+            <div className="form-group">
+              <label className="form-label obrigatorio">Data</label>
+              <input type="date" className="form-control" value={form.data} onChange={e => set('data', e.target.value)} />
+            </div>
+            <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+                <input type="checkbox" checked={form.dia_todo} onChange={e => set('dia_todo', e.target.checked)} />
+                Dia todo
+              </label>
+            </div>
+          </div>
+          {!form.dia_todo && (
+            <div className="grid-2">
+              <div className="form-group">
+                <label className="form-label">Hora início</label>
+                <input type="time" className="form-control" value={form.hora_inicio} onChange={e => set('hora_inicio', e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Hora fim</label>
+                <input type="time" className="form-control" value={form.hora_fim} onChange={e => set('hora_fim', e.target.value)} />
+              </div>
+            </div>
+          )}
+          <div className="form-group">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+              <input type="checkbox" checked={form.escritorio} onChange={e => set('escritorio', e.target.checked)} />
+              🏢 Compartilhar com o escritório (aparece para todos no modo Escritório)
+            </label>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
+          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+            {salvando ? 'Salvando...' : 'Salvar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+

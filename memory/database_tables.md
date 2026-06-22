@@ -7,9 +7,23 @@ metadata:
   originSessionId: c7321425-eb43-40e0-b57f-c2941c1276c6
 ---
 
-## Banco Limpo — 46 Tabelas (após limpeza de 28/05/2026)
+## Banco — 58 tabelas (conferido no estrutura_banco.sql em 21/06/2026)
 
 As tabelas antigas (`forum, vara, pasta, processo, partes_processo, status_processo, processo_responsaveis, modelo_comunicado`) foram **removidas**. As tabelas definitivas usam prefixo `tbl`.
+
+### ⚠️ Ajustes de schema em 21/06/2026 (já no banco LOCAL; FALTA na PRODUÇÃO no deploy)
+- `logs_auditoria.acao`: VARCHAR(20) → **VARCHAR(30)** (corrige 500 quando a ação passava de 20 chars). Ver [[pendencias-proxima-sessao]] Item 1.
+- **Collation padronizada** p/ utf8mb4_0900_ai_ci: o DEFAULT do DATABASE + as 3 tabelas que estavam em utf8mb4_unicode_ci
+  (`log_emails`, `notificacoes`, `reset_tokens`). Item 4. (MANTIDOS de propósito: UNIQUE em numPasta e ENUM em tipo_pessoa — ver Itens 2 e 3.)
+
+### ⚠️ Alterações de schema em 13/06/2026 (já no banco LOCAL; FALTA na PRODUÇÃO — ver [[pendencias-proxima-sessao]] p/ o SQL)
+- **NOVA** `processo_perito` — peritos vinculados ao processo (proc_id + tipo_pessoa + pessoa_id). Ver [[processos-pastas]].
+- **NOVA** `auditoria_pericia` — histórico campo a campo das perícias (espelha auditoria_audiencia). Ver [[pericias]].
+- `tblproc` ganhou **`cliente_polo`** (VARCHAR 'autor'/'reu' — qual polo é o cliente).
+- `pericia` ganhou: cep, logradouro, numero, complemento, bairro, cidade, estado, responsavel_id,
+  responsavel_freela_id, status, motivo_status, alterado_por, alterado_em (+FKs).
+- `configuracoes_escritorio` ganhou **`horario_alerta_prazos_2`** (2º horário de alerta) e PERDEU
+  `alerta_pendentes_enviado`/`alerta_atrasados_enviado` (trava diária removida).
 
 ### Pessoas
 | Tabela | Descrição |
@@ -62,12 +76,16 @@ As tabelas antigas (`forum, vara, pasta, processo, partes_processo, status_proce
 | pericia | Perícias vinculadas a processos |
 | tipo_pericia | Tipos de perícia |
 
-### Financeiro
+### Financeiro (REESCRITO 15/06; modelo POR PROCESSO — ver [[financeiro]])
+⚠️ As tabelas ANTIGAS `conta_corrente_pasta`, `honorarios`, `parcerias` foram **DROPADAS** (eram protótipo). As atuais:
 | Tabela | Descrição |
 |--------|-----------|
-| conta_corrente_pasta | Lançamentos financeiros por pasta |
-| honorarios | Configuração de honorários por pasta |
-| parcerias | Parcerias/comissões por processo |
+| conta_corrente | Entradas/saídas por PROCESSO (P&L do escritório). Tem `parcela_id` |
+| acordo | Acordo/alvará por processo. Coluna `tipo` ('acordo'/'alvara'), status, valor_total, qtd_parcelas |
+| acordo_parcela | Parcelas do acordo. Honorário/parceria por linha; `recebido_em`+forma; colunas de repasse cliente/parceiro (em/forma/por) |
+| forma_pagamento | Formas de pagamento (Pix/TED/etc.), soft-delete `ativo` (cadastro em Controle, 20/06) |
+| auditoria_parcela | Histórico campo a campo por parcela (acao VARCHAR(30)) |
+| auditoria_conta_corrente | Histórico por lançamento manual da conta corrente |
 
 ### Calendário e Feriados
 | Tabela | Descrição |
@@ -78,14 +96,26 @@ As tabelas antigas (`forum, vara, pasta, processo, partes_processo, status_proce
 ### Comunicações e Documentos
 | Tabela | Descrição |
 |--------|-----------|
-| modelo_documento | Modelos de documentos com variáveis automáticas |
+| modelo_documento | Modelos de documentos com variáveis. ⚠️ Agora guarda **`arquivo_s3_key`** (o .docx fica no S3 — reforma S3). Campo `destino` inclui recibo_cliente/recibo_parceria |
 | andamento_processual | Movimentações/andamentos de um processo |
+
+### Agenda
+| Tabela | Descrição |
+|--------|-----------|
+| agenda_compromisso | Compromissos/lembretes pessoais NÃO ligados a processo (20/06). Privado por usuário; flag `escritorio` p/ compartilhar. Ver [[agenda-calendario]] |
+
+### Auditorias adicionais
+| Tabela | Descrição |
+|--------|-----------|
+| auditoria_prazo | Histórico campo a campo de prazos |
+| notificacoes | Notificações internas (sino) por usuário |
 
 ### Integrações e Publicações
 | Tabela | Descrição |
 |--------|-----------|
-| publicacoes | Publicações AASP salvas |
-| configuracoes_integracoes | Módulos externos e credenciais por escritório |
+| publicacoes | REFEITA 21/06: fonte, data, numero_processo, titulo, cabecalho, texto, **texto_hash (dedup fiel)**, escritorio, importada/direcionada/tratada (por quem+quando). Ver [[integracoes-publicacoes]] |
+| publicacao_usuario | NOVA 21/06: ligação publicação↔usuários (direcionamento a vários usuários) |
+| configuracoes_integracoes | Módulos externos e credenciais por escritório (aasp guarda JSON {chave}) |
 
 ### Configurações e Usuários
 | Tabela | Descrição |
@@ -142,8 +172,8 @@ ALTER TABLE `logs_auditoria`  ADD INDEX `idx_usuario_data` (`usuario_id`, `criad
 
 ## ⚠️ pesquisas_salvas — NÃO EXISTE no banco
 
-Listada nas memórias (módulo Relatórios) mas ausente no backup de 12/06/2026 (51 tabelas conferidas).
-Será criada quando o módulo Relatórios for desenvolvido (Fase 5).
+Listada nas memórias (módulo Relatórios) mas CONFIRMADO ausente no estrutura_banco.sql de 21/06 (58 tabelas).
+A função de relatório acabou virando a aba "Consulta" do Financeiro (20/06) — não dependeu de pesquisas_salvas.
 
 ## Observações Importantes
 

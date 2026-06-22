@@ -30,6 +30,7 @@ import Relatorios    from './pages/Relatorios/Relatorios';
 import Configuracoes from './pages/Configuracoes/Configuracoes';
 import Foruns        from './pages/Controle/Foruns';
 import Varas         from './pages/Controle/Varas';
+import FormasPagamento from './pages/Controle/FormasPagamento';
 
 // Rota protegida — redireciona para login se não estiver autenticado
 function RotaProtegida({ children }) {
@@ -78,6 +79,7 @@ function AppRoutes() {
       <Route path="/configuracoes/*"   element={<RotaProtegida><Configuracoes /></RotaProtegida>} />
       <Route path="/controle/foruns"  element={<RotaProtegida><Foruns /></RotaProtegida>} />
       <Route path="/controle/varas"   element={<RotaProtegida><Varas /></RotaProtegida>} />
+      <Route path="/controle/formas-pagamento" element={<RotaProtegida><FormasPagamento /></RotaProtegida>} />
 
       {/* Redireciona raiz para dashboard */}
       <Route path="/" element={<Navigate to="/dashboard" replace />} />

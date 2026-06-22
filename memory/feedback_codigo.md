@@ -12,6 +12,24 @@ metadata:
 **Nunca codificar sem autorização explícita do usuário.**  
 O usuário decide quando e o que será desenvolvido. Claude analisa, sugere e explica — mas só executa código quando autorizado.
 
+**🧠 ANALISAR O CÓDIGO INTEIRO + TESTAR MENTALMENTE ANTES DE APONTAR ERRO OU SUGERIR ALTERAÇÃO (regra desde 21/06/2026).**
+NUNCA olhar um trecho isolado e sair dizendo que há erro/risco. Antes de afirmar qualquer coisa ou propor mudança:
+- Ler o FLUXO COMPLETO envolvido (a função inteira + quem chama + tabelas/colunas usadas em todo o caminho), não um pedaço.
+- Fazer um "teste mental" do cenário (simular a execução passo a passo) para confirmar que o problema é REAL.
+- Só então afirmar. Se não tiver certeza, dizer "preciso verificar" e verificar — não chutar.
+- **Por quê:** em 21/06 Claude levantou um falso risco no UNIQUE de numPasta lendo só um trecho; a rotina real (renumerarPasta)
+  já tratava o conflito corretamente. Leitura parcial gera alarme falso e perda de confiança. O usuário é leigo e confia na análise.
+
+**🔎 ANALISAR IMPACTO ANTES DE EXECUTAR — e ALERTAR o usuário (regra desde 20/06/2026).**
+Sempre que o usuário pedir algo, ANTES de codar, Claude deve avaliar se o pedido pode **danificar o
+sistema ou infringir alguma regra/lógica já existente**. O sistema é grande e complexo; o usuário pode,
+por desatenção, pedir algo que quebre outro setor.
+- Se o pedido for seguro: dizer em 1 linha a conclusão da análise ("isso é seguro porque...") e seguir.
+- Se houver risco/conflito: **PARAR e ALERTAR antes de fazer**, explicando o impacto e sugerindo a
+  alternativa correta. Só prosseguir após o usuário decidir.
+- **Por quê:** o usuário confia em Claude como uma segunda checagem contra erros próprios. Não basta
+  obedecer — é preciso proteger a integridade do sistema.
+
 **Fluxo de trabalho LOCAL-PRIMEIRO (regra absoluta, 12/06/2026):**
 O usuário NUNCA fará nenhuma atualização direto no servidor. TODA mudança (código e banco)
 é feita primeiro LOCALMENTE — Claude codifica na pasta local, scripts SQL são rodados primeiro

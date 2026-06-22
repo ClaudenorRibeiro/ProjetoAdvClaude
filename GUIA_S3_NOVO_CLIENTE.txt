@@ -1,0 +1,177 @@
+==========================================================================
+ GUIA — CRIAR O ARMAZENAMENTO S3 PARA UM NOVO CLIENTE (ESCRITÓRIO)
+ Sistema de Advocacia — módulo de Documentos (modelos .docx ficam no S3)
+==========================================================================
+
+QUANDO USAR ESTE GUIA
+---------------------
+Toda vez que for instalar o sistema para um NOVO escritório/cliente, cada um
+precisa do SEU PRÓPRIO bucket S3 (privado) para guardar os modelos de
+documento (.docx). Os documentos gerados NÃO ficam no S3 (vão para o Downloads
+do usuário); o S3 guarda apenas os MODELOS.
+
+Regra de ouro: 1 cliente = 1 bucket privado + 1 usuário IAM exclusivo daquele
+bucket. Nunca compartilhe credenciais entre clientes.
+
+CONVENÇÃO DE NOMES (sugerida)
+-----------------------------
+- Bucket : modelos-<cliente>-adv     (ex.: modelos-antonio-adv)
+- Usuário: advocacia-s3-<cliente>    (ex.: advocacia-s3-antonio)
+O nome do bucket é único no mundo inteiro; se acusar "já existe", acrescente
+um número ou outra palavra (ex.: modelos-antonio-adv-2).
+
+
+==========================================================================
+ PASSO 1 — CRIAR O BUCKET S3
+==========================================================================
+Console AWS  ->  serviço "S3"  ->  botão "Criar bucket".
+
+Preencha exatamente assim:
+
+1) Região da AWS:
+   - us-east-1 (Leste dos EUA / Norte da Virgínia).
+   - ANOTE a região: ela tem que ser igual ao AWS_REGION do .env.
+   - (Pode usar outra região, desde que use a MESMA no .env.)
+
+2) Tipo de bucket:
+   - "Propósito geral" (recomendado). NÃO use "Diretório".
+
+3) Namespace do bucket:
+   - "Namespace global" (padrão clássico, compatível com tudo).
+
+4) Nome do bucket:
+   - Ex.: modelos-<cliente>-adv
+   - ANOTE esse nome: vai no AWS_S3_BUCKET do .env.
+
+5) Propriedade de objeto:
+   - "ACLs desabilitadas (recomendado)".
+
+6) Configurações de bloqueio do acesso público:
+   - DEIXE MARCADO "Bloquear TODO o acesso público" (as 4 caixas marcadas).
+   - >>> IMPORTANTE: o bucket é PRIVADO. O sistema acessa por credencial
+     (usuário IAM) e gera URLs assinadas temporárias. NÃO desmarque nada aqui.
+
+7) Versionamento de bucket:
+   - "Ativar" (recomendado). Protege os modelos: se alguém sobrescrever ou
+     apagar um modelo por engano, dá para recuperar a versão anterior.
+   - (Opcional. Pode deixar "Desativar" se preferir, mas o ideal é Ativar.)
+
+8) Tags:
+   - Opcional, pode pular.
+
+9) Criptografia padrão:
+   - "SSE-S3 (chaves gerenciadas do Amazon S3)" — é grátis e suficiente.
+   - "Chave do bucket": Ativar (pode deixar).
+
+10) Configurações avançadas:
+   - Não mexer.
+
+Clique em "Criar bucket". Deve aparecer "Bucket criado com êxito".
+
+
+==========================================================================
+ PASSO 2 — CRIAR O USUÁRIO IAM (credencial do sistema p/ esse bucket)
+==========================================================================
+O bucket sozinho não basta: o backend precisa de uma credencial para
+gravar/ler os modelos. Crie um usuário IAM EXCLUSIVO desse cliente.
+
+Console AWS  ->  serviço "IAM"  ->  menu "Usuários"  ->  "Criar usuário".
+
+1) Nome do usuário:
+   - Ex.: advocacia-s3-<cliente>
+
+2) Acesso ao console:
+   - NÃO marque "Fornecer acesso ao Console de Gerenciamento da AWS".
+   - Este usuário é só para o sistema (acesso por chave), não para login humano.
+
+3) Permissões:
+   - Escolha "Anexar políticas diretamente".
+   - Clique em "Criar política" (abre em outra aba).
+   - Na nova política, vá na aba "JSON" e cole o conteúdo abaixo,
+     TROCANDO  NOME-DO-BUCKET  pelo nome real do bucket (2 lugares):
+
+   ----------------------------------------------------------------
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Sid": "AcessoObjetosDoBucket",
+         "Effect": "Allow",
+         "Action": [
+           "s3:PutObject",
+           "s3:GetObject",
+           "s3:DeleteObject"
+         ],
+         "Resource": "arn:aws:s3:::NOME-DO-BUCKET/*"
+       },
+       {
+         "Sid": "ListarOBucket",
+         "Effect": "Allow",
+         "Action": "s3:ListBucket",
+         "Resource": "arn:aws:s3:::NOME-DO-BUCKET"
+       }
+     ]
+   }
+   ----------------------------------------------------------------
+
+   - Dê um nome à política, ex.: politica-s3-<cliente>
+   - Crie a política, volte para a aba do usuário, atualize a lista,
+     marque essa política e prossiga.
+
+4) Revise e clique em "Criar usuário".
+
+>>> Essa política dá ao sistema APENAS o necessário (enviar, ler, apagar e
+    listar) e SOMENTE nesse bucket. Nenhum outro acesso na conta AWS.
+
+
+==========================================================================
+ PASSO 3 — GERAR A CHAVE DE ACESSO (Access Key + Secret)
+==========================================================================
+1) IAM  ->  Usuários  ->  clique no usuário recém-criado.
+2) Aba "Credenciais de segurança".
+3) Em "Chaves de acesso", clique "Criar chave de acesso".
+4) Caso de uso: "Aplicação em execução fora da AWS" (Application running
+   outside AWS). Avance.
+5) A AWS mostra:
+      - ID da chave de acesso        (AWS_ACCESS_KEY_ID)
+      - Chave de acesso secreta      (AWS_SECRET_ACCESS_KEY)
+   >>> A chave secreta aparece UMA ÚNICA VEZ. Copie agora.
+       Se perder, é só apagar essa chave e gerar outra.
+6) Pode baixar o .csv para guardar com segurança (NUNCA versione no git).
+
+
+==========================================================================
+ PASSO 4 — CONFIGURAR O .env DO BACKEND
+==========================================================================
+No servidor do cliente, no arquivo:
+   /var/www/advocacia/backend/.env     (produção)
+   ou no .env local, durante testes
+
+Adicione/ajuste estas 4 linhas (com os valores do cliente):
+
+   AWS_REGION=us-east-1
+   AWS_S3_BUCKET=NOME-DO-BUCKET
+   AWS_ACCESS_KEY_ID=AKIA....................
+   AWS_SECRET_ACCESS_KEY=................................
+
+Depois, reinicie o backend:
+   pm2 restart advocacia-backend
+   (em ambiente local, basta reiniciar o servidor de desenvolvimento)
+
+LEMBRETES DE SEGURANÇA
+----------------------
+- O .env NÃO vai para o git (sobrevive ao deploy/git reset). Igual ao SMTP.
+- NUNCA cole Access Key / Secret em código, e-mail, print ou commit.
+- Cada cliente tem bucket + usuário IAM próprios. Não reaproveite credenciais.
+- Se uma chave vazar: IAM -> usuário -> apagar a chave -> gerar outra ->
+  atualizar o .env -> reiniciar o backend.
+
+
+==========================================================================
+ RESUMO RÁPIDO (checklist)
+==========================================================================
+[ ] 1. S3 -> Criar bucket (privado, bloquear acesso público, versionamento on)
+[ ] 2. IAM -> Criar usuário (sem console) + política JSON restrita ao bucket
+[ ] 3. IAM -> Criar chave de acesso (copiar Access Key + Secret)
+[ ] 4. .env do backend (REGION, BUCKET, ACCESS_KEY, SECRET) + reiniciar
+==========================================================================

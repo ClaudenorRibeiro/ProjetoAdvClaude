@@ -6,6 +6,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { prazosAPI, processosAPI } from '../../services/api';
 import { formatarData, labelStatusPrazo, corPrazo, toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
+import { ModalGerar } from '../../components/GerarDocumento';
 import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 
@@ -50,6 +51,7 @@ export default function Prazos() {
   const [prazoCancelando, setPrazoCancelando]   = useState(null);
   const [prazoHistorico, setPrazoHistorico]     = useState(null); // prazo selecionado para ver histórico
   const [confirmar, setConfirmar]               = useState(null);
+  const [gerarDocPrazo, setGerarDocPrazo]       = useState(null); // prazo para gerar documento (via "Fazer")
 
   const LIMITE = 100;
 
@@ -80,11 +82,22 @@ export default function Prazos() {
     });
   }
 
-  async function fazerPrazo(id) {
+  async function fazerPrazo(p) {
     try {
-      await prazosAPI.marcarFazendo(id);
+      await prazosAPI.marcarFazendo(p.id);
       toast.success('Prazo marcado como "Fazendo"');
       carregar();
+      // Quem assumiu o prazo pode gerar o documento (só se houver modelo para o subtipo).
+      // Depois de assumido, o botão "Fazer" some, então esta é a única chance de gerar.
+      if (Number(p.tem_modelo_doc) === 1) {
+        setConfirmar({
+          titulo: 'Gerar documento',
+          mensagem: 'Deseja utilizar um modelo do sistema para este prazo?',
+          textoBotao: 'Sim, escolher modelo',
+          tipo: 'sucesso',
+          acao: () => { setGerarDocPrazo(p); },
+        });
+      }
     } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao marcar prazo'); }
   }
 
@@ -170,9 +183,13 @@ export default function Prazos() {
                     <td>{p.subtipo_nome || p.descricao || '—'}</td>
                     <td>{formatarData(p.data_vencimento)}</td>
                     <td>
-                      {p.dias_restantes < 0
-                        ? <span className="badge badge-vermelho">{Math.abs(p.dias_restantes)}d atraso</span>
-                        : <span>{p.dias_restantes}d</span>
+                      {/* Prazo concluído ou cancelado não tem mais contagem de dias/atraso — mostra "—".
+                          Só os prazos ativos (aberto/fazendo/pendente/agendado/atrasado) exibem dias restantes ou atraso. */}
+                      {['concluido','cancelado'].includes(p.status)
+                        ? <span>—</span>
+                        : p.dias_restantes < 0
+                          ? <span className="badge badge-vermelho">{Math.abs(p.dias_restantes)}d atraso</span>
+                          : <span>{p.dias_restantes}d</span>
                       }
                     </td>
                     <td>{p.responsavel_nome || 'Escritório'}</td>
@@ -204,7 +221,7 @@ export default function Prazos() {
                             {/* Ninguém fazendo: qualquer usuário pode Fazer, Concluir, Cancelar */}
                             {!p.fazendo_por && (
                               <>
-                                <button title="Marcar como Fazendo" onClick={() => fazerPrazo(p.id)}
+                                <button title="Marcar como Fazendo" onClick={() => fazerPrazo(p)}
                                   style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:'5px',padding:'4px 8px',cursor:'pointer',fontSize:'12px',whiteSpace:'nowrap'}}>
                                   ▶ Fazer
                                 </button>
@@ -275,6 +292,7 @@ export default function Prazos() {
                             📋 Histórico
                           </button>
                         )}
+                        {/* Geração de documento em Prazos é oferecida ao clicar em "Fazer" (não há botão solto). */}
                       </div>
                     </td>
                   </tr>
@@ -319,6 +337,8 @@ export default function Prazos() {
       {prazoEditando   && <ModalEditarPrazo prazo={prazoEditando} tipos={tipos} onFechar={(reload) => { setPrazoEditando(null);  if(reload) carregar(); }} />}
       {prazoCancelando && <ModalCancelarPrazo prazo={prazoCancelando} onFechar={(reload) => { setPrazoCancelando(null); if(reload) carregar(); }} />}
       {prazoHistorico  && <ModalHistoricoPrazo prazo={prazoHistorico} onFechar={() => setPrazoHistorico(null)} />}
+      {/* Geração de documento do prazo (aberta pela pergunta após o "Fazer") */}
+      {gerarDocPrazo   && <ModalGerar ancoraTipo="prazo" ancoraId={gerarDocPrazo.id} onFechar={() => setGerarDocPrazo(null)} />}
     </div>
   );
 }

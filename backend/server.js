@@ -13,7 +13,6 @@ const express    = require('express');
 const cors       = require('cors');
 const helmet     = require('helmet');
 const compression = require('compression');
-const rateLimit  = require('express-rate-limit');
 const path       = require('path');
 
 const { testarConexao } = require('./src/config/database');
@@ -27,17 +26,14 @@ const PORT = process.env.PORT || 3001;
 // Helmet adiciona headers HTTP de segurança automaticamente
 app.use(helmet());
 
-// Informa ao Express que está atrás de um proxy local (evita aviso do express-rate-limit)
-app.set('trust proxy', false);
+// Em produção o app fica atrás do nginx → confia em 1 hop de proxy para enxergar o IP real
+// (logs e eventuais regras por IP). Em dev (sem proxy) fica false para não emitir aviso.
+app.set('trust proxy', process.env.NODE_ENV === 'production' ? 1 : false);
 
-// Limita requisições para prevenir ataques de força bruta
-// Máximo de 200 requisições por IP a cada 15 minutos
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 200,
-  message: { ok: false, mensagem: 'Muitas requisições. Tente novamente em alguns minutos.' },
-});
-app.use('/api/', limiter);
+// OBS.: NÃO há rate limit GLOBAL na API — de propósito. Um teto por IP estrangularia o uso
+// normal (o SPA dispara várias chamadas por tela) e, pior, bloquearia um escritório inteiro
+// que compartilha o mesmo IP (NAT). A proteção contra força bruta fica SÓ no login, por
+// usuário (ver loginLimiter em src/routes/index.js). As rotas internas são protegidas por JWT.
 
 // ---- CORS — Permite requisições do frontend ----
 app.use(cors({

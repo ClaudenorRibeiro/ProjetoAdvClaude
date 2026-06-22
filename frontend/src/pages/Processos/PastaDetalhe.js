@@ -5,13 +5,17 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
-import { processosAPI, andamentoAPI, prazosAPI, tarefasAPI, audienciasAPI, financeiroAPI } from '../../services/api';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { processosAPI, andamentoAPI, prazosAPI, tarefasAPI, audienciasAPI, periciasAPI, financeiroAPI } from '../../services/api';
 import { formatarData, formatarNumeroPasta, formatarMoeda, labelStatusPrazo, corPrazo, toTitleCase } from '../../utils/formatters';
 import { ModalNovoProcesso, ModalEditarProcesso } from './Processos';
 import { ModalNovoPrazo, ModalCancelarPrazo, ModalEditarPrazo } from '../Prazos/Prazos';
 import { ModalTarefa } from '../Tarefas/Tarefas';
 import { ModalNovaAudiencia, ModalEditarAudiencia, ModalCancelarAudiencia, ModalRemarcarAudiencia, ModalHistoricoAudiencia, ModalRegistrarAta } from '../Audiencias/Audiencias';
+// Modais de perícia reutilizados da tela de Perícias (aba Perícias da pasta)
+import { ModalPericia, ModalCancelar as ModalCancelarPericia, ModalRemarcar as ModalRemarcarPericia, ModalHistorico as ModalHistoricoPericia } from '../Pericias/Pericias';
+// Componentes financeiros reutilizados da tela Financeiro (aba Financeiro da pasta — por processo)
+import { ModalLancamento as ModalLancamentoFin, ModalAcordo as ModalAcordoFin, AcordoBloco, ModalHistoricoLancamento } from '../Financeiro/Financeiro';
 import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 
@@ -20,6 +24,10 @@ const STATUS_COR_PRAZO = { agendado:'badge-azul', pendente:'badge-laranja', atra
 // Status de audiências — cores e labels (mesmos usados na tela de Audiências)
 const STATUS_COR_AUD   = { agendada:'badge-azul', realizada:'badge-verde', adiada:'badge-laranja', cancelada:'badge-vermelho', remarcada:'badge-cinza', acordo:'badge-verde' };
 const STATUS_LABEL_AUD = { agendada:'Agendada', realizada:'Realizada', adiada:'Adiada', cancelada:'Cancelada', remarcada:'Remarcada', acordo:'Acordo' };
+
+// Status de perícias — mesmas cores/labels da tela de Perícias (função badgeStatus de lá)
+const STATUS_COR_PER   = { agendada:'badge-azul', realizada:'badge-verde', cancelada:'badge-vermelho', remarcada:'badge-amarelo' };
+const STATUS_LABEL_PER = { agendada:'Agendada', realizada:'Realizada', cancelada:'Cancelada', remarcada:'Remarcada' };
 import { toast } from 'react-toastify';
 
 export default function PastaDetalhe() {
@@ -46,7 +54,13 @@ export default function PastaDetalhe() {
   const [prazos, setPrazos]               = useState([]);
   const [tarefas, setTarefas]             = useState([]);
   const [audiencias, setAudiencias]       = useState([]);
-  const [contaCorrente, setContaCorrente] = useState(null);
+  const [contaCorrente, setContaCorrente] = useState(null);   // { lancamentos, saldo_total } do processo
+  const [acordosFin, setAcordosFin]       = useState([]);     // acordos do processo
+  const [lancEditandoFin, setLancEditandoFin]   = useState(null);
+  const [modalAcordoFin, setModalAcordoFin]     = useState(false);
+  const [acordoEditandoFin, setAcordoEditandoFin] = useState(null);
+  const [acordoTipoNovoFin, setAcordoTipoNovoFin] = useState('acordo'); // 'acordo' | 'alvara' ao criar
+  const [histLancamentoFin, setHistLancamentoFin] = useState(null);
 
   // Modais — Prazos
   const [prazoCancelando, setPrazoCancelando] = useState(null);
@@ -66,6 +80,15 @@ export default function PastaDetalhe() {
   const [audienciaHistorico, setAudienciaHistorico]   = useState(null); // audiência com histórico aberto
   const [audienciaAta, setAudienciaAta]               = useState(null); // audiência para registrar ata
   const [tiposAudiencia, setTiposAudiencia]           = useState([]);   // lista de tipos para o modal de edição
+
+  // Modais — Perícias (mesmo fluxo da aba Audiências)
+  const [pericias, setPericias]                 = useState([]);   // perícias do processo/pasta filtrada
+  const [tiposPericia, setTiposPericia]         = useState([]);   // tipos para o modal de nova/editar
+  const [modalNovaPericia, setModalNovaPericia] = useState(false);// abrir modal de nova perícia
+  const [periciaEditando, setPericiaEditando]   = useState(null); // perícia sendo editada
+  const [periciaCancelando, setPericiaCancelando] = useState(null); // perícia sendo cancelada
+  const [periciaRemarcando, setPericiaRemarcando] = useState(null); // perícia sendo remarcada
+  const [periciaHistorico, setPericiaHistorico]   = useState(null); // perícia com histórico aberto
 
   // Modal de confirmação reutilizável (substitui window.confirm)
   const [confirmar, setConfirmar] = useState(null);
@@ -103,6 +126,7 @@ export default function PastaDetalhe() {
     }
     if (abaAtiva === 'tarefas')    carregarTarefas();
     if (abaAtiva === 'audiencias') carregarAudiencias();
+    if (abaAtiva === 'pericias')   carregarPericias();
     if (abaAtiva === 'financeiro') carregarFinanceiro();
   }, [abaAtiva, pasta, processoFiltro]); // eslint-disable-line
 
@@ -257,11 +281,112 @@ export default function PastaDetalhe() {
     });
   }
 
-  async function carregarFinanceiro() {
+  // ---- Perícias (mesmo padrão da aba Audiências: busca por processo do filtro) ----
+  async function carregarPericias() {
+    const ids = idsParaBuscar();
     try {
-      const { data } = await financeiroAPI.buscarConta(id, {});
-      if (data.ok) setContaCorrente(data.dados);
+      // Perícias dos processos filtrados + tipos (para o modal) em paralelo
+      const [resultados, tiposResp] = await Promise.all([
+        Promise.all(ids.map(pid => periciasAPI.listar({ processo_id: pid, limite: 50 }))),
+        tiposPericia.length ? Promise.resolve(null) : periciasAPI.tipos(),
+      ]);
+      const todos = resultados.flatMap(r => r.data.ok ? r.data.dados.registros : []);
+      // Mais recentes primeiro (mesma ordenação da aba de audiências)
+      todos.sort((a, b) => new Date(b.data + 'T' + (b.hora || '00:00')) - new Date(a.data + 'T' + (a.hora || '00:00')));
+      setPericias(todos);
+      if (tiposResp?.data?.ok) setTiposPericia(tiposResp.data.dados);
     } catch {}
+  }
+
+  // Abre o modal de edição com a perícia COMPLETA (a linha da lista não traz
+  // endereço estruturado nem o responsável; sem isso o salvar zeraria esses campos).
+  async function editarPericia(p) {
+    try {
+      const { data } = await periciasAPI.buscar(p.id);
+      if (data.ok) setPericiaEditando(data.dados);
+      else toast.error('Erro ao carregar perícia');
+    } catch { toast.error('Erro ao carregar perícia'); }
+  }
+
+  // Marca perícia como realizada (com confirmação) — só agendada
+  function marcarPericiaRealizada(p) {
+    setConfirmar({
+      titulo: 'Marcar como realizada',
+      mensagem: `Confirma que a perícia do processo ${p.processo_numero || ''} foi realizada?`,
+      textoBotao: 'Marcar como realizada',
+      tipo: 'aviso',
+      acao: async () => {
+        try {
+          await periciasAPI.marcarRealizada(p.id);
+          toast.success('Perícia marcada como realizada');
+          carregarPericias();
+        } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao atualizar'); }
+      },
+    });
+  }
+
+  // Excluir perícia (com confirmação) — bloqueada em cancelada/remarcada (regra do backend)
+  function excluirPericia(p) {
+    setConfirmar({
+      titulo: 'Excluir perícia',
+      mensagem: 'Tem certeza que deseja excluir esta perícia? Esta ação não pode ser desfeita.',
+      textoBotao: 'Excluir',
+      tipo: 'perigo',
+      acao: async () => {
+        try {
+          await periciasAPI.excluir(p.id);
+          toast.success('Perícia excluída');
+          carregarPericias();
+        } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao excluir'); }
+      },
+    });
+  }
+
+  // Envia/reenvia o comunicado da perícia ao cliente por e-mail
+  async function comunicarPericia(id) {
+    try {
+      const { data } = await periciasAPI.enviarComunicado(id);
+      toast.success(data.mensagem || 'Comunicado enviado ao cliente');
+      carregarPericias();
+    } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao enviar comunicado'); }
+  }
+
+  // Financeiro é POR PROCESSO: precisa de um processo específico selecionado no filtro
+  async function carregarFinanceiro() {
+    const procId = processoFiltro !== 'todos' ? parseInt(processoFiltro) : null;
+    if (!procId) { setContaCorrente(null); setAcordosFin([]); return; }
+    try {
+      const [c, a] = await Promise.all([
+        financeiroAPI.buscarConta(procId, {}),
+        financeiroAPI.listarAcordos(procId),
+      ]);
+      if (c.data.ok) setContaCorrente(c.data.dados);
+      if (a.data.ok) setAcordosFin(a.data.dados);
+    } catch {}
+  }
+
+  function excluirLancamentoFin(l) {
+    setConfirmar({
+      titulo: 'Excluir lançamento',
+      mensagem: 'Este lançamento será removido permanentemente. Esta ação não pode ser desfeita.',
+      textoBotao: 'Excluir', tipo: 'perigo',
+      acao: async () => {
+        try { await financeiroAPI.excluirLanc(l.id); toast.success('Lançamento removido'); carregarFinanceiro(); }
+        catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao excluir'); }
+      },
+    });
+  }
+
+  function excluirAcordoFin(a) {
+    setConfirmar({
+      titulo: 'Excluir acordo',
+      mensagem: 'O acordo e todas as parcelas serão removidos. Esta ação não pode ser desfeita.',
+      textoBotao: 'Excluir', tipo: 'perigo',
+      acao: async () => {
+        try { await financeiroAPI.excluirAcordo(a.id); toast.success('Acordo excluído'); carregarFinanceiro(); }
+        catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao excluir'); }
+      },
+    });
   }
 
   function excluirAndamento(andId) {
@@ -417,6 +542,7 @@ export default function PastaDetalhe() {
             { key: 'prazos',     label: 'Prazos' },
             { key: 'tarefas',    label: 'Tarefas' },
             { key: 'audiencias', label: 'Audiências' },
+            { key: 'pericias',   label: 'Perícias' },
             { key: 'financeiro', label: 'Financeiro' },
           ].map(({ key, label }) => (
             <button key={key} className={`aba-btn ${abaAtiva === key ? 'ativa' : ''}`}
@@ -780,6 +906,46 @@ export default function PastaDetalhe() {
           />
         )}
 
+        {/* Modais de perícia — reutilizam os mesmos modais da tela de Perícias */}
+        {modalNovaPericia && (
+          <ModalPericia
+            tipos={tiposPericia}
+            onTiposChange={() => periciasAPI.tipos().then(r => { if (r.data.ok) setTiposPericia(r.data.dados); })}
+            processoInicial={processoSelecionado ? {
+              processo_id:     processoSelecionado.id,
+              processo_numero: processoSelecionado.numProc || '',
+              pasta_titulo:    `${String(pasta.numPasta).padStart(4, '0')} — ${processoSelecionado.NomeTituloProc || ''}`,
+            } : null}
+            onFechar={(reload) => { setModalNovaPericia(false); if (reload) carregarPericias(); }}
+          />
+        )}
+        {periciaEditando && (
+          <ModalPericia
+            tipos={tiposPericia}
+            onTiposChange={() => periciasAPI.tipos().then(r => { if (r.data.ok) setTiposPericia(r.data.dados); })}
+            pericia={periciaEditando}
+            onFechar={(reload) => { setPericiaEditando(null); if (reload) carregarPericias(); }}
+          />
+        )}
+        {periciaCancelando && (
+          <ModalCancelarPericia
+            pericia={periciaCancelando}
+            onFechar={(reload) => { setPericiaCancelando(null); if (reload) carregarPericias(); }}
+          />
+        )}
+        {periciaRemarcando && (
+          <ModalRemarcarPericia
+            pericia={periciaRemarcando}
+            onFechar={(reload) => { setPericiaRemarcando(null); if (reload) carregarPericias(); }}
+          />
+        )}
+        {periciaHistorico && (
+          <ModalHistoricoPericia
+            pericia={periciaHistorico}
+            onFechar={() => setPericiaHistorico(null)}
+          />
+        )}
+
         {/* === ABA: TAREFAS === */}
         {abaAtiva === 'tarefas' && (
           <div>
@@ -964,72 +1130,188 @@ export default function PastaDetalhe() {
           </div>
         )}
 
-        {/* === ABA: FINANCEIRO === */}
-        {/* Financeiro é por pasta — o seletor de processo é informativo */}
+        {/* === ABA: PERÍCIAS === (mesmo filtro de processo da aba Audiências) */}
+        {abaAtiva === 'pericias' && (
+          <div>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
+              {selectProcesso}
+              {processoSelecionado && temPermissao('pericias', 'cadastrar') && (
+                <button className="btn btn-primary" onClick={() => setModalNovaPericia(true)}>
+                  + Nova Perícia
+                </button>
+              )}
+            </div>
+            <div className="tabela-wrapper">
+              <table className="tabela">
+                <thead>
+                  <tr><th>Status</th><th>Tipo</th><th>Data / Hora</th><th>Perito</th><th>Responsável</th><th>Local</th><th>Ações</th></tr>
+                </thead>
+                <tbody>
+                  {pericias.map(p => {
+                    const agendada  = p.status === 'agendada' || !p.status;      // ações de edição só quando agendada
+                    const historico = p.status === 'cancelada' || p.status === 'remarcada'; // não pode excluir
+                    return (
+                      <tr key={p.id}>
+                        <td>
+                          <span className={`badge ${STATUS_COR_PER[p.status] || 'badge-azul'}`}>
+                            {STATUS_LABEL_PER[p.status] || 'Agendada'}
+                          </span>
+                        </td>
+                        <td>{p.tipo_nome || '—'}</td>
+                        <td>{formatarData(p.data)} {p.hora?.slice(0, 5)}</td>
+                        <td>{p.perito_nome || '—'}</td>
+                        <td>{p.responsavel_nome || '—'}</td>
+                        <td>{p.local || '—'}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                            {/* Editar / Realizada / Cancelar / Remarcar / Comunicar — só quando agendada */}
+                            {agendada && temPermissao('pericias', 'alterar') && (
+                              <button className="btn btn-sm btn-secondary"
+                                onClick={() => editarPericia(p)} title="Editar perícia">
+                                ✏️ Editar
+                              </button>
+                            )}
+                            {agendada && temPermissao('pericias', 'alterar') && (
+                              <button className="btn btn-sm btn-primary"
+                                onClick={() => marcarPericiaRealizada(p)} title="Marcar como realizada">
+                                ✓ Realizada
+                              </button>
+                            )}
+                            {agendada && temPermissao('pericias', 'alterar') && (
+                              <button className="btn btn-sm"
+                                style={{ background: '#f59e0b', color: '#fff', border: 'none' }}
+                                onClick={() => setPericiaCancelando(p)} title="Cancelar perícia">
+                                Cancelar
+                              </button>
+                            )}
+                            {agendada && temPermissao('pericias', 'alterar') && (
+                              <button className="btn btn-sm"
+                                style={{ background: '#7c3aed', color: '#fff', border: 'none' }}
+                                onClick={() => setPericiaRemarcando(p)} title="Remarcar perícia">
+                                Remarcar
+                              </button>
+                            )}
+                            {/* Histórico — sempre visível */}
+                            <button className="btn btn-sm btn-secondary"
+                              onClick={() => setPericiaHistorico(p)} title="Ver histórico de alterações">
+                              📋 Histórico
+                            </button>
+                            {/* Excluir — nunca em cancelada/remarcada (regra do backend) */}
+                            {!historico && temPermissao('pericias', 'excluir') && (
+                              <button className="btn btn-sm btn-danger"
+                                onClick={() => excluirPericia(p)} title="Excluir perícia">
+                                🗑️ Excluir
+                              </button>
+                            )}
+                            {/* Comunicar/Reenviar ao cliente — só quando agendada */}
+                            {agendada && temPermissao('pericias', 'alterar') && (
+                              <button className="btn btn-sm btn-secondary"
+                                onClick={() => comunicarPericia(p.id)}
+                                title="Enviar/reenviar comunicado ao cliente por e-mail">
+                                ✉ {p.comunicado_enviado ? 'Reenviar' : 'Comunicar'}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {pericias.length === 0 && <p className="lista-vazia">Nenhuma perícia encontrada</p>}
+            </div>
+          </div>
+        )}
+
+        {/* === ABA: FINANCEIRO === (por processo) */}
         {abaAtiva === 'financeiro' && (
           <div>
-            {contaCorrente ? (
-              <div>
-                {/* Botões no topo — mesmo padrão das demais abas */}
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
-                  <button className="btn btn-primary" onClick={() => setModalLancamento(true)}>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
+              {selectProcesso}
+              {processoSelecionado && temPermissao('financeiro', 'cadastrar') && (
+                <>
+                  <button className="btn btn-outline" onClick={() => { setLancEditandoFin(null); setModalLancamento(true); }}>
                     + Lançamento
                   </button>
-                  <Link to="/financeiro" className="btn btn-outline" style={{ fontSize: '12px' }}>
-                    Ver completo
-                  </Link>
-                </div>
-                {contaCorrente.honorarios && (
-                  <div className="card" style={{ background: '#f8fafc', marginBottom: '16px', border: '1px solid #e8ecf0' }}>
-                    <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
-                      <div>
-                        <div style={{ fontSize: '12px', color: '#888' }}>Tipo de honorário</div>
-                        <strong style={{ fontSize: '14px' }}>
-                          {contaCorrente.honorarios.tipo === 'percentual'
-                            ? `${contaCorrente.honorarios.percentual}%`
-                            : contaCorrente.honorarios.tipo === 'fixo'
-                              ? `Fixo: ${formatarMoeda(contaCorrente.honorarios.valor_fixo)}`
-                              : 'Sem honorários'}
-                        </strong>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '12px', color: '#888' }}>Saldo atual</div>
-                        <strong style={{ fontSize: '14px', color: contaCorrente.saldo >= 0 ? '#059669' : '#dc2626' }}>
-                          {formatarMoeda(contaCorrente.saldo)}
-                        </strong>
-                      </div>
-                    </div>
+                  <button className="btn btn-primary" onClick={() => { setAcordoEditandoFin(null); setAcordoTipoNovoFin('acordo'); setModalAcordoFin(true); }}>
+                    + Novo Acordo
+                  </button>
+                  <button className="btn btn-primary" onClick={() => { setAcordoEditandoFin(null); setAcordoTipoNovoFin('alvara'); setModalAcordoFin(true); }}>
+                    + Novo Alvará
+                  </button>
+                </>
+              )}
+            </div>
+
+            {!processoSelecionado && <p className="lista-vazia">Selecione um processo para ver o financeiro</p>}
+
+            {processoSelecionado && contaCorrente && (
+              <>
+                {acordosFin.length > 0 && (
+                  <div style={{ marginBottom: '16px' }}>
+                    {acordosFin.map(a => (
+                      <AcordoBloco key={a.id} acordo={a}
+                        podeAlterar={temPermissao('financeiro', 'alterar')}
+                        podeExcluir={temPermissao('financeiro', 'excluir')}
+                        onEditar={() => { setAcordoEditandoFin(a.id); setModalAcordoFin(true); }}
+                        onExcluir={() => excluirAcordoFin(a)}
+                        onMudou={carregarFinanceiro} />
+                    ))}
                   </div>
                 )}
+
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+                  <strong>Conta corrente</strong>
+                  <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+                    <span style={{ fontSize: '12px', color: '#888' }}>Saldo </span>
+                    <strong style={{ color: (contaCorrente.saldo_total || 0) >= 0 ? '#059669' : '#dc2626' }}>
+                      {formatarMoeda(contaCorrente.saldo_total || 0)}
+                    </strong>
+                  </div>
+                </div>
                 <div className="tabela-wrapper">
                   <table className="tabela">
                     <thead>
-                      <tr><th>Data</th><th>Descrição</th><th>Tipo</th><th>Valor</th></tr>
+                      <tr><th>Data</th><th>Descrição</th><th>Tipo</th>
+                        <th style={{ textAlign: 'right' }}>Valor</th><th>Ações</th></tr>
                     </thead>
                     <tbody>
-                      {(contaCorrente.lancamentos || []).slice(0, 15).map(l => (
-                        <tr key={l.id}>
-                          <td>{formatarData(l.data_lancamento)}</td>
-                          <td>{l.descricao}</td>
-                          <td>
-                            <span className={`badge ${l.tipo === 'credito' ? 'badge-verde' : 'badge-vermelho'}`}>
-                              {l.tipo === 'credito' ? 'Crédito' : 'Débito'}
-                            </span>
-                          </td>
-                          <td className={l.tipo === 'credito' ? 'valor-positivo' : 'valor-negativo'}>
-                            {l.tipo === 'debito' ? '-' : '+'}{formatarMoeda(l.valor)}
-                          </td>
-                        </tr>
-                      ))}
+                      {(contaCorrente.lancamentos || []).map(l => {
+                        const ehAcordo = l.origem === 'acordo';
+                        return (
+                          <tr key={l.id}>
+                            <td style={{ whiteSpace: 'nowrap' }}>{formatarData(l.data)}</td>
+                            <td>{l.descricao}</td>
+                            <td><span className={`badge ${l.tipo === 'entrada' ? 'badge-verde' : 'badge-vermelho'}`}>{l.tipo === 'entrada' ? 'Entrada' : 'Saída'}</span></td>
+                            <td style={{ textAlign: 'right' }} className={l.tipo === 'entrada' ? 'valor-positivo' : 'valor-negativo'}>
+                              {l.tipo === 'saida' ? '−' : '+'}{formatarMoeda(l.valor)}
+                            </td>
+                            <td style={{ whiteSpace: 'nowrap' }}>
+                              {ehAcordo ? <span style={{ fontSize: 11, color: '#888' }}>(acordo)</span> : (
+                                <div style={{ display: 'flex', gap: '4px' }}>
+                                  {temPermissao('financeiro', 'alterar') && (
+                                    <button className="btn btn-outline" style={{ fontSize: '11px', padding: '3px 8px' }}
+                                      onClick={() => { setLancEditandoFin(l); setModalLancamento(true); }}>Editar</button>
+                                  )}
+                                  <button className="btn btn-outline" style={{ fontSize: '11px', padding: '3px 8px' }}
+                                    onClick={() => setHistLancamentoFin(l)}>Histórico</button>
+                                  {temPermissao('financeiro', 'excluir') && (
+                                    <button className="btn btn-danger" style={{ fontSize: '11px', padding: '3px 8px' }}
+                                      onClick={() => excluirLancamentoFin(l)}>✕</button>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                   {(!contaCorrente.lancamentos || contaCorrente.lancamentos.length === 0) && (
-                    <p className="lista-vazia">Nenhum lançamento registrado</p>
+                    <p className="lista-vazia">Nenhum lançamento neste processo</p>
                   )}
                 </div>
-              </div>
-            ) : (
-              <p className="lista-vazia">Carregando dados financeiros...</p>
+              </>
             )}
           </div>
         )}
@@ -1070,12 +1352,24 @@ export default function PastaDetalhe() {
         />
       )}
 
-      {/* Modal: Lançamento financeiro */}
-      {modalLancamento && (
-        <ModalLancamento
-          pastaId={id}
-          onFechar={(reload) => { setModalLancamento(false); if (reload) carregarFinanceiro(); }}
+      {/* Modais financeiros (por processo) — reutilizados da tela Financeiro */}
+      {modalLancamento && processoSelecionado && (
+        <ModalLancamentoFin
+          processoId={processoSelecionado.id}
+          lancamento={lancEditandoFin}
+          onFechar={(reload) => { setModalLancamento(false); setLancEditandoFin(null); if (reload) carregarFinanceiro(); }}
         />
+      )}
+      {modalAcordoFin && processoSelecionado && (
+        <ModalAcordoFin
+          processoId={processoSelecionado.id}
+          acordoId={acordoEditandoFin}
+          tipo={acordoTipoNovoFin}
+          onFechar={(reload) => { setModalAcordoFin(false); setAcordoEditandoFin(null); if (reload) carregarFinanceiro(); }}
+        />
+      )}
+      {histLancamentoFin && (
+        <ModalHistoricoLancamento lancamento={histLancamentoFin} onFechar={() => setHistLancamentoFin(null)} />
       )}
     </div>
   );
@@ -1141,64 +1435,4 @@ function ModalAndamento({ processoId, andamento, onFechar }) {
 // ============================================================
 // Modal de lançamento financeiro
 // ============================================================
-function ModalLancamento({ pastaId, onFechar }) {
-  const [form, setForm]         = useState({ tipo: 'credito', data_lancamento: new Date().toISOString().split('T')[0] });
-  const [salvando, setSalvando] = useState(false);
-
-  function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
-
-  async function salvar() {
-    if (!form.descricao || !form.valor) return toast.error('Descrição e valor são obrigatórios');
-    setSalvando(true);
-    try {
-      await financeiroAPI.lancar(pastaId, form);
-      toast.success('Lançamento registrado!');
-      onFechar(true);
-    } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao lançar'); }
-    finally { setSalvando(false); }
-  }
-
-  return (
-    <div className="modal-overlay">
-      <div className="modal-box modal-pequeno">
-        <div className="modal-header">
-          <h3>Novo Lançamento</h3>
-          <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
-        </div>
-        <div className="modal-body">
-          <div className="grid-2">
-            <div className="form-group">
-              <label className="form-label">Tipo</label>
-              <select className="form-control" value={form.tipo} onChange={e => set('tipo', e.target.value)}>
-                <option value="credito">Crédito (entrada)</option>
-                <option value="debito">Débito (saída)</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Data</label>
-              <input type="date" className="form-control" value={form.data_lancamento}
-                onChange={e => set('data_lancamento', e.target.value)} />
-            </div>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Descrição *</label>
-            <input className="form-control" value={form.descricao || ''}
-              onChange={e => set('descricao', e.target.value)}
-              onBlur={() => set('descricao', toTitleCase(form.descricao))} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Valor (R$) *</label>
-            <input type="number" step="0.01" className="form-control" value={form.valor || ''}
-              onChange={e => set('valor', e.target.value)} />
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
-            {salvando ? 'Salvando...' : 'Lançar'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+// (ModalLancamento financeiro agora é reutilizado de ../Financeiro/Financeiro — ModalLancamentoFin)

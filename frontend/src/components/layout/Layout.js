@@ -31,6 +31,7 @@ const MENU = [
     filhos: [
       { path: '/controle/foruns', label: 'Fóruns', icone: '🏛️' },
       { path: '/controle/varas',  label: 'Varas',  icone: '🏢' },
+      { path: '/controle/formas-pagamento', label: 'Formas de pagamento', icone: '💳' },
     ],
   },
   { path: '/configuracoes', label: 'Configurações', icone: '⚙️', modulo: null, apenasAdmin: true },

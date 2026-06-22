@@ -366,12 +366,15 @@ async function salvarPermissoes(req, res) {
 async function buscarIntegracoes(req, res) {
   try {
     const [rows] = await pool.execute('SELECT modulo, ativo, configuracoes FROM configuracoes_integracoes');
-    // Remove dados sensíveis (tokens) da listagem
-    const resultado = rows.map(r => ({
-      modulo: r.modulo,
-      ativo: r.ativo,
-      configurado: !!r.configuracoes,
-    }));
+    // Retorna um objeto por módulo (ativo + campos de configuração) para preencher os formulários.
+    // Tela é admin-only e protegida por JWT — por isso devolvemos os valores salvos.
+    const resultado = {};
+    for (const r of rows) {
+      const cfg = r.configuracoes
+        ? (typeof r.configuracoes === 'string' ? JSON.parse(r.configuracoes) : r.configuracoes)
+        : {};
+      resultado[r.modulo] = { ativo: !!r.ativo, ...cfg };
+    }
     return sucesso(res, resultado);
   } catch (err) {
     return erroInterno(res, err);
@@ -381,12 +384,14 @@ async function buscarIntegracoes(req, res) {
 async function salvarIntegracao(req, res) {
   try {
     const { modulo } = req.params;
-    const { ativo, configuracoes } = req.body;
+    // O frontend envia o objeto "plano" do módulo: { ativo, ...campos de configuração }.
+    // Separamos o "ativo" do resto (que vira o JSON de configurações).
+    const { ativo, ...configuracoes } = req.body || {};
 
     await pool.execute(
       `UPDATE configuracoes_integracoes SET ativo=?, configuracoes=?, atualizado_em=NOW()
        WHERE modulo=?`,
-      [ativo ? 1 : 0, configuracoes ? JSON.stringify(configuracoes) : null, modulo]
+      [ativo ? 1 : 0, Object.keys(configuracoes).length ? JSON.stringify(configuracoes) : null, modulo]
     );
 
     return sucesso(res, null, 'Integração atualizada');

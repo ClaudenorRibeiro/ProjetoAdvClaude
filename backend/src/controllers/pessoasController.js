@@ -68,7 +68,13 @@ async function listarFisicas(req, res) {
                 SELECT proc_id FROM tblTituloProcAutor WHERE tipo_pessoa = 'fisica' AND pessoa_id = pf.id
                 UNION
                 SELECT proc_id FROM tblTituloProcReu   WHERE tipo_pessoa = 'fisica' AND pessoa_id = pf.id
-              ) AS t) AS qtde_proc
+              ) AS t) AS qtde_proc,
+              -- Existe modelo "comum" gerável a partir de uma pessoa? (controla o botão "Gerar Doc")
+              EXISTS(
+                SELECT 1 FROM modelo_documento md
+                WHERE md.ativo = 1 AND md.destino = 'comum'
+                  AND (md.blocos_exigidos IS NULL OR md.blocos_exigidos = '' OR md.blocos_exigidos = 'cliente')
+              ) AS tem_modelo_doc
        FROM pessoas_fisicas pf
        LEFT JOIN estado_civil ec ON pf.estado_civil_id = ec.id
        LEFT JOIN genero g ON pf.genero_id = g.id
@@ -409,7 +415,13 @@ async function listarJuridicas(req, res) {
                 SELECT proc_id FROM tblTituloProcAutor WHERE tipo_pessoa = 'juridica' AND pessoa_id = pj.id
                 UNION
                 SELECT proc_id FROM tblTituloProcReu   WHERE tipo_pessoa = 'juridica' AND pessoa_id = pj.id
-              ) AS t) AS qtde_proc
+              ) AS t) AS qtde_proc,
+              -- Existe modelo "comum" gerável a partir de uma pessoa? (controla o botão "Gerar Doc")
+              EXISTS(
+                SELECT 1 FROM modelo_documento md
+                WHERE md.ativo = 1 AND md.destino = 'comum'
+                  AND (md.blocos_exigidos IS NULL OR md.blocos_exigidos = '' OR md.blocos_exigidos = 'cliente')
+              ) AS tem_modelo_doc
        FROM pessoas_juridicas pj ${where}
        ORDER BY pj.razao_social ASC
        LIMIT ${limitInt} OFFSET ${offsetInt}`,

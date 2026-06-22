@@ -2,7 +2,7 @@
 -- Servidor:                     127.0.0.1
 -- Versão do servidor:           8.0.46 - MySQL Community Server - GPL
 -- OS do Servidor:               Win64
--- HeidiSQL Versão:              12.5.0.6677
+-- HeidiSQL Versão:              12.7.0.6850
 -- --------------------------------------------------------
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
@@ -17,8 +17,154 @@
 
 -- Copiando estrutura do banco de dados para sistema_advocacia
 DROP DATABASE IF EXISTS `sistema_advocacia`;
-CREATE DATABASE IF NOT EXISTS `sistema_advocacia` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
+CREATE DATABASE IF NOT EXISTS `sistema_advocacia` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
 USE `sistema_advocacia`;
+
+-- Copiando estrutura para tabela sistema_advocacia.acordo
+DROP TABLE IF EXISTS `acordo`;
+CREATE TABLE IF NOT EXISTS `acordo` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `processo_id` int NOT NULL,
+  `tipo` varchar(10) NOT NULL DEFAULT 'acordo',
+  `descricao` varchar(300) DEFAULT NULL,
+  `valor_total` decimal(15,2) NOT NULL,
+  `qtd_parcelas` int NOT NULL,
+  `data_primeira` date NOT NULL,
+  `status` varchar(20) NOT NULL DEFAULT 'ativo',
+  `criado_por` int DEFAULT NULL,
+  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  `alterado_por` int DEFAULT NULL,
+  `alterado_em` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `processo_id` (`processo_id`),
+  KEY `criado_por` (`criado_por`),
+  KEY `fk_acordo_alterado` (`alterado_por`),
+  CONSTRAINT `fk_acordo_alterado` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_acordo_criado` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_acordo_proc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Copiando dados para a tabela sistema_advocacia.acordo: ~6 rows (aproximadamente)
+INSERT INTO `acordo` (`id`, `processo_id`, `tipo`, `descricao`, `valor_total`, `qtd_parcelas`, `data_primeira`, `status`, `criado_por`, `criado_em`, `alterado_por`, `alterado_em`) VALUES
+	(1, 4, 'acordo', NULL, 10000.00, 20, '2026-07-01', 'ativo', 2, '2026-06-17 14:15:29', 2, '2026-06-17 14:16:46'),
+	(2, 5, 'acordo', NULL, 1100.00, 5, '2026-07-01', 'ativo', 2, '2026-06-17 14:32:10', 2, '2026-06-17 15:04:01'),
+	(3, 5, 'acordo', NULL, 15000.00, 20, '2026-06-17', 'ativo', 2, '2026-06-17 16:31:46', NULL, NULL),
+	(4, 5, 'acordo', NULL, 5000.00, 10, '2026-08-03', 'ativo', 2, '2026-06-18 10:23:22', NULL, NULL),
+	(5, 8, 'acordo', NULL, 10000.00, 10, '2026-06-22', 'ativo', 2, '2026-06-20 10:33:34', NULL, NULL),
+	(6, 5, 'alvara', 'liquidação', 50000.00, 1, '2026-06-16', 'ativo', 2, '2026-06-20 13:27:53', 2, '2026-06-20 13:28:41');
+
+-- Copiando estrutura para tabela sistema_advocacia.acordo_parcela
+DROP TABLE IF EXISTS `acordo_parcela`;
+CREATE TABLE IF NOT EXISTS `acordo_parcela` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `acordo_id` int NOT NULL,
+  `numero` int NOT NULL,
+  `vencimento` date NOT NULL,
+  `valor_bruto` decimal(15,2) NOT NULL DEFAULT '0.00',
+  `honor_tipo` varchar(10) NOT NULL DEFAULT 'percent',
+  `honor_percentual` decimal(5,2) DEFAULT NULL,
+  `honor_valor` decimal(15,2) NOT NULL DEFAULT '0.00',
+  `valor_liquido` decimal(15,2) NOT NULL DEFAULT '0.00',
+  `observacao` varchar(300) DEFAULT NULL,
+  `parceria_pessoa_tipo` varchar(20) DEFAULT NULL,
+  `parceria_pessoa_id` int DEFAULT NULL,
+  `parceria_tipo` varchar(10) DEFAULT NULL,
+  `parceria_percentual` decimal(5,2) DEFAULT NULL,
+  `parceria_valor` decimal(15,2) DEFAULT NULL,
+  `status` varchar(15) NOT NULL DEFAULT 'pendente',
+  `recebido_em` date DEFAULT NULL,
+  `recebimento_forma_id` int DEFAULT NULL,
+  `recebimento_identificacao` varchar(120) DEFAULT NULL,
+  `repasse_cliente_em` date DEFAULT NULL,
+  `repasse_cliente_forma_id` int DEFAULT NULL,
+  `repasse_parceiro_em` date DEFAULT NULL,
+  `repasse_parceiro_forma_id` int DEFAULT NULL,
+  `repasse_cliente_por` int DEFAULT NULL,
+  `repasse_parceiro_por` int DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `acordo_id` (`acordo_id`),
+  KEY `fk_parcela_receb_forma` (`recebimento_forma_id`),
+  KEY `fk_parcela_repcli_forma` (`repasse_cliente_forma_id`),
+  KEY `fk_parcela_reppar_forma` (`repasse_parceiro_forma_id`),
+  KEY `fk_parcela_repcli_por` (`repasse_cliente_por`),
+  KEY `fk_parcela_reppar_por` (`repasse_parceiro_por`),
+  KEY `idx_parcela_vencimento` (`vencimento`),
+  CONSTRAINT `fk_parcela_acordo` FOREIGN KEY (`acordo_id`) REFERENCES `acordo` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_parcela_receb_forma` FOREIGN KEY (`recebimento_forma_id`) REFERENCES `forma_pagamento` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_parcela_repcli_forma` FOREIGN KEY (`repasse_cliente_forma_id`) REFERENCES `forma_pagamento` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_parcela_repcli_por` FOREIGN KEY (`repasse_cliente_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_parcela_reppar_forma` FOREIGN KEY (`repasse_parceiro_forma_id`) REFERENCES `forma_pagamento` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_parcela_reppar_por` FOREIGN KEY (`repasse_parceiro_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=142 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Copiando dados para a tabela sistema_advocacia.acordo_parcela: ~66 rows (aproximadamente)
+INSERT INTO `acordo_parcela` (`id`, `acordo_id`, `numero`, `vencimento`, `valor_bruto`, `honor_tipo`, `honor_percentual`, `honor_valor`, `valor_liquido`, `observacao`, `parceria_pessoa_tipo`, `parceria_pessoa_id`, `parceria_tipo`, `parceria_percentual`, `parceria_valor`, `status`, `recebido_em`, `recebimento_forma_id`, `recebimento_identificacao`, `repasse_cliente_em`, `repasse_cliente_forma_id`, `repasse_parceiro_em`, `repasse_parceiro_forma_id`, `repasse_cliente_por`, `repasse_parceiro_por`) VALUES
+	(41, 1, 1, '2026-07-01', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, 'fisica', 3, 'percent', 20.00, 30.00, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(42, 1, 2, '2026-08-03', 500.00, 'fixo', NULL, 200.00, 300.00, NULL, 'fisica', 3, 'percent', 20.00, 40.00, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(43, 1, 3, '2026-09-01', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, 'fisica', 3, 'percent', 20.00, 30.00, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(44, 1, 4, '2026-10-01', 500.00, 'fixo', NULL, 500.00, 0.00, NULL, 'fisica', 3, 'percent', 20.00, 100.00, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(45, 1, 5, '2026-11-02', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, 'fisica', 3, 'percent', 20.00, 30.00, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(46, 1, 6, '2026-12-01', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, 'fisica', 3, 'percent', 20.00, 30.00, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(47, 1, 7, '2027-01-01', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, 'fisica', 3, 'percent', 20.00, 30.00, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(48, 1, 8, '2027-02-01', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, 'fisica', 3, 'percent', 20.00, 30.00, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(49, 1, 9, '2027-03-01', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, 'fisica', 3, 'percent', 20.00, 30.00, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(50, 1, 10, '2027-04-01', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, 'fisica', 3, 'percent', 20.00, 30.00, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(51, 1, 11, '2027-05-03', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, 'fisica', 3, 'percent', 20.00, 30.00, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(52, 1, 12, '2027-06-01', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, 'fisica', 3, 'percent', 20.00, 30.00, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(53, 1, 13, '2027-07-01', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, 'fisica', 3, 'percent', 20.00, 30.00, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(54, 1, 14, '2027-08-02', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, 'fisica', 3, 'percent', 20.00, 30.00, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(55, 1, 15, '2027-09-01', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, 'fisica', 3, 'percent', 20.00, 30.00, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(56, 1, 16, '2027-10-01', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, 'fisica', 3, 'percent', 20.00, 30.00, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(57, 1, 17, '2027-11-01', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, 'fisica', 3, 'percent', 20.00, 30.00, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(58, 1, 18, '2027-12-01', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, 'fisica', 3, 'percent', 20.00, 30.00, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(59, 1, 19, '2028-01-03', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, 'fisica', 3, 'percent', 20.00, 30.00, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(60, 1, 20, '2028-02-01', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, 'fisica', 3, 'percent', 20.00, 30.00, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(96, 2, 1, '2026-07-01', 200.00, 'percent', 30.00, 60.00, 140.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(97, 2, 2, '2026-08-03', 500.00, 'fixo', NULL, 200.00, 300.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(98, 2, 3, '2026-09-01', 200.00, 'fixo', NULL, 200.00, 0.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(99, 2, 4, '2026-10-01', 200.00, 'percent', 30.00, 60.00, 140.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(100, 2, 5, '2026-11-02', 0.00, 'percent', 30.00, 0.00, 0.00, 'quitado na 2ª parc', NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(101, 3, 1, '2026-06-17', 750.00, 'percent', 30.00, 225.00, 525.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(102, 3, 2, '2026-07-17', 750.00, 'percent', 30.00, 225.00, 525.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(103, 3, 3, '2026-08-17', 750.00, 'percent', 30.00, 225.00, 525.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(104, 3, 4, '2026-09-17', 750.00, 'percent', 30.00, 225.00, 525.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(105, 3, 5, '2026-10-19', 750.00, 'percent', 30.00, 225.00, 525.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(106, 3, 6, '2026-11-17', 750.00, 'percent', 30.00, 225.00, 525.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(107, 3, 7, '2026-12-17', 750.00, 'percent', 30.00, 225.00, 525.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(108, 3, 8, '2027-01-18', 750.00, 'percent', 30.00, 225.00, 525.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(109, 3, 9, '2027-02-17', 750.00, 'percent', 30.00, 225.00, 525.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(110, 3, 10, '2027-03-17', 750.00, 'percent', 30.00, 225.00, 525.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(111, 3, 11, '2027-04-19', 750.00, 'percent', 30.00, 225.00, 525.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(112, 3, 12, '2027-05-17', 750.00, 'percent', 30.00, 225.00, 525.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(113, 3, 13, '2027-06-17', 750.00, 'percent', 30.00, 225.00, 525.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(114, 3, 14, '2027-07-19', 750.00, 'percent', 30.00, 225.00, 525.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(115, 3, 15, '2027-08-17', 750.00, 'percent', 30.00, 225.00, 525.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(116, 3, 16, '2027-09-17', 750.00, 'percent', 30.00, 225.00, 525.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(117, 3, 17, '2027-10-18', 750.00, 'percent', 30.00, 225.00, 525.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(118, 3, 18, '2027-11-17', 750.00, 'percent', 30.00, 225.00, 525.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(119, 3, 19, '2027-12-17', 750.00, 'percent', 30.00, 225.00, 525.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(120, 3, 20, '2028-01-17', 750.00, 'percent', 30.00, 225.00, 525.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(121, 4, 1, '2026-08-03', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(122, 4, 2, '2026-09-01', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, 'fisica', 4, 'percent', 50.00, 75.00, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(123, 4, 3, '2026-10-01', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(124, 4, 4, '2026-11-02', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(125, 4, 5, '2026-12-01', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(126, 4, 6, '2027-01-01', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(127, 4, 7, '2027-02-01', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(128, 4, 8, '2027-03-01', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(129, 4, 9, '2027-04-01', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(130, 4, 10, '2027-05-03', 500.00, 'percent', 30.00, 150.00, 350.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(131, 5, 1, '2026-06-22', 1000.00, 'percent', 30.00, 300.00, 700.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(132, 5, 2, '2026-07-22', 1000.00, 'percent', 30.00, 300.00, 700.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(133, 5, 3, '2026-08-24', 1000.00, 'percent', 30.00, 300.00, 700.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(134, 5, 4, '2026-09-22', 1000.00, 'percent', 30.00, 300.00, 700.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(135, 5, 5, '2026-10-22', 1000.00, 'percent', 30.00, 300.00, 700.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(136, 5, 6, '2026-11-23', 1000.00, 'percent', 30.00, 300.00, 700.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(137, 5, 7, '2026-12-22', 1000.00, 'percent', 30.00, 300.00, 700.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(138, 5, 8, '2027-01-22', 1000.00, 'percent', 30.00, 300.00, 700.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(139, 5, 9, '2027-02-22', 1000.00, 'percent', 30.00, 300.00, 700.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(140, 5, 10, '2027-03-22', 1000.00, 'percent', 30.00, 300.00, 700.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pendente', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(141, 6, 1, '2026-06-16', 50000.00, 'percent', 30.00, 15000.00, 35000.00, NULL, NULL, NULL, NULL, NULL, NULL, 'pago', '2026-06-20', 2, NULL, '2026-06-20', 4, NULL, NULL, 2, NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.advogados_freela
 DROP TABLE IF EXISTS `advogados_freela`;
@@ -45,6 +191,30 @@ CREATE TABLE IF NOT EXISTS `advogados_freela` (
 INSERT INTO `advogados_freela` (`id`, `nome`, `oab`, `telefone`, `cep`, `logradouro`, `numero`, `complemento`, `bairro`, `cidade`, `estado`, `criado_em`, `criado_por`) VALUES
 	(1, 'nernerval', '65654654-SP', '(15) 65656-5454', '03818-030', 'Rua Lagoa D\'Anta', '20', NULL, 'Parque Císper', 'São Paulo', 'SP', '2026-06-08 16:35:57', 2),
 	(2, 'juquinha', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '2026-06-09 13:25:13', 2);
+
+-- Copiando estrutura para tabela sistema_advocacia.agenda_compromisso
+DROP TABLE IF EXISTS `agenda_compromisso`;
+CREATE TABLE IF NOT EXISTS `agenda_compromisso` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `usuario_id` int NOT NULL,
+  `titulo` varchar(150) NOT NULL,
+  `descricao` text,
+  `data` date NOT NULL,
+  `hora_inicio` time DEFAULT NULL,
+  `hora_fim` time DEFAULT NULL,
+  `dia_todo` tinyint(1) NOT NULL DEFAULT '0',
+  `escritorio` tinyint(1) NOT NULL DEFAULT '0',
+  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  `alterado_em` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `usuario_id` (`usuario_id`),
+  KEY `data` (`data`),
+  CONSTRAINT `fk_agcomp_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Copiando dados para a tabela sistema_advocacia.agenda_compromisso: ~1 rows (aproximadamente)
+INSERT INTO `agenda_compromisso` (`id`, `usuario_id`, `titulo`, `descricao`, `data`, `hora_inicio`, `hora_fim`, `dia_todo`, `escritorio`, `criado_em`, `alterado_em`) VALUES
+	(1, 2, 'teste claudio', NULL, '2026-07-17', NULL, NULL, 0, 1, '2026-06-20 17:02:39', NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.andamento_processual
 DROP TABLE IF EXISTS `andamento_processual`;
@@ -132,9 +302,9 @@ CREATE TABLE IF NOT EXISTS `audiencia` (
   CONSTRAINT `audiencia_ibfk_2` FOREIGN KEY (`tipo_audiencia_id`) REFERENCES `tipo_audiencia` (`id`),
   CONSTRAINT `audiencia_ibfk_3` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `fk_audiencia_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=15 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=17 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.audiencia: ~8 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.audiencia: ~10 rows (aproximadamente)
 INSERT INTO `audiencia` (`id`, `processo_id`, `tipo_audiencia_id`, `data`, `hora`, `modalidade`, `local`, `vara_id`, `plataforma_virtual`, `link_virtual`, `responsavel_id`, `responsavel_freela_id`, `comunicado_enviado`, `ata_impressa`, `criado_em`, `criado_por`, `alterado_por`, `alterado_em`, `status`, `motivo_status`) VALUES
 	(4, 6, 11, '2026-06-25', '14:00:00', 'presencial', '20ª Vara do Trabalho - Fórum Trabalhista Ruy Barbosa', 273, NULL, NULL, NULL, NULL, 0, 0, '2026-06-08 16:17:15', 2, 2, '2026-06-09 15:34:16', 'remarcada', 'publica'),
 	(5, 8, NULL, '2026-06-23', '09:00:00', 'virtual', NULL, 309, NULL, NULL, NULL, 2, 0, 0, '2026-06-09 13:25:42', 2, 2, '2026-06-09 15:30:02', 'remarcada', 'publicação'),
@@ -143,7 +313,9 @@ INSERT INTO `audiencia` (`id`, `processo_id`, `tipo_audiencia_id`, `data`, `hora
 	(11, 8, 5, '2026-06-11', '09:00:00', 'presencial', NULL, 320, NULL, NULL, NULL, NULL, 0, 0, '2026-06-09 20:34:00', 2, 2, '2026-06-09 22:52:24', 'agendada', NULL),
 	(12, 6, 3, '2026-06-11', '09:00:00', 'virtual', NULL, NULL, 'zoom', 'https://zoom.us/j/4060402291?pwd=VXp1NWFjZi9qYStNZGxTS3o0Qmwydz09', NULL, NULL, 0, 0, '2026-06-10 09:35:42', 2, NULL, NULL, 'agendada', NULL),
 	(13, 6, 10, '2026-12-12', '09:00:00', 'presencial', NULL, 338, NULL, NULL, NULL, NULL, 0, 0, '2026-06-10 10:00:46', 2, 2, '2026-06-11 16:21:09', 'agendada', NULL),
-	(14, 5, 11, '2026-08-29', '09:00:00', 'presencial', NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, '2026-06-11 16:20:54', 2, NULL, NULL, 'agendada', NULL);
+	(14, 5, 11, '2026-08-29', '09:00:00', 'presencial', NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, '2026-06-11 16:20:54', 2, NULL, NULL, 'agendada', NULL),
+	(15, 5, 3, '2026-06-22', '09:00:00', 'presencial', NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, '2026-06-19 09:42:54', 2, NULL, NULL, 'agendada', NULL),
+	(16, 8, 10, '2026-07-17', '09:00:00', 'presencial', NULL, NULL, NULL, NULL, 3, NULL, 0, 0, '2026-06-20 16:18:38', 2, 2, '2026-06-20 16:21:57', 'agendada', NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.audiencia_testemunhas
 DROP TABLE IF EXISTS `audiencia_testemunhas`;
@@ -182,9 +354,9 @@ CREATE TABLE IF NOT EXISTS `auditoria_audiencia` (
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `audaud_ibfk_1` FOREIGN KEY (`audiencia_id`) REFERENCES `audiencia` (`id`) ON DELETE CASCADE,
   CONSTRAINT `audaud_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=34 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=36 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.auditoria_audiencia: ~25 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.auditoria_audiencia: ~27 rows (aproximadamente)
 INSERT INTO `auditoria_audiencia` (`id`, `audiencia_id`, `campo_alterado`, `valor_anterior`, `valor_novo`, `usuario_id`, `alterado_em`) VALUES
 	(3, 4, 'hora', '09:00:00', '09:00', 2, '2026-06-09 11:41:46'),
 	(4, 4, 'vara_id', '', '273', 2, '2026-06-09 11:41:46'),
@@ -210,7 +382,188 @@ INSERT INTO `auditoria_audiencia` (`id`, `audiencia_id`, `campo_alterado`, `valo
 	(30, 13, 'data', '2026-08-08', '2026-08-01', 2, '2026-06-11 16:20:09'),
 	(31, 14, 'cadastrado', NULL, 'Audiência cadastrada', 2, '2026-06-11 16:20:54'),
 	(32, 14, 'criacao', NULL, 'dia não útil (sábado) confirmado pelo usuário com senha', 2, '2026-06-11 16:20:54'),
-	(33, 13, 'data', '2026-08-01', '2026-12-12', 2, '2026-06-11 16:21:09');
+	(33, 13, 'data', '2026-08-01', '2026-12-12', 2, '2026-06-11 16:21:09'),
+	(34, 15, 'cadastrado', NULL, 'Audiência cadastrada', 2, '2026-06-19 09:42:54'),
+	(35, 16, 'cadastrado', NULL, 'Audiência cadastrada', 2, '2026-06-20 16:18:38');
+
+-- Copiando estrutura para tabela sistema_advocacia.auditoria_conta_corrente
+DROP TABLE IF EXISTS `auditoria_conta_corrente`;
+CREATE TABLE IF NOT EXISTS `auditoria_conta_corrente` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `lancamento_id` int NOT NULL,
+  `acao` varchar(30) NOT NULL,
+  `campo_alterado` varchar(100) DEFAULT NULL,
+  `valor_anterior` text,
+  `valor_novo` text,
+  `usuario_id` int NOT NULL,
+  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `lancamento_id` (`lancamento_id`),
+  KEY `usuario_id` (`usuario_id`),
+  CONSTRAINT `fk_audcc_lanc` FOREIGN KEY (`lancamento_id`) REFERENCES `conta_corrente` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_audcc_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Copiando dados para a tabela sistema_advocacia.auditoria_conta_corrente: ~2 rows (aproximadamente)
+INSERT INTO `auditoria_conta_corrente` (`id`, `lancamento_id`, `acao`, `campo_alterado`, `valor_anterior`, `valor_novo`, `usuario_id`, `criado_em`) VALUES
+	(1, 3, 'editado', 'Valor', 'R$ 152,00', 'R$ 160,00', 2, '2026-06-17 15:54:28'),
+	(2, 8, 'criado', NULL, NULL, 'Lançamento criado', 2, '2026-06-18 10:23:38');
+
+-- Copiando estrutura para tabela sistema_advocacia.auditoria_parcela
+DROP TABLE IF EXISTS `auditoria_parcela`;
+CREATE TABLE IF NOT EXISTS `auditoria_parcela` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `parcela_id` int NOT NULL,
+  `acao` varchar(30) NOT NULL,
+  `campo_alterado` varchar(100) DEFAULT NULL,
+  `valor_anterior` text,
+  `valor_novo` text,
+  `usuario_id` int NOT NULL,
+  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `parcela_id` (`parcela_id`),
+  KEY `usuario_id` (`usuario_id`),
+  CONSTRAINT `fk_audparcela_parcela` FOREIGN KEY (`parcela_id`) REFERENCES `acordo_parcela` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_audparcela_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=126 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Copiando dados para a tabela sistema_advocacia.auditoria_parcela: ~111 rows (aproximadamente)
+INSERT INTO `auditoria_parcela` (`id`, `parcela_id`, `acao`, `campo_alterado`, `valor_anterior`, `valor_novo`, `usuario_id`, `criado_em`) VALUES
+	(1, 100, 'recebida', NULL, NULL, 'Recebida em 17/06/2026', 2, '2026-06-17 15:56:48'),
+	(2, 96, 'recebida', NULL, NULL, 'Recebida em 17/06/2026', 2, '2026-06-17 16:11:12'),
+	(3, 101, 'criada', NULL, NULL, 'Parcela 1 criada', 2, '2026-06-17 16:31:46'),
+	(4, 102, 'criada', NULL, NULL, 'Parcela 2 criada', 2, '2026-06-17 16:31:46'),
+	(5, 103, 'criada', NULL, NULL, 'Parcela 3 criada', 2, '2026-06-17 16:31:46'),
+	(6, 104, 'criada', NULL, NULL, 'Parcela 4 criada', 2, '2026-06-17 16:31:46'),
+	(7, 105, 'criada', NULL, NULL, 'Parcela 5 criada', 2, '2026-06-17 16:31:46'),
+	(8, 106, 'criada', NULL, NULL, 'Parcela 6 criada', 2, '2026-06-17 16:31:46'),
+	(9, 107, 'criada', NULL, NULL, 'Parcela 7 criada', 2, '2026-06-17 16:31:46'),
+	(10, 108, 'criada', NULL, NULL, 'Parcela 8 criada', 2, '2026-06-17 16:31:46'),
+	(11, 109, 'criada', NULL, NULL, 'Parcela 9 criada', 2, '2026-06-17 16:31:46'),
+	(12, 110, 'criada', NULL, NULL, 'Parcela 10 criada', 2, '2026-06-17 16:31:46'),
+	(13, 111, 'criada', NULL, NULL, 'Parcela 11 criada', 2, '2026-06-17 16:31:46'),
+	(14, 112, 'criada', NULL, NULL, 'Parcela 12 criada', 2, '2026-06-17 16:31:46'),
+	(15, 113, 'criada', NULL, NULL, 'Parcela 13 criada', 2, '2026-06-17 16:31:46'),
+	(16, 114, 'criada', NULL, NULL, 'Parcela 14 criada', 2, '2026-06-17 16:31:46'),
+	(17, 115, 'criada', NULL, NULL, 'Parcela 15 criada', 2, '2026-06-17 16:31:46'),
+	(18, 116, 'criada', NULL, NULL, 'Parcela 16 criada', 2, '2026-06-17 16:31:46'),
+	(19, 117, 'criada', NULL, NULL, 'Parcela 17 criada', 2, '2026-06-17 16:31:46'),
+	(20, 118, 'criada', NULL, NULL, 'Parcela 18 criada', 2, '2026-06-17 16:31:46'),
+	(21, 119, 'criada', NULL, NULL, 'Parcela 19 criada', 2, '2026-06-17 16:31:46'),
+	(22, 120, 'criada', NULL, NULL, 'Parcela 20 criada', 2, '2026-06-17 16:31:46'),
+	(23, 97, 'recebida', NULL, NULL, 'Recebida em 18/06/2026', 2, '2026-06-18 08:35:10'),
+	(24, 121, 'criada', NULL, NULL, 'Parcela 1 criada', 2, '2026-06-18 10:23:22'),
+	(25, 122, 'criada', NULL, NULL, 'Parcela 2 criada', 2, '2026-06-18 10:23:22'),
+	(26, 123, 'criada', NULL, NULL, 'Parcela 3 criada', 2, '2026-06-18 10:23:22'),
+	(27, 124, 'criada', NULL, NULL, 'Parcela 4 criada', 2, '2026-06-18 10:23:22'),
+	(28, 125, 'criada', NULL, NULL, 'Parcela 5 criada', 2, '2026-06-18 10:23:22'),
+	(29, 126, 'criada', NULL, NULL, 'Parcela 6 criada', 2, '2026-06-18 10:23:22'),
+	(30, 127, 'criada', NULL, NULL, 'Parcela 7 criada', 2, '2026-06-18 10:23:22'),
+	(31, 128, 'criada', NULL, NULL, 'Parcela 8 criada', 2, '2026-06-18 10:23:22'),
+	(32, 129, 'criada', NULL, NULL, 'Parcela 9 criada', 2, '2026-06-18 10:23:22'),
+	(33, 130, 'criada', NULL, NULL, 'Parcela 10 criada', 2, '2026-06-18 10:23:22'),
+	(34, 122, 'recebida', NULL, NULL, 'Recebida em 18/06/2026', 2, '2026-06-18 10:24:11'),
+	(35, 101, 'recebida', NULL, NULL, 'Recebida em 20/06/2026', 2, '2026-06-20 08:06:06'),
+	(36, 122, 'recebimento-desfeito', NULL, NULL, 'Recebimento desfeito', 2, '2026-06-20 08:06:24'),
+	(37, 121, 'recebida', NULL, NULL, 'Recebida em 20/06/2026', 2, '2026-06-20 08:06:33'),
+	(38, 121, 'recebimento-desfeito', NULL, NULL, 'Recebimento desfeito', 2, '2026-06-20 08:07:22'),
+	(39, 101, 'recebimento-desfeito', NULL, NULL, 'Recebimento desfeito', 2, '2026-06-20 08:07:37'),
+	(40, 122, 'recebida', NULL, NULL, 'Recebida em 20/06/2026', 2, '2026-06-20 08:08:06'),
+	(41, 121, 'recebida', NULL, NULL, 'Recebida em 20/06/2026', 2, '2026-06-20 09:44:03'),
+	(42, 121, 'recebimento-desfeito', NULL, NULL, 'Recebimento desfeito', 2, '2026-06-20 09:45:35'),
+	(43, 121, 'recebida', NULL, NULL, 'Recebida em 20/06/2026', 2, '2026-06-20 09:48:03'),
+	(44, 122, 'recebimento-desfeito', NULL, NULL, 'Recebimento desfeito', 2, '2026-06-20 10:01:29'),
+	(45, 121, 'recebimento-desfeito', NULL, NULL, 'Recebimento desfeito', 2, '2026-06-20 10:01:32'),
+	(46, 121, 'recebida', NULL, NULL, 'Recebida em 20/06/2026', 2, '2026-06-20 10:01:41'),
+	(47, 122, 'recebida', NULL, NULL, 'Recebida em 20/06/2026', 2, '2026-06-20 10:02:02'),
+	(48, 122, 'recebimento-desfeito', NULL, NULL, 'Recebimento desfeito', 2, '2026-06-20 10:04:32'),
+	(49, 121, 'recebimento-desfeito', NULL, NULL, 'Recebimento desfeito', 2, '2026-06-20 10:04:34'),
+	(50, 100, 'recebimento-desfeito', NULL, NULL, 'Recebimento desfeito', 2, '2026-06-20 10:05:31'),
+	(51, 97, 'recebimento-desfeito', NULL, NULL, 'Recebimento desfeito', 2, '2026-06-20 10:05:35'),
+	(52, 96, 'recebimento-desfeito', NULL, NULL, 'Recebimento desfeito', 2, '2026-06-20 10:05:38'),
+	(53, 121, 'recebida', NULL, NULL, 'Recebida em 20/06/2026', 2, '2026-06-20 10:06:41'),
+	(54, 121, 'repasse-cliente', NULL, NULL, 'Repasse ao cliente em 20/06/2026 (Pix)', 2, '2026-06-20 10:06:55'),
+	(55, 121, 'recebimento-desfeito', NULL, NULL, 'Recebimento desfeito', 2, '2026-06-20 10:07:27'),
+	(56, 121, 'recebida', NULL, NULL, 'Recebida em 20/06/2026', 2, '2026-06-20 10:07:46'),
+	(57, 121, 'recebimento-desfeito', NULL, NULL, 'Recebimento desfeito', 2, '2026-06-20 10:08:20'),
+	(58, 121, 'recebida', NULL, NULL, 'Recebida em 20/06/2026', 2, '2026-06-20 10:08:31'),
+	(59, 122, 'recebida', NULL, NULL, 'Recebida em 20/06/2026', 2, '2026-06-20 10:08:49'),
+	(61, 122, 'recebimento-desfeito', NULL, NULL, 'Recebimento desfeito', 2, '2026-06-20 10:17:39'),
+	(63, 122, 'recebida', NULL, NULL, 'Recebida em 20/06/2026', 2, '2026-06-20 10:17:59'),
+	(64, 122, 'repasse-cliente', NULL, NULL, 'Repasse ao cliente em 20/06/2026 (Deposito C/P)', 2, '2026-06-20 10:18:13'),
+	(65, 122, 'repasse-parceiro', NULL, NULL, 'Repasse ao parceiro em 20/06/2026 (Dinheiro)', 2, '2026-06-20 10:18:56'),
+	(66, 41, 'recebida', NULL, NULL, 'Recebida em 20/06/2026', 2, '2026-06-20 10:32:43'),
+	(67, 101, 'recebida', NULL, NULL, 'Recebida em 20/06/2026', 2, '2026-06-20 10:33:00'),
+	(68, 131, 'criada', NULL, NULL, 'Parcela 1 criada', 2, '2026-06-20 10:33:34'),
+	(69, 132, 'criada', NULL, NULL, 'Parcela 2 criada', 2, '2026-06-20 10:33:34'),
+	(70, 133, 'criada', NULL, NULL, 'Parcela 3 criada', 2, '2026-06-20 10:33:34'),
+	(71, 134, 'criada', NULL, NULL, 'Parcela 4 criada', 2, '2026-06-20 10:33:34'),
+	(72, 135, 'criada', NULL, NULL, 'Parcela 5 criada', 2, '2026-06-20 10:33:34'),
+	(73, 136, 'criada', NULL, NULL, 'Parcela 6 criada', 2, '2026-06-20 10:33:34'),
+	(74, 137, 'criada', NULL, NULL, 'Parcela 7 criada', 2, '2026-06-20 10:33:34'),
+	(75, 138, 'criada', NULL, NULL, 'Parcela 8 criada', 2, '2026-06-20 10:33:34'),
+	(76, 139, 'criada', NULL, NULL, 'Parcela 9 criada', 2, '2026-06-20 10:33:34'),
+	(77, 140, 'criada', NULL, NULL, 'Parcela 10 criada', 2, '2026-06-20 10:33:34'),
+	(78, 131, 'recebida', NULL, NULL, 'Recebida em 20/06/2026', 2, '2026-06-20 10:33:42'),
+	(82, 123, 'recebida', NULL, NULL, 'Recebida em 20/06/2026', 2, '2026-06-20 10:35:57'),
+	(83, 41, 'repasse-cliente', NULL, NULL, 'Repasse ao cliente em 20/06/2026 (Deposito C/P)', 2, '2026-06-20 10:36:06'),
+	(84, 41, 'repasse-parceiro', NULL, NULL, 'Repasse ao parceiro em 20/06/2026 (Deposito C/P)', 2, '2026-06-20 10:36:11'),
+	(85, 101, 'repasse-cliente', NULL, NULL, 'Repasse ao cliente em 20/06/2026 (Pix)', 2, '2026-06-20 10:36:15'),
+	(86, 123, 'repasse-cliente', NULL, NULL, 'Repasse ao cliente em 20/06/2026 (Deposito C/P)', 2, '2026-06-20 10:36:18'),
+	(87, 131, 'repasse-cliente', NULL, NULL, 'Repasse ao cliente em 20/06/2026 (Dinheiro)', 2, '2026-06-20 10:36:22'),
+	(97, 131, 'repasse-cliente-desfeito', NULL, NULL, 'Repasse ao cliente desfeito', 2, '2026-06-20 10:50:52'),
+	(98, 123, 'repasse-cliente-desfeito', NULL, NULL, 'Repasse ao cliente desfeito', 2, '2026-06-20 10:50:54'),
+	(99, 122, 'repasse-parceiro-desfeito', NULL, NULL, 'Repasse ao parceiro desfeito', 2, '2026-06-20 10:50:54'),
+	(100, 122, 'repasse-cliente-desfeito', NULL, NULL, 'Repasse ao cliente desfeito', 2, '2026-06-20 10:50:55'),
+	(101, 101, 'repasse-cliente-desfeito', NULL, NULL, 'Repasse ao cliente desfeito', 2, '2026-06-20 10:50:55'),
+	(102, 121, 'repasse-cliente-desfeito', NULL, NULL, 'Repasse ao cliente desfeito', 2, '2026-06-20 10:50:58'),
+	(103, 41, 'repasse-parceiro-desfeito', NULL, NULL, 'Repasse ao parceiro desfeito', 2, '2026-06-20 10:50:59'),
+	(104, 41, 'repasse-cliente-desfeito', NULL, NULL, 'Repasse ao cliente desfeito', 2, '2026-06-20 10:51:00'),
+	(105, 101, 'recebimento-desfeito', NULL, NULL, 'Recebimento desfeito', 2, '2026-06-20 10:51:24'),
+	(106, 123, 'recebimento-desfeito', NULL, NULL, 'Recebimento desfeito', 2, '2026-06-20 10:51:31'),
+	(107, 122, 'recebimento-desfeito', NULL, NULL, 'Recebimento desfeito', 2, '2026-06-20 10:51:35'),
+	(108, 121, 'recebimento-desfeito', NULL, NULL, 'Recebimento desfeito', 2, '2026-06-20 10:51:37'),
+	(109, 131, 'recebimento-desfeito', NULL, NULL, 'Recebimento desfeito', 2, '2026-06-20 10:53:55'),
+	(110, 41, 'recebimento-desfeito', NULL, NULL, 'Recebimento desfeito', 2, '2026-06-20 10:54:15'),
+	(111, 141, 'criada', NULL, NULL, 'Parcela 1 criada', 2, '2026-06-20 13:27:53'),
+	(112, 141, 'recebida', NULL, NULL, 'Recebida em 20/06/2026', 2, '2026-06-20 13:29:32'),
+	(113, 141, 'repasse-cliente', NULL, NULL, 'Repasse ao cliente em 20/06/2026 (Pix)', 2, '2026-06-20 13:30:45'),
+	(114, 141, 'repasse-cliente-desfeito', NULL, NULL, 'Repasse ao cliente desfeito', 2, '2026-06-20 13:31:19'),
+	(115, 141, 'repasse-cliente', NULL, NULL, 'Repasse ao cliente em 20/06/2026 (Pix)', 2, '2026-06-20 13:31:35'),
+	(116, 122, 'recebida', NULL, NULL, 'Recebida em 20/06/2026', 2, '2026-06-20 13:33:09'),
+	(117, 122, 'repasse-cliente', NULL, NULL, 'Repasse ao cliente em 20/06/2026 (Deposito C/P)', 2, '2026-06-20 13:33:20'),
+	(118, 122, 'repasse-parceiro', NULL, NULL, 'Repasse ao parceiro em 20/06/2026 (Pix)', 2, '2026-06-20 13:33:25'),
+	(119, 141, 'repasse-cliente-desfeito', NULL, NULL, 'Repasse ao cliente desfeito', 2, '2026-06-20 13:48:48'),
+	(120, 122, 'repasse-cliente-desfeito', NULL, NULL, 'Repasse ao cliente desfeito', 2, '2026-06-20 13:48:49'),
+	(121, 122, 'repasse-parceiro-desfeito', NULL, NULL, 'Repasse ao parceiro desfeito', 2, '2026-06-20 13:48:50'),
+	(122, 141, 'recebimento-desfeito', NULL, NULL, 'Recebimento desfeito', 2, '2026-06-20 13:49:01'),
+	(123, 122, 'recebimento-desfeito', NULL, NULL, 'Recebimento desfeito', 2, '2026-06-20 13:49:08'),
+	(124, 141, 'recebida', NULL, NULL, 'Recebida em 20/06/2026', 2, '2026-06-20 14:03:02'),
+	(125, 141, 'repasse-cliente', NULL, NULL, 'Repasse ao cliente em 20/06/2026 (Deposito C/P)', 2, '2026-06-20 14:03:17');
+
+-- Copiando estrutura para tabela sistema_advocacia.auditoria_pericia
+DROP TABLE IF EXISTS `auditoria_pericia`;
+CREATE TABLE IF NOT EXISTS `auditoria_pericia` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `pericia_id` int NOT NULL,
+  `campo_alterado` varchar(100) DEFAULT NULL,
+  `valor_anterior` text,
+  `valor_novo` text,
+  `usuario_id` int NOT NULL,
+  `alterado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `pericia_id` (`pericia_id`),
+  KEY `usuario_id` (`usuario_id`),
+  CONSTRAINT `audper_ibfk_1` FOREIGN KEY (`pericia_id`) REFERENCES `pericia` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `audper_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Copiando dados para a tabela sistema_advocacia.auditoria_pericia: ~4 rows (aproximadamente)
+INSERT INTO `auditoria_pericia` (`id`, `pericia_id`, `campo_alterado`, `valor_anterior`, `valor_novo`, `usuario_id`, `alterado_em`) VALUES
+	(1, 1, 'cadastrado', NULL, 'Perícia cadastrada', 2, '2026-06-15 12:08:24'),
+	(2, 2, 'cadastrado', NULL, 'Perícia cadastrada', 2, '2026-06-15 14:11:37'),
+	(3, 3, 'cadastrado', NULL, 'Perícia cadastrada', 2, '2026-06-15 15:16:06'),
+	(4, 3, 'criacao', NULL, 'horário fora do expediente confirmado com senha (21:00)', 2, '2026-06-15 15:16:06');
 
 -- Copiando estrutura para tabela sistema_advocacia.auditoria_prazo
 DROP TABLE IF EXISTS `auditoria_prazo`;
@@ -227,9 +580,9 @@ CREATE TABLE IF NOT EXISTS `auditoria_prazo` (
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `auditoria_prazo_ibfk_1` FOREIGN KEY (`prazo_id`) REFERENCES `prazos_processo` (`id`),
   CONSTRAINT `auditoria_prazo_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=32 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.auditoria_prazo: ~15 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.auditoria_prazo: ~31 rows (aproximadamente)
 INSERT INTO `auditoria_prazo` (`id`, `prazo_id`, `status_anterior`, `status_novo`, `usuario_id`, `alterado_em`, `observacao`) VALUES
 	(1, 1, 'aberto', 'fazendo', 4, '2026-05-30 00:50:58', NULL),
 	(2, 1, 'fazendo', 'aberto', 4, '2026-05-30 00:51:44', NULL),
@@ -245,7 +598,23 @@ INSERT INTO `auditoria_prazo` (`id`, `prazo_id`, `status_anterior`, `status_novo
 	(12, 4, 'aberto', 'concluido', 2, '2026-06-03 11:37:32', NULL),
 	(13, 3, 'aberto', 'cancelado', 2, '2026-06-03 11:38:08', 'fez acordo'),
 	(14, 6, 'agendado', 'fazendo', 2, '2026-06-03 14:54:37', NULL),
-	(15, 6, 'fazendo', 'agendado', 2, '2026-06-03 14:55:14', NULL);
+	(15, 6, 'fazendo', 'agendado', 2, '2026-06-03 14:55:14', NULL),
+	(16, 7, 'aberto', 'concluido', 2, '2026-06-18 08:27:16', NULL),
+	(17, 8, 'aberto', 'concluido', 2, '2026-06-18 08:27:20', NULL),
+	(18, 6, 'atrasado', 'fazendo', 2, '2026-06-19 10:35:06', NULL),
+	(19, 6, 'fazendo', 'atrasado', 2, '2026-06-19 10:35:12', NULL),
+	(20, 5, 'agendado', 'fazendo', 2, '2026-06-19 14:26:17', NULL),
+	(21, 5, 'fazendo', 'agendado', 2, '2026-06-19 14:26:24', NULL),
+	(22, 5, 'agendado', 'fazendo', 2, '2026-06-19 14:29:05', NULL),
+	(23, 5, 'fazendo', 'agendado', 2, '2026-06-19 14:29:08', NULL),
+	(24, 6, 'atrasado', 'fazendo', 2, '2026-06-19 14:29:09', NULL),
+	(25, 6, 'fazendo', 'atrasado', 2, '2026-06-19 14:29:11', NULL),
+	(26, 6, 'atrasado', 'fazendo', 2, '2026-06-19 14:30:54', NULL),
+	(27, 6, 'fazendo', 'atrasado', 2, '2026-06-19 14:31:00', NULL),
+	(28, 6, 'atrasado', 'fazendo', 2, '2026-06-19 14:34:03', NULL),
+	(29, 6, 'fazendo', 'atrasado', 2, '2026-06-19 14:35:31', NULL),
+	(30, 6, 'atrasado', 'fazendo', 2, '2026-06-19 14:35:33', NULL),
+	(31, 6, 'fazendo', 'atrasado', 2, '2026-06-19 14:35:46', NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.calendario
 DROP TABLE IF EXISTS `calendario`;
@@ -255,8 +624,493 @@ CREATE TABLE IF NOT EXISTS `calendario` (
   PRIMARY KEY (`data`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.calendario: ~10.958 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.calendario: ~11.322 rows (aproximadamente)
 INSERT INTO `calendario` (`data`, `dia_util`) VALUES
+	('2025-01-01', 1),
+	('2025-01-02', 1),
+	('2025-01-03', 1),
+	('2025-01-04', 0),
+	('2025-01-05', 0),
+	('2025-01-06', 1),
+	('2025-01-07', 1),
+	('2025-01-08', 1),
+	('2025-01-09', 1),
+	('2025-01-10', 1),
+	('2025-01-11', 0),
+	('2025-01-12', 0),
+	('2025-01-13', 1),
+	('2025-01-14', 1),
+	('2025-01-15', 1),
+	('2025-01-16', 1),
+	('2025-01-17', 1),
+	('2025-01-18', 0),
+	('2025-01-19', 0),
+	('2025-01-20', 1),
+	('2025-01-21', 1),
+	('2025-01-22', 1),
+	('2025-01-23', 1),
+	('2025-01-24', 1),
+	('2025-01-25', 0),
+	('2025-01-26', 0),
+	('2025-01-27', 1),
+	('2025-01-28', 1),
+	('2025-01-29', 1),
+	('2025-01-30', 1),
+	('2025-01-31', 1),
+	('2025-02-01', 0),
+	('2025-02-02', 0),
+	('2025-02-03', 1),
+	('2025-02-04', 1),
+	('2025-02-05', 1),
+	('2025-02-06', 1),
+	('2025-02-07', 1),
+	('2025-02-08', 0),
+	('2025-02-09', 0),
+	('2025-02-10', 1),
+	('2025-02-11', 1),
+	('2025-02-12', 1),
+	('2025-02-13', 1),
+	('2025-02-14', 1),
+	('2025-02-15', 0),
+	('2025-02-16', 0),
+	('2025-02-17', 1),
+	('2025-02-18', 1),
+	('2025-02-19', 1),
+	('2025-02-20', 1),
+	('2025-02-21', 1),
+	('2025-02-22', 0),
+	('2025-02-23', 0),
+	('2025-02-24', 1),
+	('2025-02-25', 1),
+	('2025-02-26', 1),
+	('2025-02-27', 1),
+	('2025-02-28', 1),
+	('2025-03-01', 0),
+	('2025-03-02', 0),
+	('2025-03-03', 1),
+	('2025-03-04', 1),
+	('2025-03-05', 1),
+	('2025-03-06', 1),
+	('2025-03-07', 1),
+	('2025-03-08', 0),
+	('2025-03-09', 0),
+	('2025-03-10', 1),
+	('2025-03-11', 1),
+	('2025-03-12', 1),
+	('2025-03-13', 1),
+	('2025-03-14', 1),
+	('2025-03-15', 0),
+	('2025-03-16', 0),
+	('2025-03-17', 1),
+	('2025-03-18', 1),
+	('2025-03-19', 1),
+	('2025-03-20', 1),
+	('2025-03-21', 1),
+	('2025-03-22', 0),
+	('2025-03-23', 0),
+	('2025-03-24', 1),
+	('2025-03-25', 1),
+	('2025-03-26', 1),
+	('2025-03-27', 1),
+	('2025-03-28', 1),
+	('2025-03-29', 0),
+	('2025-03-30', 0),
+	('2025-03-31', 1),
+	('2025-04-01', 1),
+	('2025-04-02', 1),
+	('2025-04-03', 1),
+	('2025-04-04', 1),
+	('2025-04-05', 0),
+	('2025-04-06', 0),
+	('2025-04-07', 1),
+	('2025-04-08', 1),
+	('2025-04-09', 1),
+	('2025-04-10', 1),
+	('2025-04-11', 1),
+	('2025-04-12', 0),
+	('2025-04-13', 0),
+	('2025-04-14', 1),
+	('2025-04-15', 1),
+	('2025-04-16', 1),
+	('2025-04-17', 1),
+	('2025-04-18', 1),
+	('2025-04-19', 0),
+	('2025-04-20', 0),
+	('2025-04-21', 1),
+	('2025-04-22', 1),
+	('2025-04-23', 1),
+	('2025-04-24', 1),
+	('2025-04-25', 1),
+	('2025-04-26', 0),
+	('2025-04-27', 0),
+	('2025-04-28', 1),
+	('2025-04-29', 1),
+	('2025-04-30', 1),
+	('2025-05-01', 1),
+	('2025-05-02', 1),
+	('2025-05-03', 0),
+	('2025-05-04', 0),
+	('2025-05-05', 1),
+	('2025-05-06', 1),
+	('2025-05-07', 1),
+	('2025-05-08', 1),
+	('2025-05-09', 1),
+	('2025-05-10', 0),
+	('2025-05-11', 0),
+	('2025-05-12', 1),
+	('2025-05-13', 1),
+	('2025-05-14', 1),
+	('2025-05-15', 1),
+	('2025-05-16', 1),
+	('2025-05-17', 0),
+	('2025-05-18', 0),
+	('2025-05-19', 1),
+	('2025-05-20', 1),
+	('2025-05-21', 1),
+	('2025-05-22', 1),
+	('2025-05-23', 1),
+	('2025-05-24', 0),
+	('2025-05-25', 0),
+	('2025-05-26', 1),
+	('2025-05-27', 1),
+	('2025-05-28', 1),
+	('2025-05-29', 1),
+	('2025-05-30', 1),
+	('2025-05-31', 0),
+	('2025-06-01', 0),
+	('2025-06-02', 1),
+	('2025-06-03', 1),
+	('2025-06-04', 1),
+	('2025-06-05', 1),
+	('2025-06-06', 1),
+	('2025-06-07', 0),
+	('2025-06-08', 0),
+	('2025-06-09', 1),
+	('2025-06-10', 1),
+	('2025-06-11', 1),
+	('2025-06-12', 1),
+	('2025-06-13', 1),
+	('2025-06-14', 0),
+	('2025-06-15', 0),
+	('2025-06-16', 1),
+	('2025-06-17', 1),
+	('2025-06-18', 1),
+	('2025-06-19', 1),
+	('2025-06-20', 1),
+	('2025-06-21', 0),
+	('2025-06-22', 0),
+	('2025-06-23', 1),
+	('2025-06-24', 1),
+	('2025-06-25', 1),
+	('2025-06-26', 1),
+	('2025-06-27', 1),
+	('2025-06-28', 0),
+	('2025-06-29', 0),
+	('2025-06-30', 1),
+	('2025-07-01', 1),
+	('2025-07-02', 1),
+	('2025-07-03', 1),
+	('2025-07-04', 1),
+	('2025-07-05', 0),
+	('2025-07-06', 0),
+	('2025-07-07', 1),
+	('2025-07-08', 1),
+	('2025-07-09', 1),
+	('2025-07-10', 1),
+	('2025-07-11', 1),
+	('2025-07-12', 0),
+	('2025-07-13', 0),
+	('2025-07-14', 1),
+	('2025-07-15', 1),
+	('2025-07-16', 1),
+	('2025-07-17', 1),
+	('2025-07-18', 1),
+	('2025-07-19', 0),
+	('2025-07-20', 0),
+	('2025-07-21', 1),
+	('2025-07-22', 1),
+	('2025-07-23', 1),
+	('2025-07-24', 1),
+	('2025-07-25', 1),
+	('2025-07-26', 0),
+	('2025-07-27', 0),
+	('2025-07-28', 1),
+	('2025-07-29', 1),
+	('2025-07-30', 1),
+	('2025-07-31', 1),
+	('2025-08-01', 1),
+	('2025-08-02', 0),
+	('2025-08-03', 0),
+	('2025-08-04', 1),
+	('2025-08-05', 1),
+	('2025-08-06', 1),
+	('2025-08-07', 1),
+	('2025-08-08', 1),
+	('2025-08-09', 0),
+	('2025-08-10', 0),
+	('2025-08-11', 1),
+	('2025-08-12', 1),
+	('2025-08-13', 1),
+	('2025-08-14', 1),
+	('2025-08-15', 1),
+	('2025-08-16', 0),
+	('2025-08-17', 0),
+	('2025-08-18', 1),
+	('2025-08-19', 1),
+	('2025-08-20', 1),
+	('2025-08-21', 1),
+	('2025-08-22', 1),
+	('2025-08-23', 0),
+	('2025-08-24', 0),
+	('2025-08-25', 1),
+	('2025-08-26', 1),
+	('2025-08-27', 1),
+	('2025-08-28', 1),
+	('2025-08-29', 1),
+	('2025-08-30', 0),
+	('2025-08-31', 0),
+	('2025-09-01', 1),
+	('2025-09-02', 1),
+	('2025-09-03', 1),
+	('2025-09-04', 1),
+	('2025-09-05', 1),
+	('2025-09-06', 0),
+	('2025-09-07', 0),
+	('2025-09-08', 1),
+	('2025-09-09', 1),
+	('2025-09-10', 1),
+	('2025-09-11', 1),
+	('2025-09-12', 1),
+	('2025-09-13', 0),
+	('2025-09-14', 0),
+	('2025-09-15', 1),
+	('2025-09-16', 1),
+	('2025-09-17', 1),
+	('2025-09-18', 1),
+	('2025-09-19', 1),
+	('2025-09-20', 0),
+	('2025-09-21', 0),
+	('2025-09-22', 1),
+	('2025-09-23', 1),
+	('2025-09-24', 1),
+	('2025-09-25', 1),
+	('2025-09-26', 1),
+	('2025-09-27', 0),
+	('2025-09-28', 0),
+	('2025-09-29', 1),
+	('2025-09-30', 1),
+	('2025-10-01', 1),
+	('2025-10-02', 1),
+	('2025-10-03', 1),
+	('2025-10-04', 0),
+	('2025-10-05', 0),
+	('2025-10-06', 1),
+	('2025-10-07', 1),
+	('2025-10-08', 1),
+	('2025-10-09', 1),
+	('2025-10-10', 1),
+	('2025-10-11', 0),
+	('2025-10-12', 0),
+	('2025-10-13', 1),
+	('2025-10-14', 1),
+	('2025-10-15', 1),
+	('2025-10-16', 1),
+	('2025-10-17', 1),
+	('2025-10-18', 0),
+	('2025-10-19', 0),
+	('2025-10-20', 1),
+	('2025-10-21', 1),
+	('2025-10-22', 1),
+	('2025-10-23', 1),
+	('2025-10-24', 1),
+	('2025-10-25', 0),
+	('2025-10-26', 0),
+	('2025-10-27', 1),
+	('2025-10-28', 1),
+	('2025-10-29', 1),
+	('2025-10-30', 1),
+	('2025-10-31', 1),
+	('2025-11-01', 0),
+	('2025-11-02', 0),
+	('2025-11-03', 1),
+	('2025-11-04', 1),
+	('2025-11-05', 1),
+	('2025-11-06', 1),
+	('2025-11-07', 1),
+	('2025-11-08', 0),
+	('2025-11-09', 0),
+	('2025-11-10', 1),
+	('2025-11-11', 1),
+	('2025-11-12', 1),
+	('2025-11-13', 1),
+	('2025-11-14', 1),
+	('2025-11-15', 0),
+	('2025-11-16', 0),
+	('2025-11-17', 1),
+	('2025-11-18', 1),
+	('2025-11-19', 1),
+	('2025-11-20', 1),
+	('2025-11-21', 1),
+	('2025-11-22', 0),
+	('2025-11-23', 0),
+	('2025-11-24', 1),
+	('2025-11-25', 1),
+	('2025-11-26', 1),
+	('2025-11-27', 1),
+	('2025-11-28', 1),
+	('2025-11-29', 0),
+	('2025-11-30', 0),
+	('2025-12-01', 1),
+	('2025-12-02', 1),
+	('2025-12-03', 1),
+	('2025-12-04', 1),
+	('2025-12-05', 1),
+	('2025-12-06', 0),
+	('2025-12-07', 0),
+	('2025-12-08', 1),
+	('2025-12-09', 1),
+	('2025-12-10', 1),
+	('2025-12-11', 1),
+	('2025-12-12', 1),
+	('2025-12-13', 0),
+	('2025-12-14', 0),
+	('2025-12-15', 1),
+	('2025-12-16', 1),
+	('2025-12-17', 1),
+	('2025-12-18', 1),
+	('2025-12-19', 1),
+	('2025-12-20', 0),
+	('2025-12-21', 0),
+	('2025-12-22', 1),
+	('2025-12-23', 1),
+	('2025-12-24', 1),
+	('2025-12-25', 1),
+	('2025-12-26', 1),
+	('2025-12-27', 0),
+	('2025-12-28', 0),
+	('2025-12-29', 1),
+	('2025-12-30', 1),
+	('2025-12-31', 1),
+	('2026-01-01', 1),
+	('2026-01-02', 1),
+	('2026-01-03', 0),
+	('2026-01-04', 0),
+	('2026-01-05', 1),
+	('2026-01-06', 1),
+	('2026-01-07', 1),
+	('2026-01-08', 1),
+	('2026-01-09', 1),
+	('2026-01-10', 0),
+	('2026-01-11', 0),
+	('2026-01-12', 1),
+	('2026-01-13', 1),
+	('2026-01-14', 1),
+	('2026-01-15', 1),
+	('2026-01-16', 1),
+	('2026-01-17', 0),
+	('2026-01-18', 0),
+	('2026-01-19', 1),
+	('2026-01-20', 1),
+	('2026-01-21', 1),
+	('2026-01-22', 1),
+	('2026-01-23', 1),
+	('2026-01-24', 0),
+	('2026-01-25', 0),
+	('2026-01-26', 1),
+	('2026-01-27', 1),
+	('2026-01-28', 1),
+	('2026-01-29', 1),
+	('2026-01-30', 1),
+	('2026-01-31', 0),
+	('2026-02-01', 0),
+	('2026-02-02', 1),
+	('2026-02-03', 1),
+	('2026-02-04', 1),
+	('2026-02-05', 1),
+	('2026-02-06', 1),
+	('2026-02-07', 0),
+	('2026-02-08', 0),
+	('2026-02-09', 1),
+	('2026-02-10', 1),
+	('2026-02-11', 1),
+	('2026-02-12', 1),
+	('2026-02-13', 1),
+	('2026-02-14', 0),
+	('2026-02-15', 0),
+	('2026-02-16', 1),
+	('2026-02-17', 1),
+	('2026-02-18', 1),
+	('2026-02-19', 1),
+	('2026-02-20', 1),
+	('2026-02-21', 0),
+	('2026-02-22', 0),
+	('2026-02-23', 1),
+	('2026-02-24', 1),
+	('2026-02-25', 1),
+	('2026-02-26', 1),
+	('2026-02-27', 1),
+	('2026-02-28', 0),
+	('2026-03-01', 0),
+	('2026-03-02', 1),
+	('2026-03-03', 1),
+	('2026-03-04', 1),
+	('2026-03-05', 1),
+	('2026-03-06', 1),
+	('2026-03-07', 0),
+	('2026-03-08', 0),
+	('2026-03-09', 1),
+	('2026-03-10', 1),
+	('2026-03-11', 1),
+	('2026-03-12', 1),
+	('2026-03-13', 1),
+	('2026-03-14', 0),
+	('2026-03-15', 0),
+	('2026-03-16', 1),
+	('2026-03-17', 1),
+	('2026-03-18', 1),
+	('2026-03-19', 1),
+	('2026-03-20', 1),
+	('2026-03-21', 0),
+	('2026-03-22', 0),
+	('2026-03-23', 1),
+	('2026-03-24', 1),
+	('2026-03-25', 1),
+	('2026-03-26', 1),
+	('2026-03-27', 1),
+	('2026-03-28', 0),
+	('2026-03-29', 0),
+	('2026-03-30', 1),
+	('2026-03-31', 1),
+	('2026-04-01', 1),
+	('2026-04-02', 1),
+	('2026-04-03', 1),
+	('2026-04-04', 0),
+	('2026-04-05', 0),
+	('2026-04-06', 1),
+	('2026-04-07', 1),
+	('2026-04-08', 1),
+	('2026-04-09', 1),
+	('2026-04-10', 1),
+	('2026-04-11', 0),
+	('2026-04-12', 0),
+	('2026-04-13', 1),
+	('2026-04-14', 1),
+	('2026-04-15', 1),
+	('2026-04-16', 1),
+	('2026-04-17', 1),
+	('2026-04-18', 0),
+	('2026-04-19', 0),
+	('2026-04-20', 1),
+	('2026-04-21', 1),
+	('2026-04-22', 1),
+	('2026-04-23', 1),
+	('2026-04-24', 1),
+	('2026-04-25', 0),
+	('2026-04-26', 0),
+	('2026-04-27', 1),
+	('2026-04-28', 1),
+	('2026-04-29', 1),
+	('2026-04-30', 1),
 	('2026-05-01', 1),
 	('2026-05-02', 0),
 	('2026-05-03', 0),
@@ -291,7 +1145,7 @@ INSERT INTO `calendario` (`data`, `dia_util`) VALUES
 	('2026-06-01', 1),
 	('2026-06-02', 1),
 	('2026-06-03', 1),
-	('2026-06-04', 0),
+	('2026-06-04', 1),
 	('2026-06-05', 1),
 	('2026-06-06', 0),
 	('2026-06-07', 0),
@@ -9771,7 +10625,8 @@ INSERT INTO `calendario` (`data`, `dia_util`) VALUES
 	('2052-05-15', 1),
 	('2052-05-16', 1),
 	('2052-05-17', 1),
-	('2052-05-18', 0),
+	('2052-05-18', 0);
+INSERT INTO `calendario` (`data`, `dia_util`) VALUES
 	('2052-05-19', 0),
 	('2052-05-20', 1),
 	('2052-05-21', 1),
@@ -10256,8 +11111,7 @@ INSERT INTO `calendario` (`data`, `dia_util`) VALUES
 	('2053-09-12', 1),
 	('2053-09-13', 0),
 	('2053-09-14', 0),
-	('2053-09-15', 1);
-INSERT INTO `calendario` (`data`, `dia_util`) VALUES
+	('2053-09-15', 1),
 	('2053-09-16', 1),
 	('2053-09-17', 1),
 	('2053-09-18', 1),
@@ -11094,128 +11948,7 @@ INSERT INTO `calendario` (`data`, `dia_util`) VALUES
 	('2055-12-28', 1),
 	('2055-12-29', 1),
 	('2055-12-30', 1),
-	('2055-12-31', 1),
-	('2056-01-01', 0),
-	('2056-01-02', 0),
-	('2056-01-03', 1),
-	('2056-01-04', 1),
-	('2056-01-05', 1),
-	('2056-01-06', 1),
-	('2056-01-07', 1),
-	('2056-01-08', 0),
-	('2056-01-09', 0),
-	('2056-01-10', 1),
-	('2056-01-11', 1),
-	('2056-01-12', 1),
-	('2056-01-13', 1),
-	('2056-01-14', 1),
-	('2056-01-15', 0),
-	('2056-01-16', 0),
-	('2056-01-17', 1),
-	('2056-01-18', 1),
-	('2056-01-19', 1),
-	('2056-01-20', 1),
-	('2056-01-21', 1),
-	('2056-01-22', 0),
-	('2056-01-23', 0),
-	('2056-01-24', 1),
-	('2056-01-25', 1),
-	('2056-01-26', 1),
-	('2056-01-27', 1),
-	('2056-01-28', 1),
-	('2056-01-29', 0),
-	('2056-01-30', 0),
-	('2056-01-31', 1),
-	('2056-02-01', 1),
-	('2056-02-02', 1),
-	('2056-02-03', 1),
-	('2056-02-04', 1),
-	('2056-02-05', 0),
-	('2056-02-06', 0),
-	('2056-02-07', 1),
-	('2056-02-08', 1),
-	('2056-02-09', 1),
-	('2056-02-10', 1),
-	('2056-02-11', 1),
-	('2056-02-12', 0),
-	('2056-02-13', 0),
-	('2056-02-14', 1),
-	('2056-02-15', 1),
-	('2056-02-16', 1),
-	('2056-02-17', 1),
-	('2056-02-18', 1),
-	('2056-02-19', 0),
-	('2056-02-20', 0),
-	('2056-02-21', 1),
-	('2056-02-22', 1),
-	('2056-02-23', 1),
-	('2056-02-24', 1),
-	('2056-02-25', 1),
-	('2056-02-26', 0),
-	('2056-02-27', 0),
-	('2056-02-28', 1),
-	('2056-02-29', 1),
-	('2056-03-01', 1),
-	('2056-03-02', 1),
-	('2056-03-03', 1),
-	('2056-03-04', 0),
-	('2056-03-05', 0),
-	('2056-03-06', 1),
-	('2056-03-07', 1),
-	('2056-03-08', 1),
-	('2056-03-09', 1),
-	('2056-03-10', 1),
-	('2056-03-11', 0),
-	('2056-03-12', 0),
-	('2056-03-13', 1),
-	('2056-03-14', 1),
-	('2056-03-15', 1),
-	('2056-03-16', 1),
-	('2056-03-17', 1),
-	('2056-03-18', 0),
-	('2056-03-19', 0),
-	('2056-03-20', 1),
-	('2056-03-21', 1),
-	('2056-03-22', 1),
-	('2056-03-23', 1),
-	('2056-03-24', 1),
-	('2056-03-25', 0),
-	('2056-03-26', 0),
-	('2056-03-27', 1),
-	('2056-03-28', 1),
-	('2056-03-29', 1),
-	('2056-03-30', 1),
-	('2056-03-31', 1),
-	('2056-04-01', 0),
-	('2056-04-02', 0),
-	('2056-04-03', 1),
-	('2056-04-04', 1),
-	('2056-04-05', 1),
-	('2056-04-06', 1),
-	('2056-04-07', 1),
-	('2056-04-08', 0),
-	('2056-04-09', 0),
-	('2056-04-10', 1),
-	('2056-04-11', 1),
-	('2056-04-12', 1),
-	('2056-04-13', 1),
-	('2056-04-14', 1),
-	('2056-04-15', 0),
-	('2056-04-16', 0),
-	('2056-04-17', 1),
-	('2056-04-18', 1),
-	('2056-04-19', 1),
-	('2056-04-20', 1),
-	('2056-04-21', 1),
-	('2056-04-22', 0),
-	('2056-04-23', 0),
-	('2056-04-24', 1),
-	('2056-04-25', 1),
-	('2056-04-26', 1),
-	('2056-04-27', 1),
-	('2056-04-28', 1),
-	('2056-04-29', 0),
-	('2056-04-30', 0);
+	('2055-12-31', 1);
 
 -- Copiando estrutura para tabela sistema_advocacia.configuracoes_escritorio
 DROP TABLE IF EXISTS `configuracoes_escritorio`;
@@ -11234,6 +11967,7 @@ CREATE TABLE IF NOT EXISTS `configuracoes_escritorio` (
   `logo_path` varchar(300) DEFAULT NULL,
   `cor_principal` varchar(7) DEFAULT '#1a56db',
   `horario_alerta_prazos` time DEFAULT '18:00:00',
+  `horario_alerta_prazos_2` time DEFAULT NULL,
   `dias_alerta_audiencia` int DEFAULT '3',
   `dias_alerta_pericia` int DEFAULT '2',
   `dias_sem_movimentacao` int DEFAULT '30',
@@ -11244,14 +11978,12 @@ CREATE TABLE IF NOT EXISTS `configuracoes_escritorio` (
   `alerta_emails` text,
   `prazo_fazendo_timeout` int NOT NULL DEFAULT '60',
   `titulo_aba` varchar(100) DEFAULT NULL COMMENT 'Título exibido na aba do navegador',
-  `alerta_pendentes_enviado` date DEFAULT NULL,
-  `alerta_atrasados_enviado` date DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Copiando dados para a tabela sistema_advocacia.configuracoes_escritorio: ~1 rows (aproximadamente)
-INSERT INTO `configuracoes_escritorio` (`id`, `nome`, `cnpj_cpf`, `email`, `telefone`, `cep`, `logradouro`, `numero`, `bairro`, `cidade`, `estado`, `logo_path`, `cor_principal`, `horario_alerta_prazos`, `dias_alerta_audiencia`, `dias_alerta_pericia`, `dias_sem_movimentacao`, `dias_audiencia_sem_adv`, `setup_concluido`, `criado_em`, `alerta_atrasado_ativo`, `alerta_emails`, `prazo_fazendo_timeout`, `titulo_aba`, `alerta_pendentes_enviado`, `alerta_atrasados_enviado`) VALUES
-	(1, 'Dr. Antonio Ferreira da Costa', '866.204.449-20', 'contato@antonio.adv.br', '654654654', '03818-030', 'Rua Lagoa D\'anta', '70', 'Parque Císper', 'São Paulo', 'SP', NULL, '#1a56db', '10:00:00', 3, 2, 30, 7, 1, '2026-05-23 00:58:18', 1, 'visaoecultura@gmail.com, ednasvlr@gmail.com', 60, NULL, '2026-06-12', '2026-06-12');
+INSERT INTO `configuracoes_escritorio` (`id`, `nome`, `cnpj_cpf`, `email`, `telefone`, `cep`, `logradouro`, `numero`, `bairro`, `cidade`, `estado`, `logo_path`, `cor_principal`, `horario_alerta_prazos`, `horario_alerta_prazos_2`, `dias_alerta_audiencia`, `dias_alerta_pericia`, `dias_sem_movimentacao`, `dias_audiencia_sem_adv`, `setup_concluido`, `criado_em`, `alerta_atrasado_ativo`, `alerta_emails`, `prazo_fazendo_timeout`, `titulo_aba`) VALUES
+	(1, 'Dr. Antonio Ferreira da Costa', '866.204.449-20', 'contato@antonio.adv.br', '654654654', '03818-030', 'Rua Lagoa D\'anta', '70', 'Parque Císper', 'São Paulo', 'SP', NULL, '#1a56db', '21:08:00', NULL, 3, 2, 30, 7, 1, '2026-05-23 00:58:18', 1, 'visaoecultura@gmail.com, ednasvlr@gmail.com', 60, NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.configuracoes_integracoes
 DROP TABLE IF EXISTS `configuracoes_integracoes`;
@@ -11268,28 +12000,39 @@ CREATE TABLE IF NOT EXISTS `configuracoes_integracoes` (
 INSERT INTO `configuracoes_integracoes` (`id`, `modulo`, `ativo`, `configuracoes`, `atualizado_em`) VALUES
 	(1, 'whatsapp_zapi', 0, NULL, '2026-05-23 00:58:29'),
 	(2, 'email_smtp', 0, NULL, '2026-05-23 00:58:29'),
-	(3, 'aasp', 0, NULL, '2026-05-23 01:07:15'),
+	(3, 'aasp', 1, '{"url": "https://intimacaoapi.aasp.org.br/api/Associado/intimacao/json", "chave": "EED989BD91A648D0B96ADC1B4AEA8E61"}', '2026-06-22 10:38:38'),
 	(4, 'cnj_datajud', 0, NULL, '2026-05-23 00:58:29');
 
--- Copiando estrutura para tabela sistema_advocacia.conta_corrente_pasta
-DROP TABLE IF EXISTS `conta_corrente_pasta`;
-CREATE TABLE IF NOT EXISTS `conta_corrente_pasta` (
+-- Copiando estrutura para tabela sistema_advocacia.conta_corrente
+DROP TABLE IF EXISTS `conta_corrente`;
+CREATE TABLE IF NOT EXISTS `conta_corrente` (
   `id` int NOT NULL AUTO_INCREMENT,
-  `pasta_id` int NOT NULL,
+  `processo_id` int NOT NULL,
+  `parcela_id` int DEFAULT NULL,
   `data` date NOT NULL,
   `descricao` varchar(300) NOT NULL,
+  `tipo` varchar(10) NOT NULL,
   `valor` decimal(15,2) NOT NULL,
-  `tipo` varchar(20) DEFAULT 'credito',
+  `origem` varchar(20) NOT NULL DEFAULT 'manual',
   `usuario_id` int NOT NULL,
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `pasta_id` (`pasta_id`),
+  KEY `processo_id` (`processo_id`),
+  KEY `parcela_id` (`parcela_id`),
   KEY `usuario_id` (`usuario_id`),
-  CONSTRAINT `conta_corrente_pasta_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`),
-  CONSTRAINT `fk_contacorrente_tblpasta` FOREIGN KEY (`pasta_id`) REFERENCES `tblpasta` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  CONSTRAINT `fk_cc_parcela` FOREIGN KEY (`parcela_id`) REFERENCES `acordo_parcela` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_cc_processo` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_cc_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=36 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.conta_corrente_pasta: ~0 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.conta_corrente: ~6 rows (aproximadamente)
+INSERT INTO `conta_corrente` (`id`, `processo_id`, `parcela_id`, `data`, `descricao`, `tipo`, `valor`, `origem`, `usuario_id`, `criado_em`) VALUES
+	(1, 4, NULL, '2026-06-17', 'Emprestimo', 'saida', 1000.00, 'manual', 2, '2026-06-17 14:13:40'),
+	(2, 4, NULL, '2026-06-17', 'Pagto Parc Emprestimo', 'entrada', 100.00, 'manual', 2, '2026-06-17 14:14:08'),
+	(3, 5, NULL, '2026-06-17', 'Gas', 'saida', 160.00, 'manual', 2, '2026-06-17 15:19:19'),
+	(4, 5, NULL, '2026-06-17', 'Pagto Gas', 'entrada', 50.22, 'manual', 2, '2026-06-17 15:19:37'),
+	(8, 5, NULL, '2026-06-18', 'Emprestimo', 'saida', 1000.00, 'manual', 2, '2026-06-18 10:23:38'),
+	(35, 5, 141, '2026-06-20', 'Honor - parc 1/1 do alvará 1', 'entrada', 15000.00, 'acordo', 2, '2026-06-20 14:03:02');
 
 -- Copiando estrutura para tabela sistema_advocacia.emails_pf
 DROP TABLE IF EXISTS `emails_pf`;
@@ -11361,8 +12104,23 @@ CREATE TABLE IF NOT EXISTS `feriados` (
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Copiando dados para a tabela sistema_advocacia.feriados: ~0 rows (aproximadamente)
-INSERT INTO `feriados` (`id`, `data`, `descricao`, `tipo`, `criado_em`, `criado_por`) VALUES
-	(2, '2026-06-04', 'Corpus Christi', 'nacional', '2026-05-29 23:42:17', 2);
+
+-- Copiando estrutura para tabela sistema_advocacia.forma_pagamento
+DROP TABLE IF EXISTS `forma_pagamento`;
+CREATE TABLE IF NOT EXISTS `forma_pagamento` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `nome` varchar(60) NOT NULL,
+  `ativo` tinyint(1) NOT NULL DEFAULT '1',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Copiando dados para a tabela sistema_advocacia.forma_pagamento: ~5 rows (aproximadamente)
+INSERT INTO `forma_pagamento` (`id`, `nome`, `ativo`) VALUES
+	(1, 'Pix', 1),
+	(2, 'TED', 1),
+	(3, 'Deposito C/C', 1),
+	(4, 'Deposito C/P', 1),
+	(5, 'Dinheiro', 1);
 
 -- Copiando estrutura para tabela sistema_advocacia.genero
 DROP TABLE IF EXISTS `genero`;
@@ -11395,30 +12153,13 @@ CREATE TABLE IF NOT EXISTS `historico_atendimento` (
 
 -- Copiando dados para a tabela sistema_advocacia.historico_atendimento: ~0 rows (aproximadamente)
 
--- Copiando estrutura para tabela sistema_advocacia.honorarios
-DROP TABLE IF EXISTS `honorarios`;
-CREATE TABLE IF NOT EXISTS `honorarios` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `pasta_id` int NOT NULL,
-  `tipo` varchar(30) DEFAULT 'fixo',
-  `percentual` decimal(5,2) DEFAULT NULL,
-  `valor_fixo` decimal(15,2) DEFAULT NULL,
-  `observacoes` text,
-  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `idx_pasta_id` (`pasta_id`),
-  CONSTRAINT `fk_honorarios_tblpasta` FOREIGN KEY (`pasta_id`) REFERENCES `tblpasta` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
--- Copiando dados para a tabela sistema_advocacia.honorarios: ~0 rows (aproximadamente)
-
 -- Copiando estrutura para tabela sistema_advocacia.logs_auditoria
 DROP TABLE IF EXISTS `logs_auditoria`;
 CREATE TABLE IF NOT EXISTS `logs_auditoria` (
   `id` int NOT NULL AUTO_INCREMENT,
   `usuario_id` int DEFAULT NULL,
   `tabela` varchar(50) NOT NULL,
-  `acao` varchar(20) NOT NULL,
+  `acao` varchar(30) NOT NULL,
   `registro_id` int DEFAULT NULL,
   `dados_antigos` json DEFAULT NULL,
   `dados_novos` json DEFAULT NULL,
@@ -11428,9 +12169,9 @@ CREATE TABLE IF NOT EXISTS `logs_auditoria` (
   KEY `idx_usuario` (`usuario_id`),
   KEY `idx_data` (`criado_em`),
   KEY `idx_usuario_data` (`usuario_id`,`criado_em`)
-) ENGINE=InnoDB AUTO_INCREMENT=120 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=240 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.logs_auditoria: ~119 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.logs_auditoria: ~239 rows (aproximadamente)
 INSERT INTO `logs_auditoria` (`id`, `usuario_id`, `tabela`, `acao`, `registro_id`, `dados_antigos`, `dados_novos`, `criado_em`) VALUES
 	(1, 1, 'usuarios', 'criar', 2, NULL, NULL, '2026-05-23 01:06:19'),
 	(2, 1, 'usuarios', 'editar', 2, NULL, NULL, '2026-05-23 10:25:38'),
@@ -11550,7 +12291,127 @@ INSERT INTO `logs_auditoria` (`id`, `usuario_id`, `tabela`, `acao`, `registro_id
 	(116, 2, 'usuarios', 'editar', 5, NULL, NULL, '2026-06-11 09:33:54'),
 	(117, 2, 'usuarios', 'criar', 7, NULL, NULL, '2026-06-11 09:35:10'),
 	(118, 2, 'usuarios', 'criar', 8, NULL, NULL, '2026-06-11 10:48:42'),
-	(119, 2, 'audiencia', 'criar', 14, NULL, NULL, '2026-06-11 16:20:54');
+	(119, 2, 'audiencia', 'criar', 14, NULL, NULL, '2026-06-11 16:20:54'),
+	(120, 2, 'pericia', 'criar', 1, NULL, NULL, '2026-06-15 12:08:24'),
+	(121, 2, 'pericia', 'atualizar', 1, NULL, NULL, '2026-06-15 13:52:28'),
+	(122, 2, 'pericia', 'criar', 2, NULL, NULL, '2026-06-15 14:11:37'),
+	(123, 2, 'pericia', 'atualizar', 1, NULL, NULL, '2026-06-15 14:24:32'),
+	(124, 2, 'pericia', 'atualizar', 2, NULL, NULL, '2026-06-15 14:33:13'),
+	(125, 2, 'pericia', 'criar', 3, NULL, NULL, '2026-06-15 15:16:06'),
+	(126, 2, 'pessoas_fisicas', 'editar', 3, '{"id": 3, "rg": null, "cep": "03818-030", "cpf": "86620444920", "pis": null, "nome": "Erick Silva Ribeiro", "ativo": 1, "bairro": "Parque Císper", "cidade": "São Paulo", "estado": "SP", "numero": "30", "nome_mae": null, "nome_pai": null, "rg_orgao": null, "criado_em": "2026-05-25 20:35:50", "foto_path": null, "genero_id": 1, "criado_por": 2, "ctps_serie": "5654-SP", "logradouro": "Rua Lagoa D\'anta", "alterado_em": null, "complemento": null, "ctps_numero": "654654", "observacoes": null, "alterado_por": null, "profissao_id": 1, "data_nascimento": "1999-05-15", "estado_civil_id": 2}', NULL, '2026-06-15 15:30:58'),
+	(127, 2, 'tblProc', 'editar', 6, '{"id": 6, "ativo": 1, "numProc": "3333333-33.3333.3.33.3333", "tipo_id": 1, "vara_id": 302, "pasta_id": 6, "criado_em": "2026-05-27 14:39:05", "status_id": 7, "criado_por": 2, "alterado_em": "2026-06-09 11:01:24", "observacoes": null, "alterado_por": 2, "cliente_polo": null, "instancia_id": 1, "NomeTituloProc": "Claudenor de Lima Ribeiro(+3) X Via Varejo S/a", "data_distribuicao": null}', NULL, '2026-06-15 15:35:33'),
+	(128, 2, 'pericia', 'atualizar', 2, NULL, NULL, '2026-06-15 15:36:36'),
+	(129, 2, 'conta_corrente', 'criar', 1, NULL, NULL, '2026-06-17 11:43:33'),
+	(130, 2, 'conta_corrente', 'criar', 2, NULL, NULL, '2026-06-17 11:44:53'),
+	(131, 2, 'conta_corrente', 'criar', 3, NULL, NULL, '2026-06-17 11:53:47'),
+	(132, 2, 'conta_corrente', 'criar', 4, NULL, NULL, '2026-06-17 11:54:10'),
+	(133, 2, 'acordo', 'criar', 1, NULL, NULL, '2026-06-17 12:09:44'),
+	(134, 2, 'acordo', 'atualizar', 1, NULL, NULL, '2026-06-17 12:11:44'),
+	(135, 2, 'acordo', 'criar', 2, NULL, NULL, '2026-06-17 12:21:27'),
+	(136, 2, 'acordo_parcela', 'pagar', 26, NULL, NULL, '2026-06-17 12:22:10'),
+	(137, 2, 'acordo_parcela', 'pagar', 30, NULL, NULL, '2026-06-17 12:30:35'),
+	(138, 2, 'acordo', 'criar', 3, NULL, NULL, '2026-06-17 13:39:03'),
+	(139, 2, 'acordo_parcela', 'pagar', 61, NULL, NULL, '2026-06-17 13:39:25'),
+	(140, 2, 'acordo_parcela', 'pagar', 62, NULL, NULL, '2026-06-17 13:40:54'),
+	(141, 2, 'conta_corrente', 'criar', 1, NULL, NULL, '2026-06-17 14:13:40'),
+	(142, 2, 'conta_corrente', 'criar', 2, NULL, NULL, '2026-06-17 14:14:08'),
+	(143, 2, 'acordo', 'criar', 1, NULL, NULL, '2026-06-17 14:15:29'),
+	(144, 2, 'acordo', 'atualizar', 1, NULL, NULL, '2026-06-17 14:15:54'),
+	(145, 2, 'acordo', 'atualizar', 1, NULL, NULL, '2026-06-17 14:16:46'),
+	(146, 2, 'acordo', 'criar', 2, NULL, NULL, '2026-06-17 14:32:10'),
+	(147, 2, 'acordo', 'atualizar', 2, NULL, NULL, '2026-06-17 14:33:35'),
+	(148, 2, 'acordo', 'atualizar', 2, NULL, NULL, '2026-06-17 14:34:25'),
+	(149, 2, 'acordo', 'atualizar', 2, NULL, NULL, '2026-06-17 14:40:59'),
+	(150, 2, 'acordo', 'atualizar', 2, NULL, NULL, '2026-06-17 14:42:47'),
+	(151, 2, 'acordo', 'atualizar', 2, NULL, NULL, '2026-06-17 14:52:08'),
+	(152, 2, 'acordo', 'atualizar', 2, NULL, NULL, '2026-06-17 15:03:24'),
+	(153, 2, 'acordo', 'atualizar', 2, NULL, NULL, '2026-06-17 15:04:01'),
+	(154, 2, 'usuarios', 'editar', 7, NULL, NULL, '2026-06-17 15:17:50'),
+	(155, 2, 'conta_corrente', 'criar', 3, NULL, NULL, '2026-06-17 15:19:19'),
+	(156, 2, 'conta_corrente', 'criar', 4, NULL, NULL, '2026-06-17 15:19:37'),
+	(157, 2, 'conta_corrente', 'atualizar', 3, '{"id": 3, "data": "2026-06-17", "tipo": "saida", "valor": "152.00", "origem": "manual", "criado_em": "2026-06-17 15:19:19", "descricao": "Gas", "parcela_id": null, "usuario_id": 2, "processo_id": 5}', NULL, '2026-06-17 15:54:28'),
+	(158, 2, 'acordo_parcela', 'pagar', 100, NULL, NULL, '2026-06-17 15:56:48'),
+	(159, 2, 'acordo_parcela', 'pagar', 96, NULL, NULL, '2026-06-17 16:11:12'),
+	(160, 2, 'acordo', 'criar', 3, NULL, NULL, '2026-06-17 16:31:46'),
+	(161, 2, 'acordo_parcela', 'pagar', 97, NULL, NULL, '2026-06-18 08:35:10'),
+	(162, 2, 'usuarios', 'criar', 9, NULL, NULL, '2026-06-18 09:20:26'),
+	(163, 2, 'usuarios', 'editar', 3, NULL, NULL, '2026-06-18 09:21:53'),
+	(164, 2, 'usuarios', 'editar', 3, NULL, NULL, '2026-06-18 09:22:32'),
+	(165, 2, 'acordo', 'criar', 4, NULL, NULL, '2026-06-18 10:23:22'),
+	(166, 2, 'conta_corrente', 'criar', 8, NULL, NULL, '2026-06-18 10:23:38'),
+	(167, 2, 'acordo_parcela', 'pagar', 122, NULL, NULL, '2026-06-18 10:24:11'),
+	(168, 2, 'audiencia', 'criar', 15, NULL, NULL, '2026-06-19 09:42:54'),
+	(169, 2, 'acordo_parcela', 'pagar', 101, NULL, NULL, '2026-06-20 08:06:06'),
+	(170, 2, 'acordo_parcela', 'desfazer-pagamento', 122, '{"id": 122, "numero": 2, "status": "pago", "acordo_id": 4, "honor_tipo": "percent", "observacao": null, "vencimento": "2026-09-01", "honor_valor": "150.00", "valor_bruto": "500.00", "parceria_tipo": "percent", "valor_liquido": "350.00", "data_pagamento": "2026-06-18", "parceria_valor": "75.00", "honor_percentual": "30.00", "parceria_pessoa_id": 4, "parceria_percentual": "50.00", "parceria_pessoa_tipo": "fisica"}', NULL, '2026-06-20 08:06:24'),
+	(171, 2, 'acordo_parcela', 'pagar', 121, NULL, NULL, '2026-06-20 08:06:33'),
+	(172, 2, 'acordo_parcela', 'desfazer-pagamento', 121, '{"id": 121, "numero": 1, "status": "pago", "acordo_id": 4, "honor_tipo": "percent", "observacao": null, "vencimento": "2026-08-03", "honor_valor": "150.00", "valor_bruto": "500.00", "parceria_tipo": null, "valor_liquido": "350.00", "data_pagamento": "2026-06-20", "parceria_valor": null, "honor_percentual": "30.00", "parceria_pessoa_id": null, "parceria_percentual": null, "parceria_pessoa_tipo": null}', NULL, '2026-06-20 08:07:22'),
+	(173, 2, 'acordo_parcela', 'desfazer-pagamento', 101, '{"id": 101, "numero": 1, "status": "pago", "acordo_id": 3, "honor_tipo": "percent", "observacao": null, "vencimento": "2026-06-17", "honor_valor": "225.00", "valor_bruto": "750.00", "parceria_tipo": null, "valor_liquido": "525.00", "data_pagamento": "2026-06-20", "parceria_valor": null, "honor_percentual": "30.00", "parceria_pessoa_id": null, "parceria_percentual": null, "parceria_pessoa_tipo": null}', NULL, '2026-06-20 08:07:37'),
+	(174, 2, 'acordo_parcela', 'pagar', 122, NULL, NULL, '2026-06-20 08:08:06'),
+	(175, 2, 'acordo_parcela', 'pagar', 121, NULL, NULL, '2026-06-20 09:44:03'),
+	(176, 2, 'acordo_parcela', 'desfazer-pagamento', 121, '{"id": 121, "numero": 1, "status": "pago", "acordo_id": 4, "honor_tipo": "percent", "observacao": null, "vencimento": "2026-08-03", "honor_valor": "150.00", "recebido_em": "2026-06-20", "valor_bruto": "500.00", "parceria_tipo": null, "valor_liquido": "350.00", "parceria_valor": null, "honor_percentual": "30.00", "parceria_pessoa_id": null, "parceria_percentual": null, "parceria_pessoa_tipo": null, "recebimento_forma_id": 1, "recebimento_identificacao": null}', NULL, '2026-06-20 09:45:35'),
+	(177, 2, 'acordo_parcela', 'pagar', 121, NULL, NULL, '2026-06-20 09:48:03'),
+	(178, 2, 'acordo_parcela', 'desfazer-pagamento', 122, '{"id": 122, "numero": 2, "status": "pago", "acordo_id": 4, "honor_tipo": "percent", "observacao": null, "vencimento": "2026-09-01", "honor_valor": "150.00", "recebido_em": "2026-06-20", "valor_bruto": "500.00", "parceria_tipo": "percent", "valor_liquido": "350.00", "parceria_valor": "75.00", "honor_percentual": "30.00", "parceria_pessoa_id": 4, "parceria_percentual": "50.00", "parceria_pessoa_tipo": "fisica", "recebimento_forma_id": null, "recebimento_identificacao": null}', NULL, '2026-06-20 10:01:30'),
+	(179, 2, 'acordo_parcela', 'desfazer-pagamento', 121, '{"id": 121, "numero": 1, "status": "pago", "acordo_id": 4, "honor_tipo": "percent", "observacao": null, "vencimento": "2026-08-03", "honor_valor": "150.00", "recebido_em": "2026-06-20", "valor_bruto": "500.00", "parceria_tipo": null, "valor_liquido": "350.00", "parceria_valor": null, "honor_percentual": "30.00", "parceria_pessoa_id": null, "parceria_percentual": null, "parceria_pessoa_tipo": null, "recebimento_forma_id": 1, "recebimento_identificacao": null}', NULL, '2026-06-20 10:01:32'),
+	(180, 2, 'acordo_parcela', 'pagar', 121, NULL, NULL, '2026-06-20 10:01:41'),
+	(181, 2, 'acordo_parcela', 'pagar', 122, NULL, NULL, '2026-06-20 10:02:02'),
+	(182, 2, 'acordo_parcela', 'desfazer-pagamento', 122, '{"id": 122, "numero": 2, "status": "pago", "acordo_id": 4, "honor_tipo": "percent", "observacao": null, "vencimento": "2026-09-01", "honor_valor": "150.00", "recebido_em": "2026-06-20", "valor_bruto": "500.00", "parceria_tipo": "percent", "valor_liquido": "350.00", "parceria_valor": "75.00", "honor_percentual": "30.00", "parceria_pessoa_id": 4, "repasse_cliente_em": null, "parceria_percentual": "50.00", "repasse_parceiro_em": null, "parceria_pessoa_tipo": "fisica", "recebimento_forma_id": 4, "repasse_cliente_forma_id": null, "recebimento_identificacao": null, "repasse_parceiro_forma_id": null}', NULL, '2026-06-20 10:04:32'),
+	(183, 2, 'acordo_parcela', 'desfazer-pagamento', 121, '{"id": 121, "numero": 1, "status": "pago", "acordo_id": 4, "honor_tipo": "percent", "observacao": null, "vencimento": "2026-08-03", "honor_valor": "150.00", "recebido_em": "2026-06-20", "valor_bruto": "500.00", "parceria_tipo": null, "valor_liquido": "350.00", "parceria_valor": null, "honor_percentual": "30.00", "parceria_pessoa_id": null, "repasse_cliente_em": null, "parceria_percentual": null, "repasse_parceiro_em": null, "parceria_pessoa_tipo": null, "recebimento_forma_id": 1, "repasse_cliente_forma_id": null, "recebimento_identificacao": null, "repasse_parceiro_forma_id": null}', NULL, '2026-06-20 10:04:34'),
+	(184, 2, 'acordo_parcela', 'desfazer-pagamento', 100, '{"id": 100, "numero": 5, "status": "pago", "acordo_id": 2, "honor_tipo": "percent", "observacao": "quitado na 2ª parc", "vencimento": "2026-11-02", "honor_valor": "0.00", "recebido_em": "2026-06-17", "valor_bruto": "0.00", "parceria_tipo": null, "valor_liquido": "0.00", "parceria_valor": null, "honor_percentual": "30.00", "parceria_pessoa_id": null, "repasse_cliente_em": null, "parceria_percentual": null, "repasse_parceiro_em": null, "parceria_pessoa_tipo": null, "recebimento_forma_id": null, "repasse_cliente_forma_id": null, "recebimento_identificacao": null, "repasse_parceiro_forma_id": null}', NULL, '2026-06-20 10:05:31'),
+	(185, 2, 'acordo_parcela', 'desfazer-pagamento', 97, '{"id": 97, "numero": 2, "status": "pago", "acordo_id": 2, "honor_tipo": "fixo", "observacao": null, "vencimento": "2026-08-03", "honor_valor": "200.00", "recebido_em": "2026-06-18", "valor_bruto": "500.00", "parceria_tipo": null, "valor_liquido": "300.00", "parceria_valor": null, "honor_percentual": null, "parceria_pessoa_id": null, "repasse_cliente_em": null, "parceria_percentual": null, "repasse_parceiro_em": null, "parceria_pessoa_tipo": null, "recebimento_forma_id": null, "repasse_cliente_forma_id": null, "recebimento_identificacao": null, "repasse_parceiro_forma_id": null}', NULL, '2026-06-20 10:05:35'),
+	(186, 2, 'acordo_parcela', 'desfazer-pagamento', 96, '{"id": 96, "numero": 1, "status": "pago", "acordo_id": 2, "honor_tipo": "percent", "observacao": null, "vencimento": "2026-07-01", "honor_valor": "60.00", "recebido_em": "2026-06-17", "valor_bruto": "200.00", "parceria_tipo": null, "valor_liquido": "140.00", "parceria_valor": null, "honor_percentual": "30.00", "parceria_pessoa_id": null, "repasse_cliente_em": null, "parceria_percentual": null, "repasse_parceiro_em": null, "parceria_pessoa_tipo": null, "recebimento_forma_id": null, "repasse_cliente_forma_id": null, "recebimento_identificacao": null, "repasse_parceiro_forma_id": null}', NULL, '2026-06-20 10:05:38'),
+	(187, 2, 'acordo_parcela', 'pagar', 121, NULL, NULL, '2026-06-20 10:06:41'),
+	(188, 2, 'acordo_parcela', 'repasse-cliente', 121, NULL, NULL, '2026-06-20 10:06:55'),
+	(189, 2, 'acordo_parcela', 'desfazer-pagamento', 121, '{"id": 121, "numero": 1, "status": "pago", "acordo_id": 4, "honor_tipo": "percent", "observacao": null, "vencimento": "2026-08-03", "honor_valor": "150.00", "recebido_em": "2026-06-20", "valor_bruto": "500.00", "parceria_tipo": null, "valor_liquido": "350.00", "parceria_valor": null, "honor_percentual": "30.00", "parceria_pessoa_id": null, "repasse_cliente_em": "2026-06-20", "parceria_percentual": null, "repasse_parceiro_em": null, "parceria_pessoa_tipo": null, "recebimento_forma_id": 1, "repasse_cliente_forma_id": 1, "recebimento_identificacao": null, "repasse_parceiro_forma_id": null}', NULL, '2026-06-20 10:07:27'),
+	(190, 2, 'acordo_parcela', 'pagar', 121, NULL, NULL, '2026-06-20 10:07:46'),
+	(191, 2, 'acordo_parcela', 'desfazer-pagamento', 121, '{"id": 121, "numero": 1, "status": "pago", "acordo_id": 4, "honor_tipo": "percent", "observacao": null, "vencimento": "2026-08-03", "honor_valor": "150.00", "recebido_em": "2026-06-20", "valor_bruto": "500.00", "parceria_tipo": null, "valor_liquido": "350.00", "parceria_valor": null, "honor_percentual": "30.00", "parceria_pessoa_id": null, "repasse_cliente_em": "2026-06-20", "parceria_percentual": null, "repasse_parceiro_em": null, "parceria_pessoa_tipo": null, "recebimento_forma_id": 5, "repasse_cliente_forma_id": 1, "recebimento_identificacao": null, "repasse_parceiro_forma_id": null}', NULL, '2026-06-20 10:08:20'),
+	(192, 2, 'acordo_parcela', 'pagar', 121, NULL, NULL, '2026-06-20 10:08:31'),
+	(193, 2, 'acordo_parcela', 'pagar', 122, NULL, NULL, '2026-06-20 10:08:49'),
+	(194, 2, 'acordo_parcela', 'desfazer-pagamento', 122, '{"id": 122, "numero": 2, "status": "pago", "acordo_id": 4, "honor_tipo": "percent", "observacao": null, "vencimento": "2026-09-01", "honor_valor": "150.00", "recebido_em": "2026-06-20", "valor_bruto": "500.00", "parceria_tipo": "percent", "valor_liquido": "350.00", "parceria_valor": "75.00", "honor_percentual": "30.00", "parceria_pessoa_id": 4, "repasse_cliente_em": null, "parceria_percentual": "50.00", "repasse_parceiro_em": null, "parceria_pessoa_tipo": "fisica", "recebimento_forma_id": 5, "repasse_cliente_forma_id": null, "recebimento_identificacao": null, "repasse_parceiro_forma_id": null}', NULL, '2026-06-20 10:17:39'),
+	(195, 2, 'acordo_parcela', 'pagar', 122, NULL, NULL, '2026-06-20 10:17:59'),
+	(196, 2, 'acordo_parcela', 'repasse-cliente', 122, NULL, NULL, '2026-06-20 10:18:13'),
+	(197, 2, 'acordo_parcela', 'repasse-parceiro', 122, NULL, NULL, '2026-06-20 10:18:56'),
+	(198, 2, 'acordo_parcela', 'pagar', 41, NULL, NULL, '2026-06-20 10:32:43'),
+	(199, 2, 'acordo_parcela', 'pagar', 101, NULL, NULL, '2026-06-20 10:33:00'),
+	(200, 2, 'acordo', 'criar', 5, NULL, NULL, '2026-06-20 10:33:34'),
+	(201, 2, 'acordo_parcela', 'pagar', 131, NULL, NULL, '2026-06-20 10:33:42'),
+	(202, 2, 'acordo_parcela', 'pagar', 123, NULL, NULL, '2026-06-20 10:35:57'),
+	(203, 2, 'acordo_parcela', 'repasse-cliente', 41, NULL, NULL, '2026-06-20 10:36:06'),
+	(204, 2, 'acordo_parcela', 'repasse-parceiro', 41, NULL, NULL, '2026-06-20 10:36:11'),
+	(205, 2, 'acordo_parcela', 'repasse-cliente', 101, NULL, NULL, '2026-06-20 10:36:15'),
+	(206, 2, 'acordo_parcela', 'repasse-cliente', 123, NULL, NULL, '2026-06-20 10:36:18'),
+	(207, 2, 'acordo_parcela', 'repasse-cliente', 131, NULL, NULL, '2026-06-20 10:36:22'),
+	(208, 2, 'acordo_parcela', 'desfazer-repasse', 131, NULL, NULL, '2026-06-20 10:50:52'),
+	(209, 2, 'acordo_parcela', 'desfazer-repasse', 123, NULL, NULL, '2026-06-20 10:50:54'),
+	(210, 2, 'acordo_parcela', 'desfazer-repasse', 122, NULL, NULL, '2026-06-20 10:50:54'),
+	(211, 2, 'acordo_parcela', 'desfazer-repasse', 122, NULL, NULL, '2026-06-20 10:50:55'),
+	(212, 2, 'acordo_parcela', 'desfazer-repasse', 101, NULL, NULL, '2026-06-20 10:50:55'),
+	(213, 2, 'acordo_parcela', 'desfazer-repasse', 121, NULL, NULL, '2026-06-20 10:50:58'),
+	(214, 2, 'acordo_parcela', 'desfazer-repasse', 41, NULL, NULL, '2026-06-20 10:50:59'),
+	(215, 2, 'acordo_parcela', 'desfazer-repasse', 41, NULL, NULL, '2026-06-20 10:51:00'),
+	(216, 2, 'acordo_parcela', 'desfazer-pagamento', 101, '{"id": 101, "numero": 1, "status": "pago", "acordo_id": 3, "honor_tipo": "percent", "observacao": null, "vencimento": "2026-06-17", "honor_valor": "225.00", "recebido_em": "2026-06-20", "valor_bruto": "750.00", "parceria_tipo": null, "valor_liquido": "525.00", "parceria_valor": null, "honor_percentual": "30.00", "parceria_pessoa_id": null, "repasse_cliente_em": null, "parceria_percentual": null, "repasse_cliente_por": null, "repasse_parceiro_em": null, "parceria_pessoa_tipo": null, "recebimento_forma_id": 2, "repasse_parceiro_por": null, "repasse_cliente_forma_id": null, "recebimento_identificacao": null, "repasse_parceiro_forma_id": null}', NULL, '2026-06-20 10:51:24'),
+	(217, 2, 'acordo_parcela', 'desfazer-pagamento', 123, '{"id": 123, "numero": 3, "status": "pago", "acordo_id": 4, "honor_tipo": "percent", "observacao": null, "vencimento": "2026-10-01", "honor_valor": "150.00", "recebido_em": "2026-06-20", "valor_bruto": "500.00", "parceria_tipo": null, "valor_liquido": "350.00", "parceria_valor": null, "honor_percentual": "30.00", "parceria_pessoa_id": null, "repasse_cliente_em": null, "parceria_percentual": null, "repasse_cliente_por": null, "repasse_parceiro_em": null, "parceria_pessoa_tipo": null, "recebimento_forma_id": 3, "repasse_parceiro_por": null, "repasse_cliente_forma_id": null, "recebimento_identificacao": null, "repasse_parceiro_forma_id": null}', NULL, '2026-06-20 10:51:31'),
+	(218, 2, 'acordo_parcela', 'desfazer-pagamento', 122, '{"id": 122, "numero": 2, "status": "pago", "acordo_id": 4, "honor_tipo": "percent", "observacao": null, "vencimento": "2026-09-01", "honor_valor": "150.00", "recebido_em": "2026-06-20", "valor_bruto": "500.00", "parceria_tipo": "percent", "valor_liquido": "350.00", "parceria_valor": "75.00", "honor_percentual": "30.00", "parceria_pessoa_id": 4, "repasse_cliente_em": null, "parceria_percentual": "50.00", "repasse_cliente_por": null, "repasse_parceiro_em": null, "parceria_pessoa_tipo": "fisica", "recebimento_forma_id": 4, "repasse_parceiro_por": null, "repasse_cliente_forma_id": null, "recebimento_identificacao": null, "repasse_parceiro_forma_id": null}', NULL, '2026-06-20 10:51:35'),
+	(219, 2, 'acordo_parcela', 'desfazer-pagamento', 121, '{"id": 121, "numero": 1, "status": "pago", "acordo_id": 4, "honor_tipo": "percent", "observacao": null, "vencimento": "2026-08-03", "honor_valor": "150.00", "recebido_em": "2026-06-20", "valor_bruto": "500.00", "parceria_tipo": null, "valor_liquido": "350.00", "parceria_valor": null, "honor_percentual": "30.00", "parceria_pessoa_id": null, "repasse_cliente_em": null, "parceria_percentual": null, "repasse_cliente_por": null, "repasse_parceiro_em": null, "parceria_pessoa_tipo": null, "recebimento_forma_id": 4, "repasse_parceiro_por": null, "repasse_cliente_forma_id": null, "recebimento_identificacao": null, "repasse_parceiro_forma_id": null}', NULL, '2026-06-20 10:51:37'),
+	(220, 2, 'acordo_parcela', 'desfazer-pagamento', 131, '{"id": 131, "numero": 1, "status": "pago", "acordo_id": 5, "honor_tipo": "percent", "observacao": null, "vencimento": "2026-06-22", "honor_valor": "300.00", "recebido_em": "2026-06-20", "valor_bruto": "1000.00", "parceria_tipo": null, "valor_liquido": "700.00", "parceria_valor": null, "honor_percentual": "30.00", "parceria_pessoa_id": null, "repasse_cliente_em": null, "parceria_percentual": null, "repasse_cliente_por": null, "repasse_parceiro_em": null, "parceria_pessoa_tipo": null, "recebimento_forma_id": 1, "repasse_parceiro_por": null, "repasse_cliente_forma_id": null, "recebimento_identificacao": null, "repasse_parceiro_forma_id": null}', NULL, '2026-06-20 10:53:55'),
+	(221, 2, 'acordo_parcela', 'desfazer-pagamento', 41, '{"id": 41, "numero": 1, "status": "pago", "acordo_id": 1, "honor_tipo": "percent", "observacao": null, "vencimento": "2026-07-01", "honor_valor": "150.00", "recebido_em": "2026-06-20", "valor_bruto": "500.00", "parceria_tipo": "percent", "valor_liquido": "350.00", "parceria_valor": "30.00", "honor_percentual": "30.00", "parceria_pessoa_id": 3, "repasse_cliente_em": null, "parceria_percentual": "20.00", "repasse_cliente_por": null, "repasse_parceiro_em": null, "parceria_pessoa_tipo": "fisica", "recebimento_forma_id": 5, "repasse_parceiro_por": null, "repasse_cliente_forma_id": null, "recebimento_identificacao": null, "repasse_parceiro_forma_id": null}', NULL, '2026-06-20 10:54:15'),
+	(222, 2, 'acordo', 'criar', 6, NULL, NULL, '2026-06-20 13:27:53'),
+	(223, 2, 'acordo', 'atualizar', 6, NULL, NULL, '2026-06-20 13:28:41'),
+	(224, 2, 'acordo_parcela', 'pagar', 141, NULL, NULL, '2026-06-20 13:29:32'),
+	(225, 2, 'acordo_parcela', 'repasse-cliente', 141, NULL, NULL, '2026-06-20 13:30:45'),
+	(226, 2, 'acordo_parcela', 'desfazer-repasse', 141, NULL, NULL, '2026-06-20 13:31:19'),
+	(227, 2, 'acordo_parcela', 'repasse-cliente', 141, NULL, NULL, '2026-06-20 13:31:35'),
+	(228, 2, 'acordo_parcela', 'pagar', 122, NULL, NULL, '2026-06-20 13:33:09'),
+	(229, 2, 'acordo_parcela', 'repasse-cliente', 122, NULL, NULL, '2026-06-20 13:33:20'),
+	(230, 2, 'acordo_parcela', 'repasse-parceiro', 122, NULL, NULL, '2026-06-20 13:33:25'),
+	(231, 2, 'acordo_parcela', 'desfazer-repasse', 141, NULL, NULL, '2026-06-20 13:48:48'),
+	(232, 2, 'acordo_parcela', 'desfazer-repasse', 122, NULL, NULL, '2026-06-20 13:48:49'),
+	(233, 2, 'acordo_parcela', 'desfazer-repasse', 122, NULL, NULL, '2026-06-20 13:48:50'),
+	(234, 2, 'acordo_parcela', 'desfazer-pagamento', 141, '{"id": 141, "numero": 1, "status": "pago", "acordo_id": 6, "honor_tipo": "percent", "observacao": null, "vencimento": "2026-06-16", "honor_valor": "15000.00", "recebido_em": "2026-06-20", "valor_bruto": "50000.00", "parceria_tipo": null, "valor_liquido": "35000.00", "parceria_valor": null, "honor_percentual": "30.00", "parceria_pessoa_id": null, "repasse_cliente_em": null, "parceria_percentual": null, "repasse_cliente_por": null, "repasse_parceiro_em": null, "parceria_pessoa_tipo": null, "recebimento_forma_id": 2, "repasse_parceiro_por": null, "repasse_cliente_forma_id": null, "recebimento_identificacao": null, "repasse_parceiro_forma_id": null}', NULL, '2026-06-20 13:49:01'),
+	(235, 2, 'acordo_parcela', 'desfazer-pagamento', 122, '{"id": 122, "numero": 2, "status": "pago", "acordo_id": 4, "honor_tipo": "percent", "observacao": null, "vencimento": "2026-09-01", "honor_valor": "150.00", "recebido_em": "2026-06-20", "valor_bruto": "500.00", "parceria_tipo": "percent", "valor_liquido": "350.00", "parceria_valor": "75.00", "honor_percentual": "30.00", "parceria_pessoa_id": 4, "repasse_cliente_em": null, "parceria_percentual": "50.00", "repasse_cliente_por": null, "repasse_parceiro_em": null, "parceria_pessoa_tipo": "fisica", "recebimento_forma_id": 5, "repasse_parceiro_por": null, "repasse_cliente_forma_id": null, "recebimento_identificacao": null, "repasse_parceiro_forma_id": null}', NULL, '2026-06-20 13:49:08'),
+	(236, 2, 'acordo_parcela', 'pagar', 141, NULL, NULL, '2026-06-20 14:03:02'),
+	(237, 2, 'acordo_parcela', 'repasse-cliente', 141, NULL, NULL, '2026-06-20 14:03:17'),
+	(238, 2, 'audiencia', 'criar', 16, NULL, NULL, '2026-06-20 16:18:38'),
+	(239, 2, 'usuarios', 'editar', 4, NULL, NULL, '2026-06-22 14:14:15');
 
 -- Copiando estrutura para tabela sistema_advocacia.log_comunicacoes
 DROP TABLE IF EXISTS `log_comunicacoes`;
@@ -11580,38 +12441,55 @@ CREATE TABLE IF NOT EXISTS `log_comunicacoes` (
 DROP TABLE IF EXISTS `log_documentos_gerados`;
 CREATE TABLE IF NOT EXISTS `log_documentos_gerados` (
   `id` int NOT NULL AUTO_INCREMENT,
-  `modelo_id` int NOT NULL,
-  `processo_id` int DEFAULT NULL,
-  `pasta_id` int DEFAULT NULL,
-  `formato` varchar(10) DEFAULT 'pdf',
+  `modelo_id` int DEFAULT NULL,
+  `modelo_nome` varchar(150) NOT NULL,
+  `formato` varchar(10) NOT NULL,
+  `ancora_tipo` varchar(20) DEFAULT NULL,
+  `ancora_id` int DEFAULT NULL,
+  `referencia` varchar(300) DEFAULT NULL,
+  `nome_arquivo` varchar(300) DEFAULT NULL,
   `usuario_id` int NOT NULL,
+  `usuario_nome` varchar(150) NOT NULL,
   `gerado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `modelo_id` (`modelo_id`),
-  KEY `processo_id` (`processo_id`),
-  KEY `pasta_id` (`pasta_id`),
   KEY `usuario_id` (`usuario_id`),
-  CONSTRAINT `fk_logdocs_tblpasta` FOREIGN KEY (`pasta_id`) REFERENCES `tblpasta` (`id`),
-  CONSTRAINT `fk_logdocs_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`),
-  CONSTRAINT `log_documentos_gerados_ibfk_1` FOREIGN KEY (`modelo_id`) REFERENCES `modelo_documento` (`id`),
-  CONSTRAINT `log_documentos_gerados_ibfk_4` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  KEY `gerado_em` (`gerado_em`),
+  CONSTRAINT `fk_logdoc_modelo` FOREIGN KEY (`modelo_id`) REFERENCES `modelo_documento` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_logdoc_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.log_documentos_gerados: ~0 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.log_documentos_gerados: ~15 rows (aproximadamente)
+INSERT INTO `log_documentos_gerados` (`id`, `modelo_id`, `modelo_nome`, `formato`, `ancora_tipo`, `ancora_id`, `referencia`, `nome_arquivo`, `usuario_id`, `usuario_nome`, `gerado_em`) VALUES
+	(1, NULL, 'Carta Audi Una', 'docx', 'audiencia', 12, 'Proc 3333333-33.3333.3.33.3333 · Cliente Claudenor de Lima Ribeiro · Audiência 11/06/2026', 'Carta Audi Una - Claudenor de Lima Ribeiro - Proc 33333333333333333333.docx', 2, 'Claudio', '2026-06-18 16:29:30'),
+	(2, NULL, 'Carta Audi Una', 'pdf', 'audiencia', 12, 'Proc 3333333-33.3333.3.33.3333 · Cliente Claudenor de Lima Ribeiro · Audiência 11/06/2026', 'Carta Audi Una - Claudenor de Lima Ribeiro - Proc 33333333333333333333.pdf', 2, 'Claudio', '2026-06-18 16:38:24'),
+	(3, NULL, 'Carta Audi Una', 'docx', 'audiencia', 11, 'Proc 5555555-55.5555.5.55.5555 · Cliente Via Varejo S/a · Audiência 11/06/2026', 'Carta Audi Una - Via Varejo Sa - Proc 55555555555555555555.docx', 2, 'Claudio', '2026-06-18 16:40:58'),
+	(4, NULL, 'Carta Audi Una', 'pdf', 'audiencia', 10, 'Proc 3333333-33.3333.3.33.3333 · Cliente Claudenor de Lima Ribeiro · Audiência 10/06/2026', 'Carta Audi Una - Claudenor de Lima Ribeiro - Proc 33333333333333333333.pdf', 2, 'Claudio', '2026-06-19 08:26:26'),
+	(5, NULL, 'Prazo', 'docx', 'prazo', 6, 'Proc 5555555-55.5555.5.55.5555 · Cliente Via Varejo S/a', 'Prazo - Via Varejo Sa - Proc 55555555555555555555.docx', 2, 'Claudio', '2026-06-19 14:34:27'),
+	(6, NULL, 'Pericia Tecnica', 'pdf', 'pericia', 2, 'Proc 3333333-33.3333.3.33.3333 · Cliente Claudenor de Lima Ribeiro · Perícia 30/06/2026', 'Pericia Tecnica - Claudenor de Lima Ribeiro - Proc 33333333333333333333.pdf', 2, 'Claudio', '2026-06-19 15:26:05'),
+	(7, NULL, 'Pericia Social', 'pdf', 'pericia', 1, 'Proc 2222222-22.2222.2.22.2222 · Cliente Adelaide Camilo de Carvalho · Perícia 02/06/2026', 'Pericia Social - Adelaide Camilo de Carvalho - Proc 22222222222222222222.pdf', 2, 'Claudio', '2026-06-19 15:26:05'),
+	(8, NULL, 'Pericia Social', 'pdf', 'pericia', 3, 'Proc 5555555-55.5555.5.55.5555 · Cliente Via Varejo S/a · Perícia 16/06/2026', 'Pericia Social - Via Varejo Sa - Proc 55555555555555555555.pdf', 2, 'Claudio', '2026-06-19 15:26:05'),
+	(9, NULL, 'Carta Instrução Pres', 'pdf', 'audiencia', 10, 'Proc 3333333-33.3333.3.33.3333 · Cliente Claudenor de Lima Ribeiro · Audiência 10/06/2026', 'Carta Instrução Pres - Claudenor de Lima Ribeiro - Proc 33333333333333333333.pdf', 2, 'Claudio', '2026-06-19 15:29:32'),
+	(10, NULL, 'Carta Instrução Pres', 'pdf', 'audiencia', 13, 'Proc 3333333-33.3333.3.33.3333 · Cliente Claudenor de Lima Ribeiro · Audiência 12/12/2026', 'Carta Instrução Pres - Claudenor de Lima Ribeiro - Proc 33333333333333333333 (2).pdf', 2, 'Claudio', '2026-06-19 15:29:32'),
+	(11, NULL, 'Carta Audi Una', 'pdf', 'audiencia', 15, 'Proc 2222222-22.2222.2.22.2222 · Cliente Adelaide Camilo de Carvalho · Audiência 22/06/2026', 'Carta Audi Una - Adelaide Camilo de Carvalho - Proc 22222222222222222222.pdf', 2, 'Claudio', '2026-06-19 15:29:32'),
+	(12, NULL, 'Cliente Recebe do Escritorio', 'pdf', 'pagamento', 141, 'Proc 2222222-22.2222.2.22.2222 · Cliente Adelaide Camilo de Carvalho · Recibo Cliente parc 1/1', 'Cliente Recebe do Escritorio - Adelaide Camilo de Carvalho - Proc 22222222222222222222.pdf', 2, 'Claudio', '2026-06-20 15:12:58'),
+	(13, NULL, 'Cliente Recebe do Escritorio', 'pdf', 'pagamento', 141, 'Proc 2222222-22.2222.2.22.2222 · Cliente Adelaide Camilo de Carvalho · Recibo Cliente parc 1/1', 'Cliente Recebe do Escritorio - Adelaide Camilo de Carvalho - Proc 22222222222222222222.pdf', 2, 'Claudio', '2026-06-20 15:23:23'),
+	(14, NULL, 'Procuracao', 'docx', 'multipessoas', NULL, 'Autores: Via Varejo S/a · Réus: Claudenor de Lima Ribeiro', 'Procuracao - Via Varejo Sa.docx', 2, 'Claudio', '2026-06-21 12:02:04'),
+	(15, NULL, 'Procuracao', 'docx', 'multipessoas', NULL, 'Autores: Claudenor de Lima Ribeiro · Réus: Via Varejo S/a', 'Procuracao - Claudenor de Lima Ribeiro.docx', 2, 'Claudio', '2026-06-21 12:05:01');
 
 -- Copiando estrutura para tabela sistema_advocacia.log_emails
 DROP TABLE IF EXISTS `log_emails`;
 CREATE TABLE IF NOT EXISTS `log_emails` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `enviado_em` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `para` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-  `assunto` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-  `status` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-  `erro` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `para` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+  `assunto` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+  `status` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+  `erro` text CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci,
   PRIMARY KEY (`id`),
   KEY `idx_log_emails_enviado_em` (`enviado_em`),
   KEY `idx_log_emails_status` (`status`)
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Copiando dados para a tabela sistema_advocacia.log_emails: ~3 rows (aproximadamente)
 INSERT INTO `log_emails` (`id`, `enviado_em`, `para`, `assunto`, `status`, `erro`) VALUES
@@ -11630,9 +12508,12 @@ CREATE TABLE IF NOT EXISTS `log_publicacoes` (
   PRIMARY KEY (`id`),
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `log_publicacoes_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.log_publicacoes: ~0 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.log_publicacoes: ~2 rows (aproximadamente)
+INSERT INTO `log_publicacoes` (`id`, `usuario_id`, `quantidade`, `data_publicacao`, `acao_em`) VALUES
+	(1, 2, 1, '2026-06-22', '2026-06-22 14:06:17'),
+	(2, 2, 1, '2026-06-22', '2026-06-22 14:08:59');
 
 -- Copiando estrutura para tabela sistema_advocacia.modelo_documento
 DROP TABLE IF EXISTS `modelo_documento`;
@@ -11640,16 +12521,37 @@ CREATE TABLE IF NOT EXISTS `modelo_documento` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(150) NOT NULL,
   `descricao` varchar(300) DEFAULT NULL,
-  `conteudo` longtext NOT NULL,
-  `ativo` tinyint(1) DEFAULT '1',
+  `destino` varchar(20) NOT NULL DEFAULT 'comum',
+  `tipo_audiencia_id` int DEFAULT NULL,
+  `modalidade` varchar(20) DEFAULT NULL,
+  `tipo_pericia_id` int DEFAULT NULL,
+  `subtipo_prazo_id` int DEFAULT NULL,
+  `arquivo_s3_key` varchar(400) NOT NULL,
+  `blocos_exigidos` varchar(200) DEFAULT NULL,
+  `variaveis_usadas` text,
+  `ativo` tinyint(1) NOT NULL DEFAULT '1',
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   `criado_por` int DEFAULT NULL,
+  `alterado_em` datetime DEFAULT NULL,
+  `alterado_por` int DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `criado_por` (`criado_por`),
-  CONSTRAINT `modelo_documento_ibfk_1` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  KEY `alterado_por` (`alterado_por`),
+  KEY `idx_modelo_tipo_aud` (`tipo_audiencia_id`),
+  KEY `idx_modelo_tipo_per` (`tipo_pericia_id`),
+  KEY `idx_modelo_subtipo_prazo` (`subtipo_prazo_id`),
+  CONSTRAINT `fk_modelo_alterado_por` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_modelo_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_modelo_subtipo_prazo` FOREIGN KEY (`subtipo_prazo_id`) REFERENCES `prazo_subtipo` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_modelo_tipo_aud` FOREIGN KEY (`tipo_audiencia_id`) REFERENCES `tipo_audiencia` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_modelo_tipo_per` FOREIGN KEY (`tipo_pericia_id`) REFERENCES `tipo_pericia` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.modelo_documento: ~0 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.modelo_documento: ~3 rows (aproximadamente)
+INSERT INTO `modelo_documento` (`id`, `nome`, `descricao`, `destino`, `tipo_audiencia_id`, `modalidade`, `tipo_pericia_id`, `subtipo_prazo_id`, `arquivo_s3_key`, `blocos_exigidos`, `variaveis_usadas`, `ativo`, `criado_em`, `criado_por`, `alterado_em`, `alterado_por`) VALUES
+	(13, 'Teste', NULL, 'multipessoas', NULL, NULL, NULL, NULL, 'modelos/078f30b6-318d-45c4-852e-1cdda2eb6e7b.docx', NULL, 'estado_civil,profissao,nome_escritorio,cidade_hoje,data_hoje', 1, '2026-06-22 11:33:24', 2, NULL, NULL),
+	(14, 'Teste 3', NULL, 'comum', NULL, NULL, NULL, NULL, 'modelos/a6b8660a-e090-44e3-a14d-3bd5a6c8ba17.docx', 'cliente,processo', 'nome_cliente,nacionalidade_cliente,estado_civil,profissao,cpf_cliente,endereco_cliente,nome_escritorio,numero_processo,vara,forum,cidade_hoje,data_hoje', 1, '2026-06-22 11:37:04', 2, NULL, NULL),
+	(15, 'Teste 4', NULL, 'comum', NULL, NULL, NULL, NULL, 'modelos/a248b3b8-381f-4a22-bebf-4c52293965f1.docx', 'cliente,processo', 'nome_cliente,nacionalidade_cliente,estado_civil,profissao,cpf_cliente,endereco_cliente,nome_escritorio,numero_processo,vara,forum,cidade_hoje,data_hoje', 1, '2026-06-22 11:37:55', 2, NULL, NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.notificacoes
 DROP TABLE IF EXISTS `notificacoes`;
@@ -11657,7 +12559,7 @@ CREATE TABLE IF NOT EXISTS `notificacoes` (
   `id` int NOT NULL AUTO_INCREMENT,
   `usuario_id` int NOT NULL,
   `prazo_id` int NOT NULL,
-  `mensagem` varchar(300) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `mensagem` varchar(300) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
   `lida` tinyint(1) DEFAULT '0',
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -11665,29 +12567,9 @@ CREATE TABLE IF NOT EXISTS `notificacoes` (
   KEY `prazo_id` (`prazo_id`),
   CONSTRAINT `fk_notif_prazo` FOREIGN KEY (`prazo_id`) REFERENCES `prazos_processo` (`id`),
   CONSTRAINT `fk_notif_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Copiando dados para a tabela sistema_advocacia.notificacoes: ~0 rows (aproximadamente)
-
--- Copiando estrutura para tabela sistema_advocacia.parcerias
-DROP TABLE IF EXISTS `parcerias`;
-CREATE TABLE IF NOT EXISTS `parcerias` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `processo_id` int NOT NULL,
-  `descricao` varchar(200) NOT NULL,
-  `tipo` varchar(20) DEFAULT 'fixo',
-  `percentual` decimal(5,2) DEFAULT NULL,
-  `valor_fixo` decimal(15,2) DEFAULT NULL,
-  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
-  `criado_por` int DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `processo_id` (`processo_id`),
-  KEY `criado_por` (`criado_por`),
-  CONSTRAINT `fk_parcerias_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`),
-  CONSTRAINT `parcerias_ibfk_2` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.parcerias: ~0 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.notificacoes: ~0 rows (aproximadamente)
 
 -- Copiando estrutura para tabela sistema_advocacia.pericia
 DROP TABLE IF EXISTS `pericia`;
@@ -11698,26 +12580,49 @@ CREATE TABLE IF NOT EXISTS `pericia` (
   `data` date NOT NULL,
   `hora` time DEFAULT NULL,
   `local` varchar(300) DEFAULT NULL,
+  `cep` varchar(9) DEFAULT NULL,
+  `logradouro` varchar(200) DEFAULT NULL,
+  `numero` varchar(20) DEFAULT NULL,
+  `complemento` varchar(100) DEFAULT NULL,
+  `bairro` varchar(100) DEFAULT NULL,
+  `cidade` varchar(100) DEFAULT NULL,
+  `estado` varchar(2) DEFAULT NULL,
   `perito_tipo` varchar(20) DEFAULT NULL,
   `perito_id` int DEFAULT NULL,
   `assistente_tecnico_id` int DEFAULT NULL,
+  `responsavel_id` int DEFAULT NULL,
+  `responsavel_freela_id` int DEFAULT NULL,
+  `status` varchar(20) NOT NULL DEFAULT 'agendada',
+  `motivo_status` text,
   `comunicado_enviado` tinyint(1) DEFAULT '0',
   `email_perito_enviado` tinyint(1) DEFAULT '0',
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   `criado_por` int NOT NULL,
+  `alterado_por` int DEFAULT NULL,
+  `alterado_em` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `processo_id` (`processo_id`),
   KEY `tipo_pericia_id` (`tipo_pericia_id`),
   KEY `assistente_tecnico_id` (`assistente_tecnico_id`),
   KEY `criado_por` (`criado_por`),
   KEY `idx_per_data` (`data`),
+  KEY `fk_pericia_responsavel` (`responsavel_id`),
+  KEY `fk_pericia_resp_freela` (`responsavel_freela_id`),
+  KEY `fk_pericia_alterado_por` (`alterado_por`),
+  CONSTRAINT `fk_pericia_alterado_por` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_pericia_resp_freela` FOREIGN KEY (`responsavel_freela_id`) REFERENCES `advogados_freela` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_pericia_responsavel` FOREIGN KEY (`responsavel_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_pericia_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`),
   CONSTRAINT `pericia_ibfk_2` FOREIGN KEY (`tipo_pericia_id`) REFERENCES `tipo_pericia` (`id`),
   CONSTRAINT `pericia_ibfk_3` FOREIGN KEY (`assistente_tecnico_id`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `pericia_ibfk_4` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.pericia: ~0 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.pericia: ~3 rows (aproximadamente)
+INSERT INTO `pericia` (`id`, `processo_id`, `tipo_pericia_id`, `data`, `hora`, `local`, `cep`, `logradouro`, `numero`, `complemento`, `bairro`, `cidade`, `estado`, `perito_tipo`, `perito_id`, `assistente_tecnico_id`, `responsavel_id`, `responsavel_freela_id`, `status`, `motivo_status`, `comunicado_enviado`, `email_perito_enviado`, `criado_em`, `criado_por`, `alterado_por`, `alterado_em`) VALUES
+	(1, 5, 8, '2026-06-02', '20:04:00', NULL, '03818-030', 'Rua Lagoa D\'anta', '2', NULL, 'Parque Císper', 'São Paulo', 'SP', 'fisica', 4, NULL, 6, NULL, 'agendada', NULL, 0, 0, '2026-06-15 12:08:23', 2, 2, '2026-06-15 14:24:32'),
+	(2, 6, 7, '2026-06-30', '09:00:00', NULL, '03818-030', 'Rua Lagoa D\'anta', '70', NULL, 'Parque Císper', 'São Paulo', 'SP', NULL, NULL, NULL, 3, NULL, 'agendada', NULL, 0, 0, '2026-06-15 14:11:37', 2, 2, '2026-06-15 15:36:36'),
+	(3, 8, 8, '2026-06-16', '21:00:00', NULL, '03818-030', 'Rua Lagoa D\'anta', '5', NULL, 'Parque Císper', 'São Paulo', 'SP', NULL, NULL, NULL, 3, NULL, 'agendada', NULL, 0, 0, '2026-06-15 15:16:06', 2, NULL, NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.permissoes
 DROP TABLE IF EXISTS `permissoes`;
@@ -11731,100 +12636,10 @@ CREATE TABLE IF NOT EXISTS `permissoes` (
   PRIMARY KEY (`id`),
   KEY `idx_usuario_modulo` (`usuario_id`,`modulo`,`submodulo`,`acao`),
   CONSTRAINT `permissoes_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=2363 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2468 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.permissoes: ~470 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.permissoes: ~485 rows (aproximadamente)
 INSERT INTO `permissoes` (`id`, `usuario_id`, `modulo`, `submodulo`, `acao`, `permitido`) VALUES
-	(853, 4, 'pessoas', NULL, 'visualizar', 1),
-	(854, 4, 'pessoas', NULL, 'cadastrar', 1),
-	(855, 4, 'pessoas', NULL, 'alterar', 1),
-	(856, 4, 'pessoas', NULL, 'excluir', 1),
-	(857, 4, 'pessoas', NULL, 'historico', 0),
-	(858, 4, 'processos', NULL, 'visualizar', 1),
-	(859, 4, 'processos', NULL, 'cadastrar', 1),
-	(860, 4, 'processos', NULL, 'alterar', 1),
-	(861, 4, 'processos', NULL, 'excluir', 1),
-	(862, 4, 'processos', NULL, 'historico', 0),
-	(863, 4, 'processos', 'andamentos', 'visualizar', 1),
-	(864, 4, 'processos', 'andamentos', 'cadastrar', 1),
-	(865, 4, 'processos', 'andamentos', 'alterar', 1),
-	(866, 4, 'processos', 'andamentos', 'excluir', 1),
-	(867, 4, 'processos', 'andamentos', 'historico', 0),
-	(868, 4, 'processos', 'prazos', 'visualizar', 1),
-	(869, 4, 'processos', 'prazos', 'cadastrar', 1),
-	(870, 4, 'processos', 'prazos', 'alterar', 1),
-	(871, 4, 'processos', 'prazos', 'excluir', 1),
-	(872, 4, 'processos', 'prazos', 'historico', 0),
-	(873, 4, 'processos', 'tarefas', 'visualizar', 1),
-	(874, 4, 'processos', 'tarefas', 'cadastrar', 1),
-	(875, 4, 'processos', 'tarefas', 'alterar', 1),
-	(876, 4, 'processos', 'tarefas', 'excluir', 1),
-	(877, 4, 'processos', 'tarefas', 'historico', 0),
-	(878, 4, 'processos', 'audiencias', 'visualizar', 1),
-	(879, 4, 'processos', 'audiencias', 'cadastrar', 1),
-	(880, 4, 'processos', 'audiencias', 'alterar', 1),
-	(881, 4, 'processos', 'audiencias', 'excluir', 1),
-	(882, 4, 'processos', 'audiencias', 'historico', 0),
-	(883, 4, 'processos', 'pericias', 'visualizar', 1),
-	(884, 4, 'processos', 'pericias', 'cadastrar', 1),
-	(885, 4, 'processos', 'pericias', 'alterar', 1),
-	(886, 4, 'processos', 'pericias', 'excluir', 1),
-	(887, 4, 'processos', 'pericias', 'historico', 0),
-	(888, 4, 'pastas', NULL, 'visualizar', 1),
-	(889, 4, 'pastas', NULL, 'cadastrar', 1),
-	(890, 4, 'pastas', NULL, 'alterar', 1),
-	(891, 4, 'pastas', NULL, 'excluir', 1),
-	(892, 4, 'pastas', NULL, 'historico', 0),
-	(893, 4, 'prazos', NULL, 'visualizar', 1),
-	(894, 4, 'prazos', NULL, 'cadastrar', 1),
-	(895, 4, 'prazos', NULL, 'alterar', 1),
-	(896, 4, 'prazos', NULL, 'excluir', 1),
-	(897, 4, 'prazos', NULL, 'historico', 1),
-	(898, 4, 'prazos', 'ver_todos', 'visualizar', 1),
-	(899, 4, 'prazos', 'ver_todos', 'cadastrar', 1),
-	(900, 4, 'prazos', 'ver_todos', 'alterar', 1),
-	(901, 4, 'prazos', 'ver_todos', 'excluir', 1),
-	(902, 4, 'prazos', 'ver_todos', 'historico', 1),
-	(903, 4, 'tarefas', NULL, 'visualizar', 1),
-	(904, 4, 'tarefas', NULL, 'cadastrar', 1),
-	(905, 4, 'tarefas', NULL, 'alterar', 1),
-	(906, 4, 'tarefas', NULL, 'excluir', 1),
-	(907, 4, 'tarefas', NULL, 'historico', 1),
-	(908, 4, 'tarefas', 'ver_todos', 'visualizar', 1),
-	(909, 4, 'tarefas', 'ver_todos', 'cadastrar', 1),
-	(910, 4, 'tarefas', 'ver_todos', 'alterar', 1),
-	(911, 4, 'tarefas', 'ver_todos', 'excluir', 1),
-	(912, 4, 'tarefas', 'ver_todos', 'historico', 1),
-	(913, 4, 'audiencias', NULL, 'visualizar', 1),
-	(914, 4, 'audiencias', NULL, 'cadastrar', 1),
-	(915, 4, 'audiencias', NULL, 'alterar', 1),
-	(916, 4, 'audiencias', NULL, 'excluir', 1),
-	(917, 4, 'audiencias', NULL, 'historico', 0),
-	(918, 4, 'pericias', NULL, 'visualizar', 1),
-	(919, 4, 'pericias', NULL, 'cadastrar', 1),
-	(920, 4, 'pericias', NULL, 'alterar', 1),
-	(921, 4, 'pericias', NULL, 'excluir', 1),
-	(922, 4, 'pericias', NULL, 'historico', 0),
-	(923, 4, 'financeiro', NULL, 'visualizar', 1),
-	(924, 4, 'financeiro', NULL, 'cadastrar', 1),
-	(925, 4, 'financeiro', NULL, 'alterar', 1),
-	(926, 4, 'financeiro', NULL, 'excluir', 1),
-	(927, 4, 'financeiro', NULL, 'historico', 0),
-	(928, 4, 'documentos', NULL, 'visualizar', 1),
-	(929, 4, 'documentos', NULL, 'cadastrar', 1),
-	(930, 4, 'documentos', NULL, 'alterar', 1),
-	(931, 4, 'documentos', NULL, 'excluir', 1),
-	(932, 4, 'documentos', NULL, 'historico', 0),
-	(933, 4, 'publicacoes', NULL, 'visualizar', 1),
-	(934, 4, 'publicacoes', NULL, 'cadastrar', 1),
-	(935, 4, 'publicacoes', NULL, 'alterar', 1),
-	(936, 4, 'publicacoes', NULL, 'excluir', 1),
-	(937, 4, 'publicacoes', NULL, 'historico', 0),
-	(938, 4, 'relatorios', NULL, 'visualizar', 1),
-	(939, 4, 'relatorios', NULL, 'cadastrar', 1),
-	(940, 4, 'relatorios', NULL, 'alterar', 1),
-	(941, 4, 'relatorios', NULL, 'excluir', 1),
-	(942, 4, 'relatorios', NULL, 'historico', 0),
 	(1888, 3, 'pessoas', NULL, 'visualizar', 1),
 	(1889, 3, 'pessoas', NULL, 'cadastrar', 1),
 	(1890, 3, 'pessoas', NULL, 'alterar', 1),
@@ -12204,7 +13019,112 @@ INSERT INTO `permissoes` (`id`, `usuario_id`, `modulo`, `submodulo`, `acao`, `pe
 	(2359, 5, 'relatorios', NULL, 'cadastrar', 1),
 	(2360, 5, 'relatorios', NULL, 'alterar', 1),
 	(2361, 5, 'relatorios', NULL, 'excluir', 0),
-	(2362, 5, 'relatorios', NULL, 'historico', 0);
+	(2362, 5, 'relatorios', NULL, 'historico', 0),
+	(2363, 4, 'pessoas', NULL, 'visualizar', 1),
+	(2364, 4, 'pessoas', NULL, 'cadastrar', 1),
+	(2365, 4, 'pessoas', NULL, 'alterar', 1),
+	(2366, 4, 'pessoas', NULL, 'excluir', 1),
+	(2367, 4, 'pessoas', NULL, 'historico', 0),
+	(2368, 4, 'processos', NULL, 'visualizar', 1),
+	(2369, 4, 'processos', NULL, 'cadastrar', 1),
+	(2370, 4, 'processos', NULL, 'alterar', 1),
+	(2371, 4, 'processos', NULL, 'excluir', 1),
+	(2372, 4, 'processos', NULL, 'historico', 0),
+	(2373, 4, 'processos', 'andamentos', 'visualizar', 1),
+	(2374, 4, 'processos', 'andamentos', 'cadastrar', 1),
+	(2375, 4, 'processos', 'andamentos', 'alterar', 1),
+	(2376, 4, 'processos', 'andamentos', 'excluir', 1),
+	(2377, 4, 'processos', 'andamentos', 'historico', 0),
+	(2378, 4, 'processos', 'prazos', 'visualizar', 1),
+	(2379, 4, 'processos', 'prazos', 'cadastrar', 1),
+	(2380, 4, 'processos', 'prazos', 'alterar', 1),
+	(2381, 4, 'processos', 'prazos', 'excluir', 1),
+	(2382, 4, 'processos', 'prazos', 'historico', 0),
+	(2383, 4, 'processos', 'tarefas', 'visualizar', 1),
+	(2384, 4, 'processos', 'tarefas', 'cadastrar', 1),
+	(2385, 4, 'processos', 'tarefas', 'alterar', 1),
+	(2386, 4, 'processos', 'tarefas', 'excluir', 1),
+	(2387, 4, 'processos', 'tarefas', 'historico', 0),
+	(2388, 4, 'processos', 'audiencias', 'visualizar', 1),
+	(2389, 4, 'processos', 'audiencias', 'cadastrar', 1),
+	(2390, 4, 'processos', 'audiencias', 'alterar', 1),
+	(2391, 4, 'processos', 'audiencias', 'excluir', 1),
+	(2392, 4, 'processos', 'audiencias', 'historico', 0),
+	(2393, 4, 'processos', 'pericias', 'visualizar', 1),
+	(2394, 4, 'processos', 'pericias', 'cadastrar', 1),
+	(2395, 4, 'processos', 'pericias', 'alterar', 1),
+	(2396, 4, 'processos', 'pericias', 'excluir', 1),
+	(2397, 4, 'processos', 'pericias', 'historico', 0),
+	(2398, 4, 'pastas', NULL, 'visualizar', 1),
+	(2399, 4, 'pastas', NULL, 'cadastrar', 1),
+	(2400, 4, 'pastas', NULL, 'alterar', 1),
+	(2401, 4, 'pastas', NULL, 'excluir', 1),
+	(2402, 4, 'pastas', NULL, 'historico', 0),
+	(2403, 4, 'prazos', NULL, 'visualizar', 1),
+	(2404, 4, 'prazos', NULL, 'cadastrar', 1),
+	(2405, 4, 'prazos', NULL, 'alterar', 1),
+	(2406, 4, 'prazos', NULL, 'excluir', 1),
+	(2407, 4, 'prazos', NULL, 'historico', 1),
+	(2408, 4, 'prazos', 'ver_todos', 'visualizar', 1),
+	(2409, 4, 'prazos', 'ver_todos', 'cadastrar', 1),
+	(2410, 4, 'prazos', 'ver_todos', 'alterar', 1),
+	(2411, 4, 'prazos', 'ver_todos', 'excluir', 1),
+	(2412, 4, 'prazos', 'ver_todos', 'historico', 1),
+	(2413, 4, 'tarefas', NULL, 'visualizar', 1),
+	(2414, 4, 'tarefas', NULL, 'cadastrar', 1),
+	(2415, 4, 'tarefas', NULL, 'alterar', 1),
+	(2416, 4, 'tarefas', NULL, 'excluir', 1),
+	(2417, 4, 'tarefas', NULL, 'historico', 1),
+	(2418, 4, 'tarefas', 'ver_todos', 'visualizar', 1),
+	(2419, 4, 'tarefas', 'ver_todos', 'cadastrar', 1),
+	(2420, 4, 'tarefas', 'ver_todos', 'alterar', 1),
+	(2421, 4, 'tarefas', 'ver_todos', 'excluir', 1),
+	(2422, 4, 'tarefas', 'ver_todos', 'historico', 1),
+	(2423, 4, 'audiencias', NULL, 'visualizar', 1),
+	(2424, 4, 'audiencias', NULL, 'cadastrar', 1),
+	(2425, 4, 'audiencias', NULL, 'alterar', 1),
+	(2426, 4, 'audiencias', NULL, 'excluir', 1),
+	(2427, 4, 'audiencias', NULL, 'historico', 0),
+	(2428, 4, 'audiencias', 'tipos', 'visualizar', 0),
+	(2429, 4, 'audiencias', 'tipos', 'cadastrar', 0),
+	(2430, 4, 'audiencias', 'tipos', 'alterar', 0),
+	(2431, 4, 'audiencias', 'tipos', 'excluir', 0),
+	(2432, 4, 'audiencias', 'tipos', 'historico', 0),
+	(2433, 4, 'pericias', NULL, 'visualizar', 1),
+	(2434, 4, 'pericias', NULL, 'cadastrar', 1),
+	(2435, 4, 'pericias', NULL, 'alterar', 1),
+	(2436, 4, 'pericias', NULL, 'excluir', 1),
+	(2437, 4, 'pericias', NULL, 'historico', 0),
+	(2438, 4, 'pericias', 'tipos', 'visualizar', 0),
+	(2439, 4, 'pericias', 'tipos', 'cadastrar', 0),
+	(2440, 4, 'pericias', 'tipos', 'alterar', 0),
+	(2441, 4, 'pericias', 'tipos', 'excluir', 0),
+	(2442, 4, 'pericias', 'tipos', 'historico', 0),
+	(2443, 4, 'financeiro', NULL, 'visualizar', 1),
+	(2444, 4, 'financeiro', NULL, 'cadastrar', 1),
+	(2445, 4, 'financeiro', NULL, 'alterar', 1),
+	(2446, 4, 'financeiro', NULL, 'excluir', 1),
+	(2447, 4, 'financeiro', NULL, 'historico', 0),
+	(2448, 4, 'documentos', NULL, 'visualizar', 1),
+	(2449, 4, 'documentos', NULL, 'cadastrar', 1),
+	(2450, 4, 'documentos', NULL, 'alterar', 1),
+	(2451, 4, 'documentos', NULL, 'excluir', 1),
+	(2452, 4, 'documentos', NULL, 'historico', 0),
+	(2453, 4, 'documentos', 'modelos', 'visualizar', 0),
+	(2454, 4, 'documentos', 'modelos', 'cadastrar', 0),
+	(2455, 4, 'documentos', 'modelos', 'alterar', 0),
+	(2456, 4, 'documentos', 'modelos', 'excluir', 0),
+	(2457, 4, 'documentos', 'modelos', 'historico', 0),
+	(2458, 4, 'publicacoes', NULL, 'visualizar', 1),
+	(2459, 4, 'publicacoes', NULL, 'cadastrar', 0),
+	(2460, 4, 'publicacoes', NULL, 'alterar', 1),
+	(2461, 4, 'publicacoes', NULL, 'excluir', 1),
+	(2462, 4, 'publicacoes', NULL, 'historico', 0),
+	(2463, 4, 'relatorios', NULL, 'visualizar', 1),
+	(2464, 4, 'relatorios', NULL, 'cadastrar', 1),
+	(2465, 4, 'relatorios', NULL, 'alterar', 1),
+	(2466, 4, 'relatorios', NULL, 'excluir', 1),
+	(2467, 4, 'relatorios', NULL, 'historico', 0);
 
 -- Copiando estrutura para tabela sistema_advocacia.pessoas_fisicas
 DROP TABLE IF EXISTS `pessoas_fisicas`;
@@ -12254,7 +13174,7 @@ CREATE TABLE IF NOT EXISTS `pessoas_fisicas` (
 -- Copiando dados para a tabela sistema_advocacia.pessoas_fisicas: ~5 rows (aproximadamente)
 INSERT INTO `pessoas_fisicas` (`id`, `nome`, `cpf`, `rg`, `rg_orgao`, `pis`, `ctps_numero`, `ctps_serie`, `nome_pai`, `nome_mae`, `data_nascimento`, `estado_civil_id`, `profissao_id`, `genero_id`, `cep`, `logradouro`, `numero`, `complemento`, `bairro`, `cidade`, `estado`, `foto_path`, `observacoes`, `ativo`, `criado_em`, `criado_por`, `alterado_por`, `alterado_em`) VALUES
 	(2, 'Edna Silva Vieira de Lima Ribeiro', '25570626859', '23390098-6', 'SSp/sp', NULL, NULL, NULL, NULL, NULL, '1972-03-27', 7, 6, 2, '03818-030', 'Rua Lagoa D\'anta', '70', NULL, 'Parque Cisper', 'Sao Paulo', 'SP', NULL, NULL, 1, '2026-05-25 19:21:08', 2, NULL, NULL),
-	(3, 'Erick Silva Ribeiro', '86620444920', NULL, NULL, NULL, '654654', '5654-SP', NULL, NULL, '1999-05-15', 2, 1, 1, '03818-030', 'Rua Lagoa D\'anta', '30', NULL, 'Parque Císper', 'São Paulo', 'SP', NULL, NULL, 1, '2026-05-25 20:35:50', 2, NULL, NULL),
+	(3, 'Erick Silva Ribeiro', '86620444920', NULL, NULL, NULL, '654654', '5654-SP', NULL, NULL, '1999-05-15', 2, 19, 1, '03818-030', 'Rua Lagoa D\'anta', '30', NULL, 'Parque Císper', 'São Paulo', 'SP', NULL, NULL, 1, '2026-05-25 20:35:50', 2, 2, '2026-06-15 15:30:58'),
 	(4, 'Claudenor de Lima Ribeiro', '13667952880', '23.390.098-6', 'ssp/sp', '654654654654654', 'Digital', NULL, 'Jesuino Batista Ribeiro', 'Leonor Maria de Lima Ribeiro', '1972-03-27', 2, 9, 1, '03820-200', 'Rua Ibirajuba', '2', 'Apto 22, Bloco F-3', 'Vila Sílvia', 'São Paulo', 'SP', NULL, 'Teste de Observações', 1, '2026-05-26 09:12:50', 2, 2, '2026-06-09 12:11:32'),
 	(5, 'Adelaide Camilo de Carvalho', '43812289873', NULL, NULL, NULL, NULL, NULL, NULL, NULL, '1994-08-31', 3, 17, 2, '08490-006', 'Rua Inácio Monteiro', '600', NULL, 'Vila Hortência', 'São Paulo', 'SP', NULL, NULL, 1, '2026-05-26 13:39:41', 2, NULL, NULL),
 	(6, 'pedro', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1, '2026-06-09 22:52:14', 2, NULL, NULL);
@@ -12343,8 +13263,8 @@ INSERT INTO `prazos_processo` (`id`, `processo_id`, `subtipo_id`, `descricao`, `
 	(4, 5, 20, NULL, '2026-05-31', 7, 'uteis', '2026-06-10', NULL, 'concluido', 2, '2026-06-03 11:37:32', 2, '2026-06-03 11:37:32', '2026-05-30 23:40:20', 2, NULL, NULL, NULL, NULL),
 	(5, 6, 19, NULL, '2026-05-31', 15, 'uteis', '2026-06-22', NULL, 'aberto', NULL, NULL, NULL, NULL, '2026-05-31 00:06:59', 3, NULL, NULL, NULL, NULL),
 	(6, 8, 19, NULL, '2026-05-31', 10, 'uteis', '2026-06-15', NULL, 'aberto', NULL, NULL, NULL, NULL, '2026-05-31 12:16:41', 3, NULL, NULL, NULL, NULL),
-	(7, 5, 22, NULL, '2026-05-05', 10, 'uteis', '2026-05-18', 3, 'aberto', NULL, NULL, NULL, NULL, '2026-05-31 12:50:23', 2, NULL, NULL, NULL, NULL),
-	(8, 4, 2, NULL, '2026-05-12', 5, 'uteis', '2026-05-18', 5, 'aberto', NULL, NULL, NULL, NULL, '2026-05-31 12:50:41', 2, NULL, NULL, NULL, NULL);
+	(7, 5, 22, NULL, '2026-05-05', 10, 'uteis', '2026-05-18', 3, 'concluido', 2, '2026-06-18 08:27:16', 2, '2026-06-18 08:27:16', '2026-05-31 12:50:23', 2, NULL, NULL, NULL, NULL),
+	(8, 4, 2, NULL, '2026-05-12', 5, 'uteis', '2026-05-18', 5, 'concluido', 2, '2026-06-18 08:27:20', 2, '2026-06-18 08:27:20', '2026-05-31 12:50:41', 2, NULL, NULL, NULL, NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.prazo_subtipo
 DROP TABLE IF EXISTS `prazo_subtipo`;
@@ -12391,15 +13311,35 @@ INSERT INTO `prazo_subtipo` (`id`, `tipo_prazo_id`, `nome`, `ativo`) VALUES
 	(29, 5, 'Indicação De Bens', 1),
 	(30, 5, 'Cumprimento De Obrigação De Fazer/Não Fazer', 1);
 
+-- Copiando estrutura para tabela sistema_advocacia.processo_perito
+DROP TABLE IF EXISTS `processo_perito`;
+CREATE TABLE IF NOT EXISTS `processo_perito` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `proc_id` int NOT NULL,
+  `tipo_pessoa` varchar(20) NOT NULL,
+  `pessoa_id` int NOT NULL,
+  `criado_por` int DEFAULT NULL,
+  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `proc_id` (`proc_id`),
+  KEY `criado_por` (`criado_por`),
+  CONSTRAINT `fk_procperito_proc` FOREIGN KEY (`proc_id`) REFERENCES `tblproc` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_procperito_usuario` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Copiando dados para a tabela sistema_advocacia.processo_perito: ~1 rows (aproximadamente)
+INSERT INTO `processo_perito` (`id`, `proc_id`, `tipo_pessoa`, `pessoa_id`, `criado_por`, `criado_em`) VALUES
+	(1, 6, 'fisica', 6, 2, '2026-06-15 15:35:33');
+
 -- Copiando estrutura para tabela sistema_advocacia.profissao
 DROP TABLE IF EXISTS `profissao`;
 CREATE TABLE IF NOT EXISTS `profissao` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(100) NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=20 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.profissao: ~16 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.profissao: ~17 rows (aproximadamente)
 INSERT INTO `profissao` (`id`, `nome`) VALUES
 	(1, 'Advogado'),
 	(2, 'Médico'),
@@ -12416,35 +13356,138 @@ INSERT INTO `profissao` (`id`, `nome`) VALUES
 	(13, 'Operário'),
 	(14, 'Técnico'),
 	(17, 'Negociadora de Cobrança'),
-	(18, 'Controlador de Acesso');
+	(18, 'Controlador de Acesso'),
+	(19, 'Perito');
+
+-- Copiando estrutura para tabela sistema_advocacia.publicacao_usuario
+DROP TABLE IF EXISTS `publicacao_usuario`;
+CREATE TABLE IF NOT EXISTS `publicacao_usuario` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `publicacao_id` int NOT NULL,
+  `usuario_id` int NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_pu_pub` (`publicacao_id`),
+  KEY `idx_pu_user` (`usuario_id`),
+  CONSTRAINT `fk_pu_pub` FOREIGN KEY (`publicacao_id`) REFERENCES `publicacoes` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_pu_user` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Copiando dados para a tabela sistema_advocacia.publicacao_usuario: ~4 rows (aproximadamente)
+INSERT INTO `publicacao_usuario` (`id`, `publicacao_id`, `usuario_id`) VALUES
+	(2, 68, 3),
+	(3, 65, 9),
+	(4, 65, 4),
+	(6, 51, 4);
 
 -- Copiando estrutura para tabela sistema_advocacia.publicacoes
 DROP TABLE IF EXISTS `publicacoes`;
 CREATE TABLE IF NOT EXISTS `publicacoes` (
   `id` int NOT NULL AUTO_INCREMENT,
+  `fonte` varchar(20) NOT NULL DEFAULT 'aasp',
   `data_publicacao` date NOT NULL,
-  `oab` varchar(30) NOT NULL,
-  `numero_processo` varchar(30) DEFAULT NULL,
-  `texto` longtext NOT NULL,
-  `tratada` tinyint(1) DEFAULT '0',
+  `numero_processo` varchar(45) DEFAULT NULL,
+  `titulo` varchar(255) DEFAULT NULL,
+  `cabecalho` varchar(100) DEFAULT NULL,
+  `numero_publicacao` varchar(30) DEFAULT NULL,
+  `numero_arquivo` varchar(30) DEFAULT NULL,
+  `texto` mediumtext NOT NULL,
+  `texto_hash` char(64) NOT NULL,
+  `escritorio` tinyint(1) NOT NULL DEFAULT '1',
+  `importada_por` int DEFAULT NULL,
+  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  `direcionada_por` int DEFAULT NULL,
+  `direcionada_em` datetime DEFAULT NULL,
+  `tratada` tinyint(1) NOT NULL DEFAULT '0',
   `tratada_por` int DEFAULT NULL,
   `tratada_em` datetime DEFAULT NULL,
-  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
+  KEY `idx_pub_data` (`data_publicacao`),
+  KEY `idx_pub_hash` (`texto_hash`),
+  KEY `idx_pub_processo` (`numero_processo`),
+  KEY `idx_pub_fonte` (`fonte`),
+  KEY `importada_por` (`importada_por`),
+  KEY `direcionada_por` (`direcionada_por`),
   KEY `tratada_por` (`tratada_por`),
-  KEY `idx_data` (`data_publicacao`),
-  KEY `idx_processo` (`numero_processo`),
-  CONSTRAINT `publicacoes_ibfk_1` FOREIGN KEY (`tratada_por`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  CONSTRAINT `fk_pub_direcionada` FOREIGN KEY (`direcionada_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_pub_importada` FOREIGN KEY (`importada_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_pub_tratada` FOREIGN KEY (`tratada_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=69 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.publicacoes: ~0 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.publicacoes: ~66 rows (aproximadamente)
+INSERT INTO `publicacoes` (`id`, `fonte`, `data_publicacao`, `numero_processo`, `titulo`, `cabecalho`, `numero_publicacao`, `numero_arquivo`, `texto`, `texto_hash`, `escritorio`, `importada_por`, `criado_em`, `direcionada_por`, `direcionada_em`, `tratada`, `tratada_por`, `tratada_em`) VALUES
+	(1, 'aasp', '2026-06-19', '4000998-74.2026.8.26.0005', 'TJSP Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '221575', '1', '\n\r Processo: 4000998-74.2026.8.26.0005\n\r Órgão: UPJ da 1ª a 5ª Varas Cíveis - Regional V - São Miguel Paulista\r Data de disponibilização: 19/06/2026\r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r NELSON BATISTA DOS SANTOS\r COMPANHIA DE SANEAMENTO BASICO DO ESTADO DE SAO PAULO - SABESP\n\r Advogado(s) \r FLÁVIO OLÍMPIO DE AZEVEDO\r OAB SP-34248\r MILENA PIRAGINE\r OAB SP-178962\r GISELE DA CONCEIÇÃO FERNANDES\r OAB SP-308045\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n Procedimento Comum Cível Nº 4000998-74.2026.8.26.0005/SPAUTOR: NELSON BATISTA DOS SANTOSADVOGADO(A): GISELE DA CONCEIÇÃO FERNANDES (OAB SP308045)ADVOGADO(A): ANTONIO FERREIRA DA COSTA (OAB SP222418)RÉU: COMPANHIA DE SANEAMENTO BASICO DO ESTADO DE SAO PAULO - SABESPADVOGADO(A): FLÁVIO OLÍMPIO DE AZEVEDO (OAB SP034248)ADVOGADO(A): MILENA PIRAGINE (OAB SP178962)SENTENÇAPelo exposto e pelo mais que dos autos consta, julgo PROCEDENTES os pedidos formulados por NELSON BATISTA DOS SANTOS em face de COMPANHIA DE SANEAMENTO BASICO DO ESTADO DE SAO PAULO - SABESP, de maneira a: a) Declarar a inexigibilidade dos débitos atribuídos ao autor vinculados à unidade consumidora situada na Rua Ana Soares Barcelos, nº 355, complemento B04 AP 118, Guarulhos/SP, especialmente aqueles relacionados às cobranças com vencimentos em 13/11/2023 e 16/11/2023. b) Condenar a ré à restituição ao autor dos valores de R$ 12,04 e R$ 54,93 em dobro. Os valores serão corrigidos desde a data dos respectivos pagamentos e com juros de mora desde a citação, observando-se o índice IPCA-IBGE, em relação à correção monetária e a taxa SELIC, deduzida do IPCA-IBGE, em relação aos juros de mora. c) Condenar a ré ao pagamento de R$ 3.000,00 (três mil reais) a título de danos morais. O valor será corrigido desde a data da sentença, ou seja, do arbitramento (Súmula 362 do STJ) e com juros de mora desde a citação, observando-se o índice IPCA-IBGE, em relação à correção monetária e a taxa SELIC, deduzida do IPCA-IBGE, em relação aos juros de mora. Pelo princípio da sucumbência, condeno a parte ré ao pagamento de custas e despesas processuais, bem como honorários advocatícios que fixo em 10% sobre o valor atualizado da causa. P.R.I.', '613cab0e019c5f6bf0ca9bf989995884c07d3903eefb15f5ebc1b103b8d33183', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(2, 'aasp', '2026-06-19', '1017129-31.2026.8.26.0053', 'TJSP Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '239951', '1', '\n\r Processo: 1017129-31.2026.8.26.0053\n\r Órgão: Foro Central - Fazenda Pública/Acidentes - 4ª Vara de Acidentes do Trabalho\r Data de disponibilização: 19/06/2026\r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r MARCELO CASSIANO CARDOSO\n\r Advogado(s) \r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r ALYSSON LUIZ NASCIMENTO DA COSTA\r OAB SP-507195 \n Processo 1017129-31.2026.8.26.0053 - Procedimento Comum Cível - Auxílio-Acidente (Art. 86) - Marcelo Cassiano Cardoso - Vistos. 1. O INSS foi intimado para pagar os honorários periciais. Verifique-se junto ao portal de custas se há depósito; não havendo, cobre-se. 2. Juntado o laudo pericial, nos termos do Comunicado Conjunto nº 527/2019 e do art. 129-A, §3º, da Lei nº 8.213/91, CITE-SE o réu (INSS - INSTITUTO NACIONAL DO SEGURO SOCIAL) para todos os termos da presente ação através do Portal Eletrônico Integrado, devendo, nesta oportunidade, juntar cópia dos dossiês previdenciário e médico do autor, uma vez que os documentos não foram ainda juntado aos autos e contêm informações necessárias ao deslinde e julgamento do feito. 3. Intimem-se as partes para, querendo, manifestarem-se sobre o laudo no prazo comum de 15 (quinze) dias, conforme dispõe artigo 477, § 1º do CPC. Havendo assistente técnico, deverá manifestar-se em igual prazo. Int. - ADV: ANTONIO FERREIRA DA COSTA (OAB 222418/SP), ALYSSON LUIZ NASCIMENTO DA COSTA (OAB 507195/SP)', '7d0678bbd7fdb948c68512a6f771ca4a55317dbf0a093fe39ff5f5a292812cd9', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(3, 'aasp', '2026-06-19', '0000110-29.2026.8.26.0053', 'TJSP Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '233150', '1', '\n\r Processo: 0000110-29.2026.8.26.0053\n\r Órgão: Foro Central - Fazenda Pública/Acidentes - 4ª Vara de Acidentes do Trabalho\r Data de disponibilização: 19/06/2026\r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r DANILO TEIXEIRA SILVA\n\r Advogado(s) \r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r ALYSSON LUIZ NASCIMENTO DA COSTA\r OAB SP-507195 \n Processo 0000110-29.2026.8.26.0053 (processo principal 1059162-70.2025.8.26.0053) - Cumprimento de Sentença contra a Fazenda Pública - Auxílio-Acidente (Art. 86) - Danilo Teixeira Silva - Vistos. Manifeste-se expressamente o(a) exequente, no prazo de 15 (quinze) dias, sobre os cálculos apresentados pelo réu. Na hipótese de discordância, deverá apresentar, no mesmo prazo, memória de liquidação descritiva do débito que entender devido. No silêncio, certifique-se e aguarde-se provocação no arquivo provisório. Int. - ADV: ALYSSON LUIZ NASCIMENTO DA COSTA (OAB 507195/SP), ANTONIO FERREIRA DA COSTA (OAB 222418/SP)', 'b4e5d77e819d5152a9bd5d7c2250c566fa49824e0368c5607554a990b4e40e3f', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(4, 'aasp', '2026-06-19', '4000622-43.2026.8.26.0699', 'TJSP Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '24214', '1', '\n\r Processo: 4000622-43.2026.8.26.0699\n\r Órgão: Vara Única da Comarca de Salto de Pirapora\r Data de disponibilização: 19/06/2026\r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r DEBORA MATIAS\n\r Advogado(s) \r GISELE DA CONCEIÇÃO FERNANDES\r OAB SP-308045\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n Embargos à Execução Nº 4000622-43.2026.8.26.0699/SP\nEMBARGANTE: DEBORA MATIASADVOGADO(A): GISELE DA CONCEIÇÃO FERNANDES (OAB SP308045)ADVOGADO(A): ANTONIO FERREIRA DA COSTA (OAB SP222418) DESPACHO/DECISÃO\nVistos.\n1 - O art. 5º, LXXIV, da Constituição Federal, dispõe "o Estado prestará assistência jurídica integral e gratuita aos que comprovarem insuficiência de recursos". O art. 99, §2º, do CPC, por sua vez, dispõe que o juiz poderá indeferir o pedido se houver nos autos elementos que evidenciem a falta dos pressupostos legais para a concessão da gratuita.\nAssim, embora para a concessão da gratuidade não se exija o estado de miséria absoluta, é necessária a compatibilidade das circunstâncias pessoais da parte, indicadas nos autos, com a alegada impossibilidade de arcar com as custas e despesas do processo. A declaração de pobreza, por isso, estabelece mera presunção relativa da hipossuficiência, que cede ante outros elementos que sirvam para indicar a capacidade financeira.\nHá nos autos elementos que evidenciam a falta dos pressupostos legais para a gratuidade, tais como a natureza e objeto discutidos e a contratação de advogado particular.\nAntes de indeferir o pedido, contudo, impõe-se facultar ao interessado o direito de provar sua hipossuficiência financeira.\nPelo exposto, para apreciação do pedido de justiça gratuita, junte a parte autora, em 15 dias e sob a forma de documento sigiloso, documentos que comprovem sua hipossuficiência financeira, quais sejam: 1) cópias de demonstrativos de pagamento; 2) carteira de trabalho (de preferência digital); 3) das três últimas declarações de bens e rendimentos enviadas à Receita Federal; 4) extratos de todas as suas contas bancárias, dos últimos três meses, acompanhado de extrato de relacionamento bancário do Registrato (https://www.bcb.gov.br/meubc/registrato); a ausência injustificada de extrato de conta que conste da listagem do Registrato será interpretada como indício de ocultação de patrimônio; 5) extratos de todos os cartões de crédito dos últimos três meses, sob pena de indeferimento do pedido. No mesmo prazo, a parte poderá renunciar ao pedido mediante o recolhimento das custas e despesas devidas. Em caso de isenção da declaração do Imposto de Renda, a parte deverá assinar declaração própria a ser extraída do site da Receita, juntar aos autos a impressão extraída do sítio da Receita Federal (https://servicos.receita.fazenda.gov.br/Servicos/ConsRest/Atual.app/paginas/index.asp). Consigno que o juízo pode consultar: 1) o sistema Infojud para verificar a veracidade da alegação inexistência de declarações de renda na base de dados da Receita Federal e 2) o sistema Sisbajud para verificar se a parte juntou extratos bancários de contas bancárias de todos os bancos com os quais mantém relação. A falsidade da declaração assinada ensejará apuração de crime de falsidade ideológica.\n2 - Em análise da petição inicial, verifica-se que a parte autora deixou de atribuir valor à causa, em desconformidade com o art. 292 do Código de Processo Civil.\nAssim, intime-se a parte autora para, no prazo de 15 (quinze) dias, emendar a inicial, a fim de atribuir valor à causa, correspondente ao proveito econômico pretendido, bem como promover o recolhimento das custas iniciais ou sua complementação, se o caso.\nNos termos do art. 321, "caput" e parágrafo único, do Código de Processo Civil, fixo o prazo de 15 (quinze) dias para o cumprimento do acima determinado, sob pena de indeferimento da inicial.\nIntimem-se.', 'd85d7393254027bd211f520b4e7a16608460da3d9598c26f151092996b0ff288', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(5, 'aasp', '2026-06-19', '1044703-87.2023.8.26.0100', 'TJSP Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '112870', '1', '\n\r Processo: 1044703-87.2023.8.26.0100\n\r Órgão: Foro Central Cível - 2ª Vara de Falências e Recuperações Judiciais\r Data de disponibilização: 19/06/2026\r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r CREDIT CASH ASSESSORIA FINANCEIRA LTDA\r ONBEHALF AUDITORES E CONSULTORES LTDA, REPRESENTADA POR LUIZ DEOCLECIO FIORE DE OLIVEIRA\n\r Advogado(s) \r ZANON ROZZANTI DE PAULA BARROS\r OAB SP-116465\r WILLIAM DE LIMA FERNANDES\r OAB SP-402457\r WILLIAM CARMONA MAYA\r OAB SP-257198\r WANESSA FERREIRA BELCHIOR\r OAB SP-468759\r WALTER WILIAM RIPPER\r OAB SP-149058\r VIVIANE BONANI PEREIRA NASCIMENTO\r OAB SP-273026\r VITÓRIA DE ANDRADE BOLSARIN\r OAB SP-495830\r VITOR JOSÉ FERREIRA DO COUTO\r OAB SP-426471\r VINICIUS LEAL DA SILVA\r OAB SP-439957\r VIEIRA E MARIANO ADVOGADOS ASSOCIADOS\r OAB SP-29831\r VICTOR HUGO SILVA MARIANO\r OAB SP-416199\r VANILDA DE GOIS\r OAB SP-319833\r VANESSA PEREIRA RODRIGUES DOMENE\r OAB SP-158120\r TIAGO JESUS DE MELO\r OAB SP-416955\r THIAGO SAWAYA KLEIN\r OAB SP-370503\r THAUANNE CAROLINE ZAPATER FERREIRA\r OAB SP-514940\r THAIS VIEIRA PALMEIRA\r OAB SP-410432\r THAIS LOPES CARVALHO\r OAB SP-455219\r THAIS LEITE SOARES\r OAB SP-491859\r THAIS FERREIRA GALATTE POURRAT\r OAB SP-252241\r THAIS DE OLIVEIRA MENDES\r OAB SP-392361\r TATIANA LUIZA XAVIER GARBINI KRUGER\r OAB PR-78899\r TATIANA ANUNCIAÇÃO KUROISHI MENDES\r OAB SP-339169\r TAIS PACHECO NUNES\r OAB SP-430979\r TADEU CERBARO\r OAB SP-388413\r SYLVIA REGINA CAVALLARI\r OAB SP-135381\r STEVEN MARKLEW KERRY\r OAB SP-246372\r STELA RODIGHIERO PACILEO PALAZZO\r OAB SP-249297\r SÔNIA MARIA DE CAMPOS\r OAB SP-192330\r SOLANGE CRISTINA CARDOSO\r OAB SP-134444\r SIMONE APARECIDA GASTALDELLO\r OAB SP-66553\r SILVIA MALTA MANDARINO\r OAB SP-112063\r SIDNEI MARTINS\r OAB SP-369664\r SHEILA GARCIA REINA\r OAB SP-189091\r SELMA ELLEN DE OLIVEIRA\r OAB SP-174947\r SAULA DE CAMPOS PIRES DEL BEL\r OAB SP-217541\r SANDRA RODIGHIERO PACILEO\r OAB SP-205824\r SANDRA REGINA MIRANDA SANTOS\r OAB SP-146105\r SAMANTHA MORAES DI CARLO\r OAB SP-432847\r RUSLAN STUCHI\r OAB SP-256767\r RUBENS RODRIGUES ALVES DE MATOS\r OAB SP-372446\r ROSANGELA DE LIMA ALVES\r OAB SP-256004\r ROSANA THEREZIANO FEITOSA DOS SANTOS\r OAB SP-435905\r ROSANA GUEDES DO LAGO\r OAB SP-230022\r ROSANA DE SEABRA\r OAB SP-98996\r ROSANA APARECIDA DELLA LIBERA SANTOS\r OAB SP-238267\r ROGÉRIO PINTO DA SILVA\r OAB SP-157717\r RODRIGO LIMA CONCEIÇÃO\r OAB SP-375808\r RODRIGO ABUCHALA SELMO\r OAB SP-221759\r ROCHELE NUNES FAGAN\r OAB PR-99004\r ROBERTO POLI RAYEL FILHO\r OAB SP-153299\r ROBERTO NASCIMENTO DE HOLANDA\r OAB SP-450927\r ROBERTA PEREIRA DA SILVA CARLOS\r OAB SP-475053\r RICARDO TOSTO DE OLIVEIRA CARVALHO\r OAB SP-103650\r RICARDO MOSCOVICH\r OAB SP-104350\r RICARDO DE ABREU BIANCHI\r OAB SP-345150\r RICARDO CHABU DEL SOLE\r OAB SP-309132\r RICARDO BESERRA DE SOUZA\r OAB SP-318461\r RICARDO AUGUSTO DE OLIVEIRA MARQUES\r OAB SP-454449\r RENE TOEDTER\r OAB PR-42420\r RENATO SCARDOA\r OAB SP-228465\r RENATO CHAGAS CORREA DA SILVA\r OAB SP-396604\r RENATA MORAIS SAIFI\r OAB SP-319468\r RENATA DE PAOLI GONTIJO\r OAB RJ-93448\r RENATA CARDOSO DA ROCHA PINTO\r OAB RJ-169980\r RAQUEL BATALHA DE OLIVEIRA BRAGA\r OAB DF-36306\r RAISSA BRESSANIM TOKUNAGA\r OAB SP-198286\r RAFAEL LUIZ KRUGER\r OAB PR-109073\r RAFAEL GOMES DA SILVA\r OAB SP-372662\r RAFAEL DI RENZO MIRANDA\r OAB SP-344091\r PRISCILA RIOS SOARES\r OAB SP-222968\r PRISCILA DOS SANTOS COZZA\r OAB SP-244357\r PETERSON DOS SANTOS\r OAB SP-336353\r PERICLES APARECIDO ROCHA SILVESTRE\r OAB SP-275592\r PEDRO APARECIDO FIRMINO DA CONCEICAO\r OAB SP-464232\r PEDRO AGUILERAS MARTINS\r OAB SP-414306\r PAULO SERGIO BRAGA BARBOZA\r OAB SP-97272\r PAULO EDUARDO DE LIMA PACHECO\r OAB SP-345859\r PAULA MANZANO BRITTO\r OAB SP-452032\r PAULA ADRIANA CARVALHO BROMBERG\r OAB SP-361847\r PAOLA MARTINS GUSSONI\r OAB SP-476246\r PAMELA CRISTINA ROSA GOMES\r OAB SP-306328\r PABLO DO LAGO COSTA\r OAB RJ-249447\r OSWALDO ALFREDO FILHO\r OAB SP-243750\r ODILSON DO COUTO\r OAB SP-296524\r ODILON ABULASAN LIMA\r OAB SP-158528\r NATALIA MEDEIROS LEMBO\r OAB SP-491946\r MIRELLA VANESSA RAMOS\r OAB SP-450675\r MICHELE SILVA LOURENÇO\r OAB SP-367481\r MICHEL SCHIFINO SALOMÃO\r OAB SP-276654\r MELISSA CRISTINA SUGINO\r OAB SP-279054\r MAURO SERGIO ALVES MARTINS\r OAB SP-357372\r MAURILIO DA SILVA OLIVEIRA\r OAB SP-467959\r MAURICIO CLEPF MARTINS\r OAB SP-303654\r MAURICIO CAMPOS LAUTON\r OAB SP-216403\r MATHEUS FELIPE DA SILVA OLIVEIRA\r OAB SP-469777\r MATHEUS DE PAIVA MUCIN\r OAB SP-487133\r MATEUS FERREIRA DE PROENÇA\r OAB SP-484898\r MARIO MIRANDOLA NETO\r OAB SP-268673\r MARINA BERÉ FERRAZ DE SAMPAIO\r OAB SP-439988\r MARIANE GONÇALVES LUZ\r OAB SP-483192\r MARIANA DE MORAES MEDROS BARCELLOS\r OAB RJ-182381\r MARIANA CINTRA FERREIRA DA SILVA MAKARIOS\r OAB SP-324184\r MARIA ANGÉLICA BOTELHO SUGII\r OAB SP-332684\r MARCOS VALÉRIO DE SOUZA\r OAB SP-119775\r MARCOS CESARIO BURIHAM\r OAB SP-231459\r MARCO ANTONIO ALONSO DAVID\r OAB SP-309554\r MARCIO KOJI OYA\r OAB SP-165374\r MARCELO ZAMPIERI MOLINA\r OAB SP-318006\r MARCELO TAVARES MONTECLARO CESAR\r OAB SP-275514\r MARCELO AUGUSTO DE BARROS\r OAB SP-198248\r MARCELO AUGUSTO BRITO\r OAB SP-208256\r MARCELO APARECIDO PARDAL\r OAB SP-134648\r MARCEL MARQUES DE ABREU\r OAB GO-58200\r MADALENA BATISTA SALES\r OAB SP-259623\r LUIZ GUSTAVO DE OLIVEIRA RAMOS\r OAB SP-128998\r LUIZ EDUARDO DE ALMEIDA SANTOS KUNTZ\r OAB SP-307123\r LUIZ CLAUDIO TEZONI\r OAB SP-312245\r LUIS STENER\r OAB SP-335554\r LUIS FELIPE RIVELLI PEREIRA LOPES\r OAB SP-343802\r LUIS CARLOS DE SOUZA\r OAB SP-429933\r LUCIANO DA SILVA BURATTO\r OAB SP-179235\r LUCIANA MARIANO DE LIMA VILELA\r OAB SP-366540\r LUCIANA BERGHE\r OAB SP-214207\r LUCAS REGIVAN PEREIRA DA SILVA LOURENÇO\r OAB SP-447026\r LUCAS MARINI PITTIONI\r OAB SP-319021\r LUCAS ALVES RIBEIRO\r OAB SP-376759\r LUCAS ALVES LEMOS HERCULANO\r OAB SP-360328\r LINNA WERTTMUELLER VENTURA CHRISPIM\r OAB SP-464368\r LINDINALVA PIRES DE ARAUJO\r OAB SP-436670\r LEANDRO VALERIANO CAPABIANCO\r OAB SP-321952\r LEANDRO ALVES VIANI\r OAB SP-453277\r LEANDRO ALVARENGA MIRANDA\r OAB SP-261061\r LAURA LUIZA RODRIGUEZ NUNES\r OAB SP-434970\r JUVENAL GONÇALVES\r OAB SP-76160\r JULIO CESAR MENDES\r OAB SP-326244\r JULIANO GHERCOV DA ENCARNAÇÃO\r OAB SP-327545\r JULIANO DE SOUZA POMPEO\r OAB SP-162301\r JULIANA PATRICIA DA CUNHA\r OAB SP-322462\r JULIANA INATOMI\r OAB SP-192452\r JULIA HELENA BASTOS REZENDE SILVA\r OAB DF-44787\r JULIA ANDERY AMORIM\r OAB SP-376463\r JUAN PHILIPY STEPHANO AMARO\r OAB SP-340736\r JOSÉ MARCELO MARQUES FRANCO JUNIOR\r OAB SP-465922\r JOSE LEONARDO HADDAD NAKHOUL\r OAB SP-410300\r JOSE BALBINO DE ALMEIDA\r OAB SP-107514\r JOSÉ AUGUSTO LEAL\r OAB RJ-73710\r JOSÉ ARTHUR DI PRÓSPERO JUNIOR\r OAB SP-181183\r JOSE ARTHUR DI PROSPERO JUNIOR\r OAB SP-181183\r JOSE ANTONIO FERREIRA NETO\r OAB SP-41490\r JONAS GOMES GALDINO DURÃES\r OAB SP-203673\r JOÃO VITOR LORENZI LOPES\r OAB SP-528369\r JOÃO PEDRO CAMARÃO TAVARES\r OAB RJ-143561\r JOÃO PAULO DIAS MIRANDA\r OAB SP-449104\r JOÃO CARLOS ZANON\r OAB SP-163266\r JOÃO CARLOS DE LIMA JUNIOR\r OAB SP-142452\r JERRY CAROLLA\r OAB SP-126049\r JAQUELINE DE MOURA RIBEIRO\r OAB SP-291812\r JANAINA COURAS GUIMARÃES\r OAB SP-303345\r JAIRO DE PAULA FERREIRA JUNIOR\r OAB SP-215791\r JACQUELINE BEZERRA JUSTINO DE OLIVEIRA\r OAB SP-416054\r JACKSON RIOS OLIVEIRA\r OAB SP-324423\r IVO PEREIRA\r OAB SP-143801\r ISAMARA NAMIE TANAKA\r OAB SP-472649\r ISABELLE CRISTINA FELIX BERNARDO DA SILVA\r OAB SP-434412\r ISABELLA MARIA MOLINARI SALOMÃO\r OAB SP-330751\r HUGO MORETTO LARA\r OAB RJ-156537\r HIGOR CALDAS MARQUES\r OAB SP-358735\r HENRIETTE BRIGAGÃO ALCANTARA LEMOS DOS SANTOS\r OAB SP-463094\r HELEN CRISTINA VITORASSO\r OAB SP-145602\r GUSTAVO OUVINHAS GAVIOLI\r OAB SP-163607\r GUSTAVO MORENO POLIDO\r OAB SP-314819\r GUILHERME MARTINS SILVA\r OAB SP-442952\r GUILHERME ALEXANDRE HEES\r OAB SP-470327\r GLORIETE APARECIDA CARDOSO\r OAB SP-78566\r GIZA HELENA COELHO\r OAB SP-166349\r GILMAR DOS SANTOS\r OAB SP-488123\r GILBERTO DE JESUS DA ROCHA BENTO JUNIOR\r OAB SP-170162\r GIANCARLO FERRENTINI SALEM\r OAB SP-347312\r GEORGE GABRIEL GIANNETTI\r OAB SP-153154\r GABRIELA MARTINES GONÇALVES\r OAB SP-315295\r GABRIELA FERRAZ DE LIMA\r OAB SP-446906\r GABRIELA CHALUPPE CARBONELL DOMINGUEZ\r OAB SP-461001\r GABRIEL SEIJO LEAL DE FIGUEIREDO\r OAB SP-202022\r GABRIEL RUFINI GALVÃO\r OAB PR-77215\r GABRIEL JOSÉ DE ORLEANS E BRAGANÇA\r OAB SP-282419\r GABRIEL DE ALMEIDA CINTRA GONÇALVES\r OAB SP-460771\r GABRIEL ABRÃO FILHO\r OAB SP-190363\r FREDERICO RICARDO DE RIBEIRO E LOURENCO\r OAB PR-29134\r FRANCISCO CORRÊA DE CAMARGO\r OAB SP-221033\r FLAVIO ROCCHI JUNIOR\r OAB SP-249767\r FLAVIO MENDONÇA DE SAMPAIO LOPES\r OAB SP-330180\r FLÁVIO HENRIQUE DE LIMA\r OAB SP-496681\r FLAVIA CRISTINA M DE CAMPOS ANDRADE\r OAB SP-106895\r FILIPE CAROLINO COELHO\r OAB SP-465937\r FERNANDO GOMES DOS REIS LOBO\r OAB SP-183676\r FERNANDO FONTOURA DA SILVA CAIS\r OAB SP-183088\r FERNANDO CASSIOLATO\r OAB SP-487571\r FERNANDA ELISSA DE CARVALHO AWADA\r OAB SP-132649\r FERNANDA DE OLIVEIRA GARCIA RAPOSO\r OAB SP-246398\r FELIPE NAVEGA MEDEIROS\r OAB SP-217017\r FELIPE LINS DE SOUZA SILVA\r OAB SP-375636\r FABRÍCIO ROCHA DA SILVA\r OAB SP-206338\r FABIO NASCIMENTO PESSINA\r OAB SP-389165\r FABIANE FRANCO LACERDA\r OAB SP-206702\r EVANDRO MAGNUS FARIA DIAS\r OAB SP-288619\r ESTHER FERNANDES ORTUÑO\r OAB SP-527887\r ERIKA VANESSA DOS SANTOS\r OAB SP-360197\r ERICA BARBOSA DOS SANTOS\r OAB SP-409730\r EMERSON DA SILVA\r OAB SP-247075\r EMERSON ALESSANDRO GAUDENCIO\r OAB SP-308140\r ELÓI CONTINI\r OAB SP-329903\r ELAINE CRISTINA FERREIRA\r OAB SP-485067\r EDUARDO CASSIANO BANDEIRA\r OAB SP-354831\r EDSON NOVAIS GOMES PEREIRA DA SILVA\r OAB SP-226818\r EDSON NOVAIS GOMES PEREIRA DA SILVA\r OAB SP-226818\r EDSON ELIAS DE ANDRADE\r OAB PR-16630\r EDILSON PEREIRA MANZANO\r OAB SP-440728\r EDESIO CORREIA DE JESUS\r OAB SP-206672\r DOUGLAS LUIZ DA COSTA\r OAB SP-138640\r DONOVAN NEVES DE BRITO\r OAB SP-158288\r DIOGO MARCOS DE ALMEIDA\r OAB SP-452421\r DIEGO SCARIOT\r OAB SP-321391\r DIEGO MATHIAS\r OAB SP-386257\r DIEGO GOMES BASSE\r OAB SP-252527\r DIEGO FARIAS DE OLIVEIRA\r OAB SP-430927\r DEUZA APARECIDA DE SOUZA RODRIGUES\r OAB SP-325823\r DENIS FIGUEIREDO\r OAB SP-183350\r DEJAIR PASSERINE DA SILVA\r OAB SP-55226\r DEIVID FRESNEDA ARAUJO\r OAB SP-447152\r DECIO MOREIRA DA SILVA LIMA\r OAB SP-222845\r DÉBORA ALVES FEITOZA\r OAB SP-432607\r DAVID ZAMGIROLAMI\r OAB RJ-80049\r DANIELE CAMPOS FERNANDES\r OAB SP-249956\r DANIELA RIBEIRO RODRIGUES\r OAB SP-446516\r DANIELA NOGUEIRA ALMEIDA COSTA GUILHERME\r OAB SP-389549\r DANIEL RAPOZO\r OAB SP-226337\r DANIEL PINHEIRO LONGA\r OAB SP-382462\r DANIEL LOPES DA SILVA\r OAB SP-393209\r DANIEL AMERICO DOS SANTOS NEIMEIR\r OAB SP-309297\r CYLMAR PITELLI TEIXEIRA FORTES\r OAB SP-107950\r CLOVIS OLIVEIRA SILVA DE JESUS\r OAB SP-362090\r CLOVIS ALBERTO VOLPE FILHO\r OAB SP-225214\r CLAUDILENE HILDA DA SILVA\r OAB SP-219266\r CLAUDEMIR LUIS FLÁVIO\r OAB SP-154498\r CELIO SOLIDADE ROMANO\r OAB SP-241808\r CAROLINA MARTINS\r OAB SP-321613\r CARLOS OTAVIO MISSIATO BARBUIO\r OAB SP-378565\r CARLOS LOPES CAMPOS FERNANDES\r OAB SP-234868\r CARLOS DONIZETE ROCHA\r OAB SP-225615\r CARLOS AUGUSTO TORTORO JUNIOR\r OAB SP-247319\r CAMILLA QUEIROZ WERNECK\r OAB RJ-200054\r CAMILA DE NICOLA JOSÉ\r OAB SP-338556\r CAMILA DE ABREU PINTO\r OAB SP-366401\r CAMILA AMARAL\r OAB SP-330098\r CAIO ALBERTO SPÓSITO\r OAB SP-270984\r BRUNO SCHIAVINATO PEREIRA\r OAB SP-362052\r BRUNO FEILGELSON\r OAB RJ-164272\r BRUNNO DINGER SANTOS FUZATTI\r OAB SP-353489\r BEATRIZ APARECIDA DE GODOY GARCIA CRUDELI\r OAB SP-466929\r ÁTILA DE SOUZA REYS\r OAB MG-213929\r ANTONIO LEOPARDI RIGAT GARAVAGLIA MARIANNO\r OAB SP-310592\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r ANEZIO LOURENÇO JUNIOR\r OAB SP-162969\r ANDRISLENE DE CASSIA COELHO\r OAB SP-289497\r ANDRESSA SANTANA CARNEIRO DELACQUA\r OAB SP-286914\r ANDRESSA PAOLA AVELLEDA KNAPP\r OAB PR-102234\r ANDRÉIA REGINA VIOLA\r OAB SP-163205\r ANDRÉIA DA SILVA DURÃES GOMES\r OAB SP-220488\r ANDREA CRISTINA SERPE GANHO LOLLI\r OAB SP-355653\r ANDRE SELLARI DE SOUZA\r OAB SP-485210\r ANDRE RAMPAZZO DE FREITAS\r OAB SP-292912\r ANDRÉ LUIZ SOARES COSTA\r OAB RJ-92882\r ANDRE LUIZ BETTEGA D`AVILA\r OAB PR-31102\r ANDERSON VICENTINI SOUZA\r OAB SP-234165\r ANDERSON APARECIDO PIEROBON\r OAB SP-198923\r ANARRILA GUIMARÃES BRAGA FRAGATA\r OAB RJ-112851\r ANANDA QUEIROZ\r OAB SP-489929\r ANA FLAVIA ARAUJO\r OAB SP-337047\r ANA CINTIA MADUREIRA\r OAB SP-239763\r ANA CELIA ZAMPIERI\r OAB SP-65729\r ANA CAROLINA GUERREIRO FERNANDES\r OAB AL-9323B\r ALMIR GOMES DE OLIVEIRA\r OAB SP-447791\r ALINE MARTINS CARVALHO\r OAB SP-498428\r ALEXANDRE EVARISTO PINTO\r OAB SP-246337\r ALEX TOSHIO SOARES KAMOGAWA\r OAB SP-215156\r ALESSANDRA ROSSINI\r OAB SP-114618\r ALESSANDRA GARGANO\r OAB RJ-117849\r ALBERTO HABER\r OAB SP-459337\r ALBERTO DE ALMEIDA AUGUSTO\r OAB SP-175416\r AIRES FERNANDO CRUZ FRANCELINO\r OAB SP-189371\r AGOSTINHA GORETE SILVA DOS ANJOS\r OAB SP-82437\r AFONSO PACILÉO NETO\r OAB SP-239824\r ADRIANA SANTOS BARROS\r OAB SP-117017\r ADRIANA MARCON ALÓ\r OAB SP-262906\r ADEMIR FERREIRA MACHADO\r OAB SP-435996 \n Processo 1044703-87.2023.8.26.0100 - Falência de Empresários, Sociedades Empresáriais, Microempresas e Empresas de Pequeno Porte - Autofalência - Credit Cash Assessoria Financeira Ltda - Onbehalf Auditores e Consultores Ltda, representada Por Luiz Deoclecio Fiore de Oliveira - Vistos. Última decisão às fls. 21.830/21.835 1. Fls. 21.802/21.811 (Hellen Ferreira Paixão Leite Santos), 21.813 (Nayara Alves da Silva), 21.814/21.821 (Carina Lurdes Machado dos Santos), 21.864/21.874 (Millene Luque Carvalho), 21.927/21.936 (Monique Moreira Crispa), 22.106/22.119 (Karen Teixeira da Silva), 22.199/22.208 (Rodrigo Maraia Assis Meneses de Oliveira): a via é incorreta. Os credores devem se valer de habilitação/impugnação de crédito por peticionamento eletrônico inicial, por dependência ao processo principal, nos termos do artigo 13, parágrafo único, da Lei nº. 11.101/2005. Ademais, cumpre observar o Comunicado Conjunto nº 909/2025, eis que a partir da implementação do sistema Eproc o peticionamento de Habilitações de Crédito de Impugnações de Crédito relacionadas a processos de recuperação judicial e falência ainda que em trâmite no sistema SAJ será realizado exclusivamente no sistema Eproc como petição inicial. Por ocasião do protocolo, o advogado deverá selecionar a opção Outros Sistemas ou Estados no campo Tipo de Justiça e indicar o número do processo de recuperação judicial ou falência no campo Processo originário, a fim de viabilizar a correta vinculação da habilitação ou impugnação de crédito ao processo principal em trâmite no e-SAJ. 2. Fls. 21.825/21.827 (Karolaine Aparecida Lopes de Gois): Ciência à Administradora Judicial. 3. Fl. 21.828 (GFM FIDC e Libra II FIDC): Ciente o Juízo. 4. Fls. 21.849/21.856 (Caixa Econômica Federal), 21.857/21.863 (Créditas Soluções Financeiras Ltda): À Z. Serventia para regularização, se em termos. 5. Fls. 21.875/21.913 (Administradora Judicial apresenta o Quadro Geral de Credores provisório): Dê-se vista às partes e interessados, pelo prazo de 10 dias. 6. Fls. 21.916/21.917 (Ministério Público): Ciente o Juízo. 7. Fls. 21.919/21.926 (Ofício da 80ª Vara do Trabalho de São Paulo), 22.083/22.089 (Ofício da 90º Vara do Trabalho de São Paulo): Providencie a Administradora Judicial a resposta diretamente nos autos de origem, comprovando-se em 10 dias. 8. Fls. 21.937/21.939 e 22.079/22.081 (Mandado de Levantamento Eletrônico): Ciência ao interessado. 9. Fls. 21.940/22.005 (Administradora Judicial): a) Embargos de declaração opostos pelo FIDC GFM (fls. 20.673/20.676): Trata-se de embargos de declaração opostos por GFM Fundo de Investimentos em Direitos Creditórios Multicrédito em face da decisão de fls. 20.620/20.623, ao fundamento de que teria havido omissão quanto à apreciação dos argumentos por ele deduzidos às fls. 17.767/17.779, bem como ambiguidade na redação do decisum ao consignar que os valores indicados como devidos à CPFL seriam definitivamente incluídos na relação de credores após o trânsito em julgado do pedido de restituição nº 1000106-96.2024.8.26.0100. Manifestou-se a Administradora Judicial pela rejeição dos embargos, sustentando inexistir omissão e afirmando que a decisão embargada apenas determinou a anotação provisória dos valores, sem implementação efetiva da compensação. Com razão a Administradora Judicial. A decisão de fls. 20.620/20.623 determinou a mera anotação provisória dos valores apontados pela Administradora Judicial. Não foram apreciadas as impugnações de fls. 17.767/17.779 à compensação pretendida. Portanto, está reservada para momento oportuno, observados os desdobramentos do pedido de restituição nº 1000106-96.2024.8.26.0100, a apreciação definitiva acerca da viabilidade material da compensação e de seus reflexos no quadro geral de credores. Para evitar tumulto processual, eis que o extenso volume dos autos e as petições a respeito de inúmeras questões pode prejudicar a análise adequada e tempestiva da compensação, determino à Administradora Judicial a instauração de incidente próprio para tratar da questão, devendo juntar todas as petições e documentos acerca da controvérsia. b) Resposta ao SENATRAN: considerando a informação de subsistência apenas da anotação de RECALL, cuja baixa depende de providência junto ao DETRAN, determino a expedição de ofício ao órgão estadual competente para regularização do registro do veículo descrito nos autos. c) Ofício da 20ª Vara do Trabalho de São Paulo: ciente da transferência de valores para a conta judicial vinculada a estes autos. Anote-se. d) Ofícios da 35ª, 80ª e 90ª Varas do Trabalho de São Paulo: considerando as informações prestadas e, em especial, a quitação do crédito de Larissa Juliana Veloso Barbosa nos autos trabalhistas, determino a exclusão do referido crédito da relação de credores. e) Instauração de Incidente de Classificação de Crédito Público (ICCP): Ciência ao Município de São Paulo e demais interessados. f) Pedido formulado por Libra II FIDC NP Multissetorial às fls. 21.678/21.680: LIBRA II NP Fundo de Investimento em Direitos Creditórios Não Padronizados Multissetorial requer a transferência, para os autos do pedido de restituição nº 1183405-13.2023.8.26.0100, dos valores depositados nestes autos pela TIM S.A., ao argumento de que a sentença proferida naquele incidente reconheceu que parte do numerário, no valor de R$ 657.878,83, lhe pertence, tendo apresentado memória atualizada do montante. A Administradora Judicial manifestou-se pelo indeferimento do pedido, destacando que houve interposição de recurso contra a sentença do pedido de restituição, sem trânsito em julgado, e que os valores já se encontram devidamente reservados no quadro geral de credores provisório, de modo a resguardar os direitos do requerente até a solução definitiva da controvérsia. Com razão a Administradora Judicial. Indefiro o pedido. Nos termos do art. 91 da Lei nº 11.101/2005, o pedido de restituição suspende a disponibilidade da coisa até o trânsito em julgado, de modo que, enquanto pendente de apreciação definitiva o pedido de restituição nº 1183405-13.2023.8.26.0100, não há cabimento na transferência pretendida. Ademais, conforme esclarecido pela Administradora Judicial, os valores reconhecidos na sentença já foram reservados no quadro geral de credores provisório, providência suficiente, por ora, para resguardar os interesses do LIBRA II, sem prejuízo de ulterior deliberação após o trânsito em julgado. 10. Fls. 22.006/22.038 (Universo Online S.A): Ciente do depósito realizado em cumprimento à determinação anteriormente proferida por este Juízo, contra a qual interposto agravo de instrumento nº 2005715-81.2026.8.26.0000. Considerando a pendência de julgamento do agravo, permaneça o valor, por ora, reservado em conta judicial, apartado dos demais ativos disponíveis, sem autorização de utilização até ulterior deliberação. 11. Fls. 22.039/22.041 (Adelaine Vieira Damascena), 22.042/22.044 (Jussara Aparecida Vieira Fernandes), 22.045/22.047 (Monique Frazão Rodrigues): À Administradora Judicial. 12. Fls. 22.048/22.054, 22.055/22.062 e 22.063/22.069 (Jaqueline de Moura Ribeiro e Janaina Couras Guimarães), 22.071/22.072 (Glauciene Villamarin de Oliveira): Manifeste-se a Administradora Judicial. 13. Fls. 22.073/22.078 (Maria do Socorro Gomes de Souza), 22.134/22.136 (Monique Moreira Crispa, Millene Luque Carvalho e Karen Texeira da Silva), 22.193/22.194 (Evelim Vieira de Lima): Os credores deverão acompanhar o andamento da presente falência, respeitada a ordem de pagamentos dos artigos 83 e 84 da Lei 11.101/05. 14. Fls. 22.090/22.094 (Giovanne Bruno Firmino do Vale): Verifica-se que o crédito objeto da presente manifestação já foi submetido à análise em incidente próprio de habilitação de crédito, distribuído por dependência a estes autos. Desse modo, as questões relativas à existência, classificação e eventual inclusão do crédito no quadro geral de credores deverão ser apreciadas no referido incidente, observando-se o procedimento previsto na Lei nº 11.101/2005. Quanto ao recebimento dos créditos, deverá o credor se atentar ao andamento da presente demanda, relativamente à apresentação de plano de rateio e pagamento na ordem legal dos artigos 83 e 84 da Lei 11.101/05. Sem prejuízo, ciência a Administradora Judicial. 15. Fls. 22.099/22.104 e 22.137/22.143 (Administradora Judicial): a) Cessões de Créditos apresentadas por IOX e outras: Defiro prazo derradeiro de 10 dias para a análise pela Administradora Judicial. b) Ofício da 90ª Vara do Trabalho de São Paulo: Defiro a exclusão do crédito listado em favor de Aline Laila Eva dos Santos. c) Pedido formulado por SKY Serviços de Banda Larga Ltda., para compensar valores que afirma ter desembolsado no pagamento de obrigações trabalhistas atribuídas à falida: Para evitar tumulto processual, eis que o extenso volume dos autos e as petições a respeito de inúmeras questões pode prejudicar a análise adequada e tempestiva da compensação, determino à Administradora Judicial a instauração de incidente próprio para tratar da questão, devendo juntar todas as petições e documentos acerca da controvérsia. 16. Fls. 22.121/22.123 (SKY Serviços de Banda Larga Ltda comunica a interposição de agravo de instrumentos em face da decisão de fls. 21.830/21.835): Ciente o Juízo. Mantenho a decisão agravada por seus fundamentos. 17. Fls. 22.124/22.126 e 22.145/22.147 (MLE pago): Ciência ao interessado. 18. Fls. 22.128/22.132 (Administradora Judicial): a) Descumprimento de ordem judicial pela Anhanguera: Certifique a serventia se descumprida a determinação de fls. 19.438/19.441 no prazo concedido. b) Leilão de bens móveis: Considerando a regularidade do procedimento, a ausência de impugnação pelos interessados e as razões apresentadas quanto à economicidade e preservação do ativo, homologo a arrematação realizada no 3º leilão condicional. Intime-se o leiloeiro para comprovar o contato com o arrematante e a realização do depósito do valor ofertado. Intime-se. 19. Fls. 22.148/22.190 (RECOUP Serviços Ltda): Manifeste-se a Administradora Judicial. 20. Fls. 22.195/22.198 (Comprovante de depósito judicial): À Administradora Judicial. Publique-se. - ADV: JULIA ANDERY AMORIM (OAB 376463/SP), RODRIGO LIMA CONCEIÇÃO (OAB 375808/SP), CARLOS OTAVIO MISSIATO BARBUIO (OAB 378565/SP), JULIA ANDERY AMORIM (OAB 376463/SP), JULIA ANDERY AMORIM (OAB 376463/SP), JULIA ANDERY AMORIM (OAB 376463/SP), FELIPE LINS DE SOUZA SILVA (OAB 375636/SP), JULIA ANDERY AMORIM (OAB 376463/SP), LUCAS ALVES RIBEIRO (OAB 376759/SP), DANIEL PINHEIRO LONGA (OAB 382462/SP), EDSON ELIAS DE ANDRADE (OAB 16630/PR), DIEGO MATHIAS (OAB 386257/SP), CLAUDEMIR LUIS FLÁVIO (OAB 154498/SP), RUBENS RODRIGUES ALVES DE MATOS (OAB 372446/SP), LUCIANA MARIANO DE LIMA VILELA (OAB 366540/SP), CAMILA DE ABREU PINTO (OAB 366401/SP), MICHELE SILVA LOURENÇO (OAB 367481/SP), HENRIETTE BRIGAGÃO ALCANTARA LEMOS DOS SANTOS (OAB 463094/SP), HENRIETTE BRIGAGÃO ALCANTARA LEMOS DOS SANTOS (OAB 463094/SP), FREDERICO RICARDO DE RIBEIRO E LOURENCO (OAB 29134/PR), RUBENS RODRIGUES ALVES DE MATOS (OAB 372446/SP), RUBENS RODRIGUES ALVES DE MATOS (OAB 372446/SP), THIAGO SAWAYA KLEIN (OAB 370503/SP), SIDNEI MARTINS (OAB 369664/SP), RAFAEL GOMES DA SILVA (OAB 372662/SP), CLOVIS OLIVEIRA SILVA DE JESUS (OAB 362090/SP), JOSE LEONARDO HADDAD NAKHOUL (OAB 410300/SP), ERICA BARBOSA DOS SANTOS (OAB 409730/SP), ERICA BARBOSA DOS SANTOS (OAB 409730/SP), ERICA BARBOSA DOS SANTOS (OAB 409730/SP), THAIS VIEIRA PALMEIRA (OAB 410432/SP), THAIS VIEIRA PALMEIRA (OAB 410432/SP), ANDRÉ LUIZ SOARES COSTA (OAB 92882/RJ), JOSE LEONARDO HADDAD NAKHOUL (OAB 410300/SP), JOSE LEONARDO HADDAD NAKHOUL (OAB 410300/SP), JOSE LEONARDO HADDAD NAKHOUL (OAB 410300/SP), PEDRO AGUILERAS MARTINS (OAB 414306/SP), GABRIEL ABRÃO FILHO (OAB 190363/SP), RENATA DE PAOLI GONTIJO (OAB 93448/RJ), ALESSANDRA GARGANO (OAB 117849/RJ), MARIANA DE MORAES MEDROS BARCELLOS (OAB 182381/RJ), DANIELA NOGUEIRA ALMEIDA COSTA GUILHERME (OAB 389549/SP), FABIO NASCIMENTO PESSINA (OAB 389165/SP), DANIEL LOPES DA SILVA (OAB 393209/SP), THAIS DE OLIVEIRA MENDES (OAB 392361/SP), WILLIAM DE LIMA FERNANDES (OAB 402457/SP), RENATO CHAGAS CORREA DA SILVA (OAB 396604/SP), WILLIAM DE LIMA FERNANDES (OAB 402457/SP), WILLIAM DE LIMA FERNANDES (OAB 402457/SP), WILLIAM DE LIMA FERNANDES (OAB 402457/SP), WILLIAM DE LIMA FERNANDES (OAB 402457/SP), VICTOR HUGO SILVA MARIANO (OAB 416199/SP), CAMILA AMARAL (OAB 330098/SP), DEUZA APARECIDA DE SOUZA RODRIGUES (OAB 325823/SP), JULIO CESAR MENDES (OAB 326244/SP), JULIANO GHERCOV DA ENCARNAÇÃO (OAB 327545/SP), ELÓI CONTINI (OAB 329903/SP), FLAVIO MENDONÇA DE SAMPAIO LOPES (OAB 330180/SP), DEUZA APARECIDA DE SOUZA RODRIGUES (OAB 325823/SP), CAMILA AMARAL (OAB 330098/SP), ISABELLA MARIA MOLINARI SALOMÃO (OAB 330751/SP), MARIA ANGÉLICA BOTELHO SUGII (OAB 332684/SP), RENE TOEDTER (OAB 42420/PR), PETERSON DOS SANTOS (OAB 336353/SP), LUIS STENER (OAB 335554/SP), DIEGO SCARIOT (OAB 321391/SP), VANILDA DE GOIS (OAB 319833/SP), VANILDA DE GOIS (OAB 319833/SP), VANILDA DE GOIS (OAB 319833/SP), VANILDA DE GOIS (OAB 319833/SP), VANILDA DE GOIS (OAB 319833/SP), JACKSON RIOS OLIVEIRA (OAB 324423/SP), CAROLINA MARTINS (OAB 321613/SP), LEANDRO VALERIANO CAPABIANCO (OAB 321952/SP), JULIANA PATRICIA DA CUNHA (OAB 322462/SP), JULIANA PATRICIA DA CUNHA (OAB 322462/SP), MARIANA CINTRA FERREIRA DA SILVA MAKARIOS (OAB 324184/SP), CLOVIS OLIVEIRA SILVA DE JESUS (OAB 362090/SP), ANDRE LUIZ BETTEGA D`AVILA (OAB 31102/PR), BRUNNO DINGER SANTOS FUZATTI (OAB 353489/SP), EDUARDO CASSIANO BANDEIRA (OAB 354831/SP), ANDREA CRISTINA SERPE GANHO LOLLI (OAB 355653/SP), MAURO SERGIO ALVES MARTINS (OAB 357372/SP), HIGOR CALDAS MARQUES (OAB 358735/SP), TADEU CERBARO (OAB 388413/SP), ERIKA VANESSA DOS SANTOS (OAB 360197/SP), ERIKA VANESSA DOS SANTOS (OAB 360197/SP), LUCAS ALVES LEMOS HERCULANO (OAB 360328/SP), PAULA ADRIANA CARVALHO BROMBERG (OAB 361847/SP), BRUNO SCHIAVINATO PEREIRA (OAB 362052/SP), ANA FLAVIA ARAUJO (OAB 337047/SP), JUAN PHILIPY STEPHANO AMARO (OAB 340736/SP), ANA FLAVIA ARAUJO (OAB 337047/SP), CAMILA DE NICOLA JOSÉ (OAB 338556/SP), CAMILA DE NICOLA JOSÉ (OAB 338556/SP), TATIANA ANUNCIAÇÃO KUROISHI MENDES (OAB 339169/SP), JUAN PHILIPY STEPHANO AMARO (OAB 340736/SP), JOÃO PEDRO CAMARÃO TAVARES (OAB 143561/RJ), RAFAEL DI RENZO MIRANDA (OAB 344091/SP), LUIS FELIPE RIVELLI PEREIRA LOPES (OAB 343802/SP), RICARDO DE ABREU BIANCHI (OAB 345150/SP), PAULO EDUARDO DE LIMA PACHECO (OAB 345859/SP), GIANCARLO FERRENTINI SALEM (OAB 347312/SP), VANILDA DE GOIS (OAB 319833/SP), BRUNO FEILGELSON (OAB 164272/RJ), WANESSA FERREIRA BELCHIOR (OAB 468759/SP), MATHEUS FELIPE DA SILVA OLIVEIRA (OAB 469777/SP), GUILHERME ALEXANDRE HEES (OAB 470327/SP), ISAMARA NAMIE TANAKA (OAB 472649/SP), BRUNO FEILGELSON (OAB 164272/RJ), MAURILIO DA SILVA OLIVEIRA (OAB 467959/SP), ROBERTA PEREIRA DA SILVA CARLOS (OAB 475053/SP), ROBERTA PEREIRA DA SILVA CARLOS (OAB 475053/SP), PAOLA MARTINS GUSSONI (OAB 476246/SP), JULIA HELENA BASTOS REZENDE SILVA (OAB 44787DF), MARIANE GONÇALVES LUZ (OAB 483192/SP), ANDRE SELLARI DE SOUZA (OAB 485210/SP), JOSÉ MARCELO MARQUES FRANCO JUNIOR (OAB 465922/SP), GABRIELA CHALUPPE CARBONELL DOMINGUEZ (OAB 461001/SP), GABRIEL DE ALMEIDA CINTRA GONÇALVES (OAB 460771/SP), PEDRO APARECIDO FIRMINO DA CONCEICAO (OAB 464232/SP), LINNA WERTTMUELLER VENTURA CHRISPIM (OAB 464368/SP), LINNA WERTTMUELLER VENTURA CHRISPIM (OAB 464368/SP), BEATRIZ APARECIDA DE GODOY GARCIA CRUDELI (OAB 466929/SP), JOSÉ MARCELO MARQUES FRANCO JUNIOR (OAB 465922/SP), JOSÉ MARCELO MARQUES FRANCO JUNIOR (OAB 465922/SP), FILIPE CAROLINO COELHO (OAB 465937/SP), BEATRIZ APARECIDA DE GODOY GARCIA CRUDELI (OAB 466929/SP), BEATRIZ APARECIDA DE GODOY GARCIA CRUDELI (OAB 466929/SP), ALBERTO HABER (OAB 459337/SP), PABLO DO LAGO COSTA (OAB 249447/RJ), ALINE MARTINS CARVALHO (OAB 498428/SP), ALINE MARTINS CARVALHO (OAB 498428/SP), RAFAEL LUIZ KRUGER (OAB 109073/PR), ROCHELE NUNES FAGAN (OAB 99004/PR), ANA CAROLINA GUERREIRO FERNANDES (OAB 9323B/AL), HUGO MORETTO LARA (OAB 156537/RJ), ANARRILA GUIMARÃES BRAGA FRAGATA (OAB 112851RJ), JOÃO VITOR LORENZI LOPES (OAB 528369/SP), EDSON NOVAIS GOMES PEREIRA DA SILVA (OAB 226818/SP), THAUANNE CAROLINE ZAPATER FERREIRA (OAB 514940/SP), ESTHER FERNANDES ORTUÑO (OAB 527887/SP), ELAINE CRISTINA FERREIRA (OAB 485067/SP), NATALIA MEDEIROS LEMBO (OAB 491946/SP), MATEUS FERREIRA DE PROENÇA (OAB 484898/SP), GILMAR DOS SANTOS (OAB 488123/SP), ANANDA QUEIROZ (OAB 489929/SP), THAIS LEITE SOARES (OAB 491859/SP), MATHEUS DE PAIVA MUCIN (OAB 487133/SP), FLÁVIO HENRIQUE DE LIMA (OAB 496681/SP), FERNANDO CASSIOLATO (OAB 487571/SP), ANDRESSA PAOLA AVELLEDA KNAPP (OAB 102234/PR), VITÓRIA DE ANDRADE BOLSARIN (OAB 495830/SP), ÁTILA DE SOUZA REYS (OAB 213929/MG), FLÁVIO HENRIQUE DE LIMA (OAB 496681/SP), JACQUELINE BEZERRA JUSTINO DE OLIVEIRA (OAB 416054/SP), LAURA LUIZA RODRIGUEZ NUNES (OAB 434970/SP), SAMANTHA MORAES DI CARLO (OAB 432847/SP), DÉBORA ALVES FEITOZA (OAB 432607/SP), ISABELLE CRISTINA FELIX BERNARDO DA SILVA (OAB 434412/SP), ISABELLE CRISTINA FELIX BERNARDO DA SILVA (OAB 434412/SP), ISABELLE CRISTINA FELIX BERNARDO DA SILVA (OAB 434412/SP), SAMANTHA MORAES DI CARLO (OAB 432847/SP), ADEMIR FERREIRA MACHADO (OAB 435996/SP), ROSANA THEREZIANO FEITOSA DOS SANTOS (OAB 435905/SP), LINDINALVA PIRES DE ARAUJO (OAB 436670/SP), VINICIUS LEAL DA SILVA (OAB 439957/SP), MARINA BERÉ FERRAZ DE SAMPAIO (OAB 439988/SP), EDILSON PEREIRA MANZANO (OAB 440728/SP), LUIS CARLOS DE SOUZA (OAB 429933/SP), TIAGO JESUS DE MELO (OAB 416955/SP), JOSE ARTHUR DI PROSPERO JUNIOR (OAB 181183/SP), VITOR JOSÉ FERREIRA DO COUTO (OAB 426471/SP), VITOR JOSÉ FERREIRA DO COUTO (OAB 426471/SP), RAQUEL BATALHA DE OLIVEIRA BRAGA (OAB 36306/DF), GABRIEL RUFINI GALVÃO (OAB 77215/PR), DIEGO FARIAS DE OLIVEIRA (OAB 430927/SP), DIEGO FARIAS DE OLIVEIRA (OAB 430927/SP), DIEGO FARIAS DE OLIVEIRA (OAB 430927/SP), DIEGO FARIAS DE OLIVEIRA (OAB 430927/SP), TAIS PACHECO NUNES (OAB 430979/SP), RENATA CARDOSO DA ROCHA PINTO (OAB 169980/RJ), PAULA MANZANO BRITTO (OAB 452032/SP), MARCEL MARQUES DE ABREU (OAB 58200/GO), MIRELLA VANESSA RAMOS (OAB 450675/SP), ROBERTO NASCIMENTO DE HOLANDA (OAB 450927/SP), ROBERTO NASCIMENTO DE HOLANDA (OAB 450927/SP), TATIANA LUIZA XAVIER GARBINI KRUGER (OAB 78899/PR), VIEIRA E MARIANO ADVOGADOS ASSOCIADOS (OAB 29831/SP), DIOGO MARCOS DE ALMEIDA (OAB 452421/SP), LEANDRO ALVES VIANI (OAB 453277/SP), RICARDO AUGUSTO DE OLIVEIRA MARQUES (OAB 454449/SP), THAIS LOPES CARVALHO (OAB 455219/SP), CAMILLA QUEIROZ WERNECK (OAB 200054/RJ), GUILHERME MARTINS SILVA (OAB 442952/SP), LUCAS REGIVAN PEREIRA DA SILVA LOURENÇO (OAB 447026/SP), GUILHERME MARTINS SILVA (OAB 442952/SP), DANIELA RIBEIRO RODRIGUES (OAB 446516/SP), GABRIELA FERRAZ DE LIMA (OAB 446906/SP), GABRIELA FERRAZ DE LIMA (OAB 446906/SP), VIEIRA E MARIANO ADVOGADOS ASSOCIADOS (OAB 29831/SP), DEIVID FRESNEDA ARAUJO (OAB 447152/SP), DEIVID FRESNEDA ARAUJO (OAB 447152/SP), DEIVID FRESNEDA ARAUJO (OAB 447152/SP), ALMIR GOMES DE OLIVEIRA (OAB 447791/SP), JOÃO PAULO DIAS MIRANDA (OAB 449104/SP), RICARDO TOSTO DE OLIVEIRA CARVALHO (OAB 103650/SP), EDESIO CORREIA DE JESUS (OAB 206672/SP), GABRIEL SEIJO LEAL DE FIGUEIREDO (OAB 202022/SP), JONAS GOMES GALDINO DURÃES (OAB 203673/SP), SANDRA RODIGHIERO PACILEO (OAB 205824/SP), FABRÍCIO ROCHA DA SILVA (OAB 206338/SP), FABRÍCIO ROCHA DA SILVA (OAB 206338/SP), ANDERSON APARECIDO PIEROBON (OAB 198923/SP), FABIANE FRANCO LACERDA (OAB 206702/SP), FABIANE FRANCO LACERDA (OAB 206702/SP), FABIANE FRANCO LACERDA (OAB 206702/SP), FABIANE FRANCO LACERDA (OAB 206702/SP), FABIANE FRANCO LACERDA (OAB 206702/SP), MARCELO AUGUSTO BRITO (OAB 208256/SP), SÔNIA MARIA DE CAMPOS (OAB 192330/SP), FERNANDO GOMES DOS REIS LOBO (OAB 183676/SP), SHEILA GARCIA REINA (OAB 189091/SP), AIRES FERNANDO CRUZ FRANCELINO (OAB 189371/SP), SÔNIA MARIA DE CAMPOS (OAB 192330/SP), SÔNIA MARIA DE CAMPOS (OAB 192330/SP), RAISSA BRESSANIM TOKUNAGA (OAB 198286/SP), SÔNIA MARIA DE CAMPOS (OAB 192330/SP), SÔNIA MARIA DE CAMPOS (OAB 192330/SP), JULIANA INATOMI (OAB 192452/SP), JULIANA INATOMI (OAB 192452/SP), MARCELO AUGUSTO DE BARROS (OAB 198248/SP), DENIS FIGUEIREDO (OAB 183350/SP), RENATO SCARDOA (OAB 228465/SP), CLOVIS ALBERTO VOLPE FILHO (OAB 225214/SP), CARLOS DONIZETE ROCHA (OAB 225615/SP), DANIEL RAPOZO (OAB 226337/SP), EDSON NOVAIS GOMES PEREIRA DA SILVA (OAB 226818/SP), EDSON NOVAIS GOMES PEREIRA DA SILVA (OAB 226818/SP), PRISCILA RIOS SOARES (OAB 222968/SP), ROSANA GUEDES DO LAGO (OAB 230022/SP), MARCOS CESARIO BURIHAM (OAB 231459/SP), ANDERSON VICENTINI SOUZA (OAB 234165/SP), CARLOS LOPES CAMPOS FERNANDES (OAB 234868/SP), CARLOS LOPES CAMPOS FERNANDES (OAB 234868/SP), LUCIANA BERGHE (OAB 214207/SP), SAULA DE CAMPOS PIRES DEL BEL (OAB 217541/SP), ALEX TOSHIO SOARES KAMOGAWA (OAB 215156/SP), JAIRO DE PAULA FERREIRA JUNIOR (OAB 215791/SP), MAURICIO CAMPOS LAUTON (OAB 216403/SP), FELIPE NAVEGA MEDEIROS (OAB 217017/SP), SAULA DE CAMPOS PIRES DEL BEL (OAB 217541/SP), DECIO MOREIRA DA SILVA LIMA (OAB 222845/SP), CLAUDILENE HILDA DA SILVA (OAB 219266/SP), ANDRÉIA DA SILVA DURÃES GOMES (OAB 220488/SP), FRANCISCO CORRÊA DE CAMARGO (OAB 221033/SP), RODRIGO ABUCHALA SELMO (OAB 221759/SP), ANTONIO FERREIRA DA COSTA (OAB 222418/SP), CARLOS LOPES CAMPOS FERNANDES (OAB 234868/SP), MARCELO APARECIDO PARDAL (OAB 134648/SP), SOLANGE CRISTINA CARDOSO (OAB 134444/SP), SOLANGE CRISTINA CARDOSO (OAB 134444/SP), SOLANGE CRISTINA CARDOSO (OAB 134444/SP), SOLANGE CRISTINA CARDOSO (OAB 134444/SP), SOLANGE CRISTINA CARDOSO (OAB 134444/SP), FERNANDA ELISSA DE CARVALHO AWADA (OAB 132649/SP), SYLVIA REGINA CAVALLARI (OAB 135381/SP), DOUGLAS LUIZ DA COSTA (OAB 138640/SP), JOÃO CARLOS DE LIMA JUNIOR (OAB 142452/SP), IVO PEREIRA (OAB 143801/SP), HELEN CRISTINA VITORASSO (OAB 145602/SP), HELEN CRISTINA VITORASSO (OAB 145602/SP), ALESSANDRA ROSSINI (OAB 114618/SP), FLAVIA CRISTINA M DE CAMPOS ANDRADE (OAB 106895/SP), JOSE BALBINO DE ALMEIDA (OAB 107514/SP), CYLMAR PITELLI TEIXEIRA FORTES (OAB 107950/SP), CYLMAR PITELLI TEIXEIRA FORTES (OAB 107950/SP), SILVIA MALTA MANDARINO (OAB 112063/SP), FERNANDA ELISSA DE CARVALHO AWADA (OAB 132649/SP), ZANON ROZZANTI DE PAULA BARROS (OAB 116465/SP), ADRIANA SANTOS BARROS (OAB 117017/SP), MARCOS VALÉRIO DE SOUZA (OAB 119775/SP), JERRY CAROLLA (OAB 126049/SP), LUIZ GUSTAVO DE OLIVEIRA RAMOS (OAB 128998/SP), FERNANDO FONTOURA DA SILVA CAIS (OAB 183088/SP), LUCIANO DA SILVA BURATTO (OAB 179235/SP), MARCIO KOJI OYA (OAB 165374/SP), GILBERTO DE JESUS DA ROCHA BENTO JUNIOR (OAB 170162/SP), SELMA ELLEN DE OLIVEIRA (OAB 174947/SP), ALBERTO DE ALMEIDA AUGUSTO (OAB 175416/SP), LUCIANO DA SILVA BURATTO (OAB 179235/SP), GUSTAVO OUVINHAS GAVIOLI (OAB 163607/SP), JOSÉ ARTHUR DI PRÓSPERO JUNIOR (OAB 181183/SP), JOSÉ ARTHUR DI PRÓSPERO JUNIOR (OAB 181183/SP), JOSÉ ARTHUR DI PRÓSPERO JUNIOR (OAB 181183/SP), JOSÉ ARTHUR DI PRÓSPERO JUNIOR (OAB 181183/SP), JOSÉ ARTHUR DI PRÓSPERO JUNIOR (OAB 181183/SP), SANDRA REGINA MIRANDA SANTOS (OAB 146105/SP), DONOVAN NEVES DE BRITO (OAB 158288/SP), WALTER WILIAM RIPPER (OAB 149058/SP), GEORGE GABRIEL GIANNETTI (OAB 153154/SP), ROBERTO POLI RAYEL FILHO (OAB 153299/SP), ROGÉRIO PINTO DA SILVA (OAB 157717/SP), VANESSA PEREIRA RODRIGUES DOMENE (OAB 158120/SP), JOÃO CARLOS ZANON (OAB 163266/SP), ODILON ABULASAN LIMA (OAB 158528/SP), JULIANO DE SOUZA POMPEO (OAB 162301/SP), JULIANO DE SOUZA POMPEO (OAB 162301/SP), ANEZIO LOURENÇO JUNIOR (OAB 162969/SP), ANDRÉIA REGINA VIOLA (OAB 163205/SP), VANILDA DE GOIS (OAB 319833/SP), LUIZ EDUARDO DE ALMEIDA SANTOS KUNTZ (OAB 307123/SP), MAURICIO CLEPF MARTINS (OAB 303654/SP), PAMELA CRISTINA ROSA GOMES (OAB 306328/SP), LUIZ EDUARDO DE ALMEIDA SANTOS KUNTZ (OAB 307123/SP), LUIZ EDUARDO DE ALMEIDA SANTOS KUNTZ (OAB 307123/SP), LUIZ EDUARDO DE ALMEIDA SANTOS KUNTZ (OAB 307123/SP), MAURICIO CLEPF MARTINS (OAB 303654/SP), EMERSON ALESSANDRO GAUDENCIO (OAB 308140/SP), RICARDO CHABU DEL SOLE (OAB 309132/SP), DANIEL AMERICO DOS SANTOS NEIMEIR (OAB 309297/SP), DANIEL AMERICO DOS SANTOS NEIMEIR (OAB 309297/SP), MARCO ANTONIO ALONSO DAVID (OAB 309554/SP), MARCO ANTONIO ALONSO DAVID (OAB 309554/SP), JOSÉ AUGUSTO LEAL (OAB 73710/RJ), JAQUELINE DE MOURA RIBEIRO (OAB 291812/SP), JAQUELINE DE MOURA RIBEIRO (OAB 291812/SP), ANDRE RAMPAZZO DE FREITAS (OAB 292912/SP), GIZA HELENA COELHO (OAB 166349/SP), ODILSON DO COUTO (OAB 296524/SP), JANAINA COURAS GUIMARÃES (OAB 303345/SP), JOSÉ AUGUSTO LEAL (OAB 73710/RJ), JOSE ANTONIO FERREIRA NETO (OAB 41490/SP), RICARDO MOSCOVICH (OAB 104350/SP), JANAINA COURAS GUIMARÃES (OAB 303345/SP), JANAINA COURAS GUIMARÃES (OAB 303345/SP), JAQUELINE DE MOURA RIBEIRO (OAB 291812/SP), VANILDA DE GOIS (OAB 319833/SP), VANILDA DE GOIS (OAB 319833/SP), VANILDA DE GOIS (OAB 319833/SP), VANILDA DE GOIS (OAB 319833/SP), VANILDA DE GOIS (OAB 319833/SP), VANILDA DE GOIS (OAB 319833/SP), RENATA MORAIS SAIFI (OAB 319468/SP), VANILDA DE GOIS (OAB 319833/SP), VANILDA DE GOIS (OAB 319833/SP), VANILDA DE GOIS (OAB 319833/SP), VANILDA DE GOIS (OAB 319833/SP), VANILDA DE GOIS (OAB 319833/SP), MARCO ANTONIO ALONSO DAVID (OAB 309554/SP), LUIZ CLAUDIO TEZONI (OAB 312245/SP), MARCO ANTONIO ALONSO DAVID (OAB 309554/SP), ANTONIO LEOPARDI RIGAT GARAVAGLIA MARIANNO (OAB 310592/SP), ANTONIO LEOPARDI RIGAT GARAVAGLIA MARIANNO (OAB 310592/SP), LUIZ CLAUDIO TEZONI (OAB 312245/SP), LUIZ CLAUDIO TEZONI (OAB 312245/SP), LUCAS MARINI PITTIONI (OAB 319021/SP), GUSTAVO MORENO POLIDO (OAB 314819/SP), GABRIELA MARTINES GONÇALVES (OAB 315295/SP), MARCELO ZAMPIERI MOLINA (OAB 318006/SP), RICARDO BESERRA DE SOUZA (OAB 318461/SP), RICARDO BESERRA DE SOUZA (OAB 318461/SP), ROSANA APARECIDA DELLA LIBERA SANTOS (OAB 238267/SP), THAIS FERREIRA GALATTE POURRAT (OAB 252241/SP), FLAVIO ROCCHI JUNIOR (OAB 249767/SP), DANIELE CAMPOS FERNANDES (OAB 249956/SP), THAIS FERREIRA GALATTE POURRAT (OAB 252241/SP), THAIS FERREIRA GALATTE POURRAT (OAB 252241/SP), THAIS FERREIRA GALATTE POURRAT (OAB 252241/SP), STELA RODIGHIERO PACILEO PALAZZO (OAB 249297/SP), THAIS FERREIRA GALATTE POURRAT (OAB 252241/SP), DIEGO GOMES BASSE (OAB 252527/SP), ROSANGELA DE LIMA ALVES (OAB 256004/SP), DEJAIR PASSERINE DA SILVA (OAB 55226/SP), ANA CELIA ZAMPIERI (OAB 65729/SP), SIMONE APARECIDA GASTALDELLO (OAB 66553/SP), PRISCILA DOS SANTOS COZZA (OAB 244357/SP), ANA CINTIA MADUREIRA (OAB 239763/SP), AFONSO PACILÉO NETO (OAB 239824/SP), CELIO SOLIDADE ROMANO (OAB 241808/SP), CELIO SOLIDADE ROMANO (OAB 241808/SP), OSWALDO ALFREDO FILHO (OAB 243750/SP), CARLOS AUGUSTO TORTORO JUNIOR (OAB 247319/SP), ALEXANDRE EVARISTO PINTO (OAB 246337/SP), STEVEN MARKLEW KERRY (OAB 246372/SP), FERNANDA DE OLIVEIRA GARCIA RAPOSO (OAB 246398/SP), FERNANDA DE OLIVEIRA GARCIA RAPOSO (OAB 246398/SP), EMERSON DA SILVA (OAB 247075/SP), DAVID ZAMGIROLAMI (OAB 80049/RJ), MELISSA CRISTINA SUGINO (OAB 279054/SP), CAIO ALBERTO SPÓSITO (OAB 270984/SP), MARCELO TAVARES MONTECLARO CESAR (OAB 275514/SP), MICHEL SCHIFINO SALOMÃO (OAB 276654/SP), VIVIANE BONANI PEREIRA NASCIMENTO (OAB 273026/SP), PERICLES APARECIDO ROCHA SILVESTRE (OAB 275592/SP), MARIO MIRANDOLA NETO (OAB 268673/SP), GABRIEL JOSÉ DE ORLEANS E BRAGANÇA (OAB 282419/SP), GABRIEL JOSÉ DE ORLEANS E BRAGANÇA (OAB 282419/SP), ANDRESSA SANTANA CARNEIRO DELACQUA (OAB 286914/SP), EVANDRO MAGNUS FARIA DIAS (OAB 288619/SP), ANDRISLENE DE CASSIA COELHO (OAB 289497/SP), JUVENAL GONÇALVES (OAB 76160/SP), ROSANA DE SEABRA (OAB 98996/SP), GLORIETE APARECIDA CARDOSO (OAB 78566/SP), GLORIETE APARECIDA CARDOSO (OAB 78566/SP), AGOSTINHA GORETE SILVA DOS ANJOS (OAB 82437/SP), PAULO SERGIO BRAGA BARBOZA (OAB 97272/SP), ADRIANA MARCON ALÓ (OAB 262906/SP), LEANDRO ALVARENGA MIRANDA (OAB 261061/SP), MADALENA BATISTA SALES (OAB 259623/SP), MADALENA BATISTA SALES (OAB 259623/SP), WILLIAM CARMONA MAYA (OAB 257198/SP), RUSLAN STUCHI (OAB 256767/SP)', '2f4e30df6d21726f211c430b987fbd7bb06d32aa669c6ca48fa1c7a94a9643d9', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(6, 'aasp', '2026-06-19', '0011933-05.2024.5.15.0060', 'TRT15 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '15040', '1', '\n\r Processo: 0011933-05.2024.5.15.0060\n\r Órgão: CON2 - Jundiaí\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r A.P.C.\r A.R.P.\r R.S.V.\r S.C.D.B.L.\n\r Advogado(s) \r ALEXANDRE LAURIA DUTRA\r OAB SP-157840\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n Tomar ciência do(a) Intimação de ID f22a90a.Intimado(s) / Citado(s) - S.C.D.B.L.', '0256f0e21a74771e36dea4ae6d6fbdfc7d91a02a9fd82dc0c9a3224e66042877', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(7, 'aasp', '2026-06-19', '0011933-05.2024.5.15.0060', 'TRT15 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '15041', '1', '\n\r Processo: 0011933-05.2024.5.15.0060\n\r Órgão: CON2 - Jundiaí\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r A.P.C.\r A.R.P.\r R.S.V.\r S.C.D.B.L.\n\r Advogado(s) \r ALEXANDRE LAURIA DUTRA\r OAB SP-157840\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n Tomar ciência do(a) Intimação de ID f22a90a.Intimado(s) / Citado(s) - A.R.P.', 'd3ee90c12832e602ede68124c861daee41f919ec9a1794765adcf1d71e3005a6', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(8, 'aasp', '2026-06-19', '1004886-38.2026.5.02.0000', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '16', '1', '\n\r Processo: 1004886-38.2026.5.02.0000\n\r Órgão: Gabinete da Presidência - Precatórios\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r F.R.F.\r UNIÃO FEDERAL (AGU)\n\r Advogado(s) \r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO SECRETARIA DE PRECATÓRIOS Relator: VALDIR FLORINDO RPV 1004886-38.2026.5.02.0000 REQUERENTE: FLODOARDO REGO FILHO REQUERIDO: UNIÃO FEDERAL (AGU) INTIMAÇÃO Fica V. Sa. intimado para tomar ciência da Decisão ID 3985d44 proferida nos autos. REQUISIÇÃO DE PAGAMENTO Nº 08166/2026 PROCESSO JUDICIAL (PJe 1º Grau) Nº 0002750-90.2011.5.02.0039 PROCESSO RPV (PJe 2º Grau) nº 1004886-38.2026.5.02.0000 EXEQUENTE: Flodoardo Rego Filho EXECUTADA: UNIÃO FEDERAL (AGU) CONCLUSÃO Faço os autos conclusos ao (a) Exmo(a). Sr(a). Desembargador(a) Presidente / Juízo Auxiliar da Presidência em Precatório e RPVs Federais, certificando que: a) houve a integral quitação dos valores autuados e processados por esta Secretaria na correspondente requisição de pagamento/GPREC. O registro de pagamento foi realizado junto ao GPREC, e a requisição encontra-se "zerada", não havendo qualquer valor pendente, conforme "print" a seguir: b) os pagamentos foram realizados diretamente aos credores ou mediante transferência de valores à Unidade Judiciária para posterior liberação a quem de direito, conforme decisão da Presidência e certidão de alvará elaborada a partir da extração de dados junto ao Sistema de Controle de Depósitos Judiciais (SISCONDJ – Banco do Brasil), ambas constantes dos autos Requisição de Pequeno Valor. São Paulo, 17 de junho de 2026. IRINEU EDSON BARDELA Servidor(a): Secretaria de Execução da Fazenda Pública Vistos, etc. Ante o acima certificado, determino o arquivamento definitivo do presente Processo RPV (PJe 2º Grau) Nº 1004886-38.2026.5.02.0000. Considerando que os pagamentos foram registrados no GPREC, não resta qualquer providencia. Reputo a requisição de pagamento (RP) quitada, em razão da satisfação integral da obrigação por meio de pagamento total. Extingo o presente processo RPV (PJe 2º Grau) Nº 1004886-38.2026.5.02.0000. A Secretaria procederá com o respectivo registro no PJe de 2º grau, indicando o movimento "Extinta a execução ou cumprimento da sentença (código 196) - motivo: satisfação da obrigação". Atente a parte interessada: caso tenha ocorrido transferência de valores à Secretaria da Vara em vez de pagamento direto, e a importância ainda não tenha sido liberada, deverá requerer o que for de direito junto ao Juízo da Execução, nos autos do Processo Judicial (PJe 1º Grau) Nº 0002750-90.2011.5.02.0039. Registre-se o correto andamento no Pje. Intimem-se. Arquive-se. Nada mais. São Paulo, data registrada no sistema Pje. SAO PAULO/SP, 17 de junho de 2026. HELDER BIANCHI FERREIRA DE CARVALHO Juiz do TrabalhoIntimado(s) / Citado(s) - F.R.F.', '57f2b3b84f2404430e1c8a88a8a46d84d525009f48f4e712029c51168bc5e6d5', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(9, 'aasp', '2026-06-19', '1001917-94.2025.5.02.0029', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '36752', '1', '\n\r Processo: 1001917-94.2025.5.02.0029\n\r Órgão: 29ª Vara do Trabalho de São Paulo\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r CESAR AUGUSTO DE CASTRO\r WELLINGTON FERNANDO RODRIGUES SORRENTINO DA SILVA\r FBF CONSTRUCOES E SERVICOS LTDA\n\r Advogado(s) \r CARLOS EDUARDO PEREIRA BARRETTO FILHO\r OAB SP-194526\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 29ª VARA DO TRABALHO DE SÃO PAULO ATOrd 1001917-94.2025.5.02.0029 RECLAMANTE: WELLINGTON FERNANDO RODRIGUES SORRENTINO DA SILVA RECLAMADO: FBF CONSTRUCOES E SERVICOS LTDA INTIMAÇÃO Fica V. Sa. intimado para tomar ciência da Sentença ID d4e6037 proferida nos autos, cujo dispositivo consta a seguir: Julgo EXTINTA a EXECUÇÃO por cumprimento integral do acordo. Decorrido o prazo, arquivem-se. Intimem-se. LAYSE GONCALVES LAJTMAN MALAFAIA Juíza do Trabalho SubstitutaIntimado(s) / Citado(s) - WELLINGTON FERNANDO RODRIGUES SORRENTINO DA SILVA', '1fc514e3dbc03882fc96a4c583ef874b6141ba9b7c86134b088fa77558777c75', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(10, 'aasp', '2026-06-19', '1001732-47.2025.5.02.0614', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Lista de distribuição\r\n', '1170', '1', '\n\r Processo: 1001732-47.2025.5.02.0614\n\r Órgão: 13ª Turma - Cadeira 4\r Data de disponibilização: \r Tipo de comunicação: Lista de distribuição\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r RICARDO GRIMALDI BARBOSA\r WASHINGTON AMORIM DA SILVA\r JEC LOG TRANSPORTES SOLUCOES EM LOGISTICA LTDA\n\r Advogado(s) \r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r ADRIANA MAYRA SANTOS GANDOLFI\r OAB SP-419827 \n Processo 1001732-47.2025.5.02.0614 distribuído para 13ª Turma - 13ª Turma - Cadeira 4 na data 17/06/2026 Para maiores informações, clique no link a seguir: https://pje.trt2.jus.br/pjekz/visualizacao/26061800301282000000302111943?instancia=2', '447ead2c352c79d8d4bcc349b026e8824679e718557f02aa15ddd9c2a5307f85', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(11, 'aasp', '2026-06-19', '1000921-65.2026.5.02.0610', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '44061', '1', '\n\r Processo: 1000921-65.2026.5.02.0610\n\r Órgão: 10ª Vara do Trabalho de São Paulo - Zona Leste\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r JAILAME ALVES DOS SANTOS\r OWENS-ILLINOIS DO BRASIL INDUSTRIA E COMERCIO LTDA\n\r Advogado(s) \r ANDRE VILLAC POLINESIO\r OAB SP-203607\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 10ª VARA DO TRABALHO DE SÃO PAULO - ZONA LESTE ATOrd 1000921-65.2026.5.02.0610 RECLAMANTE: JAILAME ALVES DOS SANTOS RECLAMADO: OWENS-ILLINOIS DO BRASIL INDUSTRIA E COMERCIO LTDA INTIMAÇÃO Fica V. Sa. intimado para tomar ciência do Despacho ID 71c8b1e proferido nos autos. CONCLUSÃO Nesta data, faço os presentes autos conclusos ao(a) MM(a) Juiz(a) da 10ª Vara do Trabalho de São Paulo - Zona Leste/SP. São Paulo, 17 de junho de 2026. VIVIAN NATACHA GONCALVES ROCHA Vistos, etc. Id. 874b880: Ciência à reclamada. Intimem-se as partes. Nada mais. SAO PAULO/SP, 18 de junho de 2026. ANDREZA TURRI CAROLINO DE CERQUEIRA LEITE Juíza do Trabalho TitularIntimado(s) / Citado(s) - JAILAME ALVES DOS SANTOS', 'd8620243f07d1048c2345a252d568a6d22ff95ead4fb82fc643f45d7badfbf24', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(12, 'aasp', '2026-06-19', '1000921-65.2026.5.02.0610', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '44062', '1', '\n\r Processo: 1000921-65.2026.5.02.0610\n\r Órgão: 10ª Vara do Trabalho de São Paulo - Zona Leste\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r JAILAME ALVES DOS SANTOS\r OWENS-ILLINOIS DO BRASIL INDUSTRIA E COMERCIO LTDA\n\r Advogado(s) \r ANDRE VILLAC POLINESIO\r OAB SP-203607\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 10ª VARA DO TRABALHO DE SÃO PAULO - ZONA LESTE ATOrd 1000921-65.2026.5.02.0610 RECLAMANTE: JAILAME ALVES DOS SANTOS RECLAMADO: OWENS-ILLINOIS DO BRASIL INDUSTRIA E COMERCIO LTDA INTIMAÇÃO Fica V. Sa. intimado para tomar ciência do Despacho ID 71c8b1e proferido nos autos. CONCLUSÃO Nesta data, faço os presentes autos conclusos ao(a) MM(a) Juiz(a) da 10ª Vara do Trabalho de São Paulo - Zona Leste/SP. São Paulo, 17 de junho de 2026. VIVIAN NATACHA GONCALVES ROCHA Vistos, etc. Id. 874b880: Ciência à reclamada. Intimem-se as partes. Nada mais. SAO PAULO/SP, 18 de junho de 2026. ANDREZA TURRI CAROLINO DE CERQUEIRA LEITE Juíza do Trabalho TitularIntimado(s) / Citado(s) - OWENS-ILLINOIS DO BRASIL INDUSTRIA E COMERCIO LTDA', '0fe916c7a57e1b97f088bad737f2004cc3a133a51a456d455862265740a4a20c', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(13, 'aasp', '2026-06-19', '1000600-45.2026.5.02.0314', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '576', '1', '\n\r Processo: 1000600-45.2026.5.02.0314\n\r Órgão: 4ª Vara do Trabalho de Guarulhos\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r RICARDO SANTOS LEOPOLDINO\r AR RIBEIRO TRANSPORTES LTDA - ME\r BRF S.A.\n\r Advogado(s) \r JAIR TAVARES DA SILVA\r OAB SP-46688\r JOYCE PELLANDA CHEMIN\r OAB PR-58967\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 4ª VARA DO TRABALHO DE GUARULHOS ATSum 1000600-45.2026.5.02.0314 RECLAMANTE: RICARDO SANTOS LEOPOLDINO RECLAMADO: AR RIBEIRO TRANSPORTES LTDA - ME E OUTROS (1) INTIMAÇÃO Fica V. Sa. intimado para tomar ciência da Decisão ID fabf450 proferida nos autos. CONCLUSÃO Nesta data, faço o feito concluso ao(a) MM(a) Juiz(a) da 4ª Vara do Trabalho de Guarulhos/SP. GUARULHOS/SP, data abaixo. KARINY VICTORIA GUEDES DA SILVA Estagiário Conhecimento DECISÃO ID: e56e6e3. Vistos, etc. Trata-se de Recurso Ordinário interposto pela parte autora. Nos termos do art. 2º, XI, da IN 39/2016 do TST, passo à análise dos pressupostos de admissibilidade recursal. Quanto aos pressupostos objetivos ou extrínsecos, observo que a medida é tempestiva. Há regularidade formal (Súmula 422 do TST). A parte recorrente é beneficiária de justiça gratuita, não havendo falar em preparo. Quanto aos pressupostos subjetivos ou intrínsecos, observo que a medida é cabível, conforme art. 893, II, da CLT, a parte recorrente é legitima e tem interesse recursal, art. 996 do CPC e art. 769 da CLT. Logo, recebo o recurso e determino a abertura de prazo para resposta da parte recorrida, art. 900 da CLT, pena de preclusão. Após, processem-se. Intimem-se. GUARULHOS/SP, 17 de junho de 2026. JOSLEY SOARES COSTA Juiz do Trabalho TitularIntimado(s) / Citado(s) - BRF S.A.', '92c4b83b940c4c01accb6d31b402b2023d0019283731f92157629b893d7e2fc2', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(14, 'aasp', '2026-06-19', '1000812-28.2024.5.02.0608', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '28713', '1', '\n\r Processo: 1000812-28.2024.5.02.0608\n\r Órgão: 8ª Vara do Trabalho de São Paulo - Zona Leste\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r ANA BEATRIZ SANTANA DE OLIVEIRA\r KW LIMA SERVICOS LTDA\n\r Advogado(s) \r VINICIUS ADORNO QUINI\r OAB SP-471914\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 8ª VARA DO TRABALHO DE SÃO PAULO - ZONA LESTE ATSum 1000812-28.2024.5.02.0608 RECLAMANTE: ANA BEATRIZ SANTANA DE OLIVEIRA RECLAMADO: KW LIMA SERVICOS LTDA Destinatário: ANA BEATRIZ SANTANA DE OLIVEIRA INTIMAÇÃO - Processo PJe Fica V. Sa. intimado(a) para tomar ciência da pesquisa Infojud (Id 2135c15) e CCS (Id a7a589b) efetuadas em face da reclamada. No mais, aguarde o resultado do convênio Sisbajud (Id 5c45cb1) e do mandado de penhora de veículo (Id 64c6dfa), dois quais será oportunamente intimada. SAO PAULO/SP, 18 de junho de 2026. NIVEA E SILVA BENJAMIN ServidorIntimado(s) / Citado(s) - ANA BEATRIZ SANTANA DE OLIVEIRA', '4323153cc6a245e81a6363e0a08ee2ec6715ab9403158d47cf7d7ad5f76709b4', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(15, 'aasp', '2026-06-19', '1000554-56.2026.5.02.0605', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '17022', '1', '\n\r Processo: 1000554-56.2026.5.02.0605\n\r Órgão: 5ª Vara do Trabalho de São Paulo - Zona Leste\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r ANA PAULA FERREIRA DA SILVA\r ANTONIO EUGENIO DE MELO JUNIOR\r OWENS-ILLINOIS DO BRASIL INDUSTRIA E COMERCIO LTDA\n\r Advogado(s) \r ANDRE VILLAC POLINESIO\r OAB SP-203607\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 5ª VARA DO TRABALHO DE SÃO PAULO - ZONA LESTE ATOrd 1000554-56.2026.5.02.0605 RECLAMANTE: ANA PAULA FERREIRA DA SILVA RECLAMADO: OWENS-ILLINOIS DO BRASIL INDUSTRIA E COMERCIO LTDA INTIMAÇÃO Fica V. Sa. intimado para tomar ciência do Despacho ID 7e48fac proferido nos autos. DESPACHO Ainda não concluída a perícia designada e considerando o disposto no Ofício Circular nº 823/2023 - CR, fica a audiência de encerramento de instrução, designada apenas para acompanhamento da perícia, adiada para o dia 31 de julho de 2026, às 16:26 horas, ficando dispensado o comparecimento das partes. Aguarde-se a apresentação do laudo pericial. Intimem-se. SAO PAULO/SP, 18 de junho de 2026. LUCIANO LOFRANO CAPASCIUTTI Juiz do Trabalho TitularIntimado(s) / Citado(s) - OWENS-ILLINOIS DO BRASIL INDUSTRIA E COMERCIO LTDA', '86e97dad623b62d40f533e6773022967dbde9acdd1f30c3c5672f85f1e0162ed', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(16, 'aasp', '2026-06-19', '1000554-56.2026.5.02.0605', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '17023', '1', '\n\r Processo: 1000554-56.2026.5.02.0605\n\r Órgão: 5ª Vara do Trabalho de São Paulo - Zona Leste\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r ANA PAULA FERREIRA DA SILVA\r ANTONIO EUGENIO DE MELO JUNIOR\r OWENS-ILLINOIS DO BRASIL INDUSTRIA E COMERCIO LTDA\n\r Advogado(s) \r ANDRE VILLAC POLINESIO\r OAB SP-203607\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 5ª VARA DO TRABALHO DE SÃO PAULO - ZONA LESTE ATOrd 1000554-56.2026.5.02.0605 RECLAMANTE: ANA PAULA FERREIRA DA SILVA RECLAMADO: OWENS-ILLINOIS DO BRASIL INDUSTRIA E COMERCIO LTDA INTIMAÇÃO Fica V. Sa. intimado para tomar ciência do Despacho ID 7e48fac proferido nos autos. DESPACHO Ainda não concluída a perícia designada e considerando o disposto no Ofício Circular nº 823/2023 - CR, fica a audiência de encerramento de instrução, designada apenas para acompanhamento da perícia, adiada para o dia 31 de julho de 2026, às 16:26 horas, ficando dispensado o comparecimento das partes. Aguarde-se a apresentação do laudo pericial. Intimem-se. SAO PAULO/SP, 18 de junho de 2026. LUCIANO LOFRANO CAPASCIUTTI Juiz do Trabalho TitularIntimado(s) / Citado(s) - ANA PAULA FERREIRA DA SILVA', '36427a806739fb614102d683f4f20d96288d312a0343712ffb5801d0f7516dfc', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(17, 'aasp', '2026-06-19', '1000377-81.2025.5.02.0232', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '4781', '1', '\n\r Processo: 1000377-81.2025.5.02.0232\n\r Órgão: 2ª Vara do Trabalho de Carapicuíba\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r ELINALDO DE JESUS\r MAURICIO MORAS MISSAO DA SILVA\r TECLA CONSTRUCOES LTDA\n\r Advogado(s) \r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r EUDECIO TEIXEIRA RAMOS\r OAB SP-141213 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 2ª VARA DO TRABALHO DE CARAPICUÍBA ATOrd 1000377-81.2025.5.02.0232 RECLAMANTE: ELINALDO DE JESUS RECLAMADO: TECLA CONSTRUCOES LTDA Fica o beneficiário (ELINALDO DE JESUS) intimado de que foi expedido alvará judicial para liberação de valores, com determinação de transferência para a conta bancária indicada nos autos. Esta intimação foi gerada de modo automático, por intermédio do Projeto Solária (RJ- 9). CARAPICUIBA/SP, 18 de junho de 2026. SILAS SANTOS DA SILVA AssessorIntimado(s) / Citado(s) - ELINALDO DE JESUS', 'a21d240777e26255fdc90ba61c0567ce1ef427458be923157ebb602a5de7fffc', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(18, 'aasp', '2026-06-19', '1001913-54.2025.5.02.0612', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '19579', '1', '\n\r Processo: 1001913-54.2025.5.02.0612\n\r Órgão: Vice-Presidência Judicial\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r SINDICATO DOS EMPREGADOS NO COMERCIO HOTELEIRO E SIMILARES DE SAO PAULO\r ANAA S PIZZERIA LTDA\n\r Advogado(s) \r LIZANDRA FLORES DOS SANTOS\r OAB SP-195369\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r REGIANE CRISTINA FRATA\r OAB SP-244011\r GABRIELE AKEMI OLIVEIRA INOMATA\r OAB SP-504367\r WILLIAN DIAS DOS SANTOS\r OAB SP-199497 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO ANÁLISE DE RECURSOS Relator: RONALDO LUIS DE OLIVEIRA ROT 1001913-54.2025.5.02.0612 RECORRENTE: SINDICATO DOS EMPREGADOS NO COMERCIO HOTELEIRO E SIMILARES DE SAO PAULO RECORRIDO: ANAA S PIZZERIA LTDA INTIMAÇÃO Fica V. Sa. intimado para tomar ciência da Decisão ID f648e39 proferida nos autos. ROT 1001913-54.2025.5.02.0612 - 15ª Turma Parte: Advogado(s): SINDICATO DOS EMPREGADOS NO COMERCIO HOTELEIRO E SIMILARES DE SAO PAULO GABRIELE AKEMI OLIVEIRA INOMATA (SP504367) LIZANDRA FLORES DOS SANTOS (SP195369) REGIANE CRISTINA FRATA (SP244011) Parte: Advogado(s): ANAA S PIZZERIA LTDA ANTONIO FERREIRA DA COSTA (SP222418) WILLIAN DIAS DOS SANTOS (SP199497) O recurso de revista interposto reclamante versa sobre a cobrança da contribuição assistencial prevista no art. 513 da CLT aos empregados não sindicalizados, cuja legalidade já foi definida pelo Supremo Tribunal Federal (tema 935 da tabela de repercussão geral). Em 18/03/2024, o Pleno do Tribunal Superior do Trabalho admitiu o Incidente de Resolução de Demandas Repetitivas (IRDR-1000154-39.2024.5.00.0000) suscitado perante a Seção Especializada em Dissídios Coletivos, a fim de apreciar a questão exclusivamente de direito que trata sobre o modo, o momento e o lugar apropriado para o empregado não sindicalizado exercer seu direito de oposição ao pagamento da contribuição assistencial (Tema nº 2). Tendo em vista a decisão proferida em 24/04/2024 pelo Ministro Relator Guilherme Augusto Caputo Bastos, que determinou a suspensão (CPC, art. 982, I) de todos os processos, em curso no âmbito da Justiça do Trabalho (dissídios individuais e coletivos), que tenham como objeto controvérsia idêntica à do recurso afetado no IRDR-1000154-39.2024.5.00.0000, os presentes autos deverão permanecer sobrestados, até o pronunciamento definitivo do Tribunal Superior do Trabalho. Ciência às partes. /tltv SAO PAULO/SP, 18 de junho de 2026. FRANCISCO FERREIRA JORGE NETO Desembargador Vice-Presidente JudicialIntimado(s) / Citado(s) - ANAA S PIZZERIA LTDA', '91080042ce290a7fa46c6d2f0b28cbae3dd55d30aaf02f72dc0bb2eb33129112', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(19, 'aasp', '2026-06-19', '1001913-54.2025.5.02.0612', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '19580', '1', '\n\r Processo: 1001913-54.2025.5.02.0612\n\r Órgão: Vice-Presidência Judicial\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r SINDICATO DOS EMPREGADOS NO COMERCIO HOTELEIRO E SIMILARES DE SAO PAULO\r ANAA S PIZZERIA LTDA\n\r Advogado(s) \r LIZANDRA FLORES DOS SANTOS\r OAB SP-195369\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r REGIANE CRISTINA FRATA\r OAB SP-244011\r GABRIELE AKEMI OLIVEIRA INOMATA\r OAB SP-504367\r WILLIAN DIAS DOS SANTOS\r OAB SP-199497 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO ANÁLISE DE RECURSOS Relator: RONALDO LUIS DE OLIVEIRA ROT 1001913-54.2025.5.02.0612 RECORRENTE: SINDICATO DOS EMPREGADOS NO COMERCIO HOTELEIRO E SIMILARES DE SAO PAULO RECORRIDO: ANAA S PIZZERIA LTDA INTIMAÇÃO Fica V. Sa. intimado para tomar ciência da Decisão ID f648e39 proferida nos autos. ROT 1001913-54.2025.5.02.0612 - 15ª Turma Parte: Advogado(s): SINDICATO DOS EMPREGADOS NO COMERCIO HOTELEIRO E SIMILARES DE SAO PAULO GABRIELE AKEMI OLIVEIRA INOMATA (SP504367) LIZANDRA FLORES DOS SANTOS (SP195369) REGIANE CRISTINA FRATA (SP244011) Parte: Advogado(s): ANAA S PIZZERIA LTDA ANTONIO FERREIRA DA COSTA (SP222418) WILLIAN DIAS DOS SANTOS (SP199497) O recurso de revista interposto reclamante versa sobre a cobrança da contribuição assistencial prevista no art. 513 da CLT aos empregados não sindicalizados, cuja legalidade já foi definida pelo Supremo Tribunal Federal (tema 935 da tabela de repercussão geral). Em 18/03/2024, o Pleno do Tribunal Superior do Trabalho admitiu o Incidente de Resolução de Demandas Repetitivas (IRDR-1000154-39.2024.5.00.0000) suscitado perante a Seção Especializada em Dissídios Coletivos, a fim de apreciar a questão exclusivamente de direito que trata sobre o modo, o momento e o lugar apropriado para o empregado não sindicalizado exercer seu direito de oposição ao pagamento da contribuição assistencial (Tema nº 2). Tendo em vista a decisão proferida em 24/04/2024 pelo Ministro Relator Guilherme Augusto Caputo Bastos, que determinou a suspensão (CPC, art. 982, I) de todos os processos, em curso no âmbito da Justiça do Trabalho (dissídios individuais e coletivos), que tenham como objeto controvérsia idêntica à do recurso afetado no IRDR-1000154-39.2024.5.00.0000, os presentes autos deverão permanecer sobrestados, até o pronunciamento definitivo do Tribunal Superior do Trabalho. Ciência às partes. /tltv SAO PAULO/SP, 18 de junho de 2026. FRANCISCO FERREIRA JORGE NETO Desembargador Vice-Presidente JudicialIntimado(s) / Citado(s) - SINDICATO DOS EMPREGADOS NO COMERCIO HOTELEIRO E SIMILARES DE SAO PAULO', '294ca466c43d26aa21ac62c7f615234a5dd15f3404384f4ef615315c8a833d9a', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(20, 'aasp', '2026-06-19', '1001917-94.2025.5.02.0029', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '36753', '1', '\n\r Processo: 1001917-94.2025.5.02.0029\n\r Órgão: 29ª Vara do Trabalho de São Paulo\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r CESAR AUGUSTO DE CASTRO\r WELLINGTON FERNANDO RODRIGUES SORRENTINO DA SILVA\r FBF CONSTRUCOES E SERVICOS LTDA\n\r Advogado(s) \r CARLOS EDUARDO PEREIRA BARRETTO FILHO\r OAB SP-194526\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 29ª VARA DO TRABALHO DE SÃO PAULO ATOrd 1001917-94.2025.5.02.0029 RECLAMANTE: WELLINGTON FERNANDO RODRIGUES SORRENTINO DA SILVA RECLAMADO: FBF CONSTRUCOES E SERVICOS LTDA INTIMAÇÃO Fica V. Sa. intimado para tomar ciência da Sentença ID d4e6037 proferida nos autos, cujo dispositivo consta a seguir: Julgo EXTINTA a EXECUÇÃO por cumprimento integral do acordo. Decorrido o prazo, arquivem-se. Intimem-se. LAYSE GONCALVES LAJTMAN MALAFAIA Juíza do Trabalho SubstitutaIntimado(s) / Citado(s) - FBF CONSTRUCOES E SERVICOS LTDA', '9432655b227fdb669fffcfb414629d2d02322fb76da34ffbce62b2c841166d6e', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(21, 'aasp', '2026-06-19', '1000877-46.2026.5.02.0610', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '20749', '1', '\n\r Processo: 1000877-46.2026.5.02.0610\n\r Órgão: 73ª Vara do Trabalho de São Paulo\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r RENATA LEITE DA SILVA\r ESSENCIAL SISTEMA DE SEGURANCA LTDA\n\r Advogado(s) \r TATIANA MARQUES MORO NAKATANI\r OAB SP-216444\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 73ª VARA DO TRABALHO DE SÃO PAULO ATSum 1000877-46.2026.5.02.0610 RECLAMANTE: RENATA LEITE DA SILVA RECLAMADO: ESSENCIAL SISTEMA DE SEGURANCA LTDA INTIMAÇÃO Fica V. Sa. intimado para tomar ciência do Despacho ID adca49c proferido nos autos. CONCLUSÃO Nesta data, faço o feito concluso ao(a) MM(a) Juiz(a) da 73ª Vara do Trabalho de São Paulo/SP. SÃO PAULO/SP, data abaixo. JULIANA MONTEIRO DE SOUZA DESPACHO Vistos, Considerando a necessidade de readequação da pauta, redesigno a audiência UNA-RS PRESENCIAL para o dia 14/08/2026 às 11:35, mantidas as cominações anteriores. Intimem-se. SAO PAULO/SP, 18 de junho de 2026. JOSIANE GROSSL Juíza do Trabalho TitularIntimado(s) / Citado(s) - ESSENCIAL SISTEMA DE SEGURANCA LTDA', '2b837d8cfa8767b906b432fb10158b6bf5ebbe6b7ed41004e36271640537068f', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(22, 'aasp', '2026-06-19', '1000877-46.2026.5.02.0610', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '20750', '1', '\n\r Processo: 1000877-46.2026.5.02.0610\n\r Órgão: 73ª Vara do Trabalho de São Paulo\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r RENATA LEITE DA SILVA\r ESSENCIAL SISTEMA DE SEGURANCA LTDA\n\r Advogado(s) \r TATIANA MARQUES MORO NAKATANI\r OAB SP-216444\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 73ª VARA DO TRABALHO DE SÃO PAULO ATSum 1000877-46.2026.5.02.0610 RECLAMANTE: RENATA LEITE DA SILVA RECLAMADO: ESSENCIAL SISTEMA DE SEGURANCA LTDA INTIMAÇÃO Fica V. Sa. intimado para tomar ciência do Despacho ID adca49c proferido nos autos. CONCLUSÃO Nesta data, faço o feito concluso ao(a) MM(a) Juiz(a) da 73ª Vara do Trabalho de São Paulo/SP. SÃO PAULO/SP, data abaixo. JULIANA MONTEIRO DE SOUZA DESPACHO Vistos, Considerando a necessidade de readequação da pauta, redesigno a audiência UNA-RS PRESENCIAL para o dia 14/08/2026 às 11:35, mantidas as cominações anteriores. Intimem-se. SAO PAULO/SP, 18 de junho de 2026. JOSIANE GROSSL Juíza do Trabalho TitularIntimado(s) / Citado(s) - RENATA LEITE DA SILVA', 'd7af25e855b752e449cef3b16bbe163497032d7bd98ec3897ce2b7c3109ac1a4', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(23, 'aasp', '2026-06-19', '1000605-52.2026.5.02.0610', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Edital\r\n', '38800', '1', '\n\r Processo: 1000605-52.2026.5.02.0610\n\r Órgão: 10ª Vara do Trabalho de São Paulo - Zona Leste\r Data de disponibilização: \r Tipo de comunicação: Edital\r Meio: Plataforma Nacional de Editais\n\r Parte(s): \r AGS SERVICOS TERCEIRIZADOS LTDA - ME N/P: UMAIA DE MELO KADRI\r IVANIDE RODRIGUES\r AGS SERVICOS TERCEIRIZADOS LTDA - ME\n\r Advogado(s) \r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 10ª VARA DO TRABALHO DE SÃO PAULO - ZONA LESTE ATOrd 1000605-52.2026.5.02.0610 RECLAMANTE: IVANIDE RODRIGUES RECLAMADO: AGS SERVICOS TERCEIRIZADOS LTDA - ME EDITAL DE CITAÇÃO O(A) MM(a) Juiz(a) do Trabalho da 10ª Vara do Trabalho de São Paulo - Zona Leste/SP, CITA o(a) RECLAMADO: AGS SERVICOS TERCEIRIZADOS LTDA - ME, CNPJ: 07.409.123/0001-20, bem como sua sócia, SUMAIA DE MELO KADRI, CPF: 179.913.108-41, acerca da Ação Trabalhista - Rito Ordinário, Processo PJe-JT nº 1000605-52.2026.5.02.0610, apresentada pelo(a) RECLAMANTE: IVANIDE RODRIGUES, contra RECLAMADO: AGS SERVICOS TERCEIRIZADOS LTDA - ME e outros, bem como INTIMA a(s) referida(s) reclamada(s) a comparecer(em) à audiência UNA que ocorrerá no dia 04/08/2026 14:50 horas, na sala de audiências da 10ª Vara do Trabalho de São Paulo - Zona Leste/SP, endereço no cabeçalho. A petição inicial e documentos poderão ser acessados pelo site (http://pje.trtsp.jus.br/documentos). Caso a reclamada não consiga consultá-los via internet, deverá comparecer à Unidade Judiciária (endereço acima indicado) para ter acesso a eles ou receber orientações. A audiência será UNA, nos termos da CLT. Os documentos deverão ser apresentados pelo peticionamento eletrônico até uma hora antes da audiência (Ato GP/CR 01/2012 - E.TRT 2ª Região). Se a reclamada não possuir equipamento para conversão ou escaneamento de documentos em formato PDF, deverá comparecer à Unidade Judiciária no mínimo uma hora antes da audiência para proceder à adequação dos documentos por meio dos equipamentos disponíveis na Central de Atendimento. Na audiência referida lhe é facultado fazer-se substituir por um preposto (empregado) que tenha conhecimento direto dos fatos, bem como fazer-se acompanhar por advogado(a), sendo que o não comparecimento a audiência ou a não apresentação de defesa e documentos nos termos acima indicados, poder-lhe-á acarretar sérios prejuízos, presumindo-se aceitos como verdadeiros todos os fatos alegados pelo autor e constantes da petição inicial, nos termos do Art. 844 da CLT, esclarecendo, por fim que em se tratando de pessoa jurídica, sugere-se apresentar com a defesa a cópia atual do estatuto constitutivo (contrato social) de forma eletrônica. As partes deverão notificar suas testemunhas - notificação essa com força de notificação judicial - por meio de carta registrada, sedex, email ou outro meio escrito, na forma do inciso II, parágrafo primeiro do art. 362, do CPC, aplicável ao Processo do Trabalho por força do art. 769 da CLT, sob pena de serem ouvidas apenas aquelas que estiverem presentes na data de audiência espontaneamente (art. 362, § 1º do CPC). As testemunhas de ambas as partes deverão comparecer munidas da CTPS. E, para que chegue ao conhecimento de todos os interessados, é passado o presente edital que será publicado no Diário Oficial. SAO PAULO/SP, 18 de junho de 2026. VIVIAN NATACHA GONCALVES ROCHA ServidorIntimado(s) / Citado(s) - AGS SERVICOS TERCEIRIZADOS LTDA - ME', '4385a6889733e5514279e43f64a8def5e51ccb349385f828fce5931856b8e497', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(24, 'aasp', '2026-06-19', '1002605-47.2025.5.02.0614', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '8883', '1', '\n\r Processo: 1002605-47.2025.5.02.0614\n\r Órgão: 14ª Vara do Trabalho de São Paulo - Zona Leste\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r LUCA DE ABREU GONCALVES\r FLEX GESTAO DE RELACIONAMENTOS S.A. EM RECUPERACAO JUDICIAL\r ITAU UNIBANCO S.A.\n\r Advogado(s) \r ANDREIA OLIVEIRA DE PAULA\r OAB SP-371300\r KLEBIA MARIA PEREIRA DE ALMEIDA\r OAB SP-360729\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r IVAN CARLOS DE ALMEIDA\r OAB SP-173886 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 14ª VARA DO TRABALHO DE SÃO PAULO - ZONA LESTE ATSum 1002605-47.2025.5.02.0614 RECLAMANTE: LUCA DE ABREU GONCALVES RECLAMADO: FLEX GESTAO DE RELACIONAMENTOS S.A. EM RECUPERACAO JUDICIAL E OUTROS (1) INTIMAÇÃO Fica V. Sa. intimado para tomar ciência do Despacho ID d8fdf3d proferido nos autos. CONCLUSÃO Nesta data, faço o feito concluso ao(a) MM(a) Juiz(a) da 14ª Vara do Trabalho de São Paulo - Zona Leste/SP. SAO PAULO/SP, data abaixo. ANA KIAN RODRIGUES DESPACHO Vistos. Petição Id. ba17833: Nada a deferir, tendo em vista que, por ora, a execução se processa em face da primeira reclamada. Intimem-se. SAO PAULO/SP, 18 de junho de 2026. ANDREA CUNHA DOS SANTOS GONCALVES Juíza do Trabalho TitularIntimado(s) / Citado(s) - ITAU UNIBANCO S.A.', '4fc29c2806b7ba17a7c995a2b9f97acde09aaf46d59fa57ae774503949c9b059', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(25, 'aasp', '2026-06-19', '1002605-47.2025.5.02.0614', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '8884', '1', '\n\r Processo: 1002605-47.2025.5.02.0614\n\r Órgão: 14ª Vara do Trabalho de São Paulo - Zona Leste\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r LUCA DE ABREU GONCALVES\r FLEX GESTAO DE RELACIONAMENTOS S.A. EM RECUPERACAO JUDICIAL\r ITAU UNIBANCO S.A.\n\r Advogado(s) \r ANDREIA OLIVEIRA DE PAULA\r OAB SP-371300\r KLEBIA MARIA PEREIRA DE ALMEIDA\r OAB SP-360729\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r IVAN CARLOS DE ALMEIDA\r OAB SP-173886 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 14ª VARA DO TRABALHO DE SÃO PAULO - ZONA LESTE ATSum 1002605-47.2025.5.02.0614 RECLAMANTE: LUCA DE ABREU GONCALVES RECLAMADO: FLEX GESTAO DE RELACIONAMENTOS S.A. EM RECUPERACAO JUDICIAL E OUTROS (1) INTIMAÇÃO Fica V. Sa. intimado para tomar ciência do Despacho ID d8fdf3d proferido nos autos. CONCLUSÃO Nesta data, faço o feito concluso ao(a) MM(a) Juiz(a) da 14ª Vara do Trabalho de São Paulo - Zona Leste/SP. SAO PAULO/SP, data abaixo. ANA KIAN RODRIGUES DESPACHO Vistos. Petição Id. ba17833: Nada a deferir, tendo em vista que, por ora, a execução se processa em face da primeira reclamada. Intimem-se. SAO PAULO/SP, 18 de junho de 2026. ANDREA CUNHA DOS SANTOS GONCALVES Juíza do Trabalho TitularIntimado(s) / Citado(s) - LUCA DE ABREU GONCALVES', 'd91fb1393084a0a270b807cf4d67f75e0c8d7fc2f9c219c9f4dc989714fe74ed', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(26, 'aasp', '2026-06-19', '1000277-15.2025.5.02.0075', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '17570', '1', '\n\r Processo: 1000277-15.2025.5.02.0075\n\r Órgão: Vice-Presidência Judicial\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r RESTAURANTE E PIZZARIA PONTO A LTDA\r DANIEL LUIS DO NASCIMENTO FILHO\n\r Advogado(s) \r VICTOR MARTINS AMERIO\r OAB SP-235264\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r KAREN OLIVEIRA DA CRUZ\r OAB SP-377344 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO ANÁLISE DE RECURSOS Relator: SAMIR SOUBHIA ROT 1000277-15.2025.5.02.0075 RECORRENTE: RESTAURANTE E PIZZARIA PONTO A LTDA RECORRIDO: DANIEL LUIS DO NASCIMENTO FILHO INTIMAÇÃO Fica V. Sa. intimado para tomar ciência do Despacho ID b60ae01 proferido nos autos. Fica mantido o despacho agravado. Processe(m)-se o(s) Agravo(s) de Instrumento. Intimem-se, dando vista à parte contrária para apresentação de contraminuta e contrarrazões. Desde já, ficam as partes cientes de que, após a data de remessa dos autos ao Tribunal Superior do Trabalho, verificável na aba de movimentações, as futuras petições deverão ser efetivadas diretamente perante aquele Tribunal. SAO PAULO/SP, 18 de junho de 2026. FRANCISCO FERREIRA JORGE NETO Desembargador Vice-Presidente JudicialIntimado(s) / Citado(s) - RESTAURANTE E PIZZARIA PONTO A LTDA', '90472c9408aea381da50dda3fbb17738ded00cebd8be349d5088ca6fcf75349e', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(27, 'aasp', '2026-06-19', '1000277-15.2025.5.02.0075', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '17571', '1', '\n\r Processo: 1000277-15.2025.5.02.0075\n\r Órgão: Vice-Presidência Judicial\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r RESTAURANTE E PIZZARIA PONTO A LTDA\r DANIEL LUIS DO NASCIMENTO FILHO\n\r Advogado(s) \r VICTOR MARTINS AMERIO\r OAB SP-235264\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r KAREN OLIVEIRA DA CRUZ\r OAB SP-377344 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO ANÁLISE DE RECURSOS Relator: SAMIR SOUBHIA ROT 1000277-15.2025.5.02.0075 RECORRENTE: RESTAURANTE E PIZZARIA PONTO A LTDA RECORRIDO: DANIEL LUIS DO NASCIMENTO FILHO INTIMAÇÃO Fica V. Sa. intimado para tomar ciência do Despacho ID b60ae01 proferido nos autos. Fica mantido o despacho agravado. Processe(m)-se o(s) Agravo(s) de Instrumento. Intimem-se, dando vista à parte contrária para apresentação de contraminuta e contrarrazões. Desde já, ficam as partes cientes de que, após a data de remessa dos autos ao Tribunal Superior do Trabalho, verificável na aba de movimentações, as futuras petições deverão ser efetivadas diretamente perante aquele Tribunal. SAO PAULO/SP, 18 de junho de 2026. FRANCISCO FERREIRA JORGE NETO Desembargador Vice-Presidente JudicialIntimado(s) / Citado(s) - DANIEL LUIS DO NASCIMENTO FILHO', '3a7e4b91066a55db4a0728764b49c2f5cb2ba6bb9c6b4ae65d328dc78f672574', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(28, 'aasp', '2026-06-19', '1001020-29.2026.5.02.0321', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '41143', '1', '\n\r Processo: 1001020-29.2026.5.02.0321\n\r Órgão: 11ª Vara do Trabalho de Guarulhos\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r MARCELO DAMIAO LOPES RAPOSO\r INDUSTRIAS TEXTEIS SUECO LTDA\n\r Advogado(s) \r PATRICIA KRASILTCHIK OLSZEWER\r OAB SP-234843\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 11ª VARA DO TRABALHO DE GUARULHOS ATSum 1001020-29.2026.5.02.0321 RECLAMANTE: MARCELO DAMIAO LOPES RAPOSO RECLAMADO: INDUSTRIAS TEXTEIS SUECO LTDA INTIMAÇÃO Fica V. Sa. intimado para tomar ciência do Despacho ID 033af87 proferido nos autos. CONCLUSÃO Nesta data, faço o feito concluso ao(a) MM(a) Juiz(a) da 11ª Vara do Trabalho de Guarulhos/SP. GUARULHOS/SP, data abaixo. DAVI LIMA DE OLIVEIRA DESPACHO Vistos Ante o erro material na Ata de Audiência id. fd5f062, corrijo de ofício, nos termos do artigo 833 da Consolidação das Leis do Trabalho, para que onde lê-se: Designa-se para JULGAMENTO a data de 09.07.2026. passe a constar: Designa-se para JULGAMENTO a data de 08.07.2026. Mantidos os demais termos. Intime-se GUARULHOS/SP, 18 de junho de 2026. PABLO EZEQUIEL MOREIRA Juiz do Trabalho SubstitutoIntimado(s) / Citado(s) - MARCELO DAMIAO LOPES RAPOSO', '7f1e5d567bfa5838a2b367fe254fc94b84e5354c0e42a44bd1f989fee18692e7', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(29, 'aasp', '2026-06-19', '1001020-29.2026.5.02.0321', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '41145', '1', '\n\r Processo: 1001020-29.2026.5.02.0321\n\r Órgão: 11ª Vara do Trabalho de Guarulhos\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r MARCELO DAMIAO LOPES RAPOSO\r INDUSTRIAS TEXTEIS SUECO LTDA\n\r Advogado(s) \r PATRICIA KRASILTCHIK OLSZEWER\r OAB SP-234843\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 11ª VARA DO TRABALHO DE GUARULHOS ATSum 1001020-29.2026.5.02.0321 RECLAMANTE: MARCELO DAMIAO LOPES RAPOSO RECLAMADO: INDUSTRIAS TEXTEIS SUECO LTDA INTIMAÇÃO Fica V. Sa. intimado para tomar ciência do Despacho ID 033af87 proferido nos autos. CONCLUSÃO Nesta data, faço o feito concluso ao(a) MM(a) Juiz(a) da 11ª Vara do Trabalho de Guarulhos/SP. GUARULHOS/SP, data abaixo. DAVI LIMA DE OLIVEIRA DESPACHO Vistos Ante o erro material na Ata de Audiência id. fd5f062, corrijo de ofício, nos termos do artigo 833 da Consolidação das Leis do Trabalho, para que onde lê-se: Designa-se para JULGAMENTO a data de 09.07.2026. passe a constar: Designa-se para JULGAMENTO a data de 08.07.2026. Mantidos os demais termos. Intime-se GUARULHOS/SP, 18 de junho de 2026. PABLO EZEQUIEL MOREIRA Juiz do Trabalho SubstitutoIntimado(s) / Citado(s) - INDUSTRIAS TEXTEIS SUECO LTDA', '6d83c46477d484d0bcc2b646f570de5ab968ba36f80f2bb89b90edf9d0457326', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(30, 'aasp', '2026-06-19', '1001302-64.2026.5.02.0613', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '22704', '1', '\n\r Processo: 1001302-64.2026.5.02.0613\n\r Órgão: 13ª Vara do Trabalho de São Paulo - Zona Leste\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r JOSE CARLOS DE BRITO\r WD CONSTRUPLAN ENGENHARIA E GERENCIAMENTO LTDA\n\r Advogado(s) \r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 13ª VARA DO TRABALHO DE SÃO PAULO - ZONA LESTE ATOrd 1001302-64.2026.5.02.0613 RECLAMANTE: JOSE CARLOS DE BRITO RECLAMADO: WD CONSTRUPLAN ENGENHARIA E GERENCIAMENTO LTDA INTIMAÇÃO Fica V. Sa. intimado para tomar ciência do Despacho ID aecfa19 proferido nos autos. Nesta data, faço o feito concluso ao(a) MM(a) Juiz(a) da 13ª Vara do Trabalho da Zona Leste de São Paulo/SP. São Paulo, data abaixo DIEGO MACIEL OLIVEIRA DESPACHO Vistos etc. Especificamente quanto à procuração e declaração de hipossuficiência, concedo ao autor o prazo 02 dias para que seja regularizada mediante juntada de instrumento original, assinado manualmente pelo constituinte, ou digitalmente através de certificadoras oficiais, conforme MP nº 2.200-2 de 24/08/2001, que institui a Infraestrutura de Chaves Públicas Brasileira - ICP-Brasil, valendo lembrar que o site “gov.br” viabiliza a assinatura digital para os cidadãos interessados. Não cumprida a determinação no prazo ora deferido, o feito será extinto sem resolução do mérito, nos termos do art. 485 do CPC. Sem prejuízo, mantenho a data da audiência já designada. SAO PAULO/SP, 18 de junho de 2026. LUCIANA SIQUEIRA ALVES GARCIA Juíza do Trabalho TitularIntimado(s) / Citado(s) - JOSE CARLOS DE BRITO', '636796c6a88b122206f52793d3cabc0b74ba70346a3fd23808a84139dc635899', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(31, 'aasp', '2026-06-19', '1001606-30.2025.5.02.0603', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '41796', '1', '\n\r Processo: 1001606-30.2025.5.02.0603\n\r Órgão: 3ª Vara do Trabalho de São Paulo - Zona Leste\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r DANILO DA SILVA BARBOZA\r GLEIDSON CUENCE\r SANDRO SANTOS MACHADO\r OWENS-ILLINOIS DO BRASIL INDUSTRIA E COMERCIO LTDA\n\r Advogado(s) \r ANDRE VILLAC POLINESIO\r OAB SP-203607\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 3ª VARA DO TRABALHO DE SÃO PAULO - ZONA LESTE ATOrd 1001606-30.2025.5.02.0603 RECLAMANTE: DANILO DA SILVA BARBOZA RECLAMADO: OWENS-ILLINOIS DO BRASIL INDUSTRIA E COMERCIO LTDA INTIMAÇÃO Fica V. Sa. intimado para tomar ciência da Sentença ID 877941d proferida nos autos, cujo dispositivo consta a seguir: III - CONCLUSÃO À luz do exposto, CONHEÇO dos Embargos declaratórios, para NEGAR PROVIMENTO, nos termos da fundamentação supra. NOTIFIQUEM-SE AS PARTES. Prazo de lei. ITATIARA MEURILLY SILVA LOURENCO Juíza do Trabalho SubstitutaIntimado(s) / Citado(s) - OWENS-ILLINOIS DO BRASIL INDUSTRIA E COMERCIO LTDA', '2f967639c7663d4d7fcc6e1dd116f8c9da96f35fd9d3a8d1ee6b65596ac412db', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(32, 'aasp', '2026-06-19', '1001606-30.2025.5.02.0603', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '41797', '1', '\n\r Processo: 1001606-30.2025.5.02.0603\n\r Órgão: 3ª Vara do Trabalho de São Paulo - Zona Leste\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r DANILO DA SILVA BARBOZA\r GLEIDSON CUENCE\r SANDRO SANTOS MACHADO\r OWENS-ILLINOIS DO BRASIL INDUSTRIA E COMERCIO LTDA\n\r Advogado(s) \r ANDRE VILLAC POLINESIO\r OAB SP-203607\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 3ª VARA DO TRABALHO DE SÃO PAULO - ZONA LESTE ATOrd 1001606-30.2025.5.02.0603 RECLAMANTE: DANILO DA SILVA BARBOZA RECLAMADO: OWENS-ILLINOIS DO BRASIL INDUSTRIA E COMERCIO LTDA INTIMAÇÃO Fica V. Sa. intimado para tomar ciência da Sentença ID 877941d proferida nos autos, cujo dispositivo consta a seguir: III - CONCLUSÃO À luz do exposto, CONHEÇO dos Embargos declaratórios, para NEGAR PROVIMENTO, nos termos da fundamentação supra. NOTIFIQUEM-SE AS PARTES. Prazo de lei. ITATIARA MEURILLY SILVA LOURENCO Juíza do Trabalho SubstitutaIntimado(s) / Citado(s) - DANILO DA SILVA BARBOZA', 'a0063247b01d5c7b16e91bd44fbcbfc0ba41b3c1e1e8c027ebd674c839abcabd', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(33, 'aasp', '2026-06-19', '1000598-32.2026.5.02.0005', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '22938', '1', '\n\r Processo: 1000598-32.2026.5.02.0005\n\r Órgão: 5ª Vara do Trabalho de São Paulo\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r ANTONIO EUDAZIO CARLOS DE LIMA JUNIOR\r COMANDO G 9 TERCEIRIZACAO DE PORTARIA E LIMPEZA EIRELI\n\r Advogado(s) \r LUCIANO CESAR GUASTAFERRO JUNIOR\r OAB SP-327722\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 5ª VARA DO TRABALHO DE SÃO PAULO ATOrd 1000598-32.2026.5.02.0005 RECLAMANTE: ANTONIO EUDAZIO CARLOS DE LIMA JUNIOR RECLAMADO: COMANDO G 9 TERCEIRIZACAO DE PORTARIA E LIMPEZA EIRELI INTIMAÇÃO Fica V. Sa. intimado para tomar ciência do Despacho ID 78cc25f proferido nos autos. CONCLUSÃO Nesta data, faço estes autos conclusos a MM. Juíza do Trabalho para deliberações. ANTONIO WARLEY RUFINO GOMES DESPACHO Vistos. Tendo em vista que conforme Portaria GP/CR 14/2026, o expediente neste tribunal encerrará mais cedo, em razão do jogo da seleção brasileira na copa do mundo, redesigne-se a audiência Una PRESENCIAL para o dia 24/06/2026 12:20, devendo as partes comparecer sob as penas do art. 844 da CLT. Observem as partes que houve apenas alteração do horário da audiência. Intime(m)-se. SAO PAULO/SP, 18 de junho de 2026. CARLOS EDUARDO FERREIRA DE SOUZA DUARTE SAAD Juiz do Trabalho TitularIntimado(s) / Citado(s) - COMANDO G 9 TERCEIRIZACAO DE PORTARIA E LIMPEZA EIRELI', '4060632b6c99d45008c38f8c4c48e408bbf65559a7cb414289d1bfacea92a9d0', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(34, 'aasp', '2026-06-19', '1000598-32.2026.5.02.0005', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '22939', '1', '\n\r Processo: 1000598-32.2026.5.02.0005\n\r Órgão: 5ª Vara do Trabalho de São Paulo\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r ANTONIO EUDAZIO CARLOS DE LIMA JUNIOR\r COMANDO G 9 TERCEIRIZACAO DE PORTARIA E LIMPEZA EIRELI\n\r Advogado(s) \r LUCIANO CESAR GUASTAFERRO JUNIOR\r OAB SP-327722\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 5ª VARA DO TRABALHO DE SÃO PAULO ATOrd 1000598-32.2026.5.02.0005 RECLAMANTE: ANTONIO EUDAZIO CARLOS DE LIMA JUNIOR RECLAMADO: COMANDO G 9 TERCEIRIZACAO DE PORTARIA E LIMPEZA EIRELI INTIMAÇÃO Fica V. Sa. intimado para tomar ciência do Despacho ID 78cc25f proferido nos autos. CONCLUSÃO Nesta data, faço estes autos conclusos a MM. Juíza do Trabalho para deliberações. ANTONIO WARLEY RUFINO GOMES DESPACHO Vistos. Tendo em vista que conforme Portaria GP/CR 14/2026, o expediente neste tribunal encerrará mais cedo, em razão do jogo da seleção brasileira na copa do mundo, redesigne-se a audiência Una PRESENCIAL para o dia 24/06/2026 12:20, devendo as partes comparecer sob as penas do art. 844 da CLT. Observem as partes que houve apenas alteração do horário da audiência. Intime(m)-se. SAO PAULO/SP, 18 de junho de 2026. CARLOS EDUARDO FERREIRA DE SOUZA DUARTE SAAD Juiz do Trabalho TitularIntimado(s) / Citado(s) - ANTONIO EUDAZIO CARLOS DE LIMA JUNIOR', '8ed6a2e256f27598597306ffbdb76fc6e335a5c41f5522b775724eb65a9d5466', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(35, 'aasp', '2026-06-19', '1001428-53.2026.5.02.0601', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '42486', '1', '\n\r Processo: 1001428-53.2026.5.02.0601\n\r Órgão: AJUDE 4.0 - 56ª VTSP - Juiz(a) Auxiliar\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r WESLEY LEOPOLDINO MELGACO DA SILVA\r OWENS-ILLINOIS DO BRASIL INDUSTRIA E COMERCIO LTDA\n\r Advogado(s) \r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO AJUDE 4.0 - 56ª VTSP - JUIZ(A) AUXILIAR ATOrd 1001428-53.2026.5.02.0601 RECLAMANTE: WESLEY LEOPOLDINO MELGACO DA SILVA RECLAMADO: OWENS-ILLINOIS DO BRASIL INDUSTRIA E COMERCIO LTDA DESTINATÁRIO: WESLEY LEOPOLDINO MELGACO DA SILVA ENDEREÇO: Expediente enviado por outro meio. NOTIFICAÇÃO PJe Fica V. Sa. citado(a) da presente ação e notificado(a) para comparecer à audiência UNA que se realizará no dia 21/07/2026 14:40 horas, na modalidade telepresencial, pela plataforma de reuniões online Zoom, conforme dados de acesso abaixo. A audiência será UNA, de conciliação, instrução e julgamento. A petição inicial poderá ser consultada pela página https://pje.trtsp.jus.br/documentos, digitando o Código Localizador da Petição Inicial, regularmente impresso no rodapé desta correspondência. O destinatário desta notificação deve atentar-se à existência de outros documentos e/ou atos processuais constantes dos autos. Os autos do processo estão disponíveis no próprio sistema PJe ou por meio da consulta pública no endereço https://consulta.pje.trtsp.jus.br/consultaprocessual. A exibição de alguns documentos dependerá de prévio acesso por meio de usuário e senha. Em caso de dificuldade de acesso, compareça a uma Unidade de Apoio Operacional ou seus postos de serviços, localizados nos fóruns deste Tribunal. A atuação do advogado no processo depende de prévia habilitação, realizada pelo interessado no sistema PJe, art. 5º, da Res. CSJT nº 185/2017. A defesa e demais documentos, classificados na forma do art. 12, da Res. CSJT nº 185/2017, deverão ser protocolados no sistema PJe. Recomenda-se a juntada com pelo menos 48 horas de antecedência à audiência. Arquivos de áudio e vídeo deverão ser juntados aos autos na forma da Portaria GP/CR nº 9/2017, sob pena de não conhecimento. É facultada apresentação de defesa oral, art. 847, da CLT. Em audiência, V. Sa. pode designar preposto, art. 843, da CLT, bem como constituir advogado. A ausência à audiência importa revelia e confissão quanto à matéria de fato, art. 844, da CLT. A ausência à audiência importa revelia e confissão quanto à matéria de fato, na forma do art. 844 da CLT. As testemunhas deverão ser intimadas pela própria parte interessada, nos termos do artigo 305 da Consolidação das Normas da Corregedoria, por qualquer meio escrito eficaz, destacando-se que a intimação deve ser entregue com antecedência mínima de 03 dias da data da audiência. Inexistindo prova escrita do envio da intimação ou desrespeitado o interstício mínimo de 03 dias, ausente(s) a(s) testemunha(s), presume-se que a parte se comprometeu a ouvir apenas as que comparecerem espontaneamente, sob pena de preclusão da prova. Cópia desta notificação poderá ser utilizada pela parte como mandado/intimação da testemunha, desde que a ciência seja aposta no lado da folha em que consta a data e horário do agendamento e conste os seguintes dados da testemunha: nome, CPF e assinatura. Tais requisitos também serão necessários para quaisquer outras formas de notificação da testemunha. Fica(m) a(s) testemunha(s) advertida(s) que o não comparecimento implicará condução coercitiva, além de multa de um salário mínimo. Ressalta-se que não será enviado e-mail de convite visto que desnecessário. Sugere-se utilizar o link para acesso por computador e o id e senha para acesso por outros dispositivos tais como tablets e celulares. Ressalte-se que em tablets e celulares é necessário instalar o aplicativo Zoom para acesso à audiência, o que deve ser feito com antecedência. Destaca-se a responsabilidade exclusiva da parte quanto à instalação e utilização do aplicativo de acesso à plataforma Zoom, bem como assegurar conexão à internet com transmissão de dados que possibilitem a sua participação ininterrupta e integral (áudio e vídeo), sob pena de ser considerada injustificadamente ausente. A parte, patronos e testemunhas devem testar anteriormente à audiência os equipamentos e a rede de internet móvel ou fixa, bem como a plataforma Zoom, já que não serão realizados testes ou treinamentos durante a audiência. O acesso à sala de audiência telepresencial deve ser feito de um local apropriado para a coleta dos depoimentos, sem ocorrência de ruídos e/ou barulhos externos e sem a presença de terceiros. Em nenhuma hipótese será admitida a realização da audiência dentro de veículos em movimento ou caminhando em local público, ante o risco de acidentes e de falha na conexão. O não cumprimento dessas regras será tratado como ausência injustificada, resultando nas consequências legais correspondentes. O andamento da pauta poderá ser acompanhado no aplicativo JTe. O aplicativo pode ser instalado na Play Store (dispositivos Android) e na App Store (dispositivos Apple). O acesso pela versão web também está disponível na página deste Tribunal, e Serviços > Consultas > Pautas > Consulta do JTe (selecionar o TRT da 2ª Região > Pauta) ou por meio do endereço https://jte.csjt.jus.br. Dados de acesso à audiência telepresencial: Entrar na reunião Zoom https://trt2-jus-br.zoom.us/j/85012579947?pwd=9SDPGsrTrwJiWWpnNOCa2gnMngb5gQ.1 ID da reunião: 850 1257 9947 Senha de acesso: 978992 SAO PAULO/SP, 18 de junho de 2026. NAO APAGAR NENHUM CARACTERE DESTA LINHA. ESTE DOCUMENTO SERA ENVIADO VIA ECARTA REG. SAO PAULO/SP, 18 de junho de 2026. RAUL ALTRAN LACERDA ServidorIntimado(s) / Citado(s) - WESLEY LEOPOLDINO MELGACO DA SILVA', '6ba2742fe8231eaebb06fdcf0b92637172db9267c99c2ff3ca0c9a0869002156', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(36, 'aasp', '2026-06-19', '1002260-11.2025.5.02.0605', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '33220', '1', '\n\r Processo: 1002260-11.2025.5.02.0605\n\r Órgão: 7ª Turma\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r OBRA SOCIAL DOM BOSCO\r O.N.D.\r TABATA NASCIMENTO DE SOUZA\r OBRA SOCIAL DOM BOSCO\r TABATA NASCIMENTO DE SOUZA\n\r Advogado(s) \r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r ALFREDO FERNANDO FERREIRA FIGUEIREDO FILHO\r OAB SP-211454\r TALITA DOS SANTOS\r OAB SP-484476 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 7ª TURMA Relator: CELSO RICARDO PEEL FURTADO DE OLIVEIRA RORSum 1002260-11.2025.5.02.0605 RECORRENTE: TABATA NASCIMENTO DE SOUZA E OUTROS (1) RECORRIDO: TABATA NASCIMENTO DE SOUZA E OUTROS (1) Fica V. Sa. intimada do inteiro teor do v. Acórdão de id: 39c9520. SAO PAULO/SP, 18 de junho de 2026. PATRICIA CORNACCHIONI Diretor de SecretariaIntimado(s) / Citado(s) - TABATA NASCIMENTO DE SOUZA', 'c1c45a9fc4230ada142753d59052b77c078b411b21e87fde8ddab093c674074e', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(37, 'aasp', '2026-06-19', '1002260-11.2025.5.02.0605', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '33221', '1', '\n\r Processo: 1002260-11.2025.5.02.0605\n\r Órgão: 7ª Turma\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r OBRA SOCIAL DOM BOSCO\r O.N.D.\r TABATA NASCIMENTO DE SOUZA\r OBRA SOCIAL DOM BOSCO\r TABATA NASCIMENTO DE SOUZA\n\r Advogado(s) \r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r ALFREDO FERNANDO FERREIRA FIGUEIREDO FILHO\r OAB SP-211454\r TALITA DOS SANTOS\r OAB SP-484476 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 7ª TURMA Relator: CELSO RICARDO PEEL FURTADO DE OLIVEIRA RORSum 1002260-11.2025.5.02.0605 RECORRENTE: TABATA NASCIMENTO DE SOUZA E OUTROS (1) RECORRIDO: TABATA NASCIMENTO DE SOUZA E OUTROS (1) Fica V. Sa. intimada do inteiro teor do v. Acórdão de id: 39c9520. SAO PAULO/SP, 18 de junho de 2026. PATRICIA CORNACCHIONI Diretor de SecretariaIntimado(s) / Citado(s) - OBRA SOCIAL DOM BOSCO', '7ec936ca78daefe3055f43f7671d3c4a7a1e2a76782c4fb52764b6b592e8d4f3', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(38, 'aasp', '2026-06-19', '1001727-88.2023.5.02.0066', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '43026', '1', '\n\r Processo: 1001727-88.2023.5.02.0066\n\r Órgão: 66ª Vara do Trabalho de São Paulo\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r AMANDA CAMARANE REIGADA\r CAUCA SUELI MOYSES\r JULIO CEZAR RIBEIRO DE PONTES\r BRASFORMA INDUSTRIA E COMERCIO LTDA\n\r Advogado(s) \r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r FERNANDO ROGERIO PELUSO\r OAB SP-207679 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 66ª VARA DO TRABALHO DE SÃO PAULO ATOrd 1001727-88.2023.5.02.0066 RECLAMANTE: JULIO CEZAR RIBEIRO DE PONTES RECLAMADO: BRASFORMA INDUSTRIA E COMERCIO LTDA INTIMAÇÃO Fica V. Sa. intimado para tomar ciência do Despacho ID 1b65704 proferido nos autos. CONCLUSÃO Nesta data, faço os presentes autos conclusos ao(à) MM(a) Juiz(a) da 66ª Vara do Trabalho de São Paulo/SP. São Paulo, data abaixo. MAXIMILIANO MIGLIACCI Vistos, etc. #id:1a1dd09: Razão assiste ao exequente. Intime-se a reclamada para cumprir a decisão de Id cd32628 de forma integral, fornecendo a documentação necessária para o levantamento do FGTS + 40%, no prazo de 05 (cinco) dias, sob pena de responder pela multa diária no valor de R$ 500,00, limitada ao valor da obrigação principal, que será revertida ao CODEFAT, além da responsabilização de seu represente legal pelo descumprimento de ordem judicial, e execução direta. Intime(m)-se. Nada mais. SAO PAULO/SP, 18 de junho de 2026. FERNANDA MUSIALAK Juíza do Trabalho SubstitutaIntimado(s) / Citado(s) - JULIO CEZAR RIBEIRO DE PONTES', '8a6a5f2b50f4bf54ff9cdbff302b56d9321e6245eec933d0d3206d3099bb7cd2', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(39, 'aasp', '2026-06-19', '1001727-88.2023.5.02.0066', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '43027', '1', '\n\r Processo: 1001727-88.2023.5.02.0066\n\r Órgão: 66ª Vara do Trabalho de São Paulo\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r AMANDA CAMARANE REIGADA\r CAUCA SUELI MOYSES\r JULIO CEZAR RIBEIRO DE PONTES\r BRASFORMA INDUSTRIA E COMERCIO LTDA\n\r Advogado(s) \r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r FERNANDO ROGERIO PELUSO\r OAB SP-207679 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 66ª VARA DO TRABALHO DE SÃO PAULO ATOrd 1001727-88.2023.5.02.0066 RECLAMANTE: JULIO CEZAR RIBEIRO DE PONTES RECLAMADO: BRASFORMA INDUSTRIA E COMERCIO LTDA INTIMAÇÃO Fica V. Sa. intimado para tomar ciência do Despacho ID 1b65704 proferido nos autos. CONCLUSÃO Nesta data, faço os presentes autos conclusos ao(à) MM(a) Juiz(a) da 66ª Vara do Trabalho de São Paulo/SP. São Paulo, data abaixo. MAXIMILIANO MIGLIACCI Vistos, etc. #id:1a1dd09: Razão assiste ao exequente. Intime-se a reclamada para cumprir a decisão de Id cd32628 de forma integral, fornecendo a documentação necessária para o levantamento do FGTS + 40%, no prazo de 05 (cinco) dias, sob pena de responder pela multa diária no valor de R$ 500,00, limitada ao valor da obrigação principal, que será revertida ao CODEFAT, além da responsabilização de seu represente legal pelo descumprimento de ordem judicial, e execução direta. Intime(m)-se. Nada mais. SAO PAULO/SP, 18 de junho de 2026. FERNANDA MUSIALAK Juíza do Trabalho SubstitutaIntimado(s) / Citado(s) - BRASFORMA INDUSTRIA E COMERCIO LTDA', '9d3d2ac4830522de15f192cd7af5bac790fef244adf27a82d26764df77949623', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(40, 'aasp', '2026-06-19', '1002056-61.2025.5.02.0606', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '32557', '1', '\n\r Processo: 1002056-61.2025.5.02.0606\n\r Órgão: 6ª Vara do Trabalho de São Paulo - Zona Leste\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r RENATO ARAUJO DE ALMEIDA\r REGIONAL SERVICOS DE SEGURANCA E VIGILANCIA EIRELI\n\r Advogado(s) \r EDUARDO FIGUEIREDO BATISTA\r OAB SP-154236\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 6ª VARA DO TRABALHO DE SÃO PAULO - ZONA LESTE ATSum 1002056-61.2025.5.02.0606 RECLAMANTE: RENATO ARAUJO DE ALMEIDA RECLAMADO: REGIONAL SERVICOS DE SEGURANCA E VIGILANCIA EIRELI INTIMAÇÃO Fica V. Sa. intimado para tomar ciência do Despacho ID ef84c68 proferido nos autos. CONCLUSÃO Nesta data, faço o feito concluso ao(a) MM(a) Juiz(a) da 6ª Vara do Trabalho de São Paulo - Zona Leste/SP. São Paulo, 18 de junho de 2026 RENATA LORENA PORTO GADELHA DESPACHO Vistos, examinados etc. Petição id. 0656bdc: tendo em vista o pedido formulado pela parte autora, determino, nos moldes do artigo 855-A da CLT e 133 e seguintes do CPC, a instauração do Incidente de Desconsideração da Personalidade Jurídica nestes autos. Sendo assim, nos termos do artigo 135 do CPC, citem-se CELIA MARIA TERAOKA CALIA, CPF: 111.139.548-92, e NRPAR PARTICIPACOES LTDA, CNPJ: 49.360.546/0001-42, para que ofereçam resposta e apresentem as provas cabíveis no prazo de 15 dias. A citação das suscitadas deverá ser realizada nos endereços constantes do convênio INFOJUD e JUCESP, via postal com rastreamento. Por questão de economia e celeridade processuais, o presente despacho tem FORÇA DE EDITAL: O MM. Juiz do Trabalho da 06ª Vara do Trabalho de São Paulo - Zona Leste/SP, CITA/INTIMA CELIA MARIA TERAOKA CALIA, CPF: 111.139.548-92, e NRPAR PARTICIPACOES LTDA, CNPJ: 49.360.546/0001-42, acerca dos termos do presente processo, bem como do quanto acima determinado. Os autos do processo estão disponíveis no próprio sistema PJe ou por meio da consulta pública no endereço https://pje.trt2.jus.br/consultaprocessual. Em caso de dificuldade de acesso, compareça a uma Unidade de Apoio Operacional ou seus postos de serviços, localizados nos fóruns deste Tribunal. E, para que chegue ao conhecimento de todos os interessados, é passado o presente edital que será publicado no Diário Eletrônico da Justiça do Trabalho e afixado neste Juízo. 2- Após o decurso do prazo, retornem conclusos para apreciação do incidente ora instaurado. 3- Intimem-se. SAO PAULO/SP, 18 de junho de 2026. SANDRA REGINA ESPOSITO DE CASTRO Juíza do Trabalho TitularIntimado(s) / Citado(s) - REGIONAL SERVICOS DE SEGURANCA E VIGILANCIA EIRELI', 'fb64169636da625d2ac3ae5b679feb461f9246982f9c4e08387190de8eff1443', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(41, 'aasp', '2026-06-19', '1002056-61.2025.5.02.0606', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '32558', '1', '\n\r Processo: 1002056-61.2025.5.02.0606\n\r Órgão: 6ª Vara do Trabalho de São Paulo - Zona Leste\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r RENATO ARAUJO DE ALMEIDA\r REGIONAL SERVICOS DE SEGURANCA E VIGILANCIA EIRELI\n\r Advogado(s) \r EDUARDO FIGUEIREDO BATISTA\r OAB SP-154236\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 6ª VARA DO TRABALHO DE SÃO PAULO - ZONA LESTE ATSum 1002056-61.2025.5.02.0606 RECLAMANTE: RENATO ARAUJO DE ALMEIDA RECLAMADO: REGIONAL SERVICOS DE SEGURANCA E VIGILANCIA EIRELI INTIMAÇÃO Fica V. Sa. intimado para tomar ciência do Despacho ID ef84c68 proferido nos autos. CONCLUSÃO Nesta data, faço o feito concluso ao(a) MM(a) Juiz(a) da 6ª Vara do Trabalho de São Paulo - Zona Leste/SP. São Paulo, 18 de junho de 2026 RENATA LORENA PORTO GADELHA DESPACHO Vistos, examinados etc. Petição id. 0656bdc: tendo em vista o pedido formulado pela parte autora, determino, nos moldes do artigo 855-A da CLT e 133 e seguintes do CPC, a instauração do Incidente de Desconsideração da Personalidade Jurídica nestes autos. Sendo assim, nos termos do artigo 135 do CPC, citem-se CELIA MARIA TERAOKA CALIA, CPF: 111.139.548-92, e NRPAR PARTICIPACOES LTDA, CNPJ: 49.360.546/0001-42, para que ofereçam resposta e apresentem as provas cabíveis no prazo de 15 dias. A citação das suscitadas deverá ser realizada nos endereços constantes do convênio INFOJUD e JUCESP, via postal com rastreamento. Por questão de economia e celeridade processuais, o presente despacho tem FORÇA DE EDITAL: O MM. Juiz do Trabalho da 06ª Vara do Trabalho de São Paulo - Zona Leste/SP, CITA/INTIMA CELIA MARIA TERAOKA CALIA, CPF: 111.139.548-92, e NRPAR PARTICIPACOES LTDA, CNPJ: 49.360.546/0001-42, acerca dos termos do presente processo, bem como do quanto acima determinado. Os autos do processo estão disponíveis no próprio sistema PJe ou por meio da consulta pública no endereço https://pje.trt2.jus.br/consultaprocessual. Em caso de dificuldade de acesso, compareça a uma Unidade de Apoio Operacional ou seus postos de serviços, localizados nos fóruns deste Tribunal. E, para que chegue ao conhecimento de todos os interessados, é passado o presente edital que será publicado no Diário Eletrônico da Justiça do Trabalho e afixado neste Juízo. 2- Após o decurso do prazo, retornem conclusos para apreciação do incidente ora instaurado. 3- Intimem-se. SAO PAULO/SP, 18 de junho de 2026. SANDRA REGINA ESPOSITO DE CASTRO Juíza do Trabalho TitularIntimado(s) / Citado(s) - RENATO ARAUJO DE ALMEIDA', '1c30cf6037cb27a41c62a2310dd1fc84d62339f6fcec5fa075d60b6a8d95784c', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(42, 'aasp', '2026-06-19', '1000673-07.2020.5.02.0062', 'TST Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '8661', '1', '\n\r Processo: 1000673-07.2020.5.02.0062\n\r Órgão: 3ª Turma\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r ESTADO DE SÃO PAULO\r DUNBAR SERVIÇOS DE SEGURANÇA EIRELI\r FABIO ARAUJO CARNEIRO\n\r Advogado(s) \r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r ODAIR EDUARDO IVASCO\r OAB SP-312072\r ISABELLE MARIA VERZA DE CASTRO\r OAB SP-191139 \n Pauta de Julgamento (processos e-SIJ) da Trigésima Sexta Sessão Ordinária da Terceira Turma, a realizar-se exclusivamente em ambiente eletrônico (sessão virtual). A sessão virtual terá início no dia 04/08/2026 e encerramento 13/08/2026. 1. Sustentação oral na sessão virtual: 1.1. Sustentações eletrônicas: Nas hipóteses de cabimento de sustentação oral, fica facultado ao advogado encaminhar a sustentação por meio eletrônico, após a publicação da pauta até 48 horas antes do início da sessão virtual (art. 134-A do RITST). Neste caso, o julgamento será realizado em ambiente eletrônico (sessão virtual). 1.2. Formato e responsabilidade: As sustentações devem seguir as especificações técnicas do Tribunal (Ato SEGJUD.GP nº 129/2025), e o advogado firmará termo de declaração de que se encontra devidamente habilitado nos autos e de responsabilidade pelo conteúdo do arquivo enviado (art. 134-A, §§ 3º e 4º, do RITST). 2. Destaque para julgamento em sessão presencial: 2.1. Prazo: O pedido de destaque pode ser feito desde a publicação da pauta até 48 horas antes do início da sessão virtual (art. 135, II, do RITST). 2.2. Requerimento: O advogado deve formalizar o pedido de destaque por meio de inscrição eletrônica no endereço https://www.tst.jus.br/portal-da-advocacia. 2.3. Condição: O pedido de destaque só poderá ser realizado se o julgamento do processo comportar sustentação oral, e será submetido à consideração do relator. Em caso de deferimento, o processo será remetido para julgamento presencial, com publicação de nova pauta (art. 135 do RITST). Observação: Caso opte por encaminhar a sustentação oral por meio eletrônico, o advogado não poderá requerer o destaque do processo para julgamento presencial (art. 134-A, § 5º, do RITST). Processo RR - 1000673-07.2020.5.02.0062 incluído no PLENARIO VIRTUAL.\nRelator: MINISTRO ALBERTO BASTOS BALAZEIRO. ELIANE LUZIA BISINOTTO\nSecretária da 3ª Turma.', '8fa9cd4f29ca919937a4e8a6483a424b666fa639dfeecdc97a5b64dbf2c249e3', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(43, 'aasp', '2026-06-19', '0041376-42.2024.8.16.0021', 'TJPR Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '1545', '1', '\n\r Processo: 0041376-42.2024.8.16.0021\n\r Órgão: 1ª Vara de Família e Sucessões de Cascavel\r Data de disponibilização: 19/06/2026\r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r SIGILO\n\r Advogado(s) \r GISELE DA CONCEIÇÃO FERNANDES\r OAB SP-308045\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r WILLIAN DIAS DOS SANTOS\r OAB SP-199497\r RENATA ALINE FERREIRA\r OAB SP-378883 \n Intimação referente ao movimento (seq. 155) JUNTADA DE LAUDO (09/06/2026). Acesse o sistema Projudi do Tribunal de Justiça do Paraná para mais detalhes.', 'bda3fa26bea4872cfdc7d772296a9ba994ca3a5489a89b890c1082c1bddd2430', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(44, 'aasp', '2026-06-19', '0041376-42.2024.8.16.0021', 'TJPR Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '1673', '1', '\n\r Processo: 0041376-42.2024.8.16.0021\n\r Órgão: 1ª Vara de Família e Sucessões de Cascavel\r Data de disponibilização: 19/06/2026\r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r SIGILO\n\r Advogado(s) \r GISELE DA CONCEIÇÃO FERNANDES\r OAB SP-308045\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r WILLIAN DIAS DOS SANTOS\r OAB SP-199497\r RENATA ALINE FERREIRA\r OAB SP-378883 \n Intimação referente ao movimento (seq. 154) JUNTADA DE LAUDO (07/06/2026). Acesse o sistema Projudi do Tribunal de Justiça do Paraná para mais detalhes.', '9ec026ed7884b7d0373d6d006d986e14268b7749f5579169a8126b7fd2d47dde', 1, 2, '2026-06-21 13:58:34', NULL, NULL, 0, NULL, NULL),
+	(45, 'aasp', '2026-06-22', '0041878-71.2015.8.26.0100', 'TJSP Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '77632', '1', '\n\r Processo: 0041878-71.2015.8.26.0100\n\r Órgão: Foro Central Cível - 2ª Vara de Falências e Recuperações Judiciais\r Data de disponibilização: 22/06/2026\r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r BANCO CRUZEIRO DO SUL S/A\r LASPRO CONSULTORES LTDA\n\r Advogado(s) \r VANESSA FURLAN\r OAB SP-216697\r SUELY MARIAA CONCEIÇAO FARIAS COSTA LIMA\r OAB RJ-197529\r RAFAEL BARUD CASQUEIRA PIMENTA\r OAB SP-415763\r RAFAEL BARROSO FONTELLES\r OAB SP-327331\r ORESTE NESTOR DE SOUZA LASPRO\r OAB SP-98628\r ORESTE NESTOR DE SOUZA LASPRO\r OAB SP-98628\r ORESTE NESTOR DE SOUZA LASPRO\r OAB SP-98628\r MAURO XAVIER MILAN\r OAB RS-29602\r MARCELO SILVA BARBOSA\r OAB SP-280587\r LINEKER BERTINO CRUZ FIGUEIRA\r OAB SP-422268\r LINEKER BERTINO CRUZ FIGUEIRA\r OAB PA-23284\r LINDALVA CAVALCANTE BRITO\r OAB SP-231124\r KONSTANTINOS JEAN ANDREOPOULOS\r OAB SP-131758\r JOSÉ BENTO VASCONCELLOS ARMOND\r OAB RJ-263809\r JOÃO PEDRO MOURA SILVEIRA DE ÁVILA\r OAB RS-34223\r JOÃO GABRIEL CANDIOTA GREHS\r OAB RJ-241412\r IZONILDES PIO DA SILVA\r OAB MT-6486\r GUSTAVO OUVINHAS GAVIOLI\r OAB SP-163607\r GIZA HELENA COELHO\r OAB SP-166349\r DULCILENE LUCIO RIBEIRO\r OAB RJ-196948 \n Processo 0041878-71.2015.8.26.0100 (processo principal 1071548-40.2015.8.26.0100) - Exibição de Documento ou Coisa Cível - Recuperação judicial e Falência - Banco Cruzeiro do Sul S/A - Laspro Consultores Ltda - Vistos. Última decisão às fls. 11564/11565. 1. Fls. 11579/11580 (prestações de contas relativas ao mês de março/26): Ciência aos credores, interessados e falido, anotada a manifestação favorável do Ministério Público à aprovação das contas apresentadas (fls. 11613/11615). 2. Fls. 11610 (certidão de decurso de prazo para que os interessados se manifestassem sobre as contas referentes aos meses de setembro a dezembro/25): Ausentes impugnações, JULGO BOAS AS CONTAS prestadas pela Administradora Judicial relativas aos meses de setembro, outubro, novembro e dezembro/25. 3. Certifique-se o decurso do prazo concedido aos interessados, para se manifestar sobre as contas referentes aos meses de janeiro e fevereiro/26, conforme fls. 11564/11565, item 1. Publique-se. Advogados(s): Humberto de Oliveira Pereira (OAB 26926/DF), Claudia Antonia Correa (OAB 25768/DF), Vicente Celso do Espírito Santo (OAB 66548/MG), RONEY DANILO GOMES SANTOS (OAB 19096/BA), JOSÉ ANTONIO FERREIRA ALEXANDRE (OAB 6010/AL), DANGER PEREIRA DE ARAÚJO (OAB 28601/CE), Luiz Frederico Paulino Cunha do Nascimento (OAB 438862/SP), Marcia da Consolacao Silveira (OAB 438193/SP), Ivan Souza Silva Junior (OAB 57638/BA), Thiago Caron Fachetti (OAB 4252/RO), Lenir Alves de Freitas (OAB 89928/MG), Adriana Resende Ribeiro Teixeira (OAB 164753/MG), Nakma Carolina de Cerqueira Azevedo Cardoso (OAB 30946/BA), Luis Cesar Vieira da Silva (OAB 123061/RJ), Marco Antonio Castilho Rockenbach (OAB 6685/MT), Eliane Mendes Muller Affi (OAB 9022/MT), Gelson Paulo de Azevedo (OAB 5780/RN), WILLIAN ZAFFARI (OAB 26259/SC), PEDRO FRANCISCO DE LIMA FILHO (OAB 73465/RJ), Othórgenes Brandão Ferreira Filho (OAB 10015/BA), Antonio Batista de Souza (OAB 409/AC), Mila dos Santos Figueiredo (OAB 32142/BA), Antonio Carlos Pinto Fontes (OAB 154464/RJ), Andreia Farias Monteiro (OAB 117075/RJ), VALMIR M FERREIRA (OAB 7618/RN), Sebastião Moraes da Cunha (OAB 15123/DF), Roberson Felipe Vasconcelos da Penha (OAB 24029/CE), Rodrigo Simões Silva (OAB 137674/MG), MARIA DE LOURDES XAVIER DE MEDEIROS (OAB 5562/RN), Vitor de Abreu Falconery (OAB 541555/SP), EMANUEL CAVALCANTI DO NASCIMENTO BARBOSA (OAB 11641/RN), DANIEL FERNANDO NARDON (OAB 46277/RS), Heloisa dos Santos Souza Menezes (OAB 128536/MG), Diogo Nicolas Moreira Teixeira (OAB 47719/SC), Jamille Alves da Silva (OAB 48065/BA), Jurandir Machado Mesquita (OAB 7050/GO), Alcione Almeida de Lacerda (OAB 24376/PB), Deise Borba Belchior (OAB 20690/PE), Thais Gouveia Milesi (OAB 140803/RJ), Paulo Thiago Bernardes de Castro (OAB 53149/GO), Luciana Rodrigues Fortes (OAB 166450/RJ), Sheyla Dayane Floriana da Rocha Mesquita (OAB 29384/GO), Tiago Neres da Silva (OAB 8893/RN), JOSÉ EYMARD LOGUERCIO (OAB 1441A/DF), Moacyr Nunes de Barros (OAB 18489/RJ), RENATO MICHELON (OAB 43219/PR), Antonio Geraldo Albuquerque de Brito Filho (OAB 34946/PE), Durval Teodoro de Melo (OAB 3701/MT), Bruno Damiani Vechi (OAB 25534/SC), CARMEN LUCIA BADIA VIDAL (OAB 73389/RS), Rojemar Barbosa Pilar (OAB 81618/RS), SUELY MARIAA CONCEIÇAO FARIAS COSTA LIMA (OAB 197529/RJ), Maria Luiza Petrucci Nasser (OAB 76280/RJ), Marina Lorencini Pedo (OAB 406937/SP), VITOR CESAR LOURENÇO FERREIRA (OAB 95807/RJ), Michelle da Silva Amorim (OAB 19431/PE), Hilton Henrique Souza Oliveira (OAB 14206MA), Rogerio Napoleão (OAB 506928/SP), Cristiane Farias dos Santos (OAB 34855/SC), JOEL LUÍS THOMAS BASTOS (OAB 122443/SP), Priscilla Campos Favieiro (OAB 30691/DF), Messias Santana Mota Junior (OAB 52303/DF), Diego Menezes Vilela (OAB 27962/GO), RENAN GOMES MALDONADO DE JESUS (OAB 5769/RO), LUDMILA COELHO MIRANDA (OAB 180086/RJ), Auri Estevam Junior (OAB 86562/PR), Bruna Vieira (OAB 44607/SC), Sebastião Luiz Monteiro da Silva (OAB 109269/RJ), MARIA ALINE FREIRE VIEIRA DE FREITAS (OAB 4886/RN), Renato Dias Aguiar (OAB 43452/GO), Julio Alencastro Veiga Filho (OAB 647/GO), Estácio Lobo da Silva Guimaraes Neto (OAB 17539/PE), Christian Ary da Cruz Barbosa (OAB 281/SE), Erika Cristina Braga (OAB 126255/MG), NILCEIA SOUZA DA SILVA (OAB 188277/RJ), MARA NEIDE ROCHA LACERDA ARRUDA (OAB 11500/MS), Dayana de Menezes Azevedo (OAB 10500/AM), Mario Nilton Leopoldo (OAB 53745/RJ), Rafael Iorubani Alves Clemente (OAB 158032/RJ), Nívia Maria Siqueira de Araújo (OAB 98223/RJ), Andreia Aparecida Aguilar de Souza (OAB 33265/PR), Josefa das Graças Oliveira (OAB 71675/RJ), Natalia de Azevedo Zarife (OAB 160321/RJ), Paulo Régis Sousa Barros (OAB 16712/CE), Gabriel Lima de Araujo (OAB 211422/RJ), PAULO ROBERTO DE ALMEIDA SANTOS FILHO (OAB 13685/MT), Fabrício Machado Sampaio (OAB 176924/RJ), NUREDIN AHMAD ALLAN (OAB 37148/PR), RICARDO FERREIRA DE ANDRADE (OAB 9764A/MT), Felipe Savio Novaes (OAB 410712/SP), EVA PIRES GONÇALVES (OAB 8886/PB), LUCÉLIA DIAS DE MEDEIROS (OAB 11845/PB), Luiz Pereira Pardin (OAB 4776BMT), Cleoberto Cordeiro Benaion Filho (OAB 82919/RJ), Divino Cesar de Souza (OAB 25611/GO), Luis Carlos Schlindwein (OAB 21339/SC), Filipi Moratelli Knauer (OAB 134544/RJ), Rafael Iorubani Alves Clemente (OAB 158032/RJ), Cristhian Homero Groff (OAB 95877RS), Ari Tomielo (OAB 32670/RS), Leonidas Gil Benetelo de Almeida (OAB 54809/PR), Alana Lima de Oliveira (OAB 12036/PB), Isabelle Loureiro de Almeida Honorato (OAB 170269/RJ), Osmar Elias de Oliveira (OAB 9506/SC), Fernanda Wülfing (OAB 47145/SC), Claudia Aparecida da Costa Rangel (OAB 116360/RJ), Francisco das Chagas de Siqueira Júnior (OAB 11229/MS), João Paulo Buck (OAB 427771/SP), Francisco Antunes do Carmo (OAB 4070/MT), Daniel Campos Guimarães da Cunha (OAB 155549/RJ), Itamar Moreira Indio do Brasil Junior (OAB 151938/MG), JAQUELINE CELESTE CHAGAS CONSTANTINO (OAB 62699/PR), Eliane Seigneur Lezan (OAB 96792/RJ), Selesócrates Marback D" Oliveira (OAB 54452/RJ), Zilda Costa Lima (OAB 50918/GO), Marcus Vinicius Pietra Cardoso (OAB 134256/MG), Frederico Slomp Neto (OAB 39082/PR), Marconi Miranda Vieira (OAB 22098/DF), Danilo Romera Luqueze (OAB 305294/SP), Fabio Melo do Lago (OAB 5734/RO), Halan Jamersson Bastos de Andrade (OAB 28824/BA), Geraldo Vinicius Oliveira Nunes (OAB 7263/SE), David de Souza e Silva (OAB 7192/PB), Francisco Eudorio Fernandes (OAB 6176/CE), Giseli Andréia Gomes Lavadenz Mazzali (OAB 4297/AC), CLAUDIA MARIA MONTEIRO DE CASTRO STERNICK (OAB 55295/RJ), Susane Bezerra dos Santos (OAB 7826/SE), Alexey Oliveira Silva (OAB 128658/MG), Vilmar Lourenço (OAB 33559/RS), Abimael Gomes de Lima (OAB 56930/BA), Rodrigo Máximo Santana (OAB 111196/MG), Suzana Mazon Benedet (OAB 29245/SC), Guilherme Vieira de Barros (OAB 14446/MS), Fabiano de Andrade (OAB 6780/MS), Giovana Abreu da Silva Seger (OAB 20998/SC), Marinalva da Silva (OAB 75521/RJ), Edna Maria da Silva (OAB 18543/GO), Pedro Paulo de Oliveira Barros (OAB 78492/PR), Luciana Sanches Cossão (OAB 147421/RJ), João Esberrad Beltrão Lapenda (OAB 11339/PE), Lorena Siqueira Rosa (OAB 38065/GO), Anderson Mello Alves (OAB 115384/RJ), Mattar Advogados (OAB 134858/RJ), Smalei Okamura (OAB 71302RS), Diego Dillenburg Hack (OAB 103335/RS), Luiz Henrique Santos da Silva (OAB 103643/RJ), Manoel Felix Neto (OAB 9823/PB), Ligia Magalhães Ramos Barbosa (OAB 73808/RJ), Meirivone Dias Noleto (OAB 26677/GO), Claudia Maria da Silva (OAB 58156/RJ), Wilson Martins (OAB 19893B/PA), Pablo Edirmando Santos Normando (OAB 7920/PI), Aldenito Caldas Melo (OAB 6801/BA), Simiramy Bueno de Castro (OAB 5880A/MT), Edson Monteiro da Silva (OAB 202787/RJ), Vania Lima Fernandes (OAB 146411/MG), Michelly Marotta Cotta da Silva (OAB 188294/MG), Leandro Henrique Barroso de Paula (OAB 17617/MS), RENATA MARTINS OLIVEIRA (OAB 170686/RJ), Katia Lucia Cunha Siqueira (OAB 2422/SE), Flavio Henrique Vasques Silva (OAB 115847/RJ), Juliana Roma Rodrigues (OAB 40767/GO), Andre Gonçalves Melado (OAB 8075/MT), Luiz Carlos de Araujo Fernandes (OAB 3995/AC), Antonio Carlos de Queiroz (OAB 56909/BA), Fabiana Maria Sauerbronn (OAB 113753/RJ), Liria Silvana Vieira (OAB 47264PR/), Nilson Salgado de Oliveira (OAB 148967/RJ), Lucas Coelho Remor (OAB 29747/SC), BRUNO JACKSON CARVALHO DE LIMA (OAB 23505/PE), Reinaldo Dante Machado (OAB 154814/RJ), Sayde Lopes Flores (OAB 56290/RJ), Rudiero Freitas Nogueira (OAB 19119/MS), Rosângela Tenório da Silva Rodrigues (OAB 14010/AL), Giovanna Michelleto (OAB 418667/SP), SILVIA PEREIRA DANTAS (OAB 14671/PB), Jacson Rossano Asconavieta Borba (OAB 61066/RS), Lucas Pinto Souza (OAB 31940/SC), Daniel Silva de Oliveira (OAB 9553/AM), Mauri Ramos Nunes (OAB 12057/PB), Vivianni Regina Carvalho Muller (OAB 8770/RO), Ubaldino Marques da Silva Júnior (OAB 31870/BA), Sebastiana Yara Silva Fonseca (OAB 55445/RJ), Pedro Antonio da Silva Neto (OAB 2849/AL), José Euripedes Alves de Oliveira (OAB 12988/GO), Adriana Szabelski (OAB 36605/PR), Lineker Bertino Cruz Figueira (OAB 422268/SP), Rodrigo Goncalves da Cruz (OAB 99293/MG), MARCOS VINICIUS ARAÚJO VELOSO (OAB 8526/PI), Bruno Feijó Imbroinisio (OAB 145017/RJ), Danilo Lopes Baliza (OAB 35619/GO), Gabriel Geone Soares de Jesus (OAB 55284/BA), Thiago de Campos Visnadi (OAB 424849/SP), Daniel Dela Coleta Eisaqui (OAB 424369/SP), Thiago Borges Vançan dos Santos (OAB 14388/MS), LENILSON SANTOS DO NASCIMENTO (OAB 127523/RJ), Fábio Ribeiro Velozo (OAB 119189/RJ), Barbara Alcantara Vieira Burtet (OAB 61453/RS), Terezinha de Jesus Silva Pacheco (OAB 37394/RJ), LAIS NOVAES GUIMARÃES (OAB 41791/PE), Rodrigo de Sá Libório (OAB 37578/PE), Laura Patricia Dourado Amorim (OAB 9217/MT), Angelo Moreira Nunes (OAB 155618/RJ), Rodrigo Medeiros de Freitas (OAB 41007/GO), Rafael Juliano Ost Thume (OAB 46779/RS), Mariana Tereza da Silva (OAB 172339/MG), VIVIANA KARINE DELBEN FERREIRA DE LIMA (OAB 11247O/MT), Acir Oliskowski (OAB 17648/PR), Gislana da Silva Carlos (OAB 147198/MG), Luena Paula Castro de Souza (OAB 422369/SP), Margarete Geiareta da Trindade (OAB 4438/RO), Maria Carolina Cardoso da Costa (OAB 157828/RJ), RAFAEL BITTENCOURT LICURCI DE OLIVEIRA (OAB 162078/RJ), Eveline Ramos da Silva (OAB 142352/RJ), Eduardo Estanislau Tobera Filho (OAB 45755/PR), Djalma da Silva Coelho (OAB 33699/RJ), Adailton Araujo da Silva (OAB 19823/PA), Jorge Talmo de Araujo Moraes (OAB 8896/MS), Renato Santos e Silva (OAB 158388/RJ), Henderson Nanes Matutino (OAB 27144DPE), Delma Anita da Silva (OAB 18931GO), Romero Gusmão Moura (OAB 4358AL), Anna Acacia Borges Souto (OAB 46690DF), Danylo Ferreira de Alcantara (OAB 13724/MT), Antônia Fabiana Monteiro Costa (OAB 10776/PA), AMPÉLIO PARZIANELLO (OAB 45547/PR), Fabíola Sabina Siqueira (OAB 197379/RJ), RAIMUNDO FRANCISCO DE SOUZA JUNIOR (OAB 3634/AC), Leonardo Jorge Pereira dos Santos (OAB 12451/AL), Leonardo Gaspar Castelan (OAB 128697/RJ), Rodrigo Ludovico Martins (OAB 21280/GO), Juliana Barcellos Sixel (OAB 75400/RS), Wellson Rosario Santos Dantas (OAB 5474B/TO), Herick Zanette (OAB 18147SC/), Liduina Mendes Vieira (OAB 4298/RO), SIMONE FONSECA RIBEIRO (OAB 82995/MG), FABIO FRAGA AVINTE (OAB 182293/RJ), CARLOS EDUARDO FERRARO (OAB 99443/RS), Marco Aurelio Leite dos Santos (OAB 544235/SP), Ricardo Costa Lalucci (OAB 392152/SP), Fabio Paciléo Costa (OAB 387924/SP), Pedro Pereira de Morais Neto (OAB 387669/SP), Idenilson Lima da Silva (OAB 32297/DF), Ana Claudia Eduardo (OAB 120903/RJ), Cezar Luiz Lopes Parra (OAB 394761/SP), Andrey Fernandes do Rêgo Faria (OAB 3898/AC), Sidney Ferreira Soares de Lima (OAB 6792/SE), HUMBERTO DE SOUSA FELIX (OAB 5069/RN), Diego Silva Franca (OAB 149855/RJ), Walquiria Vidal Ribeiro (OAB 10453/RN), ROBERTO LUCIO DE SOUZA SALES (OAB 190100/RJ), Tiago Picoli da Vitoria (OAB 23633ES), Emerson Campos Ferreira (OAB 231579SP), Denise Nascimento Rosa (OAB 13164RS), Monica Barboza Pinheiro (OAB 116970/RJ), Romulo Inowlocki (OAB 45348/PR), Nello Ricci Neto (OAB 8225/MS), Bruno Feijó Imbroinisio (OAB 394174/SP), Jean Martins Araújo (OAB 200952/RJ), Erick Coutinho de Carvalho (OAB 392508/SP), Oreste Nestor de Souza Laspro (OAB 98628/SP), OSVALDO PEREIRA RIBEIRO (OAB 5869/RO), Pedro Henrique Belardo Zanirato (OAB 392128/SP), ANDRÉA KARINA BATISTA ALVES (OAB 20340/GO), Antonio Rafael da Rosa Vargas (OAB 65856/RS), Rita de Cassia Bassi Bonfim (OAB 7516/PR), Wiliam Crespo (OAB 138130SP), Janio Ferreira (OAB 1060/RR), Marcio Ferreira Reis (OAB 101292/RJ), RENATA AGUIAR TELES PALOMARES OLIVEIRA (OAB 9374/SE), Eduardo Alexandre Martins Henriques de Moura (OAB 31308DF), Fernanda Grezzi Urt Dittmar (OAB 13419/MS), Maria de Lourdes Ribeiro (OAB 11646/MT), Vilmar Lourenço (OAB 33559/RS), Vilmar Lourenço (OAB 33559/RS), Jose Alex Vieira (OAB 8749/MS), Jonathas Siviero (OAB 4861/RO), Victor Cerqueira de Freitas (OAB 46164/BA), Regina Celia Sabioni Lourimier (OAB 9087OMT), Rosemar Poggian Caterinque Cardozo (OAB 5674/ES), Yasmim Aguilar Portolani da Paz (OAB 385882/SP), Fernando Matioli Verissimo Silva (OAB 169843/RJ), Pedro Fernandes de Queiroga Neto (OAB 21368PB), Juvenal Alves Costa (OAB 7845/BA), Mauro Fagundes Vargas (OAB 29485RS/), Luciane Marins Landgraf (OAB 97912/RS), JAQUES JOSE DA SILVA SOUZA (OAB 32077/PE), Paulo Esmael Freires (OAB 12372/RN), José Luciano Fiuza Rodrigues (OAB 11060/RN), Rubens Rodrigues dos Santos (OAB 10609/MT), LUCIA MARIA DO NASCIMENTO (OAB 19986/PE), Erika Almeida dos Santos Ferrari (OAB 97141/RJ), Paulo André de Vasconcelos Rêgo (OAB 9526/AL), Milton Correa de Moraes (OAB 6664OMT), Paulino Jose Lourenco Junior (OAB 16965ES), Fabricio Gaspar Rodrigues (OAB 120213/RJ), JAMIL TOSTES (OAB 161963/RJ), RAFAEL GARCIA DE SENA (OAB 155143/RJ), Leandro Dias Brame (OAB 111245/RJ), Cynara Beatriz de Oliveira Mesquita (OAB 20824/SC), Bernardo Dayrell Neiva (OAB 72093/MG), Renata Cristina Pereira Lima Egito (OAB 141789/RJ), MARIA ALICE FRANCESCHINI BARROS LIMA (OAB 84158/RJ), Magda Lalau José dos Passos (OAB 38257SC), Matheus Bonenberger Domingues (OAB 81442/RS), Cristiane Bohn (OAB 44490/RS), Helio da Silva Dionizio (OAB 13556/O/MT), RODRIGO ANDRADE DOS SANTOS (OAB 150965/RJ), Fernanda da Silva Pires de Oliveira (OAB 132324/RJ), Dário de Souza Nóbrega (OAB 1602/RN), JARDSON OLIVEIRA DA COSTA (OAB 5796/TO), Thiago Vinicius Correa Gonçalves (OAB 15417/MS), Patricia Alves de Oliveira (OAB 14538/PA), Jader Evaristo Tonelli Peixer (OAB 8586/MS), Ronaldo de Castro Farias Santos (OAB 15626OMT), Carlos Evaldo Souza Júnior (OAB 7548/AM), Teodorico Alves de Araujo Neto (OAB 152818/MG), Grace Alves da Silva (OAB 15888/O/MT), LAUDIENE DANTAS LINS (OAB 143127/RJ), JOÃO CARLOS GOMES ARGUELHO (OAB 16654/MS), BRUNO BOA NOVA MORGADO CORDEIRO (OAB 167178/RJ), Dimitry da Silva Oppa (OAB 18513/SC), Jonatas Lopes dos Santos (OAB 26931/DF), Israel de Souza Pereira (OAB 198210RJ), Marina de Assis Siqueira Brinati (OAB 167831/MG), Nayara Priscilla da Silva (OAB 34917/PE), Pedro Henrique de Alvarenga Rodrigues (OAB 172927/RJ), Eder Medeiros Fernandes (OAB 31529/GO), IVAN MARTINS DA COSTA (OAB 208524/RJ), LOURENIA F. MESQUITA ABREU (OAB 95752/MG), Vicente Aragao Prado Junior (OAB 1619/AC), Roberta Soares Barrozo (OAB 135584/RJ), Carlos Claudionor Barrozo (OAB 73973/RJ), Joao Paulo Avila de Melo (OAB 47572/GO), Fabiano de Jesus Anflor (OAB 85739RS), WILLIAM RODRIGUES SANTOS (OAB 45351/RJ), Marco Aurelio Monteiro Araujo (OAB 8510/O/MT), Juliano Marques da Silva (OAB 85863MG), Flavia Neves Nou de Brito (OAB 401511/SP), Edineide de Andrade Rampe (OAB 121471/RJ), Daniela Neves Henrique (OAB 407078/SP), Mauro Sergio Guedes Nastari (OAB 27802/PR), Hayla Aline Azevedo Monteiro Nunes (OAB 398473/SP), RAFAEL BISPO DA ROCHA (OAB 33675/GO), Patricia Travasso Maia (OAB 103204/RJ), Raquel de Barba Almeida (OAB 39576/RS), Rose Angelli Cirne Eloy Gondim (OAB 8804/PB), Ligia Oliveira Duarte (OAB 7082/RN), Edson Antônio dos Santos (OAB 10092/SC), SIMONE FERREIRA DESLANDES (OAB 202378/RJ), SILVIO AFONSO (OAB 9450B/SC), Paola Victorino Dias Peluso (OAB 81184/MG), Glaucio Guedes Pita (OAB 7826/RN), Fausto Antônio Dias Campos (OAB 30192/GO), Joao Gustavo Mendonca Machado (OAB 42340/GO), CLAUDIA FAGUNDES LEAL (OAB 4552/TO), Carolina Rodrigues Maia da Silva Peres (OAB 12514/AM), UELITON FELIPE AZEVEDO DE OLIVEIRA (OAB 5176/RO), Ana Cristina de Oliveira (OAB 144223/RJ), John Tenório Gomes (OAB 19478/PB), Kleyson Gomes Ribeiro da Silva (OAB 29255/GO), LINEKER BERTINO CRUZ FIGUEIRA (OAB 23284/PA), Joao Francisco Oliveira dos Santos (OAB 1835/PI), DANIELA DA ROSA (OAB 71236/RS), Leonardo Stocker Pereira da Cunha (OAB 520178/SP), Silvio Afonso (OAB 9450/SC), JOSUÉ DE LIMA (OAB 17579/PE), JADER EVARISTO TONELLI PEIXER (OAB 8586/MS), Marlon César Cavalcante de Athayde (OAB 12926/ES), Paula Christina da Silva Dias (OAB 38127/PR), Ricardo Guedes Santos (OAB 33162/BA), Fernando Bernardes Townsend (OAB 110438/RJ), João Nascimento de Souza (OAB 130535/RJ), Larissa Moreira Gouveia da Nobrega (OAB 16133PB), Luis Carlos de Camargo (OAB 28134/SC), Mário José Lacerda Filho (OAB 10000/MS), Sheldon Romain Silva da Cruz (OAB 4432/RO), Adelia Cristina Fonseca Melo Cardoso (OAB 13488CE/), Waldeatlas dos Santos Barros (OAB 5506/RO), Manoel Antonio Rocha Fonseca (OAB 12021/MA), DIEGO RAPHAEL COSTA DE FARIA (OAB 160667/RJ), ERLON MARCOS DE SOUZA (OAB 168906/RJ), ANA CAROLINE OKAZAKI (OAB 57952/PR), Fernanda Maria Santos Duarte (OAB 33118/BA), Fernando de Sousa Lourenço (OAB 395831/SP), Kleber Pereira (OAB 395472/SP), FREDERICO VALDOMIRO SLOMP (OAB 3590/SC), Douglas Ferreira do Amaral (OAB 54151/DF), Fabricio Martins Chaves Lucas (OAB 45869/DF), JULIANA FERREIRA QUINTEIRO DE ALMEIDA (OAB 15865/MT), Renato Dias Gomes (OAB 11483/MA), Paulo Abreu de Moraes (OAB 133317/RJ), Jose Luiz Fernandes Gama (OAB 7340/MA), Rodrigo Aiache Cordeiro (OAB 2780/AC), Caio Batista Teixeira Santos (OAB 398397/SP), Kelly Christina Alves Cintra (OAB 39595/GO), Alanna Moreira do Amaral Cordeiro (OAB 21288/SC), Rubem Arbex Barcellos (OAB 99717RJ), Jessica Fatima da Silva Magalhães (OAB 22784/O/MT), João Alberto dos Santos Moraes (OAB 80595RS), Rodolfo Ribeiro Silva (OAB 52268/BA), Jonathan Edward Rodovalho Campos (OAB 160231/MG), Vilmar Lourenço (OAB 33559/RS), Hilton Hril Martins Maia (OAB 1638/PE), Marlon Cesar Cavalvante de Athayde (OAB 12926/ES), Viviane Matos Triches (OAB 4695/RO), Raquel Ferreira Belchior (OAB 400554/SP), Sabrina Gomes Parente (OAB 135301/RJ), João Paulo da Silveira Marques (OAB 415759/SP), Fabrício Rui Kersch (OAB 62092/RS), Ricardo Basile de Almeida (OAB 486871/SP), Ricardo Basile de Almeida (OAB 96352/RJ), Juscelino Ramos Júnior (OAB 38459/GO), ROGERIO SANTANNA TAVARES (OAB 103470/RJ), Silvia Mercia Francescon (OAB 47963PR), Wesley Paula Andrade (OAB 25007/GO), Fabiano Camillo (OAB 45556/PR), Huldayse Pinheiro Hermsdorf (OAB 4617RO), Deoclecio Rosa Faccion Junior (OAB 132365MG), Paula Karoline Nere Camarco Lima (OAB 45372GO), SILVANA DA MOTA BALBINO (OAB 201827/RJ), Marlise Kemper (OAB 6865/RO), Harrison da Mota Araujo (OAB 20916/MA), Guilherme Mossoleto Januário (OAB 55321/GO), Rosângela Damião de Barros (OAB 141079/RJ), Bernardino de Almeida Neto (OAB 153541/RJ), Thalia Célia Pena da Silva (OAB 6276/RO), Stefano Josef dos Santos Marrara (OAB 214197/RJ), Agnaldo Araujo Nepomuceno (OAB 1605/RO), Wande Alves Diniz (OAB 10927/MT), Andreia Costa Afonso Pimentel (OAB 4927/RO), Celso Silveira (OAB 20013/SC), Caio Henrique Conceição dos Anjos (OAB 69609/BA), Jefferson Paulo Correa (OAB 178121/RJ), José Roberto Pereira (OAB 26613/RJ), Antonio Eduardo Schramm de Souza (OAB 4001/RO), Chesli Cristiane da Silva (OAB 47946/PR), Rodrigo de Nardi Aranha (OAB 125141/RJ), Eliane Flores Sampaio (OAB 9586/MS), Neide Maria Vaz (OAB 76866/MG), Stella Tayanne de Oliveira Agazio (OAB 32434/GO), Claudio Roberto Ebner Junior (OAB 156601/RJ), Valeria Tscheika (OAB 25984/RS), Gláucia Janine de Oliveira (OAB 18774/GO), Luan da Rocha Lacerda (OAB 23202/PB), Matheus dos Santos Malandra (OAB 33730/BA), Ericky Pedro de Melo Pereira (OAB 19591/PB), Isabelle Fernanda Teixeira Vieira de Souza (OAB 472063/SP), Regiane Alves da Cunha (OAB 7712/MT), Adriano Pinto Machado (OAB 77188/RJ), Vicente Fernando da Silva Rodrigues (OAB 63584/RS), Adriana Santos Coelho (OAB 535459/SP), Viviane de Oliveira Camargo (OAB 75268/RS), Guilherme da Silva (OAB 60334/SC), Débora da Silva Diniz dos Santos (OAB 144721/RJ), Gabriel Lucio Silva (OAB 8343/AL), Newton Andrade Franca (OAB 176546/RJ), Suely de Souza Brito (OAB 29072/GO), Luis Sérgio Couto de Casado Lima (OAB 69864/RJ), Viviane Damaris Romão de Espindola (OAB 57011/SC), Wilma Priscila Bezerra (OAB 49751/PE), Leonardo Holz Prestes (OAB 65551/RS), Paulo Teixeira Morinigo (OAB 11646/SC), Cristiane Cecon (OAB 30360SC/), Evelyn Laiara da Silva Negreiros Lozano (OAB 82695/PR), MOACIR REIS DE OLIVEIRA JUNIOR (OAB 63558/RS), ELVIRA BRAATZ BONDAN (OAB 34302/SC), Gabriel Felipe Oliveira Brandao (OAB 16870/PB), Antonio Carlos da Costa Silva (OAB 23241/SC), João Jutahy Castelo Campos (OAB 21922/SC), Liliane Vinadé Silva (OAB 40794/SC), Fabiano Henrique Souza (OAB 27183/SC), Renato Santos do Nascimento (OAB 220782/RJ), Luciany Lovato Bodnar (OAB 55438/PR), Raíssa Caroline Barbosa Correa (OAB 7824/RO), Fábio Damásio da Silva (OAB 64529/BA), Rodrigo Machado Pereira (OAB 3798/AC), Marcel Alves Brito (OAB 90581/RJ), IRIVANIO DA SILVA GONÇALVES (OAB 28825/PE), Jose Antonio Cairo Ortiz (OAB 3647/AC), Jose Junior Barreiros (OAB 1405/RO), Ana Paula Bispo da Costa (OAB 22982O/MT), Deise Macvoe Guimarães Souza (OAB 34187/BA), Mikaely Soares Alves dos Santos (OAB 28289/PB), Yasmin Néia Camargo (OAB 89072/PR), Jorge Jesus de Azevedo (OAB 30026/BA), CLAUDIO BEZERRA DIAS (OAB 11560/PB), HELDER FREITAS GUSMÃO (OAB 39960/BA), LUCAS ABDUL MONTEIRO (OAB 28270/CE), Rodrigo Alvares da Silva (OAB 36897/GO), Polyne Maressa da Mota Lopes (OAB 13523/AM), Delmiro Gomes da Silva Neto (OAB 12362/PB), RODRIGO RODRIGUES DOS SANTOS (OAB 15547/MT), Felipe Eduardo Farias de Sousa (OAB 25251/PB), Marcelo La Rosa da Rocha (OAB 213136/RJ), Sinomar Francisco dos Santos (OAB 4815/RO), MARCOS ANTONIO FERNANDES LEMOS (OAB 143171/RJ), BRUNO RODRIGUES DE FREITAS (OAB 16817/BA), Jonis Torres Tatagiba (OAB 4318/RO), Jonas Moisés Dall" Agnol (OAB 77695/RS), Francisco Juracy Lima Filho (OAB 179933/RJ), Natália Cristhinan Solera dos Santos (OAB 466780/SP), Camilla Alencar Assis Silva (OAB 8645RO /), Juliana Bumachar (OAB 113760/RJ), Marcos Jonathan Gonçalves Nunes (OAB 31958/PA), PAULA WANDA FERNANDES DA SILVA (OAB 3849/AP), Claudio Ricardo Barroso Arantes (OAB 79353/RJ), Felipe da Motta Brandão Franco (OAB 43512/CE), Marcelli Correa Nascimento (OAB 45079/PR), Adriana Desmaret Spinet (OAB 4293/RO), Hélio Rodrigues dos Santos (OAB 7261/RO), Maria Evanusa Freire (OAB 18462/CE), Sérgio Conde Peres Junior (OAB 16369/MS), Ludmila Amanda Hanisch (OAB 31174/SC), Joilson Dimas Leite C Prates (OAB 4698/MT), Marco Antonio Santos Schettert (OAB 5425/SC), Mary Terezinha de Souza dos Santos Ramos (OAB 1994/RO), Ruan Alves Faustino Cavalcante (OAB 459719/SP), Daniel de Oliveira Gagliano (OAB 460536/SP), Francisco Ricardo Vieira Oliveira (OAB 1959/RO), Antonio Mario Baima Pereira Junior (OAB 9502-A/MA), Joilson Dimas Leite C Prates (OAB 4698/MT), João Bosco Vieira de Oliveira (OAB 2213/RO), João Bosco Vieira de Oliveira (OAB 2213/RO), GUIOMAR SILVA FAUAZE NOVAES (OAB 10152/BA), THEODORO HUBER SILVA (OAB 12984/MS), Pedro Terribile Garbugio (OAB 457341/SP), Alexander Nunes de Farias (OAB 9364/RO), Vinícius José Silva Rios (OAB 515333/SP), Fabricio Rabelo William (OAB 23277/SC), Isabel Carla de Mello Moura Piacentini (OAB 9636/RO), Lucas Baccaro Poffo (OAB 23893/MS), Lucas Pastore Laporte de Souza (OAB 196695/RJ), Maria de Lourdes Silva Nascimento (OAB 6064/PB), Lucas Cesar Dias de Jesus (OAB 244292/RJ), FLAVIO MARQUES DE SOUZA (OAB 92657/RJ), Sara Cristina Veloso Martins Menezes (OAB 54156/BA), Jose Costa dos Santos (OAB 4626/RO), Adriano de Oliveira Leite (OAB 4609/AM), Afra Rafaela Vieira Chagas Falcão (OAB 177720/RJ), Jose dos Reis Paulo (OAB 45923/MG), Elizeth Serrão Rodrigues (OAB 2610/AM), Maria Carolyne Falconery Ferreira (OAB 19796/AL), Raiza Rafaella Delben Ferreira de Lima (OAB 23526/O/MT), Guilherme de Carvalho Camargo (OAB 512342/SP), Gustavo Matias Dantas (OAB 7791/RN), Fausto de Araújo Neto (OAB 7829/RN), Wallascley Nogueira Pimenta (OAB 5742/RO), Jose Severino dos Santos (OAB 2336AC), José Severino dos Santos (OAB 11498/RO), Renata de Moraes (OAB 185127/MG), Silvana Felix da Silva (OAB 4169/RO), Natalie Mendes Rezende (OAB 114414/RJ), Rafael Miranda da Silva (OAB 156010/RJ), Ellen Nívea de Souza Atalaia (OAB 12742/AL), Adson Jose Messias Ribeiro (OAB 6534/AM), Cristina Fonseca de Oliveira Ferreira (OAB 38201/GO), Rosane de Lima (OAB 67059/PR), ANDERSON COSTA CABRAL (OAB 12481/AL), Valmir Matos Ferreira (OAB 7618-B/RN), Ysla Francisca Andrade da Silva (OAB 9497/AM), Thais Figueiró Fernandes Monteiro (OAB 41872/RS), RENAN DE CARVALHO PAULA (OAB 206500/RJ), TIAGO MAIA DOS SANTOS (OAB 27335/BA), Wandercleydson de Souza Machado (OAB 174131/RJ), Sylvio Kelner (OAB 10054/RJ), Celso Holz Cardoso (OAB 49197/RS), Marilia Genalia Marques Lopes (OAB 8995/PI), FRANCELINA RANIELLE SANTOS DE ANDRADE (OAB 41840/PE), Leandro Santos Dias (OAB 78392/PR), JOSÉ BENTO VASCONCELLOS ARMOND (OAB 263809/RJ), Francisca Rafaela Lisbino Rocha (OAB 20810/MA), Fredd Delio Miranda Martins (OAB 30943/GO), WANIA ALICE FERREIRA LIMA CAMPOS (OAB 109046/MG), Oreste Nestor de Souza Laspro (OAB 98628/SP), Uílian Honorato Tressmann (OAB 6805/RO), Nazario Nicolau Maia Goncalves de Faria (OAB 119891/MG), Vinícius Alves Peixoto Velozo (OAB 13447/RO), HERCULANO JOSE RIBEIRO JUNIOR (OAB 132991/MG), Welesson José Reuters de Freitas (OAB 160641/SP), Jorginea da Conceicao Machado Silva (OAB 54599/RJ), Vinícius Pinheiro Bomfim dos Santos (OAB 488370/SP), Sânnely Cristine Dourado dos Santos (OAB 59706/DF), FLAVIO MARQUES DE SOUZA (OAB 92657/RJ), Artur dos Anjos Leite (OAB 7296/TO), Daniela Salgado Santos de Oliveira (OAB 153254/RJ), Wolfgan Carlos Ribeiro de Araújo (OAB 21102/MS), Fernanda Santos Brusau (OAB 201578/RJ), Fernanda Jorge Lago Freitas (OAB 6836MA /), Anthony Yuri Foly Barbosa Ribeiro (OAB 17850/MA), Rogerio Mendonca de Souza (OAB 57713MG/), MÔNICA CARDOSO DOMINGUES (OAB 200085/RJ), Fernando Cesar Silva Martins (OAB 56954/RJ), David Daniel Melo Santa Cruz (OAB 23046/SC), Guilherme de Souza Ferreira (OAB 188459/RJ), Bruna França Magalhães Costa e Silva (OAB 19569/PB), Luiz Carlos de Moraes Pinto (OAB 71846/MG), Vilmar Lourenço (OAB 38701A/SC), Nelson Borges de Barros Neto (OAB 516496/SP), Vanessa Paula de Sousa Silva Fernandes (OAB 19551/GO), Barrichello, Masson e Venâncio Sociedade de Advogados (OAB 14826/SP), João Gabriel Candiota Grehs (OAB 241412/RJ), Bartolomeu Ferreira da Silva (OAB 897-A/RN), Marcela Assef (OAB 490173/SP), Amanda Carvalho da Silva (OAB 53024/GO), Andrea Caroline Santos Souza (OAB 16957/MA), Leonardo Leite Campos (OAB 100646/MS), Jose Turflay Albuquerque (OAB 43811/PE), Joao Victor Gomes dos Santos (OAB 205127/MG), Jorge Fernando Marinho Oliveira (OAB 13232/MA), Livia Maria Ribeiro da Silva (OAB 012082/PA), Deise Cristina Gelinger dos Santos (OAB 131110/RS), Claudiane Oliveira Caetano (OAB 34701/BA), Luiz Guilherme Rios (OAB 208396/RJ), Sergio Malamud (OAB 80736/RJ), LUIZ EMIRALDO EDUARDO MARQUES (OAB 38990/DF), Fellipe Fernandes Duarte (OAB 74550/DF), Richard Martins Silva (OAB 9844/RO), Gizele de Azevedo Ribeiro (OAB 181937/RJ), Alessandro de Oliveira (OAB 37741/BA), Jonattas Afonso Oliveira Pacheco (OAB 8544/RO), Aldiane Vidal Oliveira (OAB 771/RR), Weiller Wysler Zuza da Silva (OAB 6420/AC), Amanda Mayara Bastos Soares (OAB 27895/PA), Jose Nivaldo da Silva Fernandes (OAB 104551/RJ), Silvania Costa Barbosa (OAB 56916/BA), Lorena Ellen Peres Tavares (OAB 195512/MG), Carlos Henrique Teles de Negreiros (OAB 3185/RO), Gustavo Cândido Barbosa da Silva Vieira (OAB 25739/PB), Kate Macario de Souza (OAB 241118/RJ), Miryã Bregonci da Cunha (OAB 506042/SP), Adriana Dantas de Oliveira (OAB 155864/RJ), SERGIO ARAUJO SOARES DA SILVA (OAB 41799/BA), Maria Cristina Straatmann Ritter (OAB 30917/RS), Thiago Marchi Martins (OAB 137923/RJ), Dilney Eduardo Barrionuevo Alves (OAB 301B/RO), Osmar Moraes de França Filho (OAB 7494/RO), Ismail Luiz Gomes (OAB 28996/GO), Maibe de Castro Silva Lima (OAB 176893/RJ), SARAH VIEIRA MIRANDA (OAB 3157/PI), GERIMAR DE BRITO VIEIRA (OAB 1922/PI), Khristian Santana Ramos (OAB 10318/O/MT), Bruno Franchi Theophilo (OAB 439442/SP), Khristian Santana Ramos (OAB 10318/MT), Khristian Santana Ramos (OAB 10318/MT), Khristian Santana Ramos (OAB 10318/MT), Leodoro Vitor Julião (OAB 86053/RS), Ronaldo da Costa Procopio (OAB 68423/RJ), Irineu Domingos Mendes (OAB 6707/MS), Liliane Aparecida Santos (OAB 31300/ES), Paulo Sérgio Guimarães de Oliveira (OAB 8196/AM), João Felipe Machado (OAB 70931/RS), Paulo Henrique Cancado de Oliveira (OAB 113326/MG), Christian Ary da Cruz Barbosa (OAB 281/SE), Antonio Domício Alves Pereira (OAB 26005/GO), Kátia Cristiane da Silva Oliveira (OAB 15959/PE), Wagner de Jesus Caetano (OAB 30739/ES), SONIA MARIA SOROSINI CARUSO (OAB 53297/RJ), Gioberto de Matos Junior (OAB 787/RR), Flavia Neves de Souza Bernardo (OAB 21754/ES), Rafael Diovani Lima Tereza (OAB 444241/SP), Yasmin Vieira Braga (OAB 444338/SP), Jorge Emanuel Lobo Rodrigues de Miranda (OAB 18195/BA), Rafael Correia de Melo (OAB 80869/RS), Raphaela de Oliveira Paiva Lage (OAB 151164/RJ), Manuela de Carvalho Valente de Lima (OAB 443614/SP), Guilherme Barbosa Ferreira (OAB 174536/RJ), Laura Rocha Teixeira (OAB 445866/SP), HAILTON ANTONIO NUNES (OAB 26464/GO), Paulo Roberto Mendes de Lima (OAB 6515/PE), Cassio Roberto da Silva Gitahy (OAB 137309/RJ), Ludmila Moretto Sbarzi Guedes (OAB 4546/RO), Tatiana Tamburini Pagiola de Oliveira (OAB 149987/RJ), Carlos Eduardo Alves Santos (OAB 8414/PI), Hosney Repiso Nogueira (OAB 6327/RO), Carla Maria Marques Leal (OAB 9492/CE), Luiz Gustavo Monteiro da Silva (OAB 117174/MG), Antonio Fraccaro (OAB 1941/RO), Gilberto de Sousa Pinheiro (OAB 11124/MA), Genilza Bonam Lemgruber (OAB 169911/RJ), Hamid Charaf Bdine Junior (OAB 82333/SP), Weberton Pires dos Santos (OAB 169043/MG), Sergio Cardoso Gomes Ferreira Junior (OAB 4407/RO), EDIVAN DE CARVALHO MIRANDA (OAB 945/TO), Dihon Moises Costa Souza (OAB 51456/GO), Aldahir Fonseca Filho (OAB 4459/ES), Gilberto Claudio Hoerlle (OAB 8816/GO), Fabricio Luiz Martins Calixto (OAB 2986/AC), Jorge Luiz Santana da Silva (OAB 28146/BA), Antonio Teixeira de Moura Neto (OAB 15790-B/PA), Leonardo Soares Correira Neto (OAB 21552E/GO), Eliana Soares da Mota Gomes (OAB 151438/RJ), Max Silva Oliveira (OAB 10501/SE), Karem Aline de Carvalho Isidoro (OAB 4568/PI), Pedro Augusto Caldas Barros Silva (OAB 56871/BA), Murilo da Mota Contaiffer (OAB 497134/SP), Marília Kuhn (OAB 42912/SC), Saulo de Tarso Rodrigues Ribeiro (OAB 4887/AC), Jorge Olegario de Oliveira da Conceição (OAB 202974/RJ), Danielle Krieger Lobato (OAB 32900/RS), Hugo Queiros Alves de Souza (OAB 49258/DF), Elias Martini Gomes (OAB 152637/RJ), Gabriel Junior Geiareta da Trindade (OAB 433883/SP), Alexandre dos Santos Dias (OAB 116393/MG), Ana Beatriz Terra Crippa (OAB 213617/RJ), Edmilson Alves de Aguiar (OAB 3229/MA), Marinice de Fatima da Cruz (OAB 13366/MT), Vitória Conte Nardi (OAB 434488/SP), Ramon Rodrigues Silva Dominices (OAB 10100/MA), RAFAEL HOLANDA ALENCAR (OAB 25624/CE), Fabio Lopes de Lima (OAB 16277/SC), Edison Fernando Piacentini (OAB 978/RO), Gerusa Ribeiro Chateaubriand (OAB 112098/RJ), Thiago Santos da Silva (OAB 36012/GO), Eliana Soares da Mota Gomes (OAB 151438/RJ), Jose Aparecido da Silva (OAB 109810/MG), Thamiris Regina Gibelli (OAB 438074/SP), RODRIGO ABUD PAMPANELLI (OAB 111167/MG), Daiany Cristine Gomes Pereira Jácomo Ribeiro (OAB 2460/TO), Marcelo Mundim Ramos (OAB 438710/SP), Alexandro Cardoso da Costa (OAB 106221/RS), Henrique do Couto Martins (OAB 76490/RJ), Carlos Augusto Tortoro Junior (OAB 247319/SP), Rafaela da Conceicao Rossa (OAB 19402/SC), Amanda Tondorf Nascimento (OAB 23266/MT), Dulcilene Lucio Ribeiro (OAB 196948/RJ), Julio Cesar Guilhen Aguilera (OAB 54707/PR), Silvia Jeanane Pereira Borges (OAB 5315/TO), Ricardo de Almeida Moura (OAB 19768/CE), José Alexandre Bezerra Maia (OAB 5202/PI), Jamerson Neves de Siqueira (OAB 10026/PB), Samir Charles Mattar (OAB 134858/RJ), Everton Jose Ramos da Frota (OAB 3819/AC), JANAÍNA MENDONÇA DE MORAES (OAB 8070/AM), Bruno Rafael Batista Menezes (OAB 150467/RJ), Martha Mafra Gonzalez (OAB 4103/AM), Renata Fernanda Pinheiro da Cruz (OAB 96267/RJ), CLÁUDIO TADEU RODRIGUES DE SOUZA (OAB 197136/MG), Fernanda Braz Ordones (OAB 59085/DF), Thais Damm da Silva Brum da Silveira (OAB 229211/RJ), Paulo da Cunha (OAB 43034/RS), Izonildes Pio da Silva (OAB 6486/MT), Tácio Silva Nóbrega de Oliveira (OAB 17711/PB), Adriana Vieira Ferreira (OAB 11924/AM), Aberones Gomes de Araújo (OAB 2137/AM), Elcio Lima do Prado (OAB 4757/O/MT), Andrea Villanova Heguedusch Lavia (OAB 452587/SP), Claudia Elita Nogueira Marques Alves (OAB 2838/PI), Artur Lopes de Souza (OAB 6231/RO), Rafael Clini Diana (OAB 453602/SP), Diego Marinho dos Santos (OAB 13695/AL), Andre Luiz Boldrin Cardoso (OAB 18743/MS), Edinamara Borges Ramos Cardoso (OAB 30706/GO), Queslei da Silva e Souza (OAB 57971/DF), ALBERG BANDEIRA DE OLIVEIRA (OAB 8874/PB), Dalvo Pessoa de Oliveira Miranda (OAB 140292/RJ), Cláudio Alcântara de Queiroz Alves Lopes (OAB 6919/RN), Sandra Regina Linhares da Silva Carmo (OAB 15753/GO), Renata Medeiros Saraiva (OAB 85853/RS), Renata Perpetuo de Sousa (OAB 219190/RJ), Ricardo Marcelo Sampaio (OAB 169359/RJ), Thamara Lima dos Santos (OAB 61316/DF), Ney Rodrigues Araújo (OAB 10250/PE), RAPHAEL NOVAKI VILELA DOS REIS (OAB 152443/MG), Aderbal da Cunha Gonçalves Neto (OAB 47409/BA), LUCIENE DE OLIVEIRA MARIA (OAB 87754/RJ), Robson Oliveira Gustavo (OAB 49900/GO), Anderson Willy Moreira Lemos (OAB 50134/DF), FERNANDO RIBEIRO COELHO (OAB 22105/RJ), Viviana Karine Delben Ferreira de Lima (OAB 11247/MT), Jaime Luiz Koscheck (OAB 8758O/MT), AGOSTINHO JOSE DA SILVA (OAB 59340/RJ), Amilton Batista de Faria (OAB 9844/GO), Wellington Albuquerque Assis Ton (OAB 13331/MS), Vanderlei Macedo da Silva (OAB 158871/MG), Erika Vaz Borges Sampaio (OAB 2295/AP), Leony Ribeiro da Silva (OAB 20740/PA), JOATHAN ROBERIO DA SILVA (OAB 17317/RN), Carla dos Santos Correia (OAB 74127/RJ), Rodrigo Otávio Borges Melo (OAB 6488/AM), GIL ANTONIO VIEIRA (OAB 16400/MS), Maria Angelica Silva da Costa Zanata (OAB 13335/MT), Zulamir Cardoso da Rosa (OAB 4760/SC), Marcilio Nascimento Costa (OAB 1110B/TO), Luiz Simões Sociedade Individual de Advocacia (OAB 2295/SP), Eduardo Monteiro Cardoso (OAB 2064/AP), Eber Emanuel Viana Serafim Araújo (OAB 1045B/PE), ANA ÉRIKA MAGALHÃES GOMES (OAB 13727/PB), Marcos Antonio Magalhães Farias (OAB 17778/BA), Suellen Tamara Alves de Araujo (OAB 20023/PB), Daniella Peron de Medeiros (OAB 5764/RO), Alba Cristina Lessa do Valle (OAB 197267/RJ), Thiago Macêdo Gomes Borges (OAB 36630/GO), Marcelo Ferreira de Oliveira (OAB 49508/PR), Adrycia Karoline Fernandes Silva (OAB 34906/CE), Marcia Rejane de Souza e Silva (OAB 169674/RJ), Marcos Delli Ribeiro Rodrigues (OAB 478882/SP), KARINE GUERREIRO DE PAULA RODRIGUES VILELA (OAB 3140/RO), Vivian Teixeira Monasterio (OAB 145743/RJ), Larissa Moreira do Nascimento (OAB 10928/RO), Jonas Albertino Moraes Cardoso (OAB 2758/AP), Paulo Zini Magrassi (OAB 215107/RJ), Leandro Silva Franco (OAB 17407/BA), Wendy Oliveira Nery (OAB 84268/RJ), Welesson Jose Reuters de Freitas (OAB 160641/SP), Mauro Henrique Ortiz Lima (OAB 067311/RJ), Carlos Renildo Costa (OAB 20041/MA), Tânia Ferreira Pacheco (OAB 128794/RJ), Eraldo Inacio de Lima (OAB 32304/PE), Carlos Alberto Derzi Junior (OAB 19027/MS), Fabiana Bondan (OAB 42612/SC), Marli Siqueira Fronchetti (OAB 10065/PA), Luiz Pedro Franz (OAB 14594/MT), Marcus Vinicius Sampaio Flintz (OAB 84009/RJ), Maria Luíza de Jesus Feitosa (OAB 8990/RO), Filipe Mota Gama (OAB 167077/RJ), Andiara Ferreira (OAB 46740/SC), Romilton Marinho Vieira (OAB 633/RO), Gladstone Nogueira Frota Junior (OAB 9951/RO), Adalberto de Almeida Paula (OAB 187094/RJ), Glaucia Agnelo Guimarães (OAB 44669/DF), Kathelen Caroline Martins Amoedo (OAB 15114/AM), Flavio Branco Pereira (OAB 117616/RJ), Alex Souto Arruda (OAB 10358/PB), FLAVIO MARQUES DE SOUZA (OAB 92657/RJ), Welken Fernandes Cunha (OAB 225677/RJ), Ruy da Silva Motta (OAB 160373/MG), Ricardo Monteiro de França Miranda (OAB 104416/RJ), Cláudio Luiz Góes de Almeida (OAB 42345/BA), Shao-lin Pereira dos Santos (OAB 36189/DF), José Mello Cavalcante Júnior (OAB 10683/PB), Jose Renato Bahia da Costa (OAB 53981/BA), PAULO JOSÉ STRAMOSK (OAB 55509/SC), FLAVIO MARQUES DE SOUZA (OAB 92657/RJ), PAULO SOARES DE AZEVEDO FILHO (OAB 134531/RJ), Andresa Alves Pereira (OAB 40759/SC), Julia Karen Barreto Gonçalves (OAB 448849/SP), Fernanda Figueiredo de Niemeyer (OAB 49407/GO), Cleunice Bitencourt Kegler (OAB 5918/MS), Wellington Arruda Gouveia Junior (OAB 19147/PE), Clovis Lins de Castro (OAB 26400/PB), Regina de Almeida (OAB 100809/SP), Saulo Sena Mayriques (OAB 250893/SP), Elton da Silva Costa (OAB 249976/SP), Caio Medici Madureira (OAB 236735/SP), Vinicius Morais dos Santos (OAB 235265/SP), Ricardo Marcelo Gonçalves Arteiro (OAB 233024/SP), Claudia Raquel Biagio Assis (OAB 250732/SP), Bruno Kurzweil de Oliveira (OAB 248704/SP), Ana Karina Teixeira Calegari (OAB 252200/SP), Marcelo Custodio Maletti da Costa (OAB 252548/SP), Endrigo Deppieri Perfetti (OAB 252821/SP), Danilo Roberto Floriano (OAB 253235/SP), Rogerio Diniz Bento (OAB 253462/SP), Lindomar Melvino dos Santos (OAB 253668/SP), Patricia de Almeida Campos Christianini (OAB 254196/SP), Guilherme Nascimento Frederico (OAB 247095/SP), Rafael de Mello E Silva de Oliveira (OAB 246332/SP), Sandra Regina Duarte de Oliveira (OAB 246435/SP), Paulo Doron Rehder de Araujo (OAB 246516/SP), Antonio Grecco Neto (OAB 246893/SP), Adriana Rodrigues Faria (OAB 246925/SP), Rogerio Soares Cabral (OAB 248671/SP), Paulo Cezar Paulini Junior (OAB 247244/SP), Carlos Augusto Tortoro Junior (OAB 247319/SP), Daniel Rosa Gilg (OAB 247937/SP), Gabriel Diniz da Costa (OAB 247941/SP), Keli Cristina Gomes (OAB 248524/SP), VALMIR MATOS FERREIRA (OAB 245598/SP), Estela Maria Lemos Monteiro Soares de Camargo (OAB 60429/SP), Ernesto Antunes de Carvalho (OAB 53974/SP), Silvana Benincasa de Campos (OAB 54224/SP), Dejair Passerine da Silva (OAB 55226/SP), Paulo Lopes da Silva (OAB 56139/SP), Jose Antonio Cremasco (OAB 59298/SP), Valdir Viviani (OAB 52932/SP), Irineu Fernando de Castro Ramos (OAB 61828/SP), Cristina Kruszczynski Bergmann (OAB 61996/SP), Jose Avelino de Oliveira (OAB 67058/SP), Miguel Ricardo Gatti Calmon Nogueira da Gama (OAB 68383/SP), Tania Garisio Sartori Mocarzel (OAB 73073/SP), Alessandra Pereira da Silva (OAB 254487/SP), Renato Luiz de Macedo Mange (OAB 35585/SP), Guilherme Feldmann (OAB 254767/SP), Alessandra Martins Milare (OAB 255676/SP), Cicero Osmar da Ros (OAB 25888/SP), Krikor Kaysserlian (OAB 26797/SP), Antonio Rosella (OAB 33792/SP), Marcia Regina Bull (OAB 51798/SP), Antonio Carlos Delgado Lopes (OAB 36601/SP), Flavio Ataliba de Abreu Netto (OAB 36614/SP), Luiz Gilberto Bitar (OAB 41256/SP), Mario Takatsuka (OAB 43638/SP), Arnoldo Wald (OAB 46560/SP), Otavio Cristiano Tadeu Mocarzel (OAB 74073/SP), Alexandre Santo Nicola dos Santos (OAB 228967/SP), Renata Fiore (OAB 225843/SP), Arlindo Couto dos Santos (OAB 227589/SP), Carmen Lucia Lovric da Cunha (OAB 227990/SP), Patricia Garbelotto (OAB 228454/SP), Carine Cristina Souza Filgueiras Bravo (OAB 228839/SP), Paulo Sergio Almeida Leite (OAB 22486/SP), Flavio Augusto El Ackel (OAB 230081/SP), Wilson Massaiuki Sio Junior (OAB 230132/SP), Fabíola Roberta Pasquarelli Machado (OAB 230192/SP), Lindalva Cavalcante Brito (OAB 231124/SP), Marcos Alberto Gazzeta (OAB 232255/SP), Svetlana Dobrevska Cvetanoska (OAB 232295/SP), Luiz Gustavo Nogueira Camargo (OAB 233190/SP), Henrique Machado Ferreira (OAB 223414/SP), Carla Rosendo de Sena (OAB 222130/SP), Eduardo Foz Mange (OAB 222278/SP), Antonio Ferreira da Costa (OAB 222418/SP), Luciane de Menezes Adao (OAB 222927/SP), Daniel Jose Heleno (OAB 223327/SP), Gerusa Del Piccolo Araujo de Oliveira (OAB 224558/SP), Andressa Borba Pires (OAB 223649/SP), Marcel Afonso Acencio (OAB 224006/SP), Rafael Wallerius (OAB 224303/SP), Tiago Cortez (OAB 224372/SP), Ione Maria Barreto Leão (OAB 224395/SP), Natalie Andrade Hortas (OAB 244982/SP), Nicholas Cruz Filardi (OAB 242655/SP), Liege Karina de Sousa Ribeiro Santos (OAB 239447/SP), Fabio Lago Meirelles (OAB 240479/SP), Gustavo Maranhão Guimarães (OAB 241202/SP), Paulo Andre Ode Almeida Pinto (OAB 242089/SP), Douglas Blum Lima (OAB 242199/SP), Roberto Cesar Scacchetti de Castro (OAB 238294/SP), João Paulo Gabriel (OAB 243936/SP), Gabrieli Luize Rato Lanfredi do Carmo (OAB 244623/SP), Kelly Albernaz dos Santos (OAB 244642/SP), Vânia Maria Golfieri (OAB 244852/SP), Juliana Siqueira Moreira (OAB 244894/SP), Monica Nogueira de Souza (OAB 233205/SP), Maria da Penha Cavalcante Barbosa Pedullo (OAB 235058/SP), Carlos Augusto Reis de Athayde Fernandes (OAB 234083/SP), Antonio Rodrigo Sant Ana (OAB 234190/SP), Luis Aragão Farias de Sousa (OAB 234715/SP), Marcelo Baptistini Moleiro (OAB 234745/SP), Mauricio Baptistella Bunazar (OAB 234812/SP), Luiz Henrique Leonelli Agostini (OAB 237605/SP), Rafael Bertachini Moreira Jacinto (OAB 235654/SP), Alexandre Augusto Cassiano Neves (OAB 235729/SP), Luciano Rodrigo Masson (OAB 236862/SP), Rodrigo Domingos (OAB 236954/SP), Ubirajara Vicente Luca (OAB 237248/SP), Flavia Nunes Freitas dos Santos (OAB 221980/SP), Marcus Vinicius dos Santos Andrade (OAB 15381/SP), Alisson Deniran Pereira Oliveira (OAB 270245/SP), Valter Barbosa de Oliveira (OAB 270300/SP), Flavio Aparecido Pereira (OAB 270408/SP), Felipe Antonio Landim Ferreira (OAB 270497/SP), Fellipe Juvenal Montanher (OAB 270555/SP), Ana Rita Menin Machado (OAB 269342/SP), Aloisio Rosendo da Silva (OAB 4303/AL), Isabel Vieira dos Santos (OAB 270716/SP), Thomas Benes Felsberg (OAB 19383/SP), José Nazareno Ribeiro Neto (OAB 274989/SP), Felipe Diamantino Alkimim Lopes (OAB 273517/SP), Geraldo Jose Salomão (OAB 274312/SP), Andrea Fernandes Santana Ramires (OAB 271629/SP), Rafael Luvizuti de Moura Castro (OAB 267526/SP), Giuliano Dias de Carvalho (OAB 262650/SP), Gustavo Gonçalves Gomes (OAB 266894/SP), Ricardo Palma (OAB 262747/SP), Ana Paula Dyszy (OAB 260495/SP), Marilia Seles Peres (OAB 265146/SP), Andre de Siqueira Moraes (OAB 268580/SP), Mariana Graziela Faloppa (OAB 267501/SP), Edgar Pereira Barros (OAB 268037/SP), Fernando Jose Cerello Gonçalves Pereira (OAB 268408/SP), Lidia Mancin da Silva Torezan (OAB 268435/SP), Flavio Aparecido Cassuci Junior (OAB 268624/SP), Sandra Nascimento (OAB 284799/SP), Rafael Ferreira Batista (OAB 279653/SP), Ronny Kleber Moraes Franco (OAB 274728/SP), Luana Correa Guimaraes (OAB 276807/SP), Guilherme Montebugnoli Zilio (OAB 278167/SP), Eliana São Leandro Nobrega (OAB 278019/SP), Gelson Soares Junior (OAB 278596/SP), Renato Luiz Mondelli Stancatti (OAB 276450/SP), Raquel Massufero Izar Savio (OAB 279657/SP), Maria Goreti Guadanhin (OAB 280592/SP), Marcelo Silva Barbosa (OAB 280587/SP), Maria Ruth Rodrigues Rocha (OAB 281012/SP), Jose Carlos Rodrigues Bernatavicius Junior (OAB 282133/SP), Andre Luis Lopes Soares (OAB 273066/SP), Pedro Paulo Azzini da Fonseca Filho (OAB 274173/SP), Renan Nogueira Farah (OAB 274183/SP), Conrado Francisco Almeida Carvalho (OAB 272264/SP), Alberico Eugênio da Silva Gazzineo (OAB 272393/SP), Rui Barbosa Pereira (OAB 270912/SP), Giselle Neves Galvão Conti (OAB 274979/SP), Gabriéla Izilda de Souza Lima Gomes (OAB 276678/SP), Valdemar Vieira (OAB 273728/SP), Daiton do Nascimento (OAB 276407/SP), Adriana de Paiva Correa (OAB 274250/SP), Ronaldo de Rossi Fernandes (OAB 277348/SP), Andre Luiz Domingues Torres (OAB 273976/SP), Valter de Oliveira Prates (OAB 74775/SP), Rogerio Antonio Moreira (OAB 94467/SP), Wilson Perez Peixoto (OAB 88447/SP), Angela Beatriz Paes de Barros Di Franco (OAB 88601/SP), Antonio Pedro Arbex Neto (OAB 88786/SP), Helio Martinez Junior (OAB 92407/SP), Marcelo Orabona Angelico (OAB 94389/SP), Djalma Pereira dos Santos (OAB 86570/SP), Marcos Cesar Garrido (OAB 96924/SP), Luiz Carlos Martini (OAB 97226/SP), Alexandre Prandini Junior (OAB 97560/SP), Rose Emi Matsui (OAB 98269/SP), Marlene Ferreira Ventura da Silva (OAB 98496/SP), Carlos Rogerio Moreira (OAB 99445/SP), Jose Antonio Funnicheli (OAB 79077/SP), Claudio Jesus de Almeida (OAB 75739/SP), Luiz Carlos de Souza (OAB 75944/SP), Nelson Antonio Oliveira Borzi (OAB 76280/SP), Rosana Mary de Freitas Constante (OAB 77086/SP), Jesonias Sales de Souza (OAB 78881/SP), Fernando Stracieri (OAB 85759/SP), Moyses Zanquini (OAB 79547/SP), Rosana de Cassia Faro E Mello Ferreira (OAB 79778/SP), Newton Correa (OAB 81143/SP), Maria Cristina Serafim Alves (OAB 81528/SP), Edvaldo Botelho Muniz (OAB 81886/SP), Mailson Luiz Brandao (OAB 264979/SP), Eliane Trevisani Moreira (OAB 84483/SP), Rodrigo Queiroz Ribeiro (OAB 263228/SP), Caio Renan de Souza Godoy (OAB 257599/SP), Jean Carlos Gonzales Meixao (OAB 260162/SP), Mario Takahashi (OAB 261214/SP), Mariluci Miguel (OAB 84888/SP), Wilson Oliveira Brito Junior (OAB 260442/SP), Hélida Maciel Milhoci de Souza (OAB 262385/SP), Bruno de Medeiros Assis (OAB 263338/SP), Alexandre Simoes Vilanova (OAB 261867/SP), Mario Sergio Gonçalves Trambaiolli (OAB 265423/SP), Gerson Luiz Graboski de Lima (OAB 266541/SP), Sueli Maria dos Santos (OAB 99927/SP), Theo Tri Huynh Trung (OAB 261480/SP), Andresa Aparecida Medeiros de Araujo (OAB 265220/SP), Priscila Tenedini Garla (OAB 266075/SP), Jose Humberto Demidoff Leal (OAB 261911/SP), Erica Bareze dos Santos (OAB 263606/SP), Pedro Henrique Torres Bianchi (OAB 259740/SP), Sheila Soares Padovam (OAB 261180/SP), Amanda Matilde Graciano Soares (OAB 265209/SP), Ana Cristina Correia (OAB 259360/SP), Janaina de Oliveira Silva (OAB 257669/SP), Anderson de Almeida Rodrigues (OAB 260709/SP), Alexandre Almeida de Toledo (OAB 260492/SP), Carlos Eduardo Ramos Pereda Silveira (OAB 282785/SP), Leomar Goncalves Pinheiro (OAB 144349/SP), Eliel de Carvalho (OAB 142496/SP), Sandra Maria dos Santos Sanches Ruiz (OAB 142531/SP), Aurea Verdi Godinho (OAB 142887/SP), Marcos Fernando Barbin Stipp (OAB 143802/SP), Romualdo Veronese Alves (OAB 144034/SP), Primo Francisco Astolfi Gandra (OAB 141925/SP), Marcio de Souza Polto (OAB 144384/SP), Ricardo Ribeiro do Nascimento (OAB 144652/SP), Sergio Ricardo Machado Gayoso (OAB 145246/SP), Luiz Eugenio Araujo Muller Filho (OAB 145264/SP), Charles Carvalho (OAB 145279/SP), Ivo Waisberg (OAB 146176/SP), Jose Fernando Simao (OAB 146426/SP), Carlos Eduardo da Costa Pires Steiner (OAB 139138/SP), Fernando Azevedo Pimenta (OAB 138342/SP), Celso de Faria Monteiro (OAB 138436/SP), Ricardo Azevedo Sette (OAB 138486/SP), Ana Claudia da Silva (OAB 138782/SP), Rubens Carmo Elias Filho (OAB 138871/SP), Fernando Juliano Toro (OAB 141560/SP), Jose Roberto de Castro (OAB 139198/SP), Mauricio Nahas Borges (OAB 139486/SP), Reginaldo Moreno (OAB 139553/SP), Waldemar Deccache (OAB 140500/SP), Marcio Ribeiro Goncalves Hernandes (OAB 141178/SP), Wiliam Crespo (OAB 138130/SP), Juliano Hyppólito de Sousa (OAB 163451/SP), Welesson Jose Reuters de Freitas (OAB 160641/SP), Renata Martins de Oliveira (OAB 161507/SP), Carlos Alberto de Mello Iglesias (OAB 162566/SP), Guilherme Boyadjian (OAB 162610/SP), Eliane Cristina Carvalho (OAB 163004/SP), Vanderlei Branco (OAB 160240/SP), Gustavo Ouvinhas Gavioli (OAB 163607/SP), José Guilherme Carneiro Queiroz (OAB 163613/SP), Marcos Ralston de Oliveira Rodeguer (OAB 164775/SP), Viviane Patricia Scucuglia (OAB 165517/SP), Marcelo Luiz Neves Jardini (OAB 166903/SP), Regina Aparecida Vega Sevilha (OAB 147738/SP), Andrea Orabona Angelico Massa (OAB 152184/SP), Olga Saito (OAB 149173/SP), Teresa Anabela Silva de Araujo Plaza (OAB 149543/SP), Marcel Afonso Barbosa Moreira (OAB 150161/SP), Waldinei Dimaura Couto (OAB 150878/SP), Luciana Arruda de Souza Zanini (OAB 151213/SP), Regiane Lucia Bahia Zeidan (OAB 158327/SP), Bianca Cavichioni de Oliveira (OAB 152874/SP), Amir Moura Borges (OAB 153003/SP), Fabio Borges Blas Rodrigues (OAB 153037/SP), Fernanda Cioni Constant Pires (OAB 154178/SP), Cecília Lopes dos Santos (OAB 155633/SP), Edna Peixoto Soares (OAB 167296/SP), Tony Marcelo Gonzalez Rivera (OAB 117334/SP), Jose Renato Vargues (OAB 110364/SP), Neiva Rita da Costa (OAB 111034/SP), Alfredo Luis Alves (OAB 111459/SP), Paulino Brancato Neto (OAB 112633/SP), Roodney Roberto de Almeida (OAB 116997/SP), Ricardo Franco (OAB 110239/SP), Pedro Luiz Pires (OAB 117604/SP), Wilson Cunha Campos (OAB 118825/SP), Lucia Helena Netto Fatinanci (OAB 118875/SP), Vaine Cineia Luciano Gomes (OAB 121262/SP), Silvia Bellandi Paes de Figueiredo (OAB 121774/SP), Januario Trigo (OAB 122416/SP), Etienne Bim Bahia (OAB 105773/SP), Paulo Cesar Borba Donghia (OAB 102143/SP), Helio Gardenal Cabrera (OAB 102529/SP), Benedito Aparecido Guimarães Alves (OAB 104442/SP), Antonio Carlos Aguiar (OAB 105726/SP), Anesio Runho (OAB 105764/SP), Mario Cesar Bonfa (OAB 108647/SP), Amauri Antonio Ribeiro Martins (OAB 105984/SP), Marcos Vinicio Raiser da Cruz (OAB 106688/SP), Henrique de Azevedo Ferreira França (OAB 107855/SP), Alexandre de Mendonca Wald (OAB 107872/SP), Cylmar Pitelli Teixeira Fortes (OAB 107950/SP), Ritamar Aparecida Goncalves Pereira (OAB 137267/SP), Fabiola Ferramenta Muniz de Faria (OAB 133284/SP), Leonardo Cardoso Rino (OAB 131618/SP), Konstantinos Jean Andreopoulos (OAB 131758/SP), Luciana Pereira de Souza (OAB 132241/SP), Abilio Cesar Comeron (OAB 132255/SP), Fernando Anselmo Rodrigues (OAB 132932/SP), Silvia Maria de Almeida Bugelli Valença (OAB 131097/SP), Romina Vizentin Domingues (OAB 133338/SP), Lucia Helena Dias de Souza (OAB 135077/SP), Hermes Barbosa da Silva (OAB 135932/SP), Cristina de Lucena Marinho (OAB 136321/SP), Frederico Jose Dias Querido (OAB 136887/SP), Anna Maria Godke de Carvalho (OAB 122517/SP), Fabricio Martins Pereira (OAB 128210/SP), Jose Manoel de Arruda Alvim Netto (OAB 12363/SP), Marcos Cesar Chagas Perez (OAB 123817/SP), Osmar Pessi (OAB 124190/SP), Marcos Roberto Sanchez Galves (OAB 124372/SP), Rizzo Coelho de Almeida Filho (OAB 127853/SP), Claudio Igne (OAB 130661/SP), Ruy Janoni Dourado (OAB 128768/SP), José Gabriel Lopes Pires Assis de Almeida (OAB 129102/SP), Maria de Lourdes Correa Guimaraes (OAB 129234/SP), Ana Paula Martins Penachio Taveira (OAB 129696/SP), Fabio Jose Donario Carvalho (OAB 130350/SP), Thiago Augusto Veiga Rodrigues (OAB 221896/SP), Maria Jose Marcos (OAB 202511/SP), Amanda Hernandez Cesar de Moura (OAB 198670/SP), Alexandre Fanti Correia (OAB 198913/SP), Adriana Saraiva de Freitas Fonseca (OAB 199287/SP), André Ricardo Rodrigues Borghi (OAB 199779/SP), Geraldo Marcio Vignoli (OAB 201396/SP), Laura Oliveira Carvalho (OAB 198496/SP), Roquelaine Batista dos Santos (OAB 202868/SP), Marcelo Bassi (OAB 204334/SP), Fabyo Luiz Assunção (OAB 204585/SP), Luís Alberto de Araujo Lima (OAB 206263/SP), Valmir André Maronato Guimarães de Oliveira (OAB 206850/SP), Renata Martins de Oliveira Amado (OAB 207486/SP), Ricardo Lazzari da Silva Mendes Cardozo (OAB 208019/SP), Caio Motta Melo (OAB 193701/SP), Luiz Fabiano Santiago (OAB 191445/SP), Caio Marques Berto (OAB 192240/SP), Vitor José de Mello Monteiro (OAB 192353/SP), Ricardo Palmejani (OAB 192498/SP), Rosangela Aparecida da Silva (OAB 192504/SP), Leonardo Yuji Sugui (OAB 197816/SP), Sandro Mário Jordão (OAB 193757/SP), Fabio Romero Pacetti Fernandes (OAB 194096/SP), Tiago Schreiner Garcez Lopes (OAB 194583/SP), José Farias de Figueirêdo (OAB 196142/SP), Luciana Cossão Cavalcanti (OAB 196827/SP), Iranuza Maria Silva Stefanini (OAB 191108/SP), Demétrio Irineu Grizotto (OAB 220789/SP), Andréia Andrade Figueirêdo (OAB 219791/SP), Ronaldo Vasconcelos (OAB 220344/SP), Tadeu Luiz Laskowski (OAB 22043/SP), Rodrigo Fernandes Garcia (OAB 220703/SP), Regilene da Silva Longo (OAB 220761/SP), Celso Ferrareze (OAB 219041/SP), Gustavo Clemente Vilela (OAB 220907/SP), Julio Cesar Panhoca (OAB 220920/SP), Sergio Jabur Maluf Filho (OAB 220969/SP), Clara Moreira Azzoni (OAB 221584/SP), Leonardo Lima Cordeiro (OAB 221676/SP), Bianca Costa Lameira Souza do Nascimento (OAB 208066/SP), Anderson Souza do Nascimento (OAB 213348/SP), Rodrigo Shirai (OAB 208567/SP), Fabio Antonio Esperidião da Silva (OAB 211761/SP), Laísa Dário Faustino de Moura (OAB 212281/SP), Adriano Vinicius Leao de Carvalho (OAB 212690/SP), Rosmary Rosendo de Sena (OAB 212834/SP), Italo Francisco dos Santos (OAB 218266/SP), Eliane Pereira Miranda de Cara (OAB 213657/SP), Pedro de Carvalho Bottallo (OAB 214380/SP), Mariana Almeida de Azevedo (OAB 215056/SP), Marcelo Pereira Barros (OAB 216745/SP), Liliane Cristina Rodrigues Louza (OAB 217227/SP), Reginaldo Grangeiro Champi (OAB 167322/SP), Gerson Laurentino da Silva (OAB 178182/SP), Glaucia Mara Coelho (OAB 173018/SP), Júlia Schledorn de Camargo (OAB 173203/SP), Leonardo Luiz Tavano (OAB 173965/SP), Lucia Helena de Oliveira (OAB 174246/SP), Bruno Guimarães Scarpelini Vieira (OAB 176813/SP), Alex Sandro Hatanaka (OAB 172991/SP), Gustavo Pinheiro Guimarães Padilha (OAB 178268/SP), Emerson Gomes (OAB 179138/SP), Luísa Hamud Morato de Andrade (OAB 179296/SP), Adilson Suli Yaguinuma (OAB 180539/SP), Tania Alexandra Pedron (OAB 181162/SP), Osmar Nunes Mendonça (OAB 181328/SP), Rafael Sangiovanni Collesi (OAB 169071/SP), Jair de Campos Dias (OAB 167586/SP), Viviane Mary Sanches Barbosa (OAB 167651/SP), Marco Aurélio Nakano (OAB 168152/SP), Denilson de Oliveira (OAB 168666/SP), Marcelo Giordani Marins (OAB 168937/SP), André Carlos da Silva (OAB 172850/SP), Antonio Duarte Júnior (OAB 170657/SP), Alessandra Aparecida Nepomuceno Godoy (OAB 170891/SP), Fabio Eduardo de Laurentiz (OAB 170930/SP), Helen dos Santos Bueno (OAB 170943/SP), Marcos Roberto de Siqueira (OAB 171132/SP), Rodrigo Apparício Medeiros (OAB 191055/SP), Mariza Almeida Ramos Morais (OAB 188127/SP), Fabricio Luiz Pereira Santos (OAB 185763/SP), Marcelo Beltrão da Fonseca (OAB 186461/SP), Silvia Bessa Ribeiro (OAB 186689/SP), Leonardo Luiz Auricchio (OAB 187144/SP), Ana Luiza Medeiros Azevedo (OAB 187945/SP), Anderson Rogério Mioto (OAB 185597/SP), Nelson Teixeira Junior (OAB 188137/SP), Rogério Mazza Troise (OAB 188199/SP), Roberto Miled Bichir Haber (OAB 188805/SP), Adilson Régis Silgueiro (OAB 189154/SP), Marli Hipólito Gaspar Mestriner (OAB 189632/SP), Mauricio Bartasevicius (OAB 181634/SP), Eduardo Augusto Mattar (OAB 183356/SP), Hugo Valle dos Santos Silva (OAB 181789/SP), Alexandre Marcelo de Castro (OAB 182036/SP), Raquel Donisete de Mello Santos (OAB 182618/SP), Sandra Lygia de Souza (OAB 182666/SP), Luiz Guilherme Pennacchi Dellore (OAB 182831/SP), Abiude Camilo Alves (OAB 185410/SP), Luís César de Araujo Ferraz (OAB 183574/SP), Giuliano Colombo (OAB 184987/SP), Karen Reges Sierra (OAB 185010/SP), Mariana Hamar Valverde (OAB 185039/SP), Eliana Fola Flores (OAB 185210/SP), Luccas Vianna Santos (OAB 3404/AC), MARCEL M. SANTOS LEAL (OAB 11225/MS), Rosana Silva Pereira Cantero (OAB 11100/MS), Antonio Sergio Soares (OAB 85304/RJ), Rodrigo Veiga de Oliveira (OAB 24821/DF), Joao Ricardo Eustaquio Cardoso de Paiva (OAB 167449/MG), Geancarlo Leal de Freitas (OAB 11929/MS), Almir Pereira Dornelo (OAB 14927/PB), JOÃO RICARDO EUSTÁQUIO CARDOSO DE PAIVA (OAB 167499/MG), NADIR BLEMER DE CARVALHO (OAB 11595/MT), LUCIANA MARTINS DE OLIVEIRA (OAB 17672/MT), Bernardo Dayrell Neiva (OAB 72093/MG), Antonio Carlos Vallim de Lossio e Seiblitz (OAB 42547/RJ), Humberto Fernando Vallim Porto (OAB 20190/DF), Rafael Bachega Magela (OAB 19105/MS), WELITON RODRIGUES DE FREITAS JUNIOR (OAB 133053/MG), CARLA PERDOMO TORRES (OAB 101100/RJ), Kemio da Silva Ferreira (OAB 9464/AM), RODRIGO GOMES RIOS (OAB 165253/RJ), Jorge Augusto Alvarenga Guimaraes (OAB 548812/SP), LEANDRA MORAIS DA ROCHA (OAB 11590/AL), GISLAINE MICHELON (OAB 56828/RS), Jonhy Lindartevize (OAB 17520/MS), Selma Adriana Justino (OAB 42086/PR), Beatriz Cristina Brandão Bainn (OAB 6901/RO), Bruno Mazzo Ramos dos Santos (OAB 13600/MS), Marinete Cardoso Marmo (OAB 145272/RJ), Paulo Andrade Moura Santos (OAB 151447/RJ), Alessandro Eduardo Fonseca (OAB 377120/SP), MARCUS VINICIUS DE SOUSA BRASILEIRO (OAB 173265/RJ), GREICY FEITOSA DOS SANTOS (OAB 7150/AL), Debora Gattiboni Lopes Weber Rodrigues (OAB 72882RS/), Jéssica Cardoso de Moura (OAB 378469/SP), Matheus Pimenta Santiago (OAB 376418/SP), ALESSANDRA ISABEL DE CARVALHO (OAB 150459/RJ), Jonas Santana Pereira (OAB 37256/SC), Thiago Furtado Marinho (OAB 15492/MA), Ana Clara Cabral de Sousa Cunha (OAB 5562/RO), Fhelipe do Carmo Pereira (OAB 145004/RJ), Abilio Alves dos Santos (OAB 45870/DF), VICTOR CERQUEIRA ASSAD (OAB 16776/ES), Maria Nazarete Pereira da Silva (OAB 1073/RO), João Pedro Moura Silveira de Ávila (OAB 34223RS/), Victor Ramalho Quezado de Figueiredo (OAB 8574/MA), GABRIELLE GOMES EVANGELISTA (OAB 157352/RJ), GEYSON CARDOSO CORREA GONDIM (OAB 32942/PE), RAFAEL GOMES DA SILVA GONÇALVES (OAB 171948/RJ), BRUNA RAFAELA PEREIRA CAMPOS (OAB 13014/MA), Carlos Alberto Troncoso Justo (OAB 535/RO), GLAUCIO DE CASTRO PEREIRA (OAB 98860/RJ), Leonardo Furtado de Miranda Pinto (OAB 149146/RJ), Guilherme Pereira Butkowsky (OAB 22187/ES), ROMILDO BARBOSA DA SILVA JUNIOR (OAB 150625/RJ), WAGNER PEREIRA MOREIRA (OAB 130927/RJ), Emerson Hinke (OAB 14233/SC), Gisele Cristina da Silva Nunes (OAB 10498/AL), Nilda de Fatima Cardoso (OAB 63618/MG), Waldemar Jose Duarte Pimenta (OAB 85366/MG), Ivory Ellen Antunes Tolentino (OAB 156905/MG), Geraldo dos Reis Cardoso (OAB 34177/MG), Zilanda Claudino da Silva (OAB 106693/RJ), Alexandre Vinícius Weiss (OAB 9974/SC), Jessica Wellem da Silva Reis (OAB 42752/SC), Raimundo Façanha Ferreira (OAB 1806/RO), Samuel Araújo (OAB 28227/GO), LUCIANA SANCHES COSSÃO (OAB 147421/RJ), Fábio Henrique Caetano Ribeiro (OAB 24436/BA), Jonilson Basilio da Silva (OAB 19038DF), Kelly Cristina Andrade do Rosario Ferreira (OAB 14859/ES), Alessandro Silva Gabas (OAB 368512/SP), Guilherme Elmar Heineck Andriani (OAB 32854/SC), Tiago Sangiogo (OAB 72814/RS), Daniele Carriço Brandão (OAB 121595/RJ), Marcio Junior dos Santos Franca (OAB 2882/AC), Adriano Carvalho da Costa (OAB 3457/RN), Walter Gustavo da Silva Lemos (OAB 18814/GO), Ricardo Feliciano dos Santos (OAB 34831/SC), Julio Wagner do Couto e Silva (OAB 31441/PE), Celso Ferrareze (OAB 138778/RJ), WALTER GUSTAVO DA SILVA LEMOS (OAB 655A/RO), Maytê Ramos Machado (OAB 176122/RJ), Flavio Ribeiro Neves de Vasconcellos (OAB 371877/SP), Antonio Pinheiro Neto (OAB 36508/PR), Samuel Ferreira Geraldo (OAB 371150/SP), Ariana Lady de Carvalho (OAB 370866/SP), Sidnei Lobo Pedroso (OAB 371027/SP), Flávio Conrado Júnior (OAB 370487/SP), Nilton Cesar Rigoni (OAB 14059/SC), Jane Cleide Moreira Martins Rocha (OAB 370753/SP), Márcio Leandro Araujo Coutinho (OAB 370786/SP), André Cirilo Ribeiro de Oliveira (OAB 372770/SP), HILTON HRIL MARTINS MAIA (OAB 13442/PB), Cristino Kappaun (OAB 31957/SC), Agnaldo Sergio Ghiraldi (OAB 63727PR), LEONARDO CAMPANHA (OAB 57490/PR), Vladimir Dutra Campos (OAB 97497/RS), Artur Garrastazu Gomes Ferreira (OAB 388403/SP), Giuliano Caio Sant"ana (OAB 4842/RO), Enísio Cordeiro Gurgel (OAB 2656/CE), Thales Queiroz da Anunciação (OAB 32876/BA), Leonardo Reinaldo Duarte (OAB 35220/SC), Danylo Ferreira de Alcantara (OAB 13724OMT), Júlio César de Almeida Lorenzoni (OAB 5545/AM), Miqueias Jose Teles Figueiredo (OAB 4962/RO), Ruan Galiardo Cambruzzi (OAB 20336/SC), TATIANA PENNA FERREIRA (OAB 103951/RJ), Thiago Guido de Moraes (OAB 368390/SP), Márcio Filipe Bastos Alvarez (OAB 172004/RJ), Alan Carlos Pereira (OAB 14351/MS), Fernanda Nicola Jorge Ribeiro Machado (OAB 161786/MG), Alair Maquinez da Cruz (OAB 152100/RJ), Meire Esper Kallás (OAB 389430/SP), Ana Clara da Silva (OAB 10373B/MT), Verena Maria Marques da Silva (OAB 134458/MG), João Alipio de Arruda Madeiro (OAB 415787/SP), Pedro Oliveira Moura Santos (OAB 385051/SP), Luciano Marcondes Machado Nardozza Junior (OAB 385229/SP), Cleber Silva Santos (OAB 14506/MA), CARINE IANOWICH (OAB 70864/RS), Gustavo Gomes Soares (OAB 34894SC/), Terezinha Borges Karlson (OAB 28679DF), Flávio Pereira Rômulo (OAB 9758/MS), Gilmar Antonio Cardoso (OAB 68546/MG), Jose Mourao Farias (OAB 5114/DF), Vanessa Cidral Gaya (OAB 30344SC), Angelo Moreira Nunes (OAB 155618/RJ), ÁLISSON FLÁVIO MOSQUEIRA DE VASCONCELLOS (OAB 149393/RJ), Raimundo Paiva de Souza (OAB 2839/AM), Vilmar Lourenço (OAB 33559/RS), Vilmar Lourenço (OAB 33559/RS), Paulo Henrique Mazzali (OAB 3895/AC), LUIZ FELIPE ARAUJO FERNANDES (OAB 8526/RN), Gilmarinho Lobato Muniz (OAB 3823RO), Homero Luiz Seibel (OAB 52678/RS), Mumir Bakkar (OAB 21438/PR), MICHELE MACEDO DELUCA ALVES (OAB 141416/RJ), Bruno de Melo Moreira (OAB 150256/RJ), Lemos Advocacia Empresarial e Tributaria (OAB 655RO /), Edson Ribeiro dos Santos (OAB 6116/RO), Lenita Alvarez da Silva Teixeira (OAB 6312/ES), Luiz Felipe Ferreira Oggero (OAB 118676/RJ), Luiz Fernando Carvalho (OAB 62456/RJ), Dayenne Negrelli Vieira (OAB 7840/ES), Rodrigo Cassaro Barcellos (OAB 8841/ES), Andre Francisco Luchi (OAB 10152/ES), GRACIANNA ARAUJO MEDEIROS (OAB 7052/MA), Priscila Biz Laps (OAB 30408/SC), Josyane Maria Corrêa da Costa Ferreira (OAB 14506OMT), Marcos Edson de Aquino (OAB 15222/PB), Renata de Souza Cardoso (OAB 47273DF), Cledson Testoni (OAB 30228/SC), Sérgio Harry Magalhães (OAB 4960/MT), Marlete Maria da Cruz C. da Silva (OAB 416/RO), MARIA LUIZA PIRES DE ARAUJO (OAB 62394/MG), Marcelo Vieira Lafayette Bitu (OAB 40788/PE), Geraldo Caldeira Azambuja Neto (OAB 33312GO), Vanessa Maria Miranda Vieira (OAB 18251/PE), Terezinha Borges Karlson (OAB 28679DF), Felipe Guedes Streit (OAB 15473ES), Bruno Cunha Lima (OAB 47523/DF), Vitor Guadanhin Pereira do Carmo (OAB 378928/SP), Rafaela Nascentes Anselmo (OAB 41875/DF), Vanessa Maria Miranda Vieira (OAB 18251/PE), Thabata Regina de Macedo Gomes (OAB 13602/RN), JAYME DE MAGALHÃES JÚNIOR (OAB 12494/MS), Guilherme Zamparetti de Queiroz (OAB 43931/SC), OVÍDIO LOPES DE MENDONÇA (OAB 4753/PB), Matheus de Souza Paula (OAB 379221/SP), Imilia de Souza (OAB 36024/RS), Manyra Braz da Gama (OAB 3508/AC), Renata Aparecida Ruiz (OAB 381241/SP), Bruno Julio Kahle Filho (OAB 21053/RS), Roseleide Campos de Miranda (OAB 14195/ES), WILLIAN POLLIS MANTOVANI (OAB 4030/AC), Monica Gomes de Assunção (OAB 149767/RJ), FLAVIA POLYANNA FEITOSA ALVES (OAB 42191/GO), Marcus Vinicius Messerschmidt (OAB 57814RS), Ananias Pinheiro da Silva (OAB 1382/RO), DEISE DAS GRAÇAS LOBO (OAB 21317/ES), OVÍDIO LOPES DE MENDONÇA (OAB 4753/PB), Cristiane Bohn (OAB 44490/RS), Saulo Vasco de Farias Silva (OAB 13249/AL), Thiago Silveira Guedes Pereira (OAB 17441/PB), João Henrique Bernardon Van Den Eeden (OAB 495143/SP), Eduardo Silva Toledo Pullin Miranda (OAB 29880/GO), Angela Leite Bastos (OAB 50695/BA), WAGNER SILVA DE ALMEIDA (OAB 83351/RJ), HILÁRIO MORORO (OAB 146209/RJ), MARIA LUCIA MERÇOR (OAB 90558/RJ), LINEIDE VIEIRA DE ALMEIDA (OAB 15488/MT), Mailson Lima Maciel (OAB 10732/PB), Davi Rodrigues Ribeiro (OAB 23455/DF), Selma Cristina Flores Catalan (OAB 4076/MT), Ricardo Alexandre de Moura Costa (OAB 98546/MG), Barbara Cesario de Oliveira (OAB 12008/MA), Fábio José Straube de Castro (OAB 59532/PR), Rodrigo Alves Chaves (OAB 15241/DF), Marcos Rubbo (OAB 55329/PR), MAURO A. DA SILVA (OAB 147473/RJ), Ana Carolina Freire Tertuliano Dantas (OAB 14672/PB), Reginaldo Bacci Acunha Junior (OAB 48006/DF), Henrico Cesar Tamiozzo (OAB 58792PR), Aparecido Jesus da Silva (OAB 167794/RJ), Wander Gualberto Fontenele (OAB 40244/DF), MARIA AUGUSTA DE ALMEIDA FELDMAN (OAB 81430/RS), Ramon Ecard de Melo (OAB 497135/SP), ALEXANDRE SANDIM SIQUEIRA (OAB 171821/RJ), SIRLÉA BAHIENSE AFFONSO (OAB 116372/RJ), Elizabeth Silva de Oliveira (OAB 534715/SP), Raquel Freire Alves (OAB 18963/DF), CLAUDIA REGINA DE SOUZA FREITAS FIGUEIREDO (OAB 69580/RJ), Ronaldo dos Santos Dotto (OAB 283135/SP), Michael Carneiro Rehm (OAB 312165/SP), VALMIR DE SOUZA BORBA (OAB 85001RJ/), Gabriel Yared Forte (OAB 311687/SP), Jose Roberto Marciano (OAB 10087/GO), André Gonçalves dos Santos Adão (OAB 136773/RJ), Raimundo Gonçalves de Araújo (OAB 3300/RO), Claudio Luiz Leite Junior (OAB 311275/SP), CARLOS RENATO HERNANDES ALVAREZ (OAB 53640/RJ), CARLOS DELLAMORA GARCIA (OAB 28842/RS), Eliane Pereira Bomfim (OAB 314795/SP), Rodrigo Braido Devito (OAB 315123/SP), Dahiany Hartelsberger Passos (OAB 315233/SP), Marina Zanetti Bernardo Stocco (OAB 315388/SP), Luis Eduardo Alves de Moura (OAB 316834/SP), Caue Fernandes Guedes (OAB 307239/SP), Ivan Perazoli Júnior (OAB 161697/RJ), Carolina Kiyomi Iwamoto (OAB 305287/SP), Danilo Romera Luqueze (OAB 305294/SP), Filipe Manetta Marquezin (OAB 306016/SP), Thiago Fernandes Chebatt (OAB 306550/SP), Jose Paulo Freitas Gomes de Sá (OAB 310359/SP), Felipe Pacheco Borges (OAB 307276/SP), Regivaldo Morais de Araujo (OAB 308098/SP), GABRIEL YARED FORTE (OAB 42410/PR), Thiago Alves de Andrade (OAB 309515/SP), Henrique Castilho Filho (OAB 309809/SP), Carlos Alberto Casseb (OAB 84235/SP), Thiago Cézar Ferreira Mascarenhas (OAB 152988/RJ), Maria Leda Marques de Souza Savian (OAB 322836/SP), Felipe Olah Dourado (OAB 323542/SP), Lucas Germano dos Anjos (OAB 323810/SP), Christovão Celestino da Silva (OAB 77766/RJ), Guilherme Augusto de Lima França (OAB 324907/SP), Natália Melanas Passerine da Silva (OAB 322639/SP), Dorival Dias Pereira da Silva (OAB 325829/SP), Rafael Barroso Fontelles (OAB 327331/SP), Bernardo Marcelo Kelner (OAB 78723/RJ), Kelly Cristina Ribeiro Senteio Antunes (OAB 327868/SP), Joana D"Arc Silva Santiago Rabelo (OAB 3793/MA), Claudio Lopes Cardoso Junior (OAB 317296/SP), Gustavo Rodrigo Góes Nicoladeli (OAB 319501/SP), Mateus Bonatelli Malho (OAB 318044/SP), Jaciara de Oliveira Pinheiro (OAB 318986/SP), Flavia Nascimento de Oliveira (OAB 318971/SP), MARIO DE CASTRO SILVA (OAB 84810/RJ), Rogerio Novais de Viveiros (OAB 304120/SP), Gislaine Honorato da Silva (OAB 321917/SP), Nelsi Cassia Gomes Silva (OAB 320461/SP), ALEXANDRE HENRIQUE COSTA DIAS (OAB 116918/RJ), GLAUCIA SANTANA HARTELSBERGER (OAB 8485/MS), Rafael Echeverria Lopes (OAB 321174/SP), Guilherme Rangel Ribeiro (OAB 7361/PB), Marcelo Rincão Arosti (OAB 328607/SP), Camila Antunes Novais Funico (OAB 294490/SP), Julia Tamer Langen (OAB 290876/SP), Priscilla Ribeiro Prado (OAB 290822/SP), Alexandre Magno Silva Santos (OAB 291773/SP), Renata Moquillaza da Rocha Martins (OAB 291997/SP), Sergio André Laclau Sarmento Marques (OAB 294474/SP), Edileuza Lopes Silva (OAB 290566/SP), Andreia Cristina Martins Daros Vargas (OAB 294669/SP), Helderley Florencio Vieira (OAB 295012/SP), Giza Helena Coelho (OAB 166349/SP), Angélica Cristina dos Santos Quintanilha (OAB 295796/SP), Aparecido Nunes Barbosa (OAB 296121/SP), Camilla Merzbacher Belão (OAB 295360/SP), Lidia Natalia Vilanova Monteiro Benatti Moda (OAB 285069/SP), Lucio Marques Ferreira (OAB 283562/SP), Ari Lopes Ribeiro (OAB 283617/SP), Marlon Daniel Real (OAB 284544/SP), Carlos Pagano Botana Portugal Gouvêa (OAB 199725/SP), Sonia Regina Jeronymo (OAB 285038/SP), Rudinei de Oliveira (OAB 289947/SP), Helielthon Honorato Manganeli (OAB 287058/SP), Lucas Galvão Camerlingo (OAB 288798/SP), Sheila Rodrigues Costa (OAB 288880/SP), Alexandre da Cunha Moreira (OAB 289247/SP), Jose Roberto Delfino Junior (OAB 289447/SP), Vivian Lopes de Mello (OAB 303830/SP), Ericson Crivelli (OAB 71334/SP), EDER TIMOTIO PEREIRA BASTOS (OAB 2930/RO), NOEL NUNES DE ANDRADE (OAB 1586/RO), Francisco Toro Giuseppone (OAB 50170/SP), Jose Mauro Marques (OAB 33680/SP), Jaime Beck Landau (OAB 64293/SP), GERSON LUIZ GRABOSKI DE LIMA (OAB 15782/PR), Joao Paulo Marcondes (OAB 78658/SP), Eduardo Pellegrini de Arruda Alvim (OAB 118685/SP), Otto Steiner Junior (OAB 45316/SP), Humberto Carlos Barbosa (OAB 303420/SP), Marcelo Estebanez Martins (OAB 3208/RO), Vinicius Marchetti Vieira (OAB 296623/SP), Alexandre Pereira de Andrade (OAB 74827/RJ), Alessander Lopes Pinto (OAB 104023/RJ), Vinicius Camargo Henne (OAB 297900/SP), JAQUES RAMOS WANDERLEY (OAB 11984/PB), Olympio Jose Matos Leite de Carvalho E Silva (OAB 298656/SP), Christy Ane Melo Bastos (OAB 88919/RJ), Nelson Pereira Mendes (OAB 302208/SP), Luiz Reinaldo França Pinto (OAB 44610/RS), Alexandre Gereto Judice de Mello Faro (OAB 299365/SP), Rodolfo Daniel Veiga (OAB 300170/SP), Shemara Sawae Oliveira Iamada (OAB 300553/SP), Natalia Barbosa da Silva (OAB 301361/SP), Luís Sérgio de Paula Costa (OAB 4558/RO), HELCIO BARBOSA CAMBRAIA JUNIOR (OAB 57171/MG), Rafael de Farias Julião (OAB 353732/SP), Bruno Marques Magrini (OAB 353963/SP), Manoel Eduardo Honorato de Oliveira (OAB 8342/CE), Gabriela Meira Gontijo (OAB 542632/SP), RAFAEL ACIOLI PEREIRA (OAB 8775/AL), Laerte Pereira Fonseca (OAB 6779/SE), RAMON HENRIQUE MAÇANEIRO (OAB 20764/SC), Wdagno Sandro Bezerra Câmara (OAB 7480/RN), EDNA MARIA PEREIRA RAMOS COSTA (OAB 6943/MA), ADRIANO FRISSO RABELO (OAB 6944/ES), Odilon Alexandre Silveira Marques Pereira (OAB 162765/SP), Raphael Victor Cipriano da Rocha Coelho (OAB 157684/RJ), Octavio da Veiga Alves (OAB 356510/SP), Marcos Flávio de Oliveira (OAB 352698/SP), CÍCERO ALVES DE LIMA (OAB 14209/MS), JORGE OLIVEIRA DE SOUZA (OAB 142470/RJ), Hildebrando Costa Andrade (OAB 9318/PB), CLÍNIO DE OLIVEIRA MEMÓRIA CORDEIRO (OAB 20281/CE), Tatiana Albuquerque Correa Kesrouani (OAB 5758/MS), Erick Castelo Branco (OAB 354789/SP), Gleison Ribeiro Frade (OAB 122094/MG), GUSTAVO RODRIGUES DA ROCHA (OAB 144336/RJ), Pedro Roberto Donel (OAB 11888/SC), Frederico de Miranda Brasil Vianna (OAB 86497/RJ), Wilson de Barros Ferreira (OAB 125265/RJ), Lucimari Andrade de Oliveira (OAB 13963/MS), Rhenne Hamud Hamud (OAB 50738/PR), Raphael Rajao Reis de Caux (OAB 488791/SP), ANILDO IVO DA SILVA (OAB 37971/RS), Raphael Cajazeira Brum (OAB 386965/SP), KLEBER NELITO KAMMERS (OAB 26474/SC), Janine Kiyoshi Sugai (OAB 365869/SP), GABRIEL DINIZ DA COSTA (OAB 63407/RS), Renata Queiroz dos Santos (OAB 366179/SP), ROSIMEIRY MARIA DE LIMA (OAB 2504/RO), SELMA MARA SANTANA MOTA (OAB 5524/AM), Jose Mauro Blanco Pereira (OAB 415212/SP), Alexandre Victor Butzke (OAB 12753/SC), José Luis Seraphico de Assis Carvalho (OAB 358159/SP), Gustavo Rossetto Mendes Batista (OAB 361043/SP), Lucas Alexandre Gonzales de Oliveira (OAB 358229/SP), Rodolfo Wehrs Born (OAB 186579/RJ), Nelson Frederico Kunze Pinto (OAB 9297/MT), Pamela Cristina de Maio Alves (OAB 359951/SP), CLAUDIA BOEIRA DA SILVA (OAB 13887/SC), jose augusto barbosa urbaneja (OAB 54062/PR), MARCO AURELIO DE ARAUJO SILVA (OAB 10548/RN), MAX PINHEIRO BARBOSA (OAB 168955/RJ), ANTÔNIO CARNEIRO CORREIA (OAB 8133/GO), ALESSANDRA COSTA CARNEIRO CORREIA (OAB 25898/GO), Diego Fortunato de Azevedo (OAB 167834/RJ), Beatriz Leite Kyrillos (OAB 329722/SP), Claudinei Barrinha Bragatto (OAB 339023/SP), Reginaldo Lino da Silva (OAB 336815/SP), Leonardo Bande Garcia (OAB 335539/SP), Edmir Henrique Silva de Carvalho (OAB 337918/SP), Felipe Abdalla Caram (OAB 337735/SP), Lucas Martins Engels (OAB 338683/SP), Nelci Mariscal do Nascimento Yaguinuma (OAB 337159/SP), Pamela Munhoz dos Santos (OAB 339502/SP), Camila Russi Lopez (OAB 339614/SP), Juliana Lima Ramos (OAB 340091/SP), Edgar Smith Neto (OAB 8223/RN), Luiz Paulo de Sequeira Junior (OAB 542700/SP), PABLO BERGER (OAB 61011/RS), Bruno de Melo Ourique (OAB 331737/SP), Caio Henrique Yoshikawa (OAB 329485/SP), Flavio Mendonça de Sampaio Lopes (OAB 330180/SP), Gustavo Lima Kroger (OAB 330451/SP), Rafael Barud Casqueira Pimenta (OAB 415763/SP), Marco Antonio Cecílio Filho (OAB 81858/RJ), Meire Ribeiro Silva de Freias (OAB 125683/RJ), Ana Rosa Tenorio de Amorim (OAB 332079/SP), Aline Garcia Costa Placona (OAB 331698/SP), Elson Luiz Zanela (OAB 332043/SP), ANDRE LUYZ DA SILVEIRA MARQUES (OAB 12902/PA), EMERSON NEVES DE SIQUEIRA (OAB 12649/PB), Claudia Cristina Canola (OAB 349615/SP), Priscila Martins de Souza Araujo (OAB 347374/SP), MICHELE DE FREITAS BERRETTA (OAB 26062SC), Jackson Vicente Silva (OAB 345012/SP), Felipe Esteves Weissmann (OAB 150252/RJ), Maurício Santana de Oliveira Torres (OAB 13652/BA), João Mendes de Oliveira Castro (OAB 346829/SP), Thais de Toledo Venturini (OAB 343895/SP), Rodrigo Farias do Carmo (OAB 138298/RJ), Talita Ferrari (OAB 347771/SP), ODIRLEI DE OLIVEIRA (OAB 28013/SC), Jorge Moisés Júnior (OAB 43009/MG), Wanderley Romano Donadel (OAB 78870/MG), Wilson Furtado Roberto (OAB 346103/SP), DOUGLAS VILAR (OAB 47278/PR), NEY EDUARDO SIMÕES (OAB 177708/RJ), EDUARDO SILVA ALVES (OAB 28376/GO), Aline de Oliveira Angelin (OAB 342143/SP), Vanessa Cristina Pasqualini (OAB 400362/SP), RENATA DA CONCEIÇÃO GUIMARÃES SANTOS (OAB 105669/RJ), Murilo Raszl Cortez (OAB 343836/SP), Alexandre Cesar Alves Rodrigues (OAB 342508/SP), Thales Mahatman Monteiro de Melo (OAB 343598/SP), MARIA FERNANDA ANACHORETA XIMENES ROCHA (OAB 148456/RJ), Karla Nemes Yared (OAB 20830/PR), Wagner Veloso Martins (OAB 420086/SP) - ADV: JOÃO GABRIEL CANDIOTA GREHS (OAB 241412/RJ), JOSÉ BENTO VASCONCELLOS ARMOND (OAB 263809/RJ), IZONILDES PIO DA SILVA (OAB 6486/MT), DULCILENE LUCIO RIBEIRO (OAB 196948/RJ), ORESTE NESTOR DE SOUZA LASPRO (OAB 98628/SP), KONSTANTINOS JEAN ANDREOPOULOS (OAB 131758/SP), ORESTE NESTOR DE SOUZA LASPRO (OAB 98628/SP), LINEKER BERTINO CRUZ FIGUEIRA (OAB 422268/SP), VANESSA FURLAN (OAB 216697/SP), LINDALVA CAVALCANTE BRITO (OAB 231124/SP), ORESTE NESTOR DE SOUZA LASPRO (OAB 98628/SP), MARCELO SILVA BARBOSA (OAB 280587/SP), GIZA HELENA COELHO (OAB 166349/SP), RAFAEL BARROSO FONTELLES (OAB 327331/SP), RAFAEL BARUD CASQUEIRA PIMENTA (OAB 415763/SP), RAFAEL BARUD CASQUEIRA PIMENTA (OAB 415763/SP), GUSTAVO OUVINHAS GAVIOLI (OAB 163607/SP), SUELY MARIAA CONCEIÇAO FARIAS COSTA LIMA (OAB 197529/RJ), LINEKER BERTINO CRUZ FIGUEIRA (OAB 23284/PA), ORESTE NESTOR DE SOUZA LASPRO (OAB 98628/SP), JOÃO PEDRO MOURA SILVEIRA DE ÁVILA (OAB 34223RS/), MAURO XAVIER MILAN (OAB 29602/RS)', '8edaeef51a21922a74c0bb89692cdaa25a0cc814ede20e2c005212a0e1556802', 1, 2, '2026-06-22 10:02:33', NULL, NULL, 0, NULL, NULL),
+	(46, 'aasp', '2026-06-22', '1018273-98.2023.8.26.0100', 'TJSP Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '77618', '1', '\n\r Processo: 1018273-98.2023.8.26.0100\n\r Órgão: Foro Central Cível - 2ª Vara de Falências e Recuperações Judiciais\r Data de disponibilização: 22/06/2026\r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r BANCO GENIAL S.A.\r MASSA FALIDA DO BANCO CRUZEIRO DO SUL S/A\r MOACIR ROSA DA SILVA\n\r Advogado(s) \r ORESTE NESTOR DE SOUZA LASPRO\r OAB SP-98628\r ORESTE NESTOR DE SOUZA LASPRO\r OAB SP-98628\r NELLO RICCI NETO\r OAB MS-8225\r LUCIANA ARRUDA DE SOUZA ZANINI\r OAB SP-151213\r CLÁUDIO RODRIGO GUEDES FERRO LAMEGO\r OAB SP-373244 \n Processo 1018273-98.2023.8.26.0100 - Ação de Exigir Contas - Administração judicial - Banco Genial S.a. - Massa Falida do Banco Cruzeiro do Sul S/A - Moacir Rosa da Silva - Ciência às partes da manifestação da Administradora Judicial. - ADV: CLÁUDIO RODRIGO GUEDES FERRO LAMEGO (OAB 373244/SP), ORESTE NESTOR DE SOUZA LASPRO (OAB 98628/SP), LUCIANA ARRUDA DE SOUZA ZANINI (OAB 151213/SP), NELLO RICCI NETO (OAB 8225/MS), ORESTE NESTOR DE SOUZA LASPRO (OAB 98628/SP), NELLO RICCI NETO (OAB 8225/MS), NELLO RICCI NETO (OAB 8225/MS)', '71919417605e6a16679984c25c9a7cec5904764fc89538d3a893431e756af7c8', 1, 2, '2026-06-22 10:02:33', NULL, NULL, 0, NULL, NULL),
+	(47, 'aasp', '2026-06-22', '4071466-78.2026.8.26.0000', 'TJSP Diário de Justiça Eletrônico Nacional', 'Lista de distribuição\r\n', '148355', '1', '\n\r Processo: 4071466-78.2026.8.26.0000\n\r Órgão: Gab. 03 - 7ª Câmara de Direito Privado\r Data de disponibilização: 22/06/2026\r Tipo de comunicação: Lista de distribuição\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r CRUZ AZUL DE SAO PAULO\r MONICA JESUS PALERMO VIANA\n\r Advogado(s) \r MARIANA SERRANO GOLTZMAN\r OAB SP-290632\r MATILDE REGINA MARTINES COUTINHO\r OAB SP-88494\r RENATA ALINE MIRANDA MELEGO FERREIRA\r OAB SP-378883\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n Processo 4071466-78.2026.8.26.0000 distribuido para Gab. 03 - 7ª Câmara de Direito Privado - 7ª Câmara de Direito Privado na data de 18/06/2026.', '90d023f5f88f9c1c2087ccbb47054f78a47d0fdddb7e7d7f69a5c314b2679808', 1, 2, '2026-06-22 10:02:33', NULL, NULL, 0, NULL, NULL),
+	(48, 'aasp', '2026-06-22', '1021130-79.2025.8.26.0381', 'TJSP Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '92591', '1', '\n\r Processo: 1021130-79.2025.8.26.0381\n\r Órgão: Núcleo 4.0 Acid. Trabalho Inter. e Lit. - Vara do Núcleo Especializado de Justiça 4.0 - Acidentes do Trabalho do Interior e do Litoral\r Data de disponibilização: 22/06/2026\r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r FLAVIO CAMPOS\n\r Advogado(s) \r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r ALYSSON LUIZ NASCIMENTO DA COSTA\r OAB SP-507195 \n Processo 1021130-79.2025.8.26.0381 - Procedimento Comum Cível - Auxílio-Acidente (Art. 86) - Flavio Campos - Vistos. 1. O INSS foi devidamente intimado para pagar os honorários periciais. Assim, verifique a z. Serventia a regularidade do depósito. Na ausência de comprovação, reitere-se a cobrança. Constatado o depósito, expeça-se Mandado de Levantamento Eletrônico (MLE) em favor do perito. 2. Importante ressaltar que a liberação dos honorários não encerra os trabalhos periciais, permanecendo o(a) expert obrigado(a) a prestar esclarecimentos e responder a eventuais impugnações, nos termos do art. 477, §§ 2.º e 3.º, do Código de Processo Civil. 3. Cite-se a autarquia requerida, via portal eletrônico, ficando advertida do prazo de 15 dias úteis para apresentar defesa. 4. No mais, manifestem-se as partes no prazo comum de 15 dias úteis sobre o laudo pericial, caso ainda não tenham peticionado nesse sentido. 5. A autarquia requerida goza dos benefícios do art. 183 do CPC, devendo a z. Serventia se atentar para tanto. Oportunamente, tornem os autos conclusos. Intimem-se. - ADV: ANTONIO FERREIRA DA COSTA (OAB 222418/SP), ALYSSON LUIZ NASCIMENTO DA COSTA (OAB 507195/SP)', '41275c3915cab383547974edf3a8c654b301053ab17ab231df2a6c0cbe106fc4', 1, 2, '2026-06-22 10:02:33', NULL, NULL, 0, NULL, NULL),
+	(49, 'aasp', '2026-06-22', '1014706-87.2022.8.26.0005', 'TJSP Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '102792', '1', '\n\r Processo: 1014706-87.2022.8.26.0005\n\r Órgão: Foro Regional V - São Miguel Paulista - 4ª Vara Cível\r Data de disponibilização: 22/06/2026\r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r GILVANDIR DA ROCHA SILVA\n\r Advogado(s) \r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r ANTÔNIO AUGUSTO DE ANDRADE ABREU\r OAB SP-451851 \n Processo 1014706-87.2022.8.26.0005 - Procedimento Comum Cível - Rescisão do contrato e devolução do dinheiro - Gilvandir da Rocha Silva - Genilda Lopes Dias - Ficam as partes e respectivos representantes cientificados de que o presente processo passará a tramitar eletronicamente no Sistema Eproc do Tribunal de Justiça do Estado de São Paulo, sob o número10147068720228260005. Caso seja advogado: Ficam intimados os procuradores para que providenciem o credenciamento no eproc, caso ainda não estejam habilitados, bem como verifiquem os dados cadastrais constantes do referido sistema, promovendo, se necessário, a regularização mediante abertura de chamado junto ao suporte do sistema. Material de apoio disponível em: EPROC_ADVOGADO-Primeiros_passos_no_sistema.PDF Caso seja entidade conveniada e a comunicação junto a este E. Tribunal de Justiça for: Via portal eproc - Fica a entidade intimada para que, caso ainda não esteja credenciada, providencie o credenciamento no sistema eproc, bem como a verificação dos dados cadastrais constantes; Via integração entre sistemas - As entidades ainda pendentes de integração, deverão entrar em contato com a equipe responsável no TJSP por meio de abertura de chamado; Em caso de dúvidas, abra um chamado em https://www.suportesistemastjsp.com.br/. As comunicações subsequentes serão realizadas pelo sistema eproc, nos termos da legislação vigente e das Resoluções do CNJ aplicáveis. - ADV: ANTÔNIO AUGUSTO DE ANDRADE ABREU (OAB 451851/SP), ANTONIO FERREIRA DA COSTA (OAB 222418/SP)', '235e225bf6e11af43d88093330fcf7e4039bbab958a5e27e1bc3414f3fff4997', 1, 2, '2026-06-22 10:02:33', NULL, NULL, 0, NULL, NULL),
+	(50, 'aasp', '2026-06-22', '1014706-87.2022.8.26.0005', 'TJSP Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '196362', '1', '\n\r Processo: 1014706-87.2022.8.26.0005\n\r Órgão: UPJ da 1ª a 5ª Varas Cíveis - Regional V - São Miguel Paulista\r Data de disponibilização: 22/06/2026\r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r GILVANDIR DA ROCHA SILVA\n\r Advogado(s) \r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n Procedimento Comum Cível Nº 1014706-87.2022.8.26.0005/SP Assunto: Rescisão do contrato e devolução do dinheiro\nAUTOR: GILVANDIR DA ROCHA SILVAADVOGADO(A): ANTONIO FERREIRA DA COSTA (OAB SP222418) ATO ORDINATÓRIO\nINTIMAÇÃO : Ciência à parte AUTORA/EXEQUENTE da devolução do mandado, com resultado NEGATIVO ( EVENTO ), devendo se manifestar e promover os atos e diligências que lhe competem no prazo de 15 ( quinze ) dias.\nDecorridos 30 (trinta) dias, sem manifestação, nos processos de conhecimento, intime-se a parte autora, por carta, para dar andamento ao feito, em 05 dias, sob pena de extinção.\nProcessos de execução de título extrajudicial, cumprimento de sentença ou incidente de desconsideração da personalidade jurídica, remetam-se os autos ao arquivo, aguardando provocação. Local: São Paulo', '68b7285559bc13bcaf6b848678a9e79dbc881379375998182b409828471ead48', 1, 2, '2026-06-22 10:02:33', NULL, NULL, 0, NULL, NULL),
+	(51, 'aasp', '2026-06-22', '0006169-92.2026.8.26.0001', 'TJSP Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '302979', '1', '\n\r Processo: 0006169-92.2026.8.26.0001\n\r Órgão: Foro Regional I - Santana - 8ª Vara Cível\r Data de disponibilização: 22/06/2026\r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r ANTONIO FERREIRA DA COSTA\r RENATA ALINE MIRANDA MELEGO FERREIRA\r JULIO CEZAR ISRAEL COTTA PERES\n\r Advogado(s) \r PRISCILA GABRIELA FREITAS SOARES\r OAB SP-284796\r MICHELE PAOLA FLORENTINO STORINO\r OAB SP-271588\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n Processo 0006169-92.2026.8.26.0001 (processo principal 1043446-33.2023.8.26.0001) - Cumprimento de sentença - Rescisão / Resolução - Renata Aline Miranda Melego Ferreira - - Antonio Ferreira da Costa - Julio Cezar Israel Cotta Peres - Ficam as partes e respectivos representantes cientificados de que o presente processo passará a tramitar eletronicamente no Sistema Eproc do Tribunal de Justiça do Estado de São Paulo, sob o número00061699220268260001. Caso seja advogado: Ficam intimados os procuradores para que providenciem o credenciamento no eproc, caso ainda não estejam habilitados, bem como verifiquem os dados cadastrais constantes do referido sistema, promovendo, se necessário, a regularização mediante abertura de chamado junto ao suporte do sistema. Material de apoio disponível em: EPROC_ADVOGADO-Primeiros_passos_no_sistema.PDF Caso seja entidade conveniada e a comunicação junto a este E. Tribunal de Justiça for: Via portal eproc - Fica a entidade intimada para que, caso ainda não esteja credenciada, providencie o credenciamento no sistema eproc, bem como a verificação dos dados cadastrais constantes; Via integração entre sistemas - As entidades ainda pendentes de integração, deverão entrar em contato com a equipe responsável no TJSP por meio de abertura de chamado; Em caso de dúvidas, abra um chamado em https://www.suportesistemastjsp.com.br/. As comunicações subsequentes serão realizadas pelo sistema eproc, nos termos da legislação vigente e das Resoluções do CNJ aplicáveis. - ADV: ANTONIO FERREIRA DA COSTA (OAB 222418/SP), ANTONIO FERREIRA DA COSTA (OAB 222418/SP), MICHELE PAOLA FLORENTINO STORINO (OAB 271588/SP), PRISCILA GABRIELA FREITAS SOARES (OAB 284796/SP)', 'a7bb387a2c29f581ea907e58de75e254b31e53af87f850a73eef3eb51c734726', 0, 2, '2026-06-22 10:02:33', 2, '2026-06-22 14:20:27', 0, NULL, NULL),
+	(52, 'aasp', '2026-06-22', '1001698-87.2025.5.02.0318', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Lista de distribuição\r\n', '3942', '1', '\n\r Processo: 1001698-87.2025.5.02.0318\n\r Órgão: 14ª Turma - Cadeira 5\r Data de disponibilização: \r Tipo de comunicação: Lista de distribuição\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r NOEL DE SOUZA SILVA\r HOFFLOG TRANSPORTES E LOGISTICA LTDA\n\r Advogado(s) \r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n Processo 1001698-87.2025.5.02.0318 distribuído para 14ª Turma - 14ª Turma - Cadeira 5 na data 18/06/2026 Para maiores informações, clique no link a seguir: https://pje.trt2.jus.br/pjekz/visualizacao/26061900300703100000302276460?instancia=2', '899ff7e6e9a49cc1364b39895978c052042ddb234c196532fc26b4fe197ca3f6', 1, 2, '2026-06-22 10:02:33', NULL, NULL, 0, NULL, NULL),
+	(53, 'aasp', '2026-06-22', '1002125-05.2025.5.02.0603', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '5165', '1', '\n\r Processo: 1002125-05.2025.5.02.0603\n\r Órgão: 3ª Vara do Trabalho de São Paulo - Zona Leste\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r LUCAS DE PAULO SANTOS\r ALMEIDA FLEX COMERCIO DE MANGUEIRAS LTDA\r MUNDO DAS MANGUEIRAS LTDA\n\r Advogado(s) \r JORGE ABRAHAO JUNIOR\r OAB SP-190434\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 3ª VARA DO TRABALHO DE SÃO PAULO - ZONA LESTE ATOrd 1002125-05.2025.5.02.0603 RECLAMANTE: LUCAS DE PAULO SANTOS RECLAMADO: MUNDO DAS MANGUEIRAS LTDA E OUTROS (1) Fica o beneficiário (MUNDO DAS MANGUEIRAS LTDA) intimado de que foi expedido alvará judicial para liberação de valores, com determinação de transferência para a conta bancária indicada nos autos. Esta intimação foi gerada de modo automático, por intermédio do Projeto Solária (RJ- 9). SAO PAULO/SP, 19 de junho de 2026. DANIELE FERNANDES MORENO NERY Diretor de SecretariaIntimado(s) / Citado(s) - MUNDO DAS MANGUEIRAS LTDA', 'a4e4e128e8e12589dd1ca7a28273dadac9e4b91c599f19d2463b8a4a39c6e295', 1, 2, '2026-06-22 10:02:33', NULL, NULL, 0, NULL, NULL),
+	(54, 'aasp', '2026-06-22', '1000509-61.2026.5.02.0602', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '7837', '1', '\n\r Processo: 1000509-61.2026.5.02.0602\n\r Órgão: AJUDE 4.0 - 16ª VTSP - Juiz(a) Auxiliar\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r DANIEL MOURA PANES\r THAIS DE LIMA MARTINS\r MUNICIPIO DE SAO PAULO\r RC NUTRY ALIMENTACAO LTDA\n\r Advogado(s) \r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r JESUS MARCO CALIXTO DA ROCHA\r OAB SP-350447 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO AJUDE 4.0 - 16ª VTSP - JUIZ(A) AUXILIAR ATOrd 1000509-61.2026.5.02.0602 RECLAMANTE: THAIS DE LIMA MARTINS RECLAMADO: RC NUTRY ALIMENTACAO LTDA E OUTROS (1) Destinatário: THAIS DE LIMA MARTINS Endereço: Expediente enviado por outro meio. INTIMAÇÃO Em 05 dias manifeste-se a parte acerca do laudo pericial juntado, sob pena de preclusão. NAO APAGAR NENHUM CARACTERE DESTA LINHA. ESTE DOCUMENTO SERA ENVIADO VIA ECARTA. SAO PAULO/SP, 19 de junho de 2026. PATRICIA SILVA MARTINEZ LEITE Diretor de SecretariaIntimado(s) / Citado(s) - THAIS DE LIMA MARTINS', '163a91834504bdcdeae696d8d46c0e50f04d985d6690567e3bbb8cc9b9bd868b', 1, 2, '2026-06-22 10:02:33', NULL, NULL, 0, NULL, NULL),
+	(55, 'aasp', '2026-06-22', '1000509-61.2026.5.02.0602', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '7838', '1', '\n\r Processo: 1000509-61.2026.5.02.0602\n\r Órgão: AJUDE 4.0 - 16ª VTSP - Juiz(a) Auxiliar\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r DANIEL MOURA PANES\r THAIS DE LIMA MARTINS\r MUNICIPIO DE SAO PAULO\r RC NUTRY ALIMENTACAO LTDA\n\r Advogado(s) \r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r JESUS MARCO CALIXTO DA ROCHA\r OAB SP-350447 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO AJUDE 4.0 - 16ª VTSP - JUIZ(A) AUXILIAR ATOrd 1000509-61.2026.5.02.0602 RECLAMANTE: THAIS DE LIMA MARTINS RECLAMADO: RC NUTRY ALIMENTACAO LTDA E OUTROS (1) Destinatário: RC NUTRY ALIMENTACAO LTDA Endereço: Expediente enviado por outro meio. INTIMAÇÃO Em 05 dias manifeste-se a parte acerca do laudo pericial juntado, sob pena de preclusão. NAO APAGAR NENHUM CARACTERE DESTA LINHA. ESTE DOCUMENTO SERA ENVIADO VIA ECARTA. SAO PAULO/SP, 19 de junho de 2026. PATRICIA SILVA MARTINEZ LEITE Diretor de SecretariaIntimado(s) / Citado(s) - RC NUTRY ALIMENTACAO LTDA', 'e299b35cb8e2e69347d232e0bc80de411a13e2de78e65a164bdca6f15c1df719', 1, 2, '2026-06-22 10:02:33', NULL, NULL, 0, NULL, NULL),
+	(56, 'aasp', '2026-06-22', '1000919-55.2023.5.02.0043', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '11001', '1', '\n\r Processo: 1000919-55.2023.5.02.0043\n\r Órgão: 43ª Vara do Trabalho de São Paulo\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r GEANE MARIA ALVES DA SILVA\r ADRIANA APARECIDA ABREU NUNES\r CENTER INTERMEDIACAO DE NEGOCIOS LTDA\r CENTRUM CONSIGNACOES LTDA\r CLAUDIO LORENCONI NUNES\n\r Advogado(s) \r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 43ª VARA DO TRABALHO DE SÃO PAULO ATSum 1000919-55.2023.5.02.0043 RECLAMANTE: GEANE MARIA ALVES DA SILVA RECLAMADO: CENTRUM CONSIGNACOES LTDA E OUTROS (3) INTIMAÇÃO Fica V. Sa. intimado para tomar ciência do Despacho ID 57825c3 proferido nos autos. CONCLUSÃO Nesta data, faço o feito concluso ao(a) MM(a) Juiz(a) da 43ª Vara do Trabalho de São Paulo/SP. SAO PAULO/SP, data abaixo. SONIA MARIA GARCIA FERNANDES DESPACHO #id:3ad2b2f: Aguarde-se por 90 dias. SAO PAULO/SP, 19 de junho de 2026. ROBERTO VIEIRA DE ALMEIDA REZENDE Juiz do Trabalho TitularIntimado(s) / Citado(s) - GEANE MARIA ALVES DA SILVA', '3edcce5c2cb7992b4dea616b9e31b16d9df8d387a2cdc1222e54201c5c5bb536', 1, 2, '2026-06-22 10:02:33', NULL, NULL, 0, NULL, NULL),
+	(57, 'aasp', '2026-06-22', '1001183-74.2024.5.02.0613', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '17888', '1', '\n\r Processo: 1001183-74.2024.5.02.0613\n\r Órgão: 13ª Vara do Trabalho de São Paulo - Zona Leste\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r EDVANILDO DE JESUS SANTOS\r URBIA GESTAO DE PARQUES SPE S.A.\r HESE EMPREENDIMENTOS E GERENCIAMENTO LTDA\n\r Advogado(s) \r ANGELA MARIA DA SILVA KAKUDA\r OAB SP-326130\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 13ª VARA DO TRABALHO DE SÃO PAULO - ZONA LESTE ATSum 1001183-74.2024.5.02.0613 RECLAMANTE: EDVANILDO DE JESUS SANTOS RECLAMADO: HESE EMPREENDIMENTOS E GERENCIAMENTO LTDA Destinatário: EDVANILDO DE JESUS SANTOS INTIMAÇÃO - Processo PJe Fica V. Sa. intimado(a) para tomar ciência do resultado da diligência e da decisão abaixo transcrita: "... dê-se vistas do resultado da pesquisa à parte exequente, a fim de que sejam indicados os meios para o prosseguimento da execução, no prazo de dez dias. A indicação de novos meios deverá ser justificada adequadamente, demonstrando um mínimo de utilidade e efetividade para a satisfação da execução no caso concreto. Fica o(a) exequente desde já ciente de que, restando silente no prazo concedido, a execução ficará suspensa, iniciando-se a contagem do prazo prescricional aplicável (art. 11-A da CLT), independentemente de nova intimação." SAO PAULO/SP, 19 de junho de 2026. RENATO LUIZ KODAMA DE OLIVEIRA Diretor de SecretariaIntimado(s) / Citado(s) - EDVANILDO DE JESUS SANTOS', 'ddb9c9897249466ae85469b6abfe222660938aaa802db876c9c883abc92127a2', 1, 2, '2026-06-22 10:02:33', NULL, NULL, 0, NULL, NULL),
+	(58, 'aasp', '2026-06-22', '1000761-40.2026.5.02.0610', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '17381', '1', '\n\r Processo: 1000761-40.2026.5.02.0610\n\r Órgão: AJUDE 4.0 - 11ª VTSP - Juiz(a) Auxiliar\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r MARIA APARECIDA DA SILVA ROSA\r DEBORA CRISTINA INACIO MARQUES\n\r Advogado(s) \r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO AJUDE 4.0 - 11ª VTSP - JUIZ(A) AUXILIAR ATOrd 1000761-40.2026.5.02.0610 RECLAMANTE: MARIA APARECIDA DA SILVA ROSA RECLAMADO: DEBORA CRISTINA INACIO MARQUES INTIMAÇÃO Fica V. Sa. intimado para tomar ciência do Despacho ID 5f0cb38 proferido nos autos. CONCLUSÃO Nesta data, faço o feito concluso ao(a) MM(a) Juiz(a) da AJUDE 4.0 - 11ª VTSP - Juiz(a) Auxiliar/SP. -Id. afde972, Despacho, no qual foi designada audiência para o dia 22/07/2026 16:10h. SÃO PAULO/SP, data abaixo. LUIZ ALBERTO SANTOS DA SILVA DESPACHO Vistos, Diante da disponibilidade em pauta, antecipe-se a audiência Una-RO por videoconferência presencial para o dia 22/07/2026, às 15:15, intimando-se as partes para o comparecimento. A audiência designada acima será realizada por intermédio da Plataforma ZOOM, conforme os termos do Ato Conjunto TST.CSJT.GP nº 54/2020. As partes deverão acessar a sala de audiência mediante utilização dos dados a seguir: Link da reunião: https://trt2-jus-br.zoom.us/j/88382510981?pwd=ZhXaPC55H6kY83Odg5fkP6i7xkON97.1 Número da reunião: 883 8251 0981 Senha: 11vtsp Cada participante (partes, advogados e/ou testemunhas) deverá ter acesso individual. As partes, seus advogados ou suas testemunhas não deverão comparecer ao Fórum Ruy Barbosa. Faculta-se a apresentação de rol de testemunhas, com nome completo e endereço, no prazo de 05 dias, para intimação na forma do Provimento GP/CR nº 13/06, sob pena de serem ouvidas as que comparecerem espontaneamente. As partes deverão comprovar nos autos a intimação da(s) testemunha(s) arrolada(s) até 02 dias antes da data designada para a audiência, sob pena de preclusão. Cite-se a reclamada por carta registrada ou domicílio eletrônico, caso haja habilitação no sistema PJe. Dê-se ciência. SAO PAULO/SP, 19 de junho de 2026. JOSE OTAVIO DE ALMEIDA BARROS JUNIOR Juiz do Trabalho SubstitutoIntimado(s) / Citado(s) - MARIA APARECIDA DA SILVA ROSA', '51ebf61ab35c726b211b5a36a4421dfe09893309e2725aee27c95bdb6a85aa79', 1, 2, '2026-06-22 10:02:33', NULL, NULL, 0, NULL, NULL),
+	(59, 'aasp', '2026-06-22', '0002429-72.2013.5.02.0043', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '13834', '1', '\n\r Processo: 0002429-72.2013.5.02.0043\n\r Órgão: 43ª Vara do Trabalho de São Paulo\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r VERANEIDE DA SILVA\r ABONA PARTICIPACOES EIRELI\r JOSE RIBEIRO\r LE BAROM ALIMENTACAO LTDA.\r MARISA BORTOLETTO RIBEIRO\r TERRA AZUL ALIMENTACAO COLETIVA E SERVICOS LTDA\n\r Advogado(s) \r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 43ª VARA DO TRABALHO DE SÃO PAULO ATOrd 0002429-72.2013.5.02.0043 RECLAMANTE: VERANEIDE DA SILVA RECLAMADO: TERRA AZUL ALIMENTACAO COLETIVA E SERVICOS LTDA E OUTROS (4) INTIMAÇÃO Fica V. Sa. intimado para tomar ciência do Despacho ID 6a1b18b proferido nos autos. CONCLUSÃO Nesta data, faço o feito concluso ao(a) MM(a) Juiz(a) da 43ª Vara do Trabalho de São Paulo/SP. SAO PAULO/SP, data abaixo. DAVID CARVALHO TOLEDO JUNIOR DESPACHO Cite-se a suscitada ABONA PARTICIPACOES EIRELI do IDPJ instaurado, no endereço indicado pelo suscitante: ALAMEDA SAO CAETANO NÚMERO: 1319, SANTA MARIA COMPLEMENTO,SANTO ANDRE, CEP: 09070-210. Decorrido o prazo, venham os autos conclusos para julgamento. SAO PAULO/SP, 19 de junho de 2026. ROBERTO VIEIRA DE ALMEIDA REZENDE Juiz do Trabalho TitularIntimado(s) / Citado(s) - VERANEIDE DA SILVA', 'b038d21605393d5739aa4426049fd13341a75b3ccafcd2d1986c496c27c8edd2', 1, 2, '2026-06-22 10:02:33', NULL, NULL, 0, NULL, NULL),
+	(60, 'aasp', '2026-06-22', '0000673-16.2015.5.02.0089', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '36388', '1', '\n\r Processo: 0000673-16.2015.5.02.0089\n\r Órgão: 89ª Vara do Trabalho de São Paulo\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r 13ª VARA DE EXECUçõES FISCAISDO TRF 3ª REGIãO\r 25º TABELIÃO DE NOTAS DE SÃO PAULO\r 28º TABELIÃO DE NOTAS DE SÃO PAULO\r 5ª VARA CIVEL DO FORO REGIONAL DE TATUAPé\r 5ª VARA CÍVEL DO FORO REGIONAL DO TATUAPÉ\r 7º OFICIAL DE REGISTRO DE IMóVEIS DE SãO PAULO - SP\r 7º TABELIONATO DE NOTAS\r 9 OFICIAL DE REGISTRO DE IMOVEIS DA CAPITAL\r ANTONIO FERREIRA DA COSTA\r CNSEG\r INAL INTERAUDIOVISAO, LABORATORIO, EMPREENDIMENTOS E PARTICIPACOES S.A.\r JOSE DE CARVALHO SANTOS\r PREFEITURA DE SãO PAULO\r PREFEITURA DE SUZANO\r PREFEITURA MUNICIPAL DE SUZANO\r PRIMEIRO TABELIÃO DE NOTAS DE DIADEMA - SP\r REGISTRO DE IMÓVEIS DO GUARUJÁ/SP\r SANDRA SIMAO SEBESTYEN\r VARA DAS EXECUÇÕES FISCAIS ESTADUAIS(SÃO PAULO/SP))\r DANIEL SIMAO SEBESTYEN\r GABRIEL SIMAO & CIA. LTDA.\r LUCIANA SIMAO SEBESTYEN\r RENATA SIMAO SEBESTYEN\r RSS DISTRIBUIDORA DE ISOLANTES ELETRICOS LTDA. - EPP\r SANDRA SIMAO SEBESTYEN\n\r Advogado(s) \r TADEU BATISTA DA SILVA\r OAB SP-224357\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r ADRIANA APARECIDA PAONE\r OAB SP-83716 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 89ª VARA DO TRABALHO DE SÃO PAULO ATOrd 0000673-16.2015.5.02.0089 RECLAMANTE: JOSE DE CARVALHO SANTOS RECLAMADO: RSS DISTRIBUIDORA DE ISOLANTES ELETRICOS LTDA. - EPP E OUTROS (5) INTIMAÇÃO Fica V. Sa. intimado para tomar ciência do Despacho ID 52e20df proferido nos autos. CONCLUSÃO Nesta data, faço os presentes autos conclusos ao(a) MM(a) Juiz(a) da 89ª Vara do Trabalho de São Paulo/SP, MARCELO PEREIRA DAS NEVES . São Paulo, 19 de junho de 2026. GUILHERME JORGE DE OLIVEIRA E SILVA DESPACHO Vistos. Id. #id:f61f32f A requerente comprova que há penhora no imóvel de matrícula nº 145.111, do 7º Cartório de Registro de Imóveis de São Paulo/SP, relativa a esta demanda (Av.07). Verifica-se que a AV.07 da matrícula 145.111 refere-se ao processo 0000673-16.2015.5.02.0089 (89ª Vara do Trabalho de São Paulo), conforme certidão de imóvel acostada. O peticionante, INAL INTERAUDIOVISÃO LABORATÓRIO EMPREENDIMENTOS E PARTICIPAÇÕES S/A, arrematou o referido imóvel, conforme Carta de Arrematação expedida em 29/04/2019 e Registro nº 08 da matrícula, em execução fiscal (processo nº 0027015-61.2004.403.6182). Considerando a aquisição do imóvel por arrematação e o princípio da desoneração do arrematante, as constrições anteriores devem ser canceladas. Ademais, o registro da penhora em questão (Av.07) não foi realizada pelo GAEP, sendo decorrente de determinação direta deste Juízo. Deste modo, atribuo ao presente despacho força de ofício que deverá ser encaminhado pela interessada ao 7º Cartório de Registro de Imóveis da Comarca de São Paulo/SP para que este promova, no prazo de 10 dias, a averbação do cancelamento da penhora referente à Av.07 da matrícula 145.111. Ante a natureza da aquisição do imóvel pela arrematação em leilão judicial, o procedimento deverá ser tomado pelo Cartório independentemente da cobrança de qualquer valor. Intime-se. Tornem os autos ao arquivo definitivo. SAO PAULO/SP, 19 de junho de 2026. MARCELO PEREIRA DAS NEVES Juiz do Trabalho SubstitutoIntimado(s) / Citado(s) - INAL INTERAUDIOVISAO, LABORATORIO, EMPREENDIMENTOS E PARTICIPACOES S.A.', '0aea700ba6b95461b30a67ef62fc220a3ede6ee9d20fe0105ba48549a97a66f9', 1, 2, '2026-06-22 10:02:33', NULL, NULL, 0, NULL, NULL),
+	(61, 'aasp', '2026-06-22', '1002543-53.2024.5.02.0610', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '26696', '1', '\n\r Processo: 1002543-53.2024.5.02.0610\n\r Órgão: CEJUSC Leste\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r CATARINO RODRIGUES FILHO\r MARCIA DOS SANTOS DA SILVA\r FLEX GESTAO DE RELACIONAMENTOS S.A. EM RECUPERACAO JUDICIAL\r GRUPO CASAS BAHIA S.A.\n\r Advogado(s) \r DANIEL BATTIPAGLIA SGAI\r OAB SP-214918\r SERGIO GONINI BENICIO\r OAB SP-195470\r ANDRE SOUZA TORREAO DA COSTA\r OAB RJ-136745\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO CEJUSC LESTE ATSum 1002543-53.2024.5.02.0610 RECLAMANTE: MARCIA DOS SANTOS DA SILVA RECLAMADO: FLEX GESTAO DE RELACIONAMENTOS S.A. EM RECUPERACAO JUDICIAL E OUTROS (1) CERTIDÃO PJe-JT Certifico, para os devidos fins, que em cumprimento à determinação do(a) MM(a) Juiz(a) do CEJUSC-Leste/SP, foi designada Sessão de Conciliação em Execução por videoconferência - Sala "Sala 3": 13/07/2026 15:00. São Paulo, data abaixo. RUTE BATISTA DOS SANTOS Servidor INTIMAÇÃO - Processo PJe-JT Destinatário: MARCIA DOS SANTOS DA SILVA Processo: 1002543-53.2024.5.02.0610 Classe: Ação Trabalhista - Rito Sumaríssimo Autor: MARCIA DOS SANTOS DA SILVA Réu: FLEX GESTAO DE RELACIONAMENTOS S.A. EM RECUPERACAO JUDICIAL e outros (1) Nos termos da Resolução CSJT 415/2025 e também do Artigo 24, II, §§ 4º e 5º do Ato GP/VPA nº 1/2025 deste E. TRT2, fica V. Sa. intimado para comparecer à SESSÃO DE CONCILIAÇÃO TELEPRESENCIAL: Conciliação em Execução por videoconferência - Sala "Sala 3": 13/07/2026 15:00. As partes e advogados não deverão comparecer ao Fórum Trabalhista da Zona Leste, devendo acessar a plataforma ZOOM por meio de computadores pessoais, tablets ou smartphones, portando documento pessoal de identificação com foto. O ingresso na sala da sua sessão no CEJUSC Eletrônico da Zona Leste, no dia e horário acima agendados, poderá ser feito seguindo um dos dois caminhos abaixo explicitados: 1 - Diretamente pelo link: https://trt2-jus-br.zoom.us/j/85601023093?pwd=dytLODJ6ckdYamZOUjF2YW02Z211QT09 . A parte será redirecionada à sala de espera do CEJUSC-Leste. Deverá então clicar no ícone “salas simultâneas” (ou Breakout Rooms). Todas as salas de audiência de conciliação daquele dia aparecerão, devendo a parte ingressar na sala relativa ao seu horário e aguardar a entrada do conciliador. As salas serão identificadas pelo horário de início e o número da sala. 2 - Diretamente pelo site: www.zoom.us - clicando em “Acessar”. Posteriormente insira o ID da reunião: 856 0102 3093 e na etapa seguinte insira a seguinte senha: 1234. A parte será direcionada à sala de espera do CEJUSC-Leste. Deverá então clicar no ícone “salas simultâneas” (ou Breakout Rooms). Todas as salas de audiência de conciliação daquele dia aparecerão, devendo a parte ingressar na sala relativa ao seu horário e aguardar a entrada do conciliador. As salas serão identificadas pelo horário de início e o número da sala. O procedimento não exige cadastramento prévio junto ao CNJ, nem instalação de programas específicos. Tratando-se de audiência para tentativa de conciliação, fica dispensada a apresentação de defesa e ou documentos, bem como a presença de testemunhas. Em caso de falha na transmissão de dados ou no sinal da internet, a decisão pela viabilidade na continuidade do ato será feita unicamente pelo o magistrado e/ou conciliador da sessão. Dispensada a presença de testemunhas e a apresentação de defesa na sessão conciliatória. Intimem-se os patronos habilitados ou, na falta, as partes. SAO PAULO/SP, 19 de junho de 2026. RUTE BATISTA DOS SANTOS ServidorIntimado(s) / Citado(s) - MARCIA DOS SANTOS DA SILVA', '832794098488f385acfa42056871b901f14f68ac45483659fa046929a50b893f', 1, 2, '2026-06-22 10:02:33', NULL, NULL, 0, NULL, NULL),
+	(62, 'aasp', '2026-06-22', '1002543-53.2024.5.02.0610', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '26694', '1', '\n\r Processo: 1002543-53.2024.5.02.0610\n\r Órgão: CEJUSC Leste\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r CATARINO RODRIGUES FILHO\r MARCIA DOS SANTOS DA SILVA\r FLEX GESTAO DE RELACIONAMENTOS S.A. EM RECUPERACAO JUDICIAL\r GRUPO CASAS BAHIA S.A.\n\r Advogado(s) \r DANIEL BATTIPAGLIA SGAI\r OAB SP-214918\r SERGIO GONINI BENICIO\r OAB SP-195470\r ANDRE SOUZA TORREAO DA COSTA\r OAB RJ-136745\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO CEJUSC LESTE ATSum 1002543-53.2024.5.02.0610 RECLAMANTE: MARCIA DOS SANTOS DA SILVA RECLAMADO: FLEX GESTAO DE RELACIONAMENTOS S.A. EM RECUPERACAO JUDICIAL E OUTROS (1) CERTIDÃO PJe-JT Certifico, para os devidos fins, que em cumprimento à determinação do(a) MM(a) Juiz(a) do CEJUSC-Leste/SP, foi designada Sessão de Conciliação em Execução por videoconferência - Sala "Sala 3": 13/07/2026 15:00. São Paulo, data abaixo. RUTE BATISTA DOS SANTOS Servidor INTIMAÇÃO - Processo PJe-JT Destinatário: FLEX GESTAO DE RELACIONAMENTOS S.A. EM RECUPERACAO JUDICIAL Processo: 1002543-53.2024.5.02.0610 Classe: Ação Trabalhista - Rito Sumaríssimo Autor: MARCIA DOS SANTOS DA SILVA Réu: FLEX GESTAO DE RELACIONAMENTOS S.A. EM RECUPERACAO JUDICIAL e outros (1) Nos termos da Resolução CSJT 415/2025 e também do Artigo 24, II, §§ 4º e 5º do Ato GP/VPA nº 1/2025 deste E. TRT2, fica V. Sa. intimado para comparecer à SESSÃO DE CONCILIAÇÃO TELEPRESENCIAL: Conciliação em Execução por videoconferência - Sala "Sala 3": 13/07/2026 15:00. As partes e advogados não deverão comparecer ao Fórum Trabalhista da Zona Leste, devendo acessar a plataforma ZOOM por meio de computadores pessoais, tablets ou smartphones, portando documento pessoal de identificação com foto. O ingresso na sala da sua sessão no CEJUSC Eletrônico da Zona Leste, no dia e horário acima agendados, poderá ser feito seguindo um dos dois caminhos abaixo explicitados: 1 - Diretamente pelo link: https://trt2-jus-br.zoom.us/j/85601023093?pwd=dytLODJ6ckdYamZOUjF2YW02Z211QT09 . A parte será redirecionada à sala de espera do CEJUSC-Leste. Deverá então clicar no ícone “salas simultâneas” (ou Breakout Rooms). Todas as salas de audiência de conciliação daquele dia aparecerão, devendo a parte ingressar na sala relativa ao seu horário e aguardar a entrada do conciliador. As salas serão identificadas pelo horário de início e o número da sala. 2 - Diretamente pelo site: www.zoom.us - clicando em “Acessar”. Posteriormente insira o ID da reunião: 856 0102 3093 e na etapa seguinte insira a seguinte senha: 1234. A parte será direcionada à sala de espera do CEJUSC-Leste. Deverá então clicar no ícone “salas simultâneas” (ou Breakout Rooms). Todas as salas de audiência de conciliação daquele dia aparecerão, devendo a parte ingressar na sala relativa ao seu horário e aguardar a entrada do conciliador. As salas serão identificadas pelo horário de início e o número da sala. O procedimento não exige cadastramento prévio junto ao CNJ, nem instalação de programas específicos. Tratando-se de audiência para tentativa de conciliação, fica dispensada a apresentação de defesa e ou documentos, bem como a presença de testemunhas. Em caso de falha na transmissão de dados ou no sinal da internet, a decisão pela viabilidade na continuidade do ato será feita unicamente pelo o magistrado e/ou conciliador da sessão. Dispensada a presença de testemunhas e a apresentação de defesa na sessão conciliatória. Intimem-se os patronos habilitados ou, na falta, as partes. SAO PAULO/SP, 19 de junho de 2026. RUTE BATISTA DOS SANTOS ServidorIntimado(s) / Citado(s) - FLEX GESTAO DE RELACIONAMENTOS S.A. EM RECUPERACAO JUDICIAL', 'ebd4fe4e6a2cc01d173be2a577d694db595958db5a80925817b7b9702fdddc20', 1, 2, '2026-06-22 10:02:33', NULL, NULL, 0, NULL, NULL),
+	(63, 'aasp', '2026-06-22', '1002543-53.2024.5.02.0610', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '26695', '1', '\n\r Processo: 1002543-53.2024.5.02.0610\n\r Órgão: CEJUSC Leste\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r CATARINO RODRIGUES FILHO\r MARCIA DOS SANTOS DA SILVA\r FLEX GESTAO DE RELACIONAMENTOS S.A. EM RECUPERACAO JUDICIAL\r GRUPO CASAS BAHIA S.A.\n\r Advogado(s) \r DANIEL BATTIPAGLIA SGAI\r OAB SP-214918\r SERGIO GONINI BENICIO\r OAB SP-195470\r ANDRE SOUZA TORREAO DA COSTA\r OAB RJ-136745\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418 \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO CEJUSC LESTE ATSum 1002543-53.2024.5.02.0610 RECLAMANTE: MARCIA DOS SANTOS DA SILVA RECLAMADO: FLEX GESTAO DE RELACIONAMENTOS S.A. EM RECUPERACAO JUDICIAL E OUTROS (1) CERTIDÃO PJe-JT Certifico, para os devidos fins, que em cumprimento à determinação do(a) MM(a) Juiz(a) do CEJUSC-Leste/SP, foi designada Sessão de Conciliação em Execução por videoconferência - Sala "Sala 3": 13/07/2026 15:00. São Paulo, data abaixo. RUTE BATISTA DOS SANTOS Servidor INTIMAÇÃO - Processo PJe-JT Destinatário: GRUPO CASAS BAHIA S.A. Processo: 1002543-53.2024.5.02.0610 Classe: Ação Trabalhista - Rito Sumaríssimo Autor: MARCIA DOS SANTOS DA SILVA Réu: FLEX GESTAO DE RELACIONAMENTOS S.A. EM RECUPERACAO JUDICIAL e outros (1) Nos termos da Resolução CSJT 415/2025 e também do Artigo 24, II, §§ 4º e 5º do Ato GP/VPA nº 1/2025 deste E. TRT2, fica V. Sa. intimado para comparecer à SESSÃO DE CONCILIAÇÃO TELEPRESENCIAL: Conciliação em Execução por videoconferência - Sala "Sala 3": 13/07/2026 15:00. As partes e advogados não deverão comparecer ao Fórum Trabalhista da Zona Leste, devendo acessar a plataforma ZOOM por meio de computadores pessoais, tablets ou smartphones, portando documento pessoal de identificação com foto. O ingresso na sala da sua sessão no CEJUSC Eletrônico da Zona Leste, no dia e horário acima agendados, poderá ser feito seguindo um dos dois caminhos abaixo explicitados: 1 - Diretamente pelo link: https://trt2-jus-br.zoom.us/j/85601023093?pwd=dytLODJ6ckdYamZOUjF2YW02Z211QT09 . A parte será redirecionada à sala de espera do CEJUSC-Leste. Deverá então clicar no ícone “salas simultâneas” (ou Breakout Rooms). Todas as salas de audiência de conciliação daquele dia aparecerão, devendo a parte ingressar na sala relativa ao seu horário e aguardar a entrada do conciliador. As salas serão identificadas pelo horário de início e o número da sala. 2 - Diretamente pelo site: www.zoom.us - clicando em “Acessar”. Posteriormente insira o ID da reunião: 856 0102 3093 e na etapa seguinte insira a seguinte senha: 1234. A parte será direcionada à sala de espera do CEJUSC-Leste. Deverá então clicar no ícone “salas simultâneas” (ou Breakout Rooms). Todas as salas de audiência de conciliação daquele dia aparecerão, devendo a parte ingressar na sala relativa ao seu horário e aguardar a entrada do conciliador. As salas serão identificadas pelo horário de início e o número da sala. O procedimento não exige cadastramento prévio junto ao CNJ, nem instalação de programas específicos. Tratando-se de audiência para tentativa de conciliação, fica dispensada a apresentação de defesa e ou documentos, bem como a presença de testemunhas. Em caso de falha na transmissão de dados ou no sinal da internet, a decisão pela viabilidade na continuidade do ato será feita unicamente pelo o magistrado e/ou conciliador da sessão. Dispensada a presença de testemunhas e a apresentação de defesa na sessão conciliatória. Intimem-se os patronos habilitados ou, na falta, as partes. SAO PAULO/SP, 19 de junho de 2026. RUTE BATISTA DOS SANTOS ServidorIntimado(s) / Citado(s) - GRUPO CASAS BAHIA S.A.', '6cc38660a592f7537fa9a89068456ec7398e307ef12fbfa489208d7310ce6013', 1, 2, '2026-06-22 10:02:33', NULL, NULL, 0, NULL, NULL),
+	(64, 'aasp', '2026-06-22', '1001826-07.2025.5.02.0610', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '50506', '1', '\n\r Processo: 1001826-07.2025.5.02.0610\n\r Órgão: 17ª Turma\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r CIA DE SANEAMENTO BASICO DO ESTADO DE SAO PAULO SABESP\r REGIONAL SERVICOS DE SEGURANCA E VIGILANCIA EIRELI N/P: NRPAR PARTICIPACOES LTDA\r CELIO DE OLIVEIRA NARCISO\r REGIONAL SERVICOS DE SEGURANCA E VIGILANCIA LTDA - EPP\n\r Advogado(s) \r EDUARDO FIGUEIREDO BATISTA\r OAB SP-154236\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r FABIANO ZAVANELLA\r OAB SP-163012-A \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 17ª TURMA Relatora: THAIS VERRASTRO DE ALMEIDA ROT 1001826-07.2025.5.02.0610 RECORRENTE: CIA DE SANEAMENTO BASICO DO ESTADO DE SAO PAULO SABESP RECORRIDO: CELIO DE OLIVEIRA NARCISO E OUTROS (1) Fica V. Sa. INTIMADA do Acórdão #id:d89922e SAO PAULO/SP, 20 de junho de 2026. MONICA SAURA Diretor de SecretariaIntimado(s) / Citado(s) - REGIONAL SERVICOS DE SEGURANCA E VIGILANCIA LTDA - EPP', '9a85027d7b4e081577a88eb81c73224c0a7672e7397db141f827e5f68ed0f403', 1, 2, '2026-06-22 10:02:33', NULL, NULL, 0, NULL, NULL),
+	(65, 'aasp', '2026-06-22', '1001826-07.2025.5.02.0610', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '50505', '1', '\n\r Processo: 1001826-07.2025.5.02.0610\n\r Órgão: 17ª Turma\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r CIA DE SANEAMENTO BASICO DO ESTADO DE SAO PAULO SABESP\r REGIONAL SERVICOS DE SEGURANCA E VIGILANCIA EIRELI N/P: NRPAR PARTICIPACOES LTDA\r CELIO DE OLIVEIRA NARCISO\r REGIONAL SERVICOS DE SEGURANCA E VIGILANCIA LTDA - EPP\n\r Advogado(s) \r EDUARDO FIGUEIREDO BATISTA\r OAB SP-154236\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r FABIANO ZAVANELLA\r OAB SP-163012-A \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 17ª TURMA Relatora: THAIS VERRASTRO DE ALMEIDA ROT 1001826-07.2025.5.02.0610 RECORRENTE: CIA DE SANEAMENTO BASICO DO ESTADO DE SAO PAULO SABESP RECORRIDO: CELIO DE OLIVEIRA NARCISO E OUTROS (1) Fica V. Sa. INTIMADA do Acórdão #id:d89922e SAO PAULO/SP, 20 de junho de 2026. MONICA SAURA Diretor de SecretariaIntimado(s) / Citado(s) - CELIO DE OLIVEIRA NARCISO', '60f9ce3b2e63fc73c3744382db102a5222b508d245168999badabc04d1883b1d', 0, 2, '2026-06-22 10:02:33', 3, '2026-06-22 14:13:27', 0, NULL, NULL),
+	(68, 'aasp', '2026-06-22', '1001826-07.2025.5.02.0610', 'TRT2 Diário de Justiça Eletrônico Nacional', 'Intimação\r\n', '50504', '1', '\n\r Processo: 1001826-07.2025.5.02.0610\n\r Órgão: 17ª Turma\r Data de disponibilização: \r Tipo de comunicação: Intimação\r Meio: Diário de Justiça Eletrônico Nacional\n\r Parte(s): \r CIA DE SANEAMENTO BASICO DO ESTADO DE SAO PAULO SABESP\r REGIONAL SERVICOS DE SEGURANCA E VIGILANCIA EIRELI N/P: NRPAR PARTICIPACOES LTDA\r CELIO DE OLIVEIRA NARCISO\r REGIONAL SERVICOS DE SEGURANCA E VIGILANCIA LTDA - EPP\n\r Advogado(s) \r EDUARDO FIGUEIREDO BATISTA\r OAB SP-154236\r ANTONIO FERREIRA DA COSTA\r OAB SP-222418\r FABIANO ZAVANELLA\r OAB SP-163012-A \n PODER JUDICIÁRIO JUSTIÇA DO TRABALHO TRIBUNAL REGIONAL DO TRABALHO DA 2ª REGIÃO 17ª TURMA Relatora: THAIS VERRASTRO DE ALMEIDA ROT 1001826-07.2025.5.02.0610 RECORRENTE: CIA DE SANEAMENTO BASICO DO ESTADO DE SAO PAULO SABESP RECORRIDO: CELIO DE OLIVEIRA NARCISO E OUTROS (1) Fica V. Sa. INTIMADA do Acórdão #id:d89922e SAO PAULO/SP, 20 de junho de 2026. MONICA SAURA Diretor de SecretariaIntimado(s) / Citado(s) - CIA DE SANEAMENTO BASICO DO ESTADO DE SAO PAULO SABESP', 'e423fcd1e4bc494dc8790cfd7983e5242cce6d34e7277f6981c38519e2eb4179', 0, 2, '2026-06-22 14:09:03', 2, '2026-06-22 14:09:09', 0, NULL, NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.reset_tokens
 DROP TABLE IF EXISTS `reset_tokens`;
 CREATE TABLE IF NOT EXISTS `reset_tokens` (
   `id` int NOT NULL AUTO_INCREMENT,
   `usuario_id` int NOT NULL,
-  `token` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `token` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
   `expires_at` datetime NOT NULL,
   `usado` tinyint(1) NOT NULL DEFAULT '0',
   `criado_em` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -12452,7 +13495,7 @@ CREATE TABLE IF NOT EXISTS `reset_tokens` (
   UNIQUE KEY `token` (`token`),
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `reset_tokens_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Copiando dados para a tabela sistema_advocacia.reset_tokens: ~6 rows (aproximadamente)
 INSERT INTO `reset_tokens` (`id`, `usuario_id`, `token`, `expires_at`, `usado`, `criado_em`) VALUES
@@ -12591,6 +13634,7 @@ CREATE TABLE IF NOT EXISTS `tblproc` (
   `id` int NOT NULL AUTO_INCREMENT,
   `pasta_id` int NOT NULL,
   `numProc` varchar(45) DEFAULT NULL,
+  `cliente_polo` varchar(10) DEFAULT NULL,
   `NomeTituloProc` varchar(300) DEFAULT NULL,
   `vara_id` int DEFAULT NULL,
   `tipo_id` int DEFAULT NULL,
@@ -12622,15 +13666,15 @@ CREATE TABLE IF NOT EXISTS `tblproc` (
 ) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Copiando dados para a tabela sistema_advocacia.tblproc: ~8 rows (aproximadamente)
-INSERT INTO `tblproc` (`id`, `pasta_id`, `numProc`, `NomeTituloProc`, `vara_id`, `tipo_id`, `status_id`, `instancia_id`, `data_distribuicao`, `observacoes`, `ativo`, `criado_por`, `criado_em`, `alterado_por`, `alterado_em`) VALUES
-	(1, 1, '1002594-76.2024.5.02.0606', 'Edna Silva Vieira de Lima Ribeiro(+1) X Flex Gestão de Relacionamentos', NULL, 1, 6, 1, NULL, NULL, 1, 2, '2026-05-26 09:16:59', 2, '2026-05-26 11:01:20'),
-	(2, 1, '1002958-53.2025.5.02.0205', 'Edna Silva Vieira de Lima Ribeiro(+1) X Flex Gestão de Relacionamentos', NULL, 2, 6, 1, NULL, NULL, 1, 2, '2026-05-26 10:42:52', 2, '2026-05-26 11:01:36'),
-	(3, 4, '1002594-76.2024.5.02.0606', 'Adelaide Camilo de Carvalho X Via Varejo S/a', 1, 2, 6, 2, NULL, NULL, 0, 2, '2026-05-26 15:28:04', 2, '2026-05-26 15:33:55'),
-	(4, 4, '1002594-76.2024.5.02.0001', 'Adelaide Camilo de Carvalho X Via Varejo S/a', 304, 3, 1, 2, NULL, NULL, 1, 2, '2026-05-26 15:45:49', 2, '2026-06-09 10:26:10'),
-	(5, 4, '2222222-22.2222.2.22.2222', 'Adelaide Camilo de Carvalho X Via Varejo S/a', 308, 5, 4, 2, NULL, NULL, 1, 2, '2026-05-27 10:10:11', 2, '2026-06-09 10:26:01'),
-	(6, 6, '3333333-33.3333.3.33.3333', 'Claudenor de Lima Ribeiro(+3) X Via Varejo S/a', 302, 1, 7, 1, NULL, NULL, 1, 2, '2026-05-27 14:39:05', 2, '2026-06-09 11:01:24'),
-	(7, 7, '1111111-11.1111.1.11.1111', 'Claudenor de Lima Ribeiro X Via Varejo S/a', 308, 5, 1, 1, NULL, NULL, 1, 2, '2026-05-29 14:49:39', 2, '2026-06-09 10:25:41'),
-	(8, 8, '5555555-55.5555.5.55.5555', 'Via Varejo S/a X Edna Silva Vieira de Lima Ribeiro', 298, 1, 7, 1, NULL, NULL, 1, 3, '2026-05-31 12:16:07', NULL, NULL);
+INSERT INTO `tblproc` (`id`, `pasta_id`, `numProc`, `cliente_polo`, `NomeTituloProc`, `vara_id`, `tipo_id`, `status_id`, `instancia_id`, `data_distribuicao`, `observacoes`, `ativo`, `criado_por`, `criado_em`, `alterado_por`, `alterado_em`) VALUES
+	(1, 1, '1002594-76.2024.5.02.0606', NULL, 'Edna Silva Vieira de Lima Ribeiro(+1) X Flex Gestão de Relacionamentos', NULL, 1, 6, 1, NULL, NULL, 1, 2, '2026-05-26 09:16:59', 2, '2026-05-26 11:01:20'),
+	(2, 1, '1002958-53.2025.5.02.0205', NULL, 'Edna Silva Vieira de Lima Ribeiro(+1) X Flex Gestão de Relacionamentos', NULL, 2, 6, 1, NULL, NULL, 1, 2, '2026-05-26 10:42:52', 2, '2026-05-26 11:01:36'),
+	(3, 4, '1002594-76.2024.5.02.0606', NULL, 'Adelaide Camilo de Carvalho X Via Varejo S/a', 1, 2, 6, 2, NULL, NULL, 0, 2, '2026-05-26 15:28:04', 2, '2026-05-26 15:33:55'),
+	(4, 4, '1002594-76.2024.5.02.0001', NULL, 'Adelaide Camilo de Carvalho X Via Varejo S/a', 304, 3, 1, 2, NULL, NULL, 1, 2, '2026-05-26 15:45:49', 2, '2026-06-09 10:26:10'),
+	(5, 4, '2222222-22.2222.2.22.2222', NULL, 'Adelaide Camilo de Carvalho X Via Varejo S/a', 308, 5, 4, 2, NULL, NULL, 1, 2, '2026-05-27 10:10:11', 2, '2026-06-09 10:26:01'),
+	(6, 6, '3333333-33.3333.3.33.3333', NULL, 'Claudenor de Lima Ribeiro(+3) X Via Varejo S/a', 302, 1, 7, 1, NULL, NULL, 1, 2, '2026-05-27 14:39:05', 2, '2026-06-15 15:35:33'),
+	(7, 7, '1111111-11.1111.1.11.1111', NULL, 'Claudenor de Lima Ribeiro X Via Varejo S/a', 308, 5, 1, 1, NULL, NULL, 1, 2, '2026-05-29 14:49:39', 2, '2026-06-09 10:25:41'),
+	(8, 8, '5555555-55.5555.5.55.5555', NULL, 'Via Varejo S/a X Edna Silva Vieira de Lima Ribeiro', 298, 1, 7, 1, NULL, NULL, 1, 3, '2026-05-31 12:16:07', NULL, NULL);
 
 -- Copiando estrutura para tabela sistema_advocacia.tblstatusproc
 DROP TABLE IF EXISTS `tblstatusproc`;
@@ -12701,7 +13745,7 @@ CREATE TABLE IF NOT EXISTS `tbltituloprocautor` (
   KEY `criado_por` (`criado_por`),
   CONSTRAINT `tbltituloprocautor_ibfk_1` FOREIGN KEY (`proc_id`) REFERENCES `tblproc` (`id`) ON DELETE CASCADE,
   CONSTRAINT `tbltituloprocautor_ibfk_2` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=30 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=34 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Copiando dados para a tabela sistema_advocacia.tbltituloprocautor: ~13 rows (aproximadamente)
 INSERT INTO `tbltituloprocautor` (`id`, `proc_id`, `tipo_pessoa`, `pessoa_id`, `criado_por`, `criado_em`) VALUES
@@ -12714,10 +13758,10 @@ INSERT INTO `tbltituloprocautor` (`id`, `proc_id`, `tipo_pessoa`, `pessoa_id`, `
 	(23, 7, 'fisica', 4, 2, '2026-06-09 10:25:41'),
 	(24, 5, 'fisica', 5, 2, '2026-06-09 10:26:01'),
 	(25, 4, 'fisica', 5, 2, '2026-06-09 10:26:10'),
-	(26, 6, 'fisica', 4, 2, '2026-06-09 11:01:24'),
-	(27, 6, 'fisica', 2, 2, '2026-06-09 11:01:24'),
-	(28, 6, 'fisica', 5, 2, '2026-06-09 11:01:24'),
-	(29, 6, 'fisica', 3, 2, '2026-06-09 11:01:24');
+	(30, 6, 'fisica', 4, 2, '2026-06-15 15:35:33'),
+	(31, 6, 'fisica', 2, 2, '2026-06-15 15:35:33'),
+	(32, 6, 'fisica', 5, 2, '2026-06-15 15:35:33'),
+	(33, 6, 'fisica', 3, 2, '2026-06-15 15:35:33');
 
 -- Copiando estrutura para tabela sistema_advocacia.tbltituloprocreu
 DROP TABLE IF EXISTS `tbltituloprocreu`;
@@ -12733,7 +13777,7 @@ CREATE TABLE IF NOT EXISTS `tbltituloprocreu` (
   KEY `criado_por` (`criado_por`),
   CONSTRAINT `tbltituloprocreu_ibfk_1` FOREIGN KEY (`proc_id`) REFERENCES `tblproc` (`id`) ON DELETE CASCADE,
   CONSTRAINT `tbltituloprocreu_ibfk_2` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=17 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=18 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Copiando dados para a tabela sistema_advocacia.tbltituloprocreu: ~8 rows (aproximadamente)
 INSERT INTO `tbltituloprocreu` (`id`, `proc_id`, `tipo_pessoa`, `pessoa_id`, `criado_por`, `criado_em`) VALUES
@@ -12744,7 +13788,7 @@ INSERT INTO `tbltituloprocreu` (`id`, `proc_id`, `tipo_pessoa`, `pessoa_id`, `cr
 	(13, 7, 'juridica', 2, 2, '2026-06-09 10:25:41'),
 	(14, 5, 'juridica', 2, 2, '2026-06-09 10:26:01'),
 	(15, 4, 'juridica', 2, 2, '2026-06-09 10:26:10'),
-	(16, 6, 'juridica', 2, 2, '2026-06-09 11:01:24');
+	(17, 6, 'juridica', 2, 2, '2026-06-15 15:35:33');
 
 -- Copiando estrutura para tabela sistema_advocacia.tblvara
 DROP TABLE IF EXISTS `tblvara`;
@@ -12931,17 +13975,18 @@ CREATE TABLE IF NOT EXISTS `tipo_pericia` (
   `nome` varchar(100) NOT NULL,
   `ativo` tinyint(1) DEFAULT '1',
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.tipo_pericia: ~7 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.tipo_pericia: ~8 rows (aproximadamente)
 INSERT INTO `tipo_pericia` (`id`, `nome`, `ativo`) VALUES
 	(1, 'Médica', 1),
 	(2, 'Contábil', 1),
-	(3, 'Insalubridade', 1),
-	(4, 'Periculosidade', 1),
-	(5, 'Ergonômica', 1),
-	(6, 'Ambiental', 1),
-	(7, 'Técnica', 1);
+	(3, 'Insalubridade', 0),
+	(4, 'Periculosidade', 0),
+	(5, 'Ergonômica', 0),
+	(6, 'Ambiental', 0),
+	(7, 'Técnica', 1),
+	(8, 'Social', 1);
 
 -- Copiando estrutura para tabela sistema_advocacia.tipo_prazo
 DROP TABLE IF EXISTS `tipo_prazo`;
@@ -12982,18 +14027,19 @@ CREATE TABLE IF NOT EXISTS `usuarios` (
   KEY `idx_login` (`login`),
   KEY `fk_usuarios_criado_por` (`criado_por`),
   CONSTRAINT `fk_usuarios_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Copiando dados para a tabela sistema_advocacia.usuarios: ~8 rows (aproximadamente)
+-- Copiando dados para a tabela sistema_advocacia.usuarios: ~9 rows (aproximadamente)
 INSERT INTO `usuarios` (`id`, `nome`, `login`, `senha_hash`, `email`, `oab`, `tipo`, `nivel`, `ativo`, `ver_todos_processos`, `criado_em`, `criado_por`, `ultimo_acesso`, `notif_email`, `notif_tela`) VALUES
 	(1, 'Superusuário', 'superadmin', '$2a$12$6vzSy/RUw.HOUdaJurzjoei0THb0ZrBmKuHfOxU9A1xpvDnKwv4GW', NULL, NULL, 'administrador', 0, 1, 0, '2026-05-23 00:59:32', NULL, '2026-06-09 20:26:28', 1, 1),
-	(2, 'Claudio', 'claudio', '$2a$12$0SCACm4vro7kpi8QC28jlOnJw6V2J7Ciz4EOOgKpnAaefHhP0shXq', 'claudio@antonio.adv.br', NULL, 'administrador', 1, 1, 1, '2026-05-23 01:06:19', 1, '2026-06-12 09:16:09', 1, 1),
-	(3, 'edna', 'edna', '$2a$12$zHJRLurJ4WOgjWhf6JEvteVrp095BMfRtOZfdxqtMg0dT4OxTiu9G', 'ednasvlr@gmail.com', NULL, 'advogado', 1, 1, 1, '2026-05-23 10:35:04', 1, '2026-06-08 16:24:51', 1, 1),
-	(4, 'Erick', 'erick', '$2a$12$QM8unf8KeJC/qyibJNEiOeNwgZ0ebgm1zay0MBWbpTkMj8nW6Jclm', NULL, NULL, 'advogado', 2, 1, 0, '2026-05-29 13:49:05', 2, '2026-06-02 09:40:14', 1, 1),
+	(2, 'Claudio', 'claudio', '$2a$12$0SCACm4vro7kpi8QC28jlOnJw6V2J7Ciz4EOOgKpnAaefHhP0shXq', 'claudio@antonio.adv.br', NULL, 'administrador', 1, 1, 1, '2026-05-23 01:06:19', 1, '2026-06-22 13:43:19', 1, 1),
+	(3, 'edna', 'edna', '$2a$12$zHJRLurJ4WOgjWhf6JEvteVrp095BMfRtOZfdxqtMg0dT4OxTiu9G', 'ednasvlr@gmail.com', NULL, 'advogado', 1, 1, 1, '2026-05-23 10:35:04', 1, '2026-06-22 14:07:35', 1, 1),
+	(4, 'Erick', 'erick', '$2a$12$QM8unf8KeJC/qyibJNEiOeNwgZ0ebgm1zay0MBWbpTkMj8nW6Jclm', NULL, NULL, 'advogado', 2, 1, 0, '2026-05-29 13:49:05', 2, '2026-06-22 14:14:22', 1, 1),
 	(5, 'Evellyn', 'evellyn', '$2a$12$ndwGKWme085Gg.qaoB9AQeHEod6MVuOFRT1BOiufCmS0r8EgJGkmy', NULL, NULL, 'advogado', 2, 1, 0, '2026-05-30 00:29:53', 2, '2026-05-31 13:02:21', 1, 1),
 	(6, 'Alysson', 'Alysson', '$2a$12$BYXYvn6T28TeVpbK7tnehea6pHhsZyJGQhjoUswlMsbpDmMH1uUES', 'alysson@antonio.adv.br', NULL, 'advogado', 1, 1, 0, '2026-06-11 09:11:43', 2, NULL, 1, 1),
-	(7, 'Angela', 'Angela', '$2a$12$hMNYVQ4RoUdVcWczn7wbUOTQyvMsO.O/ZfW/UMpouJ9kjddXRvs9y', 'angela@antonio.adv.br', NULL, 'advogado', 2, 1, 0, '2026-06-11 09:35:10', 2, NULL, 1, 1),
-	(8, 'Teste', 'teste', '$2a$12$OwNh8qnIKm0pUwCfMGISReK2.SdSOI01znccCmOV7xt6Rt8B.i9uO', NULL, NULL, 'advogado', 2, 1, 0, '2026-06-11 10:48:42', 2, NULL, 1, 1);
+	(7, 'Angela', 'Angela', '$2a$12$EfoAsQYiTtIVtHg1qjqnIOdNFBl8cyvbtS64NB8Sy8dhDqQYPUiNy', 'angela@antonio.adv.br', NULL, 'advogado', 2, 1, 0, '2026-06-11 09:35:10', 2, NULL, 1, 1),
+	(8, 'Teste', 'teste', '$2a$12$OwNh8qnIKm0pUwCfMGISReK2.SdSOI01znccCmOV7xt6Rt8B.i9uO', NULL, NULL, 'advogado', 2, 1, 0, '2026-06-11 10:48:42', 2, NULL, 1, 1),
+	(9, 'Guilherme', 'guilherme', '$2a$12$HIw6gLLhq1dsskQu/Ms.xuNF9AIxjAMH40gdyKswLBkktH7wUFiyG', 'guilherme@antonio.adv.br', NULL, 'estagiario', 2, 1, 0, '2026-06-18 09:20:26', 2, NULL, 1, 1);
 
 /*!40103 SET TIME_ZONE=IFNULL(@OLD_TIME_ZONE, 'system') */;
 /*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;

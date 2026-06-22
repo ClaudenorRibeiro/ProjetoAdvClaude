@@ -32,9 +32,13 @@ const MODULOS_PERM = [
   { chave: 'audiencias', label: 'Audiências (menu)', submodulos: [
     { chave: 'audiencias.tipos', label: 'Tipos de audiência' },
   ]},
-  { chave: 'pericias',     label: 'Perícias (menu)' },
+  { chave: 'pericias', label: 'Perícias (menu)', submodulos: [
+    { chave: 'pericias.tipos', label: 'Tipos de perícia' },
+  ]},
   { chave: 'financeiro',   label: 'Financeiro' },
-  { chave: 'documentos',   label: 'Documentos' },
+  { chave: 'documentos',   label: 'Documentos (menu)', submodulos: [
+    { chave: 'documentos.modelos', label: 'Modelos de documento' },
+  ]},
   { chave: 'publicacoes',  label: 'Publicações' },
   { chave: 'relatorios',   label: 'Relatórios' },
 ];
@@ -1121,6 +1125,10 @@ function TabFeriados() {
 // ============================================================
 // ABA: INTEGRAÇÕES
 // ============================================================
+// URL oficial da API de Intimações da AASP — usada apenas como valor PADRÃO do campo
+// (a URL efetiva é sempre a que estiver salva na configuração; nada fica fixo no backend).
+const URL_PADRAO_AASP = 'https://intimacaoapi.aasp.org.br/api/Associado/intimacao/json';
+
 function TabIntegracoes() {
   const [integracoes, setIntegracoes] = useState({});
   const [carregando, setCarregando]   = useState(true);
@@ -1128,7 +1136,13 @@ function TabIntegracoes() {
 
   useEffect(() => {
     configuracaoAPI.buscarIntegracoes().then(r => {
-      if (r.data.ok) setIntegracoes(r.data.dados || {});
+      if (r.data.ok) {
+        const dados = r.data.dados || {};
+        // Se já existe config AASP mas sem URL (config antiga), pré-preenche com a URL padrão
+        // para o usuário só conferir e salvar — sem quebrar a busca.
+        if (dados.aasp && !dados.aasp.url) dados.aasp = { ...dados.aasp, url: URL_PADRAO_AASP };
+        setIntegracoes(dados);
+      }
     }).finally(() => setCarregando(false));
   }, []);
 
@@ -1169,23 +1183,25 @@ function TabIntegracoes() {
         </div>
         {aasp.ativo && (
           <>
-            <div className="grid-2">
-              <div className="form-group">
-                <label className="form-label">Login AASP</label>
-                <input className="form-control" value={aasp.login||''}
-                  onChange={e => setModulo('aasp','login', e.target.value)} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Senha AASP</label>
-                <input type="password" className="form-control" value={aasp.senha||''}
-                  onChange={e => setModulo('aasp','senha', e.target.value)} />
-              </div>
+            <div className="form-group">
+              <label className="form-label">URL da API AASP</label>
+              <input className="form-control" value={aasp.url||''}
+                onChange={e => setModulo('aasp','url', e.target.value)}
+                placeholder={URL_PADRAO_AASP} />
+              <small style={{ color: '#888' }}>
+                Endereço da API de Intimações da AASP. Já vem preenchido com o padrão oficial —
+                só altere se a AASP informar uma URL diferente.
+              </small>
             </div>
             <div className="form-group">
-              <label className="form-label">OABs monitoradas (até 10, separadas por vírgula)</label>
-              <input className="form-control" value={aasp.oabs||''}
-                onChange={e => setModulo('aasp','oabs', e.target.value)}
-                placeholder="SP123456, SP789012, ..." />
+              <label className="form-label">Chave de acesso AASP</label>
+              <input className="form-control" value={aasp.chave||''}
+                onChange={e => setModulo('aasp','chave', e.target.value)}
+                placeholder="Chave única fornecida pela AASP" />
+              <small style={{ color: '#888' }}>
+                A chave é fornecida pela AASP (API de Intimações). As OABs monitoradas já estão vinculadas
+                a essa chave na própria AASP — não precisa cadastrá-las aqui.
+              </small>
             </div>
           </>
         )}

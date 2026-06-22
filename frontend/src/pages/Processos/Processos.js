@@ -183,11 +183,13 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
     instancia_id: '',
     data_distribuicao: '',
     observacoes: '',
+    cliente_polo: '',          // 'autor' | 'reu' | '' (não definido) — quem é o cliente do escritório
   });
 
   // Partes do processo
   const [autores, setAutores] = useState([]);
   const [reus, setReus]       = useState([]);
+  const [peritos, setPeritos] = useState([]);   // peritos vinculados ao processo (opcional)
 
   // Checkbox "Novas Partes" — quando false, partes bloqueadas vindas do processoBase
   const [novasPartes, setNovasPartes] = useState(false);
@@ -199,6 +201,10 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
   const [buscaReu, setBuscaReu]           = useState('');
   const [resultAutor, setResultAutor]     = useState([]);
   const [resultReu, setResultReu]         = useState([]);
+  // Busca de peritos (independente do bloqueio de partes)
+  const [tipoPerito, setTipoPerito]       = useState('fisica');
+  const [buscaPerito, setBuscaPerito]     = useState('');
+  const [resultPerito, setResultPerito]   = useState([]);
 
   // Dados auxiliares
   const [aux, setAux]                       = useState({ foruns: [], varas: [], tipos: [], status: [], instancias: [] });
@@ -220,6 +226,11 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
         pessoa_id:   r.pessoa_id,
         tipo_pessoa: r.tipo_pessoa || 'fisica',
         nome:        r.nome,
+      })),
+      peritos: (proc?.peritos || []).map(p => ({
+        pessoa_id:   p.pessoa_id,
+        tipo_pessoa: p.tipo_pessoa || 'fisica',
+        nome:        p.nome,
       })),
     };
   }
@@ -245,9 +256,10 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
     }
     // Pré-preenche partes quando há um processo de referência
     if (processoBase) {
-      const { autores: a, reus: r } = partesDoProcesso(processoBase);
+      const { autores: a, reus: r, peritos: pe } = partesDoProcesso(processoBase);
       setAutores(a);
       setReus(r);
+      setPeritos(pe);
     }
   }, [pastaId]); // eslint-disable-line
 
@@ -383,6 +395,8 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
         observacoes:       form.observacoes  || null,
         autores,
         reus,
+        peritos,
+        cliente_polo:      form.cliente_polo || null,
       };
       const { data } = await processosAPI.criarProcesso(payload);
       toast.success('Processo criado com sucesso!');
@@ -585,6 +599,58 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
             </div>
           </div>
 
+          {/* === CLIENTE DO ESCRITÓRIO (qual polo) === */}
+          <div className="form-group">
+            <label className="form-label">Cliente do escritório</label>
+            <select className="form-control" style={{ maxWidth: '260px' }}
+              value={form.cliente_polo || ''}
+              onChange={e => set('cliente_polo', e.target.value)}>
+              <option value="">— Não definido —</option>
+              <option value="autor">Autor (polo ativo)</option>
+              <option value="reu">Réu (polo passivo)</option>
+            </select>
+            <small style={{ color: '#888' }}>Define para quem vão os comunicados (perícia/audiência)</small>
+          </div>
+
+          {/* === PERITOS DO PROCESSO (opcional) === */}
+          <div className="form-group">
+            <label className="form-label">Peritos do processo (opcional)</label>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
+              <select className="form-control" style={{ maxWidth: '130px' }}
+                value={tipoPerito}
+                onChange={e => { setTipoPerito(e.target.value); setResultPerito([]); setBuscaPerito(''); }}>
+                <option value="fisica">Física</option>
+                <option value="juridica">Jurídica</option>
+              </select>
+              <div style={{ flex: 1, position: 'relative' }}>
+                <input className="form-control" placeholder="Buscar e adicionar perito..."
+                  value={buscaPerito}
+                  onChange={e => { setBuscaPerito(e.target.value); buscarPessoas(e.target.value, tipoPerito, setResultPerito); }} />
+                {resultPerito.length > 0 && (
+                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #ddd', borderRadius: '6px', zIndex: 20, maxHeight: '160px', overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                    {resultPerito.map(p => (
+                      <div key={p.id}
+                        style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', fontSize: '13px' }}
+                        onClick={() => adicionarParte(p, tipoPerito, peritos, setPeritos, [], setBuscaPerito, setResultPerito)}>
+                        {p.nome || p.razao_social}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '28px' }}>
+              {peritos.map((pe, i) => (
+                <span key={i} style={{ background: '#ede9fe', color: '#5b21b6', borderRadius: '20px', padding: '4px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {pe.nome}
+                  <button onClick={() => removerParte(i, peritos, setPeritos)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#5b21b6', fontWeight: 'bold', padding: '0', lineHeight: '1', fontSize: '14px' }}>×</button>
+                </span>
+              ))}
+              {peritos.length === 0 && <span style={{ color: '#ccc', fontSize: '13px' }}>Nenhum perito adicionado</span>}
+            </div>
+          </div>
+
           {/* Número CNJ */}
           <div className="form-group">
             <label className="form-label">Número do Processo (CNJ)</label>
@@ -727,6 +793,7 @@ export function ModalEditarProcesso({ processo, onFechar }) {
       ? processo.data_distribuicao.split('T')[0]
       : '',
     observacoes: processo.observacoes || '',
+    cliente_polo: processo.cliente_polo || '',   // 'autor' | 'reu' | '' — cliente do escritório
   });
 
   // Partes — pré-preenchidas do processo existente
@@ -736,6 +803,9 @@ export function ModalEditarProcesso({ processo, onFechar }) {
   const [reus, setReus] = useState(
     (processo.reus || []).map(r => ({ pessoa_id: r.pessoa_id, tipo_pessoa: r.tipo_pessoa, nome: r.nome }))
   );
+  const [peritos, setPeritos] = useState(
+    (processo.peritos || []).map(p => ({ pessoa_id: p.pessoa_id, tipo_pessoa: p.tipo_pessoa, nome: p.nome }))
+  );
 
   // Busca de pessoas
   const [tipoAutor, setTipoAutor]     = useState('fisica');
@@ -744,6 +814,9 @@ export function ModalEditarProcesso({ processo, onFechar }) {
   const [buscaReu, setBuscaReu]       = useState('');
   const [resultAutor, setResultAutor] = useState([]);
   const [resultReu, setResultReu]     = useState([]);
+  const [tipoPerito, setTipoPerito]   = useState('fisica');
+  const [buscaPerito, setBuscaPerito] = useState('');
+  const [resultPerito, setResultPerito] = useState([]);
 
   // Dados auxiliares
   const [aux, setAux]                       = useState({ foruns: [], varas: [], tipos: [], status: [], instancias: [] });
@@ -842,6 +915,8 @@ export function ModalEditarProcesso({ processo, onFechar }) {
         observacoes:       form.observacoes       || null,
         autores,
         reus,
+        peritos,
+        cliente_polo:      form.cliente_polo || null,
       });
       toast.success('Processo atualizado com sucesso!');
       onFechar(true);
@@ -947,6 +1022,58 @@ export function ModalEditarProcesso({ processo, onFechar }) {
                 </span>
               ))}
               {reus.length === 0 && <span style={{ color: '#ccc', fontSize: '13px' }}>Nenhum réu adicionado</span>}
+            </div>
+          </div>
+
+          {/* === CLIENTE DO ESCRITÓRIO (qual polo) === */}
+          <div className="form-group">
+            <label className="form-label">Cliente do escritório</label>
+            <select className="form-control" style={{ maxWidth: '260px' }}
+              value={form.cliente_polo || ''}
+              onChange={e => set('cliente_polo', e.target.value)}>
+              <option value="">— Não definido —</option>
+              <option value="autor">Autor (polo ativo)</option>
+              <option value="reu">Réu (polo passivo)</option>
+            </select>
+            <small style={{ color: '#888' }}>Define para quem vão os comunicados (perícia/audiência)</small>
+          </div>
+
+          {/* === PERITOS DO PROCESSO (opcional) === */}
+          <div className="form-group">
+            <label className="form-label">Peritos do processo (opcional)</label>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
+              <select className="form-control" style={{ maxWidth: '130px' }}
+                value={tipoPerito}
+                onChange={e => { setTipoPerito(e.target.value); setResultPerito([]); setBuscaPerito(''); }}>
+                <option value="fisica">Física</option>
+                <option value="juridica">Jurídica</option>
+              </select>
+              <div style={{ flex: 1, position: 'relative' }}>
+                <input className="form-control" placeholder="Buscar e adicionar perito..."
+                  value={buscaPerito}
+                  onChange={e => { setBuscaPerito(e.target.value); buscarPessoas(e.target.value, tipoPerito, setResultPerito); }} />
+                {resultPerito.length > 0 && (
+                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #ddd', borderRadius: '6px', zIndex: 20, maxHeight: '160px', overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                    {resultPerito.map(p => (
+                      <div key={p.id}
+                        style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', fontSize: '13px' }}
+                        onClick={() => adicionarParte(p, tipoPerito, peritos, setPeritos, [], setBuscaPerito, setResultPerito)}>
+                        {p.nome || p.razao_social}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '28px' }}>
+              {peritos.map((pe, i) => (
+                <span key={i} style={{ background: '#ede9fe', color: '#5b21b6', borderRadius: '20px', padding: '4px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {pe.nome}
+                  <button onClick={() => removerParte(i, peritos, setPeritos)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#5b21b6', fontWeight: 'bold', padding: '0', lineHeight: '1', fontSize: '14px' }}>×</button>
+                </span>
+              ))}
+              {peritos.length === 0 && <span style={{ color: '#ccc', fontSize: '13px' }}>Nenhum perito adicionado</span>}
             </div>
           </div>
 

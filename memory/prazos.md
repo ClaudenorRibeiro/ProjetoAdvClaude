@@ -64,5 +64,10 @@ Mesmo padrão de Audiências:
 3. Seleciona o processo → preenche `processo_id` no formulário
 Os campos antigos (texto livre + ID manual) foram substituídos por esse padrão
 
+## Correção 18/06/2026 — coluna "Dias" (só frontend `Prazos.js`)
+Prazo **Concluído** ou **Cancelado** não mostra mais "Xd atraso" na coluna Dias — mostra `—`. (Antes, `formatarData`/badge de
+atraso aparecia em qualquer prazo com vencimento passado, independente do status.) Usa a mesma condição
+`['concluido','cancelado'].includes(p.status)` já usada na cor da linha. Só exibição; sem banco/backend.
+
 **Diferença prazo vs tarefa:** Ver [[tarefas]]  
 **Relacionado:** [[processos-pastas]], [[tarefas]]

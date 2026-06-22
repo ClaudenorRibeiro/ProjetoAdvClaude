@@ -2,6 +2,17 @@
 // FORMATADORES — Funções usadas na interface para exibição
 // ============================================================
 
+// Data de HOJE no fuso local do navegador, como 'YYYY-MM-DD'.
+// Usar em vez de new Date().toISOString() — o toISOString converte para UTC e, após as 21h
+// (horário de Brasília), retorna "amanhã", pré-preenchendo campos de data com o dia errado.
+export function hojeLocal() {
+  const d = new Date();
+  const ano = d.getFullYear();
+  const mes = String(d.getMonth() + 1).padStart(2, '0');
+  const dia = String(d.getDate()).padStart(2, '0');
+  return `${ano}-${mes}-${dia}`;
+}
+
 // Formata data ISO (YYYY-MM-DD) para DD/MM/YYYY
 export function formatarData(data) {
   if (!data) return '—';
@@ -21,6 +32,29 @@ export function formatarMoeda(valor) {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency', currency: 'BRL'
   }).format(parseFloat(valor));
+}
+
+// Máscara de moeda para INPUTS (sem "R$"): preenche da direita p/ esquerda como centavos.
+// Ex.: "1500" → "15,00"; "150000" → "1.500,00". Use com parseMoeda() para obter o número ao salvar.
+export function mascaraMoeda(valor) {
+  const digitos = String(valor ?? '').replace(/\D/g, '');
+  if (!digitos) return '';
+  const numero = parseInt(digitos, 10) / 100;
+  return numero.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Converte um NÚMERO (ex.: 1500) no texto da máscara ("1.500,00") — usado ao abrir um form em edição.
+export function numeroParaMascaraMoeda(numero) {
+  if (numero === null || numero === undefined || numero === '') return '';
+  return Number(numero).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Converte o texto mascarado ("1.500,00") de volta para número (1500.00). Aceita number direto.
+export function parseMoeda(texto) {
+  if (texto === null || texto === undefined || texto === '') return 0;
+  if (typeof texto === 'number') return texto;
+  const limpo = String(texto).replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, '');
+  return parseFloat(limpo) || 0;
 }
 
 // Formata CPF: 12345678900 → 123.456.789-00

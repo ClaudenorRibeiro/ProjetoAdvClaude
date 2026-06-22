@@ -32,4 +32,18 @@ PESSOA
 - Polo ativo (autor) e polo passivo (réu) — um ou vários em cada polo (litisconsórcio)
 - Sistema tem cadastro de **fórum** e cadastro de **vara** separados
 
-**Relacionado:** [[cadastro-pessoas]], [[prazos]], [[financeiro]], [[audiencias]]
+## Estrutura real no banco (importante)
+- As partes NÃO são colunas de `tblProc`; ficam em tabelas próprias: **`tblTituloProcAutor`** e
+  **`tblTituloProcReu`** (cada linha: proc_id + tipo_pessoa 'fisica'/'juridica' + pessoa_id). Um processo
+  pode ter vários autores e vários réus. O `tblProc.NomeTituloProc` é só o texto-título gerado.
+
+## Adições de 13/06/2026 (ver [[pericias]] e [[pendencias-proxima-sessao]])
+- **`tblProc.cliente_polo`** (VARCHAR 'autor'/'reu', opcional): marca qual polo é o **cliente do escritório**.
+  Usado para saber a quem enviar comunicados (perícia hoje; audiência no futuro). Definido no cadastro do processo
+  (seletor "Cliente do escritório" nos dois modais de `pages/Processos/Processos.js`).
+- **`processo_perito`** (tabela nova, muitos-p/-muitos): peritos vinculados ao processo (proc_id + tipo_pessoa +
+  pessoa_id). Seção "Peritos do processo (opcional)" no cadastro do processo. O seletor de perito da perícia
+  usa essa lista. Perito = pessoa (sem flag), papel pelo contexto. Backend: `processosController.js`
+  (criarProcesso/atualizarProcesso/buscarPasta tratam cliente_polo + peritos[]).
+
+**Relacionado:** [[cadastro-pessoas]], [[prazos]], [[financeiro]], [[audiencias]], [[pericias]]

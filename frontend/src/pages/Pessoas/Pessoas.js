@@ -6,6 +6,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { pessoasAPI } from '../../services/api';
 import { formatarCPF, formatarCNPJ, formatarData, mascaraCPF, validarCPF, mascaraCNPJ, validarCNPJ, toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
+import GerarDocumentoBotao from '../../components/GerarDocumento';
+import GerarDocumentoPartesBotao from '../../components/GerarDocumentoPartes';
 
 export default function Pessoas() {
   const [aba, setAba]             = useState('fisicas'); // 'fisicas' | 'juridicas'
@@ -105,6 +107,8 @@ export default function Pessoas() {
           <button className="btn btn-primary" onClick={abrirNovoCadastro}>
             + {aba==='fisicas' ? 'Nova Pessoa Física' : 'Nova Pessoa Jurídica'}
           </button>
+          {/* Gera documento que usa várias pessoas (autores × réus); só aparece com permissão de documentos */}
+          <GerarDocumentoPartesBotao />
           <span style={{marginLeft:'auto',color:'#888',fontSize:'13px'}}>{total} registro(s)</span>
         </div>
 
@@ -198,6 +202,11 @@ function TabelaFisicas({ lista, onEditar, onExcluir }) {
               >
                 Excluir
               </button>
+              {/* Gerar documento — só se houver modelo "comum" gerável a partir da pessoa */}
+              {Number(p.tem_modelo_doc) === 1 && (
+                <GerarDocumentoBotao ancoraTipo="pessoa_fisica" ancoraId={p.id}
+                  estilo={{fontSize:'12px',padding:'4px 10px'}} />
+              )}
             </td>
           </tr>
         ))}
@@ -232,6 +241,11 @@ function TabelaJuridicas({ lista, onEditar, onExcluir }) {
               >
                 Excluir
               </button>
+              {/* Gerar documento — só se houver modelo "comum" gerável a partir da pessoa */}
+              {Number(p.tem_modelo_doc) === 1 && (
+                <GerarDocumentoBotao ancoraTipo="pessoa_juridica" ancoraId={p.id}
+                  estilo={{fontSize:'12px',padding:'4px 10px'}} />
+              )}
             </td>
           </tr>
         ))}
@@ -963,6 +977,7 @@ function CampoCEP({ value, onChange, onAutoFill }) {
       <label className="form-label">CEP</label>
       <input
         type="text"
+        autoComplete="off"
         className={`form-control ${erroCep ? 'is-invalid' : ''}`}
         value={value}
         onChange={handleChange}
@@ -1033,7 +1048,7 @@ const Campo = React.forwardRef(function Campo({ label, value, onChange, onBlur, 
   return (
     <div className="form-group">
       <label className="form-label">{label}</label>
-      <input ref={ref} type={type} className="form-control" value={value} onChange={e=>onChange(e.target.value)} onBlur={onBlur} placeholder={placeholder} />
+      <input ref={ref} type={type} autoComplete="off" className="form-control" value={value} onChange={e=>onChange(e.target.value)} onBlur={onBlur} placeholder={placeholder} />
     </div>
   );
 });

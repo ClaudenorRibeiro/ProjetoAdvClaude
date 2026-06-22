@@ -40,7 +40,11 @@ metadata:
 
 - Comunicado de audiência ao cadastrar
 - Alerta 3 dias úteis antes da audiência
-- Alerta de prazos pendentes no horário configurado
+- Alerta de prazos pendentes no horário configurado (até 2 horários — ver [[prazos]])
+- **Comunicado de PERÍCIA ao cliente** (13/06/2026): ao cadastrar/remarcar/cancelar + reenvio manual.
+  Serviço `backend/src/services/comunicadoService.js` (NOVO). Vai ao cliente do processo (autor/réu por
+  `tblproc.cliente_polo`), e-mail principal de emails_pf/pj. NADA ao perito. Texto simples HTML em função
+  MODULAR (`montarComunicadoPericia`) pronta p/ virar modelo+PDF. Registra em `log_comunicacoes`. Ver [[pericias]].
 
 ## Disparo Manual
 
@@ -58,9 +62,17 @@ metadata:
 ```
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
-SMTP_USER=<email do escritório>
-SMTP_PASS=goovjyiunyprdbfu   ← App Password (gerada 12/06/2026)
+SMTP_USER=antonioadv.sistema@gmail.com
+SMTP_PASS=<App Password 16 chars, sem espaços — fica SÓ no .env do servidor, não anotar aqui>
 ```
+(O `.env` NÃO está no git → sobrevive ao deploy `git reset --hard`. Editar via WinSCP.)
+
+### ⚠️ Causa raiz do BadCredentials resolvida em 13/06/2026 (LIÇÃO IMPORTANTE)
+O PM2 reinjeta o ambiente salvo em `~/.pm2/dump.pm2` a cada start; lá estava uma App Password ANTIGA.
+O `dotenv.config()` padrão NÃO sobrescreve variável já presente no `process.env` → a senha velha do PM2
+vencia a do `.env` → `535 BadCredentials` em todo restart, independente do `.env` estar certo.
+**FIX (já em produção):** `backend/server.js` → `require('dotenv').config({ override: true })`.
+Higiene opcional no servidor: `pm2 delete advocacia-backend && cd /var/www/advocacia && unset SMTP_PASS && pm2 start ecosystem.config.js && pm2 save`.
 
 ### App Password do Gmail (IMPORTANTE)
 - É diferente da senha normal da conta Google

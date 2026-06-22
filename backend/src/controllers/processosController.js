@@ -192,8 +192,9 @@ async function renumerarPasta(req, res) {
         return erro(res, `O número ${String(num).padStart(4,'0')} já está em uso por outra pasta com processos ativos`);
       }
 
-      // Pasta conflitante está vazia — migra todos os registros dependentes para a atual
-      for (const tabela of ['tblProc','tarefas','conta_corrente_pasta','honorarios','log_documentos_gerados']) {
+      // Pasta conflitante está vazia — migra os registros que são por PASTA para a atual.
+      // (conta_corrente e acordo são por PROCESSO: seguem o tblProc remigrado, sem ajuste aqui.)
+      for (const tabela of ['tblProc','tarefas','log_documentos_gerados']) {
         await conn.execute(`UPDATE ${tabela} SET pasta_id = ? WHERE pasta_id = ?`, [id, conflitaId]);
       }
       await conn.execute('DELETE FROM tblPasta WHERE id = ?', [conflitaId]);
@@ -246,7 +247,7 @@ async function buscarPasta(req, res) {
 
     // Para cada processo, busca autores e réus em paralelo
     for (const proc of processos) {
-      const [autores, reus] = await Promise.all([
+      const [autores, reus, peritos] = await Promise.all([
         pool.execute(
           `SELECT ta.id, ta.tipo_pessoa, ta.pessoa_id,
                   CASE ta.tipo_pessoa
@@ -265,9 +266,19 @@ async function buscarPasta(req, res) {
            FROM tblTituloProcReu tr WHERE tr.proc_id = ?`,
           [proc.id]
         ),
+        pool.execute(
+          `SELECT pp.id, pp.tipo_pessoa, pp.pessoa_id,
+                  CASE pp.tipo_pessoa
+                    WHEN 'fisica'   THEN (SELECT pf.nome FROM pessoas_fisicas pf WHERE pf.id = pp.pessoa_id)
+                    WHEN 'juridica' THEN (SELECT pj.razao_social FROM pessoas_juridicas pj WHERE pj.id = pp.pessoa_id)
+                  END AS nome
+           FROM processo_perito pp WHERE pp.proc_id = ?`,
+          [proc.id]
+        ),
       ]);
       proc.autores = autores[0];
       proc.reus    = reus[0];
+      proc.peritos = peritos[0];
     }
 
     return sucesso(res, { ...pastas[0], processos });
@@ -297,12 +308,18 @@ async function criarProcesso(req, res) {
     observacoes,
     autores = [],
     reus    = [],
+    peritos = [],          // peritos vinculados ao processo (opcional)
+    cliente_polo,          // 'autor' ou 'reu' — qual polo é o cliente do escritório
   } = req.body;
 
   if (!NomeTituloProc) return erro(res, 'Título do processo é obrigatório');
   if (autores.length === 0) return erro(res, 'Inclua ao menos um autor no polo ativo');
   if (reus.length === 0)    return erro(res, 'Inclua ao menos um réu no polo passivo');
   if (!pasta_id && !numPasta) return erro(res, 'Número da pasta é obrigatório');
+  // cliente_polo é opcional, mas se vier precisa ser 'autor' ou 'reu'
+  if (cliente_polo && !['autor', 'reu'].includes(cliente_polo)) {
+    return erro(res, 'Polo do cliente inválido (use "autor" ou "reu")');
+  }
 
   const conn = await pool.getConnection();
   try {
@@ -350,12 +367,13 @@ async function criarProcesso(req, res) {
     // Cria o processo
     const [procResult] = await conn.execute(
       `INSERT INTO tblProc
-         (pasta_id, numProc, NomeTituloProc, vara_id, tipo_id, status_id, instancia_id,
+         (pasta_id, numProc, NomeTituloProc, cliente_polo, vara_id, tipo_id, status_id, instancia_id,
           data_distribuicao, observacoes, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [pastaId,
        numProcLimpo,
        NomeTituloProc,
+       cliente_polo     || null,
        vara_id          || null,
        tipo_id          || null,
        status_id        || null,
@@ -379,6 +397,14 @@ async function criarProcesso(req, res) {
       await conn.execute(
         'INSERT INTO tblTituloProcReu (proc_id, tipo_pessoa, pessoa_id, criado_por) VALUES (?, ?, ?, ?)',
         [procId, reu.tipo_pessoa, reu.pessoa_id, req.usuario.id]
+      );
+    }
+
+    // Insere peritos vinculados ao processo (opcional)
+    for (const perito of peritos) {
+      await conn.execute(
+        'INSERT INTO processo_perito (proc_id, tipo_pessoa, pessoa_id, criado_por) VALUES (?, ?, ?, ?)',
+        [procId, perito.tipo_pessoa, perito.pessoa_id, req.usuario.id]
       );
     }
 
@@ -452,8 +478,13 @@ async function atualizarProcesso(req, res) {
     numProc, NomeTituloProc,
     vara_id, tipo_id, status_id, instancia_id,
     data_distribuicao, observacoes,
-    autores, reus,
+    autores, reus, peritos, cliente_polo,
   } = req.body;
+
+  // cliente_polo é opcional; se vier preenchido precisa ser 'autor' ou 'reu'
+  if (cliente_polo && !['autor', 'reu'].includes(cliente_polo)) {
+    return erro(res, 'Polo do cliente inválido (use "autor" ou "reu")');
+  }
 
   const conn = await pool.getConnection();
   try {
@@ -480,13 +511,15 @@ async function atualizarProcesso(req, res) {
 
     await conn.execute(
       `UPDATE tblProc SET
-         numProc=?, NomeTituloProc=?,
+         numProc=?, NomeTituloProc=?, cliente_polo=?,
          vara_id=?, tipo_id=?, status_id=?, instancia_id=?,
          data_distribuicao=?, observacoes=?,
          alterado_por=?, alterado_em=NOW()
        WHERE id = ?`,
       [numProc          || null,
        NomeTituloProc   || antes[0].NomeTituloProc,
+       // se não veio no body, preserva o valor atual; se veio vazio, grava NULL
+       cliente_polo !== undefined ? (cliente_polo || null) : antes[0].cliente_polo,
        vara_id          || null,
        tipo_id          || null,
        status_id        || null,
@@ -513,6 +546,16 @@ async function atualizarProcesso(req, res) {
         await conn.execute(
           'INSERT INTO tblTituloProcReu (proc_id, tipo_pessoa, pessoa_id, criado_por) VALUES (?, ?, ?, ?)',
           [id, reu.tipo_pessoa, reu.pessoa_id, req.usuario.id]
+        );
+      }
+    }
+    // Substitui os peritos do processo se enviados
+    if (peritos !== undefined) {
+      await conn.execute('DELETE FROM processo_perito WHERE proc_id = ?', [id]);
+      for (const perito of peritos) {
+        await conn.execute(
+          'INSERT INTO processo_perito (proc_id, tipo_pessoa, pessoa_id, criado_por) VALUES (?, ?, ?, ?)',
+          [id, perito.tipo_pessoa, perito.pessoa_id, req.usuario.id]
         );
       }
     }

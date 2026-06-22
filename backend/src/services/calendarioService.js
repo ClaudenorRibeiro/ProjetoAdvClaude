@@ -61,6 +61,25 @@ async function ehDiaUtil(data) {
   return rows.length > 0 && rows[0].dia_util === 1;
 }
 
+// Retorna o PRÓXIMO dia útil em/depois de uma data (para vencimentos de parcelas de acordo).
+// Se a própria data já é dia útil, retorna ela mesma. Fallback: a própria data.
+async function proximoDiaUtil(data) {
+  // Se a data está FORA da faixa do calendário (ex.: anterior ao início dos 30 anos cadastrados),
+  // não há como saber o próximo dia útil → devolve a própria data (evita "colar" no 1º dia do calendário).
+  const [existe] = await pool.execute('SELECT 1 FROM calendario WHERE data = ? LIMIT 1', [data]);
+  if (!existe.length) return data;
+
+  const [rows] = await pool.execute(
+    `SELECT data FROM calendario
+     WHERE data >= ? AND dia_util = 1
+     ORDER BY data ASC
+     LIMIT 1`,
+    [data]
+  );
+  // dateStrings: true → data já vem como string 'YYYY-MM-DD'
+  return rows.length ? rows[0].data : data;
+}
+
 // Retorna a data útil N dias antes de uma data (para alertas de audiência/perícia)
 // Usado para: "avisar cliente 3 dias úteis antes da audiência"
 async function diasUteisAntes(data, quantidade) {
@@ -78,4 +97,4 @@ async function diasUteisAntes(data, quantidade) {
   return rows[rows.length - 1].data;
 }
 
-module.exports = { calcularVencimento, contarDiasUteis, ehDiaUtil, diasUteisAntes };
+module.exports = { calcularVencimento, contarDiasUteis, ehDiaUtil, diasUteisAntes, proximoDiaUtil };

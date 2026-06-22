@@ -72,7 +72,15 @@ async function listar(req, res) {
               COALESCE(ur.nome, CONCAT(rf.nome, ' (freelancer)')) AS responsavel_nome,
               -- Vara e fórum do local da audiência
               vr.nome AS vara_nome, vr.abrev_nome AS vara_abrev_nome,
-              fr.nome AS vara_forum_nome
+              fr.nome AS vara_forum_nome,
+              -- Existe modelo de documento para o tipo+modalidade desta audiência?
+              -- (controla a exibição do botão "Gerar Doc": sem modelo, não mostra)
+              EXISTS(
+                SELECT 1 FROM modelo_documento md
+                WHERE md.ativo = 1 AND md.destino = 'audiencia'
+                  AND md.tipo_audiencia_id <=> a.tipo_audiencia_id
+                  AND md.modalidade <=> a.modalidade
+              ) AS tem_modelo_doc
        FROM audiencia a
        LEFT JOIN tipo_audiencia ta    ON a.tipo_audiencia_id    = ta.id
        LEFT JOIN ata_audiencia aa     ON aa.audiencia_id         = a.id
@@ -578,17 +586,13 @@ async function registrarAta(req, res) {
     const [aud] = await conn.execute('SELECT processo_id FROM audiencia WHERE id = ?', [id]);
     const processoId = aud[0]?.processo_id;
 
-    if (houve_acordo && valor_acordo) {
-      const [proc] = await conn.execute(
-        'SELECT pasta_id FROM tblProc WHERE id = ?', [processoId]
+    // Acordo em audiência → entrada na conta corrente do PROCESSO (modelo novo do financeiro)
+    if (houve_acordo && valor_acordo && processoId) {
+      await conn.execute(
+        `INSERT INTO conta_corrente (processo_id, data, descricao, tipo, valor, origem, usuario_id)
+         VALUES (?, CURDATE(), 'Acordo em audiência', 'entrada', ?, 'manual', ?)`,
+        [processoId, valor_acordo, req.usuario.id]
       );
-      if (proc[0]?.pasta_id) {
-        await conn.execute(
-          `INSERT INTO conta_corrente_pasta (pasta_id, data, descricao, valor, tipo, usuario_id)
-           VALUES (?, CURDATE(), 'Acordo em audiência', ?, 'credito', ?)`,
-          [proc[0].pasta_id, valor_acordo, req.usuario.id]
-        );
-      }
     }
 
     for (const p of prazos) {

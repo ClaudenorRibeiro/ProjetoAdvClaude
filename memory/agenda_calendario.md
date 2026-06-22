@@ -28,41 +28,25 @@ metadata:
 - Clicar numa data vazia → permite cadastrar prazo ou tarefa diretamente pelo calendário
 - ❌ Sem impressão ou exportação (Google Calendar, Outlook, etc.)
 
-## Filtro por Usuário e Modo Escritório (implementado 11/06/2026)
-
-### Comportamento padrão
-- Ao entrar na Agenda, mostra **somente os eventos do usuário logado**
-- Título exibido acima dos filtros: nome do usuário logado (ex: `"Claudio"`)
-
-### Checkbox "Escritório"
-- Aparece ao lado dos demais checkboxes de tipo (Audiências, Prazos, Tarefas)
-- Ao marcar → mostra eventos de **todos os usuários do escritório**
-- Ao marcar → título muda para `"Escritório"`
-- Ao desmarcar → volta a mostrar apenas os eventos do usuário logado, título volta ao nome
-
-### Implementação técnica (Agenda.js)
-```javascript
-const { usuario } = useAuth();
-const [filtros, setFiltros] = useState({ ..., escritorio: false });
-
-const titulo   = filtros.escritorio ? 'Escritório' : (usuario?.nome || '');
-const usuarioId = filtros.escritorio ? null : usuario?.id;
-
-// Cada chamada de API recebe o filtro quando aplicável:
-audienciasAPI.listar({ ..., responsavel_id: usuarioId || undefined })
-prazosAPI.listar({ ..., usuario_id: usuarioId || undefined })
-tarefasAPI.listar({ ..., usuario_id: usuarioId || undefined })
-periciasAPI.listar({ ..., assistente_id: usuarioId || undefined })
-```
-
-### Filtros nas APIs de backend
-- `audienciasController.listar()` aceita `responsavel_id`
-- `periciasController.listar()` aceita `assistente_id`
-- `prazosController.listar()` e `tarefasController.listar()` já aceitavam `usuario_id`
-
 ## Permissões
 
 - Usuário vê somente seus próprios eventos por padrão
 - Com permissão habilitada: visualiza eventos de usuários específicos ou de todo o escritório
 
-**Relacionado:** [[prazos]], [[tarefas]], [[audiencias]], [[pericias]], [[user-permissions]]
+## Sessão 20/06/2026 — compromissos pessoais + clicar no dia + correções (detalhes em [[pendencias-proxima-sessao]])
+A Agenda já agregava prazos/audiências/perícias/tarefas do usuário (ou do Escritório). Mantida a base e ESTENDIDA:
+- **Compromissos pessoais (Etapa A):** conceito novo "compromisso/lembrete" NÃO ligado a processo (reunião, etc.).
+  Tabela NOVA **`agenda_compromisso`** (privado por usuário; flag `escritorio=1` p/ compartilhar; campos: titulo,
+  descricao, data, hora_inicio/fim, dia_todo, escritorio). NOVO `controllers/agendaCompromissoController.js`
+  (listar/criar/atualizar/excluir; só o DONO edita/exclui o seu). Rotas `/agenda/compromissos`; `agendaAPI` em api.js.
+  Frontend `Agenda.js`: eventos "📌 Compromissos" (ciano) + checkbox na legenda + "+ Novo compromisso" + ModalCompromisso.
+- **Clicar no dia (Etapa B):** calendário "selectable" → seletor "Adicionar em DD/MM/AAAA" com "📌 Novo compromisso"
+  (abre ModalCompromisso já com a data) e "✅ Nova tarefa" via DEEP-LINK `/tarefas?nova=1&data=YYYY-MM-DD` (abre o MODAL
+  REAL de Tarefas com Vencimento preenchido; Tarefas.js lê via useLocation, ModalTarefa ganhou prop `dataInicial`). Sem duplicar formulário.
+- **BUG corrigido:** audiências/perícias COM hora sumiam — `a.hora` vinha "09:00:00" e o código acrescentava ":00"
+  → "2026-07-17T09:00:00:00" inválido → react-big-calendar descartava. Normalizado hora p/ "HH:MM" (slice 0,5) e data p/ "YYYY-MM-DD" (slice 0,10).
+- **Spinner** `.spinner-mini` (utilitário CSS reutilizável no Layout.css) no "Carregando...".
+- ⏳ **ETAPA C PENDENTE:** clicar num evento de PROCESSO (prazo/audiência/perícia/tarefa) → abrir/editar no módulo de
+  origem via deep-link. É o ÚNICO pendente da Agenda. (A memória antiga dizia que "clicar num evento abre o relacionado" — isso ainda NÃO existe; é a Etapa C.)
+
+**Relacionado:** [[prazos]], [[tarefas]], [[audiencias]], [[user-permissions]], [[pendencias-proxima-sessao]]

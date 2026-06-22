@@ -1,13 +1,562 @@
 ---
 name: pendencias-proxima-sessao
-description: "HANDOFF COMPLETO sessão 12/06/2026 (tarde) — LER PRIMEIRO: fases 1-4 codadas, scripts SQL, sequência de deploy, próximos passos"
+description: "HANDOFF — LER PRIMEIRO. TOPO: 17/06 (NOITE) — identificação de qual acordo na conta corrente ('Honor - parc N do acordo N' + '- Acordo N' no cabeçalho do acordo, número DERIVADO do id, não gravado em coluna) e fix de timezone na data pré-preenchida (novo helper hojeLocal). Abaixo: 17/06 (dia) financeiro refinos; financeiro/Perícias 15/06; sessões 13/06 e 12/06 no fim. FALTA financeiro etapa 6 (relatório+recibo)."
 metadata: 
   node_type: memory
   type: project
   originSessionId: a17aec30-7d20-496a-81a0-792eca6b27e8
 ---
 
-# 🔴 HANDOFF — Sessão 12/06/2026 (tarde) — LER ESTE ARQUIVO PRIMEIRO
+# 🔵 SESSÃO 21/06/2026 — análise do banco (estrutura_banco.sql) + 2 ajustes de schema
+
+Sessão de ANÁLISE (sem código). Revisão completa do `estrutura_banco.sql` (58 tabelas). Banco estava correto e rodando;
+SQL de 20/06 e reforma S3 já aplicados no LOCAL. Levantei 4 pontos; resultado:
+- **Item 1 (FEITO no LOCAL):** `logs_auditoria.acao` era VARCHAR(20) → causava 500 quando a ação passava de 20 chars
+  (foi o caso de "desfazer-repasse-parceiro" em 20/06). Rodado: `ALTER TABLE logs_auditoria MODIFY COLUMN acao VARCHAR(30) NOT NULL;`
+  ⚠️ FALTA rodar na PRODUÇÃO no deploy.
+- **Item 2 (NADA a fazer):** UNIQUE em `tblpasta.numPasta` — investiguei `renumerarPasta` (processosController). A rotina
+  trata o conflito (apaga a pasta vazia ANTES de gravar o número), então o UNIQUE nunca é violado. MANTER como está; é até saudável.
+- **Item 3 (DECISÃO: NÃO fazer):** `tipo_pessoa` é ENUM em tbltituloprocautor/reu (varchar nas demais). Trocar seria só
+  estética/consistência, sem ganho real e ENUM é até um pouco mais eficiente. Usuário decidiu DEIXAR como está.
+- **Item 4 (FEITO no LOCAL):** collation mista — `log_emails`, `notificacoes`, `reset_tokens` e o DEFAULT do DATABASE eram
+  utf8mb4_unicode_ci. Padronizado p/ utf8mb4_0900_ai_ci (elimina risco latente de "illegal mix of collations" em JOIN de texto futuro).
+  Rodado: `ALTER DATABASE sistema_advocacia ...0900_ai_ci` + `CONVERT TO ...0900_ai_ci` nas 3 tabelas. Só banco, sem código.
+  ⚠️ FALTA rodar na PRODUÇÃO no deploy.
+- ⚠️ Após estes ALTERs, RE-EXPORTAR `estrutura_banco.sql`.
+- REGRA NOVA gravada em [[feedback-codigo]]: analisar o código INTEIRO + testar mentalmente antes de apontar erro/sugerir
+  (no Item 2 levantei falso risco lendo trecho isolado).
+
+## 🖥️ INFRA AWS atualizada em 21/06 (produção — feito pelo usuário via SSH Lightsail, guiado por Claude)
+- **Node atualizado para v24.17.0** na PRODUÇÃO (era v20.20.2 → passou por v22.23.0 → terminou em v24.17.0 a pedido do
+  usuário, para PARIDADE com o PC local e suporte LTS mais longo). Via NodeSource: trocar repo node_XX.x
+  (`curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -`) + `sudo apt install nodejs -y`. Node é system-wide
+  (`/usr/bin/node`), sobrevive ao deploy. PM2 reinicia sozinho pelo needrestart; `advocacia-backend` ONLINE, 0 crash-loop,
+  sem erro de Node (nenhum NODE_MODULE_VERSION / Cannot find module) → dependências OK no Node 24.
+- **PC LOCAL já estava no Node v24.13.0** (instalado via instalador oficial, usa CMD; sem nvm). NÃO precisou atualizar —
+  já estava à frente. RESULTADO: local (24.13.0) e produção (24.17.0) ambos na linha **Node 24 LTS** (paridade).
+- LIÇÃO p/ o futuro (explicada ao usuário): Node não "pifa" sozinho, mas nenhuma versão dura ~10 anos — cada LTS recebe
+  segurança por ~3 anos; atualizar Node/Ubuntu/deps a cada ~2 anos é manutenção de rotina normal (o processo acima leva minutos).
+
+## 📊 DIAGNÓSTICO DE CAPACIDADE (medido em 21/06 via SSH; upgrade adiado "p/ depois")
+- **Instância Lightsail = plano mais básico: 512 MB (416 MiB úteis) / 2 vCPU / ~20 GB.** Tudo numa máquina só (backend + MySQL + nginx).
+- ⚠️ **Já usa SWAP em repouso** (free -h: total 416Mi, available ~193Mi, Swap 2Gi com 348Mi em uso, carga ~0). RAM no limite ANTES de qualquer usuário pesado.
+- Pool MySQL = **10** (`database.js`); PM2 = **1 processo** (cluster mas 1 instância → usa 1 dos 2 núcleos); PDF (LibreOffice) é serializado e faminto por RAM (~100–200MB/conversão).
+- **Gargalo é RAM, não CPU** (CPU em 0% idle; sobra). No Lightsail os planos sobem RAM+CPU+disco juntos (não dá p/ subir só RAM).
+- **Estimativa de capacidade na config ATUAL (sem mexer):** com folga ~10 usuários ATIVOS simultâneos / ~15–20 logados em uso normal de escritório (cai bastante se houver geração de PDF/Excel intensa). **200 simultâneos pesados: NÃO suporta.**
+- **Recomendação (quando o usuário quiser):** subir RAM — 2 GB resolve o swap; 4 GB dá folga. 4–8 vCPU só p/ cenário extremo ou PDF muito intenso.
+  Para 200 reais simultâneos: instância grande (8–16 GB) + idealmente separar o MySQL + ligar PM2 cluster + subir pool p/ ~25–50.
+- ⚠️ ALERTA imediato: a geração de PDF (LibreOffice) em produção numa máquina de 416 MiB que já faz swap pode ficar lenta/dar erro de memória — considerar subir o plano ANTES de usar PDF em produção de forma intensa.
+- **LibreOffice instalado** na PRODUÇÃO: `sudo apt install libreoffice-writer -y` → LibreOffice 7.3.7.2 em `/usr/bin/soffice`
+  (onde pdfConvertService procura; LIBREOFFICE_PATH pode ficar vazio). Prep p/ o deploy do módulo Documentos novo (S3+docx+PDF).
+  ⚠️ Ao testar PDF após o deploy, conferir FONTES (sem MS fonts o LibreOffice usa Liberation — métrica compatível com Arial/Times,
+  costuma ficar OK; se layout ficar estranho, instalar fonts-liberation ou ttf-mscorefonts-installer).
+- ⚠️ Observação importante: nos logs do PM2 da produção aparece `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` (express-rate-limit +
+  trust proxy=false atrás do nginx). NÃO é do Node — é o CÓDIGO ANTIGO ainda em produção; o fix de rate limit de 20/06
+  (remove limitador global + trust proxy=1 em produção) resolve isso quando for deployado.
+
+---
+
+## 🆕 FEATURES NOVAS construídas em 21/06 (LOCAL; validadas node --check + build Vite; usuário ainda vai testar)
+
+### A) "Documento de partes" (modelos .docx com vários autores × réus) — SEM SQL
+- Detalhes completos em [[documentos-modelos]] (seção "DOCUMENTO DE PARTES (multipessoas)").
+- Novo destino de modelo 'multipessoas'; no .docx usa regiões `{{#autores}}…{{/autores}}` e `{{#reus}}…{{/reus}}`
+  (repetem por pessoa) + variáveis por pessoa + listas `{{#telefones}}`/`{{#emails}}`.
+- Geração pelo botão **"Gerar documento de partes" na TELA DE PESSOAS** (modal 2 lados: autor à esquerda, réu à direita).
+- ZERO banco. Fora do escopo (depois): amarrar modelo a um réu específico.
+
+### B) Módulo de PUBLICAÇÕES (AASP) REFEITO DO ZERO — PRECISA RODAR SQL
+- Detalhes completos em [[integracoes-publicacoes]].
+- ⚠️ **RODAR no HeidiSQL (LOCAL primeiro; produção no deploy)** — refaz publicacoes + cria publicacao_usuario:
+```sql
+DROP TABLE IF EXISTS publicacao_usuario;
+DROP TABLE IF EXISTS publicacoes;
+CREATE TABLE publicacoes (
+  id INT NOT NULL AUTO_INCREMENT, fonte VARCHAR(20) NOT NULL DEFAULT 'aasp', data_publicacao DATE NOT NULL,
+  numero_processo VARCHAR(45) DEFAULT NULL, titulo VARCHAR(255) DEFAULT NULL, cabecalho VARCHAR(100) DEFAULT NULL,
+  numero_publicacao VARCHAR(30) DEFAULT NULL, numero_arquivo VARCHAR(30) DEFAULT NULL,
+  texto MEDIUMTEXT NOT NULL, texto_hash CHAR(64) NOT NULL, escritorio TINYINT(1) NOT NULL DEFAULT 1,
+  importada_por INT DEFAULT NULL, criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+  direcionada_por INT DEFAULT NULL, direcionada_em DATETIME DEFAULT NULL,
+  tratada TINYINT(1) NOT NULL DEFAULT 0, tratada_por INT DEFAULT NULL, tratada_em DATETIME DEFAULT NULL,
+  PRIMARY KEY (id), KEY idx_pub_data (data_publicacao), KEY idx_pub_hash (texto_hash),
+  KEY idx_pub_processo (numero_processo), KEY idx_pub_fonte (fonte), KEY importada_por (importada_por),
+  KEY direcionada_por (direcionada_por), KEY tratada_por (tratada_por),
+  CONSTRAINT fk_pub_importada FOREIGN KEY (importada_por) REFERENCES usuarios (id) ON DELETE SET NULL,
+  CONSTRAINT fk_pub_direcionada FOREIGN KEY (direcionada_por) REFERENCES usuarios (id) ON DELETE SET NULL,
+  CONSTRAINT fk_pub_tratada FOREIGN KEY (tratada_por) REFERENCES usuarios (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+CREATE TABLE publicacao_usuario (
+  id INT NOT NULL AUTO_INCREMENT, publicacao_id INT NOT NULL, usuario_id INT NOT NULL,
+  PRIMARY KEY (id), KEY idx_pu_pub (publicacao_id), KEY idx_pu_user (usuario_id),
+  CONSTRAINT fk_pu_pub FOREIGN KEY (publicacao_id) REFERENCES publicacoes (id) ON DELETE CASCADE,
+  CONSTRAINT fk_pu_user FOREIGN KEY (usuario_id) REFERENCES usuarios (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+```
+- Integração REAL com a AASP (chave em Configurações → Integrações; corrigido o controller de Integrações
+  que não salvava/carregava config). Importar por dia, dedup por hash do texto, direcionar a vários usuários,
+  pesquisa por conteúdo, histórico, navegação no modal + realce do termo, cabeçalho de tabela fixo (.tabela-sticky).
+- DEPOIS de rodar o SQL: configurar a chave AASP e testar. "Criar prazo/audiência/perícia a partir da publicação" = depois.
+
+---
+
+# 🟠 SESSÃO 20/06/2026 — LER PRIMEIRO (Financeiro 2 tempos + Consulta + Agenda + rate limit)
+
+Tudo LOCAL, validado (node --check + build Vite). SEM git. NENHUMA dependência nova (exceljs e
+express-rate-limit já existiam). ✅ **SQL de 20/06 JÁ RODADO no banco LOCAL** (confirmado em 21/06 pelo
+estrutura_banco.sql: acordo.tipo, colunas de repasse, idx_parcela_vencimento, forma_pagamento, agenda_compromisso
+presentes). ⚠️ FALTA rodar o MESMO SQL na PRODUÇÃO antes do deploy. (SQL CONSOLIDADO abaixo p/ referência da produção.)
+✅ Reforma S3 dos modelos TAMBÉM já no banco: `modelo_documento.arquivo_s3_key` NOT NULL, com modelos reais cadastrados.
+REGRA NOVA gravada em [[feedback-codigo]]: analisar impacto e ALERTAR antes de executar qualquer pedido.
+
+## ⚠️ SQL CONSOLIDADO 20/06 — rodar TUDO no HeidiSQL (LOCAL; depois PRODUÇÃO antes do deploy)
+```sql
+-- FINANCEIRO Etapa 1 (formas de pagamento + recebimento)
+CREATE TABLE forma_pagamento ( id INT NOT NULL AUTO_INCREMENT, nome VARCHAR(60) NOT NULL,
+  ativo TINYINT(1) NOT NULL DEFAULT 1, PRIMARY KEY (id) ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+ALTER TABLE acordo_parcela CHANGE data_pagamento recebido_em DATE NULL;
+ALTER TABLE acordo_parcela
+  ADD COLUMN recebimento_forma_id INT DEFAULT NULL AFTER recebido_em,
+  ADD COLUMN recebimento_identificacao VARCHAR(120) DEFAULT NULL AFTER recebimento_forma_id,
+  ADD CONSTRAINT fk_parcela_receb_forma FOREIGN KEY (recebimento_forma_id) REFERENCES forma_pagamento (id) ON DELETE SET NULL;
+-- FINANCEIRO Etapa 2 (repasses cliente/parceiro independentes + quem fez)
+ALTER TABLE acordo_parcela
+  ADD COLUMN repasse_cliente_em DATE DEFAULT NULL, ADD COLUMN repasse_cliente_forma_id INT DEFAULT NULL,
+  ADD COLUMN repasse_parceiro_em DATE DEFAULT NULL, ADD COLUMN repasse_parceiro_forma_id INT DEFAULT NULL,
+  ADD CONSTRAINT fk_parcela_repcli_forma FOREIGN KEY (repasse_cliente_forma_id) REFERENCES forma_pagamento (id) ON DELETE SET NULL,
+  ADD CONSTRAINT fk_parcela_reppar_forma FOREIGN KEY (repasse_parceiro_forma_id) REFERENCES forma_pagamento (id) ON DELETE SET NULL;
+ALTER TABLE acordo_parcela
+  ADD COLUMN repasse_cliente_por INT DEFAULT NULL, ADD COLUMN repasse_parceiro_por INT DEFAULT NULL,
+  ADD CONSTRAINT fk_parcela_repcli_por FOREIGN KEY (repasse_cliente_por) REFERENCES usuarios (id) ON DELETE SET NULL,
+  ADD CONSTRAINT fk_parcela_reppar_por FOREIGN KEY (repasse_parceiro_por) REFERENCES usuarios (id) ON DELETE SET NULL;
+-- FINANCEIRO Etapa 3 (alvará generalizado) — UM motor só via coluna tipo
+ALTER TABLE acordo ADD COLUMN tipo VARCHAR(10) NOT NULL DEFAULT 'acordo' AFTER processo_id;
+-- CONSULTA (índice recomendado)
+ALTER TABLE acordo_parcela ADD INDEX idx_parcela_vencimento (vencimento);
+-- AGENDA (compromissos pessoais)
+CREATE TABLE agenda_compromisso ( id INT NOT NULL AUTO_INCREMENT, usuario_id INT NOT NULL,
+  titulo VARCHAR(150) NOT NULL, descricao TEXT DEFAULT NULL, data DATE NOT NULL, hora_inicio TIME DEFAULT NULL,
+  hora_fim TIME DEFAULT NULL, dia_todo TINYINT(1) NOT NULL DEFAULT 0, escritorio TINYINT(1) NOT NULL DEFAULT 0,
+  criado_em DATETIME DEFAULT CURRENT_TIMESTAMP, alterado_em DATETIME DEFAULT NULL, PRIMARY KEY (id),
+  KEY usuario_id (usuario_id), KEY data (data),
+  CONSTRAINT fk_agcomp_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+-- (Recibos NÃO precisaram de SQL.) Depois: exportar estrutura → estrutura_banco.sql.
+```
+
+## O que foi feito (TUDO testado pelo usuário, exceto onde indicado)
+1. **FINANCEIRO — pagamento de 2 TEMPOS.** TEMPO 1 = RECEBIMENTO (réu→escritório): "Receber" da parcela grava
+   `recebido_em` + forma (obrigatória) + identificação. TEMPO 2 = REPASSE (escritório→cliente E/OU parceiro),
+   datas/formas INDEPENDENTES; é no repasse que se GERA O RECIBO. A **conta corrente NÃO foi tocada** (segue sendo o
+   P&L: honorário entra + parceria sai, no recebimento). Repasses/recibo são ADITIVOS. **Não dá p/ desfazer o
+   recebimento enquanto houver repasse** (desfazer o repasse primeiro — fica na aba Repasses→Concluídos). Detalhes em [[financeiro]].
+   - Etapa 1: `forma_pagamento` (cadastro em Controle→"Formas de pagamento", só admin, soft-delete ativo=0, não bloqueia em uso).
+     NOVO `controllers/formaPagamentoController.js`; rotas `/financeiro/formas-pagamento`; NOVA tela `pages/Controle/FormasPagamento.js`.
+     Badge da parcela virou "Recebida {data}" (tooltip forma/identificação).
+   - Etapa 2: `registrarRepasse`/`desfazerRepasse` (mapa whitelist `COLS_REPASSE` — nome de coluna nunca vem do request).
+     `listarRepassesPendentes`/`listarRepassesConcluidos` (worklists GLOBAIS). Aba "Repasses" (sub-abas Pendentes/Concluídos).
+     BUG corrigido: `logs_auditoria.acao` é VARCHAR(20) → ação encurtada p/ "desfazer-repasse" (estourava em 25 chars → 500).
+   - Etapa 3: **ALVARÁ = mesma estrutura do acordo** via `acordo.tipo` ('acordo'|'alvara'). Numeração POR TIPO ("Acordo N"/"Alvará N").
+     "parc N" virou "parc N/T" (número/total) nas worklists e na descrição da conta corrente.
+   - Etapa 4: **RECIBOS** via módulo Documentos (modelo com destino "Recibo: Cliente"/"Recibo: Parceria"). NOVO `utils/extenso.js`
+     (valor por extenso pt-BR). `variaveisResolver.resolverPagamento(parcelaId,{tipoRecibo})` (valor_pago = líquido OU parceria,
+     derivado do destino). `config/variaveisDocumento.js` ganhou tags de pagamento. `GerarDocumento.js` ganhou prop `beneficiario`.
+2. **FINANCEIRO — aba "Consulta"** (3ª aba; é também o RELATÓRIO, último pendente do plano antigo). `consultarFinanceiro`
+   (GET /financeiro/consulta, WHERE dinâmico parametrizado, paginado 50/pág, retorna registros+total+totais) e
+   `exportarConsultaFinanceiro` (Excel via exceljs lazy). Base = `acordo_parcela` (lançamentos manuais da CC NÃO entram).
+3. **DOCUMENTOS — paginação** no "Histórico de documentos gerados" (50/pág; `log_documentos_gerados` já tinha índice em gerado_em).
+4. **AUDIÊNCIAS — coluna "Responsável"** na listagem (só frontend; backend já mandava responsavel_nome). Sem SQL.
+5. **AGENDA — compromissos pessoais** (tabela `agenda_compromisso`) + clicar no dia p/ adicionar (Etapas A e B) +
+   fix bug (audiências/perícias COM hora sumiam: hora "09:00:00" + ":00" → data inválida; normalizado slice) + spinner `.spinner-mini`.
+   ⏳ **ETAPA C PENDENTE:** clicar num evento de PROCESSO → abrir/editar no módulo de origem via deep-link (único pendente da Agenda). Ver [[agenda-calendario]].
+6. **SEGURANÇA/ESCALA — rate limit corrigido** (`server.js`+`routes/index.js`): REMOVIDO o limitador global de /api/ (rotas
+   protegidas por JWT); `trust proxy` = 1 em produção (atrás do nginx) / false em dev; NOVO `loginLimiter` só no POST
+   /auth/login, CHAVEADO PELO NOME DE USUÁRIO + skipSuccessfulRequests (10 falhas/15min barram só aquele login). Destrava reiniciando o backend.
+
+## Arquivos 20/06 (todos LOCAIS) — ver lista completa no RESUMO_SESSAO_20-06-2026.txt
+Backend NOVOS: `formaPagamentoController.js`, `agendaCompromissoController.js`, `utils/extenso.js`. ALTERADOS:
+`financeiroController.js`, `documentosController.js`, `services/variaveisResolver.js`, `config/variaveisDocumento.js`,
+`routes/index.js`, `server.js`. Frontend NOVOS: `pages/Controle/FormasPagamento.js`. ALTERADOS: `Financeiro.js`,
+`PastaDetalhe.js`, `Documentos.js`, `Audiencias.js`, `Agenda.js`, `Tarefas.js`, `GerarDocumento.js`, `Layout.js`, `Layout.css`, `api.js`, `App.js`.
+
+## Pendências 20/06
+- [ ] RODAR todo o SQL CONSOLIDADO acima (LOCAL) — nada rodado ainda.
+- [ ] Cadastrar formas de pagamento + modelos de Recibo p/ testar recibos.
+- [ ] AGENDA Etapa C (deep-link de evento de processo).
+- [ ] Re-exportar `estrutura_banco.sql` após rodar os SQLs.
+- [ ] Deploy: SQLs na PRODUÇÃO antes do código; instalar LibreOffice no servidor; manter AWS_* no .env (S3 dos modelos).
+
+## ⚠️ OBSERVADO (NÃO documentado neste resumo) — reforma do módulo Documentos para S3 + docx + PDF
+Há arquivos NOVOS não rastreados no git que NÃO constam do resumo de 20/06: `services/s3Service.js` (modelos .docx
+no bucket S3 privado), `services/docxModeloService.js`, `services/pdfConvertService.js` (docx→PDF via LibreOffice),
+`config/variaveisDocumento.js`, `services/variaveisResolver.js`, `utils/extenso.js`; `.env.example` ganhou `AWS_S3_BUCKET`
+e `LIBREOFFICE_PATH`; novo `GUIA_S3_NOVO_CLIENTE.txt`. Isso SUBSTITUI o modelo antigo descrito em [[documentos-modelos]]
+(que dizia "modelos não salvos no servidor"). ⚠️ Estado/decisões dessa reforma ainda precisam ser CONFIRMADOS com o usuário e detalhados em [[documentos-modelos]].
+
+---
+
+# 🟡 SESSÃO 17/06/2026 (NOITE) — identificar acordo na conta corrente + fix timezone (LER PRIMEIRO)
+
+Continuação do financeiro (mesma máquina/dia, à noite). Tudo LOCAL, validado (node --check + build Vite).
+SEM SQL novo. SEM git. Foram 2 frentes pequenas, ambas decididas passo a passo com o usuário.
+
+## 1) Identificar A QUAL ACORDO pertence cada parcela (processo com >1 acordo)
+**Problema:** um processo pode ter vários acordos; na conta corrente apareciam duas linhas idênticas
+"Honorário — parcela 1 do acordo" sem dizer de qual acordo. No cabeçalho do acordo (lista de Acordos) também
+não havia identificação.
+
+**Decisão fechada com o usuário (importante p/ entender o resto):**
+- O acordo é identificado por um **número sequencial por processo** ("Acordo 1", "Acordo 2"...), na **ordem de
+  criação**. Esse número é **DERIVADO do `acordo.id`** (auto_increment) — **NÃO existe coluna nova no banco**,
+  nada de redundância. Cálculo padrão: `COUNT(*) de acordos do mesmo processo com id <= o id deste acordo`.
+- O usuário escolheu o formato de texto **exatamente** assim (atenção ao traço e às abreviações):
+  - Linha de honorário na conta corrente: **`Honor - parc 1 do acordo 2`** (hífen "-", "parc", "acordo N").
+  - Linha de repasse de parceria: **`Repasse parceria <nome> — parc 1 do acordo 2`** (traço "—", manteve o estilo já existente).
+  - Cabeçalho do acordo na lista: **`... · recebido R$ 833,34 - Acordo 3`**.
+
+**Onde "vive" o número (ponto que o usuário perguntou e ficou decidido):**
+- Na **lista de Acordos** (cabeçalho) o número é **derivado na leitura** (query de `listarAcordos`) — nada gravado.
+- Na **conta corrente**, o texto (`Honor - parc 1 do acordo 2`) é **GRAVADO como snapshot** na coluna
+  `conta_corrente.descricao` no momento da BAIXA da parcela (igual já era antes; só mudou o texto montado).
+  Ou seja: o NÚMERO do acordo não é persistido como coluna, mas o TEXTO final fica gravado naquele instante.
+  ⚠️ Consequência aceita pelo usuário (os dados dele são TODOS de teste, ele vai limpar): lançamentos ANTIGOS
+  mantêm o texto velho ("Honorário — parcela 1 do acordo"); só os NOVOS nascem no formato novo. E se um dia um
+  acordo anterior for excluído, a numeração re-deriva na tela, mas os textos já gravados na conta corrente ficam
+  "congelados" — tudo bem porque é teste e porque acordo com parcela paga não pode ser excluído.
+
+**Código (backend `controllers/financeiroController.js`):**
+- `pagarParcela`: ANTES de montar a descrição, calcula `numeroAcordo` com
+  `SELECT COUNT(*) AS n FROM acordo WHERE processo_id = ? AND id <= ?` ([parc.processo_id, parc.acordo_id]),
+  dentro da transação que já existia. ENTRADA (honorário): `Honor - parc ${parc.numero} do acordo ${numeroAcordo}`
+  + ` (${observacao})` se houver. SAÍDA (repasse): `Repasse parceria <nome> — parc ${parc.numero} do acordo ${numeroAcordo}`.
+- `listarAcordos`: a query passou a retornar `numero_acordo` via subquery
+  `(SELECT COUNT(*) FROM acordo a2 WHERE a2.processo_id = a.processo_id AND a2.id <= a.id)`.
+
+**Código (frontend `pages/Financeiro/Financeiro.js`):**
+- `AcordoBloco` (~linha 371): o cabeçalho agora concatena `{acordo.numero_acordo != null && ' - Acordo ' + acordo.numero_acordo}`
+  depois do "recebido R$ ...".
+
+## 2) Fix do bug de TIMEZONE na data pré-preenchida (modal Receber vinha "amanhã")
+**Problema:** ao clicar **Receber** parcela depois das ~21h (horário de Brasília), a "Data do recebimento" vinha
+pré-preenchida com o dia SEGUINTE. Causa clássica: `new Date().toISOString()` converte p/ UTC → após 21h-BR já é amanhã.
+**FIX:** novo helper **`hojeLocal()`** em `frontend/src/utils/formatters.js` — devolve a data de HOJE no fuso do
+navegador como 'YYYY-MM-DD' (usa getFullYear/getMonth/getDate, sem passar por UTC). Trocados os **3 usos** de
+`new Date().toISOString().split('T')[0]` em `Financeiro.js`: (a) estado do modal "Receber parcela"; (b) data
+padrão do `ModalLancamento`; (c) o `const hoje` do aviso de data retroativa no "Gerar Parcelas".
+⚠️ **PENDENTE / sugerido (não feito, aguarda autorização):** o MESMO padrão `toISOString()` provavelmente existe
+em OUTRAS telas (Audiências, Prazos, Tarefas, etc.) e teria o mesmo bug pós-21h. Sugeri varrer o frontend inteiro
+e trocar todos por `hojeLocal()` — o usuário ainda não autorizou essa varredura geral.
+
+## Arquivos alterados nesta sessão (17/06 noite) — todos LOCAIS, validados
+- Backend: `controllers/financeiroController.js` (numeroAcordo na baixa: honorário + repasse; numero_acordo em listarAcordos).
+- Frontend: `utils/formatters.js` (NOVO helper `hojeLocal`), `pages/Financeiro/Financeiro.js`
+  (3 usos trocados p/ hojeLocal + "- Acordo N" no AcordoBloco; import de `hojeLocal`).
+- SEM SQL. SEM git. Nada deployado (deploy é sempre manual do usuário).
+
+---
+
+# 🟣 SESSÃO 17/06/2026 (DIA) — FINANCEIRO: testes + refinos + features
+
+Continuação do financeiro (reconstruído 15/06). Tudo LOCAL, validado (node --check + build Vite). Várias coisas TESTADAS
+pelo usuário no dia. Detalhes completos em [[financeiro]]. Resumo do que fizemos hoje:
+
+## ⚠️ SQL — schema final do financeiro (rodar no banco LOCAL de cada PC se ainda não tiver)
+O usuário JÁ rodou no PC de hoje. No OUTRO PC, garantir que o banco tem: `conta_corrente` COM `parcela_id`,
+`acordo_parcela` SEM `lancamento_id`, e as 2 tabelas de auditoria. SQL consolidado:
+```sql
+-- (1) Recria as 3 tabelas no formato NOVO (conta_corrente.parcela_id; acordo_parcela sem lancamento_id)
+SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS conta_corrente; DROP TABLE IF EXISTS acordo_parcela; DROP TABLE IF EXISTS acordo;
+SET FOREIGN_KEY_CHECKS = 1;
+CREATE TABLE acordo ( id INT NOT NULL AUTO_INCREMENT, processo_id INT NOT NULL, descricao VARCHAR(300) DEFAULT NULL,
+  valor_total DECIMAL(15,2) NOT NULL, qtd_parcelas INT NOT NULL, data_primeira DATE NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'ativo', criado_por INT DEFAULT NULL, criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+  alterado_por INT DEFAULT NULL, alterado_em DATETIME DEFAULT NULL, PRIMARY KEY (id), KEY processo_id (processo_id), KEY criado_por (criado_por),
+  CONSTRAINT fk_acordo_proc FOREIGN KEY (processo_id) REFERENCES tblProc (id) ON DELETE CASCADE,
+  CONSTRAINT fk_acordo_criado FOREIGN KEY (criado_por) REFERENCES usuarios (id) ON DELETE SET NULL,
+  CONSTRAINT fk_acordo_alterado FOREIGN KEY (alterado_por) REFERENCES usuarios (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+CREATE TABLE acordo_parcela ( id INT NOT NULL AUTO_INCREMENT, acordo_id INT NOT NULL, numero INT NOT NULL, vencimento DATE NOT NULL,
+  valor_bruto DECIMAL(15,2) NOT NULL DEFAULT 0, honor_tipo VARCHAR(10) NOT NULL DEFAULT 'percent', honor_percentual DECIMAL(5,2) DEFAULT NULL,
+  honor_valor DECIMAL(15,2) NOT NULL DEFAULT 0, valor_liquido DECIMAL(15,2) NOT NULL DEFAULT 0, observacao VARCHAR(300) DEFAULT NULL,
+  parceria_pessoa_tipo VARCHAR(20) DEFAULT NULL, parceria_pessoa_id INT DEFAULT NULL, parceria_tipo VARCHAR(10) DEFAULT NULL,
+  parceria_percentual DECIMAL(5,2) DEFAULT NULL, parceria_valor DECIMAL(15,2) DEFAULT NULL, status VARCHAR(15) NOT NULL DEFAULT 'pendente',
+  data_pagamento DATE DEFAULT NULL, PRIMARY KEY (id), KEY acordo_id (acordo_id),
+  CONSTRAINT fk_parcela_acordo FOREIGN KEY (acordo_id) REFERENCES acordo (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+CREATE TABLE conta_corrente ( id INT NOT NULL AUTO_INCREMENT, processo_id INT NOT NULL, parcela_id INT DEFAULT NULL, data DATE NOT NULL,
+  descricao VARCHAR(300) NOT NULL, tipo VARCHAR(10) NOT NULL, valor DECIMAL(15,2) NOT NULL, origem VARCHAR(20) NOT NULL DEFAULT 'manual',
+  usuario_id INT NOT NULL, criado_em DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY processo_id (processo_id),
+  KEY parcela_id (parcela_id), KEY usuario_id (usuario_id),
+  CONSTRAINT fk_cc_processo FOREIGN KEY (processo_id) REFERENCES tblProc (id) ON DELETE CASCADE,
+  CONSTRAINT fk_cc_parcela FOREIGN KEY (parcela_id) REFERENCES acordo_parcela (id) ON DELETE SET NULL,
+  CONSTRAINT fk_cc_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+-- (2) Históricos (auditoria por parcela e por lançamento da conta corrente)
+CREATE TABLE auditoria_parcela ( id INT NOT NULL AUTO_INCREMENT, parcela_id INT NOT NULL, acao VARCHAR(30) NOT NULL,
+  campo_alterado VARCHAR(100) DEFAULT NULL, valor_anterior TEXT, valor_novo TEXT, usuario_id INT NOT NULL,
+  criado_em DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY parcela_id (parcela_id), KEY usuario_id (usuario_id),
+  CONSTRAINT fk_audparcela_parcela FOREIGN KEY (parcela_id) REFERENCES acordo_parcela (id) ON DELETE CASCADE,
+  CONSTRAINT fk_audparcela_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+CREATE TABLE auditoria_conta_corrente ( id INT NOT NULL AUTO_INCREMENT, lancamento_id INT NOT NULL, acao VARCHAR(30) NOT NULL,
+  campo_alterado VARCHAR(100) DEFAULT NULL, valor_anterior TEXT, valor_novo TEXT, usuario_id INT NOT NULL,
+  criado_em DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY lancamento_id (lancamento_id), KEY usuario_id (usuario_id),
+  CONSTRAINT fk_audcc_lanc FOREIGN KEY (lancamento_id) REFERENCES conta_corrente (id) ON DELETE CASCADE,
+  CONSTRAINT fk_audcc_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+```
+
+## O QUE FIZEMOS HOJE (17/06) — só frontend salvo onde marcado "backend"
+1. **Máscara de moeda** em TODOS os campos de valor (helpers em `formatters.js`: `mascaraMoeda`, `numeroParaMascaraMoeda`,
+   `parseMoeda`). Estilo "caixa eletrônico" (centavos da direita p/ esquerda; digita 150000 → 1.500,00). Aplicada em:
+   Financeiro (lançamento valor; acordo valor_total; parcela bruto e honor fixo; parceria valor) e Audiências (ata valor_acordo/valor_parcela).
+   % e nº de parcelas NÃO levam máscara. ModalAcordo passou a guardar moeda como STRING mascarada e calcular honor/líquido/parceria
+   NA RENDERIZAÇÃO (helpers honorDaParcela/liquidoDaParcela/parceriaDaParcela; saiu o recalcParcela).
+2. **DECISÃO CONTÁBIL da baixa (backend):** conta corrente = P&L do escritório. Ao **Receber** parcela: ENTRADA = honorário
+   (SEMPRE, mesmo R$ 0, com a obs da parcela na descrição) + SAÍDA = repasse da parceria (se houver, com nome do parceiro).
+   Saldo = lucro. Bruto/líquido do cliente NÃO entram (ficam na parcela p/ relatórios). Exigiu o SQL do `parcela_id` acima.
+   `desfazer` apaga por `parcela_id` (entrada+saída). Helper `resolverNomePessoa`.
+3. **Modal "data do recebimento"** ao clicar Receber (default hoje, pode trocar — recebimento de outra data).
+4. **Parceria do acordo inteiro** (botão no cabeçalho do ModalAcordo) — aplica a mesma parceria em TODAS as parcelas; ainda dá p/ sobrescrever por linha.
+5. **Linha de Total** na tabela de parcelas do acordo salvo (Bruto, Honorário, Líquido, Parceria).
+6. **Trava honorário fixo > bruto** (opção A): aviso inline vermelho + bloqueio no salvar.
+7. **Confirmação ao salvar acordo** se a soma das parcelas ≠ valor total informado (de X → Y, confirma?).
+8. **Aviso de data retroativa** ao Gerar Parcelas (se 1ª parcela < hoje).
+9. **Histórico COMPLETO por parcela (backend + SQL `auditoria_parcela`):** registra criada/editada(campo a campo)/recebida/
+   recebimento-desfeito/cancelada. `atualizarAcordo` foi REESCRITO p/ atualizar parcelas NO LUGAR (mantém IDs — diff: update/insert/delete)
+   em vez de apagar+recriar (era o que permitia o histórico). Colunas **Obs** e **Histórico** no AcordoBloco + ModalHistoricoParcela.
+10. **Histórico da Conta Corrente (backend + SQL `auditoria_conta_corrente`):** criado/editado(campo a campo). Botão **Histórico**
+    no extrato (Financeiro e aba da pasta) + `ModalHistoricoLancamento` (exportado e reusado). Exclusão fica no log geral; lançamentos
+    de acordo têm histórico na parcela.
+11. **Removida coluna "Saldo"** (linha a linha) do extrato — redundante com o saldo total no topo.
+12. **Cancelar acordo (backend, SEM SQL):** botão Cancelar (pede motivo obrigatório). Acordo → 'cancelado'; parcelas PENDENTES →
+    'cancelada' (pagas permanecem). DEFINITIVO: acordo cancelado vira registro permanente (somem Editar/Excluir/Cancelar; Receber some
+    das canceladas). Status são VARCHAR → não precisou de SQL. Endpoint `PUT /financeiro/acordo/:id/cancelar`.
+13. **Fix `proximoDiaUtil` (backend):** o `calendario` só cobre 2026-05-01→2056-04-30; datas no passado "colavam" no 1º dia do calendário.
+    Agora, data fora da faixa do calendário é retornada como veio (não ajusta). ⚠️ ESSA correção foi feita SEM autorização explícita
+    (o usuário perguntou "por que?" e Claude já codou); o usuário reforçou a regra (ver [[feedback-codigo]]) e seguiu testando — fica mantida
+    salvo ele pedir reverter. OPCIONAL futuro: estender o calendário p/ trás (SQL) se quiser dia útil em datas passadas.
+
+## Arquivos alterados hoje (17/06) — todos LOCAIS
+- Backend: `controllers/financeiroController.js` (baixa por honorário+parceria, históricos parcela/CC, atualizarAcordo diff, cancelarAcordo),
+  `services/calendarioService.js` (proximoDiaUtil), `routes/index.js`.
+- Frontend: `utils/formatters.js` (máscara moeda), `pages/Financeiro/Financeiro.js` (MUITA coisa), `pages/Processos/PastaDetalhe.js`
+  (extrato: histórico + sem coluna saldo), `pages/Audiencias/Audiencias.js` (máscara nos valores da ata), `services/api.js`.
+- Memória: `feedback_codigo.md` (regra "nunca codar sem autorização" reforçada + correção da instrução de auto-commit revogada).
+
+## FALTA no financeiro (próxima sessão) — etapas 5/6 ainda
+- **Relatório**: bruto/honorário/líquido/parceria por cliente/pasta/processo/período (sai de `acordo_parcela` status='pago' + data_pagamento,
+  e da `conta_corrente`). O "Relatório Geral" antigo foi removido na reconstrução.
+- **Recibo PDF**: adaptar `pdfService.gerarReciboFinanceiro` (dead code do modelo antigo) ao novo modelo.
+
+---
+
+# 🔵 FINANCEIRO — RECONSTRUÍDO DO ZERO (15/06/2026, fim do dia) — CONTINUAR AMANHÃ / OUTRO PC
+
+**LER PRIMEIRO. Feature grande, EM ANDAMENTO.** O financeiro antigo era protótipo sem valor → o usuário autorizou
+refazer do ZERO e DROPAR as tabelas antigas. Modelo novo é **POR PROCESSO**. Detalhes completos em [[financeiro]].
+
+## ⚠️ PASSO 1 — RODAR ESTE SQL no HeidiSQL (LOCAL). No outro PC, rodar no banco local de lá ANTES de testar.
+```sql
+DROP TABLE IF EXISTS acordo_parcela;
+DROP TABLE IF EXISTS acordo;
+DROP TABLE IF EXISTS conta_corrente;
+DROP TABLE IF EXISTS conta_corrente_pasta;
+DROP TABLE IF EXISTS honorarios;
+DROP TABLE IF EXISTS parcerias;
+
+CREATE TABLE conta_corrente (
+  id INT NOT NULL AUTO_INCREMENT, processo_id INT NOT NULL, data DATE NOT NULL,
+  descricao VARCHAR(300) NOT NULL, tipo VARCHAR(10) NOT NULL, valor DECIMAL(15,2) NOT NULL,
+  origem VARCHAR(20) NOT NULL DEFAULT 'manual', usuario_id INT NOT NULL, criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id), KEY processo_id (processo_id), KEY usuario_id (usuario_id),
+  CONSTRAINT fk_cc_processo FOREIGN KEY (processo_id) REFERENCES tblProc (id) ON DELETE CASCADE,
+  CONSTRAINT fk_cc_usuario  FOREIGN KEY (usuario_id)  REFERENCES usuarios (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE acordo (
+  id INT NOT NULL AUTO_INCREMENT, processo_id INT NOT NULL, descricao VARCHAR(300) DEFAULT NULL,
+  valor_total DECIMAL(15,2) NOT NULL, qtd_parcelas INT NOT NULL, data_primeira DATE NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'ativo', criado_por INT DEFAULT NULL, criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+  alterado_por INT DEFAULT NULL, alterado_em DATETIME DEFAULT NULL,
+  PRIMARY KEY (id), KEY processo_id (processo_id), KEY criado_por (criado_por),
+  CONSTRAINT fk_acordo_proc     FOREIGN KEY (processo_id)  REFERENCES tblProc (id)  ON DELETE CASCADE,
+  CONSTRAINT fk_acordo_criado   FOREIGN KEY (criado_por)   REFERENCES usuarios (id) ON DELETE SET NULL,
+  CONSTRAINT fk_acordo_alterado FOREIGN KEY (alterado_por) REFERENCES usuarios (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE acordo_parcela (
+  id INT NOT NULL AUTO_INCREMENT, acordo_id INT NOT NULL, numero INT NOT NULL, vencimento DATE NOT NULL,
+  valor_bruto DECIMAL(15,2) NOT NULL DEFAULT 0, honor_tipo VARCHAR(10) NOT NULL DEFAULT 'percent',
+  honor_percentual DECIMAL(5,2) DEFAULT NULL, honor_valor DECIMAL(15,2) NOT NULL DEFAULT 0,
+  valor_liquido DECIMAL(15,2) NOT NULL DEFAULT 0, observacao VARCHAR(300) DEFAULT NULL,
+  parceria_pessoa_tipo VARCHAR(20) DEFAULT NULL, parceria_pessoa_id INT DEFAULT NULL,
+  parceria_tipo VARCHAR(10) DEFAULT NULL, parceria_percentual DECIMAL(5,2) DEFAULT NULL,
+  parceria_valor DECIMAL(15,2) DEFAULT NULL, status VARCHAR(15) NOT NULL DEFAULT 'pendente',
+  data_pagamento DATE DEFAULT NULL, lancamento_id INT DEFAULT NULL,
+  PRIMARY KEY (id), KEY acordo_id (acordo_id), KEY lancamento_id (lancamento_id),
+  CONSTRAINT fk_parcela_acordo     FOREIGN KEY (acordo_id)     REFERENCES acordo (id)          ON DELETE CASCADE,
+  CONSTRAINT fk_parcela_lancamento FOREIGN KEY (lancamento_id) REFERENCES conta_corrente (id)  ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+```
+
+## PASSO 2 — Arquivos alterados nesta frente (já no LOCAL; precisam ir junto p/ o outro PC)
+- Backend: `services/calendarioService.js` (proximoDiaUtil), `controllers/financeiroController.js` (REESCRITO),
+  `routes/index.js`, `controllers/audienciasController.js` (acordo→conta_corrente novo),
+  `controllers/processosController.js` (loop renumerar pasta).
+- Frontend: `services/api.js` (financeiroAPI novo), `pages/Financeiro/Financeiro.js` (REESCRITO + exporta
+  ModalLancamento/ModalAcordo/AcordoBloco), `pages/Processos/PastaDetalhe.js` (aba Financeiro reescrita reusando esses
+  componentes; removido ModalLancamento local + import Link).
+
+## PASSO 3 — O QUE JÁ ESTÁ PRONTO (validado node --check + build Vite; FALTA o usuário TESTAR)
+Conta corrente por processo (lançar/editar/excluir entrada-saída + saldo), acordo (gerar prévia em dia útil / criar /
+editar / excluir), parcelas editáveis (honorário %/fixo/sem + parceria por linha = % do honorário ou fixo), baixa
+(Receber = entrada BRUTO vinculada / Desfazer), gating de permissão `financeiro`, aba Financeiro na pasta.
+
+## PASSO 4 — O QUE FALTA (continuar amanhã) — etapas 5 e 6
+- **Etapa 5 — Histórico:** tela de auditoria do financeiro (permissão `financeiro/historico` existe; auditoria já é
+  gravada; falta só a UI). 
+- **Etapa 6 — Relatório + Recibo:** relatório bruto/honorário/líquido por cliente/pasta/processo/período (sai de
+  `acordo_parcela` WHERE status='pago' AND data_pagamento entre datas). Recibo PDF: adaptar `pdfService.gerarReciboFinanceiro`
+  (ainda existe como dead code do modelo antigo). O "Relatório Geral" antigo da tela FOI REMOVIDO.
+
+## Decisões já fechadas (não reabrir): por processo; conta corrente sempre exige processo; acordo de 1 processo;
+parceria = % do honorário; vencimento → próximo dia útil; honorário padrão 30%; baixa = BRUTO (Opção A). Ver [[financeiro]].
+
+---
+
+# 🟢 SESSÃO 15/06/2026 — LER PRIMEIRO (tudo LOCAL, validado build Vite; SEM SQL novo; deploy é do usuário)
+
+Continuação das Perícias. Tudo no LOCAL, validado (node --check + build Vite). O usuário testa e faz deploy quando quiser
+(Claude não menciona mais deploy a cada passo — usuário já sabe). NENHUM script SQL novo nesta sessão.
+
+1. **Aba "Perícias" na pasta do processo** (`pages/Processos/PastaDetalhe.js`), entre Audiências e Financeiro, mesmo
+   filtro de processo, ações completas — reutiliza os modais de `Pericias.js` (agora exportados). `ModalPericia` ganhou
+   prop opcional `processoInicial`. Detalhes em [[pericias]] (bloco "Sessão 15/06").
+2. **BUG corrigido:** Editar perícia zerava endereço/responsável (a linha da lista não traz esses campos e o UPDATE
+   regravava NULL). Agora Editar busca a perícia completa antes — na ABA e na tela `Pericias.js` (`abrirEdicao`).
+3. **"..." gerenciar tipos de perícia:** CRUD `tipo_pericia` no backend (criarTipo/atualizarTipo/excluirTipo, soft-delete,
+   bloqueia se em uso) + rotas `/pericias/tipos` (permissão submódulo `pericias/tipos`) + `periciasAPI` + `ModalGerenciarTipos`
+   no `Pericias.js` + submódulo `pericias.tipos` na matriz de `Configuracoes.js`. SEM SQL (tabelas já existiam). Admin já usa;
+   não-admin precisa receber a permissão na tela de Permissões.
+4. **Campo "Número do Processo"** no modal de perícia (padrão Novo Prazo): máscara CNJ + autocomplete; ao escolher,
+   preenche o número COMPLETO (`num_proc`), resolve o processo e carrega peritos; "Título" somente leitura. Substituiu o
+   antigo Pasta→select Processo.
+5. **autoComplete="off"** nos campos de endereço (Perícias, Audiências nos 2 blocos, Pessoas via `Campo`/`CampoCEP`) para
+   o navegador não oferecer "salvar endereço". Não 100% garantido em toda versão do Chrome.
+6. **Senha obrigatória p/ perícia em data/hora incomum** (`Pericias.js`, salvar + remarcar): data retroativa, fim de
+   semana, feriado OU fora de 08:00–18:00 → exige senha (`ModalConfirmarSenhaDiaUtil`, motivos somados, vai p/ auditoria).
+   Perícia MAIS rigorosa que audiência. Trava de FRONTEND apenas — usuário decidiu NÃO blindar no backend. Ver [[pericias]].
+7. **Coluna "Pasta" da tela de Perícias agora "0010 — Título":** `periciasController.listar` passou a retornar
+   `pa.numPasta AS pasta_numero`; `Pericias.js` formata `padStart(4,'0') — pasta_titulo`. SEM SQL (coluna já existia).
+   ⚠️ Tocou no BACKEND → entra no próximo deploy junto com o resto.
+8. **Fix "Invalid Date" no histórico da perícia:** `ModalHistorico` usava `formatarData` (só p/ 'YYYY-MM-DD') num
+   DATETIME → trocado por `new Date(...).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})`. Só frontend (`Pericias.js`).
+
+Arquivos tocados 15/06: backend `controllers/periciasController.js`, `routes/index.js`; frontend
+`pages/Processos/PastaDetalhe.js`, `pages/Pericias/Pericias.js`, `pages/Audiencias/Audiencias.js`,
+`pages/Pessoas/Pessoas.js`, `pages/Configuracoes/Configuracoes.js`, `services/api.js`.
+
+Pendências/decisões da feature Perícias ainda em aberto: "usar endereço do perito" (não feito); senha em Cancelar/Excluir
+(hoje só dia-útil, igual audiência). O "gerenciar tipos" agora FOI feito.
+
+---
+
+# 🟢 SESSÃO 13/06/2026 — LER ESTE BLOCO PRIMEIRO (resumo + checklist de deploy)
+
+O usuário trabalha em múltiplos computadores. O código local está à frente do git/produção.
+Claude NUNCA mexe no git nem no banco — o usuário faz commit, deploy e SQL manualmente. Ver [[feedback-codigo]].
+Fluxo do usuário: SQL exportado do local → roda na instância (HeidiSQL); `salvar_pc_casa_no_Git.bat` (commit+push);
+`bash /home/ubuntu/1-AtualizarSistema.sh` no SSH (git reset --hard + npm + build + pm2 restart). Ver [[deploy-versionamento]].
+
+## O que fizemos em 13/06 (4 frentes)
+
+1. **E-mail de alertas — RESOLVIDO e JÁ DEPLOYADO/testado.** Causa raiz: o PM2 reinjetava uma senha SMTP
+   ANTIGA (`zlvx aeyo zwqp phyn`) do `~/.pm2/dump.pm2`, e o `dotenv.config()` padrão não sobrescrevia →
+   BadCredentials sempre. FIX: `server.js` → `require('dotenv').config({ override: true })`. Também: login
+   único anti-throttling (`enviarEmailColetivo` com pool maxConnections:1 em `email.js`/`notificacaoService.js`)
+   e remoção da trava diária (`alertasService.js` + DROP das colunas alerta_*_enviado). Tudo isso foi DEPLOYADO
+   e CONFIRMADO funcionando (cron das 11:04 enviou `sucesso` para os 2 destinatários). Detalhes nas seções 13/06 abaixo.
+
+2. **Ajuste 1 — pausa de 5s entre e-mails (Opção A): FEITO no local, NÃO deployado.** `email.js`: const
+   `PAUSA_ENTRE_EMAILS_MS=5000` + `sleep`; espera 5s entre cada envio dentro de `enviarEmailColetivo`. Sem banco.
+
+3. **Ajuste 2 — DOIS horários de alerta de prazo: FEITO no local + TESTADO OK, NÃO deployado.** Coluna nova
+   `configuracoes_escritorio.horario_alerta_prazos_2`; `alertasService.js` agenda 1 cron por horário; validação
+   ≥1h no `configuracaoController.js` e na tela `Configuracoes.js` (2º campo). SQL já rodado no LOCAL.
+
+4. **PERÍCIAS = fluxo de audiência + comunicado ao cliente: feature A+B+C COMPLETA no local, validada
+   (node --check + build Vite OK), NÃO testada pelo usuário, NÃO deployada.** É a entrega principal do dia.
+   Detalhes completos na seção "Perícias = fluxo audiência + comunicado" mais abaixo.
+
+## ✅ CHECKLIST DE DEPLOY do que está PENDENTE (Ajuste 1 + Ajuste 2 + Perícias)
+
+**Passo 1 — SQL na PRODUÇÃO** (já rodado no LOCAL; rodar igual na instância pelo HeidiSQL ANTES do código):
+```sql
+-- (Ajuste 2) segundo horário de alerta
+ALTER TABLE configuracoes_escritorio ADD COLUMN horario_alerta_prazos_2 TIME NULL AFTER horario_alerta_prazos;
+-- (Perícias - Fase A) qual polo é o cliente
+ALTER TABLE tblproc ADD COLUMN cliente_polo VARCHAR(10) DEFAULT NULL AFTER numProc;
+-- (Perícias - Fase A) peritos do processo
+CREATE TABLE IF NOT EXISTS processo_perito (
+  id INT NOT NULL AUTO_INCREMENT, proc_id INT NOT NULL, tipo_pessoa VARCHAR(20) NOT NULL,
+  pessoa_id INT NOT NULL, criado_por INT DEFAULT NULL, criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id), KEY proc_id (proc_id), KEY criado_por (criado_por),
+  CONSTRAINT fk_procperito_proc FOREIGN KEY (proc_id) REFERENCES tblproc (id) ON DELETE CASCADE,
+  CONSTRAINT fk_procperito_usuario FOREIGN KEY (criado_por) REFERENCES usuarios (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+-- (Perícias - Fase B) endereço + responsável + status na perícia
+ALTER TABLE pericia
+  ADD COLUMN cep VARCHAR(9) DEFAULT NULL AFTER local,
+  ADD COLUMN logradouro VARCHAR(200) DEFAULT NULL AFTER cep,
+  ADD COLUMN numero VARCHAR(20) DEFAULT NULL AFTER logradouro,
+  ADD COLUMN complemento VARCHAR(100) DEFAULT NULL AFTER numero,
+  ADD COLUMN bairro VARCHAR(100) DEFAULT NULL AFTER complemento,
+  ADD COLUMN cidade VARCHAR(100) DEFAULT NULL AFTER bairro,
+  ADD COLUMN estado VARCHAR(2) DEFAULT NULL AFTER cidade,
+  ADD COLUMN responsavel_id INT DEFAULT NULL AFTER assistente_tecnico_id,
+  ADD COLUMN responsavel_freela_id INT DEFAULT NULL AFTER responsavel_id,
+  ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'agendada' AFTER responsavel_freela_id,
+  ADD COLUMN motivo_status TEXT AFTER status,
+  ADD COLUMN alterado_por INT DEFAULT NULL AFTER criado_por,
+  ADD COLUMN alterado_em DATETIME DEFAULT NULL AFTER alterado_por,
+  ADD CONSTRAINT fk_pericia_responsavel FOREIGN KEY (responsavel_id) REFERENCES usuarios (id) ON DELETE SET NULL,
+  ADD CONSTRAINT fk_pericia_resp_freela FOREIGN KEY (responsavel_freela_id) REFERENCES advogados_freela (id) ON DELETE SET NULL,
+  ADD CONSTRAINT fk_pericia_alterado_por FOREIGN KEY (alterado_por) REFERENCES usuarios (id) ON DELETE SET NULL;
+-- (Perícias - Fase B) histórico da perícia
+CREATE TABLE IF NOT EXISTS auditoria_pericia (
+  id INT NOT NULL AUTO_INCREMENT, pericia_id INT NOT NULL, campo_alterado VARCHAR(100) DEFAULT NULL,
+  valor_anterior TEXT, valor_novo TEXT, usuario_id INT NOT NULL, alterado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id), KEY pericia_id (pericia_id), KEY usuario_id (usuario_id),
+  CONSTRAINT audper_ibfk_1 FOREIGN KEY (pericia_id) REFERENCES pericia (id) ON DELETE CASCADE,
+  CONSTRAINT audper_ibfk_2 FOREIGN KEY (usuario_id) REFERENCES usuarios (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+```
+Obs: a coluna `pericia.email_perito_enviado` ficou sem uso (não enviamos nada ao perito) — pode ser dropada um dia.
+
+**Passo 2 — Código (arquivos alterados/criados em 13/06 que AINDA NÃO foram deployados):**
+- Backend: `utils/email.js` (pausa 5s), `services/alertasService.js` (2 crons),
+  `controllers/configuracaoController.js` (2º horário+validação), `controllers/processosController.js`
+  (cliente_polo+peritos), `controllers/periciasController.js` (REESCRITO), `services/comunicadoService.js` (NOVO),
+  `routes/index.js` (rotas de perícia).
+- Frontend: `pages/Configuracoes/Configuracoes.js` (2º horário), `pages/Processos/Processos.js`
+  (cliente_polo+peritos nos 2 modais), `pages/Pericias/Pericias.js` (REESCRITO), `services/api.js` (periciasAPI).
+- (server.js/notificacaoService.js do override+login único JÁ estão deployados.)
+
+**Passo 3 — testar no local ANTES do deploy** (ver "Para testar" na seção Perícias). Depois exportar
+estrutura → `estrutura_banco.sql`.
+
+## 🔶 PONTOS EM ABERTO (combinar com o usuário antes de mexer)
+1. **"Usar endereço do perito"** (botão p/ copiar o endereço do perito no local da perícia): NÃO implementado.
+2. **Senha em Cancelar/Excluir da perícia:** hoje a senha aparece só no dia-útil (igual audiência). Cancelar/Excluir
+   usam confirmação (ModalConfirmar), não senha — porque a audiência também não pede. Usuário disse "igual audiências".
+   Confirmar se está ok ou se quer senha também nessas ações.
+3. **Gerenciar tipos de perícia (botão "...")** como na audiência: NÃO implementado. Combinar se entra.
+
+---
+
+# 🔴 HISTÓRICO — Sessão 12/06/2026 (tarde) — contexto anterior
 
 O usuário trabalha em múltiplos computadores. Esta sessão fez MUITAS alterações no código local
 (ainda NÃO commitadas — o usuário commita/sobe manualmente). Este arquivo explica tudo.
@@ -187,6 +736,75 @@ Implementado (build Vite OK, aguardando teste do usuário):
   escolhida pelo usuário. Núcleo (override, login único, pool) intacto. Ajustável no VSCode pela constante.
   Obs: os 5s são entre destinatários dentro de cada tipo; entre os dois tipos há só o intervalo natural.
   DEPLOY PENDENTE (usuário faz manual). Não precisa de banco.
+
+## Perícias = fluxo audiência + comunicado (EM ANDAMENTO 13/06) — 3 fases
+
+**Decisões fechadas com o usuário:**
+- Perícia ganha fluxo da audiência: Cancelar/Remarcar/Histórico (auditoria), pede senha + valida dia útil. SEM "Registrar Ata".
+- Status: Agendada / Realizada (manual) / Cancelada / Remarcada.
+- Local = endereço estruturado (CEP→ViaCEP) + botão "usar endereço do perito". `local` vira nome/referência opcional.
+- Sempre presencial. Responsável pela condução = usuário OU freelancer (igual audiência).
+- Perito = PESSOA (cadastro unificado, sem flag). Vínculo no PROCESSO: tabela `processo_perito` (muitos-p/-muitos).
+  Na perícia, o seletor de perito mostra só os peritos do processo (com opção de adicionar na hora).
+- Assistente técnico = usuário do sistema (mantém).
+- Comunicado: e-mail ao CLIENTE (autor ou réu, conforme `tblproc.cliente_polo`) no cadastro + reenviar;
+  reenvia ao remarcar; avisa ao cancelar. NADA ao perito. Texto simples agora, estrutura pronta p/ modelo+PDF depois.
+
+**SQL já rodado pelo usuário no banco LOCAL (13/06):** add `tblproc.cliente_polo VARCHAR(10)`;
+nova tabela `processo_perito`; perícia ganhou cep/logradouro/numero/complemento/bairro/cidade/estado +
+responsavel_id + responsavel_freela_id + status + motivo_status + alterado_por/em (+FKs); nova tabela `auditoria_pericia`.
+⚠️ FALTA rodar o MESMO SQL na PRODUÇÃO antes do deploy do código.
+
+**FASE A — Processo (cliente_polo + peritos):**
+- ✅ BACKEND FEITO e validado (`processosController.js`): criarProcesso/atualizarProcesso aceitam `cliente_polo`
+  e `peritos[]` (grava em processo_perito); buscarPasta retorna `proc.peritos`. cliente_polo validado ('autor'/'reu').
+- ✅ FRONTEND FEITO e validado (build Vite OK): `Processos.js` — nos DOIS modais (Novo e Editar) foram
+  adicionados o seletor "Cliente do escritório" (Autor/Réu, em form.cliente_polo) e a seção "Peritos do
+  processo (opcional)" com busca PF/PJ reaproveitando adicionarParte/removerParte (listaOposta=[] nos peritos),
+  chips roxos, e peritos+cliente_polo no payload de criar/atualizar e em partesDoProcesso.
+- ⏳ FALTA testar (usuário): cadastrar/editar processo definindo cliente e peritos; conferir no banco
+  (tblproc.cliente_polo, processo_perito). Deploy só após Fase A testada. Rodar o SQL na PRODUÇÃO antes do deploy.
+
+**FASE B — Perícia (núcleo):**
+- ✅ BACKEND FEITO e validado (node --check): `periciasController.js` REESCRITO — listar/buscar usam status real
+  + responsavel (COALESCE usuario/freela) + responsavel_valor; criar/atualizar com endereço
+  (cep/logradouro/numero/complemento/bairro/cidade/estado) + responsavel (parsarResponsavel 'usuario:X'/'freela:X')
+  + auditoria_pericia 'cadastrado'/obs_auditoria; NOVAS: peritosDoProcesso (GET /pericias/peritos-processo?processo_id),
+  marcarRealizada, cancelar, remarcar (cria nova perícia), excluir (bloqueia cancelada/remarcada), buscarHistorico.
+  Removido marcarEmailPerito (não enviamos nada ao perito). Rotas atualizadas em routes/index.js (peritos-processo
+  ANTES de /:id; +realizada/cancelar/remarcar/historico/delete). api.js periciasAPI atualizado (peritosProcesso,
+  marcarRealizada, cancelar, remarcar, excluir, historico; removido marcarEmailPerito).
+- ✅ FRONTEND FEITO e validado (build Vite OK): `Pericias.js` REESCRITO. Lista com badges 4 status + botões
+  Editar/✓Realizada/Cancelar/Remarcar (só agendada) + Histórico (sempre) + Excluir (não em cancelada/remarcada)
+  + ✉Cliente. ModalPericia: pasta→processo, tipo, data, hora, Nome/ref do local, endereço CEP+ViaCEP,
+  Responsável (audienciasAPI.advogados, valor 'usuario:X'/'freela:X'), Assistente (usuário), Perito = SELECT dos
+  peritosProcesso(processo_id) + busca avulsa de apoio; valida dia útil → ModalConfirmarSenhaDiaUtil (authAPI.verificarSenha)
+  → executarSalvar(obs_auditoria). ModalCancelar (motivo), ModalRemarcar (nova data/hora+motivo, valida dia útil),
+  ModalHistorico (auditoria_pericia). Removido email-perito. ModalConfirmar usa prop `acao` (não onConfirmar).
+- PENDÊNCIAS/decisões abertas da Fase B (avisar usuário ao testar):
+  - Botão "usar endereço do perito" (copiar endereço do perito p/ local): NÃO implementado ainda (precisa buscar
+    endereço da pessoa-perito) — combinar se quer.
+  - Senha: hoje só no dia-útil (igual audiência). Cancelar/Excluir usam confirmação (ModalConfirmar), não senha.
+    Usuário disse "igual audiências" — audiência NÃO pede senha em cancelar/excluir, só no dia-útil. Confirmar se ok.
+  - Gerenciar tipos de perícia (botão "...") ainda não feito (audiência tem). Combinar se entra agora ou depois.
+- ⏳ FALTA testar (usuário) a Fase B inteira no local. Deploy só depois. SQL já na PRODUÇÃO antes do deploy.
+**FASE C — Comunicado ao cliente:** ✅ FEITA e validada (node --check + build OK). SEM SQL novo (tabelas já existem).
+- NOVO `backend/src/services/comunicadoService.js`: buscarClientesDoProcesso (autor/réu conforme tblproc.cliente_polo
+  → pessoas → email principal de emails_pf/pj); montarComunicadoPericia(tipoEvento agendada/remarcada/cancelada)
+  — texto simples HTML, MODULAR (trocar por modelo+PDF no futuro); enviarComunicadoPericia (envia via enviarEmail,
+  registra em log_comunicacoes, marca comunicado_enviado se ≥1 saiu, exceto cancelada). NÃO envia nada ao perito.
+- `periciasController.js`: auto-envio 'agendada' no criar; 'remarcada' (nova perícia) no remarcar; 'cancelada' no cancelar
+  — todos best-effort (try/catch, não derrubam a operação). Substituído marcarComunicado por enviarComunicado
+  (POST /pericias/:id/comunicado): reenvio manual conforme status; erros amigáveis (sem cliente definido / sem e-mail).
+- api.js: marcarComunicado → enviarComunicado (POST). Pericias.js: botão "✉ Comunicar/Reenviar" (sempre que agendada)
+  chama enviarComunicado; toast com a mensagem do backend.
+- DEPENDE de tblproc.cliente_polo preenchido (Fase A) e do cliente ter e-mail principal cadastrado.
+
+### PERÍCIAS — feature A+B+C COMPLETA no LOCAL (13/06), validada (node --check + build Vite). FALTA: usuário testar
+tudo no local; rodar TODO o SQL da feature na PRODUÇÃO; depois deploy. Pontos abertos p/ confirmar: "usar endereço
+do perito" (não feito), senha em cancelar/excluir (hoje só dia-útil, igual audiência), gerenciar tipos de perícia "..."
+(não feito). Arquivos da feature: processosController.js, Processos.js, periciasController.js, comunicadoService.js(novo),
+routes/index.js, api.js, Pericias.js.
 
 ## Itens já resolvidos (não refazer)
 - Tabela log_emails + 3 índices (12/06 ✅), SMTP_PASS novo no servidor (12/06 ✅)

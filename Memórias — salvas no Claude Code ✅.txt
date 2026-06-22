@@ -1,8 +1,0 @@
-Memórias — salvas no Claude Code ✅
-
-Os arquivos de memória (processos_pastas.md, database_tables.md, projeto_status_local.md) ficam em .claude/projects/.../memory/ — fora da pasta do projeto, por isso o Git não os vê. Eles já estão persistidos no sistema do Claude Code e vão estar disponíveis nas próximas sessões.
-
-Próximo passo: rode o SQL da migração 002 no MySQL Workbench:
-
-C:\Users\Claudenor\Downloads\ProjetoAdvClaude\backend\database\migrations\002_novo_modelo_processos.sql
-Depois disso o sistema já está pronto pra testar o módulo de Processos.

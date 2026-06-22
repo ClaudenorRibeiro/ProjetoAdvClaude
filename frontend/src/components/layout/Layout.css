@@ -472,6 +472,11 @@ body {
   color: #6b7280;
 }
 
+.badge-roxo {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
 /* Prazos — cores de urgência */
 .prazo-atrasado td {
   background: #fecaca !important;
@@ -770,4 +775,27 @@ body {
 
 .valor-positivo {
   color: #059669;
+}
+
+/* Spinner de carregamento (reutilizável) — anel azul girando */
+@keyframes spin-mini { to { transform: rotate(360deg); } }
+.spinner-mini {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #c7d2fe;        /* anel claro */
+  border-top-color: #1a56db;        /* parte azul que gira */
+  border-radius: 50%;
+  animation: spin-mini 0.7s linear infinite;
+  vertical-align: middle;
+}
+
+/* Cabeçalho de tabela FIXO ao rolar — aplicar a classe .tabela-sticky no <table>
+   e dar uma altura máxima + overflow-y ao wrapper. Reutilizável em qualquer tela. */
+.tabela-sticky thead th {
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 1;
+  box-shadow: inset 0 -1px 0 #9ca3af;  /* mantém o separador visível ao rolar */
 }

@@ -5,10 +5,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { audienciasAPI, processosAPI, pessoasAPI, authAPI, calendarioAPI } from '../../services/api';
-import { formatarData, toTitleCase } from '../../utils/formatters';
+import { formatarData, toTitleCase, mascaraMoeda, parseMoeda } from '../../utils/formatters';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
+import GerarDocumentoBotao from '../../components/GerarDocumento';
+import ModalGerarLote from '../../components/GerarLote';
 
 const STATUS_COR = {
   agendada:  'badge-azul',
@@ -52,15 +54,37 @@ export default function Audiencias() {
   const [modalHistorico, setModalHistorico]     = useState(null); // audiência selecionada para ver histórico
   const [modalCancelar, setModalCancelar]       = useState(null); // audiência selecionada para cancelar
   const [modalRemarcar, setModalRemarcar]       = useState(null); // audiência selecionada para remarcar
+  // Seleção para geração em lote (IDs das audiências marcadas) + modal do lote
+  const [selecionados, setSelecionados] = useState(() => new Set());
+  const [loteAberto, setLoteAberto] = useState(false);
+  const podeLote = temPermissao('documentos', 'cadastrar'); // quem pode gerar documentos
 
   const carregar = useCallback(async () => {
     setCarregando(true);
     try {
       const { data } = await audienciasAPI.listar({ ...filtros, limite: 30 });
       if (data.ok) { setLista(data.dados.registros); setTotal(data.dados.total); }
+      setSelecionados(new Set()); // troca de página/filtro zera a seleção (evita IDs de outra página)
     } catch { toast.error('Erro ao carregar audiências'); }
     finally { setCarregando(false); }
   }, [filtros]);
+
+  // Só audiências que ainda vão acontecer (agendada/adiada) entram no lote — mesma regra do botão individual.
+  const elegivelLote = (a) => a.status === 'agendada' || a.status === 'adiada';
+  const idsElegiveis = lista.filter(elegivelLote).map(a => a.id);
+  const todosSelecionados = idsElegiveis.length > 0 && idsElegiveis.every(id => selecionados.has(id));
+
+  function alternarSelecao(id) {
+    setSelecionados(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function alternarTodos() {
+    setSelecionados(s => {
+      const n = new Set(s);
+      if (todosSelecionados) idsElegiveis.forEach(id => n.delete(id));
+      else idsElegiveis.forEach(id => n.add(id));
+      return n;
+    });
+  }
 
   useEffect(() => { carregar(); }, [carregar]);
   useEffect(() => {
@@ -132,6 +156,14 @@ export default function Audiencias() {
             onClick={() => setModalNova(true)}>
             + Nova Audiência
           </button>
+          {/* Geração em lote — só para quem pode gerar documentos; habilita ao marcar audiências */}
+          {podeLote && (
+            <button className="btn btn-outline" style={{marginBottom:'1px'}}
+              disabled={selecionados.size === 0}
+              onClick={() => setLoteAberto(true)}>
+              📄 Gerar em lote{selecionados.size ? ` (${selecionados.size})` : ''}
+            </button>
+          )}
           <span style={{marginLeft:'auto',color:'#888',fontSize:'13px',marginBottom:'1px'}}>
             {total} audiência(s)
           </span>
@@ -144,13 +176,30 @@ export default function Audiencias() {
             <table className="tabela">
               <thead>
                 <tr>
+                  {podeLote && (
+                    <th style={{width:'32px'}}>
+                      {/* Marca/desmarca todas as audiências elegíveis da página */}
+                      <input type="checkbox" checked={todosSelecionados}
+                        onChange={alternarTodos} disabled={idsElegiveis.length === 0}
+                        title="Selecionar todas (agendadas/adiadas)" />
+                    </th>
+                  )}
                   <th>Processo</th><th>Pasta</th><th>Tipo</th>
-                  <th>Data / Hora</th><th>Modalidade</th><th>Status</th><th>Ações</th>
+                  <th>Data / Hora</th><th>Modalidade</th><th>Responsável</th><th>Status</th><th>Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {lista.map(a => (
                     <tr key={a.id}>
+                      {podeLote && (
+                        <td>
+                          {/* Caixinha só nas audiências elegíveis (agendada/adiada) */}
+                          {elegivelLote(a) && (
+                            <input type="checkbox" checked={selecionados.has(a.id)}
+                              onChange={() => alternarSelecao(a.id)} />
+                          )}
+                        </td>
+                      )}
                       <td>
                         {a.processo_numero && a.pasta_id
                           ? <span
@@ -175,6 +224,7 @@ export default function Audiencias() {
                           : <span className="badge badge-cinza">Presencial</span>
                         }
                       </td>
+                      <td style={{fontSize:'13px'}}>{a.responsavel_nome || '—'}</td>
                       <td>
                         <span className={`badge ${STATUS_COR[a.status] || 'badge-cinza'}`}>
                           {STATUS_LABEL[a.status] || a.status}
@@ -234,6 +284,12 @@ export default function Audiencias() {
                             onClick={() => setModalHistorico(a)}>
                             📋 Histórico
                           </button>
+                          {/* Gerar documento — só para audiências que ainda vão acontecer (agendada/adiada)
+                              E que tenham um modelo cadastrado para o seu tipo+modalidade (ex.: Julgamento sem modelo não mostra). */}
+                          {(a.status === 'agendada' || a.status === 'adiada') && Number(a.tem_modelo_doc) === 1 && (
+                            <GerarDocumentoBotao ancoraTipo="audiencia" ancoraId={a.id}
+                              estilo={{fontSize:'11px',padding:'4px 8px'}} />
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -317,6 +373,12 @@ export default function Audiencias() {
           acao={async () => { await excluirAudiencia(confirmarExcluir.id); }}
           onCancelar={() => setConfirmarExcluir(null)}
         />
+      )}
+
+      {/* Geração de documentos em lote (audiências marcadas) */}
+      {loteAberto && (
+        <ModalGerarLote ancoraTipo="audiencia" ancoraIds={[...selecionados]}
+          onFechar={() => setLoteAberto(false)} />
       )}
     </div>
   );
@@ -655,42 +717,42 @@ function ModalCadastroRapidoPessoa({ onFechar, onSalvo }) {
             </div>
           </div>
 
-          {/* Endereço */}
+          {/* Endereço — autoComplete="off" evita o navegador oferecer "salvar endereço" */}
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">CEP {buscandoCep && <small style={{color:'#3b82f6'}}>(buscando...)</small>}</label>
-              <input className="form-control" value={form.cep || ''} placeholder="00000-000"
+              <input className="form-control" autoComplete="off" value={form.cep || ''} placeholder="00000-000"
                 onChange={e => set('cep', e.target.value)}
                 onBlur={e => buscarCep(e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Logradouro</label>
-              <input className="form-control" value={form.logradouro || ''} onChange={e => set('logradouro', e.target.value)} />
+              <input className="form-control" autoComplete="off" value={form.logradouro || ''} onChange={e => set('logradouro', e.target.value)} />
             </div>
           </div>
           <div className="grid-3">
             <div className="form-group">
               <label className="form-label">Número</label>
-              <input className="form-control" value={form.numero || ''} onChange={e => set('numero', e.target.value)} />
+              <input className="form-control" autoComplete="off" value={form.numero || ''} onChange={e => set('numero', e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Complemento</label>
-              <input className="form-control" value={form.complemento || ''} placeholder="Apto, sala..."
+              <input className="form-control" autoComplete="off" value={form.complemento || ''} placeholder="Apto, sala..."
                 onChange={e => set('complemento', e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Bairro</label>
-              <input className="form-control" value={form.bairro || ''} onChange={e => set('bairro', e.target.value)} />
+              <input className="form-control" autoComplete="off" value={form.bairro || ''} onChange={e => set('bairro', e.target.value)} />
             </div>
           </div>
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Cidade</label>
-              <input className="form-control" value={form.cidade || ''} onChange={e => set('cidade', e.target.value)} />
+              <input className="form-control" autoComplete="off" value={form.cidade || ''} onChange={e => set('cidade', e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Estado</label>
-              <input className="form-control" value={form.estado || ''} placeholder="SP" maxLength={2}
+              <input className="form-control" autoComplete="off" value={form.estado || ''} placeholder="SP" maxLength={2}
                 onChange={e => set('estado', e.target.value.toUpperCase())} />
             </div>
           </div>
@@ -1748,11 +1810,11 @@ function ModalNovoFreela({ onFechar, onSalvo }) {
             </div>
           </div>
 
-          {/* Endereço com CEP + busca automática */}
+          {/* Endereço com CEP + busca automática — autoComplete="off" evita "salvar endereço" */}
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">CEP</label>
-              <input className="form-control" placeholder="00000-000" maxLength={9}
+              <input className="form-control" autoComplete="off" placeholder="00000-000" maxLength={9}
                 value={form.cep}
                 onChange={e => { setErroCep(''); set('cep', mascaraCEP(e.target.value)); }}
                 onBlur={e => buscarCep(e.target.value)} />
@@ -1761,36 +1823,36 @@ function ModalNovoFreela({ onFechar, onSalvo }) {
             </div>
             <div className="form-group">
               <label className="form-label">Logradouro</label>
-              <input className="form-control" value={form.logradouro}
+              <input className="form-control" autoComplete="off" value={form.logradouro}
                 onChange={e => set('logradouro', e.target.value)} />
             </div>
           </div>
           <div className="grid-3">
             <div className="form-group">
               <label className="form-label">Número</label>
-              <input className="form-control" value={form.numero}
+              <input className="form-control" autoComplete="off" value={form.numero}
                 onChange={e => set('numero', e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Complemento</label>
-              <input className="form-control" value={form.complemento}
+              <input className="form-control" autoComplete="off" value={form.complemento}
                 onChange={e => set('complemento', e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Bairro</label>
-              <input className="form-control" value={form.bairro}
+              <input className="form-control" autoComplete="off" value={form.bairro}
                 onChange={e => set('bairro', e.target.value)} />
             </div>
           </div>
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Cidade</label>
-              <input className="form-control" value={form.cidade}
+              <input className="form-control" autoComplete="off" value={form.cidade}
                 onChange={e => set('cidade', e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Estado</label>
-              <input className="form-control" maxLength={2} value={form.estado}
+              <input className="form-control" autoComplete="off" maxLength={2} value={form.estado}
                 onChange={e => set('estado', e.target.value.toUpperCase())} />
             </div>
           </div>
@@ -1924,8 +1986,10 @@ export function ModalRegistrarAta({ audiencia, onFechar }) {
   async function salvar() {
     if (!form.resultado) return toast.error('Resultado é obrigatório');
     setSalvando(true);
+    // Converte os campos de moeda mascarados de volta p/ número antes de enviar
+    const payload = { ...form, valor_acordo: parseMoeda(form.valor_acordo), valor_parcela: parseMoeda(form.valor_parcela) };
     try {
-      await audienciasAPI.registrarAta(audiencia.id, form);
+      await audienciasAPI.registrarAta(audiencia.id, payload);
       toast.success('Ata registrada com sucesso!');
       onFechar(true);
     } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao registrar ata'); }
@@ -1972,8 +2036,8 @@ export function ModalRegistrarAta({ audiencia, onFechar }) {
               <div className="grid-2">
                 <div className="form-group">
                   <label className="form-label">Valor total do acordo (R$)</label>
-                  <input type="number" step="0.01" className="form-control" value={form.valor_acordo||''}
-                    onChange={e => set('valor_acordo', e.target.value)} />
+                  <input type="text" inputMode="numeric" className="form-control" value={form.valor_acordo||''}
+                    onChange={e => set('valor_acordo', mascaraMoeda(e.target.value))} placeholder="0,00" />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Número de parcelas</label>
@@ -1984,8 +2048,8 @@ export function ModalRegistrarAta({ audiencia, onFechar }) {
               <div className="grid-2">
                 <div className="form-group">
                   <label className="form-label">Valor da parcela (R$)</label>
-                  <input type="number" step="0.01" className="form-control" value={form.valor_parcela||''}
-                    onChange={e => set('valor_parcela', e.target.value)} />
+                  <input type="text" inputMode="numeric" className="form-control" value={form.valor_parcela||''}
+                    onChange={e => set('valor_parcela', mascaraMoeda(e.target.value))} placeholder="0,00" />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Data do 1º pagamento</label>

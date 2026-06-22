@@ -3,7 +3,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { tarefasAPI, processosAPI } from '../../services/api';
 import { formatarData, labelPrioridade, toTitleCase, mascaraCNJ } from '../../utils/formatters';
 import { toast } from 'react-toastify';
@@ -30,6 +30,18 @@ export default function Tarefas() {
   const [editando, setEditando]       = useState(null);
   const [confirmar, setConfirmar]     = useState(null);
   const [tarefaHistorico, setTarefaHistorico] = useState(null);
+  const location = useLocation();
+  const [novaData, setNovaData] = useState(''); // data pré-preenchida vinda da Agenda (deep-link)
+
+  // Deep-link da Agenda: /tarefas?nova=1&data=YYYY-MM-DD abre o modal de nova tarefa já com a data
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('nova') === '1') {
+      setEditando(null);
+      setNovaData(params.get('data') || '');
+      setModalAberto(true);
+    }
+  }, [location.search]);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -125,7 +137,7 @@ export default function Tarefas() {
           </div>
           {temPermissao('tarefas', 'cadastrar') && (
             <button className="btn btn-primary" style={{ marginBottom: '1px' }}
-              onClick={() => { setEditando(null); setModalAberto(true); }}>
+              onClick={() => { setEditando(null); setNovaData(''); setModalAberto(true); }}>
               + Nova Tarefa
             </button>
           )}
@@ -243,7 +255,8 @@ export default function Tarefas() {
       {modalAberto && (
         <ModalTarefa
           tarefa={editando}
-          onFechar={(reload) => { setModalAberto(false); if (reload) carregar(); }}
+          dataInicial={novaData}
+          onFechar={(reload) => { setModalAberto(false); setNovaData(''); if (reload) carregar(); }}
         />
       )}
     </div>
@@ -349,7 +362,7 @@ function ModalHistoricoTarefa({ tarefa, onFechar }) {
 // preSelecao: { tipo, processo_id, processo_numero }
 //   usado quando aberto a partir do PastaDetalhe
 // ============================================================
-export function ModalTarefa({ tarefa, onFechar, preSelecao }) {
+export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial }) {
   // Deduz tipo inicial: tarefa existente → preSelecao → 'rotina'
   // Obs: tipo 'pasta' foi removido da UI — tarefas antigas com pasta_id continuam exibidas
   //      corretamente na listagem, mas não é mais possível criar/editar com esse vínculo
@@ -362,7 +375,7 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao }) {
     titulo:          tarefa?.titulo || '',
     descricao:       tarefa?.descricao || '',
     prioridade:      tarefa?.prioridade || 'normal',
-    data_vencimento: tarefa?.data_vencimento ? tarefa.data_vencimento.split('T')[0] : '',
+    data_vencimento: tarefa?.data_vencimento ? tarefa.data_vencimento.split('T')[0] : (dataInicial || ''),
     atribuida_para:  tarefa?.atribuida_para ? String(tarefa.atribuida_para) : '',
     processo_id:     tarefa?.processo_id || preSelecao?.processo_id || null,
   });
