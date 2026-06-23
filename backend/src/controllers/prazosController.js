@@ -354,23 +354,46 @@ async function editar(req, res) {
   }
 }
 
-// DELETE /api/prazos/:id — Exclui um prazo
+// DELETE /api/prazos/:id — Exclui um prazo (tratando as tabelas-filhas em transação)
 async function excluir(req, res) {
+  const { id } = req.params;
+
+  // Confere a existência e as regras de negócio ANTES de abrir a transação
+  const [existe] = await pool.execute('SELECT id, status, fazendo_por FROM prazos_processo WHERE id = ?', [id]);
+  if (!existe.length) return naoEncontrado(res, 'Prazo não encontrado');
+  if (['concluido', 'cancelado'].includes(existe[0].status)) {
+    return erro(res, 'Não é permitido excluir prazos já concluídos ou cancelados.');
+  }
+  if (existe[0].fazendo_por && existe[0].fazendo_por !== req.usuario.id && req.usuario.nivel > 1) {
+    return erro(res, 'Este prazo está sendo feito por outro usuário. Apenas o administrador pode excluí-lo.', 403);
+  }
+
+  // Três tabelas apontam para prazos_processo (sem ON DELETE CASCADE no banco):
+  // auditoria_prazo (histórico), notificacoes (alertas) e tarefas (vínculo).
+  // Um DELETE direto no prazo seria barrado pela FK quando houvesse filhas (ex.: histórico).
+  // Por isso tratamos cada filha na ordem correta, tudo dentro de UMA transação (tudo ou nada).
+  const conn = await pool.getConnection();
   try {
-    const { id } = req.params;
-    const [existe] = await pool.execute('SELECT id, status, fazendo_por FROM prazos_processo WHERE id = ?', [id]);
-    if (!existe.length) return naoEncontrado(res, 'Prazo não encontrado');
-    if (['concluido', 'cancelado'].includes(existe[0].status)) {
-      return erro(res, 'Não é permitido excluir prazos já concluídos ou cancelados.');
-    }
-    if (existe[0].fazendo_por && existe[0].fazendo_por !== req.usuario.id && req.usuario.nivel > 1) {
-      return erro(res, 'Este prazo está sendo feito por outro usuário. Apenas o administrador pode excluí-lo.', 403);
-    }
-    await pool.execute('DELETE FROM prazos_processo WHERE id = ?', [id]);
-    await auditoria.registrar(req.usuario.id, 'prazos_processo', 'excluir', id);
+    await conn.beginTransaction();
+
+    // 1) Tarefa tem vida própria: apenas DESVINCULA do prazo (não apaga a tarefa)
+    await conn.execute('UPDATE tarefas SET prazo_id = NULL WHERE prazo_id = ?', [id]);
+    // 2) Notificações daquele prazo deixam de fazer sentido — removidas
+    await conn.execute('DELETE FROM notificacoes WHERE prazo_id = ?', [id]);
+    // 3) Histórico do prazo é removido junto com ele
+    await conn.execute('DELETE FROM auditoria_prazo WHERE prazo_id = ?', [id]);
+    // 4) Por fim, o próprio prazo
+    await conn.execute('DELETE FROM prazos_processo WHERE id = ?', [id]);
+    // 5) Auditoria geral participa da MESMA transação (falha aqui faz rollback de tudo)
+    await auditoria.registrar(req.usuario.id, 'prazos_processo', 'excluir', id, null, null, conn);
+
+    await conn.commit();
     return sucesso(res, null, 'Prazo excluído com sucesso');
   } catch (err) {
+    await conn.rollback();
     return erroInterno(res, err);
+  } finally {
+    conn.release();
   }
 }
 

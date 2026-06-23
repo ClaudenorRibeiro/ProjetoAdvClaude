@@ -1,10 +1,72 @@
 ---
 name: pendencias-proxima-sessao
-description: "HANDOFF — LER PRIMEIRO. TOPO: 17/06 (NOITE) — identificação de qual acordo na conta corrente ('Honor - parc N do acordo N' + '- Acordo N' no cabeçalho do acordo, número DERIVADO do id, não gravado em coluna) e fix de timezone na data pré-preenchida (novo helper hojeLocal). Abaixo: 17/06 (dia) financeiro refinos; financeiro/Perícias 15/06; sessões 13/06 e 12/06 no fim. FALTA financeiro etapa 6 (relatório+recibo)."
+description: "HANDOFF — LER PRIMEIRO. TOPO: SESSÃO 22/06 — REGRA ABSOLUTA: tabelas SEMPRE minúsculas (banco E código); corrigido bug de produção tblPasta (148 subs camelCase->minúsculo no backend). AASP URL na tela (saiu do código/.env). Bucket S3 -dev + IAM próprio; .env local apontado p/ -dev. Limpeza .env/.env.example. Publicações: realce sem acento, filtro de data, dedup por numeroPublicacao + confirmação re-rodar + coluna Nº Publ. + pintura duplicadas, rodapé Exibindo X–Y de Z, seletor Exibir (Todas/Direcionadas a mim), fonte modal 14px. PENDENTE: commit+push+RE-DEPLOY (deploy de hoje NÃO tinha o fix de minúsculas) + SQL pendente na produção. Claude NÃO acessa o servidor. Resumo completo: backups/RESUMO_SESSAO_22-06-2026.txt. Abaixo: 21/06, 20/06, 17/06..."
 metadata: 
   node_type: memory
   type: project
   originSessionId: a17aec30-7d20-496a-81a0-792eca6b27e8
+---
+
+# 🔴 SESSÃO 22/06/2026 — LER PRIMEIRO (correção crítica de produção + AASP/S3/Publicações)
+
+Tudo LOCAL, validado (node --check + build Vite). SEM git (a pedido). Resumo COMPLETO e detalhado em
+**`backups/RESUMO_SESSAO_22-06-2026.txt`** — ler junto com este bloco.
+
+## ⚠️⚠️ REGRA NOVA ABSOLUTA — TABELAS SEMPRE EM MINÚSCULAS (banco E código)
+Detalhe completo em [[feedback-codigo]]. **TODOS os nomes de tabela do banco devem ser MINÚSCULOS, no
+banco E no código, para sempre.** Windows ignora caixa; **Linux (produção AWS) é SENSÍVEL**. Hoje a produção
+quebrou com `Error: Table 'sistema_advocacia.tblPasta' doesn't exist` — banco tinha `tblpasta`, código pedia
+`tblPasta` (camelCase), e o código estava INCONSISTENTE (uns minúsculo, outros camelCase).
+**CORREÇÃO FEITA:** 148 substituições em 10 arquivos do backend (camelCase->minúsculo): `tblpasta, tblproc,
+tbltipoproc, tblstatusproc, tblinstanciaproc, tblforum, tblvara, tbltituloprocautor, tbltituloprocreu`.
+Verificado: grep por `tbl` com maiúscula no backend = 0. node --check OK. Foi RENAME literal (sem gambiarra/fallback).
+Banco já estava minúsculo (confirmado no backup) — NÃO precisou mexer no banco.
+
+## 🆕 O que foi feito hoje (22/06) — tudo LOCAL
+1. **AASP — URL na tela.** Removida a constante fixa do código; `aaspService.buscarIntimacoes(chave,data,url)`;
+   `publicacoesController.lerConfigAasp()` retorna url; tela Configurações->Integrações com campo "URL da API AASP"
+   (pré-preenchido com a oficial). SEM SQL (url entra no JSON `configuracoes_integracoes.configuracoes.aasp.url`).
+   Só URL+chave editáveis; `diferencial` segue fixo=false. AÇÃO: salvar a URL na tela da produção após deploy.
+2. **S3 bucket de TESTE.** Criado `modelos-antonio-adv-dev` + usuário IAM `modelos-antonio-adv-dev` (policy
+   `AcessoModelosAntonioDev`, só esse bucket). `.env` LOCAL aponta p/ `-dev`. Produção segue `modelos-antonio-adv`
+   + usuário `modelos-s3-antonio-adv` (no .env do servidor). Código já lê tudo do .env — nenhuma mudança de código.
+3. **Limpeza .env e .env.example.** Removido lixo não lido pelo código (EMAIL_PROVIDER, ZAPI_*, AASP_API_URL/
+   AASP_TOKEN, S3_BUCKET_NAME, BACKUP_INTERVAL_HOURS) e DUPLICIDADES de AWS_*. LIBREOFFICE_PATH só no .env.example
+   (autodetect acha o soffice; não precisa preencher). MANTIDO o que está em uso.
+4. **Publicações — realce de busca sem ACENTO.** Novo `dobrarTexto()` + `realcarTexto()` reescrito com mapa de
+   posições (pinta "audiência" ao buscar "audiencia" e vice-versa). [[integracoes-publicacoes]].
+5. **Publicações — filtro de DATA da pesquisa** (`filtros.data`; checkbox "Todas as datas", padrão marcado).
+6. **Publicações — fonte do modal 13px -> 14px** (corpo).
+7. **Publicações — importação por numeroPublicacao** (traz TODAS; dedup por numeroPublicacao único do dia, fallback
+   hash quando nulo; re-rodar = incremental + ModalConfirmar "dia já importado"). Coluna **"Nº Publ."**. **Pintura de
+   duplicadas** (texto idêntico no MESMO dia, todas menos a mais antiga; campo `duplicada` no listar) + legenda.
+8. **Publicações — rodapé "Exibindo X–Y de Z"** (removido o total do topo) + seletor **"Exibir" (Todas /
+   Direcionadas a mim)** (backend `listar` param `escopo`). SEM SQL.
+9. **Tabelas minúsculas no código** (item crítico acima).
+
+## 🔧 Arquivos tocados hoje (todos LOCAIS)
+Backend: `services/aaspService.js`, `controllers/publicacoesController.js`, `.env`, `.env.example` +
+os 10 do rename de tabelas (processosController, audienciasController, dashboardController, pessoasController,
+comunicadoService, periciasController, prazosController, tarefasController, alertasService, notificacoesController).
+Frontend: `pages/Configuracoes/Configuracoes.js`, `pages/Publicacoes/Publicacoes.js`.
+
+## ✅ PRÓXIMOS PASSOS / PENDÊNCIAS (22/06)
+- [ ] **COMMIT + PUSH** das mudanças de hoje (quando o usuário quiser). `.env` NÃO vai pro git.
+- [ ] **RE-DEPLOY na produção** com o fix de minúsculas — ⚠️ o deploy que rodou hoje (commit 2ed0e61, 14:38)
+      NÃO continha esse fix. Sem re-deploy, a produção segue quebrada (tblPasta).
+- [ ] **SQL pendente na PRODUÇÃO** (rodar ANTES do código): publicacoes+publicacao_usuario (refeito 21/06);
+      logs_auditoria.acao VARCHAR(30); collation 0900_ai_ci; forma_pagamento; acordo.tipo; agenda_compromisso;
+      colunas de repasse em acordo_parcela; idx_parcela_vencimento. (SQL consolidado nos blocos 20/06 e 21/06 abaixo.)
+- [ ] **Bucket produção:** manter SÓ os 3 modelos referenciados em `modelo_documento`
+      (`modelos/078f30b6...`, `modelos/a248b3b8...`, `modelos/a6b8660a...`) e apagar os órfãos.
+- [ ] **AASP:** conferir/salvar a URL na tela de Integrações da produção (após deploy).
+- [ ] **Segurança produção:** trocar JWT_SECRET e SUPER_SENHA por valores fortes no .env do servidor.
+- [ ] Re-exportar `estrutura_banco.sql` quando o schema da produção estiver alinhado.
+
+## 🚫 REGRA DE TRABALHO REFORÇADA HOJE
+**Claude NÃO acessa o servidor — nem para leitura/diagnóstico.** Quem executa qualquer coisa no servidor é
+SEMPRE o usuário; Claude só orienta e entrega comandos/SQL prontos. (Atualizar também em [[feedback-codigo]].)
+
 ---
 
 # 🔵 SESSÃO 21/06/2026 — análise do banco (estrutura_banco.sql) + 2 ajustes de schema

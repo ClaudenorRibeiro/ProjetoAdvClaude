@@ -7,6 +7,28 @@ metadata:
   originSessionId: current
 ---
 
+## 🆕 SESSÃO 22/06/2026 — vários ajustes em Publicações (LER PRIMEIRO; tudo LOCAL, sem SQL)
+- **AASP URL na tela:** a URL da API saiu do código/.env e virou campo em Configurações->Integrações
+  (`aaspService.buscarIntimacoes(chave,data,url)`; `lerConfigAasp()` retorna url; gates exigem ativo+chave+url).
+  Salva no JSON `configuracoes_integracoes.configuracoes.aasp.url`. `diferencial` segue fixo=false.
+- **Importação mudou de regra:** dedup de import agora é por **numeroPublicacao** (único do dia), não pelo texto.
+  Traz TODAS as publicações do dia (inclusive textos iguais com numeroPublicacao diferente); usuário exclui as
+  repetidas manualmente. Fallback p/ hash do texto quando numeroPublicacao vier nulo. Re-rodar o dia = INCREMENTAL
+  (só o que falta) + abre ModalConfirmar "dia já importado". A regra de DETECÇÃO de duplicada (texto idêntico via
+  hash) foi MANTIDA, só passou a servir para PINTAR.
+- **listar():** retorna `numero_publicacao` e campo calculado `duplicada` (EXISTS outra de texto idêntico no MESMO
+  dia com id menor -> 1; marca todas as cópias menos a mais antiga). Novo param **`escopo`** ('todas' | 'minhas';
+  'minhas' = EXISTS publicacao_usuario do logado). Filtro por **data** já existia no backend.
+- **Tela:** coluna **"Nº Publ."**; **linha pintada** (#fde8e8) quando duplicada + legenda; **realce de busca sem
+  acento** (helper `dobrarTexto` + `realcarTexto` com mapa de posições); **filtro de Data** + checkbox "Todas as
+  datas"; **rodapé "Exibindo X–Y de Z"** (removido total do topo) + paginação na mesma linha; seletor **"Exibir"
+  (Todas / Direcionadas a mim)**; fonte do corpo do modal **14px**.
+- Visibilidade (confirmada, já existia): não-admin vê escritório + direcionadas a ele. Direcionar NÃO notifica
+  (a pessoa só vê abrindo a tela). Permissão de **baixar = "Publicações -> Cadastrar"** (exclusiva, mantida assim).
+- Arquivos: backend `services/aaspService.js`, `controllers/publicacoesController.js`,
+  `controllers/configuracaoController.js` (já era); frontend `pages/Publicacoes/Publicacoes.js`,
+  `pages/Configuracoes/Configuracoes.js`. Detalhes completos no **RESUMO_SESSAO_22-06-2026.txt**.
+
 ## ⚠️ MÓDULO DE PUBLICAÇÕES REESCRITO DO ZERO (21/06/2026)
 O módulo antigo era TESTE e a integração com a AASP estava toda errada (URL, auth, formato de
 data e da resposta "chutados" — nunca funcionou). Usuário autorizou refazer banco + código.

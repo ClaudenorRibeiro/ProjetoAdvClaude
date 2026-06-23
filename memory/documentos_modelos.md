@@ -9,6 +9,15 @@ metadata:
 
 ## Bloco 11 — Documentos e Modelos
 
+## 🆕 22/06/2026 — Bucket S3 de TESTE separado da produção
+- Os modelos `.docx` ficam num bucket S3 privado, definido por `AWS_S3_BUCKET` no `.env` (nada fixo no código).
+- **LOCAL agora usa `modelos-antonio-adv-dev`** (bucket de teste) + usuário IAM próprio `modelos-antonio-adv-dev`
+  (policy `AcessoModelosAntonioDev`, restrita só a esse bucket). **PRODUÇÃO usa `modelos-antonio-adv`** + usuário
+  `modelos-s3-antonio-adv` (credenciais no `.env` do servidor). Trocar de bucket = só trocar o `.env`, sem código.
+- ⚠️ Como o LOCAL apontava para o bucket de PRODUÇÃO até 22/06, a produção acumulou modelos órfãos. Limpeza: manter
+  só os arquivos referenciados em `modelo_documento.arquivo_s3_key`; apagar o resto (ver RESUMO_SESSAO_22-06-2026.txt).
+- Lembrete: nomes de tabela sempre minúsculos (`modelo_documento`, `log_documentos_gerados`). Ver [[feedback-codigo]].
+
 ## Formato
 
 - Gera **Word (.docx)** editável

@@ -20,6 +20,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useRef } from 'react';
+import { toast } from 'react-toastify';
 
 // tipo: 'perigo' (vermelho) | 'aviso' (amarelo) | 'sucesso' (verde) | 'info' (azul)
 export default function ModalConfirmar({
@@ -51,9 +52,17 @@ export default function ModalConfirmar({
     setExecutando(true);
     try {
       await acao();
+      onCancelar();            // sucesso: fecha o modal
+    } catch (err) {
+      // Em vez de fechar em silêncio, mostra o MOTIVO da falha (mensagem do backend)
+      // e mantém o modal aberto para o usuário ler e poder tentar de novo.
+      // Obs.: chamadores que já tratam o próprio erro dentro de `acao` (sem relançar)
+      // não caem aqui — portanto não há toast duplicado.
+      const msg = err?.response?.data?.mensagem
+        || 'Não foi possível concluir a ação. Tente novamente.';
+      toast.error(msg);
     } finally {
       setExecutando(false);
-      onCancelar();
     }
   }
 

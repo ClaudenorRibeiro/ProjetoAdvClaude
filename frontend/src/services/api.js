@@ -349,6 +349,11 @@ export const calendarioAPI = {
   verificarDiaUtil: (data) => api.get('/calendario/dia-util', { params: { data } }),
 };
 
+// Manutenção do sistema — ações restritas ao superusuário
+export const manutencaoAPI = {
+  limparDadosTeste: (dados) => api.post('/manutencao/limpar-dados-teste', dados),
+};
+
 // ============================================================
 // AGENDA — compromissos pessoais/avulsos
 // ============================================================

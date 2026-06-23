@@ -49,6 +49,20 @@ do servidor (não está no git; editado à parte via WinSCP). pm2 restart/testes
 - O fluxo é: Claude codifica local → usuário testa → usuário commita/sobe quando quiser
 - Claude pode usar git somente para LEITURA (status, log, diff)
 
+**🚫 Claude NÃO ACESSA O SERVIDOR — nem para leitura/diagnóstico (regra reforçada 22/06/2026).**
+O acesso SSH/terminal ao servidor AWS é EXCLUSIVO do usuário. Claude NÃO entra no servidor, NÃO roda
+`pm2 logs`, NÃO lê arquivos lá, NADA. Quem executa qualquer coisa no servidor é SEMPRE o usuário; Claude
+apenas orienta e entrega os comandos/SQL prontos para o usuário rodar. (Revoga a permissão antiga de "SSH só leitura".)
+
+**⚠️ NOMES DE TABELA SEMPRE EM MINÚSCULAS — banco E código (regra ABSOLUTA, 22/06/2026).**
+TODOS os nomes de tabela devem ser MINÚSCULOS, tanto no banco quanto no código. NUNCA camelCase (`tblPasta`).
+- Tabelas definitivas (grafia correta): `tblforum, tblvara, tblpasta, tblproc, tblstatusproc, tbltipoproc,
+  tblinstanciaproc, tbltituloprocautor, tbltituloprocreu`.
+- **Por quê:** Windows (dev local) ignora maiúsc./minúsc.; **Linux (produção) é SENSÍVEL**. Em 22/06 a produção
+  quebrou (`Table 'sistema_advocacia.tblPasta' doesn't exist`): banco minúsculo, código camelCase e inconsistente.
+- **Correção 22/06:** 148 substituições em 10 arquivos (camelCase->minúsculo); grep `tbl[A-Z]` no backend = 0; node --check OK.
+- **Daqui pra frente:** toda query nova usa o nome minúsculo. NÃO recriar o problema.
+
 **A pasta local SEMPRE prevalece sobre o git.**  
 Arquivos deletados localmente e depois commitados saem do git também.
 
@@ -59,8 +73,8 @@ Exemplo: `050626-1430 — deploy: scripts de instalação por partes`
 Depois: exportar estrutura → `estrutura_banco.sql` → commit.  
 Nunca criar arquivos de migration.
 
-**Tabelas definitivas (nunca criar versões alternativas):**  
-`tblForum, tblVara, tblPasta, tblProc, tblStatusProc, tblTipoProc, tblInstanciaProc, tblTituloProcAutor, tblTituloProcReu`
+**Tabelas definitivas (nunca criar versões alternativas) — SEMPRE minúsculas:**  
+`tblforum, tblvara, tblpasta, tblproc, tblstatusproc, tbltipoproc, tblinstanciaproc, tbltituloprocautor, tbltituloprocreu`
 
 ## Atualização de Memória — AUTOMÁTICA E OBRIGATÓRIA
 

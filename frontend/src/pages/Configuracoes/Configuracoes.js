@@ -5,7 +5,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { configuracaoAPI } from '../../services/api';
+import { configuracaoAPI, manutencaoAPI } from '../../services/api';
 import { formatarData, toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
@@ -77,7 +77,7 @@ function mascaraCnpjCpf(valor) {
 }
 
 export default function Configuracoes() {
-  const { ehAdmin } = useAuth();
+  const { ehAdmin, ehSuper } = useAuth();
   const [abaAtiva, setAbaAtiva] = useState('escritorio');
 
   if (!ehAdmin) {
@@ -99,6 +99,8 @@ export default function Configuracoes() {
             { key:'permissoes',  label:'Permissões' },
             { key:'feriados',    label:'Feriados' },
             { key:'integracoes', label:'Integrações' },
+            // Aba de manutenção visível APENAS para o superusuário (nivel 0)
+            ...(ehSuper ? [{ key:'manutencao', label:'Manutenção' }] : []),
           ].map(({ key, label }) => (
             <button key={key} className={`aba-btn ${abaAtiva===key?'ativa':''}`}
               onClick={() => setAbaAtiva(key)}>
@@ -113,6 +115,72 @@ export default function Configuracoes() {
       {abaAtiva === 'permissoes'  && <TabPermissoes />}
       {abaAtiva === 'feriados'    && <TabFeriados />}
       {abaAtiva === 'integracoes' && <TabIntegracoes />}
+      {abaAtiva === 'manutencao' && ehSuper && <TabManutencao />}
+    </div>
+  );
+}
+
+// ============================================================
+// ABA: MANUTENÇÃO (somente superusuário) — Zona de perigo
+// Limpa toda a massa de TESTE do banco. Ação irreversível, com dupla trava:
+// 1) digitar "LIMPAR" para liberar o botão; 2) ModalConfirmar antes de executar.
+// O backend ainda exige confirmacao==='LIMPAR' e é protegido por apenasSuper.
+// ============================================================
+function TabManutencao() {
+  const [texto, setTexto]           = useState('');
+  const [confirmar, setConfirmar]   = useState(null);
+  const [executando, setExecutando] = useState(false);
+
+  const liberado = texto.trim() === 'LIMPAR';
+
+  function pedirConfirmacao() {
+    setConfirmar({
+      titulo:    'Limpar TODOS os dados de teste',
+      mensagem:  'Esta ação apaga DEFINITIVAMENTE pessoas, processos, prazos, tarefas, audiências, '
+               + 'perícias, financeiro, publicações, notificações e logs. Mantém apenas tipos/listas '
+               + 'de referência, calendário, configurações, usuários e os modelos de documento. '
+               + 'NÃO pode ser desfeita.',
+      textoBotao: '🗑️ Limpar tudo',
+      tipo: 'perigo',
+      // O ModalConfirmar já trata erro (toast) e mantém-se aberto se falhar
+      acao: async () => {
+        setExecutando(true);
+        try {
+          const { data } = await manutencaoAPI.limparDadosTeste({ confirmacao: texto.trim() });
+          const r = data?.dados;
+          toast.success(
+            r ? `Limpeza concluída: ${r.registros} registro(s) em ${r.tabelas} tabela(s).`
+              : (data?.mensagem || 'Dados de teste removidos.')
+          );
+          setTexto('');
+        } finally {
+          setExecutando(false);
+        }
+      },
+    });
+  }
+
+  return (
+    <div className="card" style={{ borderColor: '#fca5a5' }}>
+      <h3 style={{ color: '#b91c1c', marginTop: 0 }}>⚠️ Zona de perigo — Limpar dados de teste</h3>
+      <p style={{ color: '#6b7280', fontSize: '14px', lineHeight: 1.6 }}>
+        Remove <strong>definitivamente</strong> toda a massa de teste: pessoas, processos, prazos,
+        tarefas, audiências, perícias, financeiro, publicações, notificações e logs. São{' '}
+        <strong>preservados</strong>: tipos/listas de referência, varas/fóruns, calendário/feriados,
+        configurações do escritório, integrações, usuários/permissões e os modelos de documento.
+        Esta ação é exclusiva do superusuário e <strong>não pode ser desfeita</strong>.
+      </p>
+      <div className="form-group" style={{ maxWidth: '260px' }}>
+        <label className="form-label">Digite <strong>LIMPAR</strong> para liberar o botão</label>
+        <input className="form-control" value={texto} placeholder="LIMPAR"
+          onChange={e => setTexto(e.target.value)} autoComplete="off" />
+      </div>
+      <button className="btn" disabled={!liberado || executando} onClick={pedirConfirmacao}
+        style={{ background: '#dc2626', color: '#fff', opacity: (liberado && !executando) ? 1 : 0.5 }}>
+        {executando ? 'Limpando…' : '🗑️ Limpar dados de teste'}
+      </button>
+
+      {confirmar && <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(null)} />}
     </div>
   );
 }

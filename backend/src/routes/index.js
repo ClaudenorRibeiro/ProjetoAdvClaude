@@ -6,7 +6,7 @@ const express = require('express');
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
 
-const { autenticar, apenasAdmin } = require('../middleware/auth');
+const { autenticar, apenasAdmin, apenasSuper } = require('../middleware/auth');
 const { verificarPermissao } = require('../middleware/permissoes');
 
 // Proteção contra força bruta SÓ no login — chaveada pelo NOME DE USUÁRIO (não por IP),
@@ -41,6 +41,7 @@ const dashboardCtrl     = require('../controllers/dashboardController');
 const periciasCtrl      = require('../controllers/periciasController');
 const agendaCompromissoCtrl = require('../controllers/agendaCompromissoController');
 const notificacoesCtrl  = require('../controllers/notificacoesController');
+const manutencaoCtrl    = require('../controllers/manutencaoController');
 
 // ---- PÚBLICO (sem autenticação) ----
 router.get('/public/info',              configuracaoCtrl.infoPublica);
@@ -284,5 +285,8 @@ router.put('/configuracoes/permissoes/:usuarioId', autenticar, apenasAdmin, conf
 router.get('/configuracoes/integracoes',          autenticar, apenasAdmin, configuracaoCtrl.buscarIntegracoes);
 router.put('/configuracoes/integracoes/:modulo',  autenticar, apenasAdmin, configuracaoCtrl.salvarIntegracao);
 router.get('/configuracoes/servidor-hora',        autenticar, apenasAdmin, configuracaoCtrl.horaServidor);
+
+// ---- MANUTENÇÃO (somente SUPERUSUÁRIO, nivel 0) ----
+router.post('/manutencao/limpar-dados-teste',     autenticar, apenasSuper, manutencaoCtrl.limparDadosTeste);
 
 module.exports = router;
