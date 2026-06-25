@@ -164,24 +164,24 @@ async function buscarDados(req, res) {
       ),
 
       // Processos sem movimentação há X dias (configurável)
+      // A "última movimentação" de cada processo é calculada UMA vez (subconsulta agrupada com
+      // JOIN), em vez de uma subconsulta correlacionada repetida 3x por linha. Bem mais leve
+      // quando há muitos processos — alivia o painel, que é a tela mais acessada.
       pool.execute(
         `SELECT pr.id, pr.numProc AS numero, pr.NomeTituloProc AS pasta_titulo,
                 LPAD(pa.numPasta, 4, '0') AS pasta_numero_fmt,
-                COALESCE(
-                  (SELECT MAX(ap.data) FROM andamento_processual ap WHERE ap.processo_id = pr.id),
-                  DATE(pr.criado_em)
-                ) AS ultima_movimentacao,
-                DATEDIFF(CURDATE(), COALESCE(
-                  (SELECT MAX(ap.data) FROM andamento_processual ap WHERE ap.processo_id = pr.id),
-                  DATE(pr.criado_em)
-                )) AS dias_sem_movimentacao
+                COALESCE(ult.ultima, DATE(pr.criado_em)) AS ultima_movimentacao,
+                DATEDIFF(CURDATE(), COALESCE(ult.ultima, DATE(pr.criado_em))) AS dias_sem_movimentacao
          FROM tblproc pr
          JOIN tblpasta pa ON pr.pasta_id = pa.id
+         LEFT JOIN (
+           SELECT processo_id, MAX(data) AS ultima
+           FROM andamento_processual
+           GROUP BY processo_id
+         ) ult ON ult.processo_id = pr.id
          WHERE pr.ativo = 1
-           AND DATEDIFF(CURDATE(), COALESCE(
-             (SELECT MAX(ap.data) FROM andamento_processual ap WHERE ap.processo_id = pr.id),
-             DATE(pr.criado_em)
-           )) >= (SELECT COALESCE(dias_sem_movimentacao, 30) FROM configuracoes_escritorio LIMIT 1)
+           AND DATEDIFF(CURDATE(), COALESCE(ult.ultima, DATE(pr.criado_em)))
+               >= (SELECT COALESCE(dias_sem_movimentacao, 30) FROM configuracoes_escritorio LIMIT 1)
          ORDER BY dias_sem_movimentacao DESC
          LIMIT 20`
       ),

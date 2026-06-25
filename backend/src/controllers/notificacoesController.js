@@ -3,7 +3,7 @@
 // Notificações na tela para o usuário logado
 // ============================================================
 
-const { pool } = require('../config/database');
+const { pool, sistemaSobrecarregado } = require('../config/database');
 const { sucesso, erroInterno } = require('../utils/response');
 
 // GET /api/notificacoes — Notificações não lidas do usuário logado
@@ -36,7 +36,9 @@ async function contagem(req, res) {
       'SELECT COUNT(*) AS total FROM notificacoes WHERE usuario_id = ? AND lida = 0',
       [req.usuario.id]
     );
-    return sucesso(res, { total: rows[0].total });
+    // sobrecarga: indica ao frontend se o sistema atingiu o limite de conexões há pouco
+    // (aviso de capacidade exibido só para admin no topo da tela). Não gera consulta no banco.
+    return sucesso(res, { total: rows[0].total, sobrecarga: sistemaSobrecarregado() });
   } catch (err) {
     return erroInterno(res, err);
   }

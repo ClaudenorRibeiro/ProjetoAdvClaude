@@ -40,5 +40,13 @@ Todos os cards mostram dados do próprio usuário logado:
 - Fixo — sem personalização pelo usuário
 - Pode ser ampliado com novos cards futuramente
 
+## Desempenho (23/06/2026)
+
+- A query **"processos sem movimentação"** (`dashboardController.js`) foi otimizada: antes calculava
+  `MAX(andamento.data)` por subconsulta correlacionada 3x por linha; agora usa `LEFT JOIN` a uma subconsulta
+  agrupada (`GROUP BY processo_id`), calculando 1x por processo. Mesmo resultado, bem mais leve com muitos dados.
+- O dashboard dispara **11 queries em paralelo** ao abrir → relacionado ao ajuste de capacidade (pool 10→15) e ao
+  **aviso de sobrecarga** (Layout mostra alerta amarelo p/ admin quando o pool satura). Ver [[pendencias-proxima-sessao]].
+
 **Pendente:** Módulo de Perícias ainda não definido — criar Bloco próprio  
 **Relacionado:** [[prazos]], [[tarefas]], [[audiencias]], [[processos-pastas]], [[configuracoes_escritorio]]

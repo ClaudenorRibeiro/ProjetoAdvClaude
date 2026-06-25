@@ -213,11 +213,15 @@ async function criarFisica(req, res) {
       }
     }
 
-    await conn.commit();         // Grava tudo de uma vez — pessoa + telefones + e-mails
-    await auditoria.registrar(req.usuario.id, 'pessoas_fisicas', 'criar', pessoaId);
+    // Auditoria participa da MESMA transação (tudo ou nada): grava antes do commit, com conn
+    await auditoria.registrar(req.usuario.id, 'pessoas_fisicas', 'criar', pessoaId, null, null, conn);
+    await conn.commit();         // Grava tudo de uma vez — pessoa + telefones + e-mails + auditoria
     return sucesso(res, { id: pessoaId }, 'Pessoa cadastrada com sucesso', 201);
   } catch (err) {
     await conn.rollback();       // Desfaz tudo se qualquer INSERT falhou
+    // Rede de segurança da trava de unicidade do banco: se dois cadastros do mesmo CPF
+    // chegarem ao mesmo tempo, o segundo é barrado aqui com mensagem amigável (não erro 500).
+    if (err.code === 'ER_DUP_ENTRY') return erro(res, 'CPF já cadastrado no sistema');
     return erroInterno(res, err);
   } finally {
     conn.release();              // SEMPRE devolve a conexão ao pool
@@ -266,6 +270,8 @@ async function atualizarFisica(req, res) {
     await auditoria.registrar(req.usuario.id, 'pessoas_fisicas', 'editar', id, antes[0]);
     return sucesso(res, null, 'Pessoa atualizada com sucesso');
   } catch (err) {
+    // Trava de unicidade: editar o CPF para um que já existe em outra pessoa cai aqui.
+    if (err.code === 'ER_DUP_ENTRY') return erro(res, 'Este CPF já está cadastrado em outra pessoa');
     return erroInterno(res, err);
   }
 }
@@ -283,11 +289,14 @@ async function excluirFisica(req, res) {
     if (!rows.length) return naoEncontrado(res, 'Pessoa não encontrada');
 
     // Verifica todos os vínculos em paralelo antes de permitir exclusão
-    const [[autoresTbl], [reusTbl], [historico], [comunicacoes]] = await Promise.all([
+    const [[autoresTbl], [reusTbl], [historico], [comunicacoes], [testemunhas]] = await Promise.all([
       pool.execute('SELECT COUNT(*) AS total FROM tbltituloprocautor WHERE tipo_pessoa = ? AND pessoa_id = ?',      ['fisica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM tbltituloprocreu WHERE tipo_pessoa = ? AND pessoa_id = ?',        ['fisica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM historico_atendimento WHERE tipo_pessoa = ? AND pessoa_id = ?',   ['fisica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM log_comunicacoes WHERE tipo_pessoa = ? AND pessoa_id = ?',        ['fisica', id]),
+      // Testemunha é sempre pessoa física (FK em audiencia_testemunhas com ON DELETE RESTRICT). Sem esta
+      // checagem, excluir uma testemunha caía no erro genérico do banco em vez de avisar o motivo ao usuário.
+      pool.execute('SELECT COUNT(*) AS total FROM audiencia_testemunhas WHERE pessoa_id = ?',                       [id]),
     ]);
 
     // Monta lista de vínculos encontrados para informar o usuário
@@ -296,6 +305,7 @@ async function excluirFisica(req, res) {
     if (reusTbl[0].total > 0)      vinculos.push(`${reusTbl[0].total} processo(s) como réu`);
     if (historico[0].total > 0)    vinculos.push(`${historico[0].total} registro(s) de histórico`);
     if (comunicacoes[0].total > 0) vinculos.push(`${comunicacoes[0].total} comunicação(ões)`);
+    if (testemunhas[0].total > 0)  vinculos.push(`${testemunhas[0].total} audiência(s) como testemunha`);
 
     if (vinculos.length > 0) {
       return erro(res, `Pessoa não pode ser excluída pois possui: ${vinculos.join(', ')}`);
@@ -489,8 +499,9 @@ async function criarJuridica(req, res) {
       }
     }
 
-    await conn.commit();         // Grava tudo de uma vez — empresa + telefones + e-mails
-    await auditoria.registrar(req.usuario.id, 'pessoas_juridicas', 'criar', pessoaId);
+    // Auditoria participa da MESMA transação (tudo ou nada): grava antes do commit, com conn
+    await auditoria.registrar(req.usuario.id, 'pessoas_juridicas', 'criar', pessoaId, null, null, conn);
+    await conn.commit();         // Grava tudo de uma vez — empresa + telefones + e-mails + auditoria
     return sucesso(res, { id: pessoaId }, 'Pessoa jurídica cadastrada com sucesso', 201);
   } catch (err) {
     await conn.rollback();       // Desfaz tudo se qualquer INSERT falhou

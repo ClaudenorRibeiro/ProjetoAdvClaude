@@ -4,10 +4,14 @@
 // ============================================================
 
 const jwt = require('jsonwebtoken');
-const { naoAutorizado } = require('../utils/response');
+const { pool } = require('../config/database');
+const { naoAutorizado, erroInterno } = require('../utils/response');
 
-// Verifica se o token JWT enviado no header Authorization é válido
-function autenticar(req, res, next) {
+// Verifica se o token JWT é válido E reconfere o cadastro atual do usuário no banco
+// (nível + se segue ativo). Reconferir no banco garante que rebaixar ou desativar um
+// usuário valha IMEDIATAMENTE, sem esperar o token (crachá) expirar — fecha a brecha
+// do usuário demitido/rebaixado que continuava com acesso por horas.
+async function autenticar(req, res, next) {
   // O token deve vir no header: Authorization: Bearer <token>
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Pega só a parte depois de "Bearer"
@@ -16,13 +20,34 @@ function autenticar(req, res, next) {
     return naoAutorizado(res, 'Token de acesso não informado');
   }
 
+  // 1) Valida a assinatura e a validade do token
+  let dados;
   try {
-    // Decodifica o token e extrai os dados do usuário
-    const dados = jwt.verify(token, process.env.JWT_SECRET);
-    req.usuario = dados; // Disponibiliza os dados do usuário para a rota
-    next(); // Passa para o próximo middleware ou controller
+    dados = jwt.verify(token, process.env.JWT_SECRET);
   } catch (err) {
     return naoAutorizado(res, 'Token inválido ou expirado. Faça login novamente.');
+  }
+
+  // 2) Reconfere o cadastro ATUAL no banco (o token guarda os dados do momento do login)
+  try {
+    const [rows] = await pool.execute(
+      'SELECT nivel, tipo, ver_todos_processos FROM usuarios WHERE id = ? AND ativo = 1',
+      [dados.id]
+    );
+    // Sem linha = usuário desativado, excluído ou inexistente → desloga (precisa entrar de novo)
+    if (!rows.length) {
+      return naoAutorizado(res, 'Sua sessão não é mais válida. Faça login novamente.');
+    }
+    // Sincroniza os dados de acesso com o valor ATUAL do banco (sobrepõe os do token)
+    req.usuario = {
+      ...dados,
+      nivel:               rows[0].nivel,
+      tipo:                rows[0].tipo,
+      ver_todos_processos: rows[0].ver_todos_processos,
+    };
+    next(); // Passa para o próximo middleware ou controller
+  } catch (err) {
+    return erroInterno(res, err);
   }
 }
 

@@ -1,13 +1,184 @@
 ---
 name: pendencias-proxima-sessao
-description: "HANDOFF — LER PRIMEIRO. TOPO: SESSÃO 22/06 — REGRA ABSOLUTA: tabelas SEMPRE minúsculas (banco E código); corrigido bug de produção tblPasta (148 subs camelCase->minúsculo no backend). AASP URL na tela (saiu do código/.env). Bucket S3 -dev + IAM próprio; .env local apontado p/ -dev. Limpeza .env/.env.example. Publicações: realce sem acento, filtro de data, dedup por numeroPublicacao + confirmação re-rodar + coluna Nº Publ. + pintura duplicadas, rodapé Exibindo X–Y de Z, seletor Exibir (Todas/Direcionadas a mim), fonte modal 14px. PENDENTE: commit+push+RE-DEPLOY (deploy de hoje NÃO tinha o fix de minúsculas) + SQL pendente na produção. Claude NÃO acessa o servidor. Resumo completo: backups/RESUMO_SESSAO_22-06-2026.txt. Abaixo: 21/06, 20/06, 17/06..."
+description: "HANDOFF — LER PRIMEIRO. TOPO: SESSÃO 23/06 — AUDITORIA COMPLETA + 10 MELHORIAS: (1) trava senha do super; (2) índices por pessoa [SQL produção]; (3) pool 10→15 + aviso de sobrecarga p/ admin; (4) bug exclusão de testemunha; (5) sessão reconfere nivel/ativo no banco a cada request; (6) travas UNIQUE CPF/login [SQL produção]; (7) auditoria dentro da transação (7 pts); (8) responsividade VERIFICADA (já estava boa, nada mudado); (9) painel mais leve; (10) telas por perfil. 2 SQL p/ rodar na PRODUÇÃO (índices + UNIQUE). Item D (JWT_SECRET/SUPER_SENHA no .env prod) PULADO pelo usuário. Resumo: resumo do dia 230626-1518.txt. Antes — SESSÃO 22/06 (NOITE) — exclusão de prazo robusta (trata FK filhas em transação) + ModalConfirmar passou a MOSTRAR o erro (conserta silêncio global) + FEATURE 'Limpar dados de teste' SÓ p/ superadmin (nivel 0, aba Manutenção); superadmin DEIXADO COMO ESTÁ (não removido do banco). Resumo: backups/RESUMO_SESSAO_22-06-2026-NOITE.txt. Antes (22/06 DIA): REGRA ABSOLUTA: tabelas SEMPRE minúsculas (banco E código); corrigido bug de produção tblPasta (148 subs camelCase->minúsculo no backend). AASP URL na tela (saiu do código/.env). Bucket S3 -dev + IAM próprio; .env local apontado p/ -dev. Limpeza .env/.env.example. Publicações: realce sem acento, filtro de data, dedup por numeroPublicacao + confirmação re-rodar + coluna Nº Publ. + pintura duplicadas, rodapé Exibindo X–Y de Z, seletor Exibir (Todas/Direcionadas a mim), fonte modal 14px. PENDENTE: commit+push+RE-DEPLOY (deploy de hoje NÃO tinha o fix de minúsculas) + SQL pendente na produção. Claude NÃO acessa o servidor. Resumo completo: backups/RESUMO_SESSAO_22-06-2026.txt. Abaixo: 21/06, 20/06, 17/06..."
 metadata: 
   node_type: memory
   type: project
   originSessionId: a17aec30-7d20-496a-81a0-792eca6b27e8
 ---
 
-# 🔴 SESSÃO 22/06/2026 — LER PRIMEIRO (correção crítica de produção + AASP/S3/Publicações)
+# 🟢 SESSÃO 23/06/2026 — AUDITORIA COMPLETA + 9 MELHORIAS (segurança, performance, robustez) — LER PRIMEIRO
+
+Sessão de **auditoria do sistema inteiro** a pedido do usuário ("quero um sistema redondo e perfeito"). Claude analisou
+infra, schema (51 tabelas via `bancoDeDados.sql`), controllers críticos e frontend; listou os achados **por prioridade**
+e foram resolvidos **um a um, com autorização a cada passo**. Tudo LOCAL, validado (node --check backend + build Vite OK).
+**SEM git. SEM acesso ao servidor.** Resumo detalhado em **`resumo do dia 230626-1518.txt`** (raiz do projeto).
+
+## ⚠️ SQL que o usuário JÁ RODOU no banco LOCAL — FALTA RODAR NA PRODUÇÃO (no deploy):
+```sql
+-- (Item 2) Índices p/ acelerar busca por pessoa (coluna "Qtde Proc" + checagem de vínculos na exclusão)
+CREATE INDEX idx_titautor_pessoa ON tbltituloprocautor (pessoa_id, tipo_pessoa, proc_id);
+CREATE INDEX idx_titreu_pessoa   ON tbltituloprocreu   (pessoa_id, tipo_pessoa, proc_id);
+
+-- (Item 6) Travas de unicidade — EXCEÇÃO à regra "sem UNIQUE", APROVADA pelo usuário (trocam o índice comum por UNIQUE)
+ALTER TABLE pessoas_fisicas DROP INDEX idx_pf_cpf, ADD UNIQUE KEY uq_pf_cpf (cpf);
+ALTER TABLE usuarios        DROP INDEX idx_login,  ADD UNIQUE KEY uq_login (login);
+-- Conferir duplicados ANTES na produção (devem vir VAZIOS):
+--   SELECT cpf,COUNT(*) FROM pessoas_fisicas WHERE cpf IS NOT NULL GROUP BY cpf HAVING COUNT(*)>1;
+--   SELECT login,COUNT(*) FROM usuarios GROUP BY login HAVING COUNT(*)>1;
+```
+
+## OS 10 ITENS RESOLVIDOS (na ordem em que foram feitos):
+
+**1) SEGURANÇA — trava de senha do superusuário** (`configuracaoController.js` → `redefinirSenhaAdmin`).
+Faltava a trava que `atualizarUsuario`/`excluirUsuario` já tinham. Um admin comum podia redefinir a senha do super
+(id baixo, login padrão 'superadmin' previsível) e logar como ele. Adicionado: se alvo `nivel===0` → 403
+"Não é possível redefinir a senha do superusuário". Fecha o ÚLTIMO vetor de takeover do super. (As listagens de
+usuário já o escondem — verificado: `nivel > 0` / `tipo='advogado'` em todas as listas; super é tipo='administrador'.)
+
+**2) PERFORMANCE — índices por pessoa (SQL acima).** `tbltituloprocautor`/`tbltituloprocreu` só tinham índice em
+`proc_id`/`criado_por`. A coluna "Qtde Proc" da tela de Pessoas e a checagem de vínculos faziam full-scan por linha.
+Índice composto `(pessoa_id, tipo_pessoa, proc_id)`. Tabelas pequenas hoje; crítico com 20k clientes. SÓ banco.
+
+**3) CAPACIDADE — pool 10→15 + aviso de sobrecarga.** `config/database.js`: `connectionLimit` 10 → **15**
+(servidor é 512MB/2vCPU — número conservador). O dashboard dispara 11 queries em paralelo → 10 saturava o pool.
++ **AVISO DE SOBRECARGA:** o pool emite `enqueue` ao saturar; `database.js` guarda o timestamp e exporta
+`sistemaSobrecarregado()`; `notificacoesController.contagem` passou a devolver o campo `sobrecarga`; `Layout.js`
+mostra um aviso amarelo **só p/ admin** no topo (pega carona na checagem do sino que já roda a cada 2min — sem
+tráfego novo, sem banco). NOTA explicada ao usuário: "conexões" ≠ "usuários logados"; o limite é ajuste técnico no
+código (mudar exige reiniciar), não vai na tela de Configurações.
+
+**4) BUG — exclusão de pessoa física que é testemunha** (`pessoasController.js` → `excluirFisica`).
+Faltava checar o vínculo `audiencia_testemunhas` (FK `ON DELETE RESTRICT`): excluir uma testemunha dava erro 500
+genérico. Adicionada a 5ª checagem em paralelo + mensagem clara "X audiência(s) como testemunha". (PJ não é afetada
+— testemunha é sempre física.)
+
+**5) SEGURANÇA — sessão reconfere o usuário no banco** (`middleware/auth.js` → `autenticar`).
+O token (8h) guardava o `nivel` do login. Rebaixar/desativar/excluir um usuário só valia após expirar. Agora
+`autenticar` é async e reconfere a cada request: `SELECT nivel, tipo, ver_todos_processos FROM usuarios WHERE id=? AND
+ativo=1` — sem linha (desativado/excluído) → desloga ("Sua sessão não é mais válida"); senão sobrepõe nivel/tipo/
+ver_todos_processos do token pelos do banco. Fecha 2 brechas (admin rebaixado e funcionário demitido com acesso por
+horas). Custo: 1 query PK por request (irrisório). **Ponto central — testar que login normal segue funcionando.**
+
+**6) INTEGRIDADE — duplicados CPF/login (SQL acima + código).** Sem UNIQUE, dois cadastros simultâneos do mesmo
+CPF/login passavam. Decisão do usuário: **TRAVAR no banco** (exceção aprovada à regra "sem UNIQUE"): `uq_pf_cpf`,
+`uq_login`. No código, tratamento amigável do erro `ER_DUP_ENTRY` em `criarFisica`, `atualizarFisica` (editar CPF p/
+um já existente), `criarUsuario` e `criarPrimeiroAdmin` ("CPF já cadastrado"/"Login já está em uso", não erro 500).
+
+**7) CONSISTÊNCIA — auditoria dentro da transação (7 pontos).** Gravavam a auditoria DEPOIS do commit (modo tolerante):
+`pessoasController` (criarFisica, criarJuridica), `processosController` (renumerarPasta, criarProcesso, atualizarProcesso),
+`audienciasController` (criar, registrarAta). Movido p/ ANTES do commit com `conn` (tudo-ou-nada), igual financeiro/
+tarefas/perícias já faziam. Invisível ao usuário; só consistência.
+
+**8) RESPONSIVIDADE — VERIFICADA, JÁ ESTAVA BOA (NADA mudado).** Varredura: `Layout.css` (importado no `index.js` =
+CSS global) tem base responsiva completa (menu off-canvas, grids→1 coluna, modais full-screen, abas com scroll,
+`.tabela-wrapper` com overflow-x, `@media máx 768px`); 16/17 telas usam essa base (só Agenda não, e a "tabela" dela é
+um quadro de detalhes dentro de modal — sem problema); NENHUMA largura fixa que vaze; toolbars já usam `flexWrap` +
+`maxWidth`. Claude reconheceu que a avaliação inicial (pessimista) estava errada e **NÃO reescreveu telas que já
+funcionam**. Manutenção pontual se algo aparecer ruim no celular no uso real.
+
+**9) PERFORMANCE — painel mais leve** (`dashboardController.js`). A query "processos sem movimentação" calculava
+`MAX(andamento.data)` por subconsulta correlacionada **3x por linha**. Reescrita com `LEFT JOIN (SELECT processo_id,
+MAX(data) ... GROUP BY processo_id)` — calcula 1x por processo. Mesmo resultado, bem mais leve quando a base crescer.
+SÓ código.
+
+**10) SEGURANÇA/UX — telas por perfil** (`App.js`). `RotaProtegida` só checava login. Agora aceita props
+`modulo`/`apenasAdmin` (espelham o menu lateral): usuário sem permissão que digita a URL é mandado p/ `/dashboard`.
+O backend continua sendo o guardião real dos dados; isto é defesa em profundidade na navegação.
+
+## NÃO FEITO (decisão do usuário):
+- **Item D — JWT_SECRET e SUPER_SENHA fortes no `.env` de PRODUÇÃO:** PULADO (tarefa manual do usuário no servidor).
+- **Cache do dashboard:** não feito (a otimização da query já resolveu; cache traria dado atrasado/complexidade).
+
+## PENDÊNCIAS p/ o usuário (deploy desta sessão):
+- Rodar os 2 blocos SQL acima na PRODUÇÃO (índices + travas CPF/login).
+- Commit + push + deploy quando quiser (Claude não mexe no git).
+- Trocar `JWT_SECRET` / `SUPER_SENHA` no `.env` do servidor (Item D).
+- + as pendências antigas (22/06 e antes) que continuam valendo (ver abaixo).
+
+## REGRAS NOVAS desta sessão (já gravadas em [[feedback-codigo]]):
+- **Responsividade é REGRA GERAL** (toda tela, todo dispositivo) — não item pontual.
+- **"Banco sem regra de negócio" TEM EXCEÇÕES** que só o usuário decide (consultar ANTES; Claude nunca remove
+  UNIQUE/ENUM sozinho). Exceções aprovadas: ENUM `tipo_pessoa` (autor/réu), UNIQUE `uq_pf_cpf`/`uq_login`/`numPasta`/
+  `reset_tokens.token`.
+- **NÃO enviar trechos de código nas respostas ao usuário** (ele é leigo; polui a leitura) — explicar em português simples.
+
+---
+
+# 🟢 SESSÃO 22/06/2026 (CONTINUAÇÃO / NOITE) — exclusão de prazo + ModalConfirmar + "Limpar dados de teste"
+
+Continuação da MESMA data, à noite. Tudo LOCAL, validado (node --check backend + build Vite OK). SEM SQL.
+SEM git. SEM acesso ao servidor. Resumo detalhado em **`backups/RESUMO_SESSAO_22-06-2026-NOITE.txt`**.
+Esta sessão começou analisando a pasta local + memórias e o RESUMO da manhã; depois corrigiu um bug e
+criou uma feature, ambos autorizados pelo usuário passo a passo.
+
+## 1) BUG (do print do usuário): "não consigo excluir um prazo e não aparece o motivo" — DUAS causas
+- **Causa 1 (falha real):** `prazos_processo` tem 3 tabelas-filhas SEM `ON DELETE CASCADE` no banco:
+  `auditoria_prazo` (histórico), `notificacoes` (`prazo_id`) e `tarefas` (`prazo_id`). O `excluir` fazia um
+  `DELETE FROM prazos_processo` direto → quando o prazo tinha histórico/notificação, a FK barrava → 500.
+  Por isso o prazo "Pendente" com histórico não excluía.
+  **Fix (Parte A — `controllers/prazosController.js`, função `excluir`):** reescrito em TRANSAÇÃO
+  (`pool.getConnection` + begin/commit/rollback). Ordem: (1) `UPDATE tarefas SET prazo_id=NULL` — DESVINCULA a
+  tarefa (NÃO apaga; tarefa tem vida própria); (2) `DELETE notificacoes`; (3) `DELETE auditoria_prazo`;
+  (4) `DELETE prazos_processo`; (5) `auditoria.registrar(...,conn)` na mesma transação. As regras antigas
+  (não excluir concluído/cancelado; bloqueio de "fazendo" por outro) ficaram ANTES da transação. **SEM SQL**
+  (não usei cascade no banco — decisão de fazer manual no código, do estilo do usuário).
+- **Causa 2 (silêncio):** `components/ui/ModalConfirmar.js` tinha `try/finally` SEM `catch` → o erro do `acao()`
+  era engolido, o modal fechava e NENHUM toast aparecia. **Fix (Parte B):** agora
+  `try { await acao(); onCancelar(); } catch (err) { toast.error(err?.response?.data?.mensagem || fallback) }`
+  — mostra o MOTIVO (mensagem do backend) e MANTÉM o modal aberto p/ retentar. Importou `toast` de 'react-toastify'.
+  É componente COMPARTILHADO: conserta o silêncio em TODAS as confirmações do sistema; quem já trata o próprio
+  erro dentro de `acao` (sem relançar) NÃO cai no catch → sem toast duplicado.
+
+## 2) FEATURE NOVA — "Limpar dados de teste" (zerar massa de teste) SÓ p/ SUPERADMIN (nivel 0). SEM SQL.
+Pedido do usuário (vai apagar muitos testes). Decidido: exclusão 1-a-1 pela tela (resolvida pela Parte A) +
+um "limpa-tudo" restrito ao SUPERADMIN OCULTO. Gating: middleware `apenasSuper` (`middleware/auth.js`, `nivel!==0`).
+- **NOVO `controllers/manutencaoController.js` → `limparDadosTeste`:** numa transação com `SET FOREIGN_KEY_CHECKS=0`
+  (religado a 1 no `finally`), `DELETE` em **38 tabelas** de massa de teste; commit; e SÓ DEPOIS registra a
+  auditoria (`'sistema'`/`'limpar-dados-teste'`) — porque `logs_auditoria` está entre as apagadas, então o registro
+  nasce já no banco zerado (decisão do usuário). 2ª trava: backend exige `body.confirmacao === 'LIMPAR'`.
+  (Nota: `logs_auditoria.usuario_id` é NULLABLE e SEM FK — confirmado no backup — então o registro pós-limpeza não quebra.)
+- **APAGA (38):** pessoas_fisicas, pessoas_juridicas, emails_pf, emails_pj, telefones_pf, telefones_pj,
+  historico_atendimento, tblpasta, tblproc, tbltituloprocautor, tbltituloprocreu, processo_perito,
+  andamento_processual, prazos_processo, auditoria_prazo, tarefas, agenda_compromisso, audiencia, ata_audiencia,
+  audiencia_testemunhas, auditoria_audiencia, pericia, auditoria_pericia, conta_corrente, acordo, acordo_parcela,
+  auditoria_parcela, auditoria_conta_corrente, publicacoes, publicacao_usuario, log_publicacoes, notificacoes,
+  logs_auditoria, log_comunicacoes, log_emails, log_documentos_gerados, reset_tokens, **advogados_freela**
+  (o usuário decidiu tratar como teste).
+- **MANTÉM (20):** tipo_audiencia, tipo_pericia, tipo_prazo, prazo_subtipo, estado_civil, genero, profissao,
+  forma_pagamento, tblvara, tblforum, tblstatusproc, tbltipoproc, tblinstanciaproc, calendario, feriados,
+  configuracoes_escritorio, configuracoes_integracoes, usuarios, permissoes, **modelo_documento**
+  (modelos .docx reais apontam p/ o S3 — preservados; o usuário confirmou MANTER).
+- **Rota:** `POST /manutencao/limpar-dados-teste` (`autenticar` + `apenasSuper`) em `routes/index.js`
+  (importado `apenasSuper` e `manutencaoCtrl`).
+- **Frontend:** aba **"Manutenção"** em `pages/Configuracoes/Configuracoes.js` visível só se `ehSuper` (do AuthContext,
+  `nivel===0`); componente `TabManutencao` = "zona de perigo" que exige digitar **`LIMPAR`** p/ liberar o botão +
+  passa pelo `ModalConfirmar`. `manutencaoAPI.limparDadosTeste` em `services/api.js`.
+
+## 3) ANÁLISE (sem código) — "dá p/ NÃO colocar o superadmin no banco?"
+- Diagnóstico: o super é só uma linha em `usuarios` com `nivel=0`; "invisível" só na aplicação (queries filtram
+  `nivel>0`). Login normal (bcrypt na tabela). Seed `database/seeds/002_superusuario.js` cria a partir de
+  `SUPER_LOGIN`/`SUPER_SENHA` do `.env` (default login `superadmin`).
+- Conclusão honesta dada ao usuário: tirar do banco é POSSÍVEL, mas há **66 FKs** apontando p/ `usuarios` (criado_por
+  etc.) → o super, ao escrever, quebraria integridade; e esconder a linha NÃO protege (quem tem acesso a banco/código
+  cria outro `nivel=0`). Recomendei (Opção A) autenticar o super pelo `.env` deixando a senha do banco "morta" —
+  fecha o furo do DBA trocar o hash. **DECISÃO DO USUÁRIO: NÃO fazer nada — DEIXAR COMO ESTÁ.** Não reabrir sem ele pedir.
+
+## Arquivos desta sessão (NOITE) — todos LOCAIS, validados
+- Backend: `controllers/prazosController.js` (excluir transacional), **NOVO** `controllers/manutencaoController.js`,
+  `routes/index.js` (import apenasSuper + manutencaoCtrl + rota /manutencao/limpar-dados-teste).
+- Frontend: `components/ui/ModalConfirmar.js` (catch + toast), `pages/Configuracoes/Configuracoes.js`
+  (aba Manutenção + TabManutencao + ehSuper), `services/api.js` (manutencaoAPI).
+- SEM SQL. SEM git. Nada deployado.
+
+## ✅ Pendências (NOITE) — além das do bloco 22/06 (dia), que continuam valendo
+- [ ] Testar: excluir um prazo com histórico (deve funcionar) e ver o toast de erro quando algo falhar.
+- [ ] Testar a aba Manutenção logado como SUPERADMIN (digitar LIMPAR → confirmar). Conferir que some p/ admin normal.
+- [ ] Levar estes arquivos no próximo deploy (commit+push do usuário). NENHUM SQL novo aqui.
+
+---
+
+# 🔴 SESSÃO 22/06/2026 — LER (correção crítica de produção + AASP/S3/Publicações)
 
 Tudo LOCAL, validado (node --check + build Vite). SEM git (a pedido). Resumo COMPLETO e detalhado em
 **`backups/RESUMO_SESSAO_22-06-2026.txt`** — ler junto com este bloco.

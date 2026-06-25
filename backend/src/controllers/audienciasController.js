@@ -279,8 +279,9 @@ async function criar(req, res) {
       );
     }
 
+    // Auditoria na MESMA transação (tudo ou nada): antes do commit, com conn
+    await auditoria.registrar(req.usuario.id, 'audiencia', 'criar', audienciaId, null, null, conn);
     await conn.commit();
-    await auditoria.registrar(req.usuario.id, 'audiencia', 'criar', audienciaId);
     return sucesso(res, { id: audienciaId }, 'Audiência cadastrada com sucesso', 201);
   } catch (err) {
     await conn.rollback();
@@ -637,8 +638,9 @@ async function registrarAta(req, res) {
       );
     }
 
+    // Auditoria na MESMA transação (tudo ou nada): antes do commit, com conn
+    await auditoria.registrar(req.usuario.id, 'ata_audiencia', 'criar', result.insertId, null, null, conn);
     await conn.commit();
-    await auditoria.registrar(req.usuario.id, 'ata_audiencia', 'criar', result.insertId);
     return sucesso(res, { id: result.insertId }, 'Ata registrada com sucesso', 201);
   } catch (err) {
     await conn.rollback();

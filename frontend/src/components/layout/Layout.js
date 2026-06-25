@@ -66,6 +66,7 @@ export default function Layout({ children }) {
   // Sidebar no celular: vira menu off-canvas (escondido por padrão, abre pelo hambúrguer)
   const [sidebarMobile, setSidebarMobile] = useState(false);
   const [qtdNotif, setQtdNotif]   = useState(0);
+  const [sobrecarga, setSobrecarga] = useState(false); // true = pool saturado há pouco (aviso de capacidade, só admin)
   const [notifs, setNotifs]       = useState([]);
   const [sinoAberto, setSinoAberto]       = useState(false);
   const [menuUsuario, setMenuUsuario]     = useState(false);
@@ -98,7 +99,10 @@ export default function Layout({ children }) {
   async function buscarContagem() {
     try {
       const { data } = await notificacoesAPI.contagem();
-      if (data.ok) setQtdNotif(data.dados.total);
+      if (data.ok) {
+        setQtdNotif(data.dados.total);
+        setSobrecarga(!!data.dados.sobrecarga); // acende/apaga o aviso de capacidade
+      }
     } catch {}
   }
 
@@ -355,6 +359,20 @@ export default function Layout({ children }) {
 
         {/* CONTEÚDO DA PÁGINA */}
         <main className="conteudo">
+          {/* Aviso de capacidade — só para admin, quando o pool atingiu o limite recentemente */}
+          {ehAdmin && sobrecarga && (
+            <div style={{
+              background:'#fffbeb', border:'1px solid #f59e0b', color:'#92400e',
+              borderRadius:'8px', padding:'10px 14px', marginBottom:'16px',
+              fontSize:'13px', display:'flex', alignItems:'center', gap:'8px'
+            }}>
+              <span style={{fontSize:'16px'}}>⚠️</span>
+              <span>
+                O sistema atingiu o limite de capacidade momentaneamente (todas as conexões ocupadas).
+                Se este aviso aparecer com frequência, considere aumentar a máquina do servidor.
+              </span>
+            </div>
+          )}
           {children}
         </main>
       </div>

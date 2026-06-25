@@ -271,6 +271,8 @@ async function criarUsuario(req, res) {
     await auditoria.registrar(req.usuario.id, 'usuarios', 'criar', result.insertId);
     return sucesso(res, { id: result.insertId }, 'Usuário criado com sucesso', 201);
   } catch (err) {
+    // Rede de segurança da trava de unicidade do login (cadastros simultâneos do mesmo login).
+    if (err.code === 'ER_DUP_ENTRY') return erro(res, 'Login já está em uso');
     return erroInterno(res, err);
   }
 }
@@ -409,8 +411,12 @@ async function redefinirSenhaAdmin(req, res) {
     const errSenha = validarSenha(senha);
     if (errSenha) return erro(res, errSenha);
 
-    const [rows] = await pool.execute('SELECT id FROM usuarios WHERE id = ? AND ativo = 1', [id]);
+    const [rows] = await pool.execute('SELECT id, nivel FROM usuarios WHERE id = ? AND ativo = 1', [id]);
     if (!rows.length) return naoEncontrado(res, 'Usuário não encontrado');
+    // Blindagem do superusuário: nem o admin pode redefinir a senha do super (nivel 0).
+    // Mesma trava já usada em atualizarUsuario/excluirUsuario — fecha o vetor de takeover
+    // (admin resetava a senha do super por id e logava como ele).
+    if (rows[0].nivel === 0) return erro(res, 'Não é possível redefinir a senha do superusuário', 403);
 
     const hash = await bcrypt.hash(senha, 12);
     await pool.execute('UPDATE usuarios SET senha_hash = ? WHERE id = ?', [hash, id]);

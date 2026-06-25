@@ -11,6 +11,15 @@ metadata:
 
 As tabelas antigas (`forum, vara, pasta, processo, partes_processo, status_processo, processo_responsaveis, modelo_comunicado`) foram **removidas**. As tabelas definitivas usam prefixo `tbl`.
 
+### ⚠️ Objetos novos em 23/06/2026 (já no banco LOCAL; FALTA na PRODUÇÃO no deploy) — ver [[pendencias-proxima-sessao]]
+- **Índices de performance** (busca por pessoa — coluna "Qtde Proc" e checagem de vínculos):
+  `CREATE INDEX idx_titautor_pessoa ON tbltituloprocautor (pessoa_id, tipo_pessoa, proc_id);`
+  `CREATE INDEX idx_titreu_pessoa ON tbltituloprocreu (pessoa_id, tipo_pessoa, proc_id);`
+- **Travas de unicidade** (exceção à regra "sem UNIQUE", APROVADA pelo usuário — tratamento de duplicados CPF/login):
+  `ALTER TABLE pessoas_fisicas DROP INDEX idx_pf_cpf, ADD UNIQUE KEY uq_pf_cpf (cpf);`
+  `ALTER TABLE usuarios DROP INDEX idx_login, ADD UNIQUE KEY uq_login (login);`
+  (Conferir duplicados antes na produção — devem vir vazios.)
+
 ### ⚠️ Ajustes de schema em 21/06/2026 (já no banco LOCAL; FALTA na PRODUÇÃO no deploy)
 - `logs_auditoria.acao`: VARCHAR(20) → **VARCHAR(30)** (corrige 500 quando a ação passava de 20 chars). Ver [[pendencias-proxima-sessao]] Item 1.
 - **Collation padronizada** p/ utf8mb4_0900_ai_ci: o DEFAULT do DATABASE + as 3 tabelas que estavam em utf8mb4_unicode_ci

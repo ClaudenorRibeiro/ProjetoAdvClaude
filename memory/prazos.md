@@ -69,5 +69,15 @@ Prazo **Concluído** ou **Cancelado** não mostra mais "Xd atraso" na coluna Dia
 atraso aparecia em qualquer prazo com vencimento passado, independente do status.) Usa a mesma condição
 `['concluido','cancelado'].includes(p.status)` já usada na cor da linha. Só exibição; sem banco/backend.
 
+## Correção 22/06/2026 — EXCLUIR prazo com histórico falhava (em silêncio) — RESOLVIDO
+**Sintoma:** prazo "Pendente" com histórico não excluía e a tela não dizia o porquê.
+**Causa real:** `prazos_processo` tem 3 filhas SEM `ON DELETE CASCADE` no banco — `auditoria_prazo` (histórico),
+`notificacoes` (`prazo_id`) e `tarefas` (`prazo_id`). O `DELETE` direto era barrado por FK → 500.
+**Fix (`prazosController.excluir`):** reescrito em TRANSAÇÃO. Ordem: `UPDATE tarefas SET prazo_id=NULL` (DESVINCULA a
+tarefa — NÃO apaga, tarefa tem vida própria) → `DELETE notificacoes` → `DELETE auditoria_prazo` →
+`DELETE prazos_processo` → `auditoria.registrar(...,conn)`. Regras antigas (não excluir concluído/cancelado; bloqueio
+de "fazendo" por outro) mantidas antes da transação. **SEM SQL** (não usei cascade no banco). O "silêncio" foi
+corrigido em paralelo no `ModalConfirmar` (agora mostra `toast.error` com o motivo) — ver [[pendencias-proxima-sessao]].
+
 **Diferença prazo vs tarefa:** Ver [[tarefas]]  
 **Relacionado:** [[processos-pastas]], [[tarefas]]

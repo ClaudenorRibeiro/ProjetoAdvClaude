@@ -32,9 +32,12 @@ import Foruns        from './pages/Controle/Foruns';
 import Varas         from './pages/Controle/Varas';
 import FormasPagamento from './pages/Controle/FormasPagamento';
 
-// Rota protegida — redireciona para login se não estiver autenticado
-function RotaProtegida({ children }) {
-  const { usuario, carregando } = useAuth();
+// Rota protegida — exige login E (quando aplicável) permissão do módulo ou perfil admin.
+// Sem login → vai para /login. Logado mas sem acesso àquela tela → volta ao painel
+// (/dashboard, que todos veem). Espelha o menu lateral, que já esconde o que o usuário não pode usar.
+// Obs.: o backend continua sendo o guardião real dos dados; isto é defesa em profundidade na navegação.
+function RotaProtegida({ children, modulo = null, apenasAdmin = false }) {
+  const { usuario, carregando, temPermissao, ehAdmin } = useAuth();
 
   if (carregando) {
     return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh'}}>Carregando...</div>;
@@ -42,6 +45,16 @@ function RotaProtegida({ children }) {
 
   if (!usuario) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Tela só de admin e usuário não é admin → sem acesso, volta ao painel
+  if (apenasAdmin && !ehAdmin) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  // Tela de um módulo e usuário sem permissão de visualizar → sem acesso
+  // (temPermissao já libera admin/super automaticamente)
+  if (modulo && !temPermissao(modulo, 'visualizar')) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <Layout>{children}</Layout>;
@@ -62,24 +75,24 @@ function AppRoutes() {
       <Route path="/login"           element={<RotaPublica><Login /></RotaPublica>} />
       <Route path="/redefinir-senha" element={<ResetSenha />} />
 
-      {/* Rotas protegidas */}
+      {/* Rotas protegidas — modulo/apenasAdmin espelham o menu lateral (Layout) */}
       <Route path="/dashboard"     element={<RotaProtegida><Dashboard /></RotaProtegida>} />
-      <Route path="/pessoas/*"     element={<RotaProtegida><Pessoas /></RotaProtegida>} />
-      <Route path="/processos"              element={<RotaProtegida><Processos /></RotaProtegida>} />
-      <Route path="/processos/pasta/:id"    element={<RotaProtegida><PastaDetalhe /></RotaProtegida>} />
-      <Route path="/prazos/*"      element={<RotaProtegida><Prazos /></RotaProtegida>} />
-      <Route path="/tarefas/*"     element={<RotaProtegida><Tarefas /></RotaProtegida>} />
-      <Route path="/audiencias/*"  element={<RotaProtegida><Audiencias /></RotaProtegida>} />
-      <Route path="/pericias/*"    element={<RotaProtegida><Pericias /></RotaProtegida>} />
-      <Route path="/financeiro/*"  element={<RotaProtegida><Financeiro /></RotaProtegida>} />
-      <Route path="/documentos/*"  element={<RotaProtegida><Documentos /></RotaProtegida>} />
-      <Route path="/publicacoes/*" element={<RotaProtegida><Publicacoes /></RotaProtegida>} />
+      <Route path="/pessoas/*"     element={<RotaProtegida modulo="pessoas"><Pessoas /></RotaProtegida>} />
+      <Route path="/processos"              element={<RotaProtegida modulo="processos"><Processos /></RotaProtegida>} />
+      <Route path="/processos/pasta/:id"    element={<RotaProtegida modulo="processos"><PastaDetalhe /></RotaProtegida>} />
+      <Route path="/prazos/*"      element={<RotaProtegida modulo="prazos"><Prazos /></RotaProtegida>} />
+      <Route path="/tarefas/*"     element={<RotaProtegida modulo="tarefas"><Tarefas /></RotaProtegida>} />
+      <Route path="/audiencias/*"  element={<RotaProtegida modulo="audiencias"><Audiencias /></RotaProtegida>} />
+      <Route path="/pericias/*"    element={<RotaProtegida modulo="pericias"><Pericias /></RotaProtegida>} />
+      <Route path="/financeiro/*"  element={<RotaProtegida modulo="financeiro"><Financeiro /></RotaProtegida>} />
+      <Route path="/documentos/*"  element={<RotaProtegida modulo="documentos"><Documentos /></RotaProtegida>} />
+      <Route path="/publicacoes/*" element={<RotaProtegida modulo="publicacoes"><Publicacoes /></RotaProtegida>} />
       <Route path="/agenda/*"      element={<RotaProtegida><Agenda /></RotaProtegida>} />
-      <Route path="/relatorios/*"  element={<RotaProtegida><Relatorios /></RotaProtegida>} />
-      <Route path="/configuracoes/*"   element={<RotaProtegida><Configuracoes /></RotaProtegida>} />
-      <Route path="/controle/foruns"  element={<RotaProtegida><Foruns /></RotaProtegida>} />
-      <Route path="/controle/varas"   element={<RotaProtegida><Varas /></RotaProtegida>} />
-      <Route path="/controle/formas-pagamento" element={<RotaProtegida><FormasPagamento /></RotaProtegida>} />
+      <Route path="/relatorios/*"  element={<RotaProtegida modulo="relatorios"><Relatorios /></RotaProtegida>} />
+      <Route path="/configuracoes/*"   element={<RotaProtegida apenasAdmin><Configuracoes /></RotaProtegida>} />
+      <Route path="/controle/foruns"  element={<RotaProtegida apenasAdmin><Foruns /></RotaProtegida>} />
+      <Route path="/controle/varas"   element={<RotaProtegida apenasAdmin><Varas /></RotaProtegida>} />
+      <Route path="/controle/formas-pagamento" element={<RotaProtegida apenasAdmin><FormasPagamento /></RotaProtegida>} />
 
       {/* Redireciona raiz para dashboard */}
       <Route path="/" element={<Navigate to="/dashboard" replace />} />

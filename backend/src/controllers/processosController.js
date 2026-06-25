@@ -203,8 +203,9 @@ async function renumerarPasta(req, res) {
     // Renumera a pasta
     await conn.execute('UPDATE tblpasta SET numPasta = ? WHERE id = ?', [num, id]);
 
+    // Auditoria na MESMA transação (tudo ou nada): antes do commit, com conn
+    await auditoria.registrar(req.usuario.id, 'tblpasta', 'renumerar', id, null, null, conn);
     await conn.commit();
-    await auditoria.registrar(req.usuario.id, 'tblpasta', 'renumerar', id);
     return sucesso(res, { numPasta: num }, 'Número da pasta atualizado com sucesso');
   } catch (err) {
     await conn.rollback();
@@ -408,8 +409,9 @@ async function criarProcesso(req, res) {
       );
     }
 
+    // Auditoria na MESMA transação (tudo ou nada): antes do commit, com conn
+    await auditoria.registrar(req.usuario.id, 'tblproc', 'criar', procId, null, null, conn);
     await conn.commit();
-    await auditoria.registrar(req.usuario.id, 'tblproc', 'criar', procId);
     return sucesso(res, { id: procId, pasta_id: pastaId }, 'Processo criado com sucesso', 201);
   } catch (err) {
     await conn.rollback();
@@ -560,8 +562,9 @@ async function atualizarProcesso(req, res) {
       }
     }
 
+    // Auditoria na MESMA transação (tudo ou nada): antes do commit, com conn
+    await auditoria.registrar(req.usuario.id, 'tblproc', 'editar', id, antes[0], null, conn);
     await conn.commit();
-    await auditoria.registrar(req.usuario.id, 'tblproc', 'editar', id, antes[0]);
     return sucesso(res, null, 'Processo atualizado com sucesso');
   } catch (err) {
     await conn.rollback();

@@ -139,6 +139,8 @@ async function criarPrimeiroAdmin(req, res) {
     return sucesso(res, { id: result.insertId }, 'Administrador criado com sucesso', 201);
 
   } catch (err) {
+    // Rede de segurança da trava de unicidade do login.
+    if (err.code === 'ER_DUP_ENTRY') return erro(res, 'Este login já está em uso');
     return erroInterno(res, err);
   }
 }

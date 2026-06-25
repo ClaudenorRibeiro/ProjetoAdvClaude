@@ -12,6 +12,12 @@ metadata:
 **Nunca codificar sem autorização explícita do usuário.**  
 O usuário decide quando e o que será desenvolvido. Claude analisa, sugere e explica — mas só executa código quando autorizado.
 
+**🗣️ NÃO ENVIAR TRECHOS DE CÓDIGO NAS RESPOSTAS — o usuário é leigo (regra de 23/06/2026).**
+Nas respostas do chat, explicar tudo em **português simples**: o que muda, por que, e o impacto. NADA de blocos de
+código, nomes de função crus ou jargão. Pode manter links clicáveis de arquivo só como referência. (Exceção natural:
+**scripts SQL** que o usuário precisa colar no HeidiSQL — esses são entregues, claramente rotulados como "cole no HeidiSQL".)
+**Por quê:** em 23/06 o usuário pediu explicitamente para parar de mandar código, que polui a leitura dele.
+
 **🧠 ANALISAR O CÓDIGO INTEIRO + TESTAR MENTALMENTE ANTES DE APONTAR ERRO OU SUGERIR ALTERAÇÃO (regra desde 21/06/2026).**
 NUNCA olhar um trecho isolado e sair dizendo que há erro/risco. Antes de afirmar qualquer coisa ou propor mudança:
 - Ler o FLUXO COMPLETO envolvido (a função inteira + quem chama + tabelas/colunas usadas em todo o caminho), não um pedaço.
@@ -85,10 +91,11 @@ Nunca criar arquivos de migration.
 
 2. Sincronizar para a pasta do projeto:  
    `C:\Users\Claudio\Downloads\ProjetoAdvClaude\memory\`  
-   (copiar os arquivos atualizados para lá)
+   ⚠️ **SOMENTE COM AUTORIZAÇÃO EXPLÍCITA do usuário** (regra de 19/06/2026). A memória interna (`.claude\...`)
+   pode ser atualizada livremente; o sync para a pasta do projeto depende de um "pode sincronizar" do usuário.
 
-3. Fazer commit e push automaticamente (sem pedir autorização):  
-   `git add memory/ && git commit -m "DDMMYY-HHMM — atualiza memória do projeto"`
+3. ⚠️ **NÃO commitar/subir NADA** (a antiga regra de auto-commit foi REVOGADA pelo usuário). Claude NUNCA mexe no git.
+   O commit/push da memória é feito pelo **USUÁRIO**, manualmente, quando ele quiser.
 
 **O que atualizar:**
 - Qualquer funcionalidade nova implementada
@@ -180,8 +187,17 @@ try {
 ## Banco de Dados — Apenas Repositório de Dados
 
 **Regra absoluta:** O banco de dados NÃO deve conter nenhuma regra de negócio.  
-**O que NUNCA colocar no banco:** `UNIQUE`, `ENUM`, `CHECK`, triggers com lógica, stored procedures com regras  
+**O que evitar no banco:** `UNIQUE`, `ENUM`, `CHECK`, triggers com lógica, stored procedures com regras  
 **O que É permitido:** `PRIMARY KEY`, `FOREIGN KEY`, `INDEX` simples, `NOT NULL` estrutural, tipos de dados adequados
+
+**⚠️ A regra TEM EXCEÇÕES — e exceção é decisão do USUÁRIO, NUNCA do Claude (23/06/2026).**
+- Claude **nunca** remove/altera um `UNIQUE`/`ENUM`/`CHECK` existente por conta própria "para cumprir a regra".
+  Ao encontrar um, **apenas sinaliza e pergunta** — o usuário decide manter ou tirar.
+- **Exceções já APROVADAS pelo usuário (manter como estão):** ENUM `tbltituloprocautor.tipo_pessoa` e
+  `tbltituloprocreu.tipo_pessoa` (`'fisica'/'juridica'`); UNIQUE `pessoas_fisicas.uq_pf_cpf`, `usuarios.uq_login`,
+  `tblpasta.numPasta`, `reset_tokens.token`.
+- **Por quê:** em 23/06 o usuário esclareceu que a regra admite exceções conscientes e que o certo é o Claude
+  **consultar antes** (como fez com o ENUM de tipo_pessoa e as travas de CPF/login), não "corrigir" sozinho.
 
 ## Datas e Crons — SEMPRE Fuso de Brasília (regra desde 12/06/2026)
 
@@ -214,6 +230,17 @@ após as 21h de Brasília já é "amanhã", e crons sem timezone disparam 3h adi
 - **Sem `window.confirm`** — usar sempre o componente `ModalConfirmar`
 - **Botões padronizados** — seguir o estilo já estabelecido no projeto
 - **Separador de tabela:** `border-bottom: 1px solid #9ca3af` (cinza médio visível)
+
+## 📱 RESPONSIVIDADE — OBRIGATÓRIA EM TODO O SISTEMA (regra geral, 23/06/2026)
+
+**Toda tela deve funcionar bem em celular, tablet, notebook e PC. É requisito, não "bom ter".**
+- Ao CRIAR ou ALTERAR qualquer tela/componente, garantir que funcione no celular (sem estourar a largura, sem zoom,
+  com áreas de toque confortáveis). Tabelas largas: rolagem horizontal controlada (classe `.tabela-wrapper`) OU virar
+  cartões — nunca deixar "vazar" a tela.
+- **Base já existente (usar!):** `Layout.css` (importado no `index.js` = CSS global) tem `@media (max-width:768px)`
+  com menu off-canvas, grids→1 coluna, modais full-screen, abas com scroll, `.tabela`/`.tabela-wrapper`. Em 23/06 foi
+  verificado que 16/17 telas já usam essa base e está bem feita.
+- **Por quê:** o usuário exige o sistema usável em qualquer dispositivo; em 23/06 pediu para registrar como **regra geral**.
 
 ## Deploy no Servidor — SEMPRE o Usuário, NUNCA Claude
 
