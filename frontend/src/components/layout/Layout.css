@@ -123,29 +123,51 @@ body {
   padding: 13px 20px;
   color: #ccc;
   text-decoration: none;
-  transition: background 0.15s;
+  border-right: 3px solid transparent;   /* reserva o espaço da barra p/ não "pular" no hover */
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
   white-space: nowrap;
   overflow: hidden;
 }
 
+/* DESTAQUE — usado tanto pelo item da tela atual (em repouso) quanto pelo item sob o mouse:
+   fundo azul + texto azul + barra à direita + ícone e rótulo crescendo +40% ("crescem juntos") */
+.menu-item.ativo,
 .menu-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-}
-
-.menu-item.ativo {
   background: rgba(126, 184, 247, 0.15);
   color: #7eb8f7;
-  border-right: 3px solid #7eb8f7;
+  border-right-color: #7eb8f7;
+}
+.menu-item.ativo .menu-icone,
+.menu-item.ativo .menu-label,
+.menu-item:hover .menu-icone,
+.menu-item:hover .menu-label {
+  transform: scale(1.4);
+}
+
+/* Ao mover o mouse pelo menu, o item da tela atual (se NÃO for o que está sob o cursor)
+   volta ao tamanho/cor normais — assim só UM item fica grande/destacado por vez */
+.menu:hover .menu-item.ativo:not(:hover) {
+  background: transparent;
+  color: #ccc;
+  border-right-color: transparent;
+}
+.menu:hover .menu-item.ativo:not(:hover) .menu-icone,
+.menu:hover .menu-item.ativo:not(:hover) .menu-label {
+  transform: none;
 }
 
 .menu-icone {
   font-size: 19px;
   flex-shrink: 0;
+  transform-origin: center;
+  transition: transform 0.2s ease, color 0.2s ease;
 }
 
 .menu-label {
   font-size: 15px;
+  display: inline-block;
+  transform-origin: left center;   /* o rótulo cresce para a direita, sem empurrar o layout */
+  transition: transform 0.2s ease;
 }
 
 /* ---- GRUPO EXPANSÍVEL COM SUB-ITENS ---- */
