@@ -9,6 +9,19 @@ metadata:
 
 ## Regras de Trabalho — OBRIGATÓRIAS
 
+**🎯 CERTEZA ABSOLUTA — NUNCA SUPOR, PRESUMIR OU "ACHAR" (regra reforçada 26/06/2026, ABSOLUTA).**
+Toda afirmação e toda ação devem se basear em FATO VERIFICADO — no código, no arquivo, na config real.
+Se não há como confirmar algo diretamente (estado do servidor, do banco, de uma config, fuso, etc.), NÃO
+preencher a lacuna com suposição: ou verificar na fonte, ou PEDIR ao usuário para verificar e ESPERAR a
+resposta. Havendo qualquer incerteza, dizer explicitamente "não tenho certeza, preciso confirmar" ANTES de
+prosseguir. Errar por suposição é inaceitável.
+- **Why:** o usuário é leigo e confia na análise de Claude como segunda checagem. Em 26/06 Claude assumiu que o
+  servidor estava em UTC (padrão comum da AWS) sem verificar; estava em America/Sao_Paulo. Adivinhar quebra a
+  confiança e pode quebrar o sistema. "É um erro gravíssimo ficar tentando adivinhar ou supondo coisas."
+- **How to apply:** antes de afirmar/agir, perguntar-se "isto é fato verificado ou suposição?". Se for suposição,
+  parar e confirmar primeiro. Como Claude NÃO acessa o servidor, fatos do servidor são sempre pedidos ao usuário.
+- Mais ampla que a regra de "analisar o código inteiro antes de apontar erro" — cobre TUDO, não só código.
+
 **Nunca codificar sem autorização explícita do usuário.**  
 O usuário decide quando e o que será desenvolvido. Claude analisa, sugere e explica — mas só executa código quando autorizado.
 
@@ -68,6 +81,10 @@ TODOS os nomes de tabela devem ser MINÚSCULOS, tanto no banco quanto no código
   quebrou (`Table 'sistema_advocacia.tblPasta' doesn't exist`): banco minúsculo, código camelCase e inconsistente.
 - **Correção 22/06:** 148 substituições em 10 arquivos (camelCase->minúsculo); grep `tbl[A-Z]` no backend = 0; node --check OK.
 - **Daqui pra frente:** toda query nova usa o nome minúsculo. NÃO recriar o problema.
+- **Reforçado 26/06/2026:** o usuário fez questão de gravar de novo. Nesta data REMOVEMOS dos scripts de deploy
+  (Deploy/instalacao/4-deploy-sistema.sh e Deploy/atualizacao/4-ReimportarBanco.sh) todo o bloco que renomeava as
+  tabelas para camelCase — era a "bomba" que quebraria a produção no Linux. NÃO reintroduzir rename para camelCase em
+  lugar NENHUM (código, scripts, SQL). Banco e código: minúsculo, sempre.
 
 **A pasta local SEMPRE prevalece sobre o git.**  
 Arquivos deletados localmente e depois commitados saem do git também.

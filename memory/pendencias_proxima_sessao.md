@@ -1,10 +1,59 @@
 ---
 name: pendencias-proxima-sessao
-description: "HANDOFF — LER PRIMEIRO. TOPO: SESSÃO 23/06 — AUDITORIA COMPLETA + 10 MELHORIAS: (1) trava senha do super; (2) índices por pessoa [SQL produção]; (3) pool 10→15 + aviso de sobrecarga p/ admin; (4) bug exclusão de testemunha; (5) sessão reconfere nivel/ativo no banco a cada request; (6) travas UNIQUE CPF/login [SQL produção]; (7) auditoria dentro da transação (7 pts); (8) responsividade VERIFICADA (já estava boa, nada mudado); (9) painel mais leve; (10) telas por perfil. 2 SQL p/ rodar na PRODUÇÃO (índices + UNIQUE). Item D (JWT_SECRET/SUPER_SENHA no .env prod) PULADO pelo usuário. Resumo: resumo do dia 230626-1518.txt. Antes — SESSÃO 22/06 (NOITE) — exclusão de prazo robusta (trata FK filhas em transação) + ModalConfirmar passou a MOSTRAR o erro (conserta silêncio global) + FEATURE 'Limpar dados de teste' SÓ p/ superadmin (nivel 0, aba Manutenção); superadmin DEIXADO COMO ESTÁ (não removido do banco). Resumo: backups/RESUMO_SESSAO_22-06-2026-NOITE.txt. Antes (22/06 DIA): REGRA ABSOLUTA: tabelas SEMPRE minúsculas (banco E código); corrigido bug de produção tblPasta (148 subs camelCase->minúsculo no backend). AASP URL na tela (saiu do código/.env). Bucket S3 -dev + IAM próprio; .env local apontado p/ -dev. Limpeza .env/.env.example. Publicações: realce sem acento, filtro de data, dedup por numeroPublicacao + confirmação re-rodar + coluna Nº Publ. + pintura duplicadas, rodapé Exibindo X–Y de Z, seletor Exibir (Todas/Direcionadas a mim), fonte modal 14px. PENDENTE: commit+push+RE-DEPLOY (deploy de hoje NÃO tinha o fix de minúsculas) + SQL pendente na produção. Claude NÃO acessa o servidor. Resumo completo: backups/RESUMO_SESSAO_22-06-2026.txt. Abaixo: 21/06, 20/06, 17/06..."
+description: "HANDOFF — LER PRIMEIRO. TOPO: SESSÃO 25-26/06 — DEPLOY DO ZERO num servidor NOVO (Ubuntu 24, IP 100.57.24.46, conta AWS EdnaADV 905418183179; domínio sistema.antonio.adv.br c/ HTTPS). Imprevistos resolvidos: firewall 443, DNS=registro A (não redirect), .pem→.ppk, CRLF→LF, token p/ repo privado, setup concluído ao salvar Escritório, e-mail Gmail PENDENTE. Scripts Deploy CORRIGIDOS (Node 24, LibreOffice, SEM rename camelCase, token, nginx 25m). MENU lateral novo (Layout.css: tela atual +40%+fundo; hover move o destaque) JÁ no GitHub (bf385e6) — FALTA rodar 1-AtualizarSistema no servidor novo. Guia: Deploy/GUIA-DEPLOY-DO-ZERO.txt. Resumo: 'resumo do dia 260626 - deploy AWS do zero.txt'. Antes — SESSÃO 23/06 — AUDITORIA COMPLETA + 10 MELHORIAS: (1) trava senha do super; (2) índices por pessoa [SQL produção]; (3) pool 10→15 + aviso de sobrecarga p/ admin; (4) bug exclusão de testemunha; (5) sessão reconfere nivel/ativo no banco a cada request; (6) travas UNIQUE CPF/login [SQL produção]; (7) auditoria dentro da transação (7 pts); (8) responsividade VERIFICADA (já estava boa, nada mudado); (9) painel mais leve; (10) telas por perfil. 2 SQL p/ rodar na PRODUÇÃO (índices + UNIQUE). Item D (JWT_SECRET/SUPER_SENHA no .env prod) PULADO pelo usuário. Resumo: resumo do dia 230626-1518.txt. Antes — SESSÃO 22/06 (NOITE) — exclusão de prazo robusta (trata FK filhas em transação) + ModalConfirmar passou a MOSTRAR o erro (conserta silêncio global) + FEATURE 'Limpar dados de teste' SÓ p/ superadmin (nivel 0, aba Manutenção); superadmin DEIXADO COMO ESTÁ (não removido do banco). Resumo: backups/RESUMO_SESSAO_22-06-2026-NOITE.txt. Antes (22/06 DIA): REGRA ABSOLUTA: tabelas SEMPRE minúsculas (banco E código); corrigido bug de produção tblPasta (148 subs camelCase->minúsculo no backend). AASP URL na tela (saiu do código/.env). Bucket S3 -dev + IAM próprio; .env local apontado p/ -dev. Limpeza .env/.env.example. Publicações: realce sem acento, filtro de data, dedup por numeroPublicacao + confirmação re-rodar + coluna Nº Publ. + pintura duplicadas, rodapé Exibindo X–Y de Z, seletor Exibir (Todas/Direcionadas a mim), fonte modal 14px. PENDENTE: commit+push+RE-DEPLOY (deploy de hoje NÃO tinha o fix de minúsculas) + SQL pendente na produção. Claude NÃO acessa o servidor. Resumo completo: backups/RESUMO_SESSAO_22-06-2026.txt. Abaixo: 21/06, 20/06, 17/06..."
 metadata: 
   node_type: memory
   type: project
   originSessionId: a17aec30-7d20-496a-81a0-792eca6b27e8
+---
+
+# 🟢 SESSÃO 25-26/06/2026 — DEPLOY DO ZERO NUM SERVIDOR NOVO (Ubuntu 24) + MENU — LER PRIMEIRO
+
+Sessão OPERACIONAL: o **USUÁRIO** fez um deploy REAL do zero num servidor NOVO; o Claude orientou passo a passo,
+resolveu os imprevistos e DEPOIS corrigiu os scripts. Resumo completo em **`resumo do dia 260626 - deploy AWS do zero.txt`**
+(raiz). SEM git nesta finalização. Memória da pasta do projeto atualizada COM autorização. Claude NÃO acessou o servidor.
+
+## SERVIDOR NOVO (passou a ser a produção do domínio)
+- Lightsail **AntonioADV**, **Ubuntu 24 LTS**, us-east-1. Conta AWS do servidor: **EdnaADV (905418183179)**.
+- **IP público: 100.57.24.46**. Domínio **sistema.antonio.adv.br** agora aponta pra ele (HTTPS Let's Encrypt ok, renova sozinho).
+- Antigo: 98.85.19.2 (Ubuntu 22, conta Antonio 264022422777) — o domínio NÃO aponta mais pra ele.
+- Instalação **"vazio/do zero"** (estrutura + referência + super + admin), via Deploy/instalacao (versão CORRIGIDA).
+
+## IMPREVISTOS RESOLVIDOS (viraram checklist no guia)
+1. **Porta 443** fechada no firewall do Lightsail → HTTPS dava timeout. Abrir HTTPS(443) no IPv4 E IPv6.
+2. **DNS**: estava como **redirecionamento** na Locaweb (caía em 186.202.157.79) → trocar por **registro A** `sistema`→100.57.24.46. Esperar propagar.
+3. **WinSCP**: converter o **.pem → .ppk** (o próprio WinSCP converte).
+4. **CRLF → LF**: todos os scripts vinham com final de linha do Windows (quebra no Linux). Convertidos.
+5. **Repo privado**: precisa de **GITHUB_TOKEN** (fine-grained, sem expiração, Contents:Read-only) no 1-configurar.sh.
+6. **estrutura_banco.sql** = SÓ estrutura (58 tabelas, sem dados) p/ instalação vazia.
+7. **Login bloqueado** até concluir o setup: super loga → salva o **Escritório** (setup_concluido=1) → aí os outros logam.
+8. **E-mail "esqueci a senha"** falha (senha de App do Gmail desatualizada) → admin define senha direto; conserto do e-mail PENDENTE.
+
+## SCRIPTS DE DEPLOY CORRIGIDOS (Deploy/ fica só local — vai por WinSCP, NÃO pelo git)
+- **instalacao**: Node 20→**24**; +**LibreOffice**; **removido lower_case_table_names** (travava o MySQL 8 + contra a regra);
+  **removido o rename camelCase**; 46→58 tabelas; **bloco S3/AWS no .env** + campos AWS no 1-configurar.sh; **GITHUB_TOKEN** +
+  clone autenticado; nginx **client_max_body_size 25m**; sem auto-feriados; tudo **LF**.
+- **atualizacao**: **4-ReimportarBanco** sem o rename (só reinicia); **3-VerificarSistema** confere tabelas em **minúsculo**;
+  **1-AtualizarSistema** com limite de memória no build (`--max-old-space-size=400`) + GIT_TERMINAL_PROMPT; 2-AtualizarBanco
+  mantido (⚠️ a transação NÃO cobre ALTER/CREATE TABLE); tudo LF. (Usuário apagou 1 script que não usava.)
+
+## S3 cross-account
+Lightsail na conta EdnaADV; S3 na conta Antonio. Buckets **dev** (modelos-antonio-adv-dev) + **produção**, cada um com IAM próprio
++ policy de 4 ações restrita ao bucket. .env local→dev, .env servidor→produção. Código NÃO muda (lê do .env). Ver [[documentos-modelos]].
+
+## MENU lateral novo (ÚNICA alteração de código) — `Layout.css`
+Efeito "crescem juntos": o item da **tela atual** fica **+40%** maior + **fundo azul destacado**; ao passar o mouse, o destaque vai
+pro item sob o cursor (o atual volta ao normal); só UM destacado por vez. Só CSS, build Vite OK. **JÁ COMMITADO+PUSHADO (local=GitHub `bf385e6`).**
+Ícones continuam **emoji** (futuro opcional: trocar por lib de ícones — balança, martelo, microscópio...).
+
+## PENDÊNCIAS (continuar daqui)
+- [ ] **Deployar o MENU no servidor novo**: está no GitHub, mas o servidor foi instalado ANTES dele. Copiar `1-AtualizarSistema.sh`
+  (corrigido) via WinSCP e rodar no servidor (`bash /home/ubuntu/1-AtualizarSistema.sh`). É só CSS — NÃO precisa mexer no banco.
+- [ ] **Consertar o e-mail**: nova senha de App do Gmail → `SMTP_PASS` no .env do servidor → restart do backend.
+- [ ] (Opcional) trocar os emoji do menu por ícones de biblioteca; decidir o destino do servidor antigo (98.85.19.2).
+- OBS.: as pendências de SQL de PRODUÇÃO das sessões anteriores (UNIQUE uq_login/uq_pf_cpf, índices por pessoa) ficaram
+  RESOLVIDAS no servidor novo — a instalação do zero já usou o `estrutura_banco.sql` atual (que já tem tudo). Guia: **Deploy/GUIA-DEPLOY-DO-ZERO.txt**.
+
 ---
 
 # 🟢 SESSÃO 23/06/2026 — AUDITORIA COMPLETA + 9 MELHORIAS (segurança, performance, robustez) — LER PRIMEIRO

@@ -7,6 +7,32 @@ metadata:
   originSessionId: c7321425-eb43-40e0-b57f-c2941c1276c6
 ---
 
+## ⭐⭐ PRODUÇÃO NOVA — DEPLOY DO ZERO EM 25-26/06/2026 (LER PRIMEIRO)
+
+A produção foi migrada para um **servidor NOVO**, instalado do zero. Detalhes e passo a passo completo em
+**`Deploy/GUIA-DEPLOY-DO-ZERO.txt`**; narrativa em **`resumo do dia 260626 - deploy AWS do zero.txt`**.
+
+- **Servidor novo:** Lightsail **AntonioADV**, **Ubuntu 24 LTS**, us-east-1. Conta AWS: **EdnaADV (905418183179)**.
+  **IP público: 100.57.24.46**. Domínio **sistema.antonio.adv.br** aponta pra ele (HTTPS Let's Encrypt, renova sozinho).
+- **Servidor antigo:** 98.85.19.2 (Ubuntu 22, conta Antonio 264022422777) — o domínio NÃO aponta mais pra ele.
+- **Node no servidor novo:** **24 LTS** (não 20). **LibreOffice** instalado (geração de PDF).
+- **S3 cross-account:** Lightsail na conta EdnaADV, S3 na conta Antonio — funciona por credencial IAM no .env (buckets dev+prod).
+
+**Scripts de Deploy CORRIGIDOS nesta sessão (ficam só locais, vão por WinSCP — NÃO pelo git):**
+- `Deploy/instalacao`: Node 20→24; +LibreOffice; **removido lower_case_table_names** (travava MySQL 8); **removido o rename
+  camelCase**; 46→58 tabelas; bloco S3/AWS no .env + campos AWS no 1-configurar.sh; **GITHUB_TOKEN** + clone autenticado
+  (repo é PRIVADO) + GIT_TERMINAL_PROMPT=0; nginx `client_max_body_size 25m`; sem auto-feriados; tudo LF.
+- `Deploy/atualizacao`: 4-ReimportarBanco SEM rename (só reinicia); 3-VerificarSistema confere tabelas em minúsculo;
+  1-AtualizarSistema com `--max-old-space-size=400` no build + GIT_TERMINAL_PROMPT; tudo LF.
+
+**Imprevistos do deploy (checklist no guia):** abrir porta **443** no firewall do Lightsail (IPv4+IPv6); DNS = **registro A**
+(NÃO redirecionamento) apontando o subdomínio pro IP, esperar propagar; WinSCP usa **.ppk** (converte do .pem); **concluir o
+setup** salvando o Escritório libera o login dos demais usuários; e-mail (Gmail) precisa de senha de App ATUAL.
+
+**Pendente:** rodar `1-AtualizarSistema.sh` no servidor novo p/ deployar a mudança do MENU (já está no GitHub) + consertar o e-mail.
+
+---
+
 ## ⭐ FLUXO REAL DE DEPLOY DO USUÁRIO (confirmado 12/06/2026 — é assim que ele faz SEMPRE)
 
 1. **Banco:** exporta o SQL do banco LOCAL (HeidiSQL) → abre o banco da instância AWS no
