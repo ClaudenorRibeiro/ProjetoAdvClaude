@@ -185,8 +185,8 @@ export default function Varas() {
               : 'Nenhuma vara cadastrada ainda.'}
           </div>
         ) : (
-          <div className="tabela-wrapper">
-            <table className="tabela">
+          <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+            <table className="tabela tabela-sticky">
               <thead>
                 <tr>
                   <th>Fórum</th>

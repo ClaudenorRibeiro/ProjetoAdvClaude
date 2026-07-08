@@ -163,8 +163,8 @@ export default function Prazos() {
 
       <div className="card">
         {carregando ? <div className="loading">Carregando...</div> : (
-          <div className="tabela-wrapper">
-            <table className="tabela">
+          <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+            <table className="tabela tabela-sticky">
               <thead>
                 <tr>
                   <th>Processo</th><th>Pasta</th><th>Prazo</th><th>Vencimento</th>

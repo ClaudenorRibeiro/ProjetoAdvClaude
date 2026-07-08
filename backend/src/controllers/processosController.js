@@ -440,8 +440,7 @@ async function excluirProcesso(req, res) {
       { tabela: 'pericia',              coluna: 'processo_id', label: 'perícia(s)'                   },
       { tabela: 'prazos_processo',      coluna: 'processo_id', label: 'prazo(s)'                     },
       { tabela: 'tarefas',              coluna: 'processo_id', label: 'tarefa(s)'                    },
-      { tabela: 'parcerias',            coluna: 'processo_id', label: 'parceria(s)'                  },
-      { tabela: 'log_documentos_gerados', coluna: 'processo_id', label: 'documento(s) gerado(s)'    },
+      { tabela: 'acordo',               coluna: 'processo_id', label: 'acordo(s)/parceria(s) no financeiro' },
       { tabela: 'log_comunicacoes',     coluna: 'processo_id', label: 'comunicação(ões) registrada(s)' },
     ];
 
@@ -487,6 +486,9 @@ async function atualizarProcesso(req, res) {
   if (cliente_polo && !['autor', 'reu'].includes(cliente_polo)) {
     return erro(res, 'Polo do cliente inválido (use "autor" ou "reu")');
   }
+  // Se autores/reus vierem no body (substituição das partes), processo precisa ficar com ao menos 1 de cada lado
+  if (autores !== undefined && autores.length === 0) return erro(res, 'Inclua ao menos um autor no polo ativo');
+  if (reus !== undefined && reus.length === 0)       return erro(res, 'Inclua ao menos um réu no polo passivo');
 
   const conn = await pool.getConnection();
   try {

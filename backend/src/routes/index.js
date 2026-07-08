@@ -72,7 +72,8 @@ router.get('/pessoas/auxiliares',              autenticar, pessoasCtrl.buscarAux
 // Cadastra novo item em tabela auxiliar (generos, estados_civis, profissoes)
 router.post('/pessoas/auxiliares/:tipo',       autenticar, verificarPermissao('pessoas','cadastrar'), pessoasCtrl.criarAuxiliar);
 router.get('/pessoas/fisicas',            autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.listarFisicas);
-// IMPORTANTE: rota /cpf/:cpf deve ficar ANTES de /:id para o Express não capturar "cpf" como id
+// IMPORTANTE: /exportar e /cpf/:cpf devem ficar ANTES de /:id para o Express não capturar a palavra como id
+router.get('/pessoas/fisicas/exportar',   autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.exportarFisicas);
 router.get('/pessoas/fisicas/cpf/:cpf',   autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.buscarPorCPF);
 router.get('/pessoas/fisicas/:id',        autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.buscarFisica);
 router.post('/pessoas/fisicas',           autenticar, verificarPermissao('pessoas','cadastrar'),  pessoasCtrl.criarFisica);
@@ -80,6 +81,7 @@ router.put('/pessoas/fisicas/:id',        autenticar, verificarPermissao('pessoa
 router.delete('/pessoas/fisicas/:id',     autenticar, verificarPermissao('pessoas','excluir'),    pessoasCtrl.excluirFisica);
 router.post('/pessoas/fisicas/:id/historico', autenticar, pessoasCtrl.adicionarHistorico);
 router.get('/pessoas/juridicas',          autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.listarJuridicas);
+router.get('/pessoas/juridicas/exportar', autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.exportarJuridicas);
 router.post('/pessoas/juridicas',         autenticar, verificarPermissao('pessoas','cadastrar'),  pessoasCtrl.criarJuridica);
 router.delete('/pessoas/juridicas/:id',   autenticar, verificarPermissao('pessoas','excluir'),    pessoasCtrl.excluirJuridica);
 

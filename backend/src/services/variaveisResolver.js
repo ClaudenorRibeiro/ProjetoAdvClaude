@@ -144,7 +144,6 @@ function blocoClienteDeParte(parte) {
     nome_fantasia: d.nome_fantasia || '',
     documento_cliente: d.cnpj || '',
     cnpj_cliente: d.cnpj || '',
-    representante_legal: d.representante_legal || '',
     inscricao_estadual: d.inscricao_estadual || '',
   };
 }
@@ -460,7 +459,7 @@ async function carregarParte(tipo, pessoaId) {
       genero: d.genero_nome || '',
       data_nascimento: dataBR(d.data_nascimento),
       nome_mae: d.nome_mae || '', nome_pai: d.nome_pai || '',
-      representante_legal: '', inscricao_estadual: '',
+      inscricao_estadual: '',
       endereco: montarEndereco(d.logradouro, d.numero, d.complemento, d.bairro, d.cidade, d.estado, d.cep),
       cep: d.cep || '', logradouro: d.logradouro || '', numero: d.numero || '',
       complemento: d.complemento || '', bairro: d.bairro || '', cidade: d.cidade || '', estado: d.estado || '',
@@ -477,7 +476,6 @@ async function carregarParte(tipo, pessoaId) {
       rg: '', rg_orgao: '', pis: '', ctps: '', nacionalidade: '',
       estado_civil: '', profissao: '', genero: '', data_nascimento: '',
       nome_mae: '', nome_pai: '',
-      representante_legal: d.representante_legal || '',
       inscricao_estadual: d.inscricao_estadual || '',
       endereco: montarEndereco(d.logradouro, d.numero, d.complemento, d.bairro, d.cidade, d.estado, d.cep),
       cep: d.cep || '', logradouro: d.logradouro || '', numero: d.numero || '',

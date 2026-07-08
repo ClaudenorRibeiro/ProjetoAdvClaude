@@ -22,8 +22,9 @@ A produção foi migrada para um **servidor NOVO**, instalado do zero. Detalhes 
 - `Deploy/instalacao`: Node 20→24; +LibreOffice; **removido lower_case_table_names** (travava MySQL 8); **removido o rename
   camelCase**; 46→58 tabelas; bloco S3/AWS no .env + campos AWS no 1-configurar.sh; **GITHUB_TOKEN** + clone autenticado
   (repo é PRIVADO) + GIT_TERMINAL_PROMPT=0; nginx `client_max_body_size 25m`; sem auto-feriados; tudo LF.
-- `Deploy/atualizacao`: 4-ReimportarBanco SEM rename (só reinicia); 3-VerificarSistema confere tabelas em minúsculo;
+- `Deploy/atualizacao`: 3-VerificarSistema confere tabelas em minúsculo;
   1-AtualizarSistema com `--max-old-space-size=400` no build + GIT_TERMINAL_PROMPT; tudo LF.
+  (28/06: 4-ReimportarBanco .sh+.txt REMOVIDOS — eram o "substituir o banco inteiro", incompatível com a rotina incremental nova.)
 
 **Imprevistos do deploy (checklist no guia):** abrir porta **443** no firewall do Lightsail (IPv4+IPv6); DNS = **registro A**
 (NÃO redirecionamento) apontando o subdomínio pro IP, esperar propagar; WinSCP usa **.ppk** (converte do .pem); **concluir o
@@ -35,8 +36,11 @@ setup** salvando o Escritório libera o login dos demais usuários; e-mail (Gmai
 
 ## ⭐ FLUXO REAL DE DEPLOY DO USUÁRIO (confirmado 12/06/2026 — é assim que ele faz SEMPRE)
 
-1. **Banco:** exporta o SQL do banco LOCAL (HeidiSQL) → abre o banco da instância AWS no
-   HeidiSQL → roda o arquivo SQL → bancos ficam idênticos (local = produção)
+1. **Banco (NOVA ROTINA desde 28/06/2026 — incremental, NÃO destrutiva):** NÃO se reimporta mais o banco
+   inteiro na AWS (apagaria os dados reais). Cada alteração de ESTRUTURA é aplicada MANUALMENTE no HeidiSQL —
+   LOCAL primeiro, depois AWS — como um "bloco" (o ALTER/CREATE + um INSERT registrando a mudança na tabela
+   `controle_versao_banco`). Comparar essa tabela no local vs AWS mostra o que falta. Ver seção "Atualização
+   do Banco em PRODUÇÃO" abaixo.
 2. **Código:** roda `salvar_pc_casa_no_Git.bat` (ou `salvar_pc_escrit_no_Git.bat`) →
    git add -A + commit "DDMMYY-HHMM — descrição" + push origin main
 3. **Servidor:** via SSH roda `bash /home/ubuntu/1-AtualizarSistema.sh`
@@ -155,7 +159,15 @@ Contém passo a passo completo para outro computador:
 ## Versionamento
 
 - Formato de commit obrigatório: `DDMMYY-HHMM — descrição curta`
-- Sem migrations — schema via HeidiSQL → exportar `estrutura_banco.sql` → commit
+- Sem migrations (regra MANTIDA — nunca criar arquivos de migração) — schema via HeidiSQL → exportar `estrutura_banco.sql` → commit
+
+## Atualização do Banco em PRODUÇÃO — incremental, SEM perder dados (NOVO 28/06/2026)
+
+- ❌ NUNCA reimportar o dump completo numa produção com dados reais: o `estrutura_banco.sql` começa com `DROP DATABASE` → apagaria tudo. (Por isso o `4-ReimportarBanco` foi removido.)
+- ✅ Cada alteração de ESTRUTURA é aplicada MANUALMENTE no HeidiSQL: LOCAL primeiro, depois AWS.
+- Tabela de controle **`controle_versao_banco`** (`numero` PK, `descricao`, `sql_aplicado` MEDIUMTEXT, `aplicado_em` DATETIME): registra cada mudança; existe nos 2 bancos; comparar mostra o que falta aplicar na AWS.
+- SEM pasta/arquivos de migração (regra do usuário reafirmada 28/06). O controle é só essa tabela + aplicação manual.
+- Claude entrega cada mudança como um "bloco" = o ALTER/CREATE + o INSERT na tabela de controle; o usuário roda. Claude NUNCA executa no banco.
 - **Regra nova (05/06/2026):** Só subir para o git após autorização explícita do usuário
 - A pasta local SEMPRE prevalece sobre o git
 - Estratégia de rollback: `git log` para ver commits, `git checkout <hash>` para voltar
@@ -179,3 +191,4 @@ Contém passo a passo completo para outro computador:
 - `DEPLOY_AWS_LIGHTSAIL.txt` — substituído pela pasta `deploy/`
 - `ConfiguracoesIniciais.txt` — desatualizado (falava em migrations antigas)
 - `gerar_manual_prazos.js` — uso pontual, removido
+- `Deploy/atualizacao/4-ReimportarBanco.sh` e `4-ReimportarBanco.txt` — removidos 28/06 (reimport destrutivo do banco; substituídos pela rotina incremental + tabela `controle_versao_banco`)

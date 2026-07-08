@@ -172,8 +172,8 @@ export default function Audiencias() {
 
       <div className="card">
         {carregando ? <div className="loading">Carregando...</div> : (
-          <div className="tabela-wrapper">
-            <table className="tabela">
+          <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+            <table className="tabela tabela-sticky">
               <thead>
                 <tr>
                   {podeLote && (

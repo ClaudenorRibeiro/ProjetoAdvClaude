@@ -84,6 +84,9 @@ export const pessoasAPI = {
   verificarCPF: (cpf) => api.get(`/pessoas/fisicas/cpf/${cpf}`),
   // Cria novo item em tabela auxiliar: tipo = 'generos' | 'estados_civis' | 'profissoes'
   criarAuxiliar: (tipo, dados) => api.post(`/pessoas/auxiliares/${tipo}`, dados),
+  // Exportação para Excel (.xlsx) — respeita a busca atual; campos escolhidos na tela
+  exportarFisicas:   (params) => api.get('/pessoas/fisicas/exportar',   { params, responseType: 'blob', timeout: 120000 }),
+  exportarJuridicas: (params) => api.get('/pessoas/juridicas/exportar', { params, responseType: 'blob', timeout: 120000 }),
   // Jurídicas
   listarJuridicas:  (params) => api.get('/pessoas/juridicas', { params }),
   criarJuridica:    (dados) => api.post('/pessoas/juridicas', dados),

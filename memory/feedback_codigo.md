@@ -31,6 +31,15 @@ código, nomes de função crus ou jargão. Pode manter links clicáveis de arqu
 **scripts SQL** que o usuário precisa colar no HeidiSQL — esses são entregues, claramente rotulados como "cole no HeidiSQL".)
 **Por quê:** em 23/06 o usuário pediu explicitamente para parar de mandar código, que polui a leitura dele.
 
+**❓ UMA PERGUNTA POR VEZ + PERGUNTAR ANTES DE CRIAR (regra reforçada 03-05/07/2026).**
+Quando precisar de esclarecimento, fazer **UMA pergunta de cada vez** e só mandar a próxima depois de resolver a
+atual — NUNCA despejar várias perguntas juntas. E **sempre perguntar/confirmar ANTES de gerar ou criar qualquer
+coisa** (SQL, código, arquivo, lista): não "sair criando".
+- **Como aplicar:** analisar → explicar o que entendeu → fazer 1 pergunta → esperar a resposta → só então gerar,
+  já com a aprovação. Se houver várias pendências, enfileirar e resolver uma por uma.
+- **Por quê:** o usuário é leigo e precisa acompanhar passo a passo; várias perguntas juntas confundem, e gerar
+  coisas sem pedir polui a leitura e pode produzir algo indesejado/perigoso (ex.: DELETE).
+
 **🧠 ANALISAR O CÓDIGO INTEIRO + TESTAR MENTALMENTE ANTES DE APONTAR ERRO OU SUGERIR ALTERAÇÃO (regra desde 21/06/2026).**
 NUNCA olhar um trecho isolado e sair dizendo que há erro/risco. Antes de afirmar qualquer coisa ou propor mudança:
 - Ler o FLUXO COMPLETO envolvido (a função inteira + quem chama + tabelas/colunas usadas em todo o caminho), não um pedaço.

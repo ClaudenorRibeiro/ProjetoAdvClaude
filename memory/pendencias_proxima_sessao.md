@@ -1,10 +1,288 @@
 ---
 name: pendencias-proxima-sessao
-description: "HANDOFF — LER PRIMEIRO. TOPO: SESSÃO 25-26/06 — DEPLOY DO ZERO num servidor NOVO (Ubuntu 24, IP 100.57.24.46, conta AWS EdnaADV 905418183179; domínio sistema.antonio.adv.br c/ HTTPS). Imprevistos resolvidos: firewall 443, DNS=registro A (não redirect), .pem→.ppk, CRLF→LF, token p/ repo privado, setup concluído ao salvar Escritório, e-mail Gmail PENDENTE. Scripts Deploy CORRIGIDOS (Node 24, LibreOffice, SEM rename camelCase, token, nginx 25m). MENU lateral novo (Layout.css: tela atual +40%+fundo; hover move o destaque) JÁ no GitHub (bf385e6) — FALTA rodar 1-AtualizarSistema no servidor novo. Guia: Deploy/GUIA-DEPLOY-DO-ZERO.txt. Resumo: 'resumo do dia 260626 - deploy AWS do zero.txt'. Antes — SESSÃO 23/06 — AUDITORIA COMPLETA + 10 MELHORIAS: (1) trava senha do super; (2) índices por pessoa [SQL produção]; (3) pool 10→15 + aviso de sobrecarga p/ admin; (4) bug exclusão de testemunha; (5) sessão reconfere nivel/ativo no banco a cada request; (6) travas UNIQUE CPF/login [SQL produção]; (7) auditoria dentro da transação (7 pts); (8) responsividade VERIFICADA (já estava boa, nada mudado); (9) painel mais leve; (10) telas por perfil. 2 SQL p/ rodar na PRODUÇÃO (índices + UNIQUE). Item D (JWT_SECRET/SUPER_SENHA no .env prod) PULADO pelo usuário. Resumo: resumo do dia 230626-1518.txt. Antes — SESSÃO 22/06 (NOITE) — exclusão de prazo robusta (trata FK filhas em transação) + ModalConfirmar passou a MOSTRAR o erro (conserta silêncio global) + FEATURE 'Limpar dados de teste' SÓ p/ superadmin (nivel 0, aba Manutenção); superadmin DEIXADO COMO ESTÁ (não removido do banco). Resumo: backups/RESUMO_SESSAO_22-06-2026-NOITE.txt. Antes (22/06 DIA): REGRA ABSOLUTA: tabelas SEMPRE minúsculas (banco E código); corrigido bug de produção tblPasta (148 subs camelCase->minúsculo no backend). AASP URL na tela (saiu do código/.env). Bucket S3 -dev + IAM próprio; .env local apontado p/ -dev. Limpeza .env/.env.example. Publicações: realce sem acento, filtro de data, dedup por numeroPublicacao + confirmação re-rodar + coluna Nº Publ. + pintura duplicadas, rodapé Exibindo X–Y de Z, seletor Exibir (Todas/Direcionadas a mim), fonte modal 14px. PENDENTE: commit+push+RE-DEPLOY (deploy de hoje NÃO tinha o fix de minúsculas) + SQL pendente na produção. Claude NÃO acessa o servidor. Resumo completo: backups/RESUMO_SESSAO_22-06-2026.txt. Abaixo: 21/06, 20/06, 17/06..."
+description: "HANDOFF — LER PRIMEIRO. TOPO 05/07/2026: limpeza da base antiga (exclusões em pessoas_fisicas/tblproc via HeidiSQL — por ID, por campo observacoes, e DEDUP de 80 pessoas por nome duplicado mantendo o de maior observacoes; relatório em Downloads) + FIX da exclusão de processo em excluirProcesso (removidas verificações de tabela inexistente 'parcerias'→trocada por 'acordo', e de coluna inexistente log_documentos_gerados.processo_id→removida, que davam 'Erro interno') — LOCAL, não deployado, fix 2 ainda não reconfirmado ponta-a-ponta; BUG LATENTE pendente em renumerarPasta (usa log_documentos_gerados.pasta_id, coluna não existe); import_tblproc CONFIRMADO rodado. Antes — TOPO: SESSÃO 25-26/06 — DEPLOY DO ZERO num servidor NOVO (Ubuntu 24, IP 100.57.24.46, conta AWS EdnaADV 905418183179; domínio sistema.antonio.adv.br c/ HTTPS). Imprevistos resolvidos: firewall 443, DNS=registro A (não redirect), .pem→.ppk, CRLF→LF, token p/ repo privado, setup concluído ao salvar Escritório, e-mail Gmail PENDENTE. Scripts Deploy CORRIGIDOS (Node 24, LibreOffice, SEM rename camelCase, token, nginx 25m). MENU lateral novo (Layout.css: tela atual +40%+fundo; hover move o destaque) JÁ no GitHub (bf385e6) — FALTA rodar 1-AtualizarSistema no servidor novo. Guia: Deploy/GUIA-DEPLOY-DO-ZERO.txt. Resumo: 'resumo do dia 260626 - deploy AWS do zero.txt'. Antes — SESSÃO 23/06 — AUDITORIA COMPLETA + 10 MELHORIAS: (1) trava senha do super; (2) índices por pessoa [SQL produção]; (3) pool 10→15 + aviso de sobrecarga p/ admin; (4) bug exclusão de testemunha; (5) sessão reconfere nivel/ativo no banco a cada request; (6) travas UNIQUE CPF/login [SQL produção]; (7) auditoria dentro da transação (7 pts); (8) responsividade VERIFICADA (já estava boa, nada mudado); (9) painel mais leve; (10) telas por perfil. 2 SQL p/ rodar na PRODUÇÃO (índices + UNIQUE). Item D (JWT_SECRET/SUPER_SENHA no .env prod) PULADO pelo usuário. Resumo: resumo do dia 230626-1518.txt. Antes — SESSÃO 22/06 (NOITE) — exclusão de prazo robusta (trata FK filhas em transação) + ModalConfirmar passou a MOSTRAR o erro (conserta silêncio global) + FEATURE 'Limpar dados de teste' SÓ p/ superadmin (nivel 0, aba Manutenção); superadmin DEIXADO COMO ESTÁ (não removido do banco). Resumo: backups/RESUMO_SESSAO_22-06-2026-NOITE.txt. Antes (22/06 DIA): REGRA ABSOLUTA: tabelas SEMPRE minúsculas (banco E código); corrigido bug de produção tblPasta (148 subs camelCase->minúsculo no backend). AASP URL na tela (saiu do código/.env). Bucket S3 -dev + IAM próprio; .env local apontado p/ -dev. Limpeza .env/.env.example. Publicações: realce sem acento, filtro de data, dedup por numeroPublicacao + confirmação re-rodar + coluna Nº Publ. + pintura duplicadas, rodapé Exibindo X–Y de Z, seletor Exibir (Todas/Direcionadas a mim), fonte modal 14px. PENDENTE: commit+push+RE-DEPLOY (deploy de hoje NÃO tinha o fix de minúsculas) + SQL pendente na produção. Claude NÃO acessa o servidor. Resumo completo: backups/RESUMO_SESSAO_22-06-2026.txt. Abaixo: 21/06, 20/06, 17/06..."
 metadata: 
   node_type: memory
   type: project
   originSessionId: a17aec30-7d20-496a-81a0-792eca6b27e8
+---
+
+# 🟢 SESSÃO 07/07/2026 — IMPORTAÇÃO EM MASSA (banco manual.xlsm → 7 tabelas) — CONCLUÍDA E CONFIRMADA
+
+Grande carga da base manual do usuário (planilha `C:\Users\Claudio\Downloads\banco manual.xlsm`, versão FINAL após
+MUITAS correções do próprio usuário durante a sessão) para o banco **LOCAL**. Claude gerou o SQL; o usuário rodou no
+HeidiSQL e **CONFIRMOU** (contagens batem + join autor/réu OK nos prints). LOCAL, não deployado, não commitado.
+
+## Resultado confirmado (contagens conferidas no HeidiSQL)
+pessoas_fisicas **4.938** | pessoas_juridicas **2.873** | tblproc **6.004** | tbltituloprocautor **6.004** |
+tbltituloprocreu **6.004** | telefones_pf **11.437** | emails_pf **1.690**.
+Arquivo entregue: `C:\Users\Claudio\Downloads\popular_banco_manual.sql` (2,8 MB, **1 transação**, IDs explícitos a
+partir de 1). Pré-requisito: as 7 tabelas estavam **VAZIAS** (usuário confirmou). numPasta→pasta_id mapeado pelo
+dump `bancoAtual-060726-1338.sql` (tblpasta ~8.806).
+
+## Regras/decisões do usuário (REUTILIZÁVEIS numa nova importação):
+- Cada linha = 1 processo. Autor = `pessoas_fisicas/nome` ('fisica'); Réu = `pessoas_juridicas/razao_social` ('juridica').
+- **Dedup PF = Opção B:** por CPF; sem CPF por nome normalizado; linha sem CPF liga à pessoa de mesmo nome que TENHA
+  CPF (0 ambíguos). CPF gravado com 11 dígitos (zfill); coluna tem UNIQUE.
+- **Dedup PJ:** por razão social normalizada (1 cadastro reusado).
+- `cliente_polo`→minúsculo 'autor'. `NomeTituloProc`="autor X réu" (corta 300). `criado_por`=24. `vara_id`"null"→NULL.
+  `ativo`=1. numProc já veio com **máscara CNJ** (25 chars).
+- **Endereço:** o USUÁRIO desmembrou na própria planilha (colunas cep/logradouro/numero/complemento/bairro/cidade/estado).
+  Dados da pessoa vêm da **1ª ocorrência com endereço**; **telefones/emails = união de todos os processos dela**.
+- **Telefone:** quebra por "/"; numero=só dígitos (mantém DDD se tiver, **NÃO inventa 11**); `tipo`=ANOTAÇÃO quando
+  houver (senão "fixo"/"celular"); descarta <8 ou >11 dígitos; principal=1º.
+- **Email:** quebra ","/";"; ignora sem "@"; tira espaços; principal=1º.
+
+## LIÇÕES:
+- ⚠️ A planilha **MUDOU DE ESTRUTURA no meio da sessão** (usuário adicionou colunas) → SEMPRE mapear coluna pelo
+  **NOME do cabeçalho**, nunca por índice fixo; reanalisar do zero a cada reenvio.
+- ⚠️ **vara 488 "não existia" era BUG do MEU parser** (regex quebrava em nomes com "(PR)") — ela EXISTE; o usuário
+  estava certo. Reforça: nunca supor.
+
+## Também nesta sessão (07/07), ANTES da importação:
+- ⚙️ **LIMPEZA (pré-requisito das 7 tabelas vazias):** entregue SQL de `DELETE` em `pessoas_fisicas`, `pessoas_juridicas`
+  e `tblproc` + `ALTER TABLE ... AUTO_INCREMENT=1` nas três. Usei **DELETE (não TRUNCATE)** porque são referenciadas
+  por FK (TRUNCATE seria bloqueado); FK checks LIGADAS de propósito (se surgisse vínculo, dava rollback em vez de
+  órfão). Cascata automática só em `telefones_pf`. Conferido no backup que todas as tabelas dependentes estavam vazias.
+- 🗂️ **UTILITÁRIO varas:** cruzei `C:\Users\Claudio\Downloads\varas para colocar id.xlsx` (234 varas) com a `tblvara`
+  do backup → gerado `C:\Users\Claudio\Downloads\varas com id.xlsx`. **199 com id**; **35 "NÃO CADASTRADA"** (cidades
+  do interior/outros estados PR/SC/MG que não estão na tblvara). Reconciliei a grafia **"SP-Z Sul" ↔ "SP-ZS"** (ids
+  376–395). Descoberto aqui o bug do parser de varas (nomes com "(PR)" quebravam a regex) — por isso confiar no NOME.
+
+## PENDÊNCIA: é só LOCAL. Se for pra PRODUÇÃO (AWS), rodar o mesmo SQL lá com as 7 tabelas vazias — decisão futura.
+
+---
+
+# 🔴 SESSÃO 05/07/2026 — LIMPEZA DE DADOS (base antiga) + FIX EXCLUSÃO DE PROCESSO — LER PRIMEIRO
+
+Sessão de manutenção/limpeza. Claude NÃO acessa servidor/git/banco — o usuário rodou TODO o SQL manualmente no
+HeidiSQL (banco **LOCAL**). O código alterado é **LOCAL, não commitado, não deployado**. Memória sincronizada com
+autorização no fim da sessão. **Regras REFORÇADAS pelo usuário hoje:** (1) **uma pergunta por vez** — nunca despejar
+várias perguntas juntas; (2) **sempre perguntar ANTES de gerar/criar qualquer coisa**; (3) **nunca supor — certeza
+absoluta**; (4) **tabelas SEMPRE minúsculas** (banco E código); (5) **não mandar trechos de código** (usuário é leigo).
+
+## (0) CONFIRMADO: `import_tblproc.sql` FOI RODADO
+O usuário confirmou que executou o `import_tblproc.sql` (6.707 processos da base antiga — ver bloco 03/07 abaixo).
+A pendência de "confirmar se rodou" está RESOLVIDA.
+
+## (1) EXCLUSÕES DE DADOS DA BASE ANTIGA (SQL entregue por Claude, rodado pelo usuário no banco LOCAL)
+Todas precedidas de ANÁLISE DE EFEITO COLATERAL (FK): Claude conferiu no `estrutura_banco.sql` o que TRAVA / some em
+CASCATA / vira ÓRFÃO, e perguntou ao usuário 1 a 1 antes de gerar o DELETE. Todo DELETE entregue com transação
+(`START TRANSACTION`/`COMMIT`). **MAPA DE DEPENDÊNCIAS confirmado (reutilizável na próxima limpeza):**
+- **Excluir de `pessoas_fisicas`:** TRAVA se a pessoa for testemunha (`audiencia_testemunhas` ON DELETE RESTRICT).
+  Vira ÓRFÃO (sem FK, vínculo polimórfico por `pessoa_id`+`tipo_pessoa='fisica'`) em: `tbltituloprocautor`,
+  `tbltituloprocreu`, `processo_perito`, `historico_atendimento`, `log_comunicacoes`. Sai junto em CASCATA (ok):
+  `telefones_pf`, `emails_pf`.
+- **Excluir de `tblproc`:** TRAVA (RESTRICT) se tiver: `andamento_processual`, `audiencia`, `pericia`,
+  `prazos_processo`, `tarefas`, `log_comunicacoes`. Some em CASCATA (SILENCIOSO — cuidado!): `acordo`
+  (+`acordo_parcela`+auditorias = FINANCEIRO), `conta_corrente` (+auditoria), `processo_perito`,
+  `tbltituloprocautor`, `tbltituloprocreu`.
+
+Exclusões feitas hoje (todas deram vínculo ZERO na conferência de leitura antes de apagar):
+- **a) `pessoas_fisicas` por ID** — 32 ids: 1154,1527,1566,1966,1967,1969,2051,2123,2348,2414,2808,2827,2840,2896,
+  2927,3009,3159,3167,3232,3263,3377,3438,3453,3466,3497,3630,4061,4116,4188,4202,4215,4230.
+- **b) `tblproc` por ID** — 32 ids: 2604,2819,2881,3436,3437,3440,3570,3669,3970,4051,4585,4606,4622,4694,4732,4833,
+  5018,5028,5107,5145,5290,5366,5392,5407,5446,5611,6109,6170,6259,6274,6290,6307.
+- **c) Por campo `observacoes`** (texto = número da base antiga), nas DUAS tabelas (`tblproc` e `pessoas_fisicas`):
+  valores 4345,4617,4739,4880,4937,6308 → casou 6 processos (Frimar/Arqui), 0 pessoas.
+  valores 5491,3159 → casou 2 processos, 0 pessoas.
+- **d) DEDUP de `pessoas_fisicas` por NOME duplicado** — ver bloco (2).
+- ⚠️ Nem todas as execuções foram explicitamente reconfirmadas de volta, mas o usuário estava rodando os SQLs
+  durante a sessão (mostrou resultados no HeidiSQL). Claude não roda SQL.
+
+## (2) DEDUP de `pessoas_fisicas` por NOME duplicado — 78 grupos / 80 exclusões (LOCAL, feito hoje)
+Fonte analisada: `backups/pessoas_fisicas.sql` (dump com 6.941 pessoas). Regra escolhida pelo usuário:
+- "Nome igual" = **OPÇÃO 2, NORMALIZADA** (ignora maiúscula/minúscula, acento e espaços extras). Ex.: "Tenorio"=
+  "Tenório"; "Dos Santos"="dos Santos". (Interpretação estrita, letra-a-letra, dava 50/51; a normalizada deu **78/80**.)
+- **Manter** o registro de MAIOR `observacoes` (comparado como número), **excluir** os demais do grupo.
+- Verificado na fonte: **0 empates** no maior valor, **0** `observacoes` vazio/não-numérico → seleção 100% inequívoca.
+- Relatório completo (grupo a grupo, quem fica / quem sai, com os nomes originais) salvo em:
+  `C:\Users\Claudenor\Downloads\duplicados_pessoas_fisicas_RELATORIO.txt`
+- Consulta de vínculos dos 80 IDs = **0** → seguro. DELETE único transacional dos 80 entregue e aprovado.
+- **Os 80 IDs excluídos:** 181,254,284,287,299,307,311,331,337,377,383,409,412,437,485,500,527,548,697,1044,1091,
+  1241,1457,1518,1524,1609,1627,1714,1816,2019,2144,2237,2393,2514,2694,2724,2748,2760,2822,2895,2935,2952,2965,
+  3063,3096,3188,3192,3242,3310,3397,3403,3435,3463,3517,3523,3640,3643,3666,3713,3717,3980,4057,4081,4084,4102,
+  4166,4300,4589,4891,5180,5200,5327,5453,5461,5467,5577,5614,5797,6301,6322.
+
+## (3) 🐛 FIX no código — EXCLUSÃO DE PROCESSO voltou a funcionar (LOCAL, backend, NÃO commitado/deployado)
+Arquivo: `backend/src/controllers/processosController.js`, função `excluirProcesso` (que é **SOFT delete**: marca
+`ativo=0`, não apaga de verdade). Antes de "excluir", ela confere uma lista de tabelas dependentes e, se houver,
+mostra mensagem amigável. DOIS bugs (referências a tabela/coluna que NÃO existem) davam **"Erro interno no servidor"**
+em TODA tentativa de excluir QUALQUER processo:
+- **Bug 1:** conferia a tabela **`parcerias`** — que NÃO existe (parceria mora em colunas de `acordo_parcela`, no
+  Financeiro). Usuário escolheu **Opção B**: troquei a verificação para **`acordo`** (tabela do Financeiro que tem
+  `processo_id`). Assim, processo com acordo/parceria é bloqueado com a mensagem amigável, coerente com o resto.
+- **Bug 2** (estava ESCONDIDO atrás do 1): conferia **`log_documentos_gerados WHERE processo_id`** — essa tabela NÃO
+  tem coluna `processo_id` (usa vínculo polimórfico `ancora_tipo`+`ancora_id`) e documento gerado NUNCA é ancorado
+  direto a um processo (só a audiência/perícia/prazo/pagamento/pessoa). Verificação **REMOVIDA** — era quebrada E
+  redundante (se o processo tem documento, ele tem a audiência/perícia/prazo que JÁ bloqueiam). Não se perde proteção.
+- **Lista final de verificação (7 tabelas, todas com `processo_id` REAL — confirmado):** `andamento_processual`,
+  `audiencia`, `pericia`, `prazos_processo`, `tarefas`, `acordo`, `log_comunicacoes`. `node --check` OK. O backend
+  roda com **nodemon** (recarrega sozinho ao salvar).
+- ⚠️ **STATUS:** o usuário TESTOU após o Bug 1 (o erro MUDOU de `parcerias`→`log_documentos_gerados`, provando que o
+  fix 1 pegou). Após o Bug 2, o usuário **NÃO reconfirmou** explicitamente que a exclusão passou a funcionar (mudou de
+  assunto). **PRÓXIMA SESSÃO: confirmar a exclusão de processo funcionando ponta a ponta.**
+
+## (4) 🐛 BUG LATENTE achado hoje (NÃO corrigido — aguarda decisão do usuário)
+Mesmo arquivo `processosController.js`, na função de **renumeração de pasta** (~linha 197-198): faz
+`UPDATE log_documentos_gerados SET pasta_id = ...`, mas essa tabela também NÃO tem coluna `pasta_id`. Quebra só num
+cenário específico: renumerar uma pasta para um número já usado por OUTRA pasta VAZIA (migração de registros). É
+independente do fix acima. Claude só SINALIZOU; **não mexeu**. Perguntar ao usuário se quer corrigir.
+
+---
+
+# 🔴 SESSÃO 03/07/2026 (CONTINUAÇÃO DE 02/07) — IMPORTAÇÃO DE PROCESSOS (tblproc) + validação — LER PRIMEIRO
+
+Continuação da mesma sessão de 02/07 (virou a noite). Claude NÃO acessa servidor/git/banco — usuário faz tudo,
+sempre com autorização prévia. Memória atualizada com autorização.
+
+## (1) CÓDIGO — validação de autor/réu obrigatório também na EDIÇÃO de processo (autorizado, LOCAL, SEM banco)
+Usuário perguntou "um processo sempre terá autor e réu?" — expliquei que SIM na criação (tela+backend já travavam),
+mas na EDIÇÃO só a tela travava, o backend (`atualizarProcesso`) aceitava salvar com `autores`/`reus` vazios se
+alguém contornasse a tela. Usuário pediu pra fechar essa brecha. Feito em `backend/src/controllers/processosController.js`
+(`atualizarProcesso`): mesma checagem que `criarProcesso` já tinha, mas só dispara quando `autores`/`reus` vêm
+explicitamente no body (`!== undefined`) — não quebra nenhum outro caso de atualização parcial do processo.
+`node --check` OK. Detalhes técnicos em [[processos-pastas]].
+
+## (2) SQL GERADO — importação em massa de `tblproc` a partir da base antiga (planilha do usuário)
+Usuário mandou `C:\Users\Claudio\Downloads\tblproc.xlsm` (aba única "tblproc", cabeçalho na linha 2, 6.712
+processos reais + 1.122 linhas vazias no fim, ignoradas) e pediu SQL pra popular `tblproc`. Analisei tudo antes,
+levantei dúvidas, usuário respondeu — SQL gerado e entregue, **AINDA NÃO CONFIRMADO como rodado com sucesso**
+(ver pendência no fim desta seção).
+
+**Decisões do usuário (perguntadas antes de codar, uma a uma):**
+- As colunas `pasta_id`, `vara_id`, `tipo_id`, `status_id`, `instancia_id` da planilha **JÁ SÃO os IDs reais do
+  banco LOCAL atual** (confirmado pelo usuário) — não precisou remapear nada. Evidência que levantei antes de
+  perguntar: o maior `pasta_id` da planilha (8814) bate exatamente com o AUTO_INCREMENT de `tblpasta` (8815) e o
+  maior `vara_id` (488) bate exatamente com o de `tblvara` (489) — ambos "auto_increment menos 1", forte indício
+  de que já são os IDs reais (mas pedi confirmação mesmo assim, por ser decisão crítica).
+- **5 processos com `numProc` duplicado na planilha** → usuário decidiu PULAR as repetidas, manter só a 1ª
+  ocorrência de cada número. Os 5 pulados estão listados em comentário no topo do próprio `import_tblproc.sql`
+  (linhas 3192, 4443, 5037, 5039, 5389 da planilha).
+- **Importação só cria os PROCESSOS (`tblproc`)** — usuário confirmou que por enquanto NÃO quer vincular
+  autor/réu como pessoa cadastrada; `tbltituloprocautor`/`tbltituloprocreu` ficam vazias para esses 6.707
+  processos. ⚠️ Efeito colateral (explicado no item (1) acima): por causa da validação nova de edição, esses
+  processos importados NÃO vão poder ser salvos na tela de edição até alguém adicionar autor+réu manualmente.
+- **Coluna `observacoes`** da planilha tem um número solto em cada linha (89 a 8935, sem explicação do que é) —
+  usuário mandou gravar "como está, o número como texto", sem eu interpretar/adivinhar o significado.
+- **`cliente_polo`**: 100% das linhas vinham `'Autor'` (maiúsculo) → normalizado para minúsculo `'autor'` (padrão
+  do sistema) antes de gravar.
+- **1 processo (linha 2205 da planilha) tinha título com 712 caracteres** (24 autores listados no texto, mais 1
+  réu) — estourava o limite de 300 da coluna `NomeTituloProc` e quebrou a 1ª tentativa de rodar o SQL (erro 1406
+  do MySQL, "Data too long"). Usuário autorizou encurtar SÓ esse 1 título pro mesmo padrão que o sistema já usa
+  quando há muita gente (`Primeiro(+N) X Primeiro(+M)`): ficou **"Josapha Batista das Neves(+23) X Atlântico Sul
+  Segurança e Vigilância Eireli"**. SQL regenerado com a correção.
+
+**Arquivo entregue:** `C:\Users\Claudio\Downloads\import_tblproc.sql` (script gerado por mim via Python/openpyxl
+lendo a planilha — Claude NÃO rodou nada no banco). Estrutura do SQL: `START TRANSACTION` + 14 blocos de INSERT
+(até 500 linhas cada) + `COMMIT`; grava `pasta_id, numProc, cliente_polo, NomeTituloProc, vara_id, tipo_id,
+status_id, instancia_id, observacoes, ativo, criado_por` (deixa `data_distribuicao`, `criado_em`, `alterado_por`,
+`alterado_em` com o padrão/NULL, pois vinham todos vazios na planilha). Total: **6.707 processos** a inserir.
+
+**⚠️ PENDÊNCIA — confirmar se a importação RODOU com sucesso:** usuário disse que ia truncar/zerar `tblproc`
+(que já estava vazia, 0 linhas, confirmado no backup de hoje) antes de rodar o SQL corrigido. A sessão terminou
+sem confirmação se o `import_tblproc.sql` corrigido foi executado e se deu certo. **Próxima sessão: perguntar
+ao usuário se rodou, e se sim, conferir se os 6.707 processos entraram certinho** (e lembrar do efeito colateral
+do item (1): esses processos vão pedir autor/réu antes de poderem ser editados na tela).
+
+## (3) PERGUNTAS RESPONDIDAS nesta continuação (sem alterar nada — só explicação)
+- Formato de gravação do `numProc` → texto (varchar 45) já com a máscara CNJ aplicada:
+  `NNNNNNN-DD.AAAA.J.TR.OOOO` (sequencial-dígito verificador.ano.segmento.tribunal.origem).
+- `tipo_pessoa` em `tbltituloprocautor`/`tbltituloprocreu` → é **texto (ENUM)**, não id; só aceita exatamente
+  `'fisica'` ou `'juridica'`, o MySQL recusa qualquer outro valor.
+
+---
+
+# 🟢 SESSÃO 02/07/2026 — POPULAÇÃO DE VARAS/FÓRUNS (TRT2) + CEP EM FÓRUNS — LER PRIMEIRO
+
+Sessão anterior (mesma pasta local, outro Claude) populou dados de referência a partir do site do TRT2 e mexeu em UI de Fóruns. Tudo LOCAL; nada commitado/deployado. Handoff completo do próprio usuário (fonte confiável, não verificado linha a linha por mim): tblforum/tblvara mudaram só DADO (estrutura igual — não passa por `controle_versao_banco`, que é só para mudança de estrutura).
+
+## (1) Dados inseridos em tblforum/tblvara (via HeidiSQL, pelo usuário, a partir de SQL gerado pelo Claude anterior)
+- **tblforum:** +31 fóruns da Grande SP + Baixada Santista (ids 8–38). tblforum não tem coluna de telefone; cep gravado só com 8 dígitos, sem traço.
+- **tblvara:** +127 varas — 14 na Zona Leste (forum_id 6), 20 na Zona Sul (forum_id 7), 93 nos 31 fóruns novos (forum_id 8–38). Cada uma com telefone, e-mail (extraído 1 a 1 da página de detalhe de cada vara no site do TRT2, SEM padrão fixo de e-mail entre cidades) e `codVaraNoProc` (código CNJ) cruzado com a planilha `C:\Users\Claudio\Downloads\codigo das varas.xlsx`; **19 varas ficaram com `codVaraNoProc = NULL`** por a planilha não ter o código (Caieiras; Cubatão 2ª/4ª/5ª; Diadema 4ª; Franco da Rocha 1ª; Itapecerica 1ª/2ª; Praia Grande 1ª/2ª; Santos 1ª–7ª; São Vicente 1ª/2ª).
+- Ajuste pontual: `criado_por=24` preenchido nas varas antigas do fórum 5 (Ruy Barbosa); vara id=1 reativada (`ativo` estava 0, voltou a 1).
+- Padrão de nomenclatura usado (documentado para reuso futuro se o usuário pedir para completar mais fóruns): nome "Nª Vara do Trabalho de <Cidade>", abrev "NNªVT/<Cidade>" (2 dígitos); fórum com 1 vara só = grava como "1ª". Domínio de e-mail quase sempre @trtsp.jus.br, EXCETO Mogi das Cruzes (@trt2.jus.br). Rodapé das páginas do TRT2 tem "administracao@trtsp.jus.br" — não é o e-mail da vara, ignorar.
+- **Pendência:** os 19 `codVaraNoProc` NULL podem ser completados depois, se o usuário quiser buscar/informar os códigos.
+
+## (2) CÓDIGO — Busca automática de endereço por CEP na tela de Fóruns (LOCAL, não deployado, SEM SQL)
+- Novo `frontend/src/utils/cep.js`: função `buscarEnderecoPorCep(cep)`, consulta a API pública ViaCEP (sem chave), devolve `{ok, endereco:{logradouro,bairro,cidade,uf}}` ou `{ok:false, motivo}`. Nunca lança erro (try/catch interno).
+- `frontend/src/pages/Controle/Foruns.js`: campo CEP ganhou `onBlur` que chama a busca, preenche Logradouro/Bairro/Cidade/UF automaticamente (sem sobrescrever o que já tinha se a ViaCEP vier vazia) e move o foco pro campo Número; mostra "🔍 Buscando..." e mensagens de erro (CEP incompleto/não encontrado/falha de rede).
+- Só frontend, zero banco. Padrão pode ser reaproveitado em outras telas com CEP (Pessoas, etc.) se o usuário pedir.
+
+## (3) CÓDIGO — Cabeçalho de tabela FIXO ao rolar em Fóruns e Varas (feito por este Claude, autorizado, LOCAL, não deployado, SEM SQL)
+- Usuário pediu (a partir de prints mostrando os títulos das colunas sumindo ao rolar) para fixar o cabeçalho. Perguntei o escopo antes de codar; usuário escolheu SÓ Fóruns e Varas (não estendeu a Formas de pagamento nem ao resto do sistema).
+- Reaproveitado o padrão já existente (classe `.tabela-sticky` do `Layout.css`, criada em 28/06): `frontend/src/pages/Controle/Foruns.js` e `frontend/src/pages/Controle/Varas.js` — a `<table class="tabela">` virou `<table class="tabela tabela-sticky">` e o `.tabela-wrapper` ganhou `maxHeight:65vh, overflowY:auto`. Zero lógica nova, zero banco.
+- Continuam SEM cabeçalho fixo (fora do escopo desta sessão, decisão do usuário): `Controle/FormasPagamento.js`, telas de Financeiro, Documentos, Configurações (usuários/permissões), Relatórios, e as tabelas internas de modais/detalhe (PastaDetalhe, históricos de Audiências/Perícias).
+
+## (4) PERGUNTAS RESPONDIDAS nesta sessão (sem alterar nada — só explicação, a partir de prints do HeidiSQL e da tela)
+- Onde fica o "Título do Processo" → coluna `tblproc.NomeTituloProc`.
+- Como exportar uma tabela do HeidiSQL pro Excel → botão direito na grade de dados → "Exportar linhas da grade..." → Formato "Excel CSV"; lembrado de clicar "Mostrar todos" antes (senão exporta só as 1.000 linhas carregadas, não a tabela inteira).
+- O que é `tblproc.cliente_polo` → guarda `'autor'`/`'reu'`, indica qual polo é o cliente do escritório; usado em documentos (variável cliente vs. parte adversa) e em quem recebe e-mail de comunicado de audiência/perícia.
+- Onde ficam as pessoas (autores/réus) de um processo → tabelas `tbltituloprocautor` e `tbltituloprocreu` (uma por polo), cada linha com `proc_id` + `tipo_pessoa` ('fisica'/'juridica') + `pessoa_id`.
+
+---
+
+# 🟢 SESSÃO 28/06/2026 (CONTINUAÇÃO) — LER PRIMEIRO
+
+Continuação da sessão de 28/06. Claude NÃO acessa servidor/git/banco — usuário faz tudo. Memória atualizada com autorização. Reconferência do `estrutura_banco.sql` atualizado: 58 tabelas, TODAS minúsculas ✅, collation 0900 ✅, melhorias de 23/06 (UNIQUE uq_pf_cpf/uq_login, índices idx_titautor/titreu_pessoa) JÁ na estrutura local; exceções aprovadas (ENUM tipo_pessoa, UNIQUE numPasta, reset_tokens.token) mantidas. **Indício: PF da base antiga JÁ importada no LOCAL (pessoas_fisicas AUTO_INCREMENT ~6980; telefones_pf ~22238) — usuário precisa confirmar; PJ ainda não (AUTO_INCREMENT=3).**
+
+## (1) CAMPO "REPRESENTANTE LEGAL" da PJ — REMOVIDO POR COMPLETO (opção B do usuário). LOCAL, validado (node --check + build Vite OK), NÃO deployado/commitado.
+Usuário decidiu que não é necessário. Efeito colateral analisado antes. Removido de TODOS os pontos:
+- Frontend `pages/Pessoas/Pessoas.js`: campo do formulário de PJ + opção na lista do "Exportar Excel".
+- Backend `controllers/pessoasController.js`: busca (condBuscaJuridica, −1 param), listagem (SELECT), cadastro (criarJuridica: destructuring + INSERT 14→13 colunas/placeholders + array de valores), lista-branca da exportação (CAMPOS_PJ). NÃO existe edição/UPDATE de PJ no backend (só listar/criar/excluir/exportar).
+- Backend `config/variaveisDocumento.js`: variável `representante_legal` saiu do catálogo (2 ocorrências).
+- Backend `services/variaveisResolver.js`: saiu do resolvedor (3 ocorrências). SEGURO: docxModeloService usa `nullGetter:()=>''` → modelo antigo com {{representante_legal}} só fica vazio, não quebra.
+- ✅ `ALTER TABLE pessoas_juridicas DROP COLUMN representante_legal;` JÁ RODADO no LOCAL pelo usuário. Falta aplicar na AWS (via nova rotina de migração — seção (3) abaixo) + REEXPORTAR `estrutura_banco.sql`.
+
+## (2) IMPORT da BASE ANTIGA de PESSOAS JURÍDICAS — SQL GERADO e RODADO no LOCAL ✅
+- Arquivo: `import_pessoas_juridicas.sql` na pasta **Downloads** do usuário (gerado de `planilha pessoa juridica_sem_duplicatas.xlsx`).
+- Planilha só tinha 2 colunas: `observacoes` (código numérico) e `razao_social`. Dados limpos: 4094 empresas, 0 vazios, 0 código duplicado, maior nome 165 chars (cabe em 200).
+- SQL: 4094 INSERTs em `pessoas_juridicas (razao_social, observacoes, criado_por)`, em **transação** (START TRANSACTION/COMMIT), 9 lotes de 500. `observacoes` = código com **4 dígitos zero à esquerda** (ex.: 2→'0002'); `criado_por=24` (Claudio, igual ao import de PF). CNPJ/endereço/telefones ficam NULL. NÃO referencia representante_legal (funciona com ou sem o DROP COLUMN).
+- Avisos: rodado 1x no LOCAL (sem trava de unicidade por nome/código). Falta aplicar na AWS no deploy (lá confirmar que o usuário id 24 existe — FK criado_por). Claude NÃO roda o SQL — usuário roda no HeidiSQL.
+
+## (3) NOVA ROTINA DE ATUALIZAÇÃO DO BANCO EM PRODUÇÃO — incremental, sem perder dados (definida 28/06)
+Decisão do usuário: parar de reimportar o banco inteiro na AWS (era destrutivo — `4-ReimportarBanco`). A partir de agora:
+- Cada alteração de ESTRUTURA é aplicada MANUALMENTE no HeidiSQL (LOCAL primeiro, depois AWS), como um "bloco" = o ALTER/CREATE + um INSERT registrando a mudança na tabela de controle.
+- Tabela `controle_versao_banco` (`numero` PK, `descricao`, `sql_aplicado` MEDIUMTEXT, `aplicado_em` DATETIME) — JÁ CRIADA no LOCAL pelo usuário; criar também na AWS. Comparar a tabela nos 2 bancos mostra o que falta aplicar.
+- Regra "SEM arquivos de migração" MANTIDA (usuário reafirmou) — não há pasta de migrations; o controle é só a tabela + aplicação manual. O `estrutura_banco.sql` continua só para instalação do zero (começa com DROP DATABASE → NUNCA reimportar em produção com dados reais).
+- `Deploy/atualizacao/4-ReimportarBanco.sh` e `.txt` REMOVIDOS (eram o reimport destrutivo; o .txt ainda estava desatualizado citando rename camelCase).
+
+---
+
+# 🟢 SESSÃO 28/06/2026 — LER PRIMEIRO
+
+Sessão mista. Claude NÃO acessa servidor/git/banco — o usuário faz tudo. Memória atualizada com autorização.
+
+## (A) BACKUP automático do banco → S3 — FEITO E FUNCIONANDO ✅ (ver [[backup-s3]])
+Backup diário 02:00 Brasília (.sql.gz) → bucket modelos-antonio-adv, pasta BackupBanco/, apaga com 120 dias. Código:
+backend/src/scripts/uploadBackup.js (git). Script servidor: Deploy/backup/backup-banco-s3.sh + LEIA-backup.txt. Já
+deployado e testado pelo usuário; cron + regra de ciclo de vida criados. Detalhes em [[backup-s3]].
+
+## (B) CÓDIGO NOVO — LOCAL, validado (build Vite OK), NÃO deployado, SEM SQL
+1. **Cabeçalho de tabela FIXO ao rolar** (classe `.tabela-sticky` + wrapper maxHeight:65vh/overflowY) nas 6 listas:
+   Pessoas (PF e PJ), Processos, Prazos, Tarefas, Audiências, Perícias. (PastaDetalhe e modais de histórico ficaram de fora.)
+2. **EXPORTAR EXCEL em Pessoas (PF e PJ):** botão "Limpar pesquisa" + botão "Exportar Excel" com MODAL de checkboxes
+   (campos sem auditoria; padrão só Nome; sem qtde_proc). Backend: pessoasController.exportarFisicas/exportarJuridicas
+   (reusa exceljs do Financeiro; LISTA-BRANCA de campos; extraí helper condBuscaFisica/condBuscaJuridica p/ não duplicar
+   a busca). Rotas /pessoas/{fisicas,juridicas}/exportar ANTES de /:id. api.js: exportar* (blob).
+   ⚠️ O modal usa `.modal-box` — NÃO existe classe `.modal` na CSS (o modal de "Confirmar exclusão" de Pessoas tem esse
+   bug pré-existente: usa `.modal`, fica transparente — NÃO consertei, fora do escopo).
+
+## (C) MIGRAÇÃO DA BASE ANTIGA (planilhas na pasta Downloads do usuário → SQL p/ HeidiSQL) — em andamento
+- **Vínculo-chave:** coluna "observacao" das planilhas = `pessoas_fisicas.observacoes` (TEXTO de 4 dígitos, ex.: "0167").
+  CUIDADO recorrente: as planilhas trazem como NÚMERO (908) → padronizar p/ "0908" (zfill 4) senão NÃO casa. CPF = só
+  dígitos com zeros à esquerda; CEP = com traço; telefone = formato do backend `(DD) NNNN-NNNN`.
+- `import_pessoas_fisicas.sql` (6973 PF, criado_por=24=Claudio, vazios/'0'→NULL, transação, lotes).
+- `import_telefones_pf.sql` (13052 telefones; dedup pessoa+número; `pessoa_id` por INNER JOIN em observacoes; tipo=descrição
+  ou NULL; principal=1º; 9 díg=celular(11), 8 díg=fixo(11), 10/11 já têm DDD, estranhos descartados).
+- **Pessoa jurídica:** DEDUP por SIMILARIDADE de nome → `..._sem_duplicatas.xlsx` (4094 únicas, 872 removidas) +
+  `duplicatas_revisar.xlsx` (516 grupos). Mantém 1ª ocorrência (pode ter typo).
+- Arquivos na pasta **Downloads** do usuário (FORA do projeto). Usuário roda os SQL no HeidiSQL (LOCAL→prod).
+
+## (D) PRODUTO "NovoJud" — só discussão (ver [[novojud-produto]])
+Nome/marca (INPI; novojud.com.br livre), contrato de licença (2 modalidades, proíbem revenda — `Contrato_Licenca_NovoJud.txt`),
+SaaS 1-instância-por-cliente é o fácil (NÃO existe escritorio_id), app PWA/loja.
+
 ---
 
 # 🟢 SESSÃO 25-26/06/2026 — DEPLOY DO ZERO NUM SERVIDOR NOVO (Ubuntu 24) + MENU — LER PRIMEIRO

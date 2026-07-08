@@ -4,10 +4,11 @@
 // Apenas administradores (rota protegida no Layout)
 // ============================================================
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { processosAPI } from '../../services/api';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
+import { buscarEnderecoPorCep } from '../../utils/cep';
 
 const FORM_VAZIO = {
   nome: '', abrev_nome: '', cep: '', logradouro: '',
@@ -24,6 +25,9 @@ export default function Foruns() {
   const [salvando,    setSalvando]    = useState(false);
   const [busca,       setBusca]       = useState('');
   const [bloqueio,    setBloqueio]    = useState(null);  // { forum, varas: [] }
+  const [buscandoCep, setBuscandoCep] = useState(false); // feedback "buscando..." do CEP
+  const [erroCep,     setErroCep]     = useState('');    // mensagem de erro da busca de CEP
+  const refNumero = useRef(null);                        // foco vai p/ Número após preencher o CEP
 
   useEffect(() => { carregar(); }, []);
 
@@ -65,6 +69,7 @@ export default function Foruns() {
     setModal(false);
     setEditando(null);
     setForm(FORM_VAZIO);
+    setErroCep('');
   }
 
   // Helper para vincular campo ao form
@@ -73,6 +78,35 @@ export default function Foruns() {
       value: form[key],
       onChange: e => setForm(f => ({ ...f, [key]: e.target.value })),
     };
+  }
+
+  // Ao sair do campo CEP: consulta a ViaCEP e preenche Logradouro, Bairro, Cidade e UF.
+  // Número e Complemento continuam manuais (a ViaCEP não os retorna).
+  async function handleCepBlur() {
+    const limpo = (form.cep || '').replace(/\D/g, '');
+    if (!limpo) { setErroCep(''); return; }              // campo vazio: não faz nada
+    if (limpo.length !== 8) { setErroCep('CEP incompleto'); return; }
+
+    setBuscandoCep(true);
+    setErroCep('');
+    const r = await buscarEnderecoPorCep(limpo);
+    setBuscandoCep(false);
+
+    if (!r.ok) {
+      setErroCep(r.motivo === 'nao_encontrado' ? 'CEP não encontrado' : 'Erro ao consultar CEP — verifique a conexão');
+      return;
+    }
+
+    // Preenche os campos de endereço; mantém o que já houver se a ViaCEP vier vazia
+    setForm(f => ({
+      ...f,
+      logradouro: r.endereco.logradouro || f.logradouro,
+      bairro:     r.endereco.bairro     || f.bairro,
+      cidade:     r.endereco.cidade     || f.cidade,
+      uf:         r.endereco.uf         || f.uf,
+    }));
+    // Pequeno atraso para o React renderizar antes de mover o foco para Número
+    setTimeout(() => refNumero.current?.focus(), 100);
   }
 
   async function salvar(e) {
@@ -160,8 +194,8 @@ export default function Foruns() {
             {busca ? 'Nenhum fórum encontrado para a busca.' : 'Nenhum fórum cadastrado ainda.'}
           </div>
         ) : (
-          <div className="tabela-wrapper">
-            <table className="tabela">
+          <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+            <table className="tabela tabela-sticky">
               <thead>
                 <tr>
                   <th>Abreviação</th>
@@ -261,7 +295,16 @@ export default function Foruns() {
                   <div className="grid-3">
                     <div className="form-group">
                       <label className="form-label">CEP</label>
-                      <input className="form-control" placeholder="00000000" maxLength={8} {...campo('cep')} />
+                      <input
+                        className={`form-control ${erroCep ? 'is-invalid' : ''}`}
+                        placeholder="00000000"
+                        maxLength={8}
+                        autoComplete="off"
+                        {...campo('cep')}
+                        onBlur={handleCepBlur}
+                      />
+                      {buscandoCep && <small style={{ color: '#888', fontSize: 12 }}>🔍 Buscando endereço...</small>}
+                      {erroCep     && <small style={{ color: '#e74c3c', fontSize: 12 }}>⚠️ {erroCep}</small>}
                     </div>
                     <div className="form-group">
                       <label className="form-label">Cidade</label>
@@ -287,7 +330,7 @@ export default function Foruns() {
                   <div className="grid-3">
                     <div className="form-group">
                       <label className="form-label">Número</label>
-                      <input className="form-control" placeholder="100" {...campo('num_end')} />
+                      <input className="form-control" placeholder="100" ref={refNumero} {...campo('num_end')} />
                     </div>
                     <div className="form-group">
                       <label className="form-label">Complemento</label>

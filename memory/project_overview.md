@@ -18,10 +18,10 @@ Sistema de gestão para escritórios de advocacia, desenvolvido para substituir 
 ## Stack Técnico
 
 - **Linguagem:** JavaScript (decisão confirmada — não migrar para TypeScript)
-- **Backend:** Node.js 20 + Express (porta 3001)
+- **Backend:** Node.js 24 + Express (porta 3001)
 - **Frontend:** React + Vite (build estático servido pelo Nginx)
 - **Banco de dados:** MySQL 8 na mesma instância (não usa RDS separado)
-- **Hospedagem:** AWS Lightsail — Ubuntu 22.04, Virginia (us-east-1)
+- **Hospedagem:** AWS Lightsail — Ubuntu 24.04 LTS, Virginia (us-east-1)
 - **Processo:** PM2 com autostart
 - **Proxy:** Nginx (porta 80/443 → 3001)
 - **Manutenção:** Via VSCode
@@ -37,9 +37,13 @@ Sistema de gestão para escritórios de advocacia, desenvolvido para substituir 
 
 ## Instâncias Ativas
 
-| Cliente | IP | Domínio | Status |
-|---------|-----|---------|--------|
-| Dr. Antonio Ferreira da Costa | 98.85.19.2 | sistema.antonio.adv.br | ✅ Online |
+Produção atual desde o deploy do zero de 25-26/06/2026 (servidor NOVO):
+
+| Cliente | IP | Domínio | Servidor | Conta AWS | Status |
+|---------|-----|---------|----------|-----------|--------|
+| Dr. Antonio Ferreira da Costa | 100.57.24.46 | sistema.antonio.adv.br | Lightsail "AntonioADV", Ubuntu 24 LTS | EdnaADV (905418183179) | ✅ Online (HTTPS Let's Encrypt, renova sozinho) |
+
+**Servidor antigo (não é mais produção):** 98.85.19.2 — Ubuntu 22, conta Antonio (264022422777). O domínio NÃO aponta mais pra ele; destino do servidor a decidir.
 
 ## Nome do Sistema na Tela de Login
 

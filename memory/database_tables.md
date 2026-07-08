@@ -7,7 +7,7 @@ metadata:
   originSessionId: c7321425-eb43-40e0-b57f-c2941c1276c6
 ---
 
-## Banco — 58 tabelas (conferido no estrutura_banco.sql em 21/06/2026)
+## Banco — 59 tabelas (28/06/2026; +controle_versao_banco). Estrutura reconferida em 28/06: todas minúsculas, collation 0900, UNIQUE uq_pf_cpf/uq_login e índices idx_titautor/titreu_pessoa presentes.
 
 As tabelas antigas (`forum, vara, pasta, processo, partes_processo, status_processo, processo_responsaveis, modelo_comunicado`) foram **removidas**. As tabelas definitivas usam prefixo `tbl`.
 
@@ -38,7 +38,7 @@ As tabelas antigas (`forum, vara, pasta, processo, partes_processo, status_proce
 | Tabela | Descrição |
 |--------|-----------|
 | pessoas_fisicas | Cadastro de pessoas físicas |
-| pessoas_juridicas | Cadastro de pessoas jurídicas |
+| pessoas_juridicas | Cadastro de pessoas jurídicas. 28/06: coluna `representante_legal` **REMOVIDA** (código + `DROP COLUMN` rodado no LOCAL; falta AWS via controle_versao_banco). Base antiga IMPORTADA no LOCAL via `import_pessoas_juridicas.sql` (4094 empresas, criado_por=24) |
 | emails_pf | E-mails de pessoas físicas |
 | emails_pj | E-mails de pessoas jurídicas |
 | telefones_pf | Telefones de pessoas físicas |
@@ -57,8 +57,8 @@ As tabelas antigas (`forum, vara, pasta, processo, partes_processo, status_proce
 |--------|-----------|
 | tblpasta | Pastas dos clientes (campo `area_direito` varchar 50) |
 | tblproc | Processos vinculados às pastas |
-| tblvara | Varas (com `abrev_nome` para dropdowns) |
-| tblforum | Fóruns |
+| tblvara | Varas (com `abrev_nome` para dropdowns). 02/07: +127 varas reais da Grande SP/Baixada Santista importadas do site do TRT2 (telefone, e-mail, `codVaraNoProc`; 19 ficaram com `codVaraNoProc` NULL) — ver [[pendencias-proxima-sessao]] |
+| tblforum | Fóruns. 02/07: +31 fóruns reais da Grande SP/Baixada Santista (TRT2) |
 | tblstatusproc | Status/fases do processo |
 | tbltipoproc | Tipos de processo |
 | tblinstanciaproc | Instâncias processuais |
@@ -134,6 +134,11 @@ As tabelas antigas (`forum, vara, pasta, processo, partes_processo, status_proce
 | permissoes | Permissões granulares por usuário |
 | reset_tokens | Tokens de redefinição de senha |
 | pesquisas_salvas | Filtros de pesquisa salvos por usuário |
+
+### Controle de versão do banco (NOVO 28/06/2026)
+| Tabela | Descrição |
+|--------|-----------|
+| controle_versao_banco | Registro manual das alterações de ESTRUTURA aplicadas (`numero` PK, `descricao`, `sql_aplicado`, `aplicado_em`). Existe no LOCAL e na AWS; comparar mostra o que falta aplicar na produção. Base da rotina incremental — ver [[deploy-versionamento]] |
 
 ### Logs
 | Tabela | Descrição |

@@ -1,0 +1,246 @@
+====================================================================
+ CONTRATO DE LICENÇA DE USO DE SOFTWARE — "NOVOJUD"
+====================================================================
+ ⚠️ RASCUNHO PARA REVISÃO JURÍDICA
+ Este documento é um modelo-base preparado para servir de ponto de
+ partida. NÃO é parecer jurídico. Antes de usar com clientes reais,
+ deve ser revisado e finalizado por um advogado (de preferência da
+ área de propriedade intelectual / contratos de tecnologia).
+ Os campos entre [colchetes] devem ser preenchidos.
+ As notas iniciadas por ">> NOTA:" são lembretes para você/advogado e
+ devem ser APAGADAS na versão final.
+====================================================================
+
+
+1. DAS PARTES
+--------------------------------------------------------------------
+LICENCIANTE (dono do sistema):
+   [Nome completo ou Razão Social], inscrito(a) no [CPF/CNPJ] nº
+   [______], com sede/endereço em [endereço completo], doravante
+   denominado(a) simplesmente "LICENCIANTE".
+
+LICENCIADO (cliente — escritório ou advogado):
+   [Nome completo ou Razão Social], inscrito(a) no [CPF/CNPJ] nº
+   [______], com endereço em [endereço completo], doravante
+   denominado(a) simplesmente "LICENCIADO".
+
+As partes acima têm, entre si, justo e contratado o presente Contrato
+de Licença de Uso de Software, que se regerá pelas cláusulas seguintes.
+
+
+2. DEFINIÇÕES
+--------------------------------------------------------------------
+2.1. "SISTEMA" ou "NOVOJUD": o software de gestão para escritórios de
+     advocacia desenvolvido e de titularidade do LICENCIANTE, incluindo
+     seu código-fonte, telas, banco de dados, documentação, marca, nome
+     e quaisquer atualizações.
+2.2. "LICENÇA": a autorização de USO concedida ao LICENCIADO nos termos
+     deste contrato. A licença NÃO transfere a propriedade do SISTEMA.
+2.3. "USUÁRIOS": as pessoas autorizadas pelo LICENCIADO (sócios,
+     advogados, estagiários e colaboradores) a acessar o SISTEMA.
+
+
+3. DO OBJETO
+--------------------------------------------------------------------
+3.1. O presente contrato tem por objeto a concessão, pelo LICENCIANTE
+     ao LICENCIADO, de uma LICENÇA DE USO do SISTEMA NOVOJUD, na
+     modalidade escolhida na Cláusula 4.
+3.2. O NOVOJUD é LICENCIADO, NÃO VENDIDO. Em nenhuma das modalidades
+     há transferência da propriedade do software, do código-fonte, do
+     nome ou da marca — que permanecem integralmente com o LICENCIANTE
+     (vide Cláusula 6).
+3.3. A licença é concedida para uso interno do LICENCIADO e de seus
+     USUÁRIOS, no exercício da própria atividade advocatícia.
+
+
+4. DAS MODALIDADES DE LICENÇA
+--------------------------------------------------------------------
+>> NOTA: marque/mantenha apenas a modalidade contratada por este
+   cliente (4.A OU 4.B), ou deixe ambas e indique a escolhida no campo.
+
+   Modalidade contratada neste instrumento: [ ] Assinatura  [ ] Definitiva
+
+4.A. LICENÇA POR ASSINATURA (pagamento mensal)
+   4.A.1. Mediante o pagamento da mensalidade prevista na Cláusula 7, o
+          LICENCIADO poderá usar o SISTEMA enquanto a assinatura estiver
+          vigente e adimplente.
+   4.A.2. Estão incluídas, durante a vigência da assinatura, as
+          atualizações e o suporte técnico previstos na Cláusula 8.
+   4.A.3. Encerrada a assinatura (por rescisão, não renovação ou
+          inadimplência), cessa automaticamente o direito de uso do
+          SISTEMA, observada a Cláusula 11.
+
+4.B. LICENÇA DEFINITIVA (pagamento único)
+   4.B.1. Mediante o pagamento único previsto na Cláusula 7, é concedida
+          ao LICENCIADO uma licença de uso por PRAZO INDETERMINADO, sem
+          mensalidade.
+   4.B.2. A licença definitiva NÃO constitui venda do SISTEMA: trata-se
+          de direito perpétuo de USO, permanecendo a propriedade
+          intelectual com o LICENCIANTE.
+   4.B.3. Atualizações e suporte técnico NÃO estão incluídos de forma
+          perpétua. Eles poderão ser [inclusos por [X] meses a contar da
+          contratação] e/ou [contratados à parte], conforme Cláusula 8.
+          >> NOTA: defina isto com cuidado para não ficar obrigado a dar
+             suporte/atualização para sempre por um pagamento único.
+
+
+5. DOS USUÁRIOS E DA ABRANGÊNCIA
+--------------------------------------------------------------------
+5.1. A licença autoriza o uso por até [____] usuários e em [1 (uma)]
+     unidade/escritório do LICENCIADO.
+     >> NOTA: ajuste conforme seu modelo de cobrança (por usuário, por
+        escritório, ilimitado, etc.).
+5.2. O acréscimo de usuários, unidades ou recursos adicionais poderá
+     ser contratado mediante condições específicas a combinar.
+
+
+6. DA PROPRIEDADE INTELECTUAL
+--------------------------------------------------------------------
+6.1. O SISTEMA NOVOJUD, seu código-fonte, sua estrutura, sua marca e seu
+     nome são de propriedade exclusiva do LICENCIANTE e protegidos pela
+     legislação aplicável (Lei nº 9.609/1998 — Programas de Computador;
+     Lei nº 9.610/1998 — Direitos Autorais; e Lei nº 9.279/1996 —
+     Propriedade Industrial).
+6.2. Este contrato não transfere ao LICENCIADO nenhum direito de
+     propriedade sobre o SISTEMA, mas tão somente o direito de uso nos
+     limites aqui previstos.
+6.3. Os DADOS inseridos pelo LICENCIADO no SISTEMA (cadastros, processos,
+     documentos etc.) são e permanecem de titularidade do LICENCIADO.
+
+
+7. DO PREÇO E DO PAGAMENTO
+--------------------------------------------------------------------
+7.A. (Assinatura) Mensalidade de R$ [______] ([valor por extenso]),
+     vencível todo dia [___] de cada mês, paga por [forma de pagamento].
+   7.A.1. Reajuste anual pelo índice [IPCA/IGP-M/outro], ou na menor
+          periodicidade permitida em lei.
+   7.A.2. O atraso no pagamento implicará [multa de [2]% + juros de
+          [1]% ao mês + correção], e, persistindo por mais de [____]
+          dias, poderá ensejar a suspensão do acesso e/ou a rescisão.
+
+7.B. (Definitiva) Valor único de R$ [______] ([valor por extenso]),
+     pago em [à vista / [___] parcelas] por [forma de pagamento].
+
+7.C. Eventuais serviços adicionais (implantação, treinamento, migração
+     de dados, personalizações, suporte fora do escopo) serão orçados e
+     cobrados à parte, mediante acordo prévio.
+
+
+8. DAS ATUALIZAÇÕES E DO SUPORTE
+--------------------------------------------------------------------
+8.1. (Assinatura) Enquanto vigente e adimplente, o LICENCIADO recebe as
+     atualizações do SISTEMA e suporte técnico [por e-mail / WhatsApp /
+     telefone], em horário comercial, dias úteis, com prazo-alvo de
+     resposta de [____].
+8.2. (Definitiva) O suporte e as atualizações seguem o definido na
+     Cláusula 4.B.3.
+8.3. O LICENCIANTE poderá evoluir, alterar ou descontinuar recursos do
+     SISTEMA, comprometendo-se a não reduzir, sem aviso prévio razoável,
+     funcionalidades essenciais já contratadas.
+
+
+9. DAS RESTRIÇÕES DE USO (vale para AS DUAS modalidades)
+--------------------------------------------------------------------
+Com o objetivo de proteger o SISTEMA, o LICENCIADO compromete-se a NÃO,
+por si ou por terceiros, no todo ou em parte:
+   a) copiar, reproduzir, revender, alugar, emprestar, ceder, doar,
+      sublicenciar, distribuir, publicar ou comercializar o SISTEMA;
+   b) disponibilizar o SISTEMA a terceiros que não sejam seus USUÁRIOS
+      autorizados;
+   c) descompilar, desmontar, aplicar engenharia reversa, ou tentar
+      acessar, copiar ou modificar o código-fonte;
+   d) remover, ocultar ou alterar marcas, avisos de direitos autorais
+      ou identificação do LICENCIANTE presentes no SISTEMA;
+   e) utilizar o SISTEMA para finalidade ilícita ou em desacordo com
+      este contrato.
+9.1. O descumprimento deste item constitui infração grave e autoriza a
+     rescisão imediata, sem prejuízo das perdas e danos e das medidas
+     judiciais cabíveis.
+
+
+10. DOS DADOS, CONFIDENCIALIDADE E LGPD
+--------------------------------------------------------------------
+10.1. Cada parte tratará as informações da outra com confidencialidade.
+10.2. No tratamento de dados pessoais, as partes observarão a Lei nº
+      13.709/2018 (LGPD). O LICENCIADO é o CONTROLADOR dos dados que
+      insere no SISTEMA; o LICENCIANTE atua como [OPERADOR / fornecedor
+      de software], tratando dados apenas conforme necessário à
+      prestação e mediante instruções do LICENCIADO.
+      >> NOTA: o enquadramento (operador x mero fornecedor) muda
+         conforme o sistema seja hospedado por você (SaaS) ou pelo
+         próprio cliente. O advogado deve ajustar.
+10.3. O LICENCIANTE adotará medidas razoáveis de segurança. [Em caso de
+      hospedagem pelo LICENCIANTE: rotinas de backup conforme política
+      vigente.] O LICENCIADO é responsável por manter cópias/zelo dos
+      seus próprios dados quando o SISTEMA estiver hospedado em ambiente
+      sob seu controle.
+
+
+11. DA VIGÊNCIA E DA RESCISÃO
+--------------------------------------------------------------------
+11.1. (Assinatura) Vigência por prazo indeterminado, iniciando-se na
+      data da assinatura, podendo qualquer parte rescindir mediante
+      aviso prévio de [30] dias, sem multa, ressalvada a inadimplência.
+11.2. (Definitiva) Vigência por prazo indeterminado quanto ao direito de
+      uso; o suporte/atualização segue a Cláusula 4.B.3.
+11.3. O contrato poderá ser rescindido de pleno direito, independente de
+      aviso, em caso de: (a) descumprimento da Cláusula 9 (restrições);
+      (b) inadimplência não sanada em [____] dias; (c) uso ilícito.
+11.4. Rescindido o contrato (modalidade assinatura) ou cessado o direito
+      de uso, o LICENCIADO deverá cessar o uso do SISTEMA. O LICENCIANTE
+      disponibilizará, por [____] dias, a exportação dos dados do
+      LICENCIADO em formato [____], após o que poderá removê-los.
+
+
+12. DAS GARANTIAS E DA LIMITAÇÃO DE RESPONSABILIDADE
+--------------------------------------------------------------------
+12.1. O LICENCIANTE empenha-se em manter o SISTEMA em funcionamento
+      adequado, mas não garante operação ininterrupta ou isenta de
+      falhas, nem se responsabiliza por indisponibilidades decorrentes
+      de terceiros (internet, hospedagem, energia) ou de uso indevido.
+12.2. O LICENCIADO é o único responsável pelo conteúdo que insere, pelo
+      cumprimento de prazos processuais e pelas decisões profissionais
+      tomadas — o SISTEMA é ferramenta de apoio, não substitui a análise
+      do advogado.
+12.3. A responsabilidade do LICENCIANTE, quando cabível, fica limitada
+      ao valor [das últimas [____] mensalidades pagas / do valor pago
+      pela licença], salvo dolo.
+
+
+13. DISPOSIÇÕES GERAIS
+--------------------------------------------------------------------
+13.1. Este contrato não gera vínculo societário, trabalhista ou de
+      representação entre as partes.
+13.2. O LICENCIADO não poderá ceder este contrato a terceiros sem
+      anuência escrita do LICENCIANTE.
+13.3. A tolerância quanto a qualquer descumprimento não significa
+      novação nem renúncia de direitos.
+13.4. Alterações deste contrato somente terão validade por escrito,
+      assinadas pelas partes (admitida a forma eletrônica).
+
+
+14. DO FORO
+--------------------------------------------------------------------
+14.1. As partes elegem o foro da Comarca de [cidade/UF] para dirimir
+      questões oriundas deste contrato, com renúncia a qualquer outro,
+      por mais privilegiado que seja.
+
+E, por estarem assim justas e contratadas, firmam o presente em [duas]
+vias de igual teor (ou por assinatura eletrônica).
+
+[Cidade], [___] de [__________] de [_____].
+
+
+____________________________________
+LICENCIANTE — [Nome]
+
+____________________________________
+LICENCIADO — [Nome]
+
+Testemunhas (opcional):
+1) ____________________  CPF: __________
+2) ____________________  CPF: __________
+
+====================================================================
+ FIM DO RASCUNHO — revisar com advogado antes de usar.
+====================================================================

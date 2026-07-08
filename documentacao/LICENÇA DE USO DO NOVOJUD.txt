@@ -1,0 +1,24 @@
+LICENÇA DE USO DO NOVOJUD
+
+1. Natureza (vale para todos os clientes).
+O NovoJud é licenciado, não vendido. Você recebe o direito de usar o sistema; a propriedade do software, do código-fonte, do nome e da marca "NovoJud" permanece sempre de [seu nome/empresa]. Nenhuma das modalidades abaixo transfere a propriedade do sistema.
+
+2. Modalidades de licença.
+(a) Licença por Assinatura (mensal): mediante pagamento mensal, você usa o sistema enquanto a assinatura estiver ativa, com atualizações e suporte incluídos no período. Encerrada ou inadimplente a assinatura, o direito de uso se encerra.
+(b) Licença Definitiva (pagamento único): mediante pagamento único, você usa o sistema por prazo indeterminado, sem mensalidade. (Atualizações e suporte podem ser contratados à parte ou inclusos por [X] meses — a combinar.)
+
+3. O que não é permitido (vale para AS DUAS modalidades).
+Com todo o cuidado, pedimos que você não: copie, revenda, alugue, ceda, empreste, sublicencie, distribua, publique ou compartilhe o sistema (no todo ou em parte) com terceiros; nem tente acessar, copiar, descompilar ou modificar o código-fonte (engenharia reversa). A licença é para uso interno do contratante e da sua equipe.
+
+4. Precisando de algo a mais.
+Quer mais acessos, uma unidade adicional ou uma condição especial? Fale com a gente — teremos prazer em ajustar.
+
+
+
+
+=======================================
+
+Dois pontos honestos pra você decidir com o advogado:
+
+- Na licença definitiva, pense se as atualizações futuras entram pra sempre ou só por um tempo (senão você fica obrigado a dar suporte eterno por um pagamento único). Deixei isso como "a combinar".
+- Vale ter uma forma de travar tecnicamente o uso (ex.: licença por chave/ativação), porque contrato proíbe, mas a trava técnica previne — se quiser, depois a gente pensa nisso no sistema.

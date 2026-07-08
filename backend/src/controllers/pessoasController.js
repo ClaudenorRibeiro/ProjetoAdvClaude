@@ -6,6 +6,50 @@
 const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
+const { hojeBrasilia } = require('../utils/helpers');
+
+// ---- Filtros de busca reutilizáveis (listagem E exportação) — evita duplicar a mesma condição ----
+
+// Condição de busca de PESSOA FÍSICA (nome, CPF, RG, PIS, endereço, telefone). Retorna { cond, params }.
+function condBuscaFisica(busca) {
+  const buscaDigitos = busca.replace(/\D/g, '');
+  const b  = `%${busca}%`;
+  const bD = `%${buscaDigitos || busca}%`;
+  const cond = ` AND (
+        pf.nome       LIKE ? OR
+        pf.cpf        LIKE ? OR
+        pf.rg         LIKE ? OR
+        pf.pis        LIKE ? OR
+        pf.logradouro LIKE ? OR
+        pf.bairro     LIKE ? OR
+        pf.cidade     LIKE ? OR
+        EXISTS (
+          SELECT 1 FROM telefones_pf t
+          WHERE t.pessoa_id = pf.id AND t.ativo = 1 AND t.numero LIKE ?
+        )
+      )`;
+  return { cond, params: [b, bD, b, b, b, b, b, b] };
+}
+
+// Condição de busca de PESSOA JURÍDICA (razão social, CNPJ, fantasia, endereço, telefone).
+function condBuscaJuridica(busca) {
+  const buscaDigitos = busca.replace(/\D/g, '');
+  const b  = `%${busca}%`;
+  const bD = `%${buscaDigitos || busca}%`;
+  const cond = ` AND (
+        pj.razao_social        LIKE ? OR
+        pj.cnpj                LIKE ? OR
+        pj.nome_fantasia       LIKE ? OR
+        pj.logradouro          LIKE ? OR
+        pj.bairro              LIKE ? OR
+        pj.cidade              LIKE ? OR
+        EXISTS (
+          SELECT 1 FROM telefones_pj t
+          WHERE t.pessoa_id = pj.id AND t.ativo = 1 AND t.numero LIKE ?
+        )
+      )`;
+  return { cond, params: [b, bD, b, b, b, b, b] };
+}
 
 // ---- PESSOAS FÍSICAS ----
 
@@ -27,27 +71,11 @@ async function listarFisicas(req, res) {
       )`;
     }
 
-    // Filtro de busca abrangente — nome, CPF, RG, PIS, endereço e telefone
+    // Filtro de busca abrangente (mesma condição reutilizada na exportação — ver condBuscaFisica)
     if (busca) {
-      // CPF é armazenado só com dígitos; remove máscara digitada para bater com o banco
-      const buscaDigitos = busca.replace(/\D/g, '');
-      const b  = `%${busca}%`;
-      const bD = `%${buscaDigitos || busca}%`;
-
-      where += ` AND (
-        pf.nome       LIKE ? OR
-        pf.cpf        LIKE ? OR
-        pf.rg         LIKE ? OR
-        pf.pis        LIKE ? OR
-        pf.logradouro LIKE ? OR
-        pf.bairro     LIKE ? OR
-        pf.cidade     LIKE ? OR
-        EXISTS (
-          SELECT 1 FROM telefones_pf t
-          WHERE t.pessoa_id = pf.id AND t.ativo = 1 AND t.numero LIKE ?
-        )
-      )`;
-      params.push(b, bD, b, b, b, b, b, b);
+      const f = condBuscaFisica(busca);
+      where += f.cond;
+      params.push(...f.params);
     }
 
     // Nota: LIMIT e OFFSET são inseridos diretamente na query (já sanitizados com parseInt)
@@ -390,32 +418,16 @@ async function listarJuridicas(req, res) {
     const params = [];
     let where = 'WHERE pj.ativo = 1';
 
-    // Filtro de busca abrangente — razão social, CNPJ, fantasia, representante, endereço e telefone
+    // Filtro de busca abrangente (mesma condição reutilizada na exportação — ver condBuscaJuridica)
     if (busca) {
-      // CNPJ é armazenado só com dígitos; remove máscara para bater com o banco
-      const buscaDigitos = busca.replace(/\D/g, '');
-      const b  = `%${busca}%`;
-      const bD = `%${buscaDigitos || busca}%`;
-
-      where += ` AND (
-        pj.razao_social        LIKE ? OR
-        pj.cnpj                LIKE ? OR
-        pj.nome_fantasia       LIKE ? OR
-        pj.representante_legal LIKE ? OR
-        pj.logradouro          LIKE ? OR
-        pj.bairro              LIKE ? OR
-        pj.cidade              LIKE ? OR
-        EXISTS (
-          SELECT 1 FROM telefones_pj t
-          WHERE t.pessoa_id = pj.id AND t.ativo = 1 AND t.numero LIKE ?
-        )
-      )`;
-      params.push(b, bD, b, b, b, b, b, b);
+      const f = condBuscaJuridica(busca);
+      where += f.cond;
+      params.push(...f.params);
     }
 
     // Nota: LIMIT e OFFSET inseridos diretamente (sanitizados com parseInt — MySQL 8 não aceita ? em LIMIT/OFFSET)
     const [rows] = await pool.execute(
-      `SELECT pj.id, pj.razao_social, pj.nome_fantasia, pj.cnpj, pj.representante_legal,
+      `SELECT pj.id, pj.razao_social, pj.nome_fantasia, pj.cnpj,
               (SELECT t.numero FROM telefones_pj t WHERE t.pessoa_id = pj.id AND t.ativo = 1
                ORDER BY t.principal DESC LIMIT 1) AS telefone,
               (SELECT e.email FROM emails_pj e WHERE e.pessoa_id = pj.id AND e.ativo = 1
@@ -451,7 +463,7 @@ async function listarJuridicas(req, res) {
 // POST /api/pessoas/juridicas — Cadastra pessoa jurídica
 async function criarJuridica(req, res) {
   const {
-    razao_social, nome_fantasia, cnpj, inscricao_estadual, representante_legal,
+    razao_social, nome_fantasia, cnpj, inscricao_estadual,
     cep, logradouro, numero, complemento, bairro, cidade, estado,
     observacoes, telefones = [], emails = []
   } = req.body;
@@ -465,13 +477,13 @@ async function criarJuridica(req, res) {
 
     const [result] = await conn.execute(
       `INSERT INTO pessoas_juridicas
-         (razao_social, nome_fantasia, cnpj, inscricao_estadual, representante_legal,
+         (razao_social, nome_fantasia, cnpj, inscricao_estadual,
           cep, logradouro, numero, complemento, bairro, cidade, estado, observacoes, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         razao_social.trim(), nome_fantasia || null,
         cnpj?.replace(/\D/g, '') || null, inscricao_estadual || null,
-        representante_legal || null, cep || null, logradouro || null,
+        cep || null, logradouro || null,
         numero || null, complemento || null, bairro || null,
         cidade || null, estado || null, observacoes || null, req.usuario.id
       ]
@@ -583,7 +595,134 @@ async function buscarAuxiliares(req, res) {
   }
 }
 
+// ============================================================
+// EXPORTAÇÃO PARA EXCEL (.xlsx) — Pessoas Físicas e Jurídicas
+// Exporta a MESMA busca da listagem (sem paginação). Os campos vêm
+// da tela (checkboxes) e são validados contra uma LISTA BRANCA: nome de
+// coluna NUNCA é montado a partir de texto cru do request (segurança).
+// ============================================================
+
+// Lista branca de campos exportáveis de PESSOA FÍSICA (ordem = ordem das colunas no Excel).
+const CAMPOS_PF = {
+  nome:            { header: 'Nome',               width: 32, sql: 'pf.nome' },
+  cpf:             { header: 'CPF',                width: 16, sql: 'pf.cpf' },
+  rg:              { header: 'RG',                 width: 14, sql: 'pf.rg' },
+  rg_orgao:        { header: 'Órgão RG',           width: 12, sql: 'pf.rg_orgao' },
+  pis:             { header: 'PIS',                width: 16, sql: 'pf.pis' },
+  ctps_numero:     { header: 'CTPS Nº',            width: 14, sql: 'pf.ctps_numero' },
+  ctps_serie:      { header: 'CTPS Série',         width: 12, sql: 'pf.ctps_serie' },
+  nome_pai:        { header: 'Nome do pai',        width: 28, sql: 'pf.nome_pai' },
+  nome_mae:        { header: 'Nome da mãe',        width: 28, sql: 'pf.nome_mae' },
+  data_nascimento: { header: 'Data de nascimento', width: 16, sql: 'pf.data_nascimento', data: true },
+  estado_civil:    { header: 'Estado civil',       width: 16, sql: 'ec.nome', join: 'LEFT JOIN estado_civil ec ON pf.estado_civil_id = ec.id' },
+  profissao:       { header: 'Profissão',          width: 22, sql: 'pr.nome', join: 'LEFT JOIN profissao pr ON pf.profissao_id = pr.id' },
+  genero:          { header: 'Gênero',             width: 12, sql: 'g.nome',  join: 'LEFT JOIN genero g ON pf.genero_id = g.id' },
+  cep:             { header: 'CEP',                width: 10, sql: 'pf.cep' },
+  logradouro:      { header: 'Logradouro',         width: 30, sql: 'pf.logradouro' },
+  numero:          { header: 'Número',             width: 8,  sql: 'pf.numero' },
+  complemento:     { header: 'Complemento',        width: 18, sql: 'pf.complemento' },
+  bairro:          { header: 'Bairro',             width: 18, sql: 'pf.bairro' },
+  cidade:          { header: 'Cidade',             width: 18, sql: 'pf.cidade' },
+  estado:          { header: 'UF',                 width: 6,  sql: 'pf.estado' },
+  telefone:        { header: 'Telefone',           width: 16, sql: '(SELECT t.numero FROM telefones_pf t WHERE t.pessoa_id = pf.id AND t.ativo = 1 ORDER BY t.principal DESC, t.id ASC LIMIT 1)' },
+  email:           { header: 'E-mail',             width: 28, sql: '(SELECT e.email FROM emails_pf e WHERE e.pessoa_id = pf.id AND e.ativo = 1 ORDER BY e.principal DESC, e.id ASC LIMIT 1)' },
+  observacoes:     { header: 'Observações',        width: 40, sql: 'pf.observacoes' },
+};
+
+// Lista branca de campos exportáveis de PESSOA JURÍDICA.
+const CAMPOS_PJ = {
+  razao_social:        { header: 'Razão social',       width: 32, sql: 'pj.razao_social' },
+  nome_fantasia:       { header: 'Nome fantasia',      width: 28, sql: 'pj.nome_fantasia' },
+  cnpj:                { header: 'CNPJ',               width: 20, sql: 'pj.cnpj' },
+  inscricao_estadual:  { header: 'Inscrição estadual', width: 18, sql: 'pj.inscricao_estadual' },
+  cep:                 { header: 'CEP',                width: 10, sql: 'pj.cep' },
+  logradouro:          { header: 'Logradouro',         width: 30, sql: 'pj.logradouro' },
+  numero:              { header: 'Número',             width: 8,  sql: 'pj.numero' },
+  complemento:         { header: 'Complemento',        width: 18, sql: 'pj.complemento' },
+  bairro:              { header: 'Bairro',             width: 18, sql: 'pj.bairro' },
+  cidade:              { header: 'Cidade',             width: 18, sql: 'pj.cidade' },
+  estado:              { header: 'UF',                 width: 6,  sql: 'pj.estado' },
+  telefone:            { header: 'Telefone',           width: 16, sql: '(SELECT t.numero FROM telefones_pj t WHERE t.pessoa_id = pj.id AND t.ativo = 1 ORDER BY t.principal DESC, t.id ASC LIMIT 1)' },
+  email:               { header: 'E-mail',             width: 28, sql: '(SELECT e.email FROM emails_pj e WHERE e.pessoa_id = pj.id AND e.ativo = 1 ORDER BY e.principal DESC, e.id ASC LIMIT 1)' },
+  observacoes:         { header: 'Observações',        width: 40, sql: 'pj.observacoes' },
+};
+
+// Monta o arquivo .xlsx a partir das linhas + a lista branca de campos escolhidos.
+async function gerarExcelPessoas(res, { rows, ordem, mapa, aba, nomeArquivo }) {
+  const ExcelJS = require('exceljs');               // require lazy: não derruba o boot se faltar a lib
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet(aba);
+  ws.columns = ordem.map(k => ({ header: mapa[k].header, key: k, width: mapa[k].width }));
+  ws.getRow(1).font = { bold: true };
+  const fmtData = d => d ? String(d).slice(0, 10).split('-').reverse().join('/') : '';
+  for (const r of rows) {
+    const linha = {};
+    for (const k of ordem) linha[k] = mapa[k].data ? fmtData(r[k]) : (r[k] == null ? '' : r[k]);
+    ws.addRow(linha);
+  }
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`);
+  await wb.xlsx.write(res);
+  res.end();
+}
+
+// GET /api/pessoas/fisicas/exportar — exporta a busca atual (ou tudo) em Excel
+async function exportarFisicas(req, res) {
+  try {
+    const { busca, campos } = req.query;
+    // valida os campos pedidos contra a lista branca; mantém a ordem canônica do mapa
+    const pedidos = (campos ? String(campos).split(',') : []);
+    let ordem = Object.keys(CAMPOS_PF).filter(k => pedidos.includes(k));
+    if (!ordem.length) ordem = ['nome'];
+
+    const selectParts = ordem.map(k => `${CAMPOS_PF[k].sql} AS ${k}`);
+    const joins = [...new Set(ordem.map(k => CAMPOS_PF[k].join).filter(Boolean))].join(' ');
+
+    let where = 'WHERE pf.ativo = 1';
+    const params = [];
+    if (busca) { const f = condBuscaFisica(busca); where += f.cond; params.push(...f.params); }
+
+    const [rows] = await pool.execute(
+      `SELECT ${selectParts.join(', ')} FROM pessoas_fisicas pf ${joins} ${where} ORDER BY pf.nome ASC LIMIT 50000`,
+      params
+    );
+
+    const [y, m, d] = hojeBrasilia().split('-');
+    await gerarExcelPessoas(res, { rows, ordem, mapa: CAMPOS_PF, aba: 'Pessoas Físicas', nomeArquivo: `Pessoas Físicas - ${d}-${m}-${y}.xlsx` });
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// GET /api/pessoas/juridicas/exportar — exporta a busca atual (ou tudo) em Excel
+async function exportarJuridicas(req, res) {
+  try {
+    const { busca, campos } = req.query;
+    const pedidos = (campos ? String(campos).split(',') : []);
+    let ordem = Object.keys(CAMPOS_PJ).filter(k => pedidos.includes(k));
+    if (!ordem.length) ordem = ['razao_social'];
+
+    const selectParts = ordem.map(k => `${CAMPOS_PJ[k].sql} AS ${k}`);
+    const joins = [...new Set(ordem.map(k => CAMPOS_PJ[k].join).filter(Boolean))].join(' ');
+
+    let where = 'WHERE pj.ativo = 1';
+    const params = [];
+    if (busca) { const f = condBuscaJuridica(busca); where += f.cond; params.push(...f.params); }
+
+    const [rows] = await pool.execute(
+      `SELECT ${selectParts.join(', ')} FROM pessoas_juridicas pj ${joins} ${where} ORDER BY pj.razao_social ASC LIMIT 50000`,
+      params
+    );
+
+    const [y, m, d] = hojeBrasilia().split('-');
+    await gerarExcelPessoas(res, { rows, ordem, mapa: CAMPOS_PJ, aba: 'Pessoas Jurídicas', nomeArquivo: `Pessoas Jurídicas - ${d}-${m}-${y}.xlsx` });
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
 module.exports = {
   listarFisicas, buscarFisica, criarFisica, atualizarFisica, excluirFisica, adicionarHistorico,
-  listarJuridicas, criarJuridica, excluirJuridica, buscarAuxiliares, buscarPorCPF, criarAuxiliar
+  listarJuridicas, criarJuridica, excluirJuridica, buscarAuxiliares, buscarPorCPF, criarAuxiliar,
+  exportarFisicas, exportarJuridicas
 };

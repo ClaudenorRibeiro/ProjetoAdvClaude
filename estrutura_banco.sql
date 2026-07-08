@@ -419,6 +419,18 @@ CREATE TABLE IF NOT EXISTS `conta_corrente` (
 
 -- Exportação de dados foi desmarcado.
 
+-- Copiando estrutura para tabela sistema_advocacia.controle_versao_banco
+DROP TABLE IF EXISTS `controle_versao_banco`;
+CREATE TABLE IF NOT EXISTS `controle_versao_banco` (
+  `numero` int NOT NULL,
+  `descricao` varchar(300) NOT NULL,
+  `sql_aplicado` mediumtext,
+  `aplicado_em` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`numero`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Exportação de dados foi desmarcado.
+
 -- Copiando estrutura para tabela sistema_advocacia.emails_pf
 DROP TABLE IF EXISTS `emails_pf`;
 CREATE TABLE IF NOT EXISTS `emails_pf` (
@@ -431,7 +443,7 @@ CREATE TABLE IF NOT EXISTS `emails_pf` (
   PRIMARY KEY (`id`),
   KEY `pessoa_id` (`pessoa_id`),
   CONSTRAINT `emails_pf_ibfk_1` FOREIGN KEY (`pessoa_id`) REFERENCES `pessoas_fisicas` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1691 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -530,7 +542,7 @@ CREATE TABLE IF NOT EXISTS `logs_auditoria` (
   KEY `idx_usuario` (`usuario_id`),
   KEY `idx_data` (`criado_em`),
   KEY `idx_usuario_data` (`usuario_id`,`criado_em`)
-) ENGINE=InnoDB AUTO_INCREMENT=266 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=284 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -594,7 +606,7 @@ CREATE TABLE IF NOT EXISTS `log_emails` (
   PRIMARY KEY (`id`),
   KEY `idx_log_emails_enviado_em` (`enviado_em`),
   KEY `idx_log_emails_status` (`status`)
-) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -643,7 +655,7 @@ CREATE TABLE IF NOT EXISTS `modelo_documento` (
   CONSTRAINT `fk_modelo_subtipo_prazo` FOREIGN KEY (`subtipo_prazo_id`) REFERENCES `prazo_subtipo` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_modelo_tipo_aud` FOREIGN KEY (`tipo_audiencia_id`) REFERENCES `tipo_audiencia` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_modelo_tipo_per` FOREIGN KEY (`tipo_pericia_id`) REFERENCES `tipo_pericia` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=17 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -726,7 +738,7 @@ CREATE TABLE IF NOT EXISTS `permissoes` (
   PRIMARY KEY (`id`),
   KEY `idx_usuario_modulo` (`usuario_id`,`modulo`,`submodulo`,`acao`),
   CONSTRAINT `permissoes_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=2468 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4358 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -773,7 +785,7 @@ CREATE TABLE IF NOT EXISTS `pessoas_fisicas` (
   CONSTRAINT `pessoas_fisicas_ibfk_1` FOREIGN KEY (`estado_civil_id`) REFERENCES `estado_civil` (`id`),
   CONSTRAINT `pessoas_fisicas_ibfk_2` FOREIGN KEY (`profissao_id`) REFERENCES `profissao` (`id`),
   CONSTRAINT `pessoas_fisicas_ibfk_3` FOREIGN KEY (`genero_id`) REFERENCES `genero` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4939 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -785,7 +797,6 @@ CREATE TABLE IF NOT EXISTS `pessoas_juridicas` (
   `nome_fantasia` varchar(200) DEFAULT NULL,
   `cnpj` varchar(18) DEFAULT NULL,
   `inscricao_estadual` varchar(30) DEFAULT NULL,
-  `representante_legal` varchar(200) DEFAULT NULL,
   `cep` varchar(9) DEFAULT NULL,
   `logradouro` varchar(200) DEFAULT NULL,
   `numero` varchar(10) DEFAULT NULL,
@@ -805,7 +816,7 @@ CREATE TABLE IF NOT EXISTS `pessoas_juridicas` (
   KEY `fk_pj_alterado_por` (`alterado_por`),
   CONSTRAINT `fk_pj_alterado_por` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `fk_pj_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2874 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -941,7 +952,7 @@ CREATE TABLE IF NOT EXISTS `publicacoes` (
   CONSTRAINT `fk_pub_direcionada` FOREIGN KEY (`direcionada_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_pub_importada` FOREIGN KEY (`importada_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_pub_tratada` FOREIGN KEY (`tratada_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=74 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=208 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -958,7 +969,7 @@ CREATE TABLE IF NOT EXISTS `reset_tokens` (
   UNIQUE KEY `token` (`token`),
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `reset_tokens_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -1020,7 +1031,7 @@ CREATE TABLE IF NOT EXISTS `tblforum` (
   KEY `alterado_por` (`alterado_por`),
   CONSTRAINT `tblforum_ibfk_1` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblforum_ibfk_2` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=39 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -1059,7 +1070,7 @@ CREATE TABLE IF NOT EXISTS `tblpasta` (
   KEY `alterado_por` (`alterado_por`),
   CONSTRAINT `tblpasta_ibfk_1` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblpasta_ibfk_2` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=8815 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -1098,7 +1109,7 @@ CREATE TABLE IF NOT EXISTS `tblproc` (
   CONSTRAINT `tblproc_ibfk_5` FOREIGN KEY (`instancia_id`) REFERENCES `tblinstanciaproc` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblproc_ibfk_6` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblproc_ibfk_7` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6005 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -1117,7 +1128,7 @@ CREATE TABLE IF NOT EXISTS `tblstatusproc` (
   KEY `alterado_por` (`alterado_por`),
   CONSTRAINT `tblstatusproc_ibfk_1` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblstatusproc_ibfk_2` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -1156,7 +1167,7 @@ CREATE TABLE IF NOT EXISTS `tbltituloprocautor` (
   KEY `idx_titautor_pessoa` (`pessoa_id`,`tipo_pessoa`,`proc_id`),
   CONSTRAINT `tbltituloprocautor_ibfk_1` FOREIGN KEY (`proc_id`) REFERENCES `tblproc` (`id`) ON DELETE CASCADE,
   CONSTRAINT `tbltituloprocautor_ibfk_2` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=34 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6005 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -1175,7 +1186,7 @@ CREATE TABLE IF NOT EXISTS `tbltituloprocreu` (
   KEY `idx_titreu_pessoa` (`pessoa_id`,`tipo_pessoa`,`proc_id`),
   CONSTRAINT `tbltituloprocreu_ibfk_1` FOREIGN KEY (`proc_id`) REFERENCES `tblproc` (`id`) ON DELETE CASCADE,
   CONSTRAINT `tbltituloprocreu_ibfk_2` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=18 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6005 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -1202,7 +1213,7 @@ CREATE TABLE IF NOT EXISTS `tblvara` (
   CONSTRAINT `tblvara_ibfk_1` FOREIGN KEY (`forum_id`) REFERENCES `tblforum` (`id`),
   CONSTRAINT `tblvara_ibfk_2` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblvara_ibfk_3` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=362 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=489 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -1219,7 +1230,7 @@ CREATE TABLE IF NOT EXISTS `telefones_pf` (
   PRIMARY KEY (`id`),
   KEY `pessoa_id` (`pessoa_id`),
   CONSTRAINT `telefones_pf_ibfk_1` FOREIGN KEY (`pessoa_id`) REFERENCES `pessoas_fisicas` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=22238 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -1295,7 +1306,7 @@ CREATE TABLE IF NOT EXISTS `usuarios` (
   UNIQUE KEY `uq_login` (`login`),
   KEY `fk_usuarios_criado_por` (`criado_por`),
   CONSTRAINT `fk_usuarios_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=25 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 

@@ -9,6 +9,28 @@ import { toast } from 'react-toastify';
 import GerarDocumentoBotao from '../../components/GerarDocumento';
 import GerarDocumentoPartesBotao from '../../components/GerarDocumentoPartes';
 
+// Campos disponíveis para exportar em Excel (mesmas chaves do backend; sem campos de auditoria)
+const CAMPOS_EXPORT_FISICA = [
+  { key: 'nome', label: 'Nome' }, { key: 'cpf', label: 'CPF' }, { key: 'rg', label: 'RG' },
+  { key: 'rg_orgao', label: 'Órgão RG' }, { key: 'pis', label: 'PIS' },
+  { key: 'ctps_numero', label: 'CTPS Nº' }, { key: 'ctps_serie', label: 'CTPS Série' },
+  { key: 'nome_pai', label: 'Nome do pai' }, { key: 'nome_mae', label: 'Nome da mãe' },
+  { key: 'data_nascimento', label: 'Data de nascimento' }, { key: 'estado_civil', label: 'Estado civil' },
+  { key: 'profissao', label: 'Profissão' }, { key: 'genero', label: 'Gênero' },
+  { key: 'cep', label: 'CEP' }, { key: 'logradouro', label: 'Logradouro' }, { key: 'numero', label: 'Número' },
+  { key: 'complemento', label: 'Complemento' }, { key: 'bairro', label: 'Bairro' }, { key: 'cidade', label: 'Cidade' },
+  { key: 'estado', label: 'UF' }, { key: 'telefone', label: 'Telefone' }, { key: 'email', label: 'E-mail' },
+  { key: 'observacoes', label: 'Observações' },
+];
+const CAMPOS_EXPORT_JURIDICA = [
+  { key: 'razao_social', label: 'Razão social' }, { key: 'nome_fantasia', label: 'Nome fantasia' },
+  { key: 'cnpj', label: 'CNPJ' }, { key: 'inscricao_estadual', label: 'Inscrição estadual' },
+  { key: 'cep', label: 'CEP' }, { key: 'logradouro', label: 'Logradouro' }, { key: 'numero', label: 'Número' },
+  { key: 'complemento', label: 'Complemento' }, { key: 'bairro', label: 'Bairro' }, { key: 'cidade', label: 'Cidade' },
+  { key: 'estado', label: 'UF' }, { key: 'telefone', label: 'Telefone' }, { key: 'email', label: 'E-mail' },
+  { key: 'observacoes', label: 'Observações' },
+];
+
 export default function Pessoas() {
   const [aba, setAba]             = useState('fisicas'); // 'fisicas' | 'juridicas'
   const [lista, setLista]         = useState([]);
@@ -20,6 +42,9 @@ export default function Pessoas() {
   const [pessoaSelecionada, setPessoaSelecionada] = useState(null);
   const [confirmarExclusao, setConfirmarExclusao] = useState(null); // { id, nome } da pessoa a excluir
   const [excluindo, setExcluindo] = useState(false);
+  const [modalExport, setModalExport] = useState(false);   // modal de seleção de campos p/ exportar
+  const [camposExport, setCamposExport] = useState({});    // { chave: true/false }
+  const [exportando, setExportando] = useState(false);
 
   const LIMITE = 20;
 
@@ -81,6 +106,43 @@ export default function Pessoas() {
     }
   }
 
+  // Limpa a caixa de busca e volta para a primeira página
+  function limparBusca() { setBusca(''); setPagina(1); }
+
+  // Abre o modal de exportação com apenas o "Nome" (ou "Razão social") marcado por padrão
+  function abrirExport() {
+    const chaveNome = aba === 'fisicas' ? 'nome' : 'razao_social';
+    setCamposExport({ [chaveNome]: true });
+    setModalExport(true);
+  }
+
+  // Liga/desliga um campo no modal de exportação
+  function toggleCampo(key) {
+    setCamposExport(prev => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  // Gera e baixa o Excel da busca atual (ou de tudo, se não houver busca)
+  async function exportar() {
+    const campos = Object.keys(camposExport).filter(k => camposExport[k]);
+    if (!campos.length) { toast.error('Selecione ao menos um campo'); return; }
+    setExportando(true);
+    try {
+      const fn = aba === 'fisicas' ? pessoasAPI.exportarFisicas : pessoasAPI.exportarJuridicas;
+      const resp = await fn({ busca, campos: campos.join(',') });
+      // Monta o download a partir do arquivo retornado (mesmo padrão do Financeiro)
+      const url = URL.createObjectURL(new Blob([resp.data], { type: resp.headers['content-type'] }));
+      const cd = resp.headers['content-disposition'] || '';
+      const m = cd.match(/filename="(.+?)"/);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = m ? m[1] : 'Pessoas.xlsx';
+      link.click();
+      URL.revokeObjectURL(url);
+      setModalExport(false);
+    } catch { toast.error('Erro ao exportar'); }
+    finally { setExportando(false); }
+  }
+
   const totalPaginas = Math.ceil(total / LIMITE);
 
   return (
@@ -104,17 +166,23 @@ export default function Pessoas() {
             value={busca}
             onChange={e => { setBusca(e.target.value); setPagina(1); }}
           />
+          {/* Limpar pesquisa — só aparece quando há algo digitado na busca */}
+          {busca && (
+            <button className="btn btn-outline" onClick={limparBusca}>Limpar pesquisa</button>
+          )}
           <button className="btn btn-primary" onClick={abrirNovoCadastro}>
             + {aba==='fisicas' ? 'Nova Pessoa Física' : 'Nova Pessoa Jurídica'}
           </button>
           {/* Gera documento que usa várias pessoas (autores × réus); só aparece com permissão de documentos */}
           <GerarDocumentoPartesBotao />
+          {/* Exporta a busca atual (ou tudo) para Excel — abre modal para escolher os campos */}
+          <button className="btn btn-outline" onClick={abrirExport}>Exportar Excel</button>
           <span style={{marginLeft:'auto',color:'#888',fontSize:'13px'}}>{total} registro(s)</span>
         </div>
 
         {/* Tabela */}
         {carregando ? <div className="loading">Carregando...</div> : (
-          <div className="tabela-wrapper">
+          <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
             {aba === 'fisicas' ? (
               <TabelaFisicas lista={lista} onEditar={abrirEdicao} onExcluir={pedirConfirmacaoExclusao} />
             ) : (
@@ -172,6 +240,37 @@ export default function Pessoas() {
           </div>
         </div>
       )}
+
+      {/* Modal de exportação para Excel — escolher os campos */}
+      {modalExport && (
+        <div className="modal-overlay">
+          <div className="modal-box" style={{maxWidth:'520px'}}>
+            <div className="modal-header">
+              <h3>Exportar para Excel</h3>
+              <button className="modal-fechar" onClick={() => setModalExport(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p style={{margin:'0 0 14px',fontSize:'13px',color:'#666'}}>
+                Marque os campos que quer no arquivo. {busca ? 'Será exportada a busca atual.' : 'Será exportada a lista inteira.'}
+              </p>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(2, 1fr)',gap:'8px 16px'}}>
+                {(aba === 'fisicas' ? CAMPOS_EXPORT_FISICA : CAMPOS_EXPORT_JURIDICA).map(c => (
+                  <label key={c.key} style={{display:'flex',alignItems:'center',gap:'8px',fontSize:'14px',cursor:'pointer'}}>
+                    <input type="checkbox" checked={!!camposExport[c.key]} onChange={() => toggleCampo(c.key)} />
+                    {c.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-outline" onClick={() => setModalExport(false)} disabled={exportando}>Cancelar</button>
+              <button className="btn btn-primary" onClick={exportar} disabled={exportando}>
+                {exportando ? 'Gerando...' : 'Exportar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -179,7 +278,7 @@ export default function Pessoas() {
 // Tabela de pessoas físicas
 function TabelaFisicas({ lista, onEditar, onExcluir }) {
   return (
-    <table className="tabela">
+    <table className="tabela tabela-sticky">
       <thead>
         <tr><th>Nome</th><th>CPF</th><th>Telefone</th><th>E-mail</th><th style={{textAlign:'center'}}>Qtde Proc</th><th>Ações</th></tr>
       </thead>
@@ -218,7 +317,7 @@ function TabelaFisicas({ lista, onEditar, onExcluir }) {
 // Tabela de pessoas jurídicas
 function TabelaJuridicas({ lista, onEditar, onExcluir }) {
   return (
-    <table className="tabela">
+    <table className="tabela tabela-sticky">
       <thead>
         <tr><th>Razão Social</th><th>Nome Fantasia</th><th>CNPJ</th><th>Telefone</th><th style={{textAlign:'center'}}>Qtde Proc</th><th>Ações</th></tr>
       </thead>
@@ -446,7 +545,6 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
               </div>
               <div className="grid-2">
                 <CampoCNPJ value={form.cnpj||''} onChange={v=>set('cnpj',v)} />
-                <Campo label="Representante Legal" value={form.representante_legal||''} onChange={v=>set('representante_legal',v)} onBlur={()=>set('representante_legal', toTitleCase(form.representante_legal))} />
               </div>
             </>
           )}
