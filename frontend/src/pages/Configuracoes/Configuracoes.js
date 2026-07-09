@@ -996,7 +996,8 @@ function TabPermissoes() {
                           {modulo.label}
                         </td>
                         {ACOES_PERM.map(acao => (
-                          <td key={acao} style={{textAlign:'center'}}>
+                          // onClick com stopPropagation: o clique no checkbox NÃO "vaza" para a barra (tr) — só marca/desmarca, não expande/oculta
+                          <td key={acao} style={{textAlign:'center'}} onClick={e => e.stopPropagation()}>
                             <input type="checkbox"
                               checked={ehAdmin ? true : !!permissoes[modulo.chave]?.[acao]}
                               disabled={ehAdmin}
@@ -1004,7 +1005,8 @@ function TabPermissoes() {
                               style={ehAdmin ? {accentColor:'#94a3b8', cursor:'not-allowed'} : {}} />
                           </td>
                         ))}
-                        <td style={{textAlign:'center'}}>
+                        {/* onClick com stopPropagation: idem para o "Todos" — clicar aqui não expande/oculta a barra */}
+                        <td style={{textAlign:'center'}} onClick={e => e.stopPropagation()}>
                           <input type="checkbox"
                             checked={ehAdmin ? true : todosMarcados}
                             disabled={ehAdmin}
