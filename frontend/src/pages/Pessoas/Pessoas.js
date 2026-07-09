@@ -17,6 +17,7 @@ const CAMPOS_EXPORT_FISICA = [
   { key: 'nome_pai', label: 'Nome do pai' }, { key: 'nome_mae', label: 'Nome da mãe' },
   { key: 'data_nascimento', label: 'Data de nascimento' }, { key: 'estado_civil', label: 'Estado civil' },
   { key: 'profissao', label: 'Profissão' }, { key: 'genero', label: 'Gênero' },
+  { key: 'nacionalidade', label: 'Nacionalidade' },
   { key: 'cep', label: 'CEP' }, { key: 'logradouro', label: 'Logradouro' }, { key: 'numero', label: 'Número' },
   { key: 'complemento', label: 'Complemento' }, { key: 'bairro', label: 'Bairro' }, { key: 'cidade', label: 'Cidade' },
   { key: 'estado', label: 'UF' }, { key: 'telefone', label: 'Telefone' }, { key: 'email', label: 'E-mail' },
@@ -356,7 +357,7 @@ function TabelaJuridicas({ lista, onEditar, onExcluir }) {
 // Modal de cadastro / edição de pessoa
 function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
   const [form, setForm]         = useState(pessoa || {});
-  const [auxiliares, setAux]    = useState({ estados_civis: [], generos: [], profissoes: [] });
+  const [auxiliares, setAux]    = useState({ estados_civis: [], generos: [], profissoes: [], nacionalidades: [] });
   const [salvando, setSalvando] = useState(false);
   const [telefones, setTelefones] = useState(pessoa?.telefones || [{ numero: '', tipo: '', principal: true }]);
   const [emails, setEmails]       = useState(pessoa?.emails || [{ email: '', principal: true }]);
@@ -387,6 +388,7 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
       generos:       'genero_id',
       estados_civis: 'estado_civil_id',
       profissoes:    'profissao_id',
+      nacionalidades:'nacionalidade_id',
     };
     // Insere na lista do tipo correto, mantendo ordem alfabética
     setAux(a => ({
@@ -429,6 +431,8 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
         return toast.error('Estado civil é obrigatório');
       if (!form.profissao_id)
         return toast.error('Profissão é obrigatória');
+      if (!form.nacionalidade_id)
+        return toast.error('Nacionalidade é obrigatória');
 
       // Primeiro telefone obrigatório
       if (!telefones[0]?.numero?.replace(/\D/g, ''))
@@ -519,7 +523,7 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
                   onChangeSerie={v => set('ctps_serie', v)}
                 />
               </div>
-              <div className="grid-2">
+              <div className="grid-3">
                 <SelectComAdicao
                   label="Estado civil" value={form.estado_civil_id||''} onChange={v=>set('estado_civil_id',v)}
                   opcoes={auxiliares.estados_civis} tipo="estados_civis"
@@ -529,6 +533,11 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
                   label="Profissão" value={form.profissao_id||''} onChange={v=>set('profissao_id',v)}
                   opcoes={auxiliares.profissoes} tipo="profissoes"
                   onNovoItem={item => handleNovoAuxiliar('profissoes', item)}
+                />
+                <SelectComAdicao
+                  label="Nacionalidade" value={form.nacionalidade_id||''} onChange={v=>set('nacionalidade_id',v)}
+                  opcoes={auxiliares.nacionalidades} tipo="nacionalidades"
+                  onNovoItem={item => handleNovoAuxiliar('nacionalidades', item)}
                 />
               </div>
               {/* Filiação */}

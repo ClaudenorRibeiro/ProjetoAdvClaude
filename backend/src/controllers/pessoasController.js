@@ -176,7 +176,7 @@ async function criarFisica(req, res) {
   const {
     nome, cpf, rg, rg_orgao, pis, ctps_numero, ctps_serie,
     data_nascimento, estado_civil_id, profissao_id,
-    genero_id, nome_pai, nome_mae,
+    genero_id, nacionalidade_id, nome_pai, nome_mae,
     cep, logradouro, numero, complemento, bairro, cidade, estado,
     observacoes, telefones = [], emails = []
   } = req.body;
@@ -204,15 +204,15 @@ async function criarFisica(req, res) {
     const [result] = await conn.execute(
       `INSERT INTO pessoas_fisicas
          (nome, cpf, rg, rg_orgao, pis, ctps_numero, ctps_serie,
-          data_nascimento, estado_civil_id, profissao_id, genero_id,
+          data_nascimento, estado_civil_id, profissao_id, genero_id, nacionalidade_id,
           nome_pai, nome_mae,
           cep, logradouro, numero, complemento, bairro, cidade, estado, observacoes, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         nome.trim(), cpf?.replace(/\D/g, '') || null, rg || null, rg_orgao || null,
         pis || null, ctps_numero || null, ctps_serie || null,
         data_nascimento || null, estado_civil_id || null, profissao_id || null,
-        genero_id || null, nome_pai || null, nome_mae || null,
+        genero_id || null, nacionalidade_id || null, nome_pai || null, nome_mae || null,
         cep || null, logradouro || null, numero || null,
         complemento || null, bairro || null, cidade || null, estado || null,
         observacoes || null, req.usuario.id
@@ -263,7 +263,7 @@ async function atualizarFisica(req, res) {
     const {
       nome, cpf, rg, rg_orgao, pis, ctps_numero, ctps_serie,
       data_nascimento, estado_civil_id, profissao_id,
-      genero_id, nome_pai, nome_mae,
+      genero_id, nacionalidade_id, nome_pai, nome_mae,
       cep, logradouro, numero, complemento, bairro, cidade, estado, observacoes
     } = req.body;
 
@@ -275,7 +275,7 @@ async function atualizarFisica(req, res) {
       `UPDATE pessoas_fisicas SET
          nome=?, cpf=?, rg=?, rg_orgao=?, pis=?, ctps_numero=?, ctps_serie=?,
          data_nascimento=?, estado_civil_id=?, profissao_id=?,
-         genero_id=?, nome_pai=?, nome_mae=?,
+         genero_id=?, nacionalidade_id=?, nome_pai=?, nome_mae=?,
          cep=?, logradouro=?, numero=?, complemento=?, bairro=?,
          cidade=?, estado=?, observacoes=?,
          alterado_por=?, alterado_em=NOW()
@@ -286,7 +286,7 @@ async function atualizarFisica(req, res) {
         // Garante formato YYYY-MM-DD — frontend pode enviar ISO com horário (ex: 1972-03-27T03:00:00.000Z)
         data_nascimento ? data_nascimento.toString().slice(0, 10) : null,
         estado_civil_id || null, profissao_id || null,
-        genero_id || null, nome_pai || null, nome_mae || null,
+        genero_id || null, nacionalidade_id || null, nome_pai || null, nome_mae || null,
         cep || null, logradouro || null, numero || null,
         complemento || null, bairro || null, cidade || null, estado || null,
         observacoes || null,
@@ -534,13 +534,14 @@ async function criarAuxiliar(req, res) {
 
     // Whitelist de tabelas — evita SQL injection via parâmetro de rota
     const tabelas = {
-      generos:       'genero',
-      estados_civis: 'estado_civil',
-      profissoes:    'profissao',
+      generos:        'genero',
+      estados_civis:  'estado_civil',
+      profissoes:     'profissao',
+      nacionalidades: 'nacionalidade',
     };
 
     const tabela = tabelas[tipo];
-    if (!tabela) return erro(res, 'Tipo inválido. Use: generos, estados_civis ou profissoes');
+    if (!tabela) return erro(res, 'Tipo inválido. Use: generos, estados_civis, profissoes ou nacionalidades');
 
     // Normaliza: primeira letra maiúscula, demais minúsculas
     const nomeTrimmed = nome.trim();
@@ -585,11 +586,12 @@ async function buscarPorCPF(req, res) {
 // GET /api/pessoas/auxiliares — Retorna listas para preencher selects
 async function buscarAuxiliares(req, res) {
   try {
-    const [estados_civis] = await pool.execute('SELECT * FROM estado_civil ORDER BY nome');
-    const [generos]       = await pool.execute('SELECT * FROM genero ORDER BY nome');
-    const [profissoes]    = await pool.execute('SELECT * FROM profissao ORDER BY nome');
+    const [estados_civis]  = await pool.execute('SELECT * FROM estado_civil ORDER BY nome');
+    const [generos]        = await pool.execute('SELECT * FROM genero ORDER BY nome');
+    const [profissoes]     = await pool.execute('SELECT * FROM profissao ORDER BY nome');
+    const [nacionalidades] = await pool.execute('SELECT * FROM nacionalidade ORDER BY nome');
 
-    return sucesso(res, { estados_civis, generos, profissoes });
+    return sucesso(res, { estados_civis, generos, profissoes, nacionalidades });
   } catch (err) {
     return erroInterno(res, err);
   }
@@ -616,7 +618,8 @@ const CAMPOS_PF = {
   data_nascimento: { header: 'Data de nascimento', width: 16, sql: 'pf.data_nascimento', data: true },
   estado_civil:    { header: 'Estado civil',       width: 16, sql: 'ec.nome', join: 'LEFT JOIN estado_civil ec ON pf.estado_civil_id = ec.id' },
   profissao:       { header: 'Profissão',          width: 22, sql: 'pr.nome', join: 'LEFT JOIN profissao pr ON pf.profissao_id = pr.id' },
-  genero:          { header: 'Gênero',             width: 12, sql: 'g.nome',  join: 'LEFT JOIN genero g ON pf.genero_id = g.id' },
+  genero:          { header: 'Gênero',             width: 12, sql: 'g.nome',   join: 'LEFT JOIN genero g ON pf.genero_id = g.id' },
+  nacionalidade:   { header: 'Nacionalidade',      width: 16, sql: 'nac.nome', join: 'LEFT JOIN nacionalidade nac ON pf.nacionalidade_id = nac.id' },
   cep:             { header: 'CEP',                width: 10, sql: 'pf.cep' },
   logradouro:      { header: 'Logradouro',         width: 30, sql: 'pf.logradouro' },
   numero:          { header: 'Número',             width: 8,  sql: 'pf.numero' },

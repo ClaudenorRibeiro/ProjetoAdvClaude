@@ -2,7 +2,7 @@
 -- Servidor:                     127.0.0.1
 -- Versão do servidor:           8.0.46 - MySQL Community Server - GPL
 -- OS do Servidor:               Win64
--- HeidiSQL Versão:              12.7.0.6850
+-- HeidiSQL Versão:              12.5.0.6677
 -- --------------------------------------------------------
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
@@ -659,6 +659,16 @@ CREATE TABLE IF NOT EXISTS `modelo_documento` (
 
 -- Exportação de dados foi desmarcado.
 
+-- Copiando estrutura para tabela sistema_advocacia.nacionalidade
+DROP TABLE IF EXISTS `nacionalidade`;
+CREATE TABLE IF NOT EXISTS `nacionalidade` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `nome` varchar(50) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Exportação de dados foi desmarcado.
+
 -- Copiando estrutura para tabela sistema_advocacia.notificacoes
 DROP TABLE IF EXISTS `notificacoes`;
 CREATE TABLE IF NOT EXISTS `notificacoes` (
@@ -759,6 +769,7 @@ CREATE TABLE IF NOT EXISTS `pessoas_fisicas` (
   `estado_civil_id` int DEFAULT NULL,
   `profissao_id` int DEFAULT NULL,
   `genero_id` int DEFAULT NULL,
+  `nacionalidade_id` int DEFAULT NULL,
   `cep` varchar(9) DEFAULT NULL,
   `logradouro` varchar(200) DEFAULT NULL,
   `numero` varchar(10) DEFAULT NULL,
@@ -780,11 +791,13 @@ CREATE TABLE IF NOT EXISTS `pessoas_fisicas` (
   KEY `genero_id` (`genero_id`),
   KEY `fk_pf_criado_por` (`criado_por`),
   KEY `fk_pf_alterado_por` (`alterado_por`),
+  KEY `nacionalidade_id` (`nacionalidade_id`),
   CONSTRAINT `fk_pf_alterado_por` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `fk_pf_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `pessoas_fisicas_ibfk_1` FOREIGN KEY (`estado_civil_id`) REFERENCES `estado_civil` (`id`),
   CONSTRAINT `pessoas_fisicas_ibfk_2` FOREIGN KEY (`profissao_id`) REFERENCES `profissao` (`id`),
-  CONSTRAINT `pessoas_fisicas_ibfk_3` FOREIGN KEY (`genero_id`) REFERENCES `genero` (`id`)
+  CONSTRAINT `pessoas_fisicas_ibfk_3` FOREIGN KEY (`genero_id`) REFERENCES `genero` (`id`),
+  CONSTRAINT `pessoas_fisicas_ibfk_4` FOREIGN KEY (`nacionalidade_id`) REFERENCES `nacionalidade` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=4939 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
@@ -952,7 +965,7 @@ CREATE TABLE IF NOT EXISTS `publicacoes` (
   CONSTRAINT `fk_pub_direcionada` FOREIGN KEY (`direcionada_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_pub_importada` FOREIGN KEY (`importada_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_pub_tratada` FOREIGN KEY (`tratada_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=208 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=226 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 

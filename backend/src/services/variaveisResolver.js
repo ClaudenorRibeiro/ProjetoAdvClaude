@@ -93,11 +93,12 @@ async function buscarPartes(processoId, tabela) {
   for (const v of vinculos) {
     if (v.tipo_pessoa === 'fisica') {
       const [pf] = await pool.execute(
-        `SELECT pf.*, ec.nome AS estado_civil_nome, prof.nome AS profissao_nome, g.nome AS genero_nome
+        `SELECT pf.*, ec.nome AS estado_civil_nome, prof.nome AS profissao_nome, g.nome AS genero_nome, nac.nome AS nacionalidade_nome
          FROM pessoas_fisicas pf
          LEFT JOIN estado_civil ec ON pf.estado_civil_id = ec.id
          LEFT JOIN profissao  prof ON pf.profissao_id   = prof.id
          LEFT JOIN genero     g    ON pf.genero_id      = g.id
+         LEFT JOIN nacionalidade nac ON pf.nacionalidade_id = nac.id
          WHERE pf.id = ?`, [v.pessoa_id]
       );
       if (pf.length) partes.push({ tipo: 'fisica', d: pf[0], nome: pf[0].nome, documento: pf[0].cpf || '' });
@@ -135,7 +136,7 @@ function blocoClienteDeParte(parte) {
       estado_civil: d.estado_civil_nome || '',
       profissao: d.profissao_nome || '',
       genero: d.genero_nome || '',
-      nacionalidade_cliente: '', // coluna 'nacionalidade' entra na Fase 4
+      nacionalidade_cliente: d.nacionalidade_nome || '',
     };
   }
   return {
@@ -332,11 +333,12 @@ async function resolverPessoa(tipo, pessoaId, usuario) {
   let parte = null;
   if (tipo === 'fisica') {
     const [pf] = await pool.execute(
-      `SELECT pf.*, ec.nome AS estado_civil_nome, prof.nome AS profissao_nome, g.nome AS genero_nome
+      `SELECT pf.*, ec.nome AS estado_civil_nome, prof.nome AS profissao_nome, g.nome AS genero_nome, nac.nome AS nacionalidade_nome
        FROM pessoas_fisicas pf
        LEFT JOIN estado_civil ec ON pf.estado_civil_id = ec.id
        LEFT JOIN profissao  prof ON pf.profissao_id    = prof.id
        LEFT JOIN genero     g    ON pf.genero_id       = g.id
+       LEFT JOIN nacionalidade nac ON pf.nacionalidade_id = nac.id
        WHERE pf.id = ?`, [pessoaId]
     );
     if (pf.length) parte = { tipo: 'fisica', d: pf[0], nome: pf[0].nome };
@@ -437,11 +439,12 @@ async function carregarParte(tipo, pessoaId) {
   let base;
   if (tipo === 'fisica') {
     const [pf] = await pool.execute(
-      `SELECT pf.*, ec.nome AS estado_civil_nome, prof.nome AS profissao_nome, g.nome AS genero_nome
+      `SELECT pf.*, ec.nome AS estado_civil_nome, prof.nome AS profissao_nome, g.nome AS genero_nome, nac.nome AS nacionalidade_nome
        FROM pessoas_fisicas pf
        LEFT JOIN estado_civil ec ON pf.estado_civil_id = ec.id
        LEFT JOIN profissao  prof ON pf.profissao_id    = prof.id
        LEFT JOIN genero     g    ON pf.genero_id       = g.id
+       LEFT JOIN nacionalidade nac ON pf.nacionalidade_id = nac.id
        WHERE pf.id = ?`, [pessoaId]
     );
     if (!pf.length) return null;
@@ -453,7 +456,7 @@ async function carregarParte(tipo, pessoaId) {
       cpf: d.cpf || '', cnpj: '',
       rg: d.rg || '', rg_orgao: d.rg_orgao || '', pis: d.pis || '',
       ctps: [d.ctps_numero, d.ctps_serie].filter(Boolean).join(' / '),
-      nacionalidade: d.nacionalidade || '',
+      nacionalidade: d.nacionalidade_nome || '',
       estado_civil: d.estado_civil_nome || '',
       profissao: d.profissao_nome || '',
       genero: d.genero_nome || '',
