@@ -963,8 +963,9 @@ function TabPermissoes() {
 
       {usuarioId && (
         <>
-          <div className="tabela-wrapper">
-            <table className="tabela">
+          {/* Cabeçalho fixo ao rolar: altura máxima + rolagem própria no wrapper e classe .tabela-sticky na tabela (mesmo padrão de Fóruns/Varas) */}
+          <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+            <table className="tabela tabela-sticky">
               <thead>
                 <tr>
                   <th>Módulo</th>
