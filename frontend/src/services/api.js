@@ -76,6 +76,7 @@ export const pessoasAPI = {
   // Físicas
   listarFisicas:   (params) => api.get('/pessoas/fisicas', { params }),
   buscarFisica:    (id) => api.get(`/pessoas/fisicas/${id}`),
+  buscarJuridica:  (id) => api.get(`/pessoas/juridicas/${id}`),
   criarFisica:     (dados) => api.post('/pessoas/fisicas', dados),
   atualizarFisica: (id, dados) => api.put(`/pessoas/fisicas/${id}`, dados),
   excluirFisica:   (id) => api.delete(`/pessoas/fisicas/${id}`),
@@ -90,7 +91,12 @@ export const pessoasAPI = {
   // Jurídicas
   listarJuridicas:  (params) => api.get('/pessoas/juridicas', { params }),
   criarJuridica:    (dados) => api.post('/pessoas/juridicas', dados),
+  atualizarJuridica:(id, dados) => api.put(`/pessoas/juridicas/${id}`, dados),
   excluirJuridica:  (id) => api.delete(`/pessoas/juridicas/${id}`),
+  // Une cadastros duplicados de empresa: { principal_id, duplicados_ids: [...] }
+  unificarJuridicas:(dados) => api.post('/pessoas/juridicas/unificar', dados),
+  // Lista os processos de uma pessoa (tipo = 'fisicas' | 'juridicas') — ao clicar na "Qtde Proc"
+  processosDaPessoa:(tipo, id) => api.get(`/pessoas/${tipo}/${id}/processos`),
   // Auxiliares (estados civis, gêneros, profissões)
   auxiliares: () => api.get('/pessoas/auxiliares'),
 };

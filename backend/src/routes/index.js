@@ -82,8 +82,15 @@ router.delete('/pessoas/fisicas/:id',     autenticar, verificarPermissao('pessoa
 router.post('/pessoas/fisicas/:id/historico', autenticar, pessoasCtrl.adicionarHistorico);
 router.get('/pessoas/juridicas',          autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.listarJuridicas);
 router.get('/pessoas/juridicas/exportar', autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.exportarJuridicas);
+// Busca 1 empresa com telefones/e-mails (edição) — DEPOIS de /exportar para não capturar a palavra como id
+router.get('/pessoas/juridicas/:id',      autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.buscarJuridica);
 router.post('/pessoas/juridicas',         autenticar, verificarPermissao('pessoas','cadastrar'),  pessoasCtrl.criarJuridica);
+// Unifica cadastros duplicados de empresa (rota estática ANTES de /:id) — SOMENTE admin e superadmin
+router.post('/pessoas/juridicas/unificar',autenticar, apenasAdmin,                                 pessoasCtrl.unificarJuridicas);
+router.put('/pessoas/juridicas/:id',      autenticar, verificarPermissao('pessoas','alterar'),    pessoasCtrl.atualizarJuridica);
 router.delete('/pessoas/juridicas/:id',   autenticar, verificarPermissao('pessoas','excluir'),    pessoasCtrl.excluirJuridica);
+// Lista os processos de uma pessoa (:tipo = 'fisicas' | 'juridicas') — ao clicar na "Qtde Proc"
+router.get('/pessoas/:tipo/:id/processos', autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.processosDaPessoa);
 
 // ---- PROCESSOS E PASTAS ----
 // ATENÇÃO: rotas estáticas (sugerir-pasta, auxiliares, pastas) ANTES de /:id

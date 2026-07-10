@@ -8,6 +8,8 @@ import { formatarCPF, formatarCNPJ, formatarData, mascaraCPF, validarCPF, mascar
 import { toast } from 'react-toastify';
 import GerarDocumentoBotao from '../../components/GerarDocumento';
 import GerarDocumentoPartesBotao from '../../components/GerarDocumentoPartes';
+import { useAuth } from '../../context/AuthContext';
+import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
 
 // Campos disponíveis para exportar em Excel (mesmas chaves do backend; sem campos de auditoria)
 const CAMPOS_EXPORT_FISICA = [
@@ -33,6 +35,7 @@ const CAMPOS_EXPORT_JURIDICA = [
 ];
 
 export default function Pessoas() {
+  const { ehAdmin } = useAuth(); // admin e superadmin (nível <= 1) — controla o botão de unificar
   const [aba, setAba]             = useState('fisicas'); // 'fisicas' | 'juridicas'
   const [lista, setLista]         = useState([]);
   const [total, setTotal]         = useState(0);
@@ -46,8 +49,26 @@ export default function Pessoas() {
   const [modalExport, setModalExport] = useState(false);   // modal de seleção de campos p/ exportar
   const [camposExport, setCamposExport] = useState({});    // { chave: true/false }
   const [exportando, setExportando] = useState(false);
+  // Unificação de empresas duplicadas (só na aba Jurídicas)
+  const [modoUnificar, setModoUnificar]   = useState(false);
+  const [selUnificar, setSelUnificar]     = useState([]);   // objetos PJ marcados
+  const [modalUnificar, setModalUnificar] = useState(false);
 
   const LIMITE = 20;
+
+  // Janela com a lista de processos de uma pessoa (ao clicar na "Qtde Proc")
+  const [verProcessosDe, setVerProcessosDe] = useState(null); // { pessoa, tipo }
+  function abrirProcessos(pessoa) { setVerProcessosDe({ pessoa, tipo: aba }); }
+
+  // Sai do modo de unificação e limpa a seleção
+  function sairModoUnificar() { setModoUnificar(false); setSelUnificar([]); }
+
+  // Marca/desmarca um cadastro na seleção de unificação
+  function toggleSelUnificar(p) {
+    setSelUnificar(prev => prev.some(x => x.id === p.id)
+      ? prev.filter(x => x.id !== p.id)
+      : [...prev, p]);
+  }
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -150,10 +171,10 @@ export default function Pessoas() {
     <div>
       {/* Abas */}
       <div className="abas" style={{display:'flex',gap:'8px',marginBottom:'16px'}}>
-        <button className={`btn ${aba==='fisicas'?'btn-primary':'btn-outline'}`} onClick={() => { setAba('fisicas'); setPagina(1); }}>
+        <button className={`btn ${aba==='fisicas'?'btn-primary':'btn-outline'}`} onClick={() => { setAba('fisicas'); setPagina(1); sairModoUnificar(); }}>
           Pessoas Físicas
         </button>
-        <button className={`btn ${aba==='juridicas'?'btn-primary':'btn-outline'}`} onClick={() => { setAba('juridicas'); setPagina(1); }}>
+        <button className={`btn ${aba==='juridicas'?'btn-primary':'btn-outline'}`} onClick={() => { setAba('juridicas'); setPagina(1); sairModoUnificar(); }}>
           Pessoas Jurídicas
         </button>
       </div>
@@ -178,6 +199,22 @@ export default function Pessoas() {
           <GerarDocumentoPartesBotao />
           {/* Exporta a busca atual (ou tudo) para Excel — abre modal para escolher os campos */}
           <button className="btn btn-outline" onClick={abrirExport}>Exportar Excel</button>
+          {/* Unificar empresas duplicadas — só na aba Jurídicas e só para admin/superadmin */}
+          {aba === 'juridicas' && ehAdmin && !modoUnificar && (
+            <button className="btn btn-outline" onClick={() => setModoUnificar(true)}>
+              Unificar duplicadas
+            </button>
+          )}
+          {aba === 'juridicas' && modoUnificar && (
+            <>
+              <span style={{fontSize:'13px',color:'#555'}}>{selUnificar.length} selecionado(s)</span>
+              <button className="btn btn-primary" disabled={selUnificar.length < 2}
+                onClick={() => setModalUnificar(true)}>
+                Continuar →
+              </button>
+              <button className="btn btn-outline" onClick={sairModoUnificar}>Cancelar</button>
+            </>
+          )}
           <span style={{marginLeft:'auto',color:'#888',fontSize:'13px'}}>{total} registro(s)</span>
         </div>
 
@@ -185,9 +222,12 @@ export default function Pessoas() {
         {carregando ? <div className="loading">Carregando...</div> : (
           <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
             {aba === 'fisicas' ? (
-              <TabelaFisicas lista={lista} onEditar={abrirEdicao} onExcluir={pedirConfirmacaoExclusao} />
+              <TabelaFisicas lista={lista} onEditar={abrirEdicao} onExcluir={pedirConfirmacaoExclusao}
+                onVerProcessos={abrirProcessos} />
             ) : (
-              <TabelaJuridicas lista={lista} onEditar={abrirEdicao} onExcluir={pedirConfirmacaoExclusao} />
+              <TabelaJuridicas lista={lista} onEditar={abrirEdicao} onExcluir={pedirConfirmacaoExclusao}
+                onVerProcessos={abrirProcessos}
+                modoUnificar={modoUnificar} selecionados={selUnificar} onToggleSel={toggleSelUnificar} />
             )}
             {lista.length === 0 && <p className="lista-vazia">Nenhum registro encontrado</p>}
           </div>
@@ -210,6 +250,26 @@ export default function Pessoas() {
           pessoa={pessoaSelecionada}
           onFechar={fecharModal}
           onAbrirEdicao={(p) => fecharModal(false, p)}
+        />
+      )}
+
+      {/* Janela com a lista de processos da pessoa (clicou na Qtde Proc) */}
+      {verProcessosDe && (
+        <ModalProcessosDaPessoa
+          pessoa={verProcessosDe.pessoa}
+          tipo={verProcessosDe.tipo}
+          onFechar={() => setVerProcessosDe(null)}
+        />
+      )}
+
+      {/* Modal de unificação de empresas duplicadas */}
+      {modalUnificar && (
+        <ModalUnificarEmpresas
+          selecionados={selUnificar}
+          onFechar={(reload) => {
+            setModalUnificar(false);
+            if (reload) { sairModoUnificar(); carregar(); }
+          }}
         />
       )}
 
@@ -277,7 +337,104 @@ export default function Pessoas() {
 }
 
 // Tabela de pessoas físicas
-function TabelaFisicas({ lista, onEditar, onExcluir }) {
+// ============================================================
+// MODAL — Processos de uma pessoa (abre ao clicar na "Qtde Proc")
+// Lista os processos (autor + réu, sem repetir) com o número copiável.
+// ============================================================
+function ModalProcessosDaPessoa({ pessoa, tipo, onFechar }) {
+  const [lista, setLista]         = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const nomePessoa = pessoa.nome || pessoa.razao_social || 'Pessoa';
+
+  useEffect(() => {
+    let ativo = true;
+    pessoasAPI.processosDaPessoa(tipo, pessoa.id)
+      .then(r => { if (ativo && r.data.ok) setLista(r.data.dados); })
+      .catch(() => toast.error('Erro ao carregar os processos'))
+      .finally(() => { if (ativo) setCarregando(false); });
+    return () => { ativo = false; };
+  }, [tipo, pessoa.id]);
+
+  // Fecha com Escape
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onFechar(); }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onFechar]);
+
+  // Monta o rótulo "vara / fórum" preferindo a abreviação, tratando vazios
+  function varaForum(p) {
+    const vara  = p.vara_abrev_nome  || p.vara_nome  || '';
+    const forum = p.forum_abrev_nome || p.forum_nome || '';
+    const txt = [vara, forum].filter(Boolean).join(' / ');
+    return txt || '—';
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box modal-grande">
+        <div className="modal-header">
+          <h3>Processos — {nomePessoa}</h3>
+          <button className="modal-fechar" onClick={onFechar}>✕</button>
+        </div>
+        <div className="modal-body">
+          {carregando ? (
+            <p style={{color:'#888',textAlign:'center',padding:'20px'}}>Carregando...</p>
+          ) : lista.length === 0 ? (
+            <p className="lista-vazia">Nenhum processo encontrado</p>
+          ) : (
+            <>
+              <p style={{fontSize:'13px',color:'#666',margin:'0 0 10px'}}>
+                {lista.length} processo(s). Clique no número para copiar.
+              </p>
+              <div className="tabela-wrapper" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+                <table className="tabela tabela-sticky">
+                  <thead>
+                    <tr>
+                      <th>Nº do Processo</th><th>Pasta</th><th>Título</th>
+                      <th>Status</th><th>Tipo</th><th>Vara / Fórum</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lista.map(p => (
+                      <tr key={p.id}>
+                        <td><NumeroProcessoCopiavel numero={p.numProc} /></td>
+                        <td>{p.pasta_numero_fmt || '—'}</td>
+                        <td>{p.titulo || '—'}</td>
+                        <td>{p.status_nome ? <span className="badge badge-cinza">{p.status_nome}</span> : '—'}</td>
+                        <td>{p.tipo_nome ? <span className="badge badge-azul">{p.tipo_nome}</span> : '—'}</td>
+                        <td style={{fontSize:'12px'}}>{varaForum(p)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onFechar}>Fechar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Célula clicável da coluna "Qtde Proc": abre a lista de processos (só quando > 0)
+function CelulaQtdeProc({ qtde, onClick }) {
+  const n = qtde ?? 0;
+  if (n === 0) return <td style={{textAlign:'center'}}>0</td>;
+  return (
+    <td style={{textAlign:'center'}}>
+      <span onClick={onClick} title="Ver os processos"
+        style={{color:'#2563eb', fontWeight:600, cursor:'pointer', textDecoration:'underline'}}>
+        {n}
+      </span>
+    </td>
+  );
+}
+
+function TabelaFisicas({ lista, onEditar, onExcluir, onVerProcessos }) {
   return (
     <table className="tabela tabela-sticky">
       <thead>
@@ -290,7 +447,7 @@ function TabelaFisicas({ lista, onEditar, onExcluir }) {
             <td>{formatarCPF(p.cpf)}</td>
             <td>{p.telefone || '—'}</td>
             <td>{p.email || '—'}</td>
-            <td style={{textAlign:'center'}}>{p.qtde_proc ?? 0}</td>
+            <CelulaQtdeProc qtde={p.qtde_proc} onClick={() => onVerProcessos(p)} />
             <td style={{display:'flex',gap:'6px'}}>
               <button className="btn btn-outline" style={{fontSize:'12px',padding:'4px 10px'}} onClick={() => onEditar(p)}>
                 Editar
@@ -316,20 +473,30 @@ function TabelaFisicas({ lista, onEditar, onExcluir }) {
 }
 
 // Tabela de pessoas jurídicas
-function TabelaJuridicas({ lista, onEditar, onExcluir }) {
+function TabelaJuridicas({ lista, onEditar, onExcluir, onVerProcessos, modoUnificar, selecionados = [], onToggleSel }) {
+  const estaSel = (id) => selecionados.some(x => x.id === id);
   return (
     <table className="tabela tabela-sticky">
       <thead>
-        <tr><th>Razão Social</th><th>Nome Fantasia</th><th>CNPJ</th><th>Telefone</th><th style={{textAlign:'center'}}>Qtde Proc</th><th>Ações</th></tr>
+        <tr>
+          {modoUnificar && <th style={{width:'34px'}}></th>}
+          <th>Razão Social</th><th>Nome Fantasia</th><th>CNPJ</th><th>Telefone</th><th style={{textAlign:'center'}}>Qtde Proc</th><th>Ações</th>
+        </tr>
       </thead>
       <tbody>
         {lista.map(p => (
-          <tr key={p.id}>
+          <tr key={p.id} style={modoUnificar && estaSel(p.id) ? {background:'#eef4ff'} : undefined}>
+            {/* Modo unificar: caixa para marcar cadastros duplicados da mesma empresa */}
+            {modoUnificar && (
+              <td style={{textAlign:'center'}}>
+                <input type="checkbox" checked={estaSel(p.id)} onChange={() => onToggleSel(p)} />
+              </td>
+            )}
             <td><strong>{p.razao_social}</strong></td>
             <td>{p.nome_fantasia || '—'}</td>
             <td>{formatarCNPJ(p.cnpj)}</td>
             <td>{p.telefone || '—'}</td>
-            <td style={{textAlign:'center'}}>{p.qtde_proc ?? 0}</td>
+            <CelulaQtdeProc qtde={p.qtde_proc} onClick={() => onVerProcessos(p)} />
             <td style={{display:'flex',gap:'6px'}}>
               <button className="btn btn-outline" style={{fontSize:'12px',padding:'4px 10px'}} onClick={() => onEditar(p)}>
                 Editar
@@ -354,6 +521,89 @@ function TabelaJuridicas({ lista, onEditar, onExcluir }) {
   );
 }
 
+// ============================================================
+// MODAL — Unificar empresas duplicadas
+// Move TODOS os vínculos dos cadastros duplicados para o PRINCIPAL
+// escolhido e apaga os duplicados. Ação irreversível (confirma antes).
+// ============================================================
+function ModalUnificarEmpresas({ selecionados, onFechar }) {
+  // Sugere como principal o cadastro com MAIS processos
+  const sugerido = [...selecionados].sort((a, b) => (b.qtde_proc ?? 0) - (a.qtde_proc ?? 0))[0];
+  const [principalId, setPrincipalId] = useState(sugerido?.id);
+  const [salvando, setSalvando]       = useState(false);
+
+  const duplicados = selecionados.filter(p => p.id !== principalId);
+
+  async function confirmar() {
+    if (!principalId)            return toast.error('Escolha o cadastro principal');
+    if (duplicados.length === 0) return toast.error('Selecione ao menos um duplicado além do principal');
+    setSalvando(true);
+    try {
+      await pessoasAPI.unificarJuridicas({
+        principal_id:   principalId,
+        duplicados_ids: duplicados.map(p => p.id),
+      });
+      toast.success('Empresas unificadas com sucesso!');
+      onFechar(true);
+    } catch (err) {
+      toast.error(err.response?.data?.mensagem || 'Erro ao unificar');
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box" style={{maxWidth:'560px'}}>
+        <div className="modal-header">
+          <h3>Unificar empresas duplicadas</h3>
+          <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
+        </div>
+        <div className="modal-body">
+          <p style={{fontSize:'13px',color:'#555',marginBottom:'12px'}}>
+            Escolha o cadastro <strong>principal</strong> (o que vai ficar). Todos os processos e
+            vínculos dos outros serão movidos para ele, e os demais serão <strong>excluídos do banco</strong>.
+          </p>
+          <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
+            {selecionados.map(p => {
+              const ehPrincipal = p.id === principalId;
+              return (
+                <label key={p.id} style={{
+                  display:'flex',alignItems:'center',gap:'10px',padding:'10px 12px',
+                  border:'1px solid ' + (ehPrincipal ? '#2563eb' : '#e2e8f0'),
+                  background: ehPrincipal ? '#eef4ff' : '#fff',
+                  borderRadius:'6px',cursor:'pointer'
+                }}>
+                  <input type="radio" name="principal" checked={ehPrincipal}
+                    onChange={() => setPrincipalId(p.id)} />
+                  <span style={{flex:1}}>
+                    <strong>{p.razao_social}</strong>
+                    <span style={{color:'#888',fontSize:'12px',marginLeft:'6px'}}>
+                      ({p.qtde_proc ?? 0} processo(s))
+                    </span>
+                  </span>
+                  <span style={{fontSize:'12px',fontWeight:600,
+                    color: ehPrincipal ? '#2563eb' : '#b91c1c'}}>
+                    {ehPrincipal ? 'PRINCIPAL (fica)' : 'será excluída'}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+          <p style={{fontSize:'12px',color:'#b91c1c',marginTop:'14px'}}>
+            ⚠️ Esta ação não pode ser desfeita. {duplicados.length} cadastro(s) será(ão) apagado(s) do banco.
+          </p>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-outline" onClick={() => onFechar(false)} disabled={salvando}>Cancelar</button>
+          <button className="btn btn-primary" onClick={confirmar} disabled={salvando}>
+            {salvando ? 'Unificando...' : 'Unificar agora'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Modal de cadastro / edição de pessoa
 function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
   const [form, setForm]         = useState(pessoa || {});
@@ -366,14 +616,16 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
 
   useEffect(() => {
     pessoasAPI.auxiliares().then(r => setAux(r.data.dados));
-    // Se editando, busca dados completos
-    if (pessoa?.id && tipo === 'fisicas') {
-      pessoasAPI.buscarFisica(pessoa.id).then(r => {
+    // Se editando, busca dados completos (inclui telefones/e-mails) — física OU jurídica
+    if (pessoa?.id) {
+      const buscar = tipo === 'fisicas' ? pessoasAPI.buscarFisica : pessoasAPI.buscarJuridica;
+      buscar(pessoa.id).then(r => {
         if (r.data.ok) {
           setForm(r.data.dados);
           const tels = r.data.dados.telefones || [];
           setTelefones(tels.length ? tels : [{ numero: '', tipo: '', principal: true }]);
-          setEmails(r.data.dados.emails || [{ email: '', principal: true }]);
+          const mails = r.data.dados.emails || [];
+          setEmails(mails.length ? mails : [{ email: '', principal: true }]);
         }
       });
     }
@@ -458,7 +710,9 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
     try {
       const payload = { ...form, telefones, emails };
       if (pessoa?.id) {
-        await pessoasAPI.atualizarFisica(pessoa.id, payload);
+        // Edição: usa a atualização correta conforme o tipo (antes chamava sempre a de física — bug)
+        const fnAtualizar = tipo === 'fisicas' ? pessoasAPI.atualizarFisica : pessoasAPI.atualizarJuridica;
+        await fnAtualizar(pessoa.id, payload);
         toast.success('Pessoa atualizada com sucesso!');
       } else {
         const fn = tipo === 'fisicas' ? pessoasAPI.criarFisica : pessoasAPI.criarJuridica;

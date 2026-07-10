@@ -37,6 +37,17 @@ function naoEncontrado(res, mensagem = 'Registro não encontrado') {
 // Resposta de erro interno — 500 (erro no servidor)
 function erroInterno(res, err) {
   console.error('Erro interno:', err);
+  // Exclusão barrada por vínculo (chave estrangeira): o registro possui "filhos" em outra
+  // tabela e o banco recusa apagá-lo. Mostra mensagem amigável e correta em vez do genérico
+  // "tente novamente" (que aqui seria enganoso — não adianta repetir).
+  // ATENÇÃO: só os códigos de "parent row is referenced" (apagar/atualizar o PAI é barrado).
+  // NÃO inclui o oposto (ER_NO_REFERENCED_ROW_*, que é inserir apontando para algo inexistente).
+  if (err && (err.code === 'ER_ROW_IS_REFERENCED_2' || err.code === 'ER_ROW_IS_REFERENCED')) {
+    return res.status(409).json({
+      ok: false,
+      mensagem: 'Não é possível excluir este item porque ele está vinculado a outros registros no sistema. Remova ou desvincule esses registros antes de excluir.',
+    });
+  }
   return res.status(500).json({
     ok: false,
     mensagem: 'Erro interno no servidor. Tente novamente.',

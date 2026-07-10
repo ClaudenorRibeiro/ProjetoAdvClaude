@@ -258,20 +258,25 @@ async function criarFisica(req, res) {
 
 // PUT /api/pessoas/fisicas/:id — Atualiza pessoa física
 async function atualizarFisica(req, res) {
+  const { id } = req.params;
+  const {
+    nome, cpf, rg, rg_orgao, pis, ctps_numero, ctps_serie,
+    data_nascimento, estado_civil_id, profissao_id,
+    genero_id, nacionalidade_id, nome_pai, nome_mae,
+    cep, logradouro, numero, complemento, bairro, cidade, estado, observacoes,
+    telefones = [], emails = []
+  } = req.body;
+
+  // Transação: dados principais + telefones + e-mails + auditoria gravam juntos ou nada
+  const conn = await pool.getConnection();
   try {
-    const { id } = req.params;
-    const {
-      nome, cpf, rg, rg_orgao, pis, ctps_numero, ctps_serie,
-      data_nascimento, estado_civil_id, profissao_id,
-      genero_id, nacionalidade_id, nome_pai, nome_mae,
-      cep, logradouro, numero, complemento, bairro, cidade, estado, observacoes
-    } = req.body;
+    await conn.beginTransaction();
 
     // Busca dados atuais para auditoria
-    const [antes] = await pool.execute('SELECT * FROM pessoas_fisicas WHERE id = ?', [id]);
-    if (!antes.length) return naoEncontrado(res, 'Pessoa não encontrada');
+    const [antes] = await conn.execute('SELECT * FROM pessoas_fisicas WHERE id = ?', [id]);
+    if (!antes.length) { await conn.rollback(); return naoEncontrado(res, 'Pessoa não encontrada'); }
 
-    await pool.execute(
+    await conn.execute(
       `UPDATE pessoas_fisicas SET
          nome=?, cpf=?, rg=?, rg_orgao=?, pis=?, ctps_numero=?, ctps_serie=?,
          data_nascimento=?, estado_civil_id=?, profissao_id=?,
@@ -295,12 +300,37 @@ async function atualizarFisica(req, res) {
       ]
     );
 
-    await auditoria.registrar(req.usuario.id, 'pessoas_fisicas', 'editar', id, antes[0]);
+    // Telefones e e-mails: a tela de edição carrega a lista COMPLETA (via buscarFisica),
+    // então regrava exatamente o que está no formulário — o que o usuário vê é o que fica salvo.
+    await conn.execute('DELETE FROM telefones_pf WHERE pessoa_id = ?', [id]);
+    for (const tel of telefones) {
+      if (tel.numero) {
+        await conn.execute(
+          'INSERT INTO telefones_pf (pessoa_id, numero, tipo, principal) VALUES (?, ?, ?, ?)',
+          [id, tel.numero, tel.tipo || 'celular', tel.principal ? 1 : 0]
+        );
+      }
+    }
+    await conn.execute('DELETE FROM emails_pf WHERE pessoa_id = ?', [id]);
+    for (const em of emails) {
+      if (em.email) {
+        await conn.execute(
+          'INSERT INTO emails_pf (pessoa_id, email, principal) VALUES (?, ?, ?)',
+          [id, em.email, em.principal ? 1 : 0]
+        );
+      }
+    }
+
+    await auditoria.registrar(req.usuario.id, 'pessoas_fisicas', 'editar', id, antes[0], null, conn);
+    await conn.commit();
     return sucesso(res, null, 'Pessoa atualizada com sucesso');
   } catch (err) {
+    await conn.rollback();
     // Trava de unicidade: editar o CPF para um que já existe em outra pessoa cai aqui.
     if (err.code === 'ER_DUP_ENTRY') return erro(res, 'Este CPF já está cadastrado em outra pessoa');
     return erroInterno(res, err);
+  } finally {
+    conn.release();
   }
 }
 
@@ -317,7 +347,7 @@ async function excluirFisica(req, res) {
     if (!rows.length) return naoEncontrado(res, 'Pessoa não encontrada');
 
     // Verifica todos os vínculos em paralelo antes de permitir exclusão
-    const [[autoresTbl], [reusTbl], [historico], [comunicacoes], [testemunhas]] = await Promise.all([
+    const [[autoresTbl], [reusTbl], [historico], [comunicacoes], [testemunhas], [peritos]] = await Promise.all([
       pool.execute('SELECT COUNT(*) AS total FROM tbltituloprocautor WHERE tipo_pessoa = ? AND pessoa_id = ?',      ['fisica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM tbltituloprocreu WHERE tipo_pessoa = ? AND pessoa_id = ?',        ['fisica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM historico_atendimento WHERE tipo_pessoa = ? AND pessoa_id = ?',   ['fisica', id]),
@@ -325,6 +355,9 @@ async function excluirFisica(req, res) {
       // Testemunha é sempre pessoa física (FK em audiencia_testemunhas com ON DELETE RESTRICT). Sem esta
       // checagem, excluir uma testemunha caía no erro genérico do banco em vez de avisar o motivo ao usuário.
       pool.execute('SELECT COUNT(*) AS total FROM audiencia_testemunhas WHERE pessoa_id = ?',                       [id]),
+      // Perito do processo (processo_perito) é ligação polimórfica SEM chave estrangeira em pessoa_id.
+      // Sem esta checagem, apagar uma pessoa que é perito deixaria um registro órfão em processo_perito.
+      pool.execute('SELECT COUNT(*) AS total FROM processo_perito WHERE tipo_pessoa = ? AND pessoa_id = ?',         ['fisica', id]),
     ]);
 
     // Monta lista de vínculos encontrados para informar o usuário
@@ -334,6 +367,7 @@ async function excluirFisica(req, res) {
     if (historico[0].total > 0)    vinculos.push(`${historico[0].total} registro(s) de histórico`);
     if (comunicacoes[0].total > 0) vinculos.push(`${comunicacoes[0].total} comunicação(ões)`);
     if (testemunhas[0].total > 0)  vinculos.push(`${testemunhas[0].total} audiência(s) como testemunha`);
+    if (peritos[0].total > 0)      vinculos.push(`${peritos[0].total} perícia(s) como perito`);
 
     if (vinculos.length > 0) {
       return erro(res, `Pessoa não pode ser excluída pois possui: ${vinculos.join(', ')}`);
@@ -359,11 +393,13 @@ async function excluirJuridica(req, res) {
     if (!rows.length) return naoEncontrado(res, 'Pessoa jurídica não encontrada');
 
     // Verifica todos os vínculos em paralelo antes de permitir exclusão
-    const [[autoresTbl], [reusTbl], [historico], [comunicacoes]] = await Promise.all([
+    const [[autoresTbl], [reusTbl], [historico], [comunicacoes], [peritos]] = await Promise.all([
       pool.execute('SELECT COUNT(*) AS total FROM tbltituloprocautor WHERE tipo_pessoa = ? AND pessoa_id = ?',      ['juridica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM tbltituloprocreu WHERE tipo_pessoa = ? AND pessoa_id = ?',        ['juridica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM historico_atendimento WHERE tipo_pessoa = ? AND pessoa_id = ?',   ['juridica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM log_comunicacoes WHERE tipo_pessoa = ? AND pessoa_id = ?',        ['juridica', id]),
+      // Perito polimórfico SEM chave estrangeira — sem esta checagem, apagar a empresa deixaria órfão em processo_perito.
+      pool.execute('SELECT COUNT(*) AS total FROM processo_perito WHERE tipo_pessoa = ? AND pessoa_id = ?',         ['juridica', id]),
     ]);
 
     // Monta lista de vínculos encontrados para informar o usuário
@@ -372,6 +408,7 @@ async function excluirJuridica(req, res) {
     if (reusTbl[0].total > 0)      vinculos.push(`${reusTbl[0].total} processo(s) como réu`);
     if (historico[0].total > 0)    vinculos.push(`${historico[0].total} registro(s) de histórico`);
     if (comunicacoes[0].total > 0) vinculos.push(`${comunicacoes[0].total} comunicação(ões)`);
+    if (peritos[0].total > 0)      vinculos.push(`${peritos[0].total} perícia(s) como perito`);
 
     if (vinculos.length > 0) {
       return erro(res, `Pessoa não pode ser excluída pois possui: ${vinculos.join(', ')}`);
@@ -383,6 +420,97 @@ async function excluirJuridica(req, res) {
     return sucesso(res, null, 'Pessoa jurídica excluída com sucesso');
   } catch (err) {
     return erroInterno(res, err);
+  }
+}
+
+// POST /api/pessoas/juridicas/unificar — Une cadastros DUPLICADOS de uma empresa
+// em um único (o "principal"): move TODOS os vínculos dos duplicados para o
+// principal e depois apaga os duplicados. Tudo dentro de UMA transação.
+//
+// Vínculos de uma empresa (conferidos na estrutura do banco):
+//   - Como PARTE por (tipo_pessoa='juridica', pessoa_id): tbltituloprocautor,
+//     tbltituloprocreu, historico_atendimento, log_comunicacoes, processo_perito.
+//   - "Filhos" do cadastro (por pessoa_id): telefones_pj, emails_pj.
+async function unificarJuridicas(req, res) {
+  const principalId = parseInt(req.body.principal_id);
+  // Remove repetidos, valores inválidos e o próprio principal da lista de duplicados
+  let duplicados = Array.isArray(req.body.duplicados_ids) ? req.body.duplicados_ids.map(Number) : [];
+  duplicados = [...new Set(duplicados.filter(x => x && x !== principalId))];
+
+  if (!principalId)          return erro(res, 'Cadastro principal é obrigatório');
+  if (duplicados.length === 0) return erro(res, 'Selecione ao menos um cadastro duplicado diferente do principal');
+
+  // Confere que TODOS os cadastros (principal + duplicados) existem em pessoas_juridicas
+  const idsTodos = [principalId, ...duplicados];
+  const phTodos  = idsTodos.map(() => '?').join(',');
+  const [existentes] = await pool.execute(
+    `SELECT id FROM pessoas_juridicas WHERE id IN (${phTodos})`, idsTodos
+  );
+  if (existentes.length !== idsTodos.length) {
+    return erro(res, 'Algum cadastro selecionado não foi encontrado');
+  }
+
+  const dupPh = duplicados.map(() => '?').join(','); // placeholders para os duplicados
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // 1) PARTES do processo (autor e réu): move os duplicados para o principal e,
+    //    em seguida, remove partes repetidas que a fusão possa ter gerado no MESMO
+    //    processo (mantém o registro de menor id).
+    for (const tabela of ['tbltituloprocautor', 'tbltituloprocreu']) {
+      await conn.execute(
+        `UPDATE ${tabela} SET pessoa_id = ?
+          WHERE tipo_pessoa = 'juridica' AND pessoa_id IN (${dupPh})`,
+        [principalId, ...duplicados]
+      );
+      await conn.execute(
+        `DELETE t FROM ${tabela} t
+           JOIN ${tabela} t2
+             ON t.proc_id = t2.proc_id AND t.tipo_pessoa = t2.tipo_pessoa
+            AND t.pessoa_id = t2.pessoa_id AND t.id > t2.id
+          WHERE t.tipo_pessoa = 'juridica' AND t.pessoa_id = ?`,
+        [principalId]
+      );
+    }
+
+    // 2) Demais vínculos por (tipo+id): histórico, comunicações e perito — só mover
+    //    (são registros distintos; não há repetição a tratar).
+    for (const tabela of ['historico_atendimento', 'log_comunicacoes', 'processo_perito']) {
+      await conn.execute(
+        `UPDATE ${tabela} SET pessoa_id = ?
+          WHERE tipo_pessoa = 'juridica' AND pessoa_id IN (${dupPh})`,
+        [principalId, ...duplicados]
+      );
+    }
+
+    // 3) "Filhos" do cadastro (telefones e e-mails): move para o principal p/ não
+    //    perder contatos (esses não têm tipo_pessoa; pertencem só à empresa).
+    for (const tabela of ['telefones_pj', 'emails_pj']) {
+      await conn.execute(
+        `UPDATE ${tabela} SET pessoa_id = ? WHERE pessoa_id IN (${dupPh})`,
+        [principalId, ...duplicados]
+      );
+    }
+
+    // 4) Apaga os cadastros duplicados (agora sem nenhum vínculo)
+    await conn.execute(`DELETE FROM pessoas_juridicas WHERE id IN (${dupPh})`, duplicados);
+
+    // 5) Auditoria dentro da MESMA transação (falha aqui desfaz tudo)
+    await auditoria.registrar(
+      req.usuario.id, 'pessoas_juridicas', 'unificar', principalId, null,
+      { unificados: duplicados }, conn
+    );
+
+    await conn.commit();
+    return sucesso(res, { principal_id: principalId, unificados: duplicados.length },
+      `${duplicados.length} cadastro(s) unificado(s) no principal com sucesso`);
+  } catch (err) {
+    await conn.rollback();
+    return erroInterno(res, err);
+  } finally {
+    conn.release();
   }
 }
 
@@ -520,6 +648,96 @@ async function criarJuridica(req, res) {
     return erroInterno(res, err);
   } finally {
     conn.release();              // SEMPRE devolve a conexão ao pool
+  }
+}
+
+// GET /api/pessoas/juridicas/:id — Busca uma empresa com telefones e e-mails (para a tela de edição)
+async function buscarJuridica(req, res) {
+  try {
+    const { id } = req.params;
+    const [rows] = await pool.execute('SELECT * FROM pessoas_juridicas WHERE id = ?', [id]);
+    if (!rows.length) return naoEncontrado(res, 'Pessoa jurídica não encontrada');
+    const pessoa = rows[0];
+
+    const [telefones] = await pool.execute(
+      'SELECT * FROM telefones_pj WHERE pessoa_id = ? ORDER BY principal DESC, id ASC', [id]
+    );
+    const [emails] = await pool.execute(
+      'SELECT * FROM emails_pj WHERE pessoa_id = ? ORDER BY principal DESC, id ASC', [id]
+    );
+
+    return sucesso(res, { ...pessoa, telefones, emails });
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// PUT /api/pessoas/juridicas/:id — Atualiza uma pessoa jurídica.
+// (Esta função FALTAVA: a edição de empresa caía por engano na atualização de PF e dava erro.)
+// A tela de edição agora carrega a lista COMPLETA de telefones/e-mails (via buscarJuridica),
+// então aqui regravamos exatamente o que está no formulário. NÃO mexe em inscrição estadual
+// (não há campo na tela para ela — gravá-la apagaria o valor existente).
+async function atualizarJuridica(req, res) {
+  const { id } = req.params;
+  const {
+    razao_social, nome_fantasia, cnpj,
+    cep, logradouro, numero, complemento, bairro, cidade, estado, observacoes,
+    telefones = [], emails = []
+  } = req.body;
+
+  if (!razao_social) return erro(res, 'A razão social é obrigatória');
+
+  // Transação: dados principais + telefones + e-mails + auditoria gravam juntos ou nada
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [antes] = await conn.execute('SELECT * FROM pessoas_juridicas WHERE id = ?', [id]);
+    if (!antes.length) { await conn.rollback(); return naoEncontrado(res, 'Pessoa jurídica não encontrada'); }
+
+    await conn.execute(
+      `UPDATE pessoas_juridicas SET
+         razao_social=?, nome_fantasia=?, cnpj=?,
+         cep=?, logradouro=?, numero=?, complemento=?, bairro=?,
+         cidade=?, estado=?, observacoes=?,
+         alterado_por=?, alterado_em=NOW()
+       WHERE id = ?`,
+      [
+        razao_social.trim(), nome_fantasia || null, cnpj?.replace(/\D/g, '') || null,
+        cep || null, logradouro || null, numero || null, complemento || null, bairro || null,
+        cidade || null, estado || null, observacoes || null,
+        req.usuario.id, id
+      ]
+    );
+
+    // Regrava telefones e e-mails conforme o formulário (que carregou a lista completa)
+    await conn.execute('DELETE FROM telefones_pj WHERE pessoa_id = ?', [id]);
+    for (const tel of telefones) {
+      if (tel.numero) {
+        await conn.execute(
+          'INSERT INTO telefones_pj (pessoa_id, numero, tipo, principal) VALUES (?, ?, ?, ?)',
+          [id, tel.numero, tel.tipo || 'comercial', tel.principal ? 1 : 0]
+        );
+      }
+    }
+    await conn.execute('DELETE FROM emails_pj WHERE pessoa_id = ?', [id]);
+    for (const em of emails) {
+      if (em.email) {
+        await conn.execute(
+          'INSERT INTO emails_pj (pessoa_id, email, principal) VALUES (?, ?, ?)',
+          [id, em.email, em.principal ? 1 : 0]
+        );
+      }
+    }
+
+    await auditoria.registrar(req.usuario.id, 'pessoas_juridicas', 'editar', id, antes[0], null, conn);
+    await conn.commit();
+    return sucesso(res, null, 'Pessoa jurídica atualizada com sucesso');
+  } catch (err) {
+    await conn.rollback();
+    return erroInterno(res, err);
+  } finally {
+    conn.release();
   }
 }
 
@@ -724,8 +942,52 @@ async function exportarJuridicas(req, res) {
   }
 }
 
+// GET /api/pessoas/:tipo/:id/processos — Lista os processos de uma pessoa (física ou jurídica)
+// Junta os papéis de AUTOR e RÉU sem repetir o mesmo processo. Usado ao clicar na "Qtde Proc".
+// NÃO filtra por processo ativo, para bater exatamente com a contagem mostrada na coluna.
+async function processosDaPessoa(req, res) {
+  try {
+    const { tipo: tipoParam, id } = req.params;
+    // O parâmetro da rota é 'fisicas'/'juridicas'; nas tabelas de partes é 'fisica'/'juridica'
+    const tipo = tipoParam === 'juridicas' ? 'juridica'
+               : tipoParam === 'fisicas'   ? 'fisica'
+               : null;
+    if (!tipo) return erro(res, 'Tipo de pessoa inválido');
+
+    const [rows] = await pool.execute(
+      `SELECT
+         pr.id, pr.numProc,
+         pr.NomeTituloProc                       AS titulo,
+         LPAD(pa.numPasta, 4, '0')               AS pasta_numero_fmt,
+         sp.nome                                 AS status_nome,
+         tp.nome                                 AS tipo_nome,
+         v.abrev_nome                            AS vara_abrev_nome,
+         v.nome                                  AS vara_nome,
+         f.abrev_nome                            AS forum_abrev_nome,
+         f.nome                                  AS forum_nome
+       FROM tblproc pr
+       JOIN tblpasta pa            ON pr.pasta_id   = pa.id
+       LEFT JOIN tblvara v         ON pr.vara_id    = v.id
+       LEFT JOIN tblforum f        ON v.forum_id    = f.id
+       LEFT JOIN tbltipoproc tp    ON pr.tipo_id    = tp.id
+       LEFT JOIN tblstatusproc sp  ON pr.status_id  = sp.id
+       WHERE pr.id IN (
+               SELECT proc_id FROM tbltituloprocautor WHERE tipo_pessoa = ? AND pessoa_id = ?
+               UNION
+               SELECT proc_id FROM tbltituloprocreu   WHERE tipo_pessoa = ? AND pessoa_id = ?
+             )
+       ORDER BY pa.numPasta DESC, pr.id DESC`,
+      [tipo, id, tipo, id]
+    );
+
+    return sucesso(res, rows);
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
 module.exports = {
   listarFisicas, buscarFisica, criarFisica, atualizarFisica, excluirFisica, adicionarHistorico,
-  listarJuridicas, criarJuridica, excluirJuridica, buscarAuxiliares, buscarPorCPF, criarAuxiliar,
-  exportarFisicas, exportarJuridicas
+  listarJuridicas, buscarJuridica, criarJuridica, atualizarJuridica, excluirJuridica, unificarJuridicas, buscarAuxiliares, buscarPorCPF, criarAuxiliar,
+  processosDaPessoa, exportarFisicas, exportarJuridicas
 };
