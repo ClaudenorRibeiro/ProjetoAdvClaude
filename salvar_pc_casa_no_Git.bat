@@ -1,10 +1,15 @@
 @echo off
 :: ============================================================
-:: Salvar e enviar para o GitHub — Sistema de Advocacia
+:: Salvar e enviar para o GitHub - Sistema de Advocacia
 :: Duplo clique para rodar
 :: ============================================================
 
 cd /d "%~dp0"
+
+:: Garante que a pasta de memorias NUNCA va para o GitHub.
+:: "git rm --cached" tira a pasta do controle do git, mas MANTEM os arquivos no seu PC.
+:: --ignore-unmatch evita erro quando a pasta ja esta fora do git. Roda sempre, sem risco.
+git rm -r --cached --ignore-unmatch memory >nul 2>&1
 
 :: Verifica se tem alterações para salvar
 git add -A
@@ -35,7 +40,7 @@ set /p DESCRICAO="Descreva o que foi feito: "
 if "%DESCRICAO%"=="" set DESCRICAO=atualizacao
 
 :: Commit e push para o GitHub
-git commit -m "%PREFIXO% — %DESCRICAO%"
+git commit -m "%PREFIXO% - %DESCRICAO%"
 git push origin main
 
 if %errorlevel%==0 (
