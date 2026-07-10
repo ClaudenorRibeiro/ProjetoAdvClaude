@@ -1,0 +1,171 @@
+================================================================================
+ RESUMO DA SESSÃO — 09/07/2026
+ Sistema de Advocacia — Dr. Antônio Ferreira da Costa
+ Temas: (UI) cabeçalho fixo + fix de checkbox nas Permissões  |  dúvidas de
+        documentos  |  RECURSO NOVO: campo NACIONALIDADE (tabela auxiliar)
+================================================================================
+
+REGRAS DE TRABALHO REFORÇADAS HOJE (o usuário fez questão):
+  - Tabelas SEMPRE em letras MINÚSCULAS, no banco E no código (regra absoluta).
+  - Uma pergunta por vez; sempre perguntar/confirmar ANTES de gerar ou criar algo.
+  - Nunca supor — só afirmar/agir com CERTEZA ABSOLUTA (verificar tudo na fonte).
+  - Não mandar trechos de código no chat (usuário é leigo).
+  - Claude não mexe no git nem roda nada no banco; o usuário roda o SQL no HeidiSQL
+    e faz os deploys manualmente.
+  - Fluxo local-primeiro: tudo é feito no banco/código LOCAL.
+
+IMPORTANTE: quase tudo desta sessão é LOCAL. A ÚNICA parte que foi para a nuvem
+foi o cabeçalho fixo da tabela de Permissões (item 1), que o próprio usuário
+deployou. O resto (fix do checkbox e o recurso de nacionalidade) está só no LOCAL.
+
+--------------------------------------------------------------------------------
+0) INÍCIO — análise da pasta e sincronização de memórias
+--------------------------------------------------------------------------------
+Comparei a memória interna do Claude com a pasta memory/ do projeto. A pasta do
+projeto estava mais atual (sessão de 07/07) em 2 arquivos (MEMORY.md e
+pendencias_proxima_sessao.md); sincronizei projeto -> interno. Conferi na fonte
+que a estrutura do código bate com as memórias (17 controllers, 19 telas). O
+usuário colou o resumo do dia 07/07 (importação em massa) só como contexto.
+
+--------------------------------------------------------------------------------
+1) CABEÇALHO FIXO ao rolar — tabela de PERMISSÕES (Configurações) — DEPLOYADO
+--------------------------------------------------------------------------------
+Pedido: fixar os títulos das colunas (Módulo, Visualizar, Cadastrar, Alterar,
+Excluir, Historico, Todos) ao descer a tela de permissões por usuário.
+Análise: essa tabela usa o MESMO padrão de Fóruns/Varas. Reaproveitei a classe já
+existente e aprovada (.tabela-sticky) + dei uma altura máxima com rolagem própria
+à área da tabela. Arquivo: frontend/src/pages/Configuracoes/Configuracoes.js.
+É mudança puramente visual (CSS/comportamento), sem tocar em nenhuma lógica de
+permissões nem no banco, restrita a esta tabela.
+=> O USUÁRIO DEPLOYOU esta parte na nuvem (deploy dele, Claude não faz git). O
+   deploy foi CONCLUÍDO COM SUCESSO. O texto amarelo que apareceu no terminal
+   ("Some chunks are larger than 500 kB") é só um AVISO de tamanho do arquivo,
+   NÃO é erro — aparece em todo build.
+
+--------------------------------------------------------------------------------
+2) FIX — clique no checkbox do MÓDULO-PAI não expande/oculta mais a barra (LOCAL)
+--------------------------------------------------------------------------------
+Problema relatado: nas linhas de módulo-PAI das permissões (ex.: "Audiências
+(menu)"), clicar num checkbox marcava/desmarcava E ao mesmo tempo abria/fechava
+os sub-itens.
+Causa: a linha inteira do módulo-pai é clicável (expande/oculta); como os
+checkboxes ficam dentro dela, o clique "vazava" para a linha.
+Correção: os checkboxes do módulo-pai passaram a "segurar" o clique
+(stopPropagation), para não chegar na barra. Agora: clicar no checkbox = só
+marca/desmarca; clicar na barra (no nome do módulo) = só mostra/oculta os
+sub-itens. Só as linhas-pai foram afetadas.
+Mesmo arquivo (Configuracoes.js). Feito DEPOIS do deploy do item 1 =>
+NÃO commitado/deployado; está só no LOCAL.
+
+--------------------------------------------------------------------------------
+3) DÚVIDAS de DOCUMENTOS respondidas (sem alterar código)
+--------------------------------------------------------------------------------
+a) Data de hoje: já existe a variável {{data_hoje}} (bloco "Escritório"). Ela sai
+   POR EXTENSO, mas hoje gera "9 de julho de 2026" (dia sem zero à esquerda, mês
+   minúsculo). O usuário queria "09 de Julho de 2026", mas depois decidiu "deixa
+   como está, vou testar" — NADA foi alterado.
+b) E-mails do autor no documento: só valem no modelo do tipo "Documento de partes".
+   Usar {{email}} (o principal) ou {{#emails}}{{email}}{{/emails}} (todos), sempre
+   DENTRO de {{#autores}}...{{/autores}}. No modelo comum não há e-mail.
+c) Aviso amarelo "variáveis não reconhecidas (ficarão vazias)" ao subir um modelo:
+   o usuário usou, num modelo do tipo "Partes", as variáveis do modelo COMUM
+   (com sufixo _cliente: {{nome_cliente}}, {{cpf_cliente}}, {{nacionalidade_cliente}},
+   {{endereco_cliente}}). No tipo Partes as variáveis de pessoa são SEM o _cliente
+   ({{nome}}, {{cpf}}, {{nacionalidade}}, {{endereco}}) e ficam dentro de
+   {{#autores}}/{{#reus}}. É AVISO, não erro — o modelo salva; só que essas
+   variáveis sairiam em branco. Converti 2 parágrafos para o usuário (o OUTORGANTE
+   e a declaração de gratuidade da justiça — art. 98 do CPC).
+
+--------------------------------------------------------------------------------
+4) RECURSO NOVO — CAMPO NACIONALIDADE (obrigatório, via tabela auxiliar)
+--------------------------------------------------------------------------------
+Descoberta (verificada na fonte): a nacionalidade NÃO era coletada em lugar
+nenhum — não havia campo na tela, o backend não tratava, e não existia coluna no
+banco. Só existia como variável de documento, que por isso saía SEMPRE vazia.
+
+Decisões do usuário (uma a uma):
+  - Campo NOVO e OBRIGATÓRIO em Pessoa Física.
+  - Alimentado por uma TABELA À PARTE (para não ter erro de escrita), igual ao
+    padrão do "gênero".
+  - Nome da tabela: "nacionalidade" (SEM prefixo tbl — segue as irmãs genero/
+    estado_civil/profissao; o prefixo tbl é só para tabelas de processo).
+  - "Brasileira" fixada no id = 1.
+  - TODOS os registros já existentes de pessoas_fisicas passam a ter
+    nacionalidade_id = 1 (backfill) — assim, tornar o campo obrigatório NÃO
+    trava a edição da base já importada (as 4.938 pessoas).
+
+Antes de codar, mapeei por INTEIRO o padrão do "gênero" em todo o sistema (banco,
+backend e frontend) para replicar sem quebrar nada. Também confirmei que a rotina
+"Limpar dados de teste" usa uma lista fixa de tabelas — a nova tabela
+"nacionalidade" fica preservada automaticamente (como o gênero).
+
+SQL ENTREGUE (o usuário roda no HeidiSQL — LOCAL). Rodar UMA vez:
+  1) CREATE TABLE nacionalidade (id INT AUTO_INCREMENT PK, nome VARCHAR(50) NOT NULL)
+     — estrutura idêntica à tabela genero.
+  2) INSERT INTO nacionalidade (id, nome) VALUES (1, 'Brasileira').
+  3) ALTER TABLE pessoas_fisicas ADD COLUMN nacionalidade_id INT NULL AFTER
+     genero_id + KEY + CONSTRAINT pessoas_fisicas_ibfk_4 FOREIGN KEY
+     (nacionalidade_id) REFERENCES nacionalidade(id).
+  4) UPDATE pessoas_fisicas SET nacionalidade_id = 1 (backfill — todos Brasileira).
+  Observações: os comandos CREATE/ALTER do MySQL não voltam atrás numa transação
+  (cada um se confirma sozinho), por isso é um script de estrutura, roda 1x; a
+  ordem importa (a Brasileira id 1 tem que existir antes do backfill, senão a
+  chave estrangeira barra). A coluna é NULLABLE no banco (igual genero_id) — a
+  obrigatoriedade é validada só na tela. NÃO foi registrado na tabela
+  controle_versao_banco (o usuário dispensou nesta alteração específica).
+
+ALTERAÇÕES DE CÓDIGO (LOCAL, validadas: node --check backend OK + build Vite OK):
+  - Backend controllers/pessoasController.js:
+      * criarFisica e atualizarFisica passam a gravar nacionalidade_id (colunas,
+        placeholders e valores conferidos um a um: INSERT com 23=23, UPDATE 24=24).
+      * buscarAuxiliares passa a devolver também a lista "nacionalidades".
+      * criarAuxiliar (botão "+") passa a aceitar o tipo "nacionalidades"
+        (gravando na tabela nacionalidade).
+      * Exportação para Excel (CAMPOS_PF) ganhou a coluna "Nacionalidade".
+  - Backend services/variaveisResolver.js:
+      * As 3 consultas de pessoa física (partes do processo, pessoa avulsa e
+        multipessoas) ganharam LEFT JOIN na tabela nacionalidade.
+      * {{nacionalidade}} (documento de partes) e {{nacionalidade_cliente}}
+        (documento comum) passam a puxar o valor real. Empresa (PJ) continua sem
+        nacionalidade (correto).
+  - Frontend pages/Pessoas/Pessoas.js:
+      * Novo campo "Nacionalidade" (dropdown + botão "+"), na mesma linha de
+        Estado civil e Profissão (a linha virou de 2 para 3 colunas).
+      * Validação: nacionalidade é obrigatória ao salvar.
+      * A lista de colunas da exportação Excel ganhou "Nacionalidade".
+  - Frontend services/api.js: NÃO precisou mudar (já era genérico).
+
+*** PENDÊNCIA CRÍTICA ***
+O código da nacionalidade DEPENDE do SQL. Enquanto o SQL acima não for rodado no
+HeidiSQL, a TELA DE PESSOAS QUEBRA — porque o backend faz "SELECT * FROM
+nacionalidade" ao abrir a tela, e a tabela ainda não existe. => A primeira coisa
+da próxima sessão é confirmar se o SQL foi rodado. Depois: re-exportar o
+estrutura_banco.sql e, quando for para a produção (AWS), rodar o MESMO SQL lá.
+
+--------------------------------------------------------------------------------
+5) MEMÓRIAS
+--------------------------------------------------------------------------------
+  - pendencias_proxima_sessao.md: novo bloco no topo "SESSÃO 09/07/2026" com todos
+    os detalhes acima (incluindo a PENDÊNCIA CRÍTICA do SQL).
+  - MEMORY.md (índice): topo atualizado para 09/07; linhas de database_tables e
+    cadastro_pessoas atualizadas.
+  - cadastro_pessoas.md, database_tables.md, documentos_modelos.md: atualizados
+    com o campo/tabela nacionalidade e a regra "Partes vs Comum".
+  - feedback_codigo.md: reforço da regra de tabelas minúsculas (09/07).
+  - Memória interna do Claude e pasta memory/ do projeto deixadas IDÊNTICAS.
+
+--------------------------------------------------------------------------------
+6) PRÓXIMOS PASSOS
+--------------------------------------------------------------------------------
+  [ ] RODAR o SQL da nacionalidade no HeidiSQL (LOCAL) — SEM isso a tela de
+      Pessoas fica quebrada.
+  [ ] Testar: cadastrar/editar pessoa com nacionalidade; conferir "Brasileira"
+      preenchida nos registros antigos; gerar um documento usando {{nacionalidade}}.
+  [ ] Re-exportar estrutura_banco.sql após rodar o SQL.
+  [ ] Levar no próximo commit/deploy (feito pelo usuário): o fix do checkbox das
+      permissões e todo o recurso de nacionalidade (código + rodar o SQL na AWS).
+  [ ] (Pendências antigas continuam valendo — ver pendencias_proxima_sessao.md:
+      bug latente do renumerarPasta, etc.)
+
+FIM.
+================================================================================

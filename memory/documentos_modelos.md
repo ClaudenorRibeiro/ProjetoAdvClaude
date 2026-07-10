@@ -9,6 +9,24 @@ metadata:
 
 ## Bloco 11 — Documentos e Modelos
 
+## 🆕 09/07/2026 — Variável NACIONALIDADE agora com dado real + regra "Partes vs Comum"
+- `{{nacionalidade}}` (modelo tipo **Documento de partes**, dentro de `{{#autores}}`/`{{#reus}}`) e
+  `{{nacionalidade_cliente}}` (modelo **comum**) ANTES saíam SEMPRE vazias (era "Fase 4" nunca feita). Agora puxam
+  o valor real do novo campo de nacionalidade (via LEFT JOIN na tabela `nacionalidade` em `variaveisResolver.js`).
+  Empresa/PJ continua sem nacionalidade (correto). ⚠️ Depende do SQL da nacionalidade ter rodado — ver [[cadastro-pessoas]].
+- **REGRA que confunde o usuário (dois tipos de modelo têm nomes de variável diferentes):**
+  - Modelo **COMUM** (um cliente/processo): tags de pessoa TÊM sufixo `_cliente` → `{{nome_cliente}}`, `{{cpf_cliente}}`,
+    `{{nacionalidade_cliente}}`, `{{endereco_cliente}}`, etc.
+  - Modelo **"Documento de partes"** (autores/réus): tags de pessoa SEM sufixo → `{{nome}}`, `{{cpf}}`,
+    `{{nacionalidade}}`, `{{endereco}}`, e ficam DENTRO de `{{#autores}}`/`{{#reus}}`.
+  - Usar a tag errada para o tipo de modelo gera o AVISO amarelo "variáveis não reconhecidas (ficarão vazias)" ao
+    subir o .docx — é AVISO, não erro; o modelo salva, mas aquelas variáveis saem em branco.
+- E-mails/telefones do autor: só no modelo de PARTES. E-mail principal = `{{email}}`; TODOS = `{{#emails}}{{email}}{{/emails}}`
+  (sub-região) dentro de `{{#autores}}`. Telefones idem com `{{#telefones}}{{numero}} ({{tipo}}){{/telefones}}`.
+- `{{data_hoje}}` (bloco Escritório) já existe e sai POR EXTENSO ("9 de julho de 2026" — dia sem zero, mês minúsculo).
+  Usuário achou o formato e decidiu deixar como está (não quis "09 de Julho").
+
+
 ## 🆕 22/06/2026 — Bucket S3 de TESTE separado da produção
 - Os modelos `.docx` ficam num bucket S3 privado, definido por `AWS_S3_BUCKET` no `.env` (nada fixo no código).
 - **LOCAL agora usa `modelos-antonio-adv-dev`** (bucket de teste) + usuário IAM próprio `modelos-antonio-adv-dev`

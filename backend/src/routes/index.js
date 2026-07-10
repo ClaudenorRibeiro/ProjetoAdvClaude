@@ -115,6 +115,9 @@ router.delete('/processos/:id',                     autenticar, verificarPermiss
 
 // ---- PRAZOS ----
 router.get('/prazos/tipos',       autenticar, prazosCtrl.buscarTipos);
+// Cadastro de novo tipo/subtipo direto na tela (botão "…") — rotas estáticas ANTES de /prazos/:id
+router.post('/prazos/tipos',      autenticar, verificarPermissao('prazos','cadastrar'), prazosCtrl.criarTipo);
+router.post('/prazos/subtipos',   autenticar, verificarPermissao('prazos','cadastrar'), prazosCtrl.criarSubtipo);
 router.get('/prazos/calcular',    autenticar, prazosCtrl.calcularDataFinal);
 router.get('/prazos/hoje',        autenticar, prazosCtrl.vencemHoje);
 router.get('/prazos',             autenticar, verificarPermissao('prazos','visualizar'), prazosCtrl.listar);

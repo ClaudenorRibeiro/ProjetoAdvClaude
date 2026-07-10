@@ -1,10 +1,98 @@
 ---
 name: pendencias-proxima-sessao
-description: "HANDOFF — LER PRIMEIRO. TOPO 05/07/2026: limpeza da base antiga (exclusões em pessoas_fisicas/tblproc via HeidiSQL — por ID, por campo observacoes, e DEDUP de 80 pessoas por nome duplicado mantendo o de maior observacoes; relatório em Downloads) + FIX da exclusão de processo em excluirProcesso (removidas verificações de tabela inexistente 'parcerias'→trocada por 'acordo', e de coluna inexistente log_documentos_gerados.processo_id→removida, que davam 'Erro interno') — LOCAL, não deployado, fix 2 ainda não reconfirmado ponta-a-ponta; BUG LATENTE pendente em renumerarPasta (usa log_documentos_gerados.pasta_id, coluna não existe); import_tblproc CONFIRMADO rodado. Antes — TOPO: SESSÃO 25-26/06 — DEPLOY DO ZERO num servidor NOVO (Ubuntu 24, IP 100.57.24.46, conta AWS EdnaADV 905418183179; domínio sistema.antonio.adv.br c/ HTTPS). Imprevistos resolvidos: firewall 443, DNS=registro A (não redirect), .pem→.ppk, CRLF→LF, token p/ repo privado, setup concluído ao salvar Escritório, e-mail Gmail PENDENTE. Scripts Deploy CORRIGIDOS (Node 24, LibreOffice, SEM rename camelCase, token, nginx 25m). MENU lateral novo (Layout.css: tela atual +40%+fundo; hover move o destaque) JÁ no GitHub (bf385e6) — FALTA rodar 1-AtualizarSistema no servidor novo. Guia: Deploy/GUIA-DEPLOY-DO-ZERO.txt. Resumo: 'resumo do dia 260626 - deploy AWS do zero.txt'. Antes — SESSÃO 23/06 — AUDITORIA COMPLETA + 10 MELHORIAS: (1) trava senha do super; (2) índices por pessoa [SQL produção]; (3) pool 10→15 + aviso de sobrecarga p/ admin; (4) bug exclusão de testemunha; (5) sessão reconfere nivel/ativo no banco a cada request; (6) travas UNIQUE CPF/login [SQL produção]; (7) auditoria dentro da transação (7 pts); (8) responsividade VERIFICADA (já estava boa, nada mudado); (9) painel mais leve; (10) telas por perfil. 2 SQL p/ rodar na PRODUÇÃO (índices + UNIQUE). Item D (JWT_SECRET/SUPER_SENHA no .env prod) PULADO pelo usuário. Resumo: resumo do dia 230626-1518.txt. Antes — SESSÃO 22/06 (NOITE) — exclusão de prazo robusta (trata FK filhas em transação) + ModalConfirmar passou a MOSTRAR o erro (conserta silêncio global) + FEATURE 'Limpar dados de teste' SÓ p/ superadmin (nivel 0, aba Manutenção); superadmin DEIXADO COMO ESTÁ (não removido do banco). Resumo: backups/RESUMO_SESSAO_22-06-2026-NOITE.txt. Antes (22/06 DIA): REGRA ABSOLUTA: tabelas SEMPRE minúsculas (banco E código); corrigido bug de produção tblPasta (148 subs camelCase->minúsculo no backend). AASP URL na tela (saiu do código/.env). Bucket S3 -dev + IAM próprio; .env local apontado p/ -dev. Limpeza .env/.env.example. Publicações: realce sem acento, filtro de data, dedup por numeroPublicacao + confirmação re-rodar + coluna Nº Publ. + pintura duplicadas, rodapé Exibindo X–Y de Z, seletor Exibir (Todas/Direcionadas a mim), fonte modal 14px. PENDENTE: commit+push+RE-DEPLOY (deploy de hoje NÃO tinha o fix de minúsculas) + SQL pendente na produção. Claude NÃO acessa o servidor. Resumo completo: backups/RESUMO_SESSAO_22-06-2026.txt. Abaixo: 21/06, 20/06, 17/06..."
+description: "HANDOFF — LER PRIMEIRO. TOPO 09/07/2026: (UI) cabeçalho FIXO ao rolar na tabela de PERMISSÕES (Configurações) — padrão .tabela-sticky de Fóruns/Varas — ESTE item o usuário DEPLOYOU na nuvem; (UI) FIX no clique do checkbox do módulo-pai (stopPropagation nos <td> — clicar no checkbox não expande/oculta mais a barra) — LOCAL, não deployado; (RECURSO NOVO) NACIONALIDADE: campo OBRIGATÓRIO em Pessoa Física alimentado por NOVA tabela à parte `nacionalidade` (id/nome, padrão igual `genero`, SEM prefixo tbl), 'Brasileira' fixa em id=1, backfill de TODOS os pessoas_fisicas para nacionalidade_id=1. Código PRONTO e validado (node --check + build Vite OK) em pessoasController.js, variaveisResolver.js ({{nacionalidade}} e {{nacionalidade_cliente}} agora puxam dado real) e Pessoas.js. ⚠️⚠️ PENDÊNCIA CRÍTICA: SQL da nacionalidade NÃO confirmado como rodado — sem ele a tela de Pessoas QUEBRA. Dúvidas de documentos respondidas ({{data_hoje}} já existe/por extenso; e-mails do autor via {{#emails}}; aviso amarelo = tags _cliente em modelo do tipo Partes). Antes — TOPO 05/07/2026: limpeza da base antiga (exclusões em pessoas_fisicas/tblproc via HeidiSQL — por ID, por campo observacoes, e DEDUP de 80 pessoas por nome duplicado mantendo o de maior observacoes; relatório em Downloads) + FIX da exclusão de processo em excluirProcesso (removidas verificações de tabela inexistente 'parcerias'→trocada por 'acordo', e de coluna inexistente log_documentos_gerados.processo_id→removida, que davam 'Erro interno') — LOCAL, não deployado, fix 2 ainda não reconfirmado ponta-a-ponta; BUG LATENTE pendente em renumerarPasta (usa log_documentos_gerados.pasta_id, coluna não existe); import_tblproc CONFIRMADO rodado. Antes — TOPO: SESSÃO 25-26/06 — DEPLOY DO ZERO num servidor NOVO (Ubuntu 24, IP 100.57.24.46, conta AWS EdnaADV 905418183179; domínio sistema.antonio.adv.br c/ HTTPS). Imprevistos resolvidos: firewall 443, DNS=registro A (não redirect), .pem→.ppk, CRLF→LF, token p/ repo privado, setup concluído ao salvar Escritório, e-mail Gmail PENDENTE. Scripts Deploy CORRIGIDOS (Node 24, LibreOffice, SEM rename camelCase, token, nginx 25m). MENU lateral novo (Layout.css: tela atual +40%+fundo; hover move o destaque) JÁ no GitHub (bf385e6) — FALTA rodar 1-AtualizarSistema no servidor novo. Guia: Deploy/GUIA-DEPLOY-DO-ZERO.txt. Resumo: 'resumo do dia 260626 - deploy AWS do zero.txt'. Antes — SESSÃO 23/06 — AUDITORIA COMPLETA + 10 MELHORIAS: (1) trava senha do super; (2) índices por pessoa [SQL produção]; (3) pool 10→15 + aviso de sobrecarga p/ admin; (4) bug exclusão de testemunha; (5) sessão reconfere nivel/ativo no banco a cada request; (6) travas UNIQUE CPF/login [SQL produção]; (7) auditoria dentro da transação (7 pts); (8) responsividade VERIFICADA (já estava boa, nada mudado); (9) painel mais leve; (10) telas por perfil. 2 SQL p/ rodar na PRODUÇÃO (índices + UNIQUE). Item D (JWT_SECRET/SUPER_SENHA no .env prod) PULADO pelo usuário. Resumo: resumo do dia 230626-1518.txt. Antes — SESSÃO 22/06 (NOITE) — exclusão de prazo robusta (trata FK filhas em transação) + ModalConfirmar passou a MOSTRAR o erro (conserta silêncio global) + FEATURE 'Limpar dados de teste' SÓ p/ superadmin (nivel 0, aba Manutenção); superadmin DEIXADO COMO ESTÁ (não removido do banco). Resumo: backups/RESUMO_SESSAO_22-06-2026-NOITE.txt. Antes (22/06 DIA): REGRA ABSOLUTA: tabelas SEMPRE minúsculas (banco E código); corrigido bug de produção tblPasta (148 subs camelCase->minúsculo no backend). AASP URL na tela (saiu do código/.env). Bucket S3 -dev + IAM próprio; .env local apontado p/ -dev. Limpeza .env/.env.example. Publicações: realce sem acento, filtro de data, dedup por numeroPublicacao + confirmação re-rodar + coluna Nº Publ. + pintura duplicadas, rodapé Exibindo X–Y de Z, seletor Exibir (Todas/Direcionadas a mim), fonte modal 14px. PENDENTE: commit+push+RE-DEPLOY (deploy de hoje NÃO tinha o fix de minúsculas) + SQL pendente na produção. Claude NÃO acessa o servidor. Resumo completo: backups/RESUMO_SESSAO_22-06-2026.txt. Abaixo: 21/06, 20/06, 17/06..."
 metadata: 
   node_type: memory
   type: project
   originSessionId: a17aec30-7d20-496a-81a0-792eca6b27e8
+---
+
+# 🟢 SESSÃO 09/07/2026 — CABEÇALHO FIXO + FIX CHECKBOX (Permissões) + RECURSO NACIONALIDADE — LER PRIMEIRO
+
+Sessão mista (UI + recurso novo). Claude NÃO acessa servidor/git/banco — o usuário faz tudo manualmente, sempre
+com autorização prévia. Tudo o que Claude alterou está na pasta **LOCAL**. Regras REFORÇADAS pelo usuário hoje:
+(1) tabelas SEMPRE minúsculas (banco E código); (2) não mandar trechos de código (usuário leigo); (3) uma pergunta
+por vez / perguntar antes de criar; (4) nunca supor — verificar tudo na fonte, certeza absoluta. No início da
+sessão, a memória foi sincronizada (interna ↔ projeto) e o estado do código foi conferido na fonte.
+
+## ⚠️⚠️ PENDÊNCIA CRÍTICA — RODAR O SQL DA NACIONALIDADE (senão a tela de Pessoas QUEBRA)
+O recurso de nacionalidade (item 4) já está no CÓDIGO, mas depende de um SQL que o usuário **AINDA NÃO confirmou
+ter rodado**. O backend faz `SELECT * FROM nacionalidade` ao abrir a tela de Pessoas (endpoint de auxiliares); se a
+tabela não existir, esse endpoint FALHA e o formulário de Pessoa Física não carrega os selects → tela quebrada.
+👉 **PRIMEIRA COISA da próxima sessão: confirmar se o SQL foi rodado no LOCAL.** SQL entregue (rodar UMA vez no HeidiSQL):
+- `CREATE TABLE nacionalidade (id INT AUTO_INCREMENT PK, nome VARCHAR(50) NOT NULL)` — estrutura igual à `genero`.
+- `INSERT INTO nacionalidade (id, nome) VALUES (1, 'Brasileira')`.
+- `ALTER TABLE pessoas_fisicas ADD COLUMN nacionalidade_id INT NULL AFTER genero_id` + KEY + `CONSTRAINT
+  pessoas_fisicas_ibfk_4 FOREIGN KEY (nacionalidade_id) REFERENCES nacionalidade(id)`.
+- `UPDATE pessoas_fisicas SET nacionalidade_id = 1` (backfill: todos os existentes viram Brasileira).
+- DDL do MySQL não entra em transação (cada CREATE/ALTER confirma sozinho) → é script de estrutura, roda 1x; a
+  ORDEM importa (Brasileira id 1 antes do backfill, senão a FK barra). Depois: re-exportar `estrutura_banco.sql`
+  e rodar o MESMO SQL na produção (AWS) quando for. NÃO registrado em `controle_versao_banco` (usuário dispensou
+  nesta alteração específica). Coluna é NULLABLE no banco (igual genero_id) — a obrigatoriedade é só na tela.
+
+## (1) Cabeçalho FIXO ao rolar — tabela de PERMISSÕES (Configurações → aba Permissões) — DEPLOYADO pelo usuário
+`frontend/src/pages/Configuracoes/Configuracoes.js`: a tabela de permissões (lista Módulo/Visualizar/Cadastrar/
+Alterar/Excluir/Historico/Todos por usuário) ganhou cabeçalho fixo, reaproveitando o MESMO padrão já aprovado de
+Fóruns/Varas (02/07): `<table className="tabela tabela-sticky">` + o wrapper com `style={{maxHeight:'65vh',
+overflowY:'auto'}}`. Só CSS/comportamento, zero lógica, zero banco, escopo restrito a esta tabela. O usuário
+DEPLOYOU esta parte na nuvem durante a sessão (deploy do próprio usuário; Claude não faz git). Deploy concluído
+com SUCESSO — o aviso amarelo do Vite "(!) Some chunks are larger than 500 kB" é só recado de tamanho do bundle,
+NÃO é erro (aparece em todo build).
+
+## (2) FIX — clique no checkbox do MÓDULO-PAI não expande/oculta mais a barra (Permissões) — LOCAL
+Mesmo arquivo. Problema: as linhas de módulo-PAI (as que têm sub-itens: Processos, Prazos, Tarefas, Audiências,
+Perícias, Documentos) têm `onClick` na linha inteira (`<tr>`) que expande/oculta os sub-itens. Como os checkboxes
+ficam DENTRO da linha, clicar num checkbox disparava as DUAS coisas (marcava E expandia/ocultava). Correção:
+`onClick={e => e.stopPropagation()}` nas células (`<td>`) dos checkboxes do módulo-pai (as ACOES_PERM + a coluna
+"Todos"), para o clique não "vazar" para a barra. Agora: clique no checkbox = só marca/desmarca; clique na barra
+(nome do módulo) = só expande/oculta. Só as linhas-pai foram afetadas; sub-linhas e módulos sem sub-itens não têm
+barra clicável (sem mudança). LOCAL, feito DEPOIS do deploy do item 1 → **NÃO commitado/deployado**.
+
+## (3) DÚVIDAS de documentos respondidas (sem alterar código)
+- `{{data_hoje}}` JÁ EXISTE (bloco "Escritório (sempre disponível)") e sai POR EXTENSO via `dataExtenso(hojeBrasilia())`
+  → hoje gera "9 de julho de 2026" (dia SEM zero à esquerda, mês minúsculo). Usuário queria "09 de Julho de 2026"
+  (com zero e maiúscula), mas depois disse "deixa como está, vou testar" → NADA foi alterado. (Se pedir depois:
+  dia com `padStart(2,'0')` + capitalizar o mês em `dataExtenso`, no `variaveisResolver.js`. Padrão jurídico formal
+  costuma ser mês minúsculo — foi alertado.)
+- E-mails do autor em documento: SÓ no modelo tipo "Documento de partes"; usar `{{email}}` (principal) ou
+  `{{#emails}}{{email}}{{/emails}}` (todos), DENTRO de `{{#autores}}`. No modelo COMUM (bloco cliente) NÃO há e-mail.
+- Aviso amarelo "variáveis não reconhecidas (ficarão vazias)" ao subir modelo do tipo Partes = o usuário usou tags
+  do modelo COMUM (`{{nome_cliente}}`, `{{cpf_cliente}}`, `{{nacionalidade_cliente}}`, `{{endereco_cliente}}`). No
+  tipo PARTES as tags de pessoa são SEM o sufixo `_cliente` (`{{nome}}`, `{{cpf}}`, `{{nacionalidade}}`,
+  `{{endereco}}`) e ficam dentro de `{{#autores}}`/`{{#reus}}`. Convertidos 2 parágrafos para o usuário (OUTORGANTE
+  + declaração de gratuidade art. 98 CPC). É AVISO, não erro — o modelo salva.
+
+## (4) RECURSO NOVO — NACIONALIDADE (tabela auxiliar + campo obrigatório) — CÓDIGO PRONTO, FALTA SQL (ver pendência crítica)
+Descoberta (verificada na fonte): a nacionalidade NÃO era coletada em lugar nenhum — sem campo na tela, sem
+tratamento no backend, sem coluna no banco. Só existia como variável de documento, que por isso saía SEMPRE vazia
+(era "Fase 4" que nunca foi feita). Usuário pediu: campo NOVO, OBRIGATÓRIO, alimentado por TABELA À PARTE (evita
+erro de escrita), padrão idêntico ao "genero". Nome decidido: **`nacionalidade`** (SEM prefixo tbl — segue as irmãs
+`genero`/`estado_civil`/`profissao`; o prefixo `tbl` é só para tabelas de PROCESSO). Padrão do "genero" foi mapeado
+por INTEIRO antes de codar. Decisões do usuário: obrigatório; "Brasileira" fixa em id=1; TODOS os registros
+existentes viram Brasileira (backfill). Alterações (LOCAL, validadas — `node --check` backend OK + build Vite OK):
+- **BANCO** (SQL entregue — ver PENDÊNCIA CRÍTICA): tabela `nacionalidade` + coluna `pessoas_fisicas.nacionalidade_id`
+  (nullable, igual genero_id) + FK + Brasileira id 1 + backfill de todos p/ id 1.
+- **BACKEND `controllers/pessoasController.js`**: `criarFisica` e `atualizarFisica` gravam `nacionalidade_id`
+  (colunas/placeholders/valores CONFERIDOS: INSERT 23=23, UPDATE 24=24); `buscarAuxiliares` devolve `nacionalidades`;
+  `criarAuxiliar` aceita `tipo="nacionalidades"` (→ tabela `nacionalidade`); `CAMPOS_PF` (exportação Excel) ganhou a
+  coluna "Nacionalidade" (LEFT JOIN nacionalidade nac). `buscarFisica` não precisou de join (`pf.*` já traz o id p/ o select).
+- **BACKEND `services/variaveisResolver.js`**: as 3 consultas de PF (`buscarPartes`, `resolverPessoa`, `carregarParte`)
+  ganharam `LEFT JOIN nacionalidade nac` + alias `nacionalidade_nome`; `{{nacionalidade_cliente}}` (doc comum) e
+  `{{nacionalidade}}` (doc partes) agora puxam o valor real. PJ/empresa continua vazio (correto — empresa não tem nacionalidade).
+- **FRONTEND `pages/Pessoas/Pessoas.js`**: novo campo "Nacionalidade" (componente `SelectComAdicao`, dropdown + "+"),
+  na linha de Estado civil/Profissão (a grade virou `grid-3`); validação obrigatória no `salvar`; estado
+  `auxiliares.nacionalidades`; `handleNovoAuxiliar` mapeia `nacionalidades→nacionalidade_id`; a lista de colunas da
+  exportação Excel ganhou "Nacionalidade". `services/api.js` NÃO mudou (criarAuxiliar/auxiliares já são genéricos).
+- **Sem efeito colateral bloqueante**: como o backfill põe TODOS como Brasileira, tornar o campo obrigatório NÃO
+  trava a edição da base importada (4.938 PF). A rotina "Limpar dados de teste" (`manutencaoController`) usa lista
+  FIXA de 38 tabelas → `nacionalidade` fica preservada automaticamente (como `genero`), sem precisar mexer.
+
+## Estado do git/deploy nesta sessão
+Claude NÃO toca git. O usuário fez UM deploy na nuvem durante a sessão, que cobriu o item 1 (cabeçalho fixo das
+permissões). Os itens 2 (fix checkbox) e 4 (nacionalidade) foram feitos DEPOIS e estão SÓ no LOCAL — não
+commitados/deployados; a nacionalidade ainda depende do SQL. Ao fim da sessão: memória sincronizada (interna ↔
+projeto, as duas idênticas) e resumo `.txt` criado na raiz do projeto (`resumo do dia 090726 - nacionalidade + cabecalho permissoes.txt`), tudo com autorização.
+
 ---
 
 # 🟢 SESSÃO 07/07/2026 — IMPORTAÇÃO EM MASSA (banco manual.xlsm → 7 tabelas) — CONCLUÍDA E CONFIRMADA

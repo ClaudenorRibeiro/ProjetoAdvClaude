@@ -392,6 +392,85 @@ export function ModalCancelarPrazo({ prazo, onFechar }) {
   );
 }
 
+// ============================================================
+// SELECT COM BOTÃO "…" — permite cadastrar um item novo (tipo ou
+// subtipo de prazo) direto na tela, sem sair do modal.
+// onSalvar(nome) cria o item no banco, recarrega a lista e devolve
+// o id do novo item, que é então auto-selecionado.
+// ============================================================
+function SelectComAdicao({ label, nomeEntidade, value, onChange, opcoes = [],
+                          placeholder = '— Selecione —', podeAdicionar = true,
+                          msgBloqueado = '', exemplo = '', onSalvar }) {
+  const [aberto, setAberto]     = useState(false);
+  const [novoNome, setNovoNome] = useState('');
+  const [salvando, setSalvando] = useState(false);
+
+  function alternar() {
+    if (!podeAdicionar) { if (msgBloqueado) toast.error(msgBloqueado); return; }
+    setAberto(v => !v);
+  }
+  function fechar() { setAberto(false); setNovoNome(''); }
+
+  async function salvar() {
+    if (!novoNome.trim()) return toast.error('Digite um nome para cadastrar');
+    setSalvando(true);
+    try {
+      const novoId = await onSalvar(novoNome.trim());
+      if (novoId) onChange(String(novoId)); // auto-seleciona o recém-criado
+      toast.success('Cadastrado com sucesso!');
+      fechar();
+    } catch (err) {
+      toast.error(err.response?.data?.mensagem || 'Erro ao cadastrar');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="form-group">
+      <label className="form-label">{label}</label>
+      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+        <select className="form-control" value={value} onChange={e => onChange(e.target.value)} style={{ flex: 1 }}>
+          <option value="">{placeholder}</option>
+          {opcoes.map(o => <option key={o.id} value={o.id}>{o.nome}</option>)}
+        </select>
+        {/* Botão "…" abre o mini-formulário para cadastrar um item novo */}
+        <button type="button" title={`Cadastrar ${nomeEntidade} que não está na lista`}
+          className="btn btn-outline"
+          style={{ padding: '6px 10px', fontSize: '15px', flexShrink: 0, lineHeight: 1 }}
+          onClick={alternar}>
+          …
+        </button>
+      </div>
+
+      {aberto && (
+        <div style={{ marginTop: '8px', padding: '10px 12px', background: '#f0f4ff',
+                      border: '1px solid #c5d0e6', borderRadius: '4px' }}>
+          <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: '#444' }}>
+            Novo {nomeEntidade}
+          </div>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <input autoFocus className="form-control" placeholder={exemplo ? `Ex.: ${exemplo}` : ''}
+              value={novoNome} onChange={e => setNovoNome(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') salvar(); if (e.key === 'Escape') fechar(); }}
+              style={{ flex: 1 }} />
+            <button type="button" className="btn btn-primary"
+              style={{ fontSize: '12px', padding: '6px 14px', flexShrink: 0 }}
+              onClick={salvar} disabled={salvando}>
+              {salvando ? '...' : 'Salvar'}
+            </button>
+            <button type="button" className="btn btn-outline"
+              style={{ fontSize: '12px', padding: '6px 10px', flexShrink: 0 }}
+              onClick={fechar}>
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // processoInicial: { processo_id, numero, titulo } — quando vem da PastaDetalhe já preenchido
 export function ModalNovoPrazo({ tipos, onFechar, processoInicial }) {
   const [form, setForm]         = useState({
@@ -403,10 +482,18 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial }) {
   const [pastas, setPastas]         = useState([]);
   const [buscaPasta, setBuscaPasta] = useState(processoInicial?.numero || '');
   const [usuarios, setUsuarios]     = useState([]);
+  // Cópia local de tipos/subtipos: começa com a prop e é recarregada ao cadastrar um item novo
+  const [tiposLocal, setTiposLocal] = useState(tipos);
+
+  const recarregarTipos = useCallback(async () => {
+    const r = await prazosAPI.tipos();
+    if (r.data.ok) setTiposLocal(r.data.dados);
+  }, []);
 
   useEffect(() => {
     processosAPI.auxiliares().then(r => setUsuarios(r.data.dados.usuarios || []));
-  }, []);
+    recarregarTipos(); // garante a lista mais atual toda vez que o modal abre
+  }, [recarregarTipos]);
 
   // Recalcula data final ao mudar data início, quantidade ou tipo de dias.
   // 1) Cálculo local imediato (sem feriados) — resultado na hora
@@ -471,8 +558,8 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial }) {
   }
 
   const subtiposFiltrados = form.tipo_prazo_id
-    ? tipos.subtipos.filter(s => String(s.tipo_prazo_id) === String(form.tipo_prazo_id))
-    : tipos.subtipos;
+    ? tiposLocal.subtipos.filter(s => String(s.tipo_prazo_id) === String(form.tipo_prazo_id))
+    : tiposLocal.subtipos;
 
   return (
     <div className="modal-overlay">
@@ -506,20 +593,35 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial }) {
             <input className="form-control" value={form.titulo||''} readOnly style={{background:'#f8fafc', cursor:'default'}} />
           </div>
           <div className="grid-2">
-            <div className="form-group">
-              <label className="form-label">Tipo de prazo *</label>
-              <select className="form-control" value={form.tipo_prazo_id||''} onChange={e=>set('tipo_prazo_id',e.target.value)}>
-                <option value="">— Todos os tipos —</option>
-                {tipos.tipos.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Subtipo *</label>
-              <select className="form-control" value={form.subtipo_id||''} onChange={e=>set('subtipo_id', e.target.value)}>
-                <option value="">— Selecione —</option>
-                {subtiposFiltrados.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
-              </select>
-            </div>
+            <SelectComAdicao
+              label="Tipo de prazo *"
+              nomeEntidade="tipo de prazo"
+              exemplo="Recurso"
+              placeholder="— Todos os tipos —"
+              value={form.tipo_prazo_id||''}
+              onChange={v => set('tipo_prazo_id', v)}
+              opcoes={tiposLocal.tipos}
+              onSalvar={async (nome) => {
+                const { data } = await prazosAPI.criarTipo({ nome });
+                await recarregarTipos();
+                return data.dados.id;
+              }}
+            />
+            <SelectComAdicao
+              label="Subtipo *"
+              nomeEntidade="subtipo"
+              exemplo="Apelação"
+              value={form.subtipo_id||''}
+              onChange={v => set('subtipo_id', v)}
+              opcoes={subtiposFiltrados}
+              podeAdicionar={!!form.tipo_prazo_id}
+              msgBloqueado="Selecione primeiro o tipo de prazo"
+              onSalvar={async (nome) => {
+                const { data } = await prazosAPI.criarSubtipo({ nome, tipo_prazo_id: form.tipo_prazo_id });
+                await recarregarTipos();
+                return data.dados.id;
+              }}
+            />
           </div>
           <div className="form-group">
             <label className="form-label">Descrição</label>
@@ -582,10 +684,18 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
   });
   const [salvando, setSalvando] = useState(false);
   const [usuarios, setUsuarios] = useState([]);
+  // Cópia local de tipos/subtipos: começa com a prop e é recarregada ao cadastrar um item novo
+  const [tiposLocal, setTiposLocal] = useState(tipos);
+
+  const recarregarTipos = useCallback(async () => {
+    const r = await prazosAPI.tipos();
+    if (r.data.ok) setTiposLocal(r.data.dados);
+  }, []);
 
   useEffect(() => {
     processosAPI.auxiliares().then(r => setUsuarios(r.data.dados.usuarios || []));
-  }, []);
+    recarregarTipos(); // garante a lista mais atual toda vez que o modal abre
+  }, [recarregarTipos]);
 
   useEffect(() => {
     if (!form.data_inicio || !form.quantidade || parseInt(form.quantidade) <= 0) return;
@@ -620,8 +730,8 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
   }
 
   const subtiposFiltrados = form.tipo_prazo_id
-    ? tipos.subtipos.filter(s => String(s.tipo_prazo_id) === String(form.tipo_prazo_id))
-    : tipos.subtipos;
+    ? tiposLocal.subtipos.filter(s => String(s.tipo_prazo_id) === String(form.tipo_prazo_id))
+    : tiposLocal.subtipos;
 
   return (
     <div className="modal-overlay">
@@ -644,20 +754,34 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
             </div>
           </div>
           <div className="grid-2">
-            <div className="form-group">
-              <label className="form-label">Tipo de prazo *</label>
-              <select className="form-control" value={form.tipo_prazo_id} onChange={e=>set('tipo_prazo_id',e.target.value)}>
-                <option value="">— Selecione —</option>
-                {tipos.tipos.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Subtipo *</label>
-              <select className="form-control" value={form.subtipo_id} onChange={e=>set('subtipo_id',e.target.value)}>
-                <option value="">— Selecione —</option>
-                {subtiposFiltrados.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
-              </select>
-            </div>
+            <SelectComAdicao
+              label="Tipo de prazo *"
+              nomeEntidade="tipo de prazo"
+              exemplo="Recurso"
+              value={form.tipo_prazo_id}
+              onChange={v => set('tipo_prazo_id', v)}
+              opcoes={tiposLocal.tipos}
+              onSalvar={async (nome) => {
+                const { data } = await prazosAPI.criarTipo({ nome });
+                await recarregarTipos();
+                return data.dados.id;
+              }}
+            />
+            <SelectComAdicao
+              label="Subtipo *"
+              nomeEntidade="subtipo"
+              exemplo="Apelação"
+              value={form.subtipo_id}
+              onChange={v => set('subtipo_id', v)}
+              opcoes={subtiposFiltrados}
+              podeAdicionar={!!form.tipo_prazo_id}
+              msgBloqueado="Selecione primeiro o tipo de prazo"
+              onSalvar={async (nome) => {
+                const { data } = await prazosAPI.criarSubtipo({ nome, tipo_prazo_id: form.tipo_prazo_id });
+                await recarregarTipos();
+                return data.dados.id;
+              }}
+            />
           </div>
           <div className="form-group">
             <label className="form-label">Descrição</label>

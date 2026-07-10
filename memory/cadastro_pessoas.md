@@ -27,7 +27,7 @@ Pessoa só vira **cliente** quando vinculada a uma pasta + contrato de honorári
 
 ## Dados — Pessoa Física
 
-Nome completo, CPF, RG, data de nascimento, estado civil, profissão, gênero, telefone(s), e-mail(s), endereço completo, foto (opcional)
+Nome completo, CPF, RG, data de nascimento, estado civil, profissão, gênero, **nacionalidade (09/07/2026)**, telefone(s), e-mail(s), endereço completo, foto (opcional)
 
 ## Dados — Pessoa Jurídica
 
@@ -48,4 +48,19 @@ Razão social, nome fantasia, CNPJ, inscrição estadual, telefone(s), e-mail(s)
 - **Capitalização de auxiliares:** ao cadastrar novo estado civil, profissão ou gênero, primeira letra maiúscula + demais minúsculas (normalização no backend em `criarAuxiliar`)
 - **Coluna Qtde Proc:** na listagem de pessoas físicas e jurídicas, mostra total de processos onde a pessoa aparece como autor (`tbltituloprocautor`) OU réu (`tbltituloprocreu`), sem duplicatas (UNION)
 
-**Relacionado:** [[processos-pastas]], [[database-tables]]
+## Implementado (09/07/2026) — Campo NACIONALIDADE (obrigatório, tabela auxiliar)
+
+- **Novo campo "Nacionalidade" em Pessoa Física**, OBRIGATÓRIO, seguindo EXATAMENTE o padrão de `genero`/
+  `estado_civil`/`profissao`: alimentado por uma TABELA À PARTE `nacionalidade` (id + nome), para evitar erro de
+  escrita. Nome da tabela SEM prefixo `tbl` (o `tbl` é só para tabelas de processo). Coluna
+  `pessoas_fisicas.nacionalidade_id` (nullable no banco, igual genero_id; a obrigatoriedade é validada só na tela).
+- **"Brasileira" fixada em id=1** e TODOS os registros existentes de `pessoas_fisicas` recebem `nacionalidade_id=1`
+  (backfill) → por isso tornar obrigatório NÃO trava a edição da base já importada.
+- **Onde mexeu (LOCAL):** `pessoasController.js` (criar/editar gravam nacionalidade_id; `buscarAuxiliares` devolve
+  `nacionalidades`; `criarAuxiliar` aceita `nacionalidades`; exportação Excel ganhou coluna Nacionalidade);
+  `pages/Pessoas/Pessoas.js` (campo `SelectComAdicao` + validação + coluna de exportação); `variaveisResolver.js`
+  ({{nacionalidade}} no doc de partes e {{nacionalidade_cliente}} no doc comum agora puxam o valor real).
+- ⚠️ **DEPENDE do SQL** (tabela + coluna + Brasileira id 1 + backfill) — enquanto o SQL não rodar no HeidiSQL, a tela
+  de Pessoas QUEBRA (o backend faz `SELECT * FROM nacionalidade`). Ver [[pendencias-proxima-sessao]].
+
+**Relacionado:** [[processos-pastas]], [[database-tables]], [[documentos-modelos]]

@@ -94,6 +94,9 @@ TODOS os nomes de tabela devem ser MINÚSCULOS, tanto no banco quanto no código
   (Deploy/instalacao/4-deploy-sistema.sh e Deploy/atualizacao/4-ReimportarBanco.sh) todo o bloco que renomeava as
   tabelas para camelCase — era a "bomba" que quebraria a produção no Linux. NÃO reintroduzir rename para camelCase em
   lugar NENHUM (código, scripts, SQL). Banco e código: minúsculo, sempre.
+- **Reforçado 09/07/2026:** o usuário pediu de novo, com ênfase, para gravar isto ("não quero mais ter problemas com
+  isso"). Aplicado na prática nesta data ao criar a tabela `nacionalidade` (minúscula, sem prefixo tbl, seguindo
+  `genero`/`estado_civil`/`profissao`) e a coluna `pessoas_fisicas.nacionalidade_id` — tudo minúsculo, banco e código.
 
 **A pasta local SEMPRE prevalece sobre o git.**  
 Arquivos deletados localmente e depois commitados saem do git também.

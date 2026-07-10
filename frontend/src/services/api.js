@@ -141,6 +141,8 @@ export const prazosAPI = {
   marcarFazendo:    (id)        => api.put(`/prazos/${id}/fazendo`),
   liberarFazendo:   (id)        => api.put(`/prazos/${id}/liberar-fazendo`),
   tipos:            ()          => api.get('/prazos/tipos'),
+  criarTipo:        (dados)     => api.post('/prazos/tipos', dados),
+  criarSubtipo:     (dados)     => api.post('/prazos/subtipos', dados),
   vencemHoje:       ()          => api.get('/prazos/hoje'),
   // Calcula data final consultando o calendário real do banco (inclui feriados)
   calcularDataFinal: (data_inicio, quantidade, tipo_dias) =>

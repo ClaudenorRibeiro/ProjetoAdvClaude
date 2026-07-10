@@ -9,6 +9,13 @@ metadata:
 
 ## Banco — 59 tabelas (28/06/2026; +controle_versao_banco). Estrutura reconferida em 28/06: todas minúsculas, collation 0900, UNIQUE uq_pf_cpf/uq_login e índices idx_titautor/titreu_pessoa presentes.
 
+### ⚠️ Objeto novo em 09/07/2026 (CÓDIGO já usa; SQL PENDENTE — sem ele a tela de Pessoas QUEBRA) — ver [[pendencias-proxima-sessao]] e [[cadastro-pessoas]]
+- **NOVA tabela `nacionalidade`** (`id` INT AI PK, `nome` VARCHAR(50) NOT NULL) — auxiliar/lista, mesmo padrão de
+  `genero`/`estado_civil`/`profissao` (SEM prefixo tbl). "Brasileira" fixada em id=1.
+- **`pessoas_fisicas` ganha `nacionalidade_id`** INT NULL (AFTER genero_id) + KEY + FK `pessoas_fisicas_ibfk_4` →
+  `nacionalidade(id)`. Backfill: todos os registros existentes recebem nacionalidade_id=1 (Brasileira).
+- Quando rodar, o total passa de 59 → **60 tabelas**. Coluna nullable no banco (obrigatoriedade só na tela, igual genero_id).
+
 As tabelas antigas (`forum, vara, pasta, processo, partes_processo, status_processo, processo_responsaveis, modelo_comunicado`) foram **removidas**. As tabelas definitivas usam prefixo `tbl`.
 
 ### ⚠️ Objetos novos em 23/06/2026 (já no banco LOCAL; FALTA na PRODUÇÃO no deploy) — ver [[pendencias-proxima-sessao]]

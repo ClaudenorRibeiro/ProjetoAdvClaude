@@ -283,6 +283,65 @@ async function buscarTipos(req, res) {
   }
 }
 
+// POST /api/prazos/tipos — Cadastra um novo TIPO de prazo (botão "…" da tela)
+// Só insere (a tabela já existe); dedup pelo nome (case-insensitive).
+async function criarTipo(req, res) {
+  try {
+    const { nome } = req.body;
+    if (!nome?.trim()) return erro(res, 'Nome do tipo é obrigatório');
+
+    // Mantém o texto digitado, apenas garante a 1ª letra maiúscula
+    const nomeTrimmed     = nome.trim();
+    const nomeNormalizado = nomeTrimmed.charAt(0).toUpperCase() + nomeTrimmed.slice(1);
+
+    const [dup] = await pool.execute(
+      'SELECT id FROM tipo_prazo WHERE LOWER(nome) = LOWER(?)', [nomeNormalizado]
+    );
+    if (dup.length > 0) return erro(res, `"${nomeNormalizado}" já está cadastrado como tipo de prazo`);
+
+    const [result] = await pool.execute(
+      'INSERT INTO tipo_prazo (nome) VALUES (?)', [nomeNormalizado]
+    );
+    return sucesso(res, { id: result.insertId, nome: nomeNormalizado }, 'Tipo de prazo cadastrado', 201);
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// POST /api/prazos/subtipos — Cadastra um novo SUBTIPO (botão "…" da tela)
+// O subtipo pertence sempre a um tipo (FK obrigatória tipo_prazo_id).
+// A duplicata é conferida DENTRO do mesmo tipo (o mesmo nome pode existir em outro tipo).
+async function criarSubtipo(req, res) {
+  try {
+    const { nome, tipo_prazo_id } = req.body;
+    if (!nome?.trim())   return erro(res, 'Nome do subtipo é obrigatório');
+    if (!tipo_prazo_id)  return erro(res, 'Selecione o tipo de prazo antes de cadastrar o subtipo');
+
+    // Confere que o tipo informado existe (a FK exige um tipo_prazo_id válido)
+    const [tipoRow] = await pool.execute('SELECT id FROM tipo_prazo WHERE id = ?', [tipo_prazo_id]);
+    if (!tipoRow.length) return erro(res, 'Tipo de prazo informado não existe');
+
+    const nomeTrimmed     = nome.trim();
+    const nomeNormalizado = nomeTrimmed.charAt(0).toUpperCase() + nomeTrimmed.slice(1);
+
+    const [dup] = await pool.execute(
+      'SELECT id FROM prazo_subtipo WHERE tipo_prazo_id = ? AND LOWER(nome) = LOWER(?)',
+      [tipo_prazo_id, nomeNormalizado]
+    );
+    if (dup.length > 0) return erro(res, `"${nomeNormalizado}" já está cadastrado neste tipo`);
+
+    const [result] = await pool.execute(
+      'INSERT INTO prazo_subtipo (tipo_prazo_id, nome) VALUES (?, ?)',
+      [tipo_prazo_id, nomeNormalizado]
+    );
+    return sucesso(res,
+      { id: result.insertId, nome: nomeNormalizado, tipo_prazo_id: Number(tipo_prazo_id) },
+      'Subtipo cadastrado', 201);
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
 // GET /api/prazos/hoje — Prazos que vencem hoje (para o dashboard)
 async function vencemHoje(req, res) {
   try {
@@ -582,4 +641,4 @@ function labelStatus(s) {
   return map[s] || s || '—';
 }
 
-module.exports = { listar, criar, editar, excluir, mudarStatus, buscarTipos, vencemHoje, calcularDataFinal, marcarFazendo, liberarFazendo, liberarFazendoExpirados, buscarHistorico };
+module.exports = { listar, criar, editar, excluir, mudarStatus, buscarTipos, criarTipo, criarSubtipo, vencemHoje, calcularDataFinal, marcarFazendo, liberarFazendo, liberarFazendoExpirados, buscarHistorico };
