@@ -10,7 +10,7 @@ import { processosAPI, andamentoAPI, prazosAPI, tarefasAPI, audienciasAPI, peric
 import { formatarData, formatarNumeroPasta, formatarMoeda, labelStatusPrazo, corPrazo, toTitleCase } from '../../utils/formatters';
 import { ModalNovoProcesso, ModalEditarProcesso } from './Processos';
 import { ModalNovoPrazo, ModalCancelarPrazo, ModalEditarPrazo } from '../Prazos/Prazos';
-import { ModalTarefa } from '../Tarefas/Tarefas';
+import { ModalTarefa, ModalHistoricoTarefa } from '../Tarefas/Tarefas';
 import { ModalNovaAudiencia, ModalEditarAudiencia, ModalCancelarAudiencia, ModalRemarcarAudiencia, ModalHistoricoAudiencia, ModalRegistrarAta } from '../Audiencias/Audiencias';
 // Modais de perícia reutilizados da tela de Perícias (aba Perícias da pasta)
 import { ModalPericia, ModalCancelar as ModalCancelarPericia, ModalRemarcar as ModalRemarcarPericia, ModalHistorico as ModalHistoricoPericia } from '../Pericias/Pericias';
@@ -19,6 +19,7 @@ import { ModalLancamento as ModalLancamentoFin, ModalAcordo as ModalAcordoFin, A
 import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
+import MenuAcoes from '../../components/MenuAcoes';
 
 const STATUS_COR_PRAZO = { agendado:'badge-azul', pendente:'badge-laranja', atrasado:'badge-vermelho', concluido:'badge-verde', cancelado:'badge-cinza' };
 
@@ -71,6 +72,7 @@ export default function PastaDetalhe() {
 
   // Modais — Tarefas
   const [modalTarefa, setModalTarefa]         = useState(false);
+  const [tarefaHistorico, setTarefaHistorico] = useState(null);
   const [tarefaEditando, setTarefaEditando]   = useState(null);
 
   // Modais — Audiências
@@ -205,6 +207,20 @@ export default function PastaDetalhe() {
         await prazosAPI.excluir(prazoId);
         toast.success('Prazo excluído');
         carregarPrazos();
+      },
+    });
+  }
+
+  function excluirTarefa(t) {
+    setConfirmar({
+      titulo: 'Excluir Tarefa',
+      mensagem: 'Esta tarefa será removida permanentemente. Esta ação não pode ser desfeita.',
+      textoBotao: '🗑️ Excluir',
+      tipo: 'perigo',
+      acao: async () => {
+        await tarefasAPI.excluir(t.id);
+        toast.success('Tarefa excluída');
+        carregarTarefas();
       },
     });
   }
@@ -762,10 +778,6 @@ export default function PastaDetalhe() {
                                       style={{background:'#16a34a',color:'#fff',border:'none',borderRadius:'5px',padding:'4px 8px',cursor:'pointer',fontSize:'12px',whiteSpace:'nowrap'}}>
                                       ✅ Concluir
                                     </button>
-                                    <button onClick={() => setPrazoCancelando(p)}
-                                      style={{background:'#6b7280',color:'#fff',border:'none',borderRadius:'5px',padding:'4px 8px',cursor:'pointer',fontSize:'12px',whiteSpace:'nowrap'}}>
-                                      ✖ Cancelar
-                                    </button>
                                   </>
                                 )}
                                 {euFazendo && (
@@ -777,10 +789,6 @@ export default function PastaDetalhe() {
                                     <button onClick={() => concluirPrazo(p.id)}
                                       style={{background:'#16a34a',color:'#fff',border:'none',borderRadius:'5px',padding:'4px 8px',cursor:'pointer',fontSize:'12px',whiteSpace:'nowrap'}}>
                                       ✅ Concluir
-                                    </button>
-                                    <button onClick={() => setPrazoCancelando(p)}
-                                      style={{background:'#6b7280',color:'#fff',border:'none',borderRadius:'5px',padding:'4px 8px',cursor:'pointer',fontSize:'12px',whiteSpace:'nowrap'}}>
-                                      ✖ Cancelar
                                     </button>
                                   </>
                                 )}
@@ -794,28 +802,25 @@ export default function PastaDetalhe() {
                                       style={{background:'#16a34a',color:'#fff',border:'none',borderRadius:'5px',padding:'4px 8px',cursor:'pointer',fontSize:'12px',whiteSpace:'nowrap'}}>
                                       ✅ Concluir
                                     </button>
-                                    <button onClick={() => setPrazoCancelando(p)}
-                                      style={{background:'#6b7280',color:'#fff',border:'none',borderRadius:'5px',padding:'4px 8px',cursor:'pointer',fontSize:'12px',whiteSpace:'nowrap'}}>
-                                      ✖ Cancelar
-                                    </button>
                                   </>
                                 )}
                               </>
                             )}
-                            {/* Editar — só para prazos ativos e sem bloqueio de fazendo */}
-                            {ativo && temPermissao('prazos','alterar') && (!outroFazendo || ehAdmin) && (
-                              <button title="Editar" onClick={() => setPrazoEditando(p)}
-                                style={{background:'#3b82f6',color:'#fff',border:'none',borderRadius:'5px',padding:'4px 8px',cursor:'pointer',fontSize:'13px'}}>
-                                ✏️
-                              </button>
-                            )}
-                            {/* Excluir — só para prazos ativos e sem bloqueio de fazendo */}
-                            {ativo && temPermissao('prazos','excluir') && (!outroFazendo || ehAdmin) && (
-                              <button title="Excluir" onClick={() => confirmarExcluirPrazo(p.id)}
-                                style={{background:'#ef4444',color:'#fff',border:'none',borderRadius:'5px',padding:'4px 8px',cursor:'pointer',fontSize:'13px'}}>
-                                🗑️
-                              </button>
-                            )}
+                            {/* Demais ações no menu "⋮": Gerar doc, Cancelar, Editar, Excluir */}
+                            <MenuAcoes itens={[
+                              { label: 'Gerar documento', icone: '📄',
+                                oculto: !temPermissao('documentos','cadastrar'),
+                                gerarDoc: { ancoraTipo: 'prazo', ancoraId: p.id } },
+                              { label: 'Cancelar', icone: '✖',
+                                oculto: !ativo,
+                                onClick: () => setPrazoCancelando(p) },
+                              { label: 'Editar', icone: '✏️',
+                                oculto: !(ativo && temPermissao('prazos','alterar') && (!outroFazendo || ehAdmin)),
+                                onClick: () => setPrazoEditando(p) },
+                              { label: 'Excluir', icone: '🗑️', perigo: true,
+                                oculto: !(ativo && temPermissao('prazos','excluir') && (!outroFazendo || ehAdmin)),
+                                onClick: () => confirmarExcluirPrazo(p.id) },
+                            ]} />
                           </div>
                         </td>
                       </tr>
@@ -850,6 +855,9 @@ export default function PastaDetalhe() {
             }) : undefined}
             onFechar={(reload) => { setModalTarefa(false); setTarefaEditando(null); if (reload) carregarTarefas(); }}
           />
+        )}
+        {tarefaHistorico && (
+          <ModalHistoricoTarefa tarefa={tarefaHistorico} onFechar={() => setTarefaHistorico(null)} />
         )}
         {modalNovoPrazo && (
           <ModalNovoPrazo
@@ -996,19 +1004,24 @@ export default function PastaDetalhe() {
                           </span>
                         </td>
                         <td>
-                          <div style={{ display: 'flex', gap: '6px' }}>
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                             <button
                               className={`btn ${t.concluida ? 'btn-outline' : 'btn-success'}`}
                               style={{ fontSize: '12px', padding: '4px 10px' }}
                               onClick={() => toggleConcluirTarefa(t)}>
                               {t.concluida ? 'Reabrir' : '✓ Concluir'}
                             </button>
-                            {!t.concluida && (
-                              <button className="btn btn-outline" style={{ fontSize: '12px', padding: '4px 10px' }}
-                                onClick={() => { setTarefaEditando(t); setModalTarefa(true); }}>
-                                Editar
-                              </button>
-                            )}
+                            <MenuAcoes itens={[
+                              { label: 'Editar', icone: '✏️',
+                                oculto: !(temPermissao('tarefas','alterar') && !t.concluida),
+                                onClick: () => { setTarefaEditando(t); setModalTarefa(true); } },
+                              { label: 'Histórico', icone: '📋',
+                                oculto: !temPermissao('tarefas','historico'),
+                                onClick: () => setTarefaHistorico(t) },
+                              { label: 'Excluir', icone: '🗑️', perigo: true,
+                                oculto: !temPermissao('tarefas','excluir'),
+                                onClick: () => excluirTarefa(t) },
+                            ]} />
                           </div>
                         </td>
                       </tr>
@@ -1077,46 +1090,14 @@ export default function PastaDetalhe() {
                                 📋 Registrar Ata
                               </button>
                             )}
-                            {/* Cancelar — só agendada ou adiada */}
-                            {['agendada','adiada'].includes(a.status) && temPermissao('audiencias', 'alterar') && (
-                              <button className="btn btn-sm"
-                                style={{ background: '#f59e0b', color: '#fff', border: 'none' }}
-                                onClick={() => setAudienciaCancelando(a)}
-                                title="Cancelar audiência">
-                                Cancelar
-                              </button>
-                            )}
-                            {/* Remarcar — só agendada ou adiada */}
-                            {['agendada','adiada'].includes(a.status) && temPermissao('audiencias', 'alterar') && (
-                              <button className="btn btn-sm"
-                                style={{ background: '#7c3aed', color: '#fff', border: 'none' }}
-                                onClick={() => setAudienciaRemarcando(a)}
-                                title="Remarcar audiência">
-                                Remarcar
-                              </button>
-                            )}
-                            {/* Editar */}
-                            {podeEditarAud(a) && (
-                              <button className="btn btn-sm btn-secondary"
-                                onClick={() => setAudienciaEditando(a)}
-                                title="Editar audiência">
-                                ✏️ Editar
-                              </button>
-                            )}
-                            {/* Excluir */}
-                            {podeExcluirAud(a) && (
-                              <button className="btn btn-sm btn-danger"
-                                onClick={() => excluirAudiencia(a)}
-                                title="Excluir audiência">
-                                🗑️ Excluir
-                              </button>
-                            )}
-                            {/* Histórico — sempre visível */}
-                            <button className="btn btn-sm btn-secondary"
-                              onClick={() => setAudienciaHistorico(a)}
-                              title="Ver histórico de alterações">
-                              📋 Histórico
-                            </button>
+                            <MenuAcoes itens={[
+                              { label: 'Gerar documento', icone: '📄', oculto: !temPermissao('documentos','cadastrar'), gerarDoc: { ancoraTipo: 'audiencia', ancoraId: a.id } },
+                              { label: 'Cancelar', icone: '✖', oculto: !(['agendada','adiada'].includes(a.status) && temPermissao('audiencias','alterar')), onClick: () => setAudienciaCancelando(a) },
+                              { label: 'Remarcar', icone: '🔁', oculto: !(['agendada','adiada'].includes(a.status) && temPermissao('audiencias','alterar')), onClick: () => setAudienciaRemarcando(a) },
+                              { label: 'Editar', icone: '✏️', oculto: !podeEditarAud(a), onClick: () => setAudienciaEditando(a) },
+                              { label: 'Histórico', icone: '📋', onClick: () => setAudienciaHistorico(a) },
+                              { label: 'Excluir', icone: '🗑️', perigo: true, oculto: !podeExcluirAud(a), onClick: () => excluirAudiencia(a) },
+                            ]} />
                           </div>
                         </td>
                       </tr>
@@ -1164,52 +1145,22 @@ export default function PastaDetalhe() {
                         <td style={{ whiteSpace: 'nowrap' }}>
                           <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                             {/* Editar / Realizada / Cancelar / Remarcar / Comunicar — só quando agendada */}
-                            {agendada && temPermissao('pericias', 'alterar') && (
-                              <button className="btn btn-sm btn-secondary"
-                                onClick={() => editarPericia(p)} title="Editar perícia">
-                                ✏️ Editar
-                              </button>
-                            )}
+                            {/* Ação principal: marcar realizada (só agendada) */}
                             {agendada && temPermissao('pericias', 'alterar') && (
                               <button className="btn btn-sm btn-primary"
                                 onClick={() => marcarPericiaRealizada(p)} title="Marcar como realizada">
                                 ✓ Realizada
                               </button>
                             )}
-                            {agendada && temPermissao('pericias', 'alterar') && (
-                              <button className="btn btn-sm"
-                                style={{ background: '#f59e0b', color: '#fff', border: 'none' }}
-                                onClick={() => setPericiaCancelando(p)} title="Cancelar perícia">
-                                Cancelar
-                              </button>
-                            )}
-                            {agendada && temPermissao('pericias', 'alterar') && (
-                              <button className="btn btn-sm"
-                                style={{ background: '#7c3aed', color: '#fff', border: 'none' }}
-                                onClick={() => setPericiaRemarcando(p)} title="Remarcar perícia">
-                                Remarcar
-                              </button>
-                            )}
-                            {/* Histórico — sempre visível */}
-                            <button className="btn btn-sm btn-secondary"
-                              onClick={() => setPericiaHistorico(p)} title="Ver histórico de alterações">
-                              📋 Histórico
-                            </button>
-                            {/* Excluir — nunca em cancelada/remarcada (regra do backend) */}
-                            {!historico && temPermissao('pericias', 'excluir') && (
-                              <button className="btn btn-sm btn-danger"
-                                onClick={() => excluirPericia(p)} title="Excluir perícia">
-                                🗑️ Excluir
-                              </button>
-                            )}
-                            {/* Comunicar/Reenviar ao cliente — só quando agendada */}
-                            {agendada && temPermissao('pericias', 'alterar') && (
-                              <button className="btn btn-sm btn-secondary"
-                                onClick={() => comunicarPericia(p.id)}
-                                title="Enviar/reenviar comunicado ao cliente por e-mail">
-                                ✉ {p.comunicado_enviado ? 'Reenviar' : 'Comunicar'}
-                              </button>
-                            )}
+                            <MenuAcoes itens={[
+                              { label: 'Gerar documento', icone: '📄', oculto: !temPermissao('documentos','cadastrar'), gerarDoc: { ancoraTipo: 'pericia', ancoraId: p.id } },
+                              { label: 'Editar', icone: '✏️', oculto: !(agendada && temPermissao('pericias','alterar')), onClick: () => editarPericia(p) },
+                              { label: 'Remarcar', icone: '🔁', oculto: !(agendada && temPermissao('pericias','alterar')), onClick: () => setPericiaRemarcando(p) },
+                              { label: 'Cancelar', icone: '✖', oculto: !(agendada && temPermissao('pericias','alterar')), onClick: () => setPericiaCancelando(p) },
+                              { label: p.comunicado_enviado ? 'Reenviar comunicado' : 'Comunicar cliente', icone: '✉', oculto: !(agendada && temPermissao('pericias','alterar')), onClick: () => comunicarPericia(p.id) },
+                              { label: 'Histórico', icone: '📋', onClick: () => setPericiaHistorico(p) },
+                              { label: 'Excluir', icone: '🗑️', perigo: true, oculto: !(!historico && temPermissao('pericias','excluir')), onClick: () => excluirPericia(p) },
+                            ]} />
                           </div>
                         </td>
                       </tr>

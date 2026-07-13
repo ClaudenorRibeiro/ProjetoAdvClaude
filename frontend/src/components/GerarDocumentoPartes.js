@@ -13,7 +13,7 @@ import { documentosAPI, pessoasAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { useAuth } from '../context/AuthContext';
 
-export default function GerarDocumentoPartesBotao({ label = '📄 Gerar documento de partes', estilo }) {
+export default function GerarDocumentoPartesBotao({ label = '📄 Gerar documentos', estilo }) {
   const { temPermissao } = useAuth();
   const [aberto, setAberto] = useState(false);
 
@@ -176,7 +176,7 @@ function ModalGerarPartes({ onFechar }) {
     <div className="modal-overlay">
       <div className="modal-box" style={{ maxWidth: '760px' }}>
         <div className="modal-header">
-          <h3>Gerar documento de partes</h3>
+          <h3>Gerar documentos</h3>
           <button className="modal-fechar" onClick={onFechar}>✕</button>
         </div>
         <div className="modal-body">

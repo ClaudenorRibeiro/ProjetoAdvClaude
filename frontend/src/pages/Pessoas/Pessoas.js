@@ -199,13 +199,13 @@ export default function Pessoas() {
           <GerarDocumentoPartesBotao />
           {/* Exporta a busca atual (ou tudo) para Excel — abre modal para escolher os campos */}
           <button className="btn btn-outline" onClick={abrirExport}>Exportar Excel</button>
-          {/* Unificar empresas duplicadas — só na aba Jurídicas e só para admin/superadmin */}
-          {aba === 'juridicas' && ehAdmin && !modoUnificar && (
+          {/* Unificar cadastros duplicados — nas duas abas (física e jurídica), só para admin/superadmin */}
+          {ehAdmin && !modoUnificar && (
             <button className="btn btn-outline" onClick={() => setModoUnificar(true)}>
               Unificar duplicadas
             </button>
           )}
-          {aba === 'juridicas' && modoUnificar && (
+          {modoUnificar && (
             <>
               <span style={{fontSize:'13px',color:'#555'}}>{selUnificar.length} selecionado(s)</span>
               <button className="btn btn-primary" disabled={selUnificar.length < 2}
@@ -223,7 +223,8 @@ export default function Pessoas() {
           <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
             {aba === 'fisicas' ? (
               <TabelaFisicas lista={lista} onEditar={abrirEdicao} onExcluir={pedirConfirmacaoExclusao}
-                onVerProcessos={abrirProcessos} />
+                onVerProcessos={abrirProcessos}
+                modoUnificar={modoUnificar} selecionados={selUnificar} onToggleSel={toggleSelUnificar} />
             ) : (
               <TabelaJuridicas lista={lista} onEditar={abrirEdicao} onExcluir={pedirConfirmacaoExclusao}
                 onVerProcessos={abrirProcessos}
@@ -262,9 +263,10 @@ export default function Pessoas() {
         />
       )}
 
-      {/* Modal de unificação de empresas duplicadas */}
+      {/* Modal de unificação de cadastros duplicados (física ou jurídica) */}
       {modalUnificar && (
-        <ModalUnificarEmpresas
+        <ModalUnificarPessoas
+          tipo={aba}
           selecionados={selUnificar}
           onFechar={(reload) => {
             setModalUnificar(false);
@@ -434,15 +436,25 @@ function CelulaQtdeProc({ qtde, onClick }) {
   );
 }
 
-function TabelaFisicas({ lista, onEditar, onExcluir, onVerProcessos }) {
+function TabelaFisicas({ lista, onEditar, onExcluir, onVerProcessos, modoUnificar, selecionados = [], onToggleSel }) {
+  const estaSel = (id) => selecionados.some(x => x.id === id);
   return (
     <table className="tabela tabela-sticky">
       <thead>
-        <tr><th>Nome</th><th>CPF</th><th>Telefone</th><th>E-mail</th><th style={{textAlign:'center'}}>Qtde Proc</th><th>Ações</th></tr>
+        <tr>
+          {modoUnificar && <th style={{width:'34px'}}></th>}
+          <th>Nome</th><th>CPF</th><th>Telefone</th><th>E-mail</th><th style={{textAlign:'center'}}>Qtde Proc</th><th>Ações</th>
+        </tr>
       </thead>
       <tbody>
         {lista.map(p => (
-          <tr key={p.id}>
+          <tr key={p.id} style={modoUnificar && estaSel(p.id) ? {background:'#eef4ff'} : undefined}>
+            {/* Modo unificar: caixa para marcar cadastros duplicados da mesma pessoa */}
+            {modoUnificar && (
+              <td style={{textAlign:'center'}}>
+                <input type="checkbox" checked={estaSel(p.id)} onChange={() => onToggleSel(p)} />
+              </td>
+            )}
             <td><strong>{p.nome}</strong></td>
             <td>{formatarCPF(p.cpf)}</td>
             <td>{p.telefone || '—'}</td>
@@ -459,11 +471,9 @@ function TabelaFisicas({ lista, onEditar, onExcluir, onVerProcessos }) {
               >
                 Excluir
               </button>
-              {/* Gerar documento — só se houver modelo "comum" gerável a partir da pessoa */}
-              {Number(p.tem_modelo_doc) === 1 && (
-                <GerarDocumentoBotao ancoraTipo="pessoa_fisica" ancoraId={p.id}
-                  estilo={{fontSize:'12px',padding:'4px 10px'}} />
-              )}
+              {/* Gerar documento — sempre visível; o modal lista os modelos desta origem (ou avisa se não houver). */}
+              <GerarDocumentoBotao ancoraTipo="pessoa_fisica" ancoraId={p.id}
+                estilo={{fontSize:'12px',padding:'4px 10px'}} />
             </td>
           </tr>
         ))}
@@ -508,11 +518,9 @@ function TabelaJuridicas({ lista, onEditar, onExcluir, onVerProcessos, modoUnifi
               >
                 Excluir
               </button>
-              {/* Gerar documento — só se houver modelo "comum" gerável a partir da pessoa */}
-              {Number(p.tem_modelo_doc) === 1 && (
-                <GerarDocumentoBotao ancoraTipo="pessoa_juridica" ancoraId={p.id}
-                  estilo={{fontSize:'12px',padding:'4px 10px'}} />
-              )}
+              {/* Gerar documento — sempre visível; o modal lista os modelos desta origem (ou avisa se não houver). */}
+              <GerarDocumentoBotao ancoraTipo="pessoa_juridica" ancoraId={p.id}
+                estilo={{fontSize:'12px',padding:'4px 10px'}} />
             </td>
           </tr>
         ))}
@@ -522,11 +530,14 @@ function TabelaJuridicas({ lista, onEditar, onExcluir, onVerProcessos, modoUnifi
 }
 
 // ============================================================
-// MODAL — Unificar empresas duplicadas
-// Move TODOS os vínculos dos cadastros duplicados para o PRINCIPAL
-// escolhido e apaga os duplicados. Ação irreversível (confirma antes).
+// MODAL — Unificar cadastros duplicados (pessoa física OU empresa)
+// Move TODOS os vínculos dos duplicados para o PRINCIPAL escolhido e apaga os
+// duplicados. Ação irreversível (confirma antes). Para física, o backend BLOQUEIA
+// se houver CPFs diferentes e o principal HERDA o CPF se estiver sem.
 // ============================================================
-function ModalUnificarEmpresas({ selecionados, onFechar }) {
+function ModalUnificarPessoas({ tipo, selecionados, onFechar }) {
+  const ehFisica = tipo === 'fisicas';
+  const nomeDe = (p) => ehFisica ? p.nome : p.razao_social;
   // Sugere como principal o cadastro com MAIS processos
   const sugerido = [...selecionados].sort((a, b) => (b.qtde_proc ?? 0) - (a.qtde_proc ?? 0))[0];
   const [principalId, setPrincipalId] = useState(sugerido?.id);
@@ -539,11 +550,9 @@ function ModalUnificarEmpresas({ selecionados, onFechar }) {
     if (duplicados.length === 0) return toast.error('Selecione ao menos um duplicado além do principal');
     setSalvando(true);
     try {
-      await pessoasAPI.unificarJuridicas({
-        principal_id:   principalId,
-        duplicados_ids: duplicados.map(p => p.id),
-      });
-      toast.success('Empresas unificadas com sucesso!');
+      const fn = ehFisica ? pessoasAPI.unificarFisicas : pessoasAPI.unificarJuridicas;
+      await fn({ principal_id: principalId, duplicados_ids: duplicados.map(p => p.id) });
+      toast.success(ehFisica ? 'Pessoas unificadas com sucesso!' : 'Empresas unificadas com sucesso!');
       onFechar(true);
     } catch (err) {
       toast.error(err.response?.data?.mensagem || 'Erro ao unificar');
@@ -555,7 +564,7 @@ function ModalUnificarEmpresas({ selecionados, onFechar }) {
     <div className="modal-overlay">
       <div className="modal-box" style={{maxWidth:'560px'}}>
         <div className="modal-header">
-          <h3>Unificar empresas duplicadas</h3>
+          <h3>{ehFisica ? 'Unificar pessoas duplicadas' : 'Unificar empresas duplicadas'}</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
         </div>
         <div className="modal-body">
@@ -563,6 +572,12 @@ function ModalUnificarEmpresas({ selecionados, onFechar }) {
             Escolha o cadastro <strong>principal</strong> (o que vai ficar). Todos os processos e
             vínculos dos outros serão movidos para ele, e os demais serão <strong>excluídos do banco</strong>.
           </p>
+          {ehFisica && (
+            <p style={{fontSize:'12px',color:'#b45309',marginBottom:'12px'}}>
+              Observação: cadastros com <strong>CPFs diferentes</strong> não podem ser unificados
+              (o sistema bloqueia — CPFs diferentes indicam pessoas diferentes).
+            </p>
+          )}
           <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
             {selecionados.map(p => {
               const ehPrincipal = p.id === principalId;
@@ -576,14 +591,17 @@ function ModalUnificarEmpresas({ selecionados, onFechar }) {
                   <input type="radio" name="principal" checked={ehPrincipal}
                     onChange={() => setPrincipalId(p.id)} />
                   <span style={{flex:1}}>
-                    <strong>{p.razao_social}</strong>
+                    <strong>{nomeDe(p)}</strong>
+                    {ehFisica && p.cpf && (
+                      <span style={{color:'#888',fontSize:'12px',marginLeft:'6px'}}>CPF {formatarCPF(p.cpf)}</span>
+                    )}
                     <span style={{color:'#888',fontSize:'12px',marginLeft:'6px'}}>
                       ({p.qtde_proc ?? 0} processo(s))
                     </span>
                   </span>
                   <span style={{fontSize:'12px',fontWeight:600,
                     color: ehPrincipal ? '#2563eb' : '#b91c1c'}}>
-                    {ehPrincipal ? 'PRINCIPAL (fica)' : 'será excluída'}
+                    {ehPrincipal ? 'PRINCIPAL (fica)' : 'será excluído'}
                   </span>
                 </label>
               );

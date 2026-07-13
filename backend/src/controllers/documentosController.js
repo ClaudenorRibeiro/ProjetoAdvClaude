@@ -49,6 +49,8 @@ function normalizarDestino(body) {
   const destino = validos.includes(body.destino) ? body.destino : 'comum';
   const intOrNull = v => (v !== undefined && v !== null && v !== '' && !isNaN(parseInt(v, 10))) ? parseInt(v, 10) : null;
   const out = { destino, tipo_audiencia_id: null, modalidade: null, tipo_pericia_id: null, subtipo_prazo_id: null };
+  // "minutos antes": imprime o horário (audiência/perícia) X min antes do real (0 = real). Nunca negativo.
+  out.minutos_antes = Math.max(0, parseInt(body.minutos_antes, 10) || 0);
   if (destino === 'audiencia') {
     out.tipo_audiencia_id = intOrNull(body.tipo_audiencia_id);
     out.modalidade = ['presencial', 'virtual'].includes(body.modalidade) ? body.modalidade : null;
@@ -132,7 +134,7 @@ async function buscarModelo(req, res) {
   try {
     const [rows] = await pool.execute(
       `SELECT id, nome, descricao, destino, tipo_audiencia_id, modalidade, tipo_pericia_id, subtipo_prazo_id,
-              blocos_exigidos, variaveis_usadas, ativo, criado_em
+              blocos_exigidos, variaveis_usadas, minutos_antes, ativo, criado_em
        FROM modelo_documento WHERE id = ?`,
       [req.params.id]
     );
@@ -189,8 +191,8 @@ async function criarModelo(req, res) {
       const [result] = await pool.execute(
         `INSERT INTO modelo_documento
            (nome, descricao, destino, tipo_audiencia_id, modalidade, tipo_pericia_id, subtipo_prazo_id,
-            arquivo_s3_key, blocos_exigidos, variaveis_usadas, criado_por)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            arquivo_s3_key, blocos_exigidos, variaveis_usadas, minutos_antes, criado_por)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           nome.trim(),
           descricao && descricao.trim() ? descricao.trim() : null,
@@ -198,6 +200,7 @@ async function criarModelo(req, res) {
           key,
           analise.blocos.join(',') || null,
           analise.conhecidas.join(',') || null,
+          d.minutos_antes,
           req.usuario.id,
         ]
       );
@@ -251,13 +254,14 @@ async function atualizarModelo(req, res) {
         await pool.execute(
           `UPDATE modelo_documento
              SET nome=?, descricao=?, destino=?, tipo_audiencia_id=?, modalidade=?, tipo_pericia_id=?, subtipo_prazo_id=?,
-                 arquivo_s3_key=?, blocos_exigidos=?, variaveis_usadas=?, alterado_por=?, alterado_em=NOW()
+                 arquivo_s3_key=?, blocos_exigidos=?, variaveis_usadas=?, minutos_antes=?, alterado_por=?, alterado_em=NOW()
            WHERE id=?`,
           [
             nome.trim(), desc, d.destino, d.tipo_audiencia_id, d.modalidade, d.tipo_pericia_id, d.subtipo_prazo_id,
             novaKey,
             analise.blocos.join(',') || null,
             analise.conhecidas.join(',') || null,
+            d.minutos_antes,
             req.usuario.id, id,
           ]
         );
@@ -275,9 +279,9 @@ async function atualizarModelo(req, res) {
       await pool.execute(
         `UPDATE modelo_documento
            SET nome=?, descricao=?, destino=?, tipo_audiencia_id=?, modalidade=?, tipo_pericia_id=?, subtipo_prazo_id=?,
-               alterado_por=?, alterado_em=NOW()
+               minutos_antes=?, alterado_por=?, alterado_em=NOW()
          WHERE id=?`,
-        [nome.trim(), desc, d.destino, d.tipo_audiencia_id, d.modalidade, d.tipo_pericia_id, d.subtipo_prazo_id, req.usuario.id, id]
+        [nome.trim(), desc, d.destino, d.tipo_audiencia_id, d.modalidade, d.tipo_pericia_id, d.subtipo_prazo_id, d.minutos_antes, req.usuario.id, id]
       );
     }
 
@@ -445,13 +449,17 @@ async function gerar(req, res) {
 
     // Busca o modelo (ativo) e seu arquivo no S3.
     const [rows] = await pool.execute(
-      'SELECT id, nome, arquivo_s3_key, destino FROM modelo_documento WHERE id = ? AND ativo = 1', [modelo_id]
+      'SELECT id, nome, arquivo_s3_key, destino, minutos_antes FROM modelo_documento WHERE id = ? AND ativo = 1', [modelo_id]
     );
     if (!rows.length) return naoEncontrado(res, 'Modelo não encontrado ou desativado');
     const modelo = rows[0];
 
     // Para recibos, o destino do modelo define se o valor é do cliente (líquido) ou do parceiro (repasse).
-    const opcoes = { tipoRecibo: modelo.destino === 'recibo_parceria' ? 'parceiro' : 'cliente' };
+    // minutosAntes: opção do modelo para imprimir horário (audiência/perícia) X minutos antes do real (0 = real).
+    const opcoes = {
+      tipoRecibo: modelo.destino === 'recibo_parceria' ? 'parceiro' : 'cliente',
+      minutosAntes: Number(modelo.minutos_antes) || 0,
+    };
 
     // Resolve as variáveis a partir do registro âncora.
     const ctx = await variaveisResolver.resolver(ancora_tipo, ancora_id, req.usuario, opcoes);
@@ -525,7 +533,7 @@ async function gerarMultipessoas(req, res) {
 
     // Busca o modelo (ativo) e confere que é mesmo um "Documento de partes".
     const [rows] = await pool.execute(
-      'SELECT id, nome, arquivo_s3_key, destino FROM modelo_documento WHERE id = ? AND ativo = 1', [modelo_id]
+      'SELECT id, nome, arquivo_s3_key, destino, minutos_antes FROM modelo_documento WHERE id = ? AND ativo = 1', [modelo_id]
     );
     if (!rows.length) return naoEncontrado(res, 'Modelo não encontrado ou desativado');
     const modelo = rows[0];
@@ -693,11 +701,11 @@ async function gerarLote(req, res) {
     async function carregarModelo(modeloId) {
       if (modelosCache.has(modeloId)) return modelosCache.get(modeloId);
       const [r] = await pool.execute(
-        'SELECT id, nome, arquivo_s3_key FROM modelo_documento WHERE id = ? AND ativo = 1', [modeloId]
+        'SELECT id, nome, arquivo_s3_key, minutos_antes FROM modelo_documento WHERE id = ? AND ativo = 1', [modeloId]
       );
       if (!r.length) { modelosCache.set(modeloId, null); return null; }
       const buffer = await s3Service.baixarArquivo(r[0].arquivo_s3_key);
-      const obj = { id: r[0].id, nome: r[0].nome, buffer };
+      const obj = { id: r[0].id, nome: r[0].nome, minutos_antes: r[0].minutos_antes, buffer };
       modelosCache.set(modeloId, obj);
       return obj;
     }
@@ -716,7 +724,7 @@ async function gerarLote(req, res) {
         if (!modelo) { falhas++; continue; }
 
         // Resolve as variáveis a partir do registro âncora (mesmo resolvedor da geração individual).
-        const ctx = await variaveisResolver.resolver(ancora_tipo, ancoraId, req.usuario);
+        const ctx = await variaveisResolver.resolver(ancora_tipo, ancoraId, req.usuario, { minutosAntes: Number(modelo.minutos_antes) || 0 });
         if (!ctx) { falhas++; continue; }
 
         // Preenche o .docx e, se for PDF, converte (LibreOffice — fila serializada interna).

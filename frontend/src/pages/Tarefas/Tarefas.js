@@ -9,6 +9,7 @@ import { formatarData, labelPrioridade, toTitleCase, mascaraCNJ } from '../../ut
 import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
+import MenuAcoes from '../../components/MenuAcoes';
 
 const PRIORIDADE_COR = { urgente: 'badge-vermelho', normal: 'badge-laranja', baixa: 'badge-verde' };
 const LIMITE = 100;
@@ -191,32 +192,24 @@ export default function Tarefas() {
                     <td>{t.atribuida_para_nome || 'Escritório'}</td>
                     <td>{renderVinculo(t)}</td>
                     <td>
-                      <div style={{ display: 'flex', gap: '6px' }}>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                         <button
                           className={`btn ${t.concluida ? 'btn-outline' : 'btn-success'}`}
                           style={{ fontSize: '12px', padding: '4px 10px' }}
                           onClick={() => toggleConcluir(t)}>
                           {t.concluida ? 'Reabrir' : '✓ Concluir'}
                         </button>
-                        {temPermissao('tarefas', 'alterar') && !t.concluida && (
-                          <button className="btn btn-outline" style={{ fontSize: '12px', padding: '4px 10px' }}
-                            onClick={() => { setEditando(t); setModalAberto(true); }}>
-                            Editar
-                          </button>
-                        )}
-                        {temPermissao('tarefas', 'historico') && (
-                          <button title="Ver histórico" onClick={() => setTarefaHistorico(t)}
-                            style={{ background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: '5px',
-                                     padding: '4px 8px', cursor: 'pointer', fontSize: '12px', whiteSpace: 'nowrap' }}>
-                            📋 Histórico
-                          </button>
-                        )}
-                        {temPermissao('tarefas', 'excluir') && (
-                          <button className="btn btn-danger" style={{ fontSize: '12px', padding: '4px 10px' }}
-                            onClick={() => confirmarExcluir(t)}>
-                            Excluir
-                          </button>
-                        )}
+                        <MenuAcoes itens={[
+                          { label: 'Editar', icone: '✏️',
+                            oculto: !(temPermissao('tarefas','alterar') && !t.concluida),
+                            onClick: () => { setEditando(t); setModalAberto(true); } },
+                          { label: 'Histórico', icone: '📋',
+                            oculto: !temPermissao('tarefas','historico'),
+                            onClick: () => setTarefaHistorico(t) },
+                          { label: 'Excluir', icone: '🗑️', perigo: true,
+                            oculto: !temPermissao('tarefas','excluir'),
+                            onClick: () => confirmarExcluir(t) },
+                        ]} />
                       </div>
                     </td>
                   </tr>
@@ -266,7 +259,7 @@ export default function Tarefas() {
 // ============================================================
 // MODAL HISTÓRICO DE TAREFA — Linha do tempo de eventos
 // ============================================================
-function ModalHistoricoTarefa({ tarefa, onFechar }) {
+export function ModalHistoricoTarefa({ tarefa, onFechar }) {
   const [historico, setHistorico] = useState(null);
   const [carregando, setCarregando] = useState(true);
 

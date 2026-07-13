@@ -9,8 +9,8 @@ import { formatarData, toTitleCase, mascaraMoeda, parseMoeda } from '../../utils
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
-import GerarDocumentoBotao from '../../components/GerarDocumento';
 import ModalGerarLote from '../../components/GerarLote';
+import MenuAcoes from '../../components/MenuAcoes';
 
 const STATUS_COR = {
   agendada:  'badge-azul',
@@ -236,60 +236,23 @@ export default function Audiencias() {
                         )}
                       </td>
                       <td>
-                        <div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
-                          {/* Registrar ata — só audiências agendadas ou adiadas */}
+                        <div style={{display:'flex',gap:'6px',flexWrap:'wrap',alignItems:'center'}}>
+                          {/* Ação principal: registrar ata — só agendadas/adiadas */}
                           {(a.status === 'agendada' || a.status === 'adiada') && (
                             <button className="btn btn-primary" style={{fontSize:'11px',padding:'4px 8px'}}
                               onClick={() => setModalAta(a)}>
                               Registrar Ata
                             </button>
                           )}
-                          {/* Cancelar — só agendadas/adiadas */}
-                          {(a.status === 'agendada' || a.status === 'adiada') && temPermissao('audiencias','alterar') && (
-                            <button className="btn btn-outline" style={{fontSize:'11px',padding:'4px 8px',color:'#d97706',borderColor:'#fcd34d'}}
-                              onClick={() => setModalCancelar(a)}>
-                              Cancelar
-                            </button>
-                          )}
-                          {/* Remarcar — só agendadas/adiadas */}
-                          {(a.status === 'agendada' || a.status === 'adiada') && temPermissao('audiencias','alterar') && (
-                            <button className="btn btn-outline" style={{fontSize:'11px',padding:'4px 8px',color:'#7c3aed',borderColor:'#c4b5fd'}}
-                              onClick={() => setModalRemarcar(a)}>
-                              Remarcar
-                            </button>
-                          )}
-                          {/* Marcar impressa — só com ata */}
-                          {['realizada','adiada','acordo','cancelada'].includes(a.status) && !a.ata_impressa && (
-                            <button className="btn btn-outline" style={{fontSize:'11px',padding:'4px 8px'}}
-                              onClick={() => marcarAtaImpressa(a.id)}>
-                              Marcar Impressa
-                            </button>
-                          )}
-                          {/* Editar */}
-                          {podeEditar(a) && (
-                            <button className="btn btn-outline" style={{fontSize:'11px',padding:'4px 8px'}}
-                              onClick={() => setModalEditar(a)}>
-                              ✏️ Editar
-                            </button>
-                          )}
-                          {/* Excluir */}
-                          {podeExcluir(a) && (
-                            <button className="btn btn-outline" style={{fontSize:'11px',padding:'4px 8px',color:'#dc2626',borderColor:'#fca5a5'}}
-                              onClick={() => setConfirmarExcluir(a)}>
-                              🗑️ Excluir
-                            </button>
-                          )}
-                          {/* Histórico */}
-                          <button className="btn btn-outline" style={{fontSize:'11px',padding:'4px 8px',color:'#6b7280',borderColor:'#d1d5db'}}
-                            onClick={() => setModalHistorico(a)}>
-                            📋 Histórico
-                          </button>
-                          {/* Gerar documento — só para audiências que ainda vão acontecer (agendada/adiada)
-                              E que tenham um modelo cadastrado para o seu tipo+modalidade (ex.: Julgamento sem modelo não mostra). */}
-                          {(a.status === 'agendada' || a.status === 'adiada') && Number(a.tem_modelo_doc) === 1 && (
-                            <GerarDocumentoBotao ancoraTipo="audiencia" ancoraId={a.id}
-                              estilo={{fontSize:'11px',padding:'4px 8px'}} />
-                          )}
+                          <MenuAcoes itens={[
+                            { label: 'Gerar documento', icone: '📄', oculto: !temPermissao('documentos','cadastrar'), gerarDoc: { ancoraTipo: 'audiencia', ancoraId: a.id } },
+                            { label: 'Cancelar', icone: '✖', oculto: !((a.status === 'agendada' || a.status === 'adiada') && temPermissao('audiencias','alterar')), onClick: () => setModalCancelar(a) },
+                            { label: 'Remarcar', icone: '🔁', oculto: !((a.status === 'agendada' || a.status === 'adiada') && temPermissao('audiencias','alterar')), onClick: () => setModalRemarcar(a) },
+                            { label: 'Marcar impressa', icone: '🖨️', oculto: !(['realizada','adiada','acordo','cancelada'].includes(a.status) && !a.ata_impressa), onClick: () => marcarAtaImpressa(a.id) },
+                            { label: 'Editar', icone: '✏️', oculto: !podeEditar(a), onClick: () => setModalEditar(a) },
+                            { label: 'Histórico', icone: '📋', onClick: () => setModalHistorico(a) },
+                            { label: 'Excluir', icone: '🗑️', perigo: true, oculto: !podeExcluir(a), onClick: () => setConfirmarExcluir(a) },
+                          ]} />
                         </div>
                       </td>
                     </tr>

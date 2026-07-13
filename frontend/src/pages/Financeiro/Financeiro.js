@@ -879,19 +879,24 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
                     )}
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>
-                    {/* Pendente recebe; recebida desfaz (bloqueado se houver repasse); cancelada não tem ação */}
-                    {podeAlterar && p.status === 'pendente' && (
-                      <button className="btn btn-primary" style={{ fontSize: '11px', padding: '3px 8px' }} onClick={() => setRecebendo(p)}>Receber</button>
-                    )}
-                    {podeAlterar && p.status === 'pago' && (() => {
-                      const temRepasse = !!(p.repasse_cliente_em || p.repasse_parceiro_em);
-                      return (
-                        <button className="btn btn-outline" style={{ fontSize: '11px', padding: '3px 8px', opacity: temRepasse ? 0.5 : 1 }}
-                          disabled={temRepasse}
-                          title={temRepasse ? "Desfaça os repasses na aba 'Repasses' antes de desfazer o recebimento" : ''}
-                          onClick={() => desfazer(p)}>Desfazer recebimento</button>
-                      );
-                    })()}
+                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      {/* Gerar documento da parcela (recibo/declaração/autorização) — sempre visível; o modal lista os modelos (ou avisa se não houver). */}
+                      <GerarDocumentoBotao ancoraTipo="pagamento" ancoraId={p.id}
+                        estilo={{ fontSize: '11px', padding: '3px 8px' }} />
+                      {/* Pendente recebe; recebida desfaz (bloqueado se houver repasse); cancelada não tem ação */}
+                      {podeAlterar && p.status === 'pendente' && (
+                        <button className="btn btn-primary" style={{ fontSize: '11px', padding: '3px 8px' }} onClick={() => setRecebendo(p)}>Receber</button>
+                      )}
+                      {podeAlterar && p.status === 'pago' && (() => {
+                        const temRepasse = !!(p.repasse_cliente_em || p.repasse_parceiro_em);
+                        return (
+                          <button className="btn btn-outline" style={{ fontSize: '11px', padding: '3px 8px', opacity: temRepasse ? 0.5 : 1 }}
+                            disabled={temRepasse}
+                            title={temRepasse ? "Desfaça os repasses na aba 'Repasses' antes de desfazer o recebimento" : ''}
+                            onClick={() => desfazer(p)}>Desfazer recebimento</button>
+                        );
+                      })()}
+                    </div>
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <button className="btn btn-outline" style={{ fontSize: '11px', padding: '3px 8px' }} onClick={() => setHistoricoDe(p)}>Histórico</button>

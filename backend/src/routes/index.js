@@ -75,6 +75,8 @@ router.get('/pessoas/fisicas',            autenticar, verificarPermissao('pessoa
 // IMPORTANTE: /exportar e /cpf/:cpf devem ficar ANTES de /:id para o Express não capturar a palavra como id
 router.get('/pessoas/fisicas/exportar',   autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.exportarFisicas);
 router.get('/pessoas/fisicas/cpf/:cpf',   autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.buscarPorCPF);
+// Unifica cadastros duplicados de pessoa física (rota estática ANTES de :id) — SOMENTE admin e superadmin
+router.post('/pessoas/fisicas/unificar',  autenticar, apenasAdmin,                                 pessoasCtrl.unificarFisicas);
 router.get('/pessoas/fisicas/:id',        autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.buscarFisica);
 router.post('/pessoas/fisicas',           autenticar, verificarPermissao('pessoas','cadastrar'),  pessoasCtrl.criarFisica);
 router.put('/pessoas/fisicas/:id',        autenticar, verificarPermissao('pessoas','alterar'),    pessoasCtrl.atualizarFisica);
@@ -125,7 +127,8 @@ router.get('/prazos/tipos',       autenticar, prazosCtrl.buscarTipos);
 // Cadastro de novo tipo/subtipo direto na tela (botão "…") — rotas estáticas ANTES de /prazos/:id
 router.post('/prazos/tipos',      autenticar, verificarPermissao('prazos','cadastrar'), prazosCtrl.criarTipo);
 router.post('/prazos/subtipos',   autenticar, verificarPermissao('prazos','cadastrar'), prazosCtrl.criarSubtipo);
-router.get('/prazos/calcular',    autenticar, prazosCtrl.calcularDataFinal);
+router.get('/prazos/calcular',      autenticar, prazosCtrl.calcularDataFinal);
+router.get('/prazos/calcular-dias', autenticar, prazosCtrl.calcularDias);
 router.get('/prazos/hoje',        autenticar, prazosCtrl.vencemHoje);
 router.get('/prazos',             autenticar, verificarPermissao('prazos','visualizar'), prazosCtrl.listar);
 router.post('/prazos',            autenticar, verificarPermissao('prazos','cadastrar'),  prazosCtrl.criar);

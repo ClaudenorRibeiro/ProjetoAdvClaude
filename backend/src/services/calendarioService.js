@@ -42,6 +42,35 @@ async function calcularVencimento(dataInicio, quantidade, tipoDias) {
   return rows[rows.length - 1].data;
 }
 
+// Calcula a QUANTIDADE de dias a partir de uma data final (o inverso de calcularVencimento).
+// Usado quando o usuário digita a data final direto e o sistema preenche o campo "dias".
+// dataInicio / dataFinal: strings 'YYYY-MM-DD'
+// tipoDias: 'uteis' ou 'corridos'
+// Retorna: número inteiro de dias (contagem INCLUSIVA de início e fim, casando com calcularVencimento),
+//          ou null se faltar dado ou a data final for anterior à de início.
+async function calcularQuantidade(dataInicio, dataFinal, tipoDias) {
+  if (!dataInicio || !dataFinal) return null;
+  // Datas em ISO ('YYYY-MM-DD') comparam corretamente como texto → final não pode ser antes do início
+  if (dataFinal < dataInicio) return null;
+
+  if (tipoDias === 'corridos') {
+    // Dias corridos: conta todos os dias do calendário, incluindo os dois extremos
+    const ini = new Date(dataInicio + 'T12:00:00');
+    const fim = new Date(dataFinal  + 'T12:00:00');
+    const dias = Math.round((fim - ini) / 86400000) + 1; // +1 = inclui a data de início
+    return dias;
+  }
+
+  // Dias úteis: conta quantos dias úteis existem entre início e final, inclusive os dois extremos
+  // (mesmo critério do cálculo direto: a data início conta como dia 1 se for dia útil).
+  const [rows] = await pool.execute(
+    `SELECT COUNT(*) as total FROM calendario
+     WHERE data >= ? AND data <= ? AND dia_util = 1`,
+    [dataInicio, dataFinal]
+  );
+  return rows[0].total;
+}
+
 // Conta quantos dias úteis existem entre duas datas (inclusive início, exclusive fim)
 async function contarDiasUteis(dataInicio, dataFim) {
   const [rows] = await pool.execute(
@@ -97,4 +126,4 @@ async function diasUteisAntes(data, quantidade) {
   return rows[rows.length - 1].data;
 }
 
-module.exports = { calcularVencimento, contarDiasUteis, ehDiaUtil, diasUteisAntes, proximoDiaUtil };
+module.exports = { calcularVencimento, calcularQuantidade, contarDiasUteis, ehDiaUtil, diasUteisAntes, proximoDiaUtil };

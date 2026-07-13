@@ -9,12 +9,15 @@ const auditoria = require('../middleware/auditoria');
 // GET /api/tarefas — Lista tarefas com filtros
 async function listar(req, res) {
   try {
-    const { usuario_id, concluida, prioridade, pagina = 1, limite = 30 } = req.query;
+    const { usuario_id, concluida, prioridade, processo_id, pagina = 1, limite = 30 } = req.query;
     const params = [];
     let where = 'WHERE 1=1';
 
     if (concluida !== undefined) { where += ' AND t.concluida = ?'; params.push(concluida); }
     if (prioridade)              { where += ' AND t.prioridade = ?'; params.push(prioridade); }
+    // Filtro por processo (aba de Tarefas dentro do processo/pasta). SEM processo_id (tela do menu
+    // lateral) mostra TODAS. Tarefas "Rotina Interna" (processo_id NULL) só aparecem no menu lateral.
+    if (processo_id)             { where += ' AND t.processo_id = ?'; params.push(processo_id); }
 
     // Filtra por usuário respeitando a permissão 'tarefas.ver_todos > visualizar'
     if (usuario_id) {

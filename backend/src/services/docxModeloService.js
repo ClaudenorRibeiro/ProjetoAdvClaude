@@ -75,6 +75,11 @@ function analisar(buffer) {
       const bloco = BLOCO_DE_TAG[v];
       // 'escritorio' está sempre disponível, então não conta como bloco exigido.
       if (bloco && bloco !== 'escritorio') blocos.add(bloco);
+    } else if (TAGS_PARTE.has(v)) {
+      // Tags de pessoa usadas dentro de {{#autores}}/{{#reus}}. São válidas em modelos
+      // ancorados no processo (que agora fornecem autores/réus completos). NÃO forçam um
+      // "bloco exigido": as partes acompanham o processo em toda âncora ligada a ele.
+      conhecidas.push(v);
     } else {
       desconhecidas.push(v);
     }

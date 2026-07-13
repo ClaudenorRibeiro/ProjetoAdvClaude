@@ -10,8 +10,8 @@ import { periciasAPI, processosAPI, pessoasAPI, audienciasAPI, authAPI, calendar
 import { formatarData, toTitleCase, mascaraCNJ } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
-import GerarDocumentoBotao from '../../components/GerarDocumento';
 import ModalGerarLote from '../../components/GerarLote';
+import MenuAcoes from '../../components/MenuAcoes';
 import { useAuth } from '../../context/AuthContext';
 
 // Cor/label do badge conforme o status
@@ -213,42 +213,21 @@ export default function Pericias() {
                       <td>{p.responsavel_nome || '—'}</td>
                       <td><span className={`badge ${bg.cls}`}>{bg.txt}</span></td>
                       <td>
-                        <div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
-                          {/* Editar só quando agendada */}
-                          {agendada && (
-                            <button className="btn btn-outline" style={{fontSize:'11px',padding:'4px 8px'}}
-                              onClick={() => abrirEdicao(p)}>Editar</button>
-                          )}
+                        <div style={{display:'flex',gap:'6px',flexWrap:'wrap',alignItems:'center'}}>
+                          {/* Ação principal: marcar realizada (só quando agendada) */}
                           {agendada && (
                             <button className="btn btn-outline" style={{fontSize:'11px',padding:'4px 8px'}}
                               onClick={() => pedirMarcarRealizada(p)}>✓ Realizada</button>
                           )}
-                          {agendada && (
-                            <button className="btn btn-outline" style={{fontSize:'11px',padding:'4px 8px'}}
-                              onClick={() => setCancelando(p)}>Cancelar</button>
-                          )}
-                          {agendada && (
-                            <button className="btn btn-outline" style={{fontSize:'11px',padding:'4px 8px'}}
-                              onClick={() => setRemarcando(p)}>Remarcar</button>
-                          )}
-                          <button className="btn btn-outline" style={{fontSize:'11px',padding:'4px 8px'}}
-                            onClick={() => setHistoricoDe(p)}>Histórico</button>
-                          {!historico && (
-                            <button className="btn btn-outline" style={{fontSize:'11px',padding:'4px 8px',color:'#dc2626'}}
-                              onClick={() => pedirExcluir(p)}>Excluir</button>
-                          )}
-                          {agendada && (
-                            <button className="btn btn-outline" style={{fontSize:'11px',padding:'4px 8px'}}
-                              onClick={() => enviarComunicado(p.id)}
-                              title="Enviar/reenviar comunicado ao cliente por e-mail">
-                              ✉ {p.comunicado_enviado ? 'Reenviar' : 'Comunicar'}
-                            </button>
-                          )}
-                          {/* Gerar documento — só perícia agendada e com modelo para o seu tipo */}
-                          {agendada && Number(p.tem_modelo_doc) === 1 && (
-                            <GerarDocumentoBotao ancoraTipo="pericia" ancoraId={p.id}
-                              estilo={{fontSize:'11px',padding:'4px 8px'}} />
-                          )}
+                          <MenuAcoes itens={[
+                            { label: 'Gerar documento', icone: '📄', oculto: !temPermissao('documentos','cadastrar'), gerarDoc: { ancoraTipo: 'pericia', ancoraId: p.id } },
+                            { label: 'Editar', icone: '✏️', oculto: !agendada, onClick: () => abrirEdicao(p) },
+                            { label: 'Remarcar', icone: '🔁', oculto: !agendada, onClick: () => setRemarcando(p) },
+                            { label: 'Cancelar', icone: '✖', oculto: !agendada, onClick: () => setCancelando(p) },
+                            { label: p.comunicado_enviado ? 'Reenviar comunicado' : 'Comunicar cliente', icone: '✉', oculto: !agendada, onClick: () => enviarComunicado(p.id) },
+                            { label: 'Histórico', icone: '📋', onClick: () => setHistoricoDe(p) },
+                            { label: 'Excluir', icone: '🗑️', perigo: true, oculto: !!historico, onClick: () => pedirExcluir(p) },
+                          ]} />
                         </div>
                       </td>
                     </tr>

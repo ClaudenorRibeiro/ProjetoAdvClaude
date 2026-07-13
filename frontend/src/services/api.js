@@ -95,6 +95,8 @@ export const pessoasAPI = {
   excluirJuridica:  (id) => api.delete(`/pessoas/juridicas/${id}`),
   // Une cadastros duplicados de empresa: { principal_id, duplicados_ids: [...] }
   unificarJuridicas:(dados) => api.post('/pessoas/juridicas/unificar', dados),
+  // Une cadastros duplicados de pessoa física: { principal_id, duplicados_ids: [...] }
+  unificarFisicas:  (dados) => api.post('/pessoas/fisicas/unificar', dados),
   // Lista os processos de uma pessoa (tipo = 'fisicas' | 'juridicas') — ao clicar na "Qtde Proc"
   processosDaPessoa:(tipo, id) => api.get(`/pessoas/${tipo}/${id}/processos`),
   // Auxiliares (estados civis, gêneros, profissões)
@@ -153,6 +155,9 @@ export const prazosAPI = {
   // Calcula data final consultando o calendário real do banco (inclui feriados)
   calcularDataFinal: (data_inicio, quantidade, tipo_dias) =>
     api.get('/prazos/calcular', { params: { data_inicio, quantidade, tipo_dias } }),
+  // Cálculo inverso: recebe a data final e devolve a quantidade de dias (inclui feriados)
+  calcularDias: (data_inicio, data_final, tipo_dias) =>
+    api.get('/prazos/calcular-dias', { params: { data_inicio, data_final, tipo_dias } }),
   // Histórico completo: criação + todas as mudanças de status
   historico: (id) => api.get(`/prazos/${id}/historico`),
 };

@@ -467,6 +467,7 @@ function ModalModelo({ modelo, onFechar, onBaixar }) {
     modalidade: modelo?.modalidade || '',
     tipo_pericia_id: modelo?.tipo_pericia_id || '',
     subtipo_prazo_id: modelo?.subtipo_prazo_id || '',
+    minutos_antes: modelo?.minutos_antes ?? 0,
   });
   const [opcoes, setOpcoes] = useState(null);
   const [arquivo, setArquivo] = useState(null);
@@ -504,6 +505,7 @@ function ModalModelo({ modelo, onFechar, onBaixar }) {
     fd.append('modalidade', form.modalidade || '');
     fd.append('tipo_pericia_id', form.tipo_pericia_id || '');
     fd.append('subtipo_prazo_id', form.subtipo_prazo_id || '');
+    fd.append('minutos_antes', form.minutos_antes || 0);
     if (arquivo) fd.append('arquivo', arquivo);
 
     setSalvando(true);
@@ -607,6 +609,20 @@ function ModalModelo({ modelo, onFechar, onBaixar }) {
                   <option key={s.id} value={s.id}>{s.tipo_prazo_nome ? `${s.tipo_prazo_nome} — ` : ''}{s.nome}</option>
                 ))}
               </select>
+            </div>
+          )}
+
+          {/* "Minutos antes": só para destinos com horário (audiência/perícia). 0 = horário real. */}
+          {(form.destino === 'audiencia' || form.destino === 'pericia') && (
+            <div className="form-group">
+              <label className="form-label">Imprimir o horário quantos minutos antes?</label>
+              <input type="number" min="0" step="5" className="form-control"
+                value={form.minutos_antes}
+                onChange={e => set('minutos_antes', e.target.value)} />
+              <small style={{ color: '#888' }}>
+                0 = horário real. Ex.: 60 faz uma audiência das 09:00 sair como 08:00 no documento.
+                O horário real continua disponível em {'{{hora_audiencia_real}}'} / {'{{hora_pericia_real}}'}.
+              </small>
             </div>
           )}
 

@@ -96,13 +96,7 @@ async function listarFisicas(req, res) {
                 SELECT proc_id FROM tbltituloprocautor WHERE tipo_pessoa = 'fisica' AND pessoa_id = pf.id
                 UNION
                 SELECT proc_id FROM tbltituloprocreu   WHERE tipo_pessoa = 'fisica' AND pessoa_id = pf.id
-              ) AS t) AS qtde_proc,
-              -- Existe modelo "comum" gerável a partir de uma pessoa? (controla o botão "Gerar Doc")
-              EXISTS(
-                SELECT 1 FROM modelo_documento md
-                WHERE md.ativo = 1 AND md.destino = 'comum'
-                  AND (md.blocos_exigidos IS NULL OR md.blocos_exigidos = '' OR md.blocos_exigidos = 'cliente')
-              ) AS tem_modelo_doc
+              ) AS t) AS qtde_proc
        FROM pessoas_fisicas pf
        LEFT JOIN estado_civil ec ON pf.estado_civil_id = ec.id
        LEFT JOIN genero g ON pf.genero_id = g.id
@@ -427,9 +421,11 @@ async function excluirJuridica(req, res) {
 // em um único (o "principal"): move TODOS os vínculos dos duplicados para o
 // principal e depois apaga os duplicados. Tudo dentro de UMA transação.
 //
-// Vínculos de uma empresa (conferidos na estrutura do banco):
-//   - Como PARTE por (tipo_pessoa='juridica', pessoa_id): tbltituloprocautor,
-//     tbltituloprocreu, historico_atendimento, log_comunicacoes, processo_perito.
+// Vínculos de uma empresa (conferidos na estrutura do banco — mover TODOS p/ não deixar órfão):
+//   - Por (tipo_pessoa='juridica', pessoa_id): tbltituloprocautor, tbltituloprocreu,
+//     historico_atendimento, log_comunicacoes, processo_perito.
+//   - Por coluna própria (tipo+id): pericia (perito_tipo/perito_id), acordo_parcela
+//     (parceria_pessoa_tipo/parceria_pessoa_id).
 //   - "Filhos" do cadastro (por pessoa_id): telefones_pj, emails_pj.
 async function unificarJuridicas(req, res) {
   const principalId = parseInt(req.body.principal_id);
@@ -475,9 +471,24 @@ async function unificarJuridicas(req, res) {
       );
     }
 
-    // 2) Demais vínculos por (tipo+id): histórico, comunicações e perito — só mover
-    //    (são registros distintos; não há repetição a tratar).
-    for (const tabela of ['historico_atendimento', 'log_comunicacoes', 'processo_perito']) {
+    // 2) PERITO do processo (processo_perito, por tipo+id): move e remove repetição no
+    //    MESMO processo (a fusão pode deixar o mesmo perito 2x no processo).
+    await conn.execute(
+      `UPDATE processo_perito SET pessoa_id = ?
+        WHERE tipo_pessoa = 'juridica' AND pessoa_id IN (${dupPh})`,
+      [principalId, ...duplicados]
+    );
+    await conn.execute(
+      `DELETE t FROM processo_perito t
+         JOIN processo_perito t2
+           ON t.proc_id = t2.proc_id AND t.tipo_pessoa = t2.tipo_pessoa
+          AND t.pessoa_id = t2.pessoa_id AND t.id > t2.id
+        WHERE t.tipo_pessoa = 'juridica' AND t.pessoa_id = ?`,
+      [principalId]
+    );
+
+    // 3) Vínculos por (tipo+id) sem repetição a tratar: histórico e comunicações — só mover.
+    for (const tabela of ['historico_atendimento', 'log_comunicacoes']) {
       await conn.execute(
         `UPDATE ${tabela} SET pessoa_id = ?
           WHERE tipo_pessoa = 'juridica' AND pessoa_id IN (${dupPh})`,
@@ -485,7 +496,19 @@ async function unificarJuridicas(req, res) {
       );
     }
 
-    // 3) "Filhos" do cadastro (telefones e e-mails): move para o principal p/ não
+    // 4) Perito de PERÍCIA e PARCEIRO de acordo (colunas próprias; 1 por linha — só mover).
+    await conn.execute(
+      `UPDATE pericia SET perito_id = ?
+        WHERE perito_tipo = 'juridica' AND perito_id IN (${dupPh})`,
+      [principalId, ...duplicados]
+    );
+    await conn.execute(
+      `UPDATE acordo_parcela SET parceria_pessoa_id = ?
+        WHERE parceria_pessoa_tipo = 'juridica' AND parceria_pessoa_id IN (${dupPh})`,
+      [principalId, ...duplicados]
+    );
+
+    // 5) "Filhos" do cadastro (telefones e e-mails): move para o principal p/ não
     //    perder contatos (esses não têm tipo_pessoa; pertencem só à empresa).
     for (const tabela of ['telefones_pj', 'emails_pj']) {
       await conn.execute(
@@ -494,13 +517,148 @@ async function unificarJuridicas(req, res) {
       );
     }
 
-    // 4) Apaga os cadastros duplicados (agora sem nenhum vínculo)
+    // 6) Apaga os cadastros duplicados (agora sem nenhum vínculo)
     await conn.execute(`DELETE FROM pessoas_juridicas WHERE id IN (${dupPh})`, duplicados);
 
-    // 5) Auditoria dentro da MESMA transação (falha aqui desfaz tudo)
+    // 7) Auditoria dentro da MESMA transação (falha aqui desfaz tudo)
     await auditoria.registrar(
       req.usuario.id, 'pessoas_juridicas', 'unificar', principalId, null,
       { unificados: duplicados }, conn
+    );
+
+    await conn.commit();
+    return sucesso(res, { principal_id: principalId, unificados: duplicados.length },
+      `${duplicados.length} cadastro(s) unificado(s) no principal com sucesso`);
+  } catch (err) {
+    await conn.rollback();
+    return erroInterno(res, err);
+  } finally {
+    conn.release();
+  }
+}
+
+// ---- UNIFICAR PESSOAS FÍSICAS DUPLICADAS (só admin/superadmin) ----
+// Move TODOS os vínculos dos duplicados para o principal e apaga os duplicados, em 1 transação.
+// Vínculos da pessoa física (conferidos no banco — mover todos p/ NÃO deixar órfão):
+//   - Por (tipo_pessoa='fisica', pessoa_id): tbltituloprocautor, tbltituloprocreu,
+//     historico_atendimento, log_comunicacoes, processo_perito.
+//   - Por coluna própria (tipo+id): pericia (perito_tipo/perito_id), acordo_parcela
+//     (parceria_pessoa_tipo/parceria_pessoa_id).
+//   - FK diretas (por pessoa_id): audiencia_testemunhas, telefones_pf, emails_pf.
+// TRAVA DE CPF: CPFs diferentes = pessoas diferentes -> bloqueia. O principal HERDA o CPF
+// se estiver sem (só um dos selecionados pode ter CPF, pois cpf é UNIQUE no banco).
+async function unificarFisicas(req, res) {
+  const principalId = parseInt(req.body.principal_id);
+  let duplicados = Array.isArray(req.body.duplicados_ids) ? req.body.duplicados_ids.map(Number) : [];
+  duplicados = [...new Set(duplicados.filter(x => x && x !== principalId))];
+
+  if (!principalId)            return erro(res, 'Cadastro principal é obrigatório');
+  if (duplicados.length === 0) return erro(res, 'Selecione ao menos um cadastro duplicado diferente do principal');
+
+  // Carrega id + cpf de todos os selecionados (confere existência e alimenta a trava de CPF).
+  const idsTodos = [principalId, ...duplicados];
+  const phTodos  = idsTodos.map(() => '?').join(',');
+  const [regs] = await pool.execute(
+    `SELECT id, cpf FROM pessoas_fisicas WHERE id IN (${phTodos})`, idsTodos
+  );
+  if (regs.length !== idsTodos.length) {
+    return erro(res, 'Algum cadastro selecionado não foi encontrado');
+  }
+
+  // TRAVA DE CPF: dois ou mais CPFs diferentes preenchidos = pessoas diferentes.
+  const cpfsDistintos = [...new Set(regs.map(r => (r.cpf || '').trim()).filter(Boolean))];
+  if (cpfsDistintos.length > 1) {
+    return erro(res, 'Estes cadastros têm CPFs diferentes e não podem ser unificados — CPFs diferentes indicam pessoas diferentes.');
+  }
+  const cpfGrupo     = cpfsDistintos[0] || null;                                       // único CPF do grupo (se houver)
+  const cpfPrincipal = (regs.find(r => r.id === principalId)?.cpf || '').trim() || null; // CPF atual do principal
+
+  const dupPh = duplicados.map(() => '?').join(',');
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // 1) PARTES (autor e réu): move + remove repetição no MESMO processo (mantém menor id).
+    for (const tabela of ['tbltituloprocautor', 'tbltituloprocreu']) {
+      await conn.execute(
+        `UPDATE ${tabela} SET pessoa_id = ? WHERE tipo_pessoa = 'fisica' AND pessoa_id IN (${dupPh})`,
+        [principalId, ...duplicados]
+      );
+      await conn.execute(
+        `DELETE t FROM ${tabela} t
+           JOIN ${tabela} t2 ON t.proc_id = t2.proc_id AND t.tipo_pessoa = t2.tipo_pessoa
+             AND t.pessoa_id = t2.pessoa_id AND t.id > t2.id
+          WHERE t.tipo_pessoa = 'fisica' AND t.pessoa_id = ?`,
+        [principalId]
+      );
+    }
+
+    // 2) PERITO do processo (processo_perito): move + remove repetição no mesmo processo.
+    await conn.execute(
+      `UPDATE processo_perito SET pessoa_id = ? WHERE tipo_pessoa = 'fisica' AND pessoa_id IN (${dupPh})`,
+      [principalId, ...duplicados]
+    );
+    await conn.execute(
+      `DELETE t FROM processo_perito t
+         JOIN processo_perito t2 ON t.proc_id = t2.proc_id AND t.tipo_pessoa = t2.tipo_pessoa
+           AND t.pessoa_id = t2.pessoa_id AND t.id > t2.id
+        WHERE t.tipo_pessoa = 'fisica' AND t.pessoa_id = ?`,
+      [principalId]
+    );
+
+    // 3) TESTEMUNHA (audiencia_testemunhas, FK direta): move + remove repetição na mesma audiência.
+    await conn.execute(
+      `UPDATE audiencia_testemunhas SET pessoa_id = ? WHERE pessoa_id IN (${dupPh})`,
+      [principalId, ...duplicados]
+    );
+    await conn.execute(
+      `DELETE t FROM audiencia_testemunhas t
+         JOIN audiencia_testemunhas t2 ON t.audiencia_id = t2.audiencia_id
+           AND t.pessoa_id = t2.pessoa_id AND t.id > t2.id
+        WHERE t.pessoa_id = ?`,
+      [principalId]
+    );
+
+    // 4) Vínculos por (tipo+id) sem repetição a tratar: histórico e comunicações — só mover.
+    for (const tabela of ['historico_atendimento', 'log_comunicacoes']) {
+      await conn.execute(
+        `UPDATE ${tabela} SET pessoa_id = ? WHERE tipo_pessoa = 'fisica' AND pessoa_id IN (${dupPh})`,
+        [principalId, ...duplicados]
+      );
+    }
+
+    // 5) Perito de PERÍCIA e PARCEIRO de acordo (coluna própria; 1 por linha — só mover).
+    await conn.execute(
+      `UPDATE pericia SET perito_id = ? WHERE perito_tipo = 'fisica' AND perito_id IN (${dupPh})`,
+      [principalId, ...duplicados]
+    );
+    await conn.execute(
+      `UPDATE acordo_parcela SET parceria_pessoa_id = ? WHERE parceria_pessoa_tipo = 'fisica' AND parceria_pessoa_id IN (${dupPh})`,
+      [principalId, ...duplicados]
+    );
+
+    // 6) Telefones e e-mails (FK por pessoa_id): move para o principal.
+    for (const tabela of ['telefones_pf', 'emails_pf']) {
+      await conn.execute(
+        `UPDATE ${tabela} SET pessoa_id = ? WHERE pessoa_id IN (${dupPh})`,
+        [principalId, ...duplicados]
+      );
+    }
+
+    // 7) Apaga os cadastros duplicados (agora sem nenhum vínculo). Isso LIBERA o CPF único.
+    await conn.execute(`DELETE FROM pessoas_fisicas WHERE id IN (${dupPh})`, duplicados);
+
+    // 8) HERANÇA DE CPF: se o principal estava sem CPF e o grupo tinha um, grava agora
+    //    (só é possível depois do delete acima, que libera o índice UNIQUE do CPF).
+    if (!cpfPrincipal && cpfGrupo) {
+      await conn.execute(`UPDATE pessoas_fisicas SET cpf = ? WHERE id = ?`, [cpfGrupo, principalId]);
+    }
+
+    // 9) Auditoria dentro da MESMA transação (falha aqui desfaz tudo).
+    await auditoria.registrar(
+      req.usuario.id, 'pessoas_fisicas', 'unificar', principalId, null,
+      { unificados: duplicados, cpf_herdado: (!cpfPrincipal && cpfGrupo) ? cpfGrupo : null }, conn
     );
 
     await conn.commit();
@@ -565,13 +723,7 @@ async function listarJuridicas(req, res) {
                 SELECT proc_id FROM tbltituloprocautor WHERE tipo_pessoa = 'juridica' AND pessoa_id = pj.id
                 UNION
                 SELECT proc_id FROM tbltituloprocreu   WHERE tipo_pessoa = 'juridica' AND pessoa_id = pj.id
-              ) AS t) AS qtde_proc,
-              -- Existe modelo "comum" gerável a partir de uma pessoa? (controla o botão "Gerar Doc")
-              EXISTS(
-                SELECT 1 FROM modelo_documento md
-                WHERE md.ativo = 1 AND md.destino = 'comum'
-                  AND (md.blocos_exigidos IS NULL OR md.blocos_exigidos = '' OR md.blocos_exigidos = 'cliente')
-              ) AS tem_modelo_doc
+              ) AS t) AS qtde_proc
        FROM pessoas_juridicas pj ${where}
        ORDER BY pj.razao_social ASC
        LIMIT ${limitInt} OFFSET ${offsetInt}`,
@@ -987,7 +1139,7 @@ async function processosDaPessoa(req, res) {
 }
 
 module.exports = {
-  listarFisicas, buscarFisica, criarFisica, atualizarFisica, excluirFisica, adicionarHistorico,
+  listarFisicas, buscarFisica, criarFisica, atualizarFisica, excluirFisica, unificarFisicas, adicionarHistorico,
   listarJuridicas, buscarJuridica, criarJuridica, atualizarJuridica, excluirJuridica, unificarJuridicas, buscarAuxiliares, buscarPorCPF, criarAuxiliar,
   processosDaPessoa, exportarFisicas, exportarJuridicas
 };

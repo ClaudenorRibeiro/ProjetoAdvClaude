@@ -6,7 +6,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { prazosAPI, processosAPI } from '../../services/api';
 import { formatarData, labelStatusPrazo, corPrazo, toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
-import { ModalGerar } from '../../components/GerarDocumento';
+import MenuAcoes from '../../components/MenuAcoes';
 import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 
@@ -51,7 +51,6 @@ export default function Prazos() {
   const [prazoCancelando, setPrazoCancelando]   = useState(null);
   const [prazoHistorico, setPrazoHistorico]     = useState(null); // prazo selecionado para ver histórico
   const [confirmar, setConfirmar]               = useState(null);
-  const [gerarDocPrazo, setGerarDocPrazo]       = useState(null); // prazo para gerar documento (via "Fazer")
 
   const LIMITE = 100;
 
@@ -87,17 +86,6 @@ export default function Prazos() {
       await prazosAPI.marcarFazendo(p.id);
       toast.success('Prazo marcado como "Fazendo"');
       carregar();
-      // Quem assumiu o prazo pode gerar o documento (só se houver modelo para o subtipo).
-      // Depois de assumido, o botão "Fazer" some, então esta é a única chance de gerar.
-      if (Number(p.tem_modelo_doc) === 1) {
-        setConfirmar({
-          titulo: 'Gerar documento',
-          mensagem: 'Deseja utilizar um modelo do sistema para este prazo?',
-          textoBotao: 'Sim, escolher modelo',
-          tipo: 'sucesso',
-          acao: () => { setGerarDocPrazo(p); },
-        });
-      }
     } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao marcar prazo'); }
   }
 
@@ -218,7 +206,7 @@ export default function Prazos() {
                       <div style={{display:'flex',gap:'6px',alignItems:'center',flexWrap:'wrap'}}>
                         {ativo && (
                           <>
-                            {/* Ninguém fazendo: qualquer usuário pode Fazer, Concluir, Cancelar */}
+                            {/* Ninguém fazendo: Fazer + Concluir na linha */}
                             {!p.fazendo_por && (
                               <>
                                 <button title="Marcar como Fazendo" onClick={() => fazerPrazo(p)}
@@ -229,13 +217,9 @@ export default function Prazos() {
                                   style={{background:'#16a34a',color:'#fff',border:'none',borderRadius:'5px',padding:'4px 8px',cursor:'pointer',fontSize:'12px',whiteSpace:'nowrap'}}>
                                   ✅ Concluir
                                 </button>
-                                <button title="Cancelar prazo" onClick={() => setPrazoCancelando(p)}
-                                  style={{background:'#6b7280',color:'#fff',border:'none',borderRadius:'5px',padding:'4px 8px',cursor:'pointer',fontSize:'12px',whiteSpace:'nowrap'}}>
-                                  ✖ Cancelar
-                                </button>
                               </>
                             )}
-                            {/* EU estou fazendo: posso Liberar, Concluir e Cancelar */}
+                            {/* EU estou fazendo: Liberar + Concluir na linha */}
                             {euFazendo && (
                               <>
                                 <button title="Liberar prazo (desfazer Fazendo)" onClick={() => liberarFazendo(p.id)}
@@ -246,13 +230,9 @@ export default function Prazos() {
                                   style={{background:'#16a34a',color:'#fff',border:'none',borderRadius:'5px',padding:'4px 8px',cursor:'pointer',fontSize:'12px',whiteSpace:'nowrap'}}>
                                   ✅ Concluir
                                 </button>
-                                <button title="Cancelar prazo" onClick={() => setPrazoCancelando(p)}
-                                  style={{background:'#6b7280',color:'#fff',border:'none',borderRadius:'5px',padding:'4px 8px',cursor:'pointer',fontSize:'12px',whiteSpace:'nowrap'}}>
-                                  ✖ Cancelar
-                                </button>
                               </>
                             )}
-                            {/* OUTRO está fazendo e eu sou admin: posso Liberar, Concluir e Cancelar */}
+                            {/* OUTRO está fazendo e eu sou admin: Liberar + Concluir na linha */}
                             {outroFazendo && ehAdmin && (
                               <>
                                 <button title="Liberar prazo (admin)" onClick={() => liberarFazendo(p.id)}
@@ -263,36 +243,28 @@ export default function Prazos() {
                                   style={{background:'#16a34a',color:'#fff',border:'none',borderRadius:'5px',padding:'4px 8px',cursor:'pointer',fontSize:'12px',whiteSpace:'nowrap'}}>
                                   ✅ Concluir
                                 </button>
-                                <button title="Cancelar prazo" onClick={() => setPrazoCancelando(p)}
-                                  style={{background:'#6b7280',color:'#fff',border:'none',borderRadius:'5px',padding:'4px 8px',cursor:'pointer',fontSize:'12px',whiteSpace:'nowrap'}}>
-                                  ✖ Cancelar
-                                </button>
                               </>
                             )}
                           </>
                         )}
-                        {/* Editar — só para prazos ativos e respeitando bloqueio de fazendo */}
-                        {ativo && temPermissao('prazos','alterar') && (!outroFazendo || ehAdmin) && (
-                          <button title="Editar" onClick={() => setPrazoEditando(p)}
-                            style={{background:'#3b82f6',color:'#fff',border:'none',borderRadius:'5px',padding:'4px 8px',cursor:'pointer',fontSize:'13px'}}>
-                            ✏️
-                          </button>
-                        )}
-                        {/* Excluir — só para prazos ativos e respeitando bloqueio de fazendo */}
-                        {ativo && temPermissao('prazos','excluir') && (!outroFazendo || ehAdmin) && (
-                          <button title="Excluir" onClick={() => confirmarExcluir(p.id)}
-                            style={{background:'#ef4444',color:'#fff',border:'none',borderRadius:'5px',padding:'4px 8px',cursor:'pointer',fontSize:'13px'}}>
-                            🗑️
-                          </button>
-                        )}
-                        {/* Histórico — disponível para qualquer status, se usuário tiver permissão */}
-                        {temPermissao('prazos','historico') && (
-                          <button title="Ver histórico completo" onClick={() => setPrazoHistorico(p)}
-                            style={{background:'#0ea5e9',color:'#fff',border:'none',borderRadius:'5px',padding:'4px 8px',cursor:'pointer',fontSize:'12px',whiteSpace:'nowrap'}}>
-                            📋 Histórico
-                          </button>
-                        )}
-                        {/* Geração de documento em Prazos é oferecida ao clicar em "Fazer" (não há botão solto). */}
+                        {/* Demais ações no menu "⋮": Gerar doc, Cancelar, Editar, Histórico, Excluir */}
+                        <MenuAcoes itens={[
+                          { label: 'Gerar documento', icone: '📄',
+                            oculto: !temPermissao('documentos','cadastrar'),
+                            gerarDoc: { ancoraTipo: 'prazo', ancoraId: p.id } },
+                          { label: 'Cancelar', icone: '✖',
+                            oculto: !ativo,
+                            onClick: () => setPrazoCancelando(p) },
+                          { label: 'Editar', icone: '✏️',
+                            oculto: !(ativo && temPermissao('prazos','alterar') && (!outroFazendo || ehAdmin)),
+                            onClick: () => setPrazoEditando(p) },
+                          { label: 'Histórico', icone: '📋',
+                            oculto: !temPermissao('prazos','historico'),
+                            onClick: () => setPrazoHistorico(p) },
+                          { label: 'Excluir', icone: '🗑️', perigo: true,
+                            oculto: !(ativo && temPermissao('prazos','excluir') && (!outroFazendo || ehAdmin)),
+                            onClick: () => confirmarExcluir(p.id) },
+                        ]} />
                       </div>
                     </td>
                   </tr>
@@ -337,8 +309,6 @@ export default function Prazos() {
       {prazoEditando   && <ModalEditarPrazo prazo={prazoEditando} tipos={tipos} onFechar={(reload) => { setPrazoEditando(null);  if(reload) carregar(); }} />}
       {prazoCancelando && <ModalCancelarPrazo prazo={prazoCancelando} onFechar={(reload) => { setPrazoCancelando(null); if(reload) carregar(); }} />}
       {prazoHistorico  && <ModalHistoricoPrazo prazo={prazoHistorico} onFechar={() => setPrazoHistorico(null)} />}
-      {/* Geração de documento do prazo (aberta pela pergunta após o "Fazer") */}
-      {gerarDocPrazo   && <ModalGerar ancoraTipo="prazo" ancoraId={gerarDocPrazo.id} onFechar={() => setGerarDocPrazo(null)} />}
     </div>
   );
 }
@@ -479,6 +449,9 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial }) {
     ...(processoInicial ? { processo_id: processoInicial.processo_id, titulo: processoInicial.titulo } : {}),
   });
   const [salvando, setSalvando] = useState(false);
+  // Guarda qual campo o usuário mexeu por último ('dias' ou 'data') para os dois cálculos
+  // (dias→data e data→dias) não ficarem se recalculando em loop. Começa null: nada recalcula sozinho.
+  const [modo, setModo] = useState(null);
   const [pastas, setPastas]         = useState([]);
   const [buscaPasta, setBuscaPasta] = useState(processoInicial?.numero || '');
   const [usuarios, setUsuarios]     = useState([]);
@@ -495,10 +468,12 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial }) {
     recarregarTipos(); // garante a lista mais atual toda vez que o modal abre
   }, [recarregarTipos]);
 
-  // Recalcula data final ao mudar data início, quantidade ou tipo de dias.
+  // CAMINHO DIAS → DATA: quando o usuário digita a Quantidade, calcula a data final.
+  // Só roda se o último campo mexido foi 'dias' (evita brigar com o cálculo inverso).
   // 1) Cálculo local imediato (sem feriados) — resultado na hora
   // 2) Consulta banco — corrige com feriados se disponível
   useEffect(() => {
+    if (modo !== 'dias') return;
     if (!form.data_inicio || !form.quantidade || parseInt(form.quantidade) <= 0) return;
     const qtd  = parseInt(form.quantidade);
     const data = new Date(form.data_inicio + 'T12:00:00');
@@ -517,7 +492,29 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial }) {
     prazosAPI.calcularDataFinal(form.data_inicio, form.quantidade, form.tipo_dias)
       .then(r => { if (r.data.ok) setForm(f => ({ ...f, data_final: r.data.dados.data_final })); })
       .catch(() => {});
-  }, [form.data_inicio, form.quantidade, form.tipo_dias]);
+  }, [modo, form.data_inicio, form.quantidade, form.tipo_dias]);
+
+  // CAMINHO DATA → DIAS: quando o usuário digita a Data final, preenche a Quantidade (só referência).
+  // A data final digitada é a que MANDA; aqui só contamos os dias entre início e final.
+  useEffect(() => {
+    if (modo !== 'data') return;
+    if (!form.data_inicio || !form.data_final) return;
+    const ini = new Date(form.data_inicio + 'T12:00:00');
+    const fim = new Date(form.data_final  + 'T12:00:00');
+    if (fim < ini) { setForm(f => ({ ...f, quantidade: '' })); return; } // final antes do início
+    let qtd;
+    if (form.tipo_dias === 'corridos') {
+      qtd = Math.round((fim - ini) / 86400000) + 1; // inclui os dois extremos
+    } else {
+      qtd = 0;
+      const d = new Date(ini);
+      while (d <= fim) { const wd = d.getDay(); if (wd !== 0 && wd !== 6) qtd++; d.setDate(d.getDate() + 1); }
+    }
+    setForm(f => ({ ...f, quantidade: String(qtd) }));
+    prazosAPI.calcularDias(form.data_inicio, form.data_final, form.tipo_dias)
+      .then(r => { if (r.data.ok && r.data.dados.quantidade != null) setForm(f => ({ ...f, quantidade: String(r.data.dados.quantidade) })); })
+      .catch(() => {});
+  }, [modo, form.data_inicio, form.data_final, form.tipo_dias]);
 
   async function buscarPastas(termo) {
     if (termo.length < 2) return setPastas([]);
@@ -548,6 +545,7 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial }) {
     if (!form.processo_id || !form.data_inicio) return toast.error('Processo e data de início são obrigatórios');
     if (!form.tipo_prazo_id) return toast.error('Tipo de prazo é obrigatório');
     if (!form.subtipo_id)    return toast.error('Subtipo é obrigatório');
+    if (!form.data_final)    return toast.error('A data final é obrigatória. Informe a data final ou a quantidade de dias.');
     setSalvando(true);
     try {
       await prazosAPI.criar(form);
@@ -635,7 +633,7 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial }) {
             </div>
             <div className="form-group">
               <label className="form-label">Quantidade de dias</label>
-              <input type="number" className="form-control" value={form.quantidade||''} onChange={e=>set('quantidade',e.target.value)} />
+              <input type="number" className="form-control" value={form.quantidade||''} onChange={e=>{ set('quantidade',e.target.value); setModo('dias'); }} />
             </div>
             <div className="form-group">
               <label className="form-label">Tipo de dias</label>
@@ -645,8 +643,8 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial }) {
               </select>
             </div>
             <div className="form-group">
-              <label className="form-label">Data final</label>
-              <input type="date" className="form-control" value={form.data_final||''} onChange={e=>set('data_final',e.target.value)} />
+              <label className="form-label">Data final *</label>
+              <input type="date" className="form-control" value={form.data_final||''} onChange={e=>{ set('data_final',e.target.value); setModo('data'); }} />
             </div>
           </div>
           <div className="form-group">
@@ -684,6 +682,9 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
   });
   const [salvando, setSalvando] = useState(false);
   const [usuarios, setUsuarios] = useState([]);
+  // Qual campo o usuário mexeu por último ('dias' ou 'data'). Começa null: ao ABRIR a edição,
+  // nada recalcula sozinho — preserva a data final e a quantidade que já estavam gravadas.
+  const [modo, setModo] = useState(null);
   // Cópia local de tipos/subtipos: começa com a prop e é recarregada ao cadastrar um item novo
   const [tiposLocal, setTiposLocal] = useState(tipos);
 
@@ -697,7 +698,9 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
     recarregarTipos(); // garante a lista mais atual toda vez que o modal abre
   }, [recarregarTipos]);
 
+  // CAMINHO DIAS → DATA (só quando o usuário mexeu na Quantidade)
   useEffect(() => {
+    if (modo !== 'dias') return;
     if (!form.data_inicio || !form.quantidade || parseInt(form.quantidade) <= 0) return;
     const qtd  = parseInt(form.quantidade);
     const data = new Date(form.data_inicio + 'T12:00:00');
@@ -712,7 +715,28 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
     prazosAPI.calcularDataFinal(form.data_inicio, form.quantidade, form.tipo_dias)
       .then(r => { if (r.data.ok) setForm(f => ({ ...f, data_final: r.data.dados.data_final })); })
       .catch(() => {});
-  }, [form.data_inicio, form.quantidade, form.tipo_dias]);
+  }, [modo, form.data_inicio, form.quantidade, form.tipo_dias]);
+
+  // CAMINHO DATA → DIAS (só quando o usuário mexeu na Data final; a data digitada é a que MANDA)
+  useEffect(() => {
+    if (modo !== 'data') return;
+    if (!form.data_inicio || !form.data_final) return;
+    const ini = new Date(form.data_inicio + 'T12:00:00');
+    const fim = new Date(form.data_final  + 'T12:00:00');
+    if (fim < ini) { setForm(f => ({ ...f, quantidade: '' })); return; }
+    let qtd;
+    if (form.tipo_dias === 'corridos') {
+      qtd = Math.round((fim - ini) / 86400000) + 1;
+    } else {
+      qtd = 0;
+      const d = new Date(ini);
+      while (d <= fim) { const wd = d.getDay(); if (wd !== 0 && wd !== 6) qtd++; d.setDate(d.getDate() + 1); }
+    }
+    setForm(f => ({ ...f, quantidade: String(qtd) }));
+    prazosAPI.calcularDias(form.data_inicio, form.data_final, form.tipo_dias)
+      .then(r => { if (r.data.ok && r.data.dados.quantidade != null) setForm(f => ({ ...f, quantidade: String(r.data.dados.quantidade) })); })
+      .catch(() => {});
+  }, [modo, form.data_inicio, form.data_final, form.tipo_dias]);
 
   function set(k, v) { setForm(f => ({...f, [k]: v})); }
 
@@ -720,6 +744,7 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
     if (!form.data_inicio)   return toast.error('Data de início é obrigatória');
     if (!form.tipo_prazo_id) return toast.error('Tipo de prazo é obrigatório');
     if (!form.subtipo_id)    return toast.error('Subtipo é obrigatório');
+    if (!form.data_final)    return toast.error('A data final é obrigatória. Informe a data final ou a quantidade de dias.');
     setSalvando(true);
     try {
       await prazosAPI.editar(prazo.id, form);
@@ -795,7 +820,7 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
             </div>
             <div className="form-group">
               <label className="form-label">Quantidade de dias</label>
-              <input type="number" className="form-control" value={form.quantidade} onChange={e=>set('quantidade',e.target.value)} />
+              <input type="number" className="form-control" value={form.quantidade} onChange={e=>{ set('quantidade',e.target.value); setModo('dias'); }} />
             </div>
             <div className="form-group">
               <label className="form-label">Tipo de dias</label>
@@ -805,8 +830,8 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
               </select>
             </div>
             <div className="form-group">
-              <label className="form-label">Data final</label>
-              <input type="date" className="form-control" value={form.data_final||''} onChange={e=>set('data_final',e.target.value)} />
+              <label className="form-label">Data final *</label>
+              <input type="date" className="form-control" value={form.data_final||''} onChange={e=>{ set('data_final',e.target.value); setModo('data'); }} />
             </div>
           </div>
           <div className="form-group">

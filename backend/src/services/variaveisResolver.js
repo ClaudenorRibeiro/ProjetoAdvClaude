@@ -60,6 +60,19 @@ function dataExtenso(d) {       // -> '18 de junho de 2026'
 function hora(t) {              // 'HH:MM:SS' -> 'HH:MM'
   return t ? String(t).slice(0, 5) : '';
 }
+// Subtrai `minutos` de um horário e devolve 'HH:MM'. minutos<=0 (ou vazio) -> horário real.
+// Usado pela opção "minutos antes" do MODELO (ex.: audiência 09:00 com 60 -> 08:00). Trava em 00:00.
+function horaAjustada(t, minutos) {
+  const base = hora(t);
+  const min = Number(minutos) || 0;
+  if (!base || min <= 0) return base;
+  const [h, m] = base.split(':').map(Number);
+  let total = h * 60 + m - min;
+  if (total < 0) total = 0;
+  const hh = String(Math.floor(total / 60)).padStart(2, '0');
+  const mm = String(total % 60).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
 // Monta um endereço legível ignorando partes vazias.
 function montarEndereco(logradouro, numero, complemento, bairro, cidade, uf, cep) {
   const linha1 = [logradouro, numero].filter(Boolean).join(', ');
@@ -110,6 +123,22 @@ async function buscarPartes(processoId, tabela) {
   return partes;
 }
 
+// ---- Autores/réus COMPLETOS e repetíveis (regiões {{#autores}}/{{#reus}} de um processo) ----
+// Reaproveita carregarParte (mesmo formato/campos do "Documento de partes"), já com
+// telefones e e-mails. Retorna array na ordem de cadastro (id ASC). `tabela` é valor
+// interno controlado ('tbltituloprocautor'/'tbltituloprocreu') — sem injeção.
+async function buscarPartesRegiao(processoId, tabela) {
+  const [vinculos] = await pool.execute(
+    `SELECT tipo_pessoa, pessoa_id FROM ${tabela} WHERE proc_id = ? ORDER BY id ASC`, [processoId]
+  );
+  const out = [];
+  for (const v of vinculos) {
+    const parte = await carregarParte(v.tipo_pessoa, v.pessoa_id);
+    if (parte) out.push(parte);
+  }
+  return out;
+}
+
 // Monta as variáveis do bloco Cliente a partir de UMA parte (a principal).
 function blocoClienteDeParte(parte) {
   if (!parte) return {};
@@ -154,7 +183,9 @@ async function blocoProcessoECliente(processoId) {
   const [pr] = await pool.execute(
     `SELECT p.id, p.numProc, p.NomeTituloProc, p.data_distribuicao, p.cliente_polo,
             pa.numPasta, pa.area_direito,
-            v.nome AS vara_nome, f.nome AS forum_nome,
+            v.nome AS vara_nome,
+            f.nome AS forum_nome, f.cep AS forum_cep, f.logradouro AS forum_log, f.num_end AS forum_num,
+            f.compl_end AS forum_compl, f.bairro AS forum_bairro, f.cidade AS forum_cidade, f.uf AS forum_uf,
             tp.nome AS tipo_nome, st.nome AS status_nome, ins.nome AS instancia_nome
      FROM tblproc p
      JOIN tblpasta pa ON p.pasta_id = pa.id
@@ -178,6 +209,10 @@ async function blocoProcessoECliente(processoId) {
   const adversos = await buscarPartes(processoId, tabelaAdversa);
   const clientePrincipal = clientes[0] || null;
 
+  // Autores e réus COMPLETOS e repetíveis (por POLO), para modelos com {{#autores}}/{{#reus}}.
+  const autores = await buscarPartesRegiao(processoId, 'tbltituloprocautor');
+  const reus    = await buscarPartesRegiao(processoId, 'tbltituloprocreu');
+
   const dados = {
     numero_processo: p.numProc || '',
     titulo_processo: p.NomeTituloProc || '',
@@ -185,6 +220,15 @@ async function blocoProcessoECliente(processoId) {
     area_direito: p.area_direito || '',
     vara: p.vara_nome || '',
     forum: p.forum_nome || '',
+    // Endereço do fórum/vara (endereçamento ao juízo e cartas ao fórum) — vem do cadastro de fórum.
+    endereco_forum: montarEndereco(p.forum_log, p.forum_num, p.forum_compl, p.forum_bairro, p.forum_cidade, p.forum_uf, p.forum_cep),
+    cep_forum: p.forum_cep || '',
+    logradouro_forum: p.forum_log || '',
+    numero_forum: p.forum_num || '',
+    complemento_forum: p.forum_compl || '',
+    bairro_forum: p.forum_bairro || '',
+    cidade_forum: p.forum_cidade || '',
+    estado_forum: p.forum_uf || '',
     tipo_processo: p.tipo_nome || '',
     status_processo: p.status_nome || '',
     instancia: p.instancia_nome || '',
@@ -192,6 +236,9 @@ async function blocoProcessoECliente(processoId) {
     parte_adversa: adversos.map(a => a.nome).join(', '),
     parte_adversa_documento: adversos.map(a => a.documento).filter(Boolean).join(', '),
     ...blocoClienteDeParte(clientePrincipal),
+    // Regiões repetíveis de partes (mesmo formato do "Documento de partes").
+    autores,
+    reus,
   };
 
   return {
@@ -203,10 +250,11 @@ async function blocoProcessoECliente(processoId) {
 }
 
 // ---- Bloco Audiência ----
-function montaBlocoAudiencia(a) {
+function montaBlocoAudiencia(a, minutosAntes = 0) {
   return {
     data_audiencia: dataBR(a.data),
-    hora_audiencia: hora(a.hora),
+    hora_audiencia: horaAjustada(a.hora, minutosAntes), // respeita "minutos antes" do modelo (0 = horário real)
+    hora_audiencia_real: hora(a.hora),                  // horário real, sempre disponível
     tipo_audiencia: a.tipo_nome || '',
     local_audiencia: a.local || '',
     vara_audiencia: a.vara_nome || '',
@@ -225,7 +273,7 @@ function montaBlocoAudiencia(a) {
   };
 }
 
-async function resolverAudiencia(audienciaId, usuario) {
+async function resolverAudiencia(audienciaId, usuario, opcoes = {}) {
   const [aud] = await pool.execute(
     `SELECT a.id, a.data, a.hora, a.local, a.modalidade, a.link_virtual, a.plataforma_virtual, a.processo_id,
             ta.nome AS tipo_nome,
@@ -244,7 +292,7 @@ async function resolverAudiencia(audienciaId, usuario) {
   const proc = await blocoProcessoECliente(a.processo_id);
   const esc = await blocoEscritorio(usuario);
 
-  const dados = { ...(proc ? proc.dados : {}), ...montaBlocoAudiencia(a), ...esc };
+  const dados = { ...(proc ? proc.dados : {}), ...montaBlocoAudiencia(a, opcoes.minutosAntes), ...esc };
 
   const refPartes = [];
   if (proc?.numeroProcesso) refPartes.push(`Proc ${proc.numeroProcesso}`);
@@ -260,17 +308,18 @@ async function resolverAudiencia(audienciaId, usuario) {
 }
 
 // ---- Bloco Perícia ----
-function montaBlocoPericia(p) {
+function montaBlocoPericia(p, minutosAntes = 0) {
   return {
     data_pericia: dataBR(p.data),
-    hora_pericia: hora(p.hora),
+    hora_pericia: horaAjustada(p.hora, minutosAntes), // respeita "minutos antes" do modelo (0 = horário real)
+    hora_pericia_real: hora(p.hora),                  // horário real, sempre disponível
     local_pericia: p.local || '',
     tipo_pericia: p.tipo_nome || '',
     perito: p.perito_nome || '',
   };
 }
 
-async function resolverPericia(periciaId, usuario) {
+async function resolverPericia(periciaId, usuario, opcoes = {}) {
   const [per] = await pool.execute(
     `SELECT pe.id, pe.data, pe.hora, pe.local, pe.processo_id,
             tp.nome AS tipo_nome,
@@ -287,7 +336,7 @@ async function resolverPericia(periciaId, usuario) {
 
   const proc = await blocoProcessoECliente(p.processo_id);
   const esc = await blocoEscritorio(usuario);
-  const dados = { ...(proc ? proc.dados : {}), ...montaBlocoPericia(p), ...esc };
+  const dados = { ...(proc ? proc.dados : {}), ...montaBlocoPericia(p, opcoes.minutosAntes), ...esc };
 
   const refPartes = [];
   if (proc?.numeroProcesso) refPartes.push(`Proc ${proc.numeroProcesso}`);
@@ -533,8 +582,8 @@ async function resolverMultipessoas(autores, reus, usuario) {
 
 // ---- Ponto de entrada: resolve as variáveis conforme o tipo de âncora ----
 async function resolver(ancoraTipo, ancoraId, usuario, opcoes = {}) {
-  if (ancoraTipo === 'audiencia')        return resolverAudiencia(ancoraId, usuario);
-  if (ancoraTipo === 'pericia')          return resolverPericia(ancoraId, usuario);
+  if (ancoraTipo === 'audiencia')        return resolverAudiencia(ancoraId, usuario, opcoes);
+  if (ancoraTipo === 'pericia')          return resolverPericia(ancoraId, usuario, opcoes);
   if (ancoraTipo === 'prazo')            return resolverPrazo(ancoraId, usuario);
   if (ancoraTipo === 'pagamento')        return resolverPagamento(ancoraId, usuario, opcoes);
   if (ancoraTipo === 'pessoa_fisica')    return resolverPessoa('fisica', ancoraId, usuario);

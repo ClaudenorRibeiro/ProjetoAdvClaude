@@ -62,12 +62,7 @@ async function listar(req, res) {
         pr.numProc AS processo_numero,
         pr.NomeTituloProc AS pasta_titulo,
         pa.id     AS pasta_id,
-        pa.numPasta AS pasta_numero,
-        -- Existe modelo de documento para o tipo desta perícia? (controla o botão "Gerar Doc")
-        EXISTS(
-          SELECT 1 FROM modelo_documento md
-          WHERE md.ativo = 1 AND md.destino = 'pericia' AND md.tipo_pericia_id <=> pe.tipo_pericia_id
-        ) AS tem_modelo_doc
+        pa.numPasta AS pasta_numero
       FROM pericia pe
       LEFT JOIN tipo_pericia      tp ON pe.tipo_pericia_id = tp.id
       LEFT JOIN pessoas_fisicas   pf ON pe.perito_tipo = 'fisica'   AND pe.perito_id = pf.id

@@ -5,7 +5,7 @@
 
 const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
-const { calcularVencimento } = require('../services/calendarioService');
+const { calcularVencimento, calcularQuantidade } = require('../services/calendarioService');
 const { criarNotificacao, emailPrazoDelegado } = require('../services/notificacaoService');
 const { hojeBrasilia } = require('../utils/helpers');
 const auditoria = require('../middleware/auditoria');
@@ -94,12 +94,7 @@ async function listar(req, res) {
                 WHEN pp.data_vencimento < CURDATE() THEN 'atrasado'
                 WHEN pp.data_vencimento = CURDATE() THEN 'pendente'
                 ELSE 'agendado'
-              END AS status,
-              -- Existe modelo de documento para o subtipo deste prazo? (controla o botão "Gerar Doc")
-              EXISTS(
-                SELECT 1 FROM modelo_documento md
-                WHERE md.ativo = 1 AND md.destino = 'prazo' AND md.subtipo_prazo_id <=> pp.subtipo_id
-              ) AS tem_modelo_doc
+              END AS status
        FROM prazos_processo pp
        LEFT JOIN prazo_subtipo ps ON pp.subtipo_id = ps.id
        LEFT JOIN tipo_prazo tp    ON ps.tipo_prazo_id = tp.id
@@ -138,17 +133,23 @@ async function criar(req, res) {
   try {
     const {
       processo_id, subtipo_id, descricao, data_inicio,
-      quantidade, tipo_dias, delegado_para
+      quantidade, tipo_dias, data_final, delegado_para
     } = req.body;
 
     if (!processo_id || !data_inicio) {
       return erro(res, 'Processo e data de início são obrigatórios');
     }
 
-    // Calcula automaticamente a data de vencimento
-    let data_vencimento = null;
-    if (quantidade && tipo_dias) {
+    // Define a data de vencimento:
+    // - a data final digitada na tela é a que MANDA (é ela que vira o vencimento);
+    // - se não vier data final (ex.: só a quantidade), calcula a partir de quantidade + tipo de dias.
+    let data_vencimento = data_final || null;
+    if (!data_vencimento && quantidade && tipo_dias) {
       data_vencimento = await calcularVencimento(data_inicio, quantidade, tipo_dias);
+    }
+    // Todo prazo precisa de uma data final (regra do usuário)
+    if (!data_vencimento) {
+      return erro(res, 'A data final é obrigatória. Informe a data final ou a quantidade de dias.');
     }
 
     const [result] = await pool.execute(
@@ -377,11 +378,27 @@ async function calcularDataFinal(req, res) {
   }
 }
 
+// GET /api/prazos/calcular-dias?data_inicio=YYYY-MM-DD&data_final=YYYY-MM-DD&tipo_dias=uteis|corridos
+// Cálculo INVERSO: recebe a data final e devolve a quantidade de dias (respeitando feriados nos dias úteis).
+// Usado quando o usuário digita a data final direto e a tela preenche o campo "Quantidade de dias".
+async function calcularDias(req, res) {
+  try {
+    const { data_inicio, data_final, tipo_dias } = req.query;
+    if (!data_inicio || !data_final || !tipo_dias) {
+      return erro(res, 'Parâmetros obrigatórios: data_inicio, data_final, tipo_dias', 400);
+    }
+    const quantidade = await calcularQuantidade(data_inicio, data_final, tipo_dias);
+    return sucesso(res, { quantidade });
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
 // PUT /api/prazos/:id — Edita um prazo existente
 async function editar(req, res) {
   try {
     const { id } = req.params;
-    const { subtipo_id, descricao, data_inicio, quantidade, tipo_dias, delegado_para } = req.body;
+    const { subtipo_id, descricao, data_inicio, quantidade, tipo_dias, data_final, delegado_para } = req.body;
 
     if (!data_inicio) return erro(res, 'Data de início é obrigatória');
 
@@ -391,9 +408,13 @@ async function editar(req, res) {
       return erro(res, 'Este prazo está sendo feito por outro usuário. Apenas o administrador pode editá-lo.', 403);
     }
 
-    let data_vencimento = null;
-    if (quantidade && tipo_dias) {
+    // Mesma regra do criar: a data final digitada é a que MANDA; sem ela, calcula pela quantidade.
+    let data_vencimento = data_final || null;
+    if (!data_vencimento && quantidade && tipo_dias) {
       data_vencimento = await calcularVencimento(data_inicio, quantidade, tipo_dias);
+    }
+    if (!data_vencimento) {
+      return erro(res, 'A data final é obrigatória. Informe a data final ou a quantidade de dias.');
     }
 
     await pool.execute(
@@ -641,4 +662,4 @@ function labelStatus(s) {
   return map[s] || s || '—';
 }
 
-module.exports = { listar, criar, editar, excluir, mudarStatus, buscarTipos, criarTipo, criarSubtipo, vencemHoje, calcularDataFinal, marcarFazendo, liberarFazendo, liberarFazendoExpirados, buscarHistorico };
+module.exports = { listar, criar, editar, excluir, mudarStatus, buscarTipos, criarTipo, criarSubtipo, vencemHoje, calcularDataFinal, calcularDias, marcarFazendo, liberarFazendo, liberarFazendoExpirados, buscarHistorico };
