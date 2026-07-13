@@ -39,9 +39,12 @@ echo.
 set /p DESCRICAO="Descreva o que foi feito: "
 if "%DESCRICAO%"=="" set DESCRICAO=atualizacao
 
-:: Commit e push para o GitHub
+:: Commit e push FORCADO para o GitHub.
+:: --force faz a SUA PASTA LOCAL SEMPRE PREVALECER: sobrescreve o GitHub com o que
+:: esta aqui, mesmo que o outro computador tenha enviado algo diferente. Combina com
+:: a regra de estes scripts NUNCA baixarem nada do Git (sem pull/fetch).
 git commit -m "%PREFIXO% - %DESCRICAO%"
-git push origin main
+git push --force origin main
 
 if %errorlevel%==0 (
     echo.
