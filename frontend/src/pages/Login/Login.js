@@ -14,12 +14,16 @@ export default function Login() {
   const [erro, setErro]       = useState('');
   const [carregando, setCarregando] = useState(false);
   const [nomeEscritorio, setNomeEscritorio] = useState('Sistema de Advocacia');
+  const [logoEscritorio, setLogoEscritorio] = useState(null);
   const { logar }   = useAuth();
   const navigate    = useNavigate();
 
   useEffect(() => {
     api.get('/public/info')
-      .then(r => { if (r.data.ok && r.data.dados?.nome) setNomeEscritorio(r.data.dados.nome); })
+      .then(r => {
+        if (r.data.ok && r.data.dados?.nome) setNomeEscritorio(r.data.dados.nome);
+        if (r.data.ok && r.data.dados?.logo_base64) setLogoEscritorio(r.data.dados.logo_base64);
+      })
       .catch(() => {}); // falha silenciosa — mantém o fallback
   }, []);
 
@@ -74,6 +78,10 @@ export default function Login() {
     <div className="login-page">
       <div className="login-card">
         <div className="login-logo">
+          {logoEscritorio && (
+            <img src={logoEscritorio} alt="Logo do escritório"
+              style={{maxWidth:'200px', maxHeight:'90px', marginBottom:'10px'}} />
+          )}
           <h1>{nomeEscritorio}</h1>
           <p>Gestão jurídica completa</p>
         </div>

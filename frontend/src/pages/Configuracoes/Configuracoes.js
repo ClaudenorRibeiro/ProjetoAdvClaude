@@ -260,7 +260,60 @@ function TabEscritorio() {
   const [salvando, setSalvando] = useState(false);
   const [carregando, setCarregando] = useState(true);
   const [buscandoCep, setBuscandoCep] = useState(false);
+  const [enviandoLogo, setEnviandoLogo] = useState(false);
   const refNumero = React.useRef(null);
+  const refLogo   = React.useRef(null);
+
+  // Tipos de imagem aceitos e tamanho máximo (também validados no servidor).
+  const LOGO_TIPOS = ['image/png', 'image/jpeg', 'image/webp'];
+  const LOGO_MAX_BYTES = 512 * 1024; // 512 KB
+
+  // Envia o logo escolhido: valida tipo e tamanho na tela (aviso amigável) e manda ao servidor.
+  async function enviarLogo(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!LOGO_TIPOS.includes(file.type)) {
+      toast.error('Tipo de arquivo não permitido. Envie uma imagem PNG, JPG ou WEBP.');
+      if (refLogo.current) refLogo.current.value = '';
+      return;
+    }
+    if (file.size > LOGO_MAX_BYTES) {
+      toast.error('A imagem é muito grande. O tamanho máximo é 512 KB.');
+      if (refLogo.current) refLogo.current.value = '';
+      return;
+    }
+    setEnviandoLogo(true);
+    try {
+      const fd = new FormData();
+      fd.append('logo', file);
+      const { data } = await configuracaoAPI.salvarLogo(fd);
+      if (data.ok) {
+        set('logo_base64', data.dados.logo_base64);
+        toast.success('Logo atualizado com sucesso!');
+        window.dispatchEvent(new Event('logo-atualizado')); // avisa o menu lateral para atualizar
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.mensagem || 'Erro ao enviar o logo.');
+    } finally {
+      setEnviandoLogo(false);
+      if (refLogo.current) refLogo.current.value = ''; // libera para reenviar o mesmo arquivo se quiser
+    }
+  }
+
+  // Remove o logo (volta a exibir o nome do escritório no lugar da imagem).
+  async function removerLogoHandler() {
+    setEnviandoLogo(true);
+    try {
+      await configuracaoAPI.removerLogo();
+      set('logo_base64', null);
+      toast.success('Logo removido.');
+      window.dispatchEvent(new Event('logo-atualizado'));
+    } catch (err) {
+      toast.error(err.response?.data?.mensagem || 'Erro ao remover o logo.');
+    } finally {
+      setEnviandoLogo(false);
+    }
+  }
 
   const carregar = useCallback(() => {
     configuracaoAPI.buscarEscritorio().then(r => {
@@ -339,6 +392,40 @@ function TabEscritorio() {
           <small style={{color:'#888',fontSize:'12px'}}>Se vazio, usa o nome do escritório</small>
         </div>
       </div>
+
+      {/* Logo do escritório — imagem guardada no banco desta instância (por escritório) */}
+      <div className="form-group">
+        <label className="form-label">Logo do escritório</label>
+        <div style={{display:'flex', alignItems:'center', gap:'16px', flexWrap:'wrap'}}>
+          {/* Prévia do logo atual */}
+          <div style={{width:'140px', height:'80px', border:'1px solid #e2e8f0', borderRadius:'8px',
+                       display:'flex', alignItems:'center', justifyContent:'center',
+                       background:'#f8fafc', overflow:'hidden'}}>
+            {form.logo_base64
+              ? <img src={form.logo_base64} alt="Logo atual" style={{maxWidth:'100%', maxHeight:'100%'}} />
+              : <span style={{color:'#94a3b8', fontSize:'12px'}}>Sem logo</span>}
+          </div>
+          {ehSuper && (
+            <div style={{display:'flex', flexDirection:'column', gap:'8px'}}>
+              <input ref={refLogo} type="file" accept="image/png,image/jpeg,image/webp"
+                onChange={enviarLogo} disabled={enviandoLogo} style={{fontSize:'13px'}} />
+              {form.logo_base64 && (
+                <button type="button" className="btn btn-secondary"
+                  style={{padding:'4px 12px', fontSize:'13px', alignSelf:'flex-start'}}
+                  onClick={removerLogoHandler} disabled={enviandoLogo}>
+                  Remover logo
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+        <small style={{color:'#888', fontSize:'12px', display:'block', marginTop:'8px', lineHeight:'1.5'}}>
+          Aceita apenas imagens <strong>PNG, JPG ou WEBP</strong>, de no máximo <strong>512 KB</strong>.
+          Para um resultado melhor, use um PNG com fundo transparente. Por segurança, qualquer
+          outro tipo de arquivo é bloqueado.
+        </small>
+      </div>
+
       <div className="grid-2">
         <div className="form-group">
           <label className="form-label">CNPJ / CPF</label>

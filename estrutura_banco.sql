@@ -363,7 +363,7 @@ CREATE TABLE IF NOT EXISTS `configuracoes_escritorio` (
   `bairro` varchar(100) DEFAULT NULL,
   `cidade` varchar(100) DEFAULT NULL,
   `estado` varchar(2) DEFAULT NULL,
-  `logo_path` varchar(300) DEFAULT NULL,
+  `logo_base64` longtext,
   `cor_principal` varchar(7) DEFAULT '#1a56db',
   `horario_alerta_prazos` time DEFAULT '18:00:00',
   `horario_alerta_prazos_2` time DEFAULT NULL,

@@ -69,6 +69,24 @@ body {
   padding: 8px;
 }
 
+/* Reserva (quando o escritório ainda não enviou um logo): mostra o nome no lugar da imagem */
+.logo-nome {
+  display: block;
+  padding: 14px 10px;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: #fff;
+}
+.layout.sidebar-fechada .logo-nome {
+  font-size: 0;              /* menu recolhido: esconde o texto para não estourar a largura */
+  padding: 8px;
+}
+.layout.sidebar-fechada .logo-nome::first-letter {
+  font-size: 22px;          /* mostra só a inicial quando recolhido */
+}
+
 /* Botão de recolher — canto superior direito sobre o logo */
 .btn-toggle-sidebar {
   position: absolute;

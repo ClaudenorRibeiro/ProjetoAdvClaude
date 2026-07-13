@@ -285,6 +285,8 @@ router.delete('/publicacoes/:id',         autenticar, verificarPermissao('public
 // ---- CONFIGURAÇÕES (somente admin) ----
 router.get('/configuracoes/escritorio',           autenticar, apenasAdmin, configuracaoCtrl.buscarEscritorio);
 router.put('/configuracoes/escritorio',           autenticar, apenasAdmin, configuracaoCtrl.atualizarEscritorio);
+router.post('/configuracoes/logo',                autenticar, apenasAdmin, configuracaoCtrl.uploadLogo, configuracaoCtrl.salvarLogo);
+router.delete('/configuracoes/logo',              autenticar, apenasAdmin, configuracaoCtrl.removerLogo);
 router.put('/configuracoes/setup-concluido',      autenticar, apenasAdmin, configuracaoCtrl.marcarSetupConcluido);
 router.get('/configuracoes/feriados',             autenticar, configuracaoCtrl.listarFeriados);
 router.post('/configuracoes/feriados',            autenticar, apenasAdmin, configuracaoCtrl.criarFeriado);

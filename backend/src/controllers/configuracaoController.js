@@ -9,15 +9,93 @@ const bcrypt = require('bcryptjs');
 const auditoria = require('../middleware/auditoria');
 const { ehDiaUtil } = require('../services/calendarioService');
 const { reagendarCronPrazos } = require('../services/alertasService');
+const multer = require('multer');
+
+// ============================================================
+// UPLOAD DO LOGO DO ESCRITÓRIO
+// A imagem é guardada NO BANCO (base64), na tabela configuracoes_escritorio,
+// então cada instância/escritório tem o seu próprio logo e ele sobrevive às
+// atualizações do sistema (o deploy não mexe no banco).
+// SEGURANÇA: só aceitamos imagens PNG, JPG/JPEG ou WEBP, no máximo 512 KB.
+// A validação REAL é feita aqui no servidor, pelos primeiros bytes do arquivo
+// (a "assinatura" da imagem) — NÃO pela extensão/nome — para que um arquivo
+// perigoso renomeado como ".png" seja recusado.
+// ============================================================
+const LOGO_MAX_BYTES = 512 * 1024; // 512 KB
+
+// Recebe o arquivo em memória (não grava em disco) e limita o tamanho.
+const uploadLogoMemoria = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: LOGO_MAX_BYTES },
+});
+
+// Middleware de upload: devolve mensagem amigável em vez do erro cru do multer.
+function uploadLogo(req, res, next) {
+  uploadLogoMemoria.single('logo')(req, res, (err) => {
+    if (err) {
+      const msg = err.code === 'LIMIT_FILE_SIZE'
+        ? 'A imagem é muito grande. O tamanho máximo do logo é 512 KB.'
+        : (err.message || 'Falha ao enviar a imagem.');
+      return erro(res, msg);
+    }
+    next();
+  });
+}
+
+// Descobre o tipo REAL da imagem pelos primeiros bytes (assinatura), ignorando a
+// extensão/nome do arquivo. Retorna 'image/png' | 'image/jpeg' | 'image/webp' ou null.
+function tipoImagemReal(buffer) {
+  if (!buffer || buffer.length < 12) return null;
+  // PNG começa com: 89 50 4E 47
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) return 'image/png';
+  // JPEG começa com: FF D8 FF
+  if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) return 'image/jpeg';
+  // WEBP: "RIFF" nos bytes 0-3 e "WEBP" nos bytes 8-11
+  if (buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP') return 'image/webp';
+  return null; // qualquer outra coisa (inclusive SVG, que pode conter script) é recusada
+}
 
 // GET /api/public/info — Retorna nome, logo e título da aba (sem autenticação)
 // Usado na tela de login e para definir document.title no frontend
 async function infoPublica(req, res) {
   try {
     const [rows] = await pool.execute(
-      'SELECT nome, logo_path, titulo_aba FROM configuracoes_escritorio LIMIT 1'
+      'SELECT nome, logo_base64, titulo_aba FROM configuracoes_escritorio LIMIT 1'
     );
-    return sucesso(res, rows[0] || { nome: 'Sistema de Advocacia', logo_path: null, titulo_aba: null });
+    return sucesso(res, rows[0] || { nome: 'Sistema de Advocacia', logo_base64: null, titulo_aba: null });
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// POST /api/configuracoes/logo — Recebe a imagem do logo, valida e guarda no banco (base64).
+// Só admin/super. Aceita apenas PNG, JPG/JPEG ou WEBP, até 512 KB (validado pelo conteúdo).
+async function salvarLogo(req, res) {
+  try {
+    if (!req.file || !req.file.buffer || !req.file.buffer.length) {
+      return erro(res, 'Nenhuma imagem foi enviada. Selecione um arquivo PNG, JPG ou WEBP.');
+    }
+    // Confere o tipo REAL pelo conteúdo (não confia na extensão) — barra arquivos disfarçados.
+    const mime = tipoImagemReal(req.file.buffer);
+    if (!mime) {
+      return erro(res, 'Arquivo inválido. Envie uma imagem PNG, JPG ou WEBP de verdade (outros tipos são bloqueados por segurança).');
+    }
+    // Monta a imagem no formato que o navegador exibe direto (data URI) e guarda no banco.
+    const dataUri = `data:${mime};base64,${req.file.buffer.toString('base64')}`;
+    await pool.execute('UPDATE configuracoes_escritorio SET logo_base64 = ? LIMIT 1', [dataUri]);
+    await auditoria.registrar(req.usuario.id, 'configuracoes_escritorio', 'editar', 1);
+    return sucesso(res, { logo_base64: dataUri }, 'Logo atualizado com sucesso!');
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// DELETE /api/configuracoes/logo — Remove o logo (volta ao padrão, que mostra o nome do escritório).
+async function removerLogo(req, res) {
+  try {
+    await pool.execute('UPDATE configuracoes_escritorio SET logo_base64 = NULL LIMIT 1');
+    await auditoria.registrar(req.usuario.id, 'configuracoes_escritorio', 'editar', 1);
+    return sucesso(res, {}, 'Logo removido.');
   } catch (err) {
     return erroInterno(res, err);
   }
@@ -517,6 +595,7 @@ async function verificarDiaUtil(req, res) {
 
 module.exports = {
   infoPublica,
+  uploadLogo, salvarLogo, removerLogo,
   buscarEscritorio, atualizarEscritorio, marcarSetupConcluido,
   listarFeriados, criarFeriado, excluirFeriado,
   listarUsuarios, criarUsuario, atualizarUsuario, redefinirSenhaAdmin, excluirUsuario, historicoUsuario,

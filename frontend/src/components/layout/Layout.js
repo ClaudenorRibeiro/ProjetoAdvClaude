@@ -71,8 +71,22 @@ export default function Layout({ children }) {
   const [sinoAberto, setSinoAberto]       = useState(false);
   const [menuUsuario, setMenuUsuario]     = useState(false);
   const [modalSenha, setModalSenha]       = useState(false);
+  const [escritorio, setEscritorio]       = useState({ nome: '', logo_base64: null }); // logo + nome (do banco desta instância)
   const sinoRef    = useRef(null);
   const usuarioRef = useRef(null);
+
+  // Busca o logo/nome do escritório (endpoint público) ao montar e sempre que o logo for
+  // atualizado na tela de Configurações (evento 'logo-atualizado') — assim o menu reflete na hora.
+  useEffect(() => {
+    function carregarInfo() {
+      authAPI.infoPublica()
+        .then(r => { if (r.data.ok && r.data.dados) setEscritorio({ nome: r.data.dados.nome || '', logo_base64: r.data.dados.logo_base64 || null }); })
+        .catch(() => {});
+    }
+    carregarInfo();
+    window.addEventListener('logo-atualizado', carregarInfo);
+    return () => window.removeEventListener('logo-atualizado', carregarInfo);
+  }, []);
 
   // Busca contagem ao montar e a cada 2 minutos
   useEffect(() => {
@@ -183,11 +197,9 @@ export default function Layout({ children }) {
               {sidebarAberta ? '◀' : '▶'}
             </button>
             <Link to="/dashboard" title="Ir para o Dashboard">
-              <img
-                src="/logo.png"
-                alt="Logo do escritório"
-                className="logo-img"
-              />
+              {escritorio.logo_base64
+                ? <img src={escritorio.logo_base64} alt="Logo do escritório" className="logo-img" />
+                : <span className="logo-nome">{escritorio.nome || 'Sistema de Advocacia'}</span>}
             </Link>
           </div>
         </div>
