@@ -97,7 +97,7 @@ export default function Tarefas() {
       return (
         <Link to={`/processos/pasta/${t.pasta_id}?aba=tarefas`}
           style={{ fontSize: '13px', fontWeight: 500 }}>
-          📁 Pasta {t.pasta_numero_fmt || t.pasta_id}
+          Pasta {t.pasta_numero_fmt || t.pasta_id}
         </Link>
       );
     }
@@ -105,11 +105,11 @@ export default function Tarefas() {
       return (
         <Link to={`/processos/pasta/${t.pasta_do_processo_id}?aba=tarefas&processo=${t.processo_id}`}
           style={{ fontSize: '13px', fontFamily: 'monospace' }}>
-          ⚖️ {t.processo_numero || `Processo ${t.processo_id}`}
+          {t.processo_numero || `Processo ${t.processo_id}`}
         </Link>
       );
     }
-    return <span style={{ fontSize: '13px', color: '#64748b' }}>🗂️ Rotina Interna</span>;
+    return <span style={{ fontSize: '13px', color: '#64748b' }}>Rotina Interna</span>;
   }
 
   const totalPaginas = Math.ceil(total / LIMITE);
