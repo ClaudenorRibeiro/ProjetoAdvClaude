@@ -98,6 +98,7 @@ router.get('/pessoas/:tipo/:id/processos', autenticar, verificarPermissao('pesso
 // ATENÇÃO: rotas estáticas (sugerir-pasta, auxiliares, pastas) ANTES de /:id
 router.get('/processos/buscar',                     autenticar, processosCtrl.buscarProcessosPorNumero);
 router.get('/processos/sugerir-pasta',              autenticar, processosCtrl.sugerirNumeroPasta);
+router.get('/processos/pastas/checar',              autenticar, processosCtrl.checarPasta);
 router.get('/processos/auxiliares',                 autenticar, processosCtrl.buscarAuxiliares);
 // Auxiliares — CRUD completo, permissão por ação (não mais só admin)
 router.post('/processos/auxiliares/foruns',          autenticar, verificarPermissao('processos','cadastrar'), processosCtrl.criarForum);

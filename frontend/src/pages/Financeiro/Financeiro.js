@@ -10,7 +10,7 @@ import { formatarData, formatarMoeda, formatarNumeroPasta, toTitleCase, mascaraM
 import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
-import GerarDocumentoBotao from '../../components/GerarDocumento';
+import MenuAcoes from '../../components/MenuAcoes';
 
 const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
 
@@ -249,18 +249,16 @@ export default function Financeiro() {
                           {ehAcordo ? (
                             <span style={{ fontSize: '11px', color: '#888' }}>(parcela de acordo)</span>
                           ) : (
-                            <div style={{ display: 'flex', gap: '4px' }}>
-                              {podeAlterar && (
-                                <button className="btn btn-outline" style={{ fontSize: '11px', padding: '3px 8px' }}
-                                  onClick={() => { setLancEditando(l); setModalLancamento(true); }}>Editar</button>
-                              )}
-                              <button className="btn btn-outline" style={{ fontSize: '11px', padding: '3px 8px' }}
-                                onClick={() => setHistLancamento(l)}>Histórico</button>
-                              {podeExcluir && (
-                                <button className="btn btn-danger" style={{ fontSize: '11px', padding: '3px 8px' }}
-                                  onClick={() => excluirLancamento(l)}>✕</button>
-                              )}
-                            </div>
+                            <MenuAcoes itens={[
+                              { label: 'Editar', icone: '✏️',
+                                oculto: !podeAlterar,
+                                onClick: () => { setLancEditando(l); setModalLancamento(true); } },
+                              { label: 'Histórico', icone: '📋',
+                                onClick: () => setHistLancamento(l) },
+                              { label: 'Excluir', icone: '🗑️', perigo: true,
+                                oculto: !podeExcluir,
+                                onClick: () => excluirLancamento(l) },
+                            ]} />
                           )}
                         </td>
                       </tr>
@@ -299,6 +297,7 @@ export default function Financeiro() {
 // uma linha (uma parcela com cliente E parceiro pendentes gera 2 linhas).
 // ============================================================
 function RepassesView({ podeAlterar }) {
+  const { temPermissao } = useAuth();
   const [sub, setSub] = useState('pendentes');         // 'pendentes' | 'concluidos'
   const [pendentes, setPendentes] = useState(null);
   const [concluidos, setConcluidos] = useState(null);
@@ -384,7 +383,7 @@ function RepassesView({ podeAlterar }) {
               <thead>
                 <tr>
                   <th>Recebido em</th><th>Processo</th><th>Pasta</th><th>Parcela</th>
-                  <th>Repassar para</th><th style={{ textAlign: 'right' }}>Valor</th><th>Ação</th>
+                  <th>Repassar para</th><th style={{ textAlign: 'right' }}>Valor</th><th>Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -399,10 +398,11 @@ function RepassesView({ podeAlterar }) {
                     </td>
                     <td style={{ textAlign: 'right' }}>{formatarMoeda(l.valor)}</td>
                     <td>
-                      {podeAlterar && (
-                        <button className="btn btn-primary" style={{ fontSize: 11, padding: '3px 8px' }}
-                          onClick={() => setRepassando(l)}>Repassar</button>
-                      )}
+                      <MenuAcoes itens={[
+                        { label: 'Repassar', icone: '💸',
+                          oculto: !podeAlterar,
+                          onClick: () => setRepassando(l) },
+                      ]} />
                     </td>
                   </tr>
                 ))}
@@ -438,16 +438,16 @@ function RepassesView({ podeAlterar }) {
                     <td>{l.forma || '—'}</td>
                     <td>{l.quem || '—'}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <GerarDocumentoBotao ancoraTipo="pagamento" ancoraId={l.parcela.id}
-                          beneficiario={l.tipo} label="Recibo" />
-                        <button className="btn btn-outline" style={{ fontSize: 11, padding: '3px 8px' }}
-                          onClick={() => setHistoricoDe(l.parcela)}>Histórico</button>
-                        {podeAlterar && (
-                          <button className="btn btn-outline" style={{ fontSize: 11, padding: '3px 8px' }}
-                            onClick={() => desfazerRepasse(l)}>Desfazer</button>
-                        )}
-                      </div>
+                      <MenuAcoes itens={[
+                        { label: 'Recibo', icone: '📄',
+                          oculto: !temPermissao('documentos','cadastrar'),
+                          gerarDoc: { ancoraTipo: 'pagamento', ancoraId: l.parcela.id, beneficiario: l.tipo } },
+                        { label: 'Histórico', icone: '📋',
+                          onClick: () => setHistoricoDe(l.parcela) },
+                        { label: 'Desfazer', icone: '↩️',
+                          oculto: !podeAlterar,
+                          onClick: () => desfazerRepasse(l) },
+                      ]} />
                     </td>
                   </tr>
                 ))}
@@ -775,6 +775,7 @@ export function ModalHistoricoLancamento({ lancamento, onFechar }) {
 // BLOCO DE UM ACORDO (resumo + parcelas, com baixa)
 // ============================================================
 export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcluir, onMudou }) {
+  const { temPermissao } = useAuth();
   const [aberto, setAberto] = useState(false);
   const [parcelas, setParcelas] = useState(null);
   const [recebendo, setRecebendo] = useState(null); // parcela aguardando a data do recebimento
@@ -845,7 +846,7 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
                 <th style={{ textAlign: 'right' }}>Bruto</th>
                 <th style={{ textAlign: 'right' }}>Honorário</th>
                 <th style={{ textAlign: 'right' }}>Líquido</th>
-                <th>Parceria</th><th>Obs</th><th>Status</th><th>Ação</th><th>Histórico</th>
+                <th>Parceria</th><th>Obs</th><th>Status</th><th>Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -879,27 +880,27 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
                     )}
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>
-                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
-                      {/* Gerar documento da parcela (recibo/declaração/autorização) — sempre visível; o modal lista os modelos (ou avisa se não houver). */}
-                      <GerarDocumentoBotao ancoraTipo="pagamento" ancoraId={p.id}
-                        estilo={{ fontSize: '11px', padding: '3px 8px' }} />
-                      {/* Pendente recebe; recebida desfaz (bloqueado se houver repasse); cancelada não tem ação */}
-                      {podeAlterar && p.status === 'pendente' && (
-                        <button className="btn btn-primary" style={{ fontSize: '11px', padding: '3px 8px' }} onClick={() => setRecebendo(p)}>Receber</button>
-                      )}
-                      {podeAlterar && p.status === 'pago' && (() => {
-                        const temRepasse = !!(p.repasse_cliente_em || p.repasse_parceiro_em);
-                        return (
-                          <button className="btn btn-outline" style={{ fontSize: '11px', padding: '3px 8px', opacity: temRepasse ? 0.5 : 1 }}
-                            disabled={temRepasse}
-                            title={temRepasse ? "Desfaça os repasses na aba 'Repasses' antes de desfazer o recebimento" : ''}
-                            onClick={() => desfazer(p)}>Desfazer recebimento</button>
-                        );
-                      })()}
-                    </div>
-                  </td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    <button className="btn btn-outline" style={{ fontSize: '11px', padding: '3px 8px' }} onClick={() => setHistoricoDe(p)}>Histórico</button>
+                    <MenuAcoes itens={[
+                      // Gerar documento da parcela (recibo/declaração/autorização) — o modal lista os modelos (ou avisa se não houver).
+                      { label: 'Gerar documento', icone: '📄',
+                        oculto: !temPermissao('documentos','cadastrar'),
+                        gerarDoc: { ancoraTipo: 'pagamento', ancoraId: p.id } },
+                      // Pendente recebe; recebida desfaz (bloqueado se houver repasse); cancelada não tem ação
+                      { label: 'Receber', icone: '💰',
+                        oculto: !(podeAlterar && p.status === 'pendente'),
+                        onClick: () => setRecebendo(p) },
+                      { label: 'Desfazer recebimento', icone: '↩️',
+                        oculto: !(podeAlterar && p.status === 'pago'),
+                        // Continua visível com repasse feito para poder explicar o porquê do bloqueio
+                        onClick: () => {
+                          if (p.repasse_cliente_em || p.repasse_parceiro_em) {
+                            toast.info("Desfaça os repasses na aba 'Repasses' antes de desfazer o recebimento.");
+                            return;
+                          }
+                          desfazer(p);
+                        } },
+                      { label: 'Histórico', icone: '📋', onClick: () => setHistoricoDe(p) },
+                    ]} />
                   </td>
                 </tr>
               ))}
@@ -911,7 +912,7 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
                 <td style={{ textAlign: 'right' }}>{formatarMoeda(round2(parcelas.reduce((s, p) => s + Number(p.honor_valor || 0), 0)))}</td>
                 <td style={{ textAlign: 'right' }}>{formatarMoeda(round2(parcelas.reduce((s, p) => s + Number(p.valor_liquido || 0), 0)))}</td>
                 <td>{formatarMoeda(round2(parcelas.reduce((s, p) => s + Number(p.parceria_valor || 0), 0)))}</td>
-                <td colSpan={4}></td>
+                <td colSpan={3}></td>
               </tr>
             </tfoot>
           </table>

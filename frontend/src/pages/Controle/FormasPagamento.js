@@ -9,6 +9,7 @@ import React, { useState, useEffect } from 'react';
 import { financeiroAPI } from '../../services/api';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
+import MenuAcoes from '../../components/MenuAcoes';
 
 export default function FormasPagamento() {
   const [formas,     setFormas]     = useState([]);
@@ -101,7 +102,7 @@ export default function FormasPagamento() {
               <thead>
                 <tr>
                   <th>Nome</th>
-                  <th style={{ width: 100 }}>Ações</th>
+                  <th style={{ width: 60 }}>Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -109,12 +110,10 @@ export default function FormasPagamento() {
                   <tr key={f.id}>
                     <td>{f.nome}</td>
                     <td>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button className="btn btn-outline" style={{ padding: '4px 10px', fontSize: 12 }}
-                          title="Editar" onClick={() => abrirEditar(f)}>✏️</button>
-                        <button className="btn btn-danger" style={{ padding: '4px 10px', fontSize: 12 }}
-                          title="Excluir" onClick={() => excluir(f)}>🗑️</button>
-                      </div>
+                      <MenuAcoes itens={[
+                        { label: 'Editar',  icone: '✏️', onClick: () => abrirEditar(f) },
+                        { label: 'Excluir', icone: '🗑️', perigo: true, onClick: () => excluir(f) },
+                      ]} />
                     </td>
                   </tr>
                 ))}

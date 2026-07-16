@@ -112,6 +112,7 @@ export const processosAPI = {
   buscarPasta:       (id) => api.get(`/processos/pastas/${id}`),
   renumerarPasta:    (id, dados) => api.put(`/processos/pastas/${id}/renumerar`, dados),
   sugerirPasta:      () => api.get('/processos/sugerir-pasta'),
+  checarPasta:       (numPasta) => api.get('/processos/pastas/checar', { params: { numPasta } }),
   buscarPorNumero:   (q) => api.get('/processos/buscar', { params: { q } }),
   // Processos
   criarProcesso:     (dados) => api.post('/processos', dados),

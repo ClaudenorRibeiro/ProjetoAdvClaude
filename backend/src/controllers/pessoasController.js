@@ -797,6 +797,9 @@ async function criarJuridica(req, res) {
     return sucesso(res, { id: pessoaId }, 'Pessoa jurídica cadastrada com sucesso', 201);
   } catch (err) {
     await conn.rollback();       // Desfaz tudo se qualquer INSERT falhou
+    // Trava de unicidade do banco (uq_pj_cnpj): sem isto o CNPJ repetido virava
+    // "Erro interno no servidor" e o usuário não descobria o motivo.
+    if (err.code === 'ER_DUP_ENTRY') return erro(res, 'CNPJ já cadastrado no sistema');
     return erroInterno(res, err);
   } finally {
     conn.release();              // SEMPRE devolve a conexão ao pool
@@ -887,6 +890,8 @@ async function atualizarJuridica(req, res) {
     return sucesso(res, null, 'Pessoa jurídica atualizada com sucesso');
   } catch (err) {
     await conn.rollback();
+    // Trava de unicidade: editar o CNPJ para um que já existe em outra empresa cai aqui.
+    if (err.code === 'ER_DUP_ENTRY') return erro(res, 'Este CNPJ já está cadastrado em outra empresa');
     return erroInterno(res, err);
   } finally {
     conn.release();

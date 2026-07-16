@@ -9,6 +9,7 @@ import React, { useState, useEffect } from 'react';
 import { processosAPI } from '../../services/api';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
+import MenuAcoes from '../../components/MenuAcoes';
 
 const FORM_VAZIO = {
   forum_id: '', nome: '', abrev_nome: '',
@@ -195,7 +196,7 @@ export default function Varas() {
                   <th>Cód. CNJ</th>
                   <th>Complemento</th>
                   <th>Contato</th>
-                  <th style={{ width: 100 }}>Ações</th>
+                  <th style={{ width: 60 }}>Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -222,20 +223,10 @@ export default function Varas() {
                       {!v.tel && !v.email && <span style={{ color: '#bbb' }}>—</span>}
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button
-                          className="btn btn-outline"
-                          style={{ padding: '4px 10px', fontSize: 12 }}
-                          title="Editar"
-                          onClick={() => abrirEditar(v)}
-                        >✏️</button>
-                        <button
-                          className="btn btn-danger"
-                          style={{ padding: '4px 10px', fontSize: 12 }}
-                          title="Excluir"
-                          onClick={() => excluir(v)}
-                        >🗑️</button>
-                      </div>
+                      <MenuAcoes itens={[
+                        { label: 'Editar',  icone: '✏️', onClick: () => abrirEditar(v) },
+                        { label: 'Excluir', icone: '🗑️', perigo: true, onClick: () => excluir(v) },
+                      ]} />
                     </td>
                   </tr>
                 ))}

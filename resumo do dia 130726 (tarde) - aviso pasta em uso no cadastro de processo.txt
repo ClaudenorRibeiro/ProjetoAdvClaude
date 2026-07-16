@@ -1,0 +1,164 @@
+================================================================================
+ RESUMO COMPLETO DA SESSÃO — 13/07/2026 (TARDE / continuação)
+ Sistema de Advocacia — Dr. Antônio Ferreira da Costa
+ (handoff para o Claude do outro computador — LER INTEIRO antes de continuar)
+================================================================================
+
+--------------------------------------------------------------------------------
+0) ESTADO GERAL (o mais importante)
+--------------------------------------------------------------------------------
+- Esta é uma sessão de CONTINUAÇÃO da manhã de 13/07 (que tratou de Prazos data-final,
+  Git push forçado e Logo por escritório — ver o outro resumo:
+  "resumo do dia 130726 - prazos data final + git push forcado + logo por escritorio (multi-cliente).txt").
+- No começo da sessão: analisei a pasta LOCAL inteira + todas as memórias e confirmei
+  que a pasta memory/ do projeto e a memória interna do Claude estavam IDÊNTICAS e no
+  ponto mais atual (bateram 1:1 com o resumo da manhã). Nada para reconciliar.
+- TUDO verificado no LOCAL: node --check (backend) + build do Vite passaram.
+- NADA foi commitado, NADA foi para o GitHub, NADA foi deployado na AWS por mim
+  (Claude não mexe em git/servidor). O usuário decide quando subir.
+- NENHUM SQL nesta sessão da tarde. O banco NÃO mudou. (Os SQL pendentes continuam
+  sendo os da manhã/dias anteriores — ver seção F.)
+- 1 (uma) feature nova nesta sessão, com autorização explícita do usuário.
+
+--------------------------------------------------------------------------------
+1) REGRAS DE TRABALHO (o usuário reforçou de novo, em caixa alta — estão em feedback_codigo.md)
+--------------------------------------------------------------------------------
+1. NUNCA CODAR SEM AUTORIZAÇÃO — fluxo de 2 passos: (1º) explicar em português o
+   que entendi do pedido + efeitos colaterais e ESPERAR; (2º) só codar depois do
+   "pode codar". Responder pergunta de escopo NÃO é autorização.
+2. NUNCA SUPOR — verificar tudo na fonte (código/arquivo/config). Na dúvida, dizer
+   "não tenho certeza, preciso confirmar" e verificar/perguntar.
+3. CORRIGIR O USUÁRIO quando o pedido dele quebrar/contrariar/prejudicar outra
+   parte do sistema — analisar o código INTEIRO (front E back) ANTES.
+4. NENHUMA EXCLUSÃO PODE DEIXAR ÓRFÃOS — tratar as amarrações (FK + polimórficas)
+   antes de apagar.
+5. SEMPRE MENSAGENS AMIGÁVEIS na tela — nunca erro cru do banco.
+6. TABELAS SEMPRE EM MINÚSCULAS — no banco E no código. (Regra eterna, o usuário
+   repetiu em CAIXA ALTA de novo hoje.)
+7. NÃO mandar trechos de código no chat (usuário é leigo). Exceção: SQL para colar
+   no HeidiSQL. Uma pergunta por vez.
+8. Claude NÃO mexe em git/banco/servidor. A pasta memory/ NUNCA vai para o GitHub.
+
+--------------------------------------------------------------------------------
+A) FEATURE — AVISO AMIGÁVEL "pasta já em uso" no cadastro de processo (LOCAL, SEM SQL)
+--------------------------------------------------------------------------------
+PEDIDO (exato): no modal "Novo Processo", no campo "Número da Pasta", quando o campo
+PERDER O FOCO (onBlur — o usuário digita um número e sai do campo), verificar se
+aquela pasta JÁ ESTÁ EM USO e pedir para o usuário CONFIRMAR se vai incluir mais um
+processo dentro dessa pasta. Aviso amigável.
+
+CONTEXTO IMPORTANTE (verificado na fonte antes de codar):
+- Reaproveitar uma pasta já existente SEMPRE foi permitido e intencional (carta
+  precatória, recurso, processo relacionado do mesmo cliente).
+- O backend (criarProcesso) JÁ anexava o novo processo a uma pasta existente EM
+  SILÊNCIO quando o número digitado já existia. Ou seja: a funcionalidade de "juntar
+  na mesma pasta" já funcionava — FALTAVA SÓ O AVISO. A lógica de anexar NÃO mudou.
+- Não existia nenhum endpoint que, dado um número de pasta, dissesse se ela já tinha
+  processo. Os que existiam buscam por texto/nº de processo ou precisam do ID da
+  pasta — nenhum servia para checar por NÚMERO exato.
+
+DECISÃO DO USUÁRIO (confirmada antes de codar): quando ele CANCELAR o aviso, o campo
+volta para o número livre sugerido automaticamente (chamamos de "opção A").
+
+O QUE FOI FEITO (LOCAL, build OK, node --check OK, SEM SQL):
+
+BACKEND — src/controllers/processosController.js
+  - Nova função checarPasta. É SOMENTE LEITURA (SELECT, SEM transação, porque não
+    altera nada no banco).
+  - Endpoint: GET /processos/pastas/checar?numPasta=NN
+  - Responde um objeto: { emUso, totalProcessos, titulo }.
+      * emUso = true SÓ quando a pasta existe E tem pelo menos 1 processo ATIVO.
+      * Pasta que existe mas está VAZIA (sem processo ativo) => emUso = false
+        (não avisa; é reaproveitada em silêncio, exatamente como já era).
+      * titulo = NomeTituloProc do processo mais recente da pasta (deixa o aviso
+        informativo, ex.: "Fulano X Beltrano").
+  - Adicionada ao module.exports.
+
+BACKEND — src/routes/index.js
+  - Nova rota: router.get('/processos/pastas/checar', autenticar, processosCtrl.checarPasta)
+  - CUIDADO REGISTRADO NO CÓDIGO: essa rota foi colocada ANTES de
+    '/processos/pastas/:id'. Se ficasse depois, o Express interpretaria a palavra
+    "checar" como se fosse um :id e chamaria o controller errado.
+  - Usa só "autenticar" (sem verificarPermissao), igual à rota irmã
+    '/processos/sugerir-pasta', que é o outro helper do mesmo modal de cadastro.
+
+FRONTEND — src/services/api.js
+  - Novo método: checarPasta(numPasta) => GET /processos/pastas/checar?numPasta=...
+
+FRONTEND — src/pages/Processos/Processos.js  (SÓ o componente ModalNovoProcesso)
+  - import do useRef.
+  - Novo estado "confirmar" (controla o aviso) e um useRef "pastaConfirmadaRef".
+  - onBlur={checarPastaEmUso} no input do "Número da Pasta".
+  - Função checarPastaEmUso: chama a API; se emUso, abre o ModalConfirmar (o modal de
+    confirmação padrão do sistema, tipo "aviso"/amarelo, botão "Sim, incluir") com a
+    mensagem amigável ("A pasta nº 0042 já existe e possui X processo(s) (ex.: ...).
+    Deseja incluir mais um processo dentro desta mesma pasta?").
+  - Se CONFIRMAR ("Sim, incluir"): mantém o número digitado e segue o cadastro normal
+    (o backend anexa à pasta existente, como já fazia).
+  - Se CANCELAR (ou fechar o aviso no X/Esc/clicando fora): volta o campo para o
+    número livre sugerido (opção A), via função reverterPastaSugerida (que rechama
+    o endpoint sugerir-pasta).
+  - POR QUE O useRef: o ModalConfirmar usa o MESMO onCancelar tanto para "cancelar"
+    quanto para fechar DEPOIS de confirmar. O pastaConfirmadaRef marca "o usuário
+    confirmou" para NÃO reverter o número quando ele, na verdade, aceitou incluir.
+  - Se a checagem falhar por qualquer motivo (rede etc.), NÃO bloqueia o cadastro —
+    apenas segue sem o aviso.
+
+O QUE NÃO FOI TOCADO (efeitos colaterais cuidados):
+  - O ModalEditarProcesso e a aba de adicionar processo de DENTRO da pasta NÃO foram
+    mexidos. Nesses lugares o campo "Número da Pasta" nem aparece (a pasta já é
+    conhecida), então não faz sentido checar lá.
+  - O número sugerido ao abrir o modal é sempre um número LIVRE, então ao abrir o
+    cadastro o aviso NÃO dispara à toa.
+
+FALTA (usuário testar no LOCAL):
+  - Abrir "Novo Processo", digitar um número de pasta que JÁ existe e tem processo, e
+    sair do campo => deve aparecer o aviso.
+  - Confirmar => mantém o número e deixa cadastrar (processo entra na pasta existente).
+  - Cancelar => campo volta para o número sugerido.
+  - Digitar um número novo/livre => NÃO deve avisar.
+
+--------------------------------------------------------------------------------
+B) BANCO DE DADOS — SQL
+--------------------------------------------------------------------------------
+- Nesta sessão da TARDE: NENHUM SQL. O banco não mudou.
+- Continuam pendentes (rodados só no LOCAL, faltam rodar na AWS no próximo deploy):
+    * logo_base64 em configuracoes_escritorio (manhã de 13/07):
+        ALTER TABLE `configuracoes_escritorio`
+          DROP COLUMN `logo_path`,
+          ADD COLUMN `logo_base64` LONGTEXT NULL AFTER `estado`;
+    * minutos_antes em modelo_documento (12/07).
+    * tabela nacionalidade + pessoas_fisicas.nacionalidade_id (09/07).
+
+--------------------------------------------------------------------------------
+C) ARQUIVOS TOCADOS HOJE (TARDE) — só LOCAL, não commitado
+--------------------------------------------------------------------------------
+BACKEND:
+  src/controllers/processosController.js   (nova função checarPasta + module.exports)
+  src/routes/index.js                       (nova rota GET /processos/pastas/checar, antes de /pastas/:id)
+FRONTEND:
+  src/services/api.js                       (método checarPasta)
+  src/pages/Processos/Processos.js          (só o ModalNovoProcesso: useRef, estado confirmar,
+                                             onBlur, checarPastaEmUso, reverterPastaSugerida, ModalConfirmar)
+MEMÓRIAS (pasta memory/ — NUNCA vai ao git):
+  MEMORY.md, pendencias_proxima_sessao.md, processos_pastas.md, feedback_codigo.md
+  (atualizados com esta sessão; as duas pastas de memória — projeto e interna — foram
+   deixadas idênticas)
+
+--------------------------------------------------------------------------------
+D) PENDÊNCIAS / PRÓXIMOS PASSOS
+--------------------------------------------------------------------------------
+1. Usuário TESTAR no LOCAL:
+   - A feature desta tarde (aviso de pasta em uso), conforme a seção A.
+   - E o que já estava pendente da manhã: Prazos data-final; Logo (rodar o SQL do
+     logo primeiro, depois subir/remover); geração de documentos, unificar duplicadas,
+     menu "⋮" (de 12/07, se ainda não testou).
+2. Quando o usuário aprovar tudo: commit/push (agora FORÇADO) + deploy + rodar na AWS
+   os SQL pendentes (logo_base64 + minutos_antes + nacionalidade) + re-exportar
+   estrutura_banco.sql.
+3. Instalação da 2ª instância (outro cliente): banco + .env + domínio + bucket S3
+   próprios; trocar os exemplos de e-mail/bucket nos scripts de instalação; subir o
+   logo do cliente novo pela tela.
+
+FIM.
+================================================================================

@@ -9,6 +9,7 @@ import { configuracaoAPI, manutencaoAPI } from '../../services/api';
 import { formatarData, toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
+import MenuAcoes from '../../components/MenuAcoes';
 import { useAuth } from '../../context/AuthContext';
 
 // Estrutura de módulos para a matriz de permissões
@@ -619,28 +620,18 @@ function TabUsuarios() {
                     </span>
                   </td>
                   <td>
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      <button className="btn btn-outline" style={{fontSize:'12px',padding:'4px 10px'}}
-                        onClick={() => { setEditando(u); setModalAberto(true); }}>
-                        Editar
-                      </button>
-                      <button className="btn btn-outline" style={{fontSize:'12px',padding:'4px 10px',color:'#d97706',borderColor:'#d97706'}}
-                        onClick={() => { setUsuarioSenha(u); setModalSenha(true); }}
-                        title="Redefinir senha deste usuário">
-                        🔑 Senha
-                      </button>
-                      <button className="btn btn-outline" style={{fontSize:'12px',padding:'4px 10px',color:'#6366f1',borderColor:'#6366f1'}}
-                        onClick={() => { setUsuarioHistorico(u); setModalHistorico(true); }}
-                        title="Ver histórico de ações deste usuário">
-                        📋 Histórico
-                      </button>
-                      <button className="btn btn-outline" style={{fontSize:'12px',padding:'4px 10px',color:'#dc2626',borderColor:'#dc2626'}}
-                        onClick={() => confirmarExclusao(u)}
-                        disabled={excluindo === u.id}
-                        title="Excluir usuário">
-                        🗑️
-                      </button>
-                    </div>
+                    <MenuAcoes itens={[
+                      { label: 'Editar', icone: '✏️',
+                        onClick: () => { setEditando(u); setModalAberto(true); } },
+                      { label: 'Redefinir senha', icone: '🔑',
+                        onClick: () => { setUsuarioSenha(u); setModalSenha(true); } },
+                      { label: 'Histórico', icone: '📋',
+                        onClick: () => { setUsuarioHistorico(u); setModalHistorico(true); } },
+                      // Some enquanto a exclusão deste usuário está em andamento (evita clique duplo)
+                      { label: 'Excluir', icone: '🗑️', perigo: true,
+                        oculto: excluindo === u.id,
+                        onClick: () => confirmarExclusao(u) },
+                    ]} />
                   </td>
                 </tr>
               ))}
@@ -1263,10 +1254,10 @@ function TabFeriados() {
                     </span>
                   </td>
                   <td>
-                    <button className="btn btn-danger" style={{fontSize:'12px',padding:'4px 8px'}}
-                      onClick={() => excluirFeriado(f.id)}>
-                      Remover
-                    </button>
+                    <MenuAcoes itens={[
+                      { label: 'Remover', icone: '🗑️', perigo: true,
+                        onClick: () => excluirFeriado(f.id) },
+                    ]} />
                   </td>
                 </tr>
               ))}

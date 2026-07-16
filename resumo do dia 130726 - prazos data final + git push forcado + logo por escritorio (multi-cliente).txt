@@ -1,0 +1,240 @@
+================================================================================
+ RESUMO COMPLETO DA SESSÃO — 13/07/2026
+ Sistema de Advocacia — Dr. Antônio Ferreira da Costa
+ (handoff para o Claude do outro computador — LER INTEIRO antes de continuar)
+================================================================================
+
+--------------------------------------------------------------------------------
+0) ESTADO GERAL (o mais importante)
+--------------------------------------------------------------------------------
+- Sessão de continuação. TUDO verificado (node --check no backend + build do Vite
+  passaram em todas as etapas) no ambiente LOCAL.
+- NADA foi commitado, NADA foi para o GitHub, NADA foi deployado na AWS por mim
+  (Claude não mexe em git/servidor). O usuário decide quando subir.
+- 1 (UM) SQL foi necessário nesta sessão (o do LOGO). O usuário vai rodar no
+  HeidiSQL LOCAL para testar; FALTA rodar na AWS no próximo deploy:
+      ALTER TABLE `configuracoes_escritorio`
+        DROP COLUMN `logo_path`,
+        ADD COLUMN `logo_base64` LONGTEXT NULL AFTER `estado`;
+- 3 frentes hoje: (A) PRAZOS — permitir digitar a data final direto; (B) GIT — os
+  2 .bat passaram a fazer push FORÇADO; (C) LOGO por escritório (deixar o sistema
+  pronto para uma 2ª instância AWS de OUTRO cliente).
+
+--------------------------------------------------------------------------------
+1) REGRAS DE TRABALHO (o usuário reforçou de novo — estão em feedback_codigo.md)
+--------------------------------------------------------------------------------
+1. NUNCA CODAR SEM AUTORIZAÇÃO — fluxo de 2 passos: (1º) explicar em português o
+   que entendi do pedido + efeitos colaterais e ESPERAR; (2º) só codar depois do
+   "pode codar". Responder pergunta de escopo NÃO é autorização.
+2. NUNCA SUPOR — verificar tudo na fonte (código/arquivo/config). Na dúvida, dizer
+   "não tenho certeza, preciso confirmar" e verificar/perguntar.
+3. CORRIGIR O USUÁRIO quando o pedido dele quebrar/contrariar/prejudicar outra
+   parte do sistema — analisar o código INTEIRO (front E back) ANTES.
+4. NENHUMA EXCLUSÃO PODE DEIXAR ÓRFÃOS — tratar as amarrações (FK + polimórficas)
+   antes de apagar.
+5. SEMPRE MENSAGENS AMIGÁVEIS na tela — nunca erro cru do banco.
+6. TABELAS SEMPRE EM MINÚSCULAS — no banco E no código. (O usuário fez MUITA
+   questão de novo hoje, em caixa alta. Regra eterna.)
+7. NÃO mandar trechos de código no chat (usuário é leigo). Exceção: SQL para colar
+   no HeidiSQL. Uma pergunta por vez.
+8. Claude NÃO mexe em git/banco/servidor. A pasta memory/ NUNCA vai para o GitHub.
+
+--------------------------------------------------------------------------------
+A) PRAZOS — DATA FINAL pode ser digitada direto (bidirecional) e virou OBRIGATÓRIA
+   — só LOCAL, SEM SQL, build OK
+--------------------------------------------------------------------------------
+PEDIDO: ao cadastrar um prazo, poder informar a DATA FINAL direto, sem precisar
+preencher a quantidade de dias. E todo prazo passa a EXIGIR uma data final.
+
+O QUE HAVIA ANTES (verificado na fonte): só dava para informar a QUANTIDADE de dias
+e o sistema calculava a data final (dias úteis/corridos, com feriados). O campo
+"Data final" até existia e era editável na tela, MAS o backend IGNORAVA a data
+digitada — se a quantidade ficasse vazia, o prazo era salvo SEM vencimento (nulo).
+
+DECISÃO DO USUÁRIO (confirmada): quando ele digitar a data final, ELA é a que MANDA
+— vira o vencimento exato. A quantidade de dias vira só referência.
+
+O QUE FOI FEITO:
+- Backend `services/calendarioService.js`: nova função `calcularQuantidade(inicio,
+  final, tipo)` — o INVERSO de calcularVencimento. Úteis: conta no `calendario`
+  os dias úteis entre início e fim (inclusive os dois). Corridos: diferença + 1.
+- Backend `controllers/prazosController.js`: `criar` e `editar` agora leem
+  `data_final` do body → é ela que vira `data_vencimento` (se não vier, calcula
+  pela quantidade; se nada vier, erro amigável "A data final é obrigatória").
+  Novo endpoint `calcularDias` + rota GET `/prazos/calcular-dias`.
+- Frontend `pages/Prazos/Prazos.js` (os 2 modais: Novo e Editar, reaproveitados
+  também no PastaDetalhe): estado `modo` ('dias' | 'data', começa null) diz qual
+  campo o usuário mexeu por último, para os dois cálculos (dias->data e data->dias)
+  NÃO ficarem se recalculando em loop. Começar null faz com que, ao ABRIR a edição
+  de um prazo, nada seja recalculado (preserva a data e a quantidade salvas).
+  Data final virou OBRIGATÓRIA na validação da tela. `services/api.js`: `calcularDias`.
+- SEM mudança de banco.
+
+FALTA: usuário testar na tela (digitar só a quantidade; digitar só a data final;
+tentar salvar sem data final -> deve bloquear; editar prazo antigo e salvar sem
+mexer -> deve manter tudo). Vale nos 2 lugares: tela Prazos e aba do processo.
+
+--------------------------------------------------------------------------------
+B) GIT — os 2 .bat agora fazem PUSH FORÇADO (a pasta local SEMPRE prevalece)
+--------------------------------------------------------------------------------
+O QUE ACONTECEU: ao rodar o salvar_pc_*.bat, o COMMIT local funcionou, mas o PUSH
+foi RECUSADO ("! [rejected] main -> main (fetch first)"). Motivo: o GitHub estava
+no commit `655eaac`, enviado pelo OUTRO computador depois de 10/07, que ESTA máquina
+nunca baixou (os scripts, por regra ABSOLUTA do usuário, NUNCA fazem pull/fetch).
+Ou seja: os dois computadores divergiram. Um push comum só passa em "fast-forward"
+(quando o local já tem tudo do remoto); por isso funcionou enquanto só um PC
+empurrava e quebrou na 1ª divergência real.
+
+DECISÃO DO USUÁRIO (Opção 2, ciente de que o force apaga do GitHub o commit do
+outro PC não sincronizado — ele afirmou que a pasta LOCAL é a fonte de verdade,
+atualizada e testada): a pasta local SEMPRE prevalece.
+
+O QUE FOI FEITO: nos DOIS arquivos (salvar_pc_casa_no_Git.bat e
+salvar_pc_escrit_no_Git.bat) troquei `git push origin main` por
+`git push --force origin main` (com comentário explicativo no arquivo).
+- `--force-with-lease` NÃO serve aqui (ele bloquearia justamente quando o remoto
+  mudou, que é o caso) -> é `--force` puro, coerente com o "nunca baixar".
+- O `Deploy/atualizacao/1-AtualizarSistema.sh` do servidor NÃO precisou mudar: ele
+  já faz `git fetch + git reset --hard origin/main` (iguala o servidor ao GitHub,
+  já preparado para histórico reescrito por force). Fluxo completo:
+  local (push --force) -> GitHub -> servidor (reset --hard).
+- ATENÇÃO/MODELO NOVO: como os dois PCs agora sempre forçam, "quem roda o .bat por
+  último manda". Regra de ouro: começar a trabalhar SEMPRE na máquina que está com
+  a versão mais recente.
+
+--------------------------------------------------------------------------------
+C) LOGO POR ESCRITÓRIO — deixar o sistema MULTI-CLIENTE — só LOCAL, PRECISA DE SQL
+--------------------------------------------------------------------------------
+CONTEXTO: o usuário vai instalar uma 2ª instância na AWS para OUTRO cliente (banco
+e .env próprios — ele já sabe disso). Pediu para resolver o logo e qualquer outra
+coisa que fosse específica do escritório e estivesse "presa" no código.
+
+VARREDURA NO CÓDIGO INTEIRO (feita e confirmada): o LOGO era a ÚNICA coisa de marca
+"presa" no git (o arquivo frontend/public/logo.png, do Dr. Antônio). Todo o resto
+já é POR INSTÂNCIA:
+- Nome do escritório e Título da aba do navegador -> vêm do BANCO
+  (configuracoes_escritorio), servidos pelo endpoint público /public/info.
+- E-mail (SMTP/from), bucket do S3 e domínio -> ficam no .env (confirmado que o
+  .env está fora do git).
+- Favicon -> balança da justiça genérica, serve para qualquer escritório.
+Descoberta: já existia meia-infra (a coluna logo_path e o endpoint /public/info
+devolvendo o logo), mas ninguém tinha terminado de ligar — a tela ainda usava o
+arquivo fixo.
+
+SOLUÇÃO (feita, LOCAL, build OK): o logo virou UPLOAD na aba Escritório, guardado
+NO BANCO de cada instância (não é arquivo, não vai para o S3). Assim é por cliente,
+some do git e sobrevive às atualizações (o deploy não mexe no banco).
+
+ONDE FICA SALVO: tabela `configuracoes_escritorio`, coluna nova `logo_base64`, como
+TEXTO (a imagem convertida em base64, um "data URI"). Entra no backup diário do
+banco automaticamente. (Discussão honesta com o usuário: o padrão de "sistemas
+grandes" para arquivos é o S3 — e o próprio sistema já guarda os .docx no S3 —, mas
+para UM logo pequeno, guardar no banco é uma escolha legítima e mais simples. Se um
+dia houver MUITAS imagens por cliente, aí sim migrar tudo para o S3. O usuário
+decidiu: DEIXAR NO BANCO.)
+
+SEGURANÇA DO ARQUIVO (exigência do usuário — evitar vírus):
+- Só aceita imagens PNG, JPG/JPEG ou WEBP; máximo 512 KB.
+- A validação de verdade é no SERVIDOR, pelos primeiros bytes do arquivo (a
+  "assinatura"/bytes mágicos), NÃO pela extensão -> um arquivo perigoso renomeado
+  para .png é recusado.
+- SVG e qualquer outro tipo são BLOQUEADOS (SVG pode conter script).
+- Mensagens amigáveis, e também validação na tela (tipo e tamanho) antes de enviar.
+
+QUEM PODE ENVIAR: só o SUPER-USUÁRIO (nível 0), igual aos demais campos da aba
+Escritório (que já são editáveis só pelo super). O usuário confirmou DEIXAR só para
+o super. Consequência: o admin "Claudio" NÃO vê o botão de upload (comportamento
+desejado; para subir o logo é preciso entrar como super-usuário). O backend permite
+admin, mas a tela mantém só super, para ficar consistente com o resto.
+
+ONDE O LOGO APARECE: menu lateral (Layout.js, busca em /public/info; NOME do
+escritório como reserva quando não há logo; ouve o evento 'logo-atualizado' para
+atualizar na hora) e tela de login (Login.js, mostra o logo, nome como reserva).
+
+SQL (rodar no HeidiSQL — LOCAL para testar; AWS no deploy):
+      ALTER TABLE `configuracoes_escritorio`
+        DROP COLUMN `logo_path`,
+        ADD COLUMN `logo_base64` LONGTEXT NULL AFTER `estado`;
+(A coluna logo_path era morta — nunca era lida por ninguém.) O estrutura_banco.sql
+JÁ foi ajustado (logo_path -> logo_base64) para a instalação do cliente novo já
+nascer com o campo certo.
+
+EFEITO PARA O DR. ANTÔNIO: depois que isto for para o ar, o menu vai mostrar o
+NOME dele até ele subir o logo em Configurações -> Escritório (leva 10 segundos,
+como super). O arquivo public/logo.png foi REMOVIDO do projeto.
+
+FALTA: usuário rodar o SQL no LOCAL + testar (subir logo; testar bloqueio de tipo/
+tamanho; remover logo); e rodar o mesmo SQL na AWS no deploy.
+
+Também conversado (NÃO é código, só heads-up para a instalação do cliente novo):
+- Os scripts de instalação (Deploy/instalacao/1-configurar.sh e
+  scripts/2_deploy_app.sh) trazem e-mail/bucket do Dr. Antônio como EXEMPLO padrão
+  — na hora de instalar o cliente novo, trocar pelos dele (esses valores geram o
+  .env). Ofereci trocar por textos genéricos ("SEU_EMAIL_AQUI") — o usuário não
+  pediu para mexer agora.
+- Item de segurança em aberto: o super-usuário é criado igual em toda instância.
+  Ofereci tratar (cada instância com o seu) — o usuário não pediu para mexer agora.
+
+--------------------------------------------------------------------------------
+D) 2ª INSTÂNCIA AWS x MESMO GIT (dúvida respondida)
+--------------------------------------------------------------------------------
+As 2 instâncias PODEM usar o MESMO repositório git — o git guarda só o CÓDIGO, que
+é o mesmo produto. O que é diferente por instância NÃO está no git: o banco de dados
+(cada uma com o seu) e o .env (credenciais, e-mail, bucket S3, domínio). Rodar o
+1-AtualizarSistema.sh em cada servidor faz as duas ficarem na mesma versão do código.
+Para o outro cliente: banco próprio + .env próprio + domínio próprio + bucket S3
+próprio (senão os documentos/backups se misturam) + o logo dele (upload na tela).
+
+--------------------------------------------------------------------------------
+E) ARQUIVOS TOCADOS HOJE (só LOCAL, não commitado)
+--------------------------------------------------------------------------------
+BACKEND:
+  src/services/calendarioService.js        (nova calcularQuantidade)
+  src/controllers/prazosController.js       (criar/editar leem data_final + calcularDias)
+  src/controllers/configuracaoController.js (multer + salvarLogo/removerLogo + infoPublica devolve logo_base64)
+  src/routes/index.js                       (GET /prazos/calcular-dias; POST/DELETE /configuracoes/logo)
+FRONTEND:
+  src/services/api.js                       (calcularDias; salvarLogo; removerLogo)
+  src/pages/Prazos/Prazos.js                (data final bidirecional + obrigatória, nos 2 modais)
+  src/pages/Configuracoes/Configuracoes.js  (seção "Logo do escritório": prévia + upload + remover)
+  src/pages/Login/Login.js                  (mostra o logo, nome como reserva)
+  src/components/layout/Layout.js           (menu usa o logo do banco, nome como reserva, ouve 'logo-atualizado')
+  src/components/layout/Layout.css          (.logo-nome)
+RAIZ / OUTROS:
+  estrutura_banco.sql                       (logo_path -> logo_base64)
+  frontend/public/logo.png                  (REMOVIDO)
+  salvar_pc_casa_no_Git.bat                 (push --force)
+  salvar_pc_escrit_no_Git.bat              (push --force)
+
+--------------------------------------------------------------------------------
+F) BANCO DE DADOS — SQL pendentes
+--------------------------------------------------------------------------------
+- HOJE (13/07): coluna logo_base64 em configuracoes_escritorio (sai logo_path).
+  LOCAL a rodar/testar; FALTA AWS.
+- De 12/07 (ainda pendente na AWS): coluna minutos_antes em modelo_documento
+  (já rodada no LOCAL).
+- De 09/07 (ainda pendente na AWS): tabela nacionalidade + coluna
+  pessoas_fisicas.nacionalidade_id (já rodadas no LOCAL; estrutura_banco.sql já as
+  contém).
+- Nenhuma outra mudança de estrutura hoje.
+
+--------------------------------------------------------------------------------
+G) PENDÊNCIAS / PRÓXIMOS PASSOS
+--------------------------------------------------------------------------------
+1. Usuário TESTAR (no LOCAL):
+   - Prazos: data final direta (bidirecional) + obrigatória, nos 2 lugares.
+   - Logo: rodar o SQL do logo primeiro; depois subir/remover o logo (como super),
+     e testar o bloqueio de tipo/tamanho.
+   - (De 12/07, se ainda não testou) geração de documentos, unificar duplicadas,
+     menu "⋮".
+2. Quando aprovar tudo (feito pelo usuário): commit/push (agora FORÇADO) + deploy +
+   rodar na AWS os SQLs pendentes (logo_base64 + minutos_antes + nacionalidade) +
+   re-exportar estrutura_banco.sql.
+3. Instalação da 2ª instância (outro cliente): banco + .env + domínio + bucket S3
+   próprios; trocar os exemplos de e-mail/bucket nos scripts de instalação; subir o
+   logo do cliente novo pela tela.
+4. Opcionais oferecidos e NÃO feitos (aguardam decisão): textos genéricos nos
+   scripts de instalação; super-usuário próprio por instância.
+
+FIM.
+================================================================================

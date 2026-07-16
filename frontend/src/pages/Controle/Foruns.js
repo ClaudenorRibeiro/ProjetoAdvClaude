@@ -8,6 +8,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { processosAPI } from '../../services/api';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
+import MenuAcoes from '../../components/MenuAcoes';
 import { buscarEnderecoPorCep } from '../../utils/cep';
 
 const FORM_VAZIO = {
@@ -202,7 +203,7 @@ export default function Foruns() {
                   <th>Nome</th>
                   <th>Cidade / UF</th>
                   <th>Endereço</th>
-                  <th style={{ width: 100 }}>Ações</th>
+                  <th style={{ width: 60 }}>Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -228,20 +229,10 @@ export default function Foruns() {
                       )}
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button
-                          className="btn btn-outline"
-                          style={{ padding: '4px 10px', fontSize: 12 }}
-                          title="Editar"
-                          onClick={() => abrirEditar(f)}
-                        >✏️</button>
-                        <button
-                          className="btn btn-danger"
-                          style={{ padding: '4px 10px', fontSize: 12 }}
-                          title="Excluir"
-                          onClick={() => excluir(f)}
-                        >🗑️</button>
-                      </div>
+                      <MenuAcoes itens={[
+                        { label: 'Editar',  icone: '✏️', onClick: () => abrirEditar(f) },
+                        { label: 'Excluir', icone: '🗑️', perigo: true, onClick: () => excluir(f) },
+                      ]} />
                     </td>
                   </tr>
                 ))}

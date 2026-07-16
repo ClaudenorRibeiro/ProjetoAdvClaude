@@ -161,9 +161,10 @@ async function listarPastas(req, res) {
   }
 }
 
-// PUT /api/processos/pastas/:id/renumerar — Altera o numPasta de uma pasta
-// Se o novo número já pertence a uma pasta vazia (sem processos ativos),
-// migra os registros dela para a atual e a remove, liberando o número.
+// PUT /api/processos/pastas/:id/renumerar — Altera o numPasta de uma pasta.
+// O número escolhido precisa estar LIVRE: se já pertencer a qualquer outra pasta,
+// a troca é recusada com mensagem explicativa. O sistema nunca apaga uma pasta aqui
+// (o banco já tem UNIQUE em numPasta — duas pastas jamais dividem um número).
 async function renumerarPasta(req, res) {
   const { id } = req.params;
   const num = parseInt(req.body.numPasta);
@@ -177,27 +178,14 @@ async function renumerarPasta(req, res) {
     if (!pasta.length) { await conn.rollback(); return naoEncontrado(res, 'Pasta não encontrada'); }
     if (pasta[0].numPasta === num) { await conn.rollback(); return erro(res, 'A pasta já possui este número'); }
 
-    // Verifica se o número já existe em outra pasta
+    // O número precisa estar livre — tanto faz se a outra pasta tem processos ou não.
     const [existente] = await conn.execute('SELECT id FROM tblpasta WHERE numPasta = ? AND id != ?', [num, id]);
-
     if (existente.length) {
-      const conflitaId = existente[0].id;
-
-      // Só permite se a pasta conflitante não tiver processos ativos
-      const [[{ ativos }]] = await conn.execute(
-        'SELECT COUNT(*) AS ativos FROM tblproc WHERE pasta_id = ? AND ativo = 1', [conflitaId]
+      await conn.rollback();
+      return erro(res,
+        `O número ${String(num).padStart(4,'0')} já pertence a outra pasta. ` +
+        `Escolha um número que não esteja em uso.`
       );
-      if (ativos > 0) {
-        await conn.rollback();
-        return erro(res, `O número ${String(num).padStart(4,'0')} já está em uso por outra pasta com processos ativos`);
-      }
-
-      // Pasta conflitante está vazia — migra os registros que são por PASTA para a atual.
-      // (conta_corrente e acordo são por PROCESSO: seguem o tblproc remigrado, sem ajuste aqui.)
-      for (const tabela of ['tblproc','tarefas','log_documentos_gerados']) {
-        await conn.execute(`UPDATE ${tabela} SET pasta_id = ? WHERE pasta_id = ?`, [id, conflitaId]);
-      }
-      await conn.execute('DELETE FROM tblpasta WHERE id = ?', [conflitaId]);
     }
 
     // Renumera a pasta
@@ -283,6 +271,45 @@ async function buscarPasta(req, res) {
     }
 
     return sucesso(res, { ...pastas[0], processos });
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// GET /api/processos/pastas/checar?numPasta=42
+// Checagem SOMENTE LEITURA (sem transação): informa se a pasta já existe e
+// quantos processos ATIVOS possui. Usada no cadastro de processo para avisar
+// antes de anexar um novo processo a uma pasta que já está em uso.
+async function checarPasta(req, res) {
+  try {
+    const num = parseInt(req.query.numPasta);
+    if (!num || num < 1) return sucesso(res, { emUso: false });
+
+    const [pastas] = await pool.execute(
+      'SELECT id FROM tblpasta WHERE numPasta = ?',
+      [num]
+    );
+    if (!pastas.length) return sucesso(res, { emUso: false });
+
+    const pastaId = pastas[0].id;
+    const [contagem] = await pool.execute(
+      'SELECT COUNT(*) AS total FROM tblproc WHERE pasta_id = ? AND ativo = 1',
+      [pastaId]
+    );
+    const total = contagem[0].total;
+    // Pasta existe mas sem processo ativo (pasta "vazia") = reaproveitável sem aviso
+    if (total === 0) return sucesso(res, { emUso: false });
+
+    // Título do processo mais recente da pasta — deixa o aviso informativo
+    const [titulo] = await pool.execute(
+      'SELECT NomeTituloProc FROM tblproc WHERE pasta_id = ? AND ativo = 1 ORDER BY id DESC LIMIT 1',
+      [pastaId]
+    );
+    return sucesso(res, {
+      emUso: true,
+      totalProcessos: total,
+      titulo: titulo.length ? titulo[0].NomeTituloProc : null,
+    });
   } catch (err) {
     return erroInterno(res, err);
   }
@@ -421,54 +448,79 @@ async function criarProcesso(req, res) {
   }
 }
 
-// DELETE /api/processos/:id — Soft-delete do processo (ativo = 0)
-// Bloqueia a exclusão se existir qualquer dado dependente do processo.
-// A pasta NÃO é excluída fisicamente — fica invisível na listagem e seu
-// número volta a ser sugerido pelo sugerirNumeroPasta (sem processos ativos).
+// DELETE /api/processos/:id — Exclusão DEFINITIVA do processo (apaga do banco).
+// Só exclui a "casca vazia": qualquer trabalho ou dinheiro pendurado no processo
+// (as 8 verificações abaixo) bloqueia a exclusão com mensagem explicativa. Um caso
+// real — arquivado, com acordo, audiências etc. — nunca passa por aqui.
+// Passando na trava, saem junto APENAS os vínculos de autor/réu/perito: essas tabelas
+// guardam pessoa_id sem FK para pessoas, então as PESSOAS continuam intactas no
+// cadastro, com os demais processos delas.
+// A pasta não é apagada — fica totalmente vazia e seu número volta a ser sugerido
+// pelo sugerirNumeroPasta. O único rastro é o log de auditoria.
 async function excluirProcesso(req, res) {
   const { id } = req.params;
+  const conn = await pool.getConnection();
   try {
-    const [rows] = await pool.execute(
-      'SELECT id FROM tblproc WHERE id = ? AND ativo = 1', [id]
-    );
-    if (!rows.length) return naoEncontrado(res, 'Processo não encontrado');
+    await conn.beginTransaction();
 
-    // Verifica dados dependentes que impedem a exclusão
+    const [rows] = await conn.execute(
+      'SELECT id, numProc, NomeTituloProc FROM tblproc WHERE id = ? AND ativo = 1', [id]
+    );
+    if (!rows.length) { await conn.rollback(); return naoEncontrado(res, 'Processo não encontrado'); }
+    const proc = rows[0];
+
+    // Verifica dados dependentes que impedem a exclusão.
+    // conta_corrente e acordo estão aqui por um motivo crítico: a FK das duas é
+    // ON DELETE CASCADE, então sem estas checagens o DELETE abaixo apagaria o
+    // financeiro do processo em silêncio.
     const verificacoes = [
       { tabela: 'andamento_processual', coluna: 'processo_id', label: 'andamento(s) processual(is)' },
       { tabela: 'audiencia',            coluna: 'processo_id', label: 'audiência(s)'                 },
       { tabela: 'pericia',              coluna: 'processo_id', label: 'perícia(s)'                   },
       { tabela: 'prazos_processo',      coluna: 'processo_id', label: 'prazo(s)'                     },
       { tabela: 'tarefas',              coluna: 'processo_id', label: 'tarefa(s)'                    },
-      { tabela: 'acordo',               coluna: 'processo_id', label: 'acordo(s)/parceria(s) no financeiro' },
+      { tabela: 'acordo',               coluna: 'processo_id', label: 'acordo(s)/alvará(s) no financeiro' },
+      { tabela: 'conta_corrente',       coluna: 'processo_id', label: 'lançamento(s) na conta corrente' },
       { tabela: 'log_comunicacoes',     coluna: 'processo_id', label: 'comunicação(ões) registrada(s)' },
     ];
 
     const bloqueios = [];
     for (const v of verificacoes) {
-      const [[{ total }]] = await pool.execute(
+      const [[{ total }]] = await conn.execute(
         `SELECT COUNT(*) AS total FROM ${v.tabela} WHERE ${v.coluna} = ?`, [id]
       );
       if (total > 0) bloqueios.push(`${total} ${v.label}`);
     }
 
     if (bloqueios.length > 0) {
+      await conn.rollback();
       return erro(res,
         `Não é possível excluir este processo — ele possui: ${bloqueios.join(', ')}. ` +
         `Remova esses registros antes de excluir o processo.`
       );
     }
 
-    // Sem dependentes — pode excluir
-    await pool.execute(
-      'UPDATE tblproc SET ativo = 0, alterado_por = ?, alterado_em = NOW() WHERE id = ?',
-      [req.usuario.id, id]
+    // Casca vazia — apaga de verdade. Os vínculos saem explicitamente (não dependemos
+    // do ON DELETE CASCADE do banco para algo que precisa ser garantido).
+    await conn.execute('DELETE FROM tbltituloprocautor WHERE proc_id = ?', [id]);
+    await conn.execute('DELETE FROM tbltituloprocreu   WHERE proc_id = ?', [id]);
+    await conn.execute('DELETE FROM processo_perito    WHERE proc_id = ?', [id]);
+    await conn.execute('DELETE FROM tblproc WHERE id = ?', [id]);
+
+    // Auditoria na MESMA transação. Guarda o NÚMERO do processo: depois da exclusão
+    // o id não aponta mais para nada, e é o número que identifica o que foi apagado.
+    await auditoria.registrar(
+      req.usuario.id, 'tblproc', 'excluir', Number(id),
+      { numProc: proc.numProc, titulo: proc.NomeTituloProc }, null, conn
     );
 
-    await auditoria.registrar(req.usuario.id, 'tblproc', 'excluir', id);
+    await conn.commit();
     return sucesso(res, null, 'Processo excluído com sucesso');
   } catch (err) {
+    await conn.rollback();
     return erroInterno(res, err);
+  } finally {
+    conn.release();
   }
 }
 
@@ -889,6 +941,7 @@ module.exports = {
   listarPastas,
   renumerarPasta,
   buscarPasta,
+  checarPasta,
   criarProcesso,
   atualizarProcesso,
   excluirProcesso,

@@ -3,13 +3,14 @@
 // Novo modelo: tblPasta → tblProc → tblTituloProcAutor + tblTituloProcReu
 // ============================================================
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { processosAPI, pessoasAPI } from '../../services/api';
 import { formatarNumeroPasta, mascaraCNJ, toTitleCase } from '../../utils/formatters';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
+import MenuAcoes from '../../components/MenuAcoes';
 
 export default function Processos() {
   const navigate = useNavigate();
@@ -89,7 +90,10 @@ export default function Processos() {
                         {formatarNumeroPasta(p.numPasta)}
                       </strong>
                     </td>
-                    <td>
+                    {/* Título clicável: abre a pasta (mesma ação do "Abrir pasta" no menu ⋮) */}
+                    <td onClick={() => navigate(`/processos/pasta/${p.id}`)}
+                        style={{ cursor: 'pointer' }}
+                        title="Abrir pasta">
                       <div style={{ fontWeight: '500', color: '#1e2a3a' }}>
                         {p.titulo_proc || <em style={{ color: '#aaa' }}>Sem processos</em>}
                       </div>
@@ -110,13 +114,10 @@ export default function Processos() {
                       <span style={{ fontWeight: '600' }}>{p.total_processos}</span>
                     </td>
                     <td>
-                      <button
-                        className="btn btn-outline"
-                        style={{ fontSize: '12px', padding: '4px 10px' }}
-                        onClick={() => navigate(`/processos/pasta/${p.id}`)}
-                      >
-                        Abrir
-                      </button>
+                      <MenuAcoes itens={[
+                        { label: 'Abrir pasta', icone: '📂',
+                          onClick: () => navigate(`/processos/pasta/${p.id}`) },
+                      ]} />
                     </td>
                   </tr>
                 ))}
@@ -183,7 +184,10 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
     instancia_id: '',
     data_distribuicao: '',
     observacoes: '',
-    cliente_polo: '',          // 'autor' | 'reu' | '' (não definido) — quem é o cliente do escritório
+    // 'autor' | 'reu' | '' (não definido) — quem é o cliente do escritório.
+    // Padrão 'autor': é o caso da esmagadora maioria dos processos e alinha a tela
+    // com a geração de documentos, que já assume o autor quando o polo não vem definido.
+    cliente_polo: 'autor',
   });
 
   // Partes do processo
@@ -213,6 +217,12 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
   // Título gerado automaticamente
   const [nomeTitulo, setNomeTitulo] = useState('');
   const [salvando, setSalvando]     = useState(false);
+
+  // Aviso amigável quando a pasta digitada já está em uso (tem processo ativo)
+  const [confirmar, setConfirmar]   = useState(null);
+  // Marca que o usuário confirmou "incluir na pasta existente" — evita reverter o
+  // número ao fechar o modal de confirmação (o fechamento é compartilhado com o cancelar)
+  const pastaConfirmadaRef = useRef(false);
 
   // ---- Monta o estado inicial de partes a partir de um processo ----
   function partesDoProcesso(proc) {
@@ -260,6 +270,11 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
       setAutores(a);
       setReus(r);
       setPeritos(pe);
+      // Herda o polo do cliente do processo de origem (a pasta é do mesmo cliente).
+      // Origem sem polo definido mantém o padrão 'autor'.
+      if (processoBase.cliente_polo) {
+        setForm(f => ({ ...f, cliente_polo: processoBase.cliente_polo }));
+      }
     }
   }, [pastaId]); // eslint-disable-line
 
@@ -283,6 +298,37 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
   }, [autores, reus]);
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
+
+  // Volta o campo da pasta para o próximo número livre sugerido (opção A no cancelar)
+  function reverterPastaSugerida() {
+    processosAPI.sugerirPasta().then(r => {
+      if (r.data.ok) setForm(f => ({ ...f, numPasta: String(r.data.dados.proximo) }));
+    }).catch(() => {});
+  }
+
+  // Ao sair do campo "Número da Pasta": se a pasta já existir e tiver processo
+  // ativo, avisa e pede confirmação antes de anexar mais um processo a ela.
+  async function checarPastaEmUso() {
+    const num = parseInt(form.numPasta);
+    if (!num || num < 1) return;
+    try {
+      const r = await processosAPI.checarPasta(num);
+      if (!r.data.ok || !r.data.dados.emUso) return;
+      const d = r.data.dados;
+      pastaConfirmadaRef.current = false;
+      setConfirmar({
+        titulo:     'Pasta já em uso',
+        tipo:       'aviso',
+        textoBotao: 'Sim, incluir',
+        mensagem:   `A pasta nº ${formatarNumeroPasta(num)} já existe e possui ${d.totalProcessos} `
+          + `processo(s)${d.titulo ? ` (ex.: ${d.titulo})` : ''}. `
+          + 'Deseja incluir mais um processo dentro desta mesma pasta?',
+        acao: async () => { pastaConfirmadaRef.current = true; },
+      });
+    } catch {
+      // Se a checagem falhar, não bloqueia o cadastro — apenas segue sem aviso.
+    }
+  }
 
   // Extrai campos do número CNJ e pré-preenche Tipo, Fórum e Vara.
   // Formato CNJ: NNNNNNN-DD.AAAA.J.TT.OOOO (20 dígitos brutos)
@@ -432,6 +478,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
                   style={{ maxWidth: '110px' }}
                   value={form.numPasta}
                   onChange={e => set('numPasta', e.target.value)}
+                  onBlur={checarPastaEmUso}
                 />
                 <span style={{ fontSize: '12px', color: '#888' }}>
                   Sugerido automaticamente — altere se necessário (ex: carta precatória na pasta 42)
@@ -765,6 +812,19 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
             foruns={aux.foruns || []}
             onFechar={() => setModalAux(null)}
             onAtualizado={async () => { await recarregarAux(); }}
+          />
+        )}
+
+        {/* Aviso amigável: pasta já em uso — confirmar antes de anexar outro processo */}
+        {confirmar && (
+          <ModalConfirmar
+            {...confirmar}
+            onCancelar={() => {
+              // Opção A: ao cancelar (ou fechar sem confirmar), volta ao número sugerido
+              if (!pastaConfirmadaRef.current) reverterPastaSugerida();
+              pastaConfirmadaRef.current = false;
+              setConfirmar(null);
+            }}
           />
         )}
       </div>

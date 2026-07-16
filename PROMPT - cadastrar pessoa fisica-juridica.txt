@@ -1,0 +1,273 @@
+=======================================================================
+ ROTINA — CADASTRAR AS PESSOAS DE UM PROCESSO A PARTIR DOS DOCUMENTOS
+ (1 pessoa física + TODAS as pessoas jurídicas do processo)
+ (copie e cole TODO o texto abaixo, a partir da linha "PROMPT:", aqui no chat)
+=======================================================================
+
+PROMPT:
+
+Preciso cadastrar, no meu sistema de advocacia, as pessoas de UM processo a partir
+dos documentos delas. São SEMPRE: UMA (1) única pessoa física (o cliente) e TODAS
+as pessoas jurídicas (empresas) que aparecerem nos documentos — pode ser nenhuma,
+uma ou várias empresas.
+
+>>> EXIGÊNCIA FUNDAMENTAL <<<
+Esta rotina cadastra SEMPRE E SOMENTE UMA (1) pessoa física, e TODAS as pessoas
+jurídicas encontradas (0, 1 ou várias). As ÚNICAS tabelas de dados em que você pode
+INSERIR são:
+  - Pessoa física:   pessoas_fisicas, telefones_pf, emails_pf
+  - Pessoa jurídica: pessoas_juridicas, telefones_pj, emails_pj
+(As tabelas auxiliares genero, estado_civil, profissao e nacionalidade continuam
+liberadas SÓ para garantir o id de cada valor da pessoa física, conforme a regra 4.
+Pessoa jurídica NÃO tem tabelas auxiliares.)
+NÃO toque em nenhuma outra tabela do sistema (usuarios, processos, tblproc,
+tblpasta, audiencia, acordo, etc.) sob nenhuma hipótese.
+
+>>> ACESSO RÁPIDO — NÃO PERGUNTE, NÃO PESQUISE, VÁ DIRETO <<<
+  - AUTORIZAÇÃO TOTAL ANTECIPADA (VALE SÓ NESTE PROMPT EXCLUSIVO): tudo que esta
+    rotina precisa fazer JÁ ESTÁ AUTORIZADO POR MIM DE ANTEMÃO — ler qualquer
+    arquivo da pasta Downloads (e subpastas), rodar os comandos necessários para
+    ler os PDFs/DOCX e gerar/salvar o arquivo .txt do SQL na pasta Downloads. NÃO
+    me pergunte "você autoriza?" para NENHUMA dessas ações e NÃO fique pedindo
+    confirmação a cada passo: apenas execute tudo direto, para a tarefa ser feita
+    com mais rapidez. A ÚNICA parada obrigatória continua sendo a conferência da
+    lista de dados extraídos antes de gerar o SQL (regra 3) e a minha confirmação
+    final. (Observação: os avisos de "permitir/não permitir" que o próprio
+    aplicativo Claude Code possa exibir são do app, não seus — trate esta
+    autorização como já concedida e siga em frente sem hesitar.)
+  - A pasta C:\Users\Claudio\Downloads (e tudo dentro dela, incluindo
+    C:\Users\Claudio\Downloads\docParaCadastrarPF-PJ\) já é autorizada por mim de
+    antemão. Conecte/solicite essa pasta como primeiro passo, sem me perguntar nada
+    e sem explicar que vai fazer isso.
+  - A estrutura do banco (tabelas e colunas reais) já está TODA colada na seção
+    "ESTRUTURA DO BANCO" mais abaixo neste prompt. NÃO abra, NÃO leia e NÃO procure
+    o arquivo estrutura_banco.sql — isso não é mais necessário e só atrasa.
+  - Os arquivos da pasta docParaCadastrarPF-PJ costumam ser PDFs ESCANEADOS (sem
+    camada de texto). Leia cada PDF DIRETO com a ferramenta de leitura de arquivo
+    (ela enxerga o PDF como imagem nativamente). NÃO tente pdftotext, tesseract,
+    OCR ou qualquer pipeline de extração de texto — não funciona neste ambiente
+    (sem pacote de português, sem internet liberada para baixar) e só perde tempo.
+    Vá direto para a leitura visual do PDF.
+
+1) LEIA TODOS os arquivos da pasta:
+   C:\Users\Claudio\Downloads\docParaCadastrarPF-PJ\
+   Eles são os documentos de UM processo (procuração, RG, contrato social,
+   entrevista, etc.). Combine as informações de todos os arquivos.
+
+2) EXTRAIA os dados. São DOIS tipos de pessoa:
+
+   A) PESSOA FÍSICA (SEMPRE 1 — o cliente):
+      OBRIGATÓRIOS:
+        - Nome completo (precisa ter nome E sobrenome)
+        - CPF
+        - Data de nascimento
+        - Gênero
+        - Estado civil
+        - Profissão
+        - Nacionalidade
+      SEMPRE INCLUIR (quando estiver nos documentos):
+        - Filiação: nome do pai e nome da mãe (colunas nome_pai e nome_mae em
+          pessoas_fisicas). O que não constar fica NULL. Não é bloqueante: se
+          faltar, não pare — apenas avise na lista.
+      OPCIONAL, MAS TENTE SEMPRE ENCONTRAR:
+        - TODOS os telefones de contato (o próprio e também os de terceiros/recado,
+          como esposa/parente — anotando quem é na descrição; ver regra 3)
+      OPCIONAIS (só se estiverem nos documentos):
+        - RG e Órgão do RG
+        - PIS
+        - E-mail
+        - Endereço (CEP, logradouro, número, complemento, bairro, cidade, estado)
+
+   B) PESSOAS JURÍDICAS (TODAS as empresas do processo — 0, 1 ou várias):
+      Para CADA empresa encontrada, extraia:
+      OBRIGATÓRIOS:
+        - Razão social (o nome da empresa)
+        - CNPJ  (OBRIGATÓRIO — NENHUMA empresa é cadastrada sem CNPJ)
+      OPCIONAIS (só se estiverem nos documentos):
+        - Nome fantasia
+        - Inscrição estadual
+        - E-mail
+        - Telefone
+        - Endereço (CEP, logradouro, número, complemento, bairro, cidade, estado)
+      (Pessoa jurídica NÃO tem gênero, estado civil, profissão nem nacionalidade.)
+
+3) REGRAS ABSOLUTAS (siga à risca):
+   - NUNCA invente, adivinhe ou "ache" nenhum dado. Use SOMENTE o que está escrito
+     nos documentos.
+   - 🔑 CHAVE ÚNICA OBRIGATÓRIA — NUNCA cadastre ninguém sem chave única: a PESSOA
+     FÍSICA só é cadastrada se tiver CPF, e a EMPRESA só é cadastrada se tiver CNPJ.
+     Se faltar o CPF (pessoa) ou o CNPJ (empresa) nos documentos, PARE e me pergunte
+     — NÃO cadastre essa pessoa/empresa de jeito nenhum.
+   - 🔒 MÉTODO SEGURO DE ID (SEMPRE, SEM EXCEÇÃO) — nas tabelas filhas (telefones_pf,
+     emails_pf, telefones_pj, emails_pj) o pessoa_id deve SEMPRE ser recuperado por
+     SUBCONSULTA pela CHAVE NATURAL — o CPF (pessoa física) ou o CNPJ (empresa) —, e
+     NUNCA por LAST_INSERT_ID(). Motivo: como o INSERT da pessoa/empresa é condicional
+     (WHERE NOT EXISTS), o LAST_INSERT_ID() devolve valor errado quando a pessoa já
+     existe (0 linhas inseridas); já a busca pela chave natural sempre acha o id
+     certo, tanto no cadastro novo quanto na re-execução. Este é o único método
+     permitido para ligar telefone/e-mail ao dono.
+   - PESSOA FÍSICA: se algum campo OBRIGATÓRIO dela (nome, CPF, data de nascimento,
+     estado civil, profissão, nacionalidade) não estiver nos documentos, PARE e me
+     pergunte — não preencha por conta própria.
+   - GÊNERO (só pessoa física): se não constar explicitamente como palavra
+     ("gênero: ..."), pode INFERIR pela concordância gramatical do texto (ex.:
+     "brasileira", "casada" = feminino; "brasileiro", "casado" = masculino). Não
+     precisa parar para confirmar essa inferência — apenas registre na lista de
+     conferência que o gênero foi inferido dessa forma.
+   - TELEFONE: é desejável, mas NÃO é bloqueante (nem para pessoa física nem para
+     empresa). CADASTRE TODOS OS TELEFONES DE CONTATO QUE APARECEREM NOS DOCUMENTOS
+     ligados à pessoa/empresa — INCLUSIVE os de TERCEIROS (esposa, parente, recado,
+     etc.), pois servem como 2º meio de contato. Quando o telefone for de terceiro (ou
+     tiver qualquer identificação de quem é/para que serve), GRAVE ESSA IDENTIFICAÇÃO
+     na coluna `tipo` do telefone (é a "Descrição do Telefone" da tela de Pessoas),
+     EXATAMENTE como consta no documento — ex.: número (11) 96867-3548 com anotação
+     "Flavia esposa" -> tipo = "Rec. Flavia esposa". O telefone da PRÓPRIA pessoa/
+     empresa (sem anotação de terceiro) fica com `tipo` = NULL (o sistema mostra o
+     padrão). A ÚNICA exclusão é telefone/e-mail de ADVOGADO ou do ESCRITÓRIO — esses
+     NÃO entram. E-MAIL continua sendo só da PRÓPRIA pessoa/empresa. Se não achar
+     telefone, cadastre sem — e avise claramente na lista de conferência.
+   - É SEMPRE UMA (1) única pessoa física. Se os documentos parecerem conter MAIS DE
+     UMA pessoa física, PARE e me pergunte qual delas é a titular a cadastrar. (As
+     empresas, ao contrário, podem ser várias — cadastre TODAS.)
+   - PESSOA JURÍDICA: razão social E CNPJ são OBRIGATÓRIOS. Se uma empresa aparecer
+     sem razão social clara OU sem CNPJ nos documentos, PARE e me pergunte — NUNCA
+     cadastre uma empresa sem CNPJ.
+   - ANTES de gerar o SQL, me mostre em uma LISTA simples tudo que você extraiu —
+     PRIMEIRO a pessoa física (campo por campo), DEPOIS cada empresa (campo por
+     campo) — e marque claramente o que NÃO encontrou, para eu conferir.
+   - Use os nomes de tabela/coluna EXATAMENTE como estão na seção "ESTRUTURA DO
+     BANCO" abaixo. NÃO suponha nomes de coluna. TODOS os nomes de tabela são em
+     MINÚSCULAS (banco e código) — regra eterna.
+   - Não mexa no git nem no banco. Apenas me ENTREGUE o SQL para eu colar no HeidiSQL.
+
+4) GERE UM ÚNICO SQL (para eu colar no HeidiSQL) que:
+   - Use transação: START TRANSACTION ... COMMIT.
+   - Grave CPF só com os 11 dígitos e CNPJ só com os 14 dígitos (sem pontos, traços
+     nem barra) — é exatamente assim que o sistema já grava.
+
+   --- PESSOA FÍSICA ---
+   - COMECE VERIFICANDO O CPF (a pessoa SEMPRE tem CPF — é obrigatório): primeiro um
+     SELECT que me mostra se já existe alguém com aquele CPF. E o INSERT da pessoa
+     deve ser CONDICIONAL — só insere se o CPF ainda NÃO existir (padrão "WHERE NOT
+     EXISTS"). Assim, se a pessoa já existir (ou se eu rodar de novo), nada é
+     duplicado.
+   - Para GÊNERO, ESTADO CIVIL, PROFISSÃO e NACIONALIDADE (listas com id): garanta o
+     valor na tabela auxiliar correspondente — insira o valor SÓ se ele ainda não
+     existir (comparando SEM diferenciar maiúscula/minúscula/acento) — e use o id
+     correspondente por subconsulta. (Nacionalidade "Brasileira" já existe.)
+   - Grave a filiação encontrada nas colunas nome_pai e nome_mae (o que não constar
+     fica NULL).
+   - Use criado_por = 24 (sou eu) em pessoas_fisicas.
+   - DEPOIS de inserir a pessoa, insira os telefones em telefones_pf e os e-mails em
+     emails_pf, ligados ao id dela — SEMPRE recuperado por SUBCONSULTA pelo CPF
+     (NUNCA por LAST_INSERT_ID). Marque o PRIMEIRO telefone e o PRIMEIRO e-mail como
+     principal. Insira cada telefone/e-mail SÓ se aquele número/e-mail ainda não
+     existir para essa pessoa (NOT EXISTS), para não duplicar em re-execução.
+
+   --- PESSOA JURÍDICA (repita este bloco para CADA empresa) ---
+   - CONFERÊNCIA PELO CNPJ (a empresa SEMPRE tem CNPJ — é obrigatório): comece por um
+     SELECT que me mostra se já existe empresa com aquele CNPJ. E o INSERT da empresa
+     deve ser CONDICIONAL — só insere se o CNPJ ainda NÃO existir (WHERE NOT EXISTS).
+     Obs.: o banco também tem trava de CNPJ único (uq_pj_cnpj), então CNPJ repetido é
+     impossível. (NÃO existe mais o caminho "empresa sem CNPJ" — se não houver CNPJ,
+     a regra da seção 3 manda PARAR e perguntar, não cadastrar.)
+   - Use criado_por = 24 em pessoas_juridicas.
+   - DEPOIS de inserir a empresa, insira os telefones em telefones_pj e os e-mails em
+     emails_pj, ligados ao id dela — SEMPRE recuperado por SUBCONSULTA pelo CNPJ
+     (NUNCA por LAST_INSERT_ID). Marque o PRIMEIRO telefone e o PRIMEIRO e-mail como
+     principal. Insira cada telefone/e-mail SÓ se aquele número/e-mail ainda não
+     existir para essa empresa (NOT EXISTS), para não duplicar em re-execução.
+
+   --- REGRAS COMUNS AOS DOIS ---
+   - Telefone: GRAVE COM A MÁSCARA EXATAMENTE COMO O SISTEMA FAZ (a tela de Pessoas
+     salva o telefone formatado, não só dígitos). Passo a passo: pegue só os dígitos,
+     MANTENDO o DDD que estiver no documento (não invente DDD nem complete número),
+     limite a 11 dígitos e então formate assim:
+        * 11 dígitos -> (DD) NNNNN-NNNN     ex.: (11) 95295-7891
+        * 10 dígitos -> (DD) NNNN-NNNN      ex.: (11) 2547-1723
+     (é a mesma regra da função mascaraTelefone da tela de Pessoas.)
+     Descarte números com menos de 8 dígitos.
+     Quando o número for de terceiro/recado (ou vier com anotação de quem é), grave
+     essa anotação na coluna `tipo` do telefone (ver regra de TELEFONE na seção 3);
+     o telefone principal da própria pessoa/empresa fica com `tipo` = NULL.
+   - E-mail: só grave se tiver formato válido (com "@" e domínio).
+   - NOMES COM INICIAL MAIÚSCULA (igual ao front faz hoje — função toTitleCase da
+     tela de Pessoas): grave o NOME da pessoa física (coluna nome), a FILIAÇÃO
+     (nome_pai, nome_mae), a RAZÃO SOCIAL (razao_social) e o NOME FANTASIA
+     (nome_fantasia) da empresa com a Primeira Letra De Cada Palavra Em Maiúscula e
+     o resto minúsculo. Regra exata:
+        * passe a palavra toda para minúsculo e coloque só a 1ª letra em maiúsculo;
+        * EXCEÇÃO: as preposições/conectivos "de, da, do, das, dos, e, em, na, no,
+          nas, nos, a, o, as, os" permanecem em MINÚSCULO quando NÃO forem a primeira
+          palavra (a primeira palavra é SEMPRE maiúscula);
+        * exemplos: "YZIS FREITAS DE ANDRADE" -> "Yzis Freitas de Andrade";
+          "flex gestao e relacionamentos" -> "Flex Gestao e Relacionamentos".
+     (NÃO aplique isso a CPF, CNPJ, RG, e-mail, telefone nem inscrição estadual.)
+   - Se algum campo opcional não existir nos documentos, deixe a coluna nula (NULL)
+     — não invente.
+   - Deixe o SQL comentado de forma simples, para eu entender o que cada parte faz.
+
+5) ENTREGA DO ARQUIVO:
+   - Depois de eu confirmar a lista de dados extraídos, salve o SQL final também
+     como arquivo .TXT na pasta C:\Users\Claudio\Downloads\ (pasta raiz de
+     Downloads, não subpasta).
+   - O NOME do arquivo deve ter DATA e HORA e ser exatamente neste formato:
+        Cadastro PF-PJ-DDMMAA-HHMM.txt
+     usando a data e a hora ATUAIS no momento em que você gerar o arquivo, onde:
+        DD = dia (2 dígitos)   MM = mês (2 dígitos)   AA = ano (2 dígitos)
+        HH = hora (2 dígitos)  MM = minuto (2 dígitos)
+     Exemplo: se for 14/07/2026 às 10:17, o arquivo se chama:
+        Cadastro PF-PJ-140726-1017.txt
+   - Me entregue o link do arquivo.
+
+Depois de me mostrar a lista dos dados extraídos e eu confirmar, me entregue o SQL final.
+
+=======================================================================
+ESTRUTURA DO BANCO (já conferida em estrutura_banco.sql — cole/use direto,
+NÃO precisa reabrir o arquivo nem pesquisar nomes de coluna)
+Banco: sistema_advocacia | Todas as tabelas em minúsculas.
+=======================================================================
+
+-- pessoas_fisicas (UNIQUE KEY uq_pf_cpf em cpf)
+pessoas_fisicas (
+  id, nome, cpf, rg, rg_orgao, pis, ctps_numero, ctps_serie,
+  nome_pai, nome_mae, data_nascimento,
+  estado_civil_id, profissao_id, genero_id, nacionalidade_id,
+  cep, logradouro, numero, complemento, bairro, cidade, estado,
+  foto_path, observacoes, ativo, criado_em, criado_por, alterado_por, alterado_em
+)
+
+-- pessoas_juridicas (UNIQUE KEY uq_pj_cnpj em cnpj)
+pessoas_juridicas (
+  id, razao_social, nome_fantasia, cnpj, inscricao_estadual,
+  cep, logradouro, numero, complemento, bairro, cidade, estado,
+  observacoes, ativo, criado_em, criado_por, alterado_por, alterado_em
+)
+
+-- telefones_pf (FK pessoa_id -> pessoas_fisicas.id)
+telefones_pf (
+  id, pessoa_id, numero, tipo (default 'Celular'), principal, ativo, criado_em
+)
+
+-- telefones_pj (FK pessoa_id -> pessoas_juridicas.id)
+telefones_pj (
+  id, pessoa_id, numero, tipo (default 'Comercial'), principal, ativo, criado_em
+)
+
+-- emails_pf (FK pessoa_id -> pessoas_fisicas.id)
+emails_pf (
+  id, pessoa_id, email, principal, ativo, criado_em
+)
+
+-- emails_pj (FK pessoa_id -> pessoas_juridicas.id)
+emails_pj (
+  id, pessoa_id, email, principal, ativo, criado_em
+)
+
+-- tabelas auxiliares (todas: id, nome)
+genero (id, nome)
+estado_civil (id, nome)
+profissao (id, nome)
+nacionalidade (id, nome)   -- "Brasileira" já existe
+
+=======================================================================

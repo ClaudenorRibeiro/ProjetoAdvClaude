@@ -26,6 +26,7 @@ export default function MenuAcoes({ itens = [], titulo = 'Mais ações' }) {
   const visiveis = itens.filter(it => it && !it.oculto);
   const [pos, setPos] = useState(null); // { top, left } quando aberto; null quando fechado
   const [docCtx, setDocCtx] = useState(null); // { ancoraTipo, ancoraId, beneficiario } ao gerar documento
+  const [hover, setHover] = useState(false);
   const btnRef = useRef(null);
 
   useEffect(() => {
@@ -51,11 +52,18 @@ export default function MenuAcoes({ itens = [], titulo = 'Mais ações' }) {
 
   if (visiveis.length === 0) return null;
 
+  // Realce sob o mouse; segue realçado enquanto o menu está aberto
+  const realce = hover || !!pos;
+
   return (
     <>
       <button ref={btnRef} type="button" title={titulo} onClick={alternar}
-        style={{ background: '#fff', border: '1px solid #cbd5e1', borderRadius: '5px',
-          padding: '4px 9px', cursor: 'pointer', fontSize: '16px', lineHeight: 1, color: '#475569' }}>
+        onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+        style={{ background: realce ? '#e2e8f0' : '#fff',
+          border: `1px solid ${realce ? '#94a3b8' : '#cbd5e1'}`, borderRadius: '5px',
+          padding: '4px 9px', cursor: 'pointer', fontSize: '16px', lineHeight: 1,
+          color: realce ? '#1e293b' : '#475569',
+          transition: 'background-color 0.15s, border-color 0.15s, color 0.15s' }}>
         ⋮
       </button>
       {pos && (

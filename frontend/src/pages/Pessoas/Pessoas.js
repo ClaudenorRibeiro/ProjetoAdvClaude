@@ -6,8 +6,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { pessoasAPI } from '../../services/api';
 import { formatarCPF, formatarCNPJ, formatarData, mascaraCPF, validarCPF, mascaraCNPJ, validarCNPJ, toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
-import GerarDocumentoBotao from '../../components/GerarDocumento';
 import GerarDocumentoPartesBotao from '../../components/GerarDocumentoPartes';
+import MenuAcoes from '../../components/MenuAcoes';
 import { useAuth } from '../../context/AuthContext';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
 
@@ -437,6 +437,7 @@ function CelulaQtdeProc({ qtde, onClick }) {
 }
 
 function TabelaFisicas({ lista, onEditar, onExcluir, onVerProcessos, modoUnificar, selecionados = [], onToggleSel }) {
+  const { temPermissao } = useAuth();
   const estaSel = (id) => selecionados.some(x => x.id === id);
   return (
     <table className="tabela tabela-sticky">
@@ -460,20 +461,15 @@ function TabelaFisicas({ lista, onEditar, onExcluir, onVerProcessos, modoUnifica
             <td>{p.telefone || '—'}</td>
             <td>{p.email || '—'}</td>
             <CelulaQtdeProc qtde={p.qtde_proc} onClick={() => onVerProcessos(p)} />
-            <td style={{display:'flex',gap:'6px'}}>
-              <button className="btn btn-outline" style={{fontSize:'12px',padding:'4px 10px'}} onClick={() => onEditar(p)}>
-                Editar
-              </button>
-              <button
-                className="btn"
-                style={{fontSize:'12px',padding:'4px 10px',background:'#fff',color:'#dc3545',border:'1px solid #dc3545'}}
-                onClick={() => onExcluir(p)}
-              >
-                Excluir
-              </button>
-              {/* Gerar documento — sempre visível; o modal lista os modelos desta origem (ou avisa se não houver). */}
-              <GerarDocumentoBotao ancoraTipo="pessoa_fisica" ancoraId={p.id}
-                estilo={{fontSize:'12px',padding:'4px 10px'}} />
+            <td>
+              {/* Gerar documento — o modal lista os modelos desta origem (ou avisa se não houver). */}
+              <MenuAcoes itens={[
+                { label: 'Gerar documento', icone: '📄',
+                  oculto: !temPermissao('documentos','cadastrar'),
+                  gerarDoc: { ancoraTipo: 'pessoa_fisica', ancoraId: p.id } },
+                { label: 'Editar',  icone: '✏️', onClick: () => onEditar(p) },
+                { label: 'Excluir', icone: '🗑️', perigo: true, onClick: () => onExcluir(p) },
+              ]} />
             </td>
           </tr>
         ))}
@@ -484,6 +480,7 @@ function TabelaFisicas({ lista, onEditar, onExcluir, onVerProcessos, modoUnifica
 
 // Tabela de pessoas jurídicas
 function TabelaJuridicas({ lista, onEditar, onExcluir, onVerProcessos, modoUnificar, selecionados = [], onToggleSel }) {
+  const { temPermissao } = useAuth();
   const estaSel = (id) => selecionados.some(x => x.id === id);
   return (
     <table className="tabela tabela-sticky">
@@ -507,20 +504,15 @@ function TabelaJuridicas({ lista, onEditar, onExcluir, onVerProcessos, modoUnifi
             <td>{formatarCNPJ(p.cnpj)}</td>
             <td>{p.telefone || '—'}</td>
             <CelulaQtdeProc qtde={p.qtde_proc} onClick={() => onVerProcessos(p)} />
-            <td style={{display:'flex',gap:'6px'}}>
-              <button className="btn btn-outline" style={{fontSize:'12px',padding:'4px 10px'}} onClick={() => onEditar(p)}>
-                Editar
-              </button>
-              <button
-                className="btn"
-                style={{fontSize:'12px',padding:'4px 10px',background:'#fff',color:'#dc3545',border:'1px solid #dc3545'}}
-                onClick={() => onExcluir(p)}
-              >
-                Excluir
-              </button>
-              {/* Gerar documento — sempre visível; o modal lista os modelos desta origem (ou avisa se não houver). */}
-              <GerarDocumentoBotao ancoraTipo="pessoa_juridica" ancoraId={p.id}
-                estilo={{fontSize:'12px',padding:'4px 10px'}} />
+            <td>
+              {/* Gerar documento — o modal lista os modelos desta origem (ou avisa se não houver). */}
+              <MenuAcoes itens={[
+                { label: 'Gerar documento', icone: '📄',
+                  oculto: !temPermissao('documentos','cadastrar'),
+                  gerarDoc: { ancoraTipo: 'pessoa_juridica', ancoraId: p.id } },
+                { label: 'Editar',  icone: '✏️', onClick: () => onEditar(p) },
+                { label: 'Excluir', icone: '🗑️', perigo: true, onClick: () => onExcluir(p) },
+              ]} />
             </td>
           </tr>
         ))}

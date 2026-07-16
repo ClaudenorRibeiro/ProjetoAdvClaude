@@ -213,13 +213,9 @@ export default function Pericias() {
                       <td>{p.responsavel_nome || '—'}</td>
                       <td><span className={`badge ${bg.cls}`}>{bg.txt}</span></td>
                       <td>
-                        <div style={{display:'flex',gap:'6px',flexWrap:'wrap',alignItems:'center'}}>
-                          {/* Ação principal: marcar realizada (só quando agendada) */}
-                          {agendada && (
-                            <button className="btn btn-outline" style={{fontSize:'11px',padding:'4px 8px'}}
-                              onClick={() => pedirMarcarRealizada(p)}>✓ Realizada</button>
-                          )}
                           <MenuAcoes itens={[
+                            // Marcar realizada — só quando agendada
+                            { label: 'Marcar realizada', icone: '✅', oculto: !agendada, onClick: () => pedirMarcarRealizada(p) },
                             { label: 'Gerar documento', icone: '📄', oculto: !temPermissao('documentos','cadastrar'), gerarDoc: { ancoraTipo: 'pericia', ancoraId: p.id } },
                             { label: 'Editar', icone: '✏️', oculto: !agendada, onClick: () => abrirEdicao(p) },
                             { label: 'Remarcar', icone: '🔁', oculto: !agendada, onClick: () => setRemarcando(p) },
@@ -228,7 +224,6 @@ export default function Pericias() {
                             { label: 'Histórico', icone: '📋', onClick: () => setHistoricoDe(p) },
                             { label: 'Excluir', icone: '🗑️', perigo: true, oculto: !!historico, onClick: () => pedirExcluir(p) },
                           ]} />
-                        </div>
                       </td>
                     </tr>
                   );

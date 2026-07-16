@@ -203,69 +203,35 @@ export default function Prazos() {
                     </td>
                     <td><span className={`badge ${STATUS_COR[p.status]}`}>{labelStatusPrazo(p.status)}</span></td>
                     <td>
-                      <div style={{display:'flex',gap:'6px',alignItems:'center',flexWrap:'wrap'}}>
-                        {ativo && (
-                          <>
-                            {/* Ninguém fazendo: Fazer + Concluir na linha */}
-                            {!p.fazendo_por && (
-                              <>
-                                <button title="Marcar como Fazendo" onClick={() => fazerPrazo(p)}
-                                  style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:'5px',padding:'4px 8px',cursor:'pointer',fontSize:'12px',whiteSpace:'nowrap'}}>
-                                  ▶ Fazer
-                                </button>
-                                <button title="Concluir prazo" onClick={() => concluirPrazo(p.id)}
-                                  style={{background:'#16a34a',color:'#fff',border:'none',borderRadius:'5px',padding:'4px 8px',cursor:'pointer',fontSize:'12px',whiteSpace:'nowrap'}}>
-                                  ✅ Concluir
-                                </button>
-                              </>
-                            )}
-                            {/* EU estou fazendo: Liberar + Concluir na linha */}
-                            {euFazendo && (
-                              <>
-                                <button title="Liberar prazo (desfazer Fazendo)" onClick={() => liberarFazendo(p.id)}
-                                  style={{background:'#9ca3af',color:'#fff',border:'none',borderRadius:'5px',padding:'4px 8px',cursor:'pointer',fontSize:'12px',whiteSpace:'nowrap'}}>
-                                  ◀ Liberar
-                                </button>
-                                <button title="Concluir prazo" onClick={() => concluirPrazo(p.id)}
-                                  style={{background:'#16a34a',color:'#fff',border:'none',borderRadius:'5px',padding:'4px 8px',cursor:'pointer',fontSize:'12px',whiteSpace:'nowrap'}}>
-                                  ✅ Concluir
-                                </button>
-                              </>
-                            )}
-                            {/* OUTRO está fazendo e eu sou admin: Liberar + Concluir na linha */}
-                            {outroFazendo && ehAdmin && (
-                              <>
-                                <button title="Liberar prazo (admin)" onClick={() => liberarFazendo(p.id)}
-                                  style={{background:'#9ca3af',color:'#fff',border:'none',borderRadius:'5px',padding:'4px 8px',cursor:'pointer',fontSize:'12px',whiteSpace:'nowrap'}}>
-                                  ◀ Liberar
-                                </button>
-                                <button title="Concluir prazo" onClick={() => concluirPrazo(p.id)}
-                                  style={{background:'#16a34a',color:'#fff',border:'none',borderRadius:'5px',padding:'4px 8px',cursor:'pointer',fontSize:'12px',whiteSpace:'nowrap'}}>
-                                  ✅ Concluir
-                                </button>
-                              </>
-                            )}
-                          </>
-                        )}
-                        {/* Demais ações no menu "⋮": Gerar doc, Cancelar, Editar, Histórico, Excluir */}
-                        <MenuAcoes itens={[
-                          { label: 'Gerar documento', icone: '📄',
-                            oculto: !temPermissao('documentos','cadastrar'),
-                            gerarDoc: { ancoraTipo: 'prazo', ancoraId: p.id } },
-                          { label: 'Cancelar', icone: '✖',
-                            oculto: !ativo,
-                            onClick: () => setPrazoCancelando(p) },
-                          { label: 'Editar', icone: '✏️',
-                            oculto: !(ativo && temPermissao('prazos','alterar') && (!outroFazendo || ehAdmin)),
-                            onClick: () => setPrazoEditando(p) },
-                          { label: 'Histórico', icone: '📋',
-                            oculto: !temPermissao('prazos','historico'),
-                            onClick: () => setPrazoHistorico(p) },
-                          { label: 'Excluir', icone: '🗑️', perigo: true,
-                            oculto: !(ativo && temPermissao('prazos','excluir') && (!outroFazendo || ehAdmin)),
-                            onClick: () => confirmarExcluir(p.id) },
-                        ]} />
-                      </div>
+                      {/* Todas as ações no menu "⋮". Fazer/Liberar/Concluir seguem as MESMAS regras
+                          de antes: ninguém fazendo → Fazer; eu fazendo (ou outro fazendo e eu admin)
+                          → Liberar; Concluir em qualquer um desses três casos. */}
+                      <MenuAcoes itens={[
+                        { label: 'Fazer', icone: '▶',
+                          oculto: !(ativo && !p.fazendo_por),
+                          onClick: () => fazerPrazo(p) },
+                        { label: 'Liberar', icone: '◀',
+                          oculto: !(ativo && (euFazendo || (outroFazendo && ehAdmin))),
+                          onClick: () => liberarFazendo(p.id) },
+                        { label: 'Concluir', icone: '✅',
+                          oculto: !(ativo && (!p.fazendo_por || euFazendo || (outroFazendo && ehAdmin))),
+                          onClick: () => concluirPrazo(p.id) },
+                        { label: 'Gerar documento', icone: '📄',
+                          oculto: !temPermissao('documentos','cadastrar'),
+                          gerarDoc: { ancoraTipo: 'prazo', ancoraId: p.id } },
+                        { label: 'Cancelar', icone: '✖',
+                          oculto: !ativo,
+                          onClick: () => setPrazoCancelando(p) },
+                        { label: 'Editar', icone: '✏️',
+                          oculto: !(ativo && temPermissao('prazos','alterar') && (!outroFazendo || ehAdmin)),
+                          onClick: () => setPrazoEditando(p) },
+                        { label: 'Histórico', icone: '📋',
+                          oculto: !temPermissao('prazos','historico'),
+                          onClick: () => setPrazoHistorico(p) },
+                        { label: 'Excluir', icone: '🗑️', perigo: true,
+                          oculto: !(ativo && temPermissao('prazos','excluir') && (!outroFazendo || ehAdmin)),
+                          onClick: () => confirmarExcluir(p.id) },
+                      ]} />
                     </td>
                   </tr>
                   );

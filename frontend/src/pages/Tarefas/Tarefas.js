@@ -192,25 +192,19 @@ export default function Tarefas() {
                     <td>{t.atribuida_para_nome || 'Escritório'}</td>
                     <td>{renderVinculo(t)}</td>
                     <td>
-                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                        <button
-                          className={`btn ${t.concluida ? 'btn-outline' : 'btn-success'}`}
-                          style={{ fontSize: '12px', padding: '4px 10px' }}
-                          onClick={() => toggleConcluir(t)}>
-                          {t.concluida ? 'Reabrir' : '✓ Concluir'}
-                        </button>
-                        <MenuAcoes itens={[
-                          { label: 'Editar', icone: '✏️',
-                            oculto: !(temPermissao('tarefas','alterar') && !t.concluida),
-                            onClick: () => { setEditando(t); setModalAberto(true); } },
-                          { label: 'Histórico', icone: '📋',
-                            oculto: !temPermissao('tarefas','historico'),
-                            onClick: () => setTarefaHistorico(t) },
-                          { label: 'Excluir', icone: '🗑️', perigo: true,
-                            oculto: !temPermissao('tarefas','excluir'),
-                            onClick: () => confirmarExcluir(t) },
-                        ]} />
-                      </div>
+                      <MenuAcoes itens={[
+                        { label: t.concluida ? 'Reabrir' : 'Concluir', icone: t.concluida ? '↩️' : '✅',
+                          onClick: () => toggleConcluir(t) },
+                        { label: 'Editar', icone: '✏️',
+                          oculto: !(temPermissao('tarefas','alterar') && !t.concluida),
+                          onClick: () => { setEditando(t); setModalAberto(true); } },
+                        { label: 'Histórico', icone: '📋',
+                          oculto: !temPermissao('tarefas','historico'),
+                          onClick: () => setTarefaHistorico(t) },
+                        { label: 'Excluir', icone: '🗑️', perigo: true,
+                          oculto: !temPermissao('tarefas','excluir'),
+                          onClick: () => confirmarExcluir(t) },
+                      ]} />
                     </td>
                   </tr>
                 ))}

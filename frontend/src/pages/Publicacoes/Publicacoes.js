@@ -13,6 +13,7 @@ import { formatarData, hojeLocal } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
+import MenuAcoes from '../../components/MenuAcoes';
 
 const POR_PAGINA = 30;
 
@@ -303,22 +304,19 @@ function PublicacoesAASP() {
                         : <span className="badge badge-laranja">Pendente</span>}
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                        {podeAlterar && (
-                          <button className="btn btn-outline" style={{ fontSize: '11px', padding: '3px 7px' }}
-                            onClick={() => setDirecionarAberto(p)}>Direcionar</button>
-                        )}
-                        {podeAlterar && (
-                          <button className="btn btn-outline" style={{ fontSize: '11px', padding: '3px 7px' }}
-                            onClick={() => alternarTratada(p)}>{p.tratada ? 'Reabrir' : '✓ Tratar'}</button>
-                        )}
-                        <button className="btn btn-outline" style={{ fontSize: '11px', padding: '3px 7px' }}
-                          onClick={() => setHistoricoAberto(p)}>Histórico</button>
-                        {podeExcluir && (
-                          <button className="btn btn-outline" style={{ fontSize: '11px', padding: '3px 7px', color: '#dc2626', borderColor: '#dc2626' }}
-                            onClick={() => excluirPublicacao(p)}>Excluir</button>
-                        )}
-                      </div>
+                      <MenuAcoes itens={[
+                        { label: 'Direcionar', icone: '📨',
+                          oculto: !podeAlterar,
+                          onClick: () => setDirecionarAberto(p) },
+                        { label: p.tratada ? 'Reabrir' : 'Tratar', icone: p.tratada ? '↩️' : '✓',
+                          oculto: !podeAlterar,
+                          onClick: () => alternarTratada(p) },
+                        { label: 'Histórico', icone: '📋',
+                          onClick: () => setHistoricoAberto(p) },
+                        { label: 'Excluir', icone: '🗑️', perigo: true,
+                          oculto: !podeExcluir,
+                          onClick: () => excluirPublicacao(p) },
+                      ]} />
                     </td>
                   </tr>
                 ))}

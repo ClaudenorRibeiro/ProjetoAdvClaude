@@ -12,6 +12,7 @@ import { toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
+import MenuAcoes from '../../components/MenuAcoes';
 
 // Rótulo amigável do "destino" do modelo (a que situação ele se aplica).
 function rotuloDestino(m) {
@@ -144,28 +145,22 @@ export default function Documentos() {
                       {/* criado_em é DATETIME ('YYYY-MM-DD HH:MM:SS'); formatamos como data pt-BR */}
                       <td>{m.criado_em ? new Date(m.criado_em).toLocaleDateString('pt-BR') : '—'}</td>
                       <td>
-                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                          <button className="btn btn-outline" style={{ fontSize: '12px', padding: '4px 10px' }}
-                            onClick={() => baixar(m)}>Baixar</button>
-                          {podeAlterar && (
-                            <button className="btn btn-outline" style={{ fontSize: '12px', padding: '4px 10px' }}
-                              onClick={() => { setModeloEditando(m); setModalAberto(true); }}>Editar</button>
-                          )}
-                          {m.ativo
-                            ? (podeExcluir && (
-                                <button className="btn btn-outline" style={{ fontSize: '12px', padding: '4px 10px', color: '#d97706', borderColor: '#d97706' }}
-                                  onClick={() => desativar(m)}>Desativar</button>
-                              ))
-                            : (podeAlterar && (
-                                <button className="btn btn-outline" style={{ fontSize: '12px', padding: '4px 10px', color: '#059669', borderColor: '#059669' }}
-                                  onClick={() => reativar(m)}>Reativar</button>
-                              ))}
-                          {/* Exclusão DEFINITIVA — permanente (apaga do banco e do S3); pede confirmação */}
-                          {podeExcluir && (
-                            <button className="btn btn-outline" style={{ fontSize: '12px', padding: '4px 10px', color: '#dc2626', borderColor: '#dc2626' }}
-                              onClick={() => setModeloExcluir(m)}>Excluir</button>
-                          )}
-                        </div>
+                        <MenuAcoes itens={[
+                          { label: 'Baixar', icone: '⬇️', onClick: () => baixar(m) },
+                          { label: 'Editar', icone: '✏️',
+                            oculto: !podeAlterar,
+                            onClick: () => { setModeloEditando(m); setModalAberto(true); } },
+                          { label: 'Desativar', icone: '🚫',
+                            oculto: !(m.ativo && podeExcluir),
+                            onClick: () => desativar(m) },
+                          { label: 'Reativar', icone: '♻️',
+                            oculto: !(!m.ativo && podeAlterar),
+                            onClick: () => reativar(m) },
+                          // Exclusão DEFINITIVA — permanente (apaga do banco e do S3); pede confirmação
+                          { label: 'Excluir', icone: '🗑️', perigo: true,
+                            oculto: !podeExcluir,
+                            onClick: () => setModeloExcluir(m) },
+                        ]} />
                       </td>
                     </tr>
                   );

@@ -236,15 +236,9 @@ export default function Audiencias() {
                         )}
                       </td>
                       <td>
-                        <div style={{display:'flex',gap:'6px',flexWrap:'wrap',alignItems:'center'}}>
-                          {/* Ação principal: registrar ata — só agendadas/adiadas */}
-                          {(a.status === 'agendada' || a.status === 'adiada') && (
-                            <button className="btn btn-primary" style={{fontSize:'11px',padding:'4px 8px'}}
-                              onClick={() => setModalAta(a)}>
-                              Registrar Ata
-                            </button>
-                          )}
                           <MenuAcoes itens={[
+                            // Registrar ata — só agendadas/adiadas
+                            { label: 'Registrar ata', icone: '📝', oculto: !(a.status === 'agendada' || a.status === 'adiada'), onClick: () => setModalAta(a) },
                             { label: 'Gerar documento', icone: '📄', oculto: !temPermissao('documentos','cadastrar'), gerarDoc: { ancoraTipo: 'audiencia', ancoraId: a.id } },
                             { label: 'Cancelar', icone: '✖', oculto: !((a.status === 'agendada' || a.status === 'adiada') && temPermissao('audiencias','alterar')), onClick: () => setModalCancelar(a) },
                             { label: 'Remarcar', icone: '🔁', oculto: !((a.status === 'agendada' || a.status === 'adiada') && temPermissao('audiencias','alterar')), onClick: () => setModalRemarcar(a) },
@@ -253,7 +247,6 @@ export default function Audiencias() {
                             { label: 'Histórico', icone: '📋', onClick: () => setModalHistorico(a) },
                             { label: 'Excluir', icone: '🗑️', perigo: true, oculto: !podeExcluir(a), onClick: () => setConfirmarExcluir(a) },
                           ]} />
-                        </div>
                       </td>
                     </tr>
                 ))}

@@ -418,12 +418,15 @@ body {
   margin-bottom: 16px;
 }
 
+/* Rótulo menor e mais claro que o dado: cria a hierarquia entre o nome do campo
+   e a informação digitada (antes ambos eram 13px e "se misturavam") */
 .form-label {
   display: block;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
-  color: #555;
+  color: #6b7280;
   margin-bottom: 5px;
+  transition: color 0.15s;
 }
 
 .form-label.obrigatorio::after {
@@ -431,20 +434,29 @@ body {
   color: #dc2626;
 }
 
-.form-control {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 13px;
-  color: #333;
-  transition: border-color 0.15s;
+/* O rótulo acende junto com o campo ativo. Depende de rótulo e campo estarem
+   dentro do mesmo .form-group — padrão seguido em todo o sistema. */
+.form-group:focus-within .form-label {
+  color: #1a56db;
 }
 
+.form-control {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #111827;
+  transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
+}
+
+/* Sem background no estado normal, de propósito: preserva o cinza que o navegador
+   aplica sozinho nos campos desabilitados (ex.: aba Escritório para quem não é super) */
 .form-control:focus {
   outline: none;
   border-color: #1a56db;
-  box-shadow: 0 0 0 2px rgba(26, 86, 219, 0.1);
+  background: #f7fafe;
+  box-shadow: 0 0 0 3px rgba(26, 86, 219, 0.18);
 }
 
 /* Tabelas */
