@@ -16,7 +16,7 @@
 // clicar fora, ao rolar a página ou ao redimensionar a janela.
 // ============================================================
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { ModalGerar } from './GerarDocumento';
 
 // Um item pode ser uma ação comum { label, onClick } ou "Gerar documento":
@@ -28,6 +28,7 @@ export default function MenuAcoes({ itens = [], titulo = 'Mais ações' }) {
   const [docCtx, setDocCtx] = useState(null); // { ancoraTipo, ancoraId, beneficiario } ao gerar documento
   const [hover, setHover] = useState(false);
   const btnRef = useRef(null);
+  const menuRef = useRef(null);
 
   useEffect(() => {
     if (!pos) return;
@@ -46,9 +47,36 @@ export default function MenuAcoes({ itens = [], titulo = 'Mais ações' }) {
     e.stopPropagation();
     if (pos) { setPos(null); return; }
     const r = btnRef.current.getBoundingClientRect();
-    // Alinha o menu à direita do botão, sem sair da tela pela esquerda.
+    // Posição inicial: abaixo do botão, alinhado à direita (sem sair pela esquerda).
+    // O useLayoutEffect abaixo corrige o lado (cima/baixo) antes de a tela pintar.
     setPos({ top: r.bottom + 4, left: Math.max(8, r.right - 200) });
   }
+
+  // Depois de abrir, mede a ALTURA REAL do menu e decide o lado:
+  // - cabe para baixo  -> abre para baixo (comportamento normal);
+  // - não cabe embaixo mas cabe em cima -> abre para cima;
+  // - apertado dos dois lados (tela baixa) -> usa o lado com mais espaço e
+  //   encosta na borda, sem cortar.
+  // Roda ANTES da tela pintar (useLayoutEffect), então não há "piscada".
+  useLayoutEffect(() => {
+    if (!pos || pos.pronto || !menuRef.current || !btnRef.current) return;
+    const alturaMenu = menuRef.current.getBoundingClientRect().height;
+    const rb = btnRef.current.getBoundingClientRect();
+    const margem = 8;
+    const espacoAbaixo = window.innerHeight - rb.bottom - margem;
+    const espacoAcima = rb.top - margem;
+    let top;
+    if (alturaMenu <= espacoAbaixo) {
+      top = rb.bottom + 4;                          // cabe embaixo
+    } else if (alturaMenu <= espacoAcima) {
+      top = rb.top - alturaMenu - 4;                // não coube embaixo: abre para cima
+    } else if (espacoAbaixo >= espacoAcima) {
+      top = rb.bottom + 4;                          // não cabe em nenhum: usa o lado maior
+    } else {
+      top = Math.max(margem, rb.top - alturaMenu - 4);
+    }
+    setPos(p => ({ ...p, top, pronto: true }));
+  }, [pos]);
 
   if (visiveis.length === 0) return null;
 
@@ -67,7 +95,7 @@ export default function MenuAcoes({ itens = [], titulo = 'Mais ações' }) {
         ⋮
       </button>
       {pos && (
-        <div onMouseDown={e => e.stopPropagation()}
+        <div ref={menuRef} onMouseDown={e => e.stopPropagation()}
           style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 1000, width: '200px',
             background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px',
             boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: '6px' }}>
