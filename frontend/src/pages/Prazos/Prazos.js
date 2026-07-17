@@ -43,7 +43,7 @@ export default function Prazos() {
   const { temPermissao, usuario, ehAdmin } = useAuth();
   const [lista, setLista]                   = useState([]);
   const [total, setTotal]                   = useState(0);
-  const [filtros, setFiltros]               = useState({ status: '', data_de: '', data_ate: '', pagina: 1 });
+  const [filtros, setFiltros]               = useState({ status: '', data_de: '', data_ate: '', mostrar_encerrados: false, pagina: 1 });
   const [tipos, setTipos]                   = useState({ tipos: [], subtipos: [] });
   const [carregando, setCarregando]         = useState(false);
   const [modalAberto, setModalAberto]       = useState(false);
@@ -136,8 +136,14 @@ export default function Prazos() {
             <label className="form-label">Até</label>
             <input type="date" className="form-control" value={filtros.data_ate} onChange={e=>setFiltro('data_ate',e.target.value)} />
           </div>
+          <label style={{margin:0, marginBottom:'7px', display:'flex', alignItems:'center', gap:'6px',
+            cursor:'pointer', userSelect:'none'}}>
+            <input type="checkbox" checked={filtros.mostrar_encerrados}
+              onChange={e=>setFiltro('mostrar_encerrados', e.target.checked)} />
+            <span style={{fontSize:'13px', color:'#475569'}}>Mostrar concluídos e cancelados</span>
+          </label>
           <button className="btn btn-secondary" style={{marginBottom:'1px'}}
-            onClick={() => setFiltros({ status: '', data_de: '', data_ate: '', pagina: 1 })}>
+            onClick={() => setFiltros({ status: '', data_de: '', data_ate: '', mostrar_encerrados: false, pagina: 1 })}>
             ✕ Limpar filtros
           </button>
           <button className="btn btn-primary" style={{marginBottom:'1px'}} onClick={() => setModalAberto(true)}>

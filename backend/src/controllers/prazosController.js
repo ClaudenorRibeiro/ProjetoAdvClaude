@@ -34,9 +34,12 @@ async function liberarFazendoExpirados() {
 // Status é calculado dinamicamente pela data (concluido/cancelado são armazenados)
 async function listar(req, res) {
   try {
-    const { processo_id, usuario_id, status, data_de, data_ate, pagina = 1, limite = 30 } = req.query;
+    const { processo_id, usuario_id, status, data_de, data_ate, mostrar_encerrados, pagina = 1, limite = 30 } = req.query;
     const params = [];
     let where = 'WHERE 1=1';
+
+    // Query chega como string ('true'/'false'); qualquer coisa != 'true' esconde os encerrados.
+    const mostrarEncerrados = mostrar_encerrados === 'true' || mostrar_encerrados === true;
 
     if (processo_id) { where += ' AND pp.processo_id = ?'; params.push(processo_id); }
 
@@ -53,6 +56,10 @@ async function listar(req, res) {
       } else if (status === 'fazendo') {
         where += " AND pp.status NOT IN ('concluido','cancelado') AND pp.fazendo_por IS NOT NULL";
       }
+    } else if (!mostrarEncerrados) {
+      // "Todos" com o checkbox desmarcado: esconde concluídos e cancelados (só prazos em aberto).
+      // Se o usuário escolher "Concluído"/"Cancelado" no dropdown, cai no if acima e eles aparecem.
+      where += " AND pp.status NOT IN ('concluido','cancelado')";
     }
 
     if (data_de)  { where += ' AND pp.data_vencimento >= ?'; params.push(data_de); }
