@@ -275,12 +275,15 @@ router.delete('/pericias/:id',            autenticar, verificarPermissao('perici
 // ---- PUBLICAÇÕES (fonte atual: AASP) ----
 // Rotas estáticas antes das com :id.
 router.get('/publicacoes/aasp/status',    autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.statusAasp);
+router.get('/publicacoes/cnj/status',     autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.statusCnj);
+router.post('/publicacoes/cnj/importar',  autenticar, verificarPermissao('publicacoes','cadastrar'),  publicacoesCtrl.importarCnj);
 router.get('/publicacoes/usuarios',       autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.usuariosParaDirecionar);
 router.get('/publicacoes',                autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.listar);
 router.get('/publicacoes/:id/historico',  autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.historico);
 router.post('/publicacoes/importar',      autenticar, verificarPermissao('publicacoes','cadastrar'),  publicacoesCtrl.importar);
 router.put('/publicacoes/:id/direcionar', autenticar, verificarPermissao('publicacoes','alterar'),    publicacoesCtrl.direcionar);
 router.put('/publicacoes/:id/tratar',     autenticar, verificarPermissao('publicacoes','alterar'),    publicacoesCtrl.tratar);
+router.post('/publicacoes/excluir-lote',  autenticar, verificarPermissao('publicacoes','excluir'),    publicacoesCtrl.excluirLote);
 router.delete('/publicacoes/:id',         autenticar, verificarPermissao('publicacoes','excluir'),    publicacoesCtrl.excluir);
 
 // ---- CONFIGURAÇÕES (somente admin) ----

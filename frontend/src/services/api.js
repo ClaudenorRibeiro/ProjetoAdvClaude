@@ -305,17 +305,22 @@ export const documentosAPI = {
 };
 
 // ============================================================
-// PUBLICAÇÕES AASP
+// PUBLICAÇÕES (fontes: AASP e CNJ/DJEN — telas separadas, mesmas ações)
+// listar/direcionar/tratar/historico/excluir são compartilhados (por id da publicação);
+// a fonte é distinguida pelo parâmetro `fonte` no listar e pelas rotas de importar/status.
 // ============================================================
 export const publicacoesAPI = {
   statusAasp:   () => api.get('/publicacoes/aasp/status'),
+  statusCnj:    () => api.get('/publicacoes/cnj/status'),
   usuarios:     () => api.get('/publicacoes/usuarios'),
   listar:       (params) => api.get('/publicacoes', { params }),
   importar:     (dados) => api.post('/publicacoes/importar', dados),
+  importarCnj:  (dados) => api.post('/publicacoes/cnj/importar', dados),
   direcionar:   (id, dados) => api.put(`/publicacoes/${id}/direcionar`, dados),
   tratar:       (id, dados) => api.put(`/publicacoes/${id}/tratar`, dados),
   historico:    (id) => api.get(`/publicacoes/${id}/historico`),
   excluir:      (id) => api.delete(`/publicacoes/${id}`),
+  excluirLote:  (dados) => api.post('/publicacoes/excluir-lote', dados),
 };
 
 // ============================================================

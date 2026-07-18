@@ -13,7 +13,10 @@ async function listar(req, res) {
     const params = [];
     let where = 'WHERE 1=1';
 
-    if (concluida !== undefined) { where += ' AND t.concluida = ?'; params.push(concluida); }
+    // Vazio ('') significa "sem filtro / todas". Só filtra quando vem um valor real
+    // ('0' pendentes, '1' concluídas). Sem o "!== ''", o MySQL leria '' como 0 e
+    // mostraria só as pendentes (era o motivo de a concluída "sumir" da aba da pasta).
+    if (concluida !== undefined && concluida !== '') { where += ' AND t.concluida = ?'; params.push(concluida); }
     if (prioridade)              { where += ' AND t.prioridade = ?'; params.push(prioridade); }
     // Filtro por processo (aba de Tarefas dentro do processo/pasta). SEM processo_id (tela do menu
     // lateral) mostra TODAS. Tarefas "Rotina Interna" (processo_id NULL) só aparecem no menu lateral.

@@ -468,6 +468,11 @@ async function salvarIntegracao(req, res) {
     // Separamos o "ativo" do resto (que vira o JSON de configurações).
     const { ativo, ...configuracoes } = req.body || {};
 
+    // CNJ (DJEN): no máximo 10 OABs por escritório (defesa no servidor, além da tela).
+    if (modulo === 'cnj' && Array.isArray(configuracoes.oabs) && configuracoes.oabs.length > 10) {
+      return erro(res, 'O CNJ (DJEN) permite no máximo 10 OABs.');
+    }
+
     await pool.execute(
       `UPDATE configuracoes_integracoes SET ativo=?, configuracoes=?, atualizado_em=NOW()
        WHERE modulo=?`,

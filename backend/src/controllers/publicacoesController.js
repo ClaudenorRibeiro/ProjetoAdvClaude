@@ -17,11 +17,7 @@ const crypto = require('crypto');
 const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const aaspService = require('../services/aaspService');
-
-// Admin (superusuário ou administrador) enxerga todas as publicações.
-function ehAdmin(req) {
-  return Number(req.usuario.nivel) <= 1;
-}
+const cnjService = require('../services/cnjService');
 
 // "Impressão digital" (SHA-256) do texto EXATO da publicação — base da dedup fiel.
 function hashTexto(texto) {
@@ -52,37 +48,222 @@ async function statusAasp(req, res) {
   }
 }
 
+// Lê a configuração do CNJ/DJEN (Configurações → Integrações). Retorna { ativo, url, oabs }.
+// A consulta do CNJ é pública (sem chave); guardamos só a lista de OABs a monitorar e a URL.
+async function lerConfigCnj() {
+  const [rows] = await pool.execute(
+    `SELECT ativo, configuracoes FROM configuracoes_integracoes WHERE modulo = 'cnj' LIMIT 1`
+  );
+  if (!rows.length) return { ativo: false, url: null, oabs: [] };
+  const cfg = rows[0].configuracoes
+    ? (typeof rows[0].configuracoes === 'string' ? JSON.parse(rows[0].configuracoes) : rows[0].configuracoes)
+    : {};
+  const oabs = Array.isArray(cfg.oabs) ? cfg.oabs : [];
+  return { ativo: !!rows[0].ativo, url: cfg.url || null, oabs };
+}
+
+// GET /api/publicacoes/cnj/status — diz se o CNJ está configurado (ativo + ao menos 1 OAB).
+async function statusCnj(req, res) {
+  try {
+    const cfg = await lerConfigCnj();
+    const temOab = cfg.oabs.some(o => o && o.numero && o.uf);
+    return sucesso(res, { configurado: !!(cfg.ativo && temOab) });
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// POST /api/publicacoes/cnj/importar — baixa as comunicações do DJEN de um PERÍODO,
+// para TODAS as OABs configuradas, e salva as novas (fonte='cnj'). Body: { dataInicio, dataFim }.
+// Dedup pelo id do CNJ (único por comunicação) — re-rodar o período não duplica.
+async function importarCnj(req, res) {
+  try {
+    const { dataInicio, dataFim } = req.body;
+    if (!dataInicio || !dataFim)  return erro(res, 'Informe o período (início e fim)');
+    if (dataFim < dataInicio)     return erro(res, 'A data final não pode ser anterior à inicial');
+    if (periodoExcede(dataInicio, dataFim)) return erro(res, 'O período de busca não pode passar de 3 meses.');
+
+    const cfg = await lerConfigCnj();
+    const oabs = cfg.oabs.filter(o => o && o.numero && o.uf);
+    if (!cfg.ativo || !oabs.length) {
+      // Sem CNJ configurado: NÃO é erro — a tela mostra aviso amigável.
+      return sucesso(res, { configurado: false },
+        'A integração com o CNJ não está configurada. Configure em Configurações → Integrações.');
+    }
+
+    // Busca no CNJ para cada OAB configurada e junta tudo.
+    let itens = [];
+    try {
+      for (const o of oabs) {
+        const lote = await cnjService.buscarComunicacoes({
+          url: cfg.url,
+          numeroOab: String(o.numero).trim(),
+          ufOab: String(o.uf).trim().toUpperCase(),
+          dataInicio, dataFim,
+        });
+        itens = itens.concat(lote);
+      }
+    } catch (e) {
+      return erro(res, e.message || 'Falha ao consultar o CNJ');
+    }
+
+    // Monta candidatos com o id do CNJ (chave de dedup). Ignora sem id ou texto vazio.
+    const candidatos = [];
+    for (const it of itens) {
+      const texto = it.texto;
+      if (it.id == null || !texto || !String(texto).trim()) continue;
+      candidatos.push({
+        id_cnj: Number(it.id),
+        texto,
+        hash: hashTexto(texto),
+        tribunal: it.siglaTribunal || null,
+        numero_processo: it.numeroprocessocommascara || it.numero_processo || null,
+        cabecalho: it.tipoComunicacao || null,   // "tipo" (Intimação, Edital...)
+        titulo: it.nomeOrgao || null,             // órgão/vara
+        numero_publicacao: it.numeroComunicacao != null ? String(it.numeroComunicacao) : null,
+        hash_cnj: it.hash || null,                // usado para baixar a certidão em PDF
+        data_publicacao: it.data_disponibilizacao
+          ? String(it.data_disponibilizacao).slice(0, 10) : dataInicio,
+      });
+    }
+
+    if (!candidatos.length) {
+      return sucesso(res, { configurado: true, novas: 0, recebidas: itens.length },
+        'Nenhuma publicação encontrada neste período.');
+    }
+
+    // O que já existe no banco (por id do CNJ), para não reinserir.
+    const ids = [...new Set(candidatos.map(c => c.id_cnj))];
+    const phIds = ids.map(() => '?').join(',');
+    const [exist] = await pool.execute(
+      `SELECT id_cnj FROM publicacoes WHERE fonte = 'cnj' AND id_cnj IN (${phIds})`, ids
+    );
+    const jaExistem = new Set(exist.map(r => Number(r.id_cnj)));
+
+    // Filtra os novos (e evita duplicar dentro do próprio lote — a mesma comunicação
+    // pode voltar para mais de uma OAB da lista).
+    const novos = [];
+    const vistosNoLote = new Set();
+    for (const c of candidatos) {
+      if (jaExistem.has(c.id_cnj) || vistosNoLote.has(c.id_cnj)) continue;
+      vistosNoLote.add(c.id_cnj);
+      novos.push(c);
+    }
+
+    if (!novos.length) {
+      return sucesso(res, { configurado: true, novas: 0, recebidas: itens.length },
+        'Nenhuma publicação nova (todas já estavam no sistema).');
+    }
+
+    // Insere as novas em transação (tudo ou nada). Quem importou = leitor.
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      for (const c of novos) {
+        await conn.execute(
+          `INSERT INTO publicacoes
+             (fonte, id_cnj, data_publicacao, numero_processo, tribunal, titulo, cabecalho,
+              numero_publicacao, texto, texto_hash, hash_cnj, escritorio, importada_por)
+           VALUES ('cnj', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+          [c.id_cnj, c.data_publicacao, c.numero_processo, c.tribunal, c.titulo, c.cabecalho,
+           c.numero_publicacao, c.texto, c.hash, c.hash_cnj, req.usuario.id]
+        );
+      }
+      await conn.commit();
+    } catch (e) {
+      await conn.rollback();
+      return erroInterno(res, e);
+    } finally {
+      conn.release();
+    }
+
+    return sucesso(res, { configurado: true, novas: novos.length, recebidas: itens.length },
+      `${novos.length} nova(s) publicação(ões) importada(s).`);
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// Colunas permitidas na ordenação (LISTA BRANCA — nome de coluna nunca vem solto
+// do usuário para dentro do SQL). A tela manda a "chave"; aqui vira a coluna real.
+const COLUNAS_ORDENAR = {
+  data:        'p.data_publicacao',
+  processo:    'p.numero_processo',
+  publicacao:  'p.numero_publicacao',   // "Nº Publ." (AASP)
+  tribunal:    'p.tribunal',            // (CNJ)
+  conteudo:    'LEFT(p.texto, 200)',    // ordena pelos primeiros caracteres — não pesa no texto inteiro
+  direcionada: 'p.escritorio',          // por tipo (escritório x específico)
+  status:      'p.tratada',
+};
+
+// Trava de 3 meses da PESQUISA: true se o período De→Até passar de 3 meses.
+function periodoExcede(dataInicio, dataFim) {
+  if (!dataInicio || !dataFim) return false;
+  const ini = new Date(dataInicio + 'T00:00:00');
+  const fim = new Date(dataFim + 'T00:00:00');
+  if (isNaN(ini.getTime()) || isNaN(fim.getTime())) return false;
+  const limite = new Date(ini); limite.setMonth(limite.getMonth() + 3);
+  return fim > limite;
+}
+
+// Monta o WHERE de listagem/exclusão de publicações a partir dos filtros da tela.
+// Usado por listar() E por excluirLote() para ficarem SEMPRE em sincronia (mesmo recorte
+// que o usuário vê é o que pode apagar). `q` é o objeto de filtros (req.query ou req.body):
+//   { fonte, data, tratada, busca, escopo }. Retorna { where, params, fonte }.
+function montarFiltroPublicacoes(q, usuario) {
+  const cond = [];
+  const params = [];
+
+  // Cada aba age SÓ na sua fonte (telas separadas: AASP x CNJ). Sem o parâmetro
+  // `fonte`, mantém o comportamento original (AASP).
+  const fonte = q.fonte === 'cnj' ? 'cnj' : 'aasp';
+  cond.push('p.fonte = ?'); params.push(fonte);
+
+  // Janela de datas (De/Até). Sem datas = sem filtro de data (mostra tudo, paginado).
+  if (q.dataInicio && q.dataFim) { cond.push('p.data_publicacao BETWEEN ? AND ?'); params.push(q.dataInicio, q.dataFim); }
+  else if (q.dataInicio)         { cond.push('p.data_publicacao >= ?'); params.push(q.dataInicio); }
+  else if (q.dataFim)            { cond.push('p.data_publicacao <= ?'); params.push(q.dataFim); }
+  if (q.tratada === '0' || q.tratada === '1') { cond.push('p.tratada = ?'); params.push(q.tratada); }
+  // Pesquisa por conteúdo (e, de brinde, pelo número do processo).
+  if (q.busca && q.busca.trim()) {
+    cond.push('(p.texto LIKE ? OR p.numero_processo LIKE ?)');
+    params.push(`%${q.busca.trim()}%`, `%${q.busca.trim()}%`);
+  }
+
+  if (q.escopo === 'minhas') {
+    // "Direcionadas a mim": só as direcionadas pessoalmente ao usuário logado (não as gerais
+    // do escritório). Vale para qualquer nível, inclusive admin.
+    cond.push('EXISTS (SELECT 1 FROM publicacao_usuario pu WHERE pu.publicacao_id = p.id AND pu.usuario_id = ?)');
+    params.push(usuario.id);
+  } else if (Number(usuario.nivel) > 1) {
+    // Visibilidade normal — não-admin vê/apaga as do escritório OU as direcionadas a ele.
+    cond.push('(p.escritorio = 1 OR EXISTS (SELECT 1 FROM publicacao_usuario pu WHERE pu.publicacao_id = p.id AND pu.usuario_id = ?))');
+    params.push(usuario.id);
+  }
+  return { where: 'WHERE ' + cond.join(' AND '), params, fonte };
+}
+
 // GET /api/publicacoes — lista/pesquisa publicações salvas (com visibilidade e paginação).
 // Filtros: data (data_publicacao exata), tratada ('0'|'1'|''), busca (trecho do conteúdo),
 //          escopo ('todas' = tudo que o usuário pode ver | 'minhas' = só as direcionadas a ele).
 async function listar(req, res) {
   try {
-    const { data, tratada, busca, escopo } = req.query;
     const limitInt  = parseInt(req.query.limite) || 30;
     const offsetInt = ((parseInt(req.query.pagina) || 1) - 1) * limitInt;
 
-    const cond = [];
-    const params = [];
-
-    if (data)    { cond.push('p.data_publicacao = ?'); params.push(data); }
-    if (tratada === '0' || tratada === '1') { cond.push('p.tratada = ?'); params.push(tratada); }
-    // Pesquisa por conteúdo (e, de brinde, pelo número do processo).
-    if (busca && busca.trim()) {
-      cond.push('(p.texto LIKE ? OR p.numero_processo LIKE ?)');
-      params.push(`%${busca.trim()}%`, `%${busca.trim()}%`);
+    // Trava de 3 meses na pesquisa (defesa no servidor, além da tela).
+    if (periodoExcede(req.query.dataInicio, req.query.dataFim)) {
+      return erro(res, 'O período de pesquisa não pode passar de 3 meses.');
     }
 
-    if (escopo === 'minhas') {
-      // "Direcionadas a mim": só as que foram direcionadas pessoalmente ao usuário logado
-      // (não traz as gerais do escritório). Vale para qualquer nível, inclusive admin.
-      cond.push('EXISTS (SELECT 1 FROM publicacao_usuario pu WHERE pu.publicacao_id = p.id AND pu.usuario_id = ?)');
-      params.push(req.usuario.id);
-    } else if (!ehAdmin(req)) {
-      // "Todas" (padrão): visibilidade normal — não-admin vê as do escritório OU as direcionadas a ele.
-      cond.push('(p.escritorio = 1 OR EXISTS (SELECT 1 FROM publicacao_usuario pu WHERE pu.publicacao_id = p.id AND pu.usuario_id = ?))');
-      params.push(req.usuario.id);
-    }
-    const where = cond.length ? 'WHERE ' + cond.join(' AND ') : '';
+    const { where, params } = montarFiltroPublicacoes(req.query, req.usuario);
+
+    // Ordenação: coluna vem da LISTA BRANCA; direção só 'asc'/'desc'. Padrão = Data mais recente.
+    const col = COLUNAS_ORDENAR[req.query.ordenar];
+    const dir = req.query.direcao === 'asc' ? 'ASC' : (req.query.direcao === 'desc' ? 'DESC' : null);
+    const orderBy = (col && dir)
+      ? `ORDER BY ${col} ${dir}, p.id ${dir}`
+      : 'ORDER BY p.data_publicacao DESC, p.id DESC';
 
     // direcionada_nomes: lista (resolvida na leitura) dos usuários direcionados.
     // duplicada: 1 quando existe OUTRA publicação de TEXTO idêntico no MESMO dia com id menor.
@@ -90,6 +271,7 @@ async function listar(req, res) {
     //   mais antiga (a "original"), ajudando o usuário a identificar quais excluir manualmente.
     const [rows] = await pool.execute(
       `SELECT p.id, p.fonte, p.data_publicacao, p.numero_processo, p.numero_publicacao,
+              p.tribunal, p.hash_cnj,
               p.titulo, p.cabecalho, p.texto, p.escritorio, p.tratada, p.tratada_em,
               ut.nome AS tratada_por_nome,
               (SELECT GROUP_CONCAT(u.nome SEPARATOR ', ')
@@ -98,11 +280,12 @@ async function listar(req, res) {
               EXISTS (SELECT 1 FROM publicacoes p2
                        WHERE p2.data_publicacao = p.data_publicacao
                          AND p2.texto_hash = p.texto_hash
+                         AND p2.fonte = p.fonte
                          AND p2.id < p.id) AS duplicada
        FROM publicacoes p
        LEFT JOIN usuarios ut ON p.tratada_por = ut.id
        ${where}
-       ORDER BY p.data_publicacao DESC, p.id DESC
+       ${orderBy}
        LIMIT ${limitInt} OFFSET ${offsetInt}`,
       params
     );
@@ -374,4 +557,72 @@ async function excluir(req, res) {
   }
 }
 
-module.exports = { statusAasp, listar, importar, direcionar, tratar, historico, excluir, usuariosParaDirecionar };
+// POST /api/publicacoes/excluir-lote — exclui VÁRIAS publicações de uma vez (transação).
+// Sempre preso à FONTE da aba e à VISIBILIDADE do usuário (reusa o mesmo filtro da listagem).
+// Body:
+//   { fonte, todas: true, data?, tratada?, busca?, escopo? }  → apaga TODAS as que batem com
+//        os filtros atuais (quando não há filtro, é a fonte inteira daquela aba); OU
+//   { fonte, ids: [..] }                                       → apaga só as selecionadas.
+// Os vínculos em publicacao_usuario caem por CASCADE (sem órfãos). Registra o total no log.
+async function excluirLote(req, res) {
+  const body = req.body || {};
+  const todas = !!body.todas;
+
+  // Modo "todas": usa todos os filtros da tela. Modo "seleção": só fonte + visibilidade
+  // (as ids escolhidas valem por si, independentemente de data/status/busca da tela).
+  let alvoSql, alvoParams;
+  if (todas) {
+    const { where, params } = montarFiltroPublicacoes(body, req.usuario);
+    alvoSql = where; alvoParams = params;
+  } else {
+    const ids = [...new Set(
+      (Array.isArray(body.ids) ? body.ids : [])
+        .map(Number).filter(n => Number.isInteger(n) && n > 0)
+    )];
+    if (!ids.length) return erro(res, 'Nenhuma publicação selecionada');
+    const { where, params } = montarFiltroPublicacoes({ fonte: body.fonte }, req.usuario);
+    const ph = ids.map(() => '?').join(',');
+    alvoSql = `${where} AND p.id IN (${ph})`;
+    alvoParams = [...params, ...ids];
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // Quanto será apagado, agrupado por dia (para o log manter o padrão da tabela).
+    const [resumo] = await conn.execute(
+      `SELECT DATE_FORMAT(p.data_publicacao,'%Y-%m-%d') AS dia, COUNT(*) AS qtd
+         FROM publicacoes p ${alvoSql} GROUP BY dia`, alvoParams
+    );
+    const totalExcluir = resumo.reduce((s, r) => s + Number(r.qtd), 0);
+    if (!totalExcluir) {
+      await conn.rollback();
+      return sucesso(res, { excluidas: 0 }, 'Nenhuma publicação para excluir.');
+    }
+
+    // Apaga o recorte (os vínculos de publicacao_usuario caem por CASCADE).
+    await conn.execute(`DELETE p FROM publicacoes p ${alvoSql}`, alvoParams);
+
+    // Log: uma linha por dia apagado (usuário + quantidade + data).
+    for (const r of resumo) {
+      await conn.execute(
+        `INSERT INTO log_publicacoes (usuario_id, quantidade, data_publicacao) VALUES (?, ?, ?)`,
+        [req.usuario.id, Number(r.qtd), r.dia]
+      );
+    }
+
+    await conn.commit();
+    return sucesso(res, { excluidas: totalExcluir }, `${totalExcluir} publicação(ões) excluída(s).`);
+  } catch (err) {
+    await conn.rollback();
+    return erroInterno(res, err);
+  } finally {
+    conn.release();
+  }
+}
+
+module.exports = {
+  statusAasp, listar, importar, direcionar, tratar, historico, excluir, excluirLote, usuariosParaDirecionar,
+  statusCnj, importarCnj,
+};

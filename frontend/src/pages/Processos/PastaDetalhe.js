@@ -55,6 +55,7 @@ export default function PastaDetalhe() {
   const [andamentos, setAndamentos]       = useState([]);
   const [prazos, setPrazos]               = useState([]);
   const [tarefas, setTarefas]             = useState([]);
+  const [mostrarConcluidas, setMostrarConcluidas] = useState(false); // aba Tarefas: esconde concluídas por padrão
   const [audiencias, setAudiencias]       = useState([]);
   const [contaCorrente, setContaCorrente] = useState(null);   // { lancamentos, saldo_total } do processo
   const [acordosFin, setAcordosFin]       = useState([]);     // acordos do processo
@@ -131,7 +132,7 @@ export default function PastaDetalhe() {
     if (abaAtiva === 'audiencias') carregarAudiencias();
     if (abaAtiva === 'pericias')   carregarPericias();
     if (abaAtiva === 'financeiro') carregarFinanceiro();
-  }, [abaAtiva, pasta, processoFiltro]); // eslint-disable-line
+  }, [abaAtiva, pasta, processoFiltro, mostrarConcluidas]); // eslint-disable-line
 
   // Retorna os IDs dos processos a buscar conforme o filtro atual
   function idsParaBuscar() {
@@ -229,7 +230,7 @@ export default function PastaDetalhe() {
     const ids = idsParaBuscar();
     try {
       const resultados = await Promise.all(
-        ids.map(pid => tarefasAPI.listar({ processo_id: pid, concluida: '', limite: 100 }))
+        ids.map(pid => tarefasAPI.listar({ processo_id: pid, concluida: mostrarConcluidas ? '' : '0', limite: 100 }))
       );
       const todos = resultados.flatMap(r => r.data.ok ? r.data.dados.registros : []);
       setTarefas(todos);
@@ -899,6 +900,11 @@ export default function PastaDetalhe() {
                 onClick={() => { setTarefaEditando(null); setModalTarefa(true); }}>
                 + Nova Tarefa
               </button>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', userSelect: 'none' }}>
+                <input type="checkbox" checked={mostrarConcluidas}
+                  onChange={e => setMostrarConcluidas(e.target.checked)} />
+                <span style={{ fontSize: '13px', color: '#475569' }}>Mostrar concluídas</span>
+              </label>
             </div>
             <div className="tabela-wrapper">
               <table className="tabela">

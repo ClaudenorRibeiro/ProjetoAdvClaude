@@ -11365,7 +11365,7 @@ INSERT IGNORE INTO `configuracoes_integracoes` (`id`, `modulo`, `ativo`, `config
 	(1, 'whatsapp_zapi', 0, NULL, NOW()),
 	(2, 'email_smtp',    0, NULL, NOW()),
 	(3, 'aasp',          0, NULL, NOW()),
-	(4, 'cnj_datajud',   0, NULL, NOW());
+	(4, 'cnj',           0, NULL, NOW());
 
 -- Zera "criado por/alterado por" (apontavam para usuarios do Antonio).
 UPDATE feriados SET criado_por=NULL;

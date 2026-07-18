@@ -1277,6 +1277,7 @@ function TabFeriados() {
 // URL oficial da API de Intimações da AASP — usada apenas como valor PADRÃO do campo
 // (a URL efetiva é sempre a que estiver salva na configuração; nada fica fixo no backend).
 const URL_PADRAO_AASP = 'https://intimacaoapi.aasp.org.br/api/Associado/intimacao/json';
+const URL_PADRAO_CNJ  = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
 
 function TabIntegracoes() {
   const [integracoes, setIntegracoes] = useState({});
@@ -1290,6 +1291,9 @@ function TabIntegracoes() {
         // Se já existe config AASP mas sem URL (config antiga), pré-preenche com a URL padrão
         // para o usuário só conferir e salvar — sem quebrar a busca.
         if (dados.aasp && !dados.aasp.url) dados.aasp = { ...dados.aasp, url: URL_PADRAO_AASP };
+        // CNJ: garante a URL padrão preenchida (a consulta é pública, sem chave).
+        if (!dados.cnj) dados.cnj = { ativo: false, url: URL_PADRAO_CNJ, oabs: [] };
+        else if (!dados.cnj.url) dados.cnj = { ...dados.cnj, url: URL_PADRAO_CNJ };
         setIntegracoes(dados);
       }
     }).finally(() => setCarregando(false));
@@ -1314,8 +1318,17 @@ function TabIntegracoes() {
   if (carregando) return <div className="card"><div className="loading">Carregando...</div></div>;
 
   const aasp      = integracoes.aasp      || {};
+  const cnj       = integracoes.cnj       || {};
   const whatsapp  = integracoes.whatsapp  || {};
   const email     = integracoes.email     || {};
+
+  // Lista de OABs monitoradas no CNJ (cada item: { numero, uf }).
+  const oabsCnj = Array.isArray(cnj.oabs) ? cnj.oabs : [];
+  function setOabCnj(i, campo, valor) {
+    setModulo('cnj', 'oabs', oabsCnj.map((o, idx) => idx === i ? { ...o, [campo]: valor } : o));
+  }
+  function addOabCnj()    { if (oabsCnj.length < 10) setModulo('cnj', 'oabs', [...oabsCnj, { numero: '', uf: '' }]); }
+  function removeOabCnj(i) { setModulo('cnj', 'oabs', oabsCnj.filter((_, idx) => idx !== i)); }
 
   return (
     <div style={{display:'flex',flexDirection:'column',gap:'16px'}}>
@@ -1357,6 +1370,61 @@ function TabIntegracoes() {
         <button className="btn btn-primary" onClick={() => salvarModulo('aasp')}
           disabled={salvando === 'aasp'}>
           {salvando === 'aasp' ? 'Salvando...' : 'Salvar configurações AASP'}
+        </button>
+      </div>
+
+      {/* CNJ / DJEN (Diário de Justiça Eletrônico Nacional) */}
+      <div className="card">
+        <div style={{display:'flex',alignItems:'center',gap:'12px',marginBottom:'16px'}}>
+          <h3 style={{margin:0,fontSize:'15px',color:'#1e2a3a'}}>Publicações CNJ (DJEN)</h3>
+          <label style={{display:'flex',alignItems:'center',gap:'6px',cursor:'pointer',marginLeft:'auto'}}>
+            <input type="checkbox" checked={!!cnj.ativo}
+              onChange={e => setModulo('cnj','ativo', e.target.checked)} />
+            <span style={{fontSize:'13px'}}>Integração ativa</span>
+          </label>
+        </div>
+        {cnj.ativo && (
+          <>
+            <div className="form-group">
+              <label className="form-label">URL da API do CNJ</label>
+              <input className="form-control" value={cnj.url||''}
+                onChange={e => setModulo('cnj','url', e.target.value)}
+                placeholder={URL_PADRAO_CNJ} />
+              <small style={{ color: '#888' }}>
+                Endereço da ComunicaAPI (DJEN). Já vem preenchido com o padrão oficial —
+                a consulta é pública e gratuita, sem chave. Só altere se o CNJ informar outra URL.
+              </small>
+            </div>
+            <div className="form-group">
+              <label className="form-label">OABs monitoradas</label>
+              <small style={{ color: '#888', display: 'block', marginBottom: '8px' }}>
+                Cadastre as OABs do escritório (número e UF). As publicações do DJEN são buscadas por essas OABs.
+              </small>
+              {oabsCnj.map((o, i) => (
+                <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+                  <input className="form-control" style={{ maxWidth: '160px' }}
+                    value={o.numero || ''} placeholder="Número (ex.: 150000)"
+                    onChange={e => setOabCnj(i, 'numero', e.target.value.replace(/\D/g, ''))} />
+                  <input className="form-control" style={{ maxWidth: '90px', textTransform: 'uppercase' }}
+                    value={o.uf || ''} placeholder="UF" maxLength={2}
+                    onChange={e => setOabCnj(i, 'uf', e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase())} />
+                  <button type="button" className="btn btn-outline" title="Remover"
+                    onClick={() => removeOabCnj(i)}>✕</button>
+                </div>
+              ))}
+              <button type="button" className="btn btn-outline" onClick={addOabCnj}
+                disabled={oabsCnj.length >= 10}>+ Adicionar OAB</button>
+              {oabsCnj.length >= 10 && (
+                <small style={{ color: '#888', display: 'block', marginTop: '6px' }}>
+                  Máximo de 10 OABs por escritório.
+                </small>
+              )}
+            </div>
+          </>
+        )}
+        <button className="btn btn-primary" onClick={() => salvarModulo('cnj')}
+          disabled={salvando === 'cnj'}>
+          {salvando === 'cnj' ? 'Salvando...' : 'Salvar configurações CNJ'}
         </button>
       </div>
 
