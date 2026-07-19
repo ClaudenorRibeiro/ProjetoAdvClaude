@@ -11362,8 +11362,8 @@ INSERT IGNORE INTO `tbltipoproc` (`id`, `nome`, `codTipoProc`, `ativo`, `criado_
 -- configuracoes_integracoes: 4 linhas VAZIAS (andaime; cada escritorio
 -- configura a sua). A chave AASP do Antonio NAO vai aqui.
 INSERT IGNORE INTO `configuracoes_integracoes` (`id`, `modulo`, `ativo`, `configuracoes`, `atualizado_em`) VALUES
-	(1, 'whatsapp_zapi', 0, NULL, NOW()),
-	(2, 'email_smtp',    0, NULL, NOW()),
+	(1, 'whatsapp', 0, NULL, NOW()),
+	(2, 'email',    0, NULL, NOW()),
 	(3, 'aasp',          0, NULL, NOW()),
 	(4, 'cnj',           0, NULL, NOW());
 

@@ -543,7 +543,7 @@ CREATE TABLE IF NOT EXISTS `logs_auditoria` (
   KEY `idx_usuario` (`usuario_id`),
   KEY `idx_data` (`criado_em`),
   KEY `idx_usuario_data` (`usuario_id`,`criado_em`)
-) ENGINE=InnoDB AUTO_INCREMENT=351 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=355 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -607,7 +607,7 @@ CREATE TABLE IF NOT EXISTS `log_emails` (
   PRIMARY KEY (`id`),
   KEY `idx_log_emails_enviado_em` (`enviado_em`),
   KEY `idx_log_emails_status` (`status`)
-) ENGINE=InnoDB AUTO_INCREMENT=42 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=44 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -622,7 +622,7 @@ CREATE TABLE IF NOT EXISTS `log_publicacoes` (
   PRIMARY KEY (`id`),
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `log_publicacoes_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=28 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=32 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -973,7 +973,7 @@ CREATE TABLE IF NOT EXISTS `publicacoes` (
   CONSTRAINT `fk_pub_direcionada` FOREIGN KEY (`direcionada_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_pub_importada` FOREIGN KEY (`importada_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_pub_tratada` FOREIGN KEY (`tratada_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=818 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=924 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
@@ -1025,7 +1025,7 @@ CREATE TABLE IF NOT EXISTS `tarefas` (
   CONSTRAINT `tarefas_ibfk_4` FOREIGN KEY (`atribuida_para`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `tarefas_ibfk_5` FOREIGN KEY (`concluida_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `tarefas_ibfk_6` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=15 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 
