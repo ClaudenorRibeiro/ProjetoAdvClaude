@@ -725,7 +725,9 @@ function ModalHistoricoUsuario({ usuario, onFechar }) {
                           </span>
                         </td>
                         <td style={{ fontSize: '12px' }}>{r.tabela}</td>
-                        <td style={{ fontSize: '12px', color: '#666' }}>#{r.registro_id}</td>
+                        <td style={{ fontSize: '12px', color: '#666' }}>
+                          {r.descricao || (r.registro_id != null ? `#${r.registro_id}` : '—')}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

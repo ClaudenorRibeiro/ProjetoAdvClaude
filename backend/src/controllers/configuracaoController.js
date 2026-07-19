@@ -556,7 +556,7 @@ async function historicoUsuario(req, res) {
     if (!usuario.length) return naoEncontrado(res, 'Usuário não encontrado');
 
     let sql = `
-      SELECT id, tabela, acao, registro_id, criado_em
+      SELECT id, tabela, acao, registro_id, descricao, criado_em
       FROM logs_auditoria
       WHERE usuario_id = ?`;
     const params = [id];
