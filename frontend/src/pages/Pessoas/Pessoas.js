@@ -39,7 +39,8 @@ export default function Pessoas() {
   const [aba, setAba]             = useState('fisicas'); // 'fisicas' | 'juridicas'
   const [lista, setLista]         = useState([]);
   const [total, setTotal]         = useState(0);
-  const [busca, setBusca]         = useState('');
+  const [busca, setBusca]         = useState('');       // termo já aplicado (usado na consulta)
+  const [buscaInput, setBuscaInput] = useState('');     // texto digitado na caixa (instantâneo)
   const [pagina, setPagina]       = useState(1);
   const [carregando, setCarregando] = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
@@ -85,6 +86,12 @@ export default function Pessoas() {
 
   useEffect(() => { carregar(); }, [carregar]);
 
+  // Debounce da busca: consulta só 350ms após parar de digitar (evita 1 consulta por tecla)
+  useEffect(() => {
+    const t = setTimeout(() => { setBusca(buscaInput); setPagina(1); }, 350);
+    return () => clearTimeout(t);
+  }, [buscaInput]);
+
   function abrirNovoCadastro() { setPessoaSelecionada(null); setModalAberto(true); }
   function abrirEdicao(pessoa) { setPessoaSelecionada(pessoa); setModalAberto(true); }
 
@@ -129,7 +136,7 @@ export default function Pessoas() {
   }
 
   // Limpa a caixa de busca e volta para a primeira página
-  function limparBusca() { setBusca(''); setPagina(1); }
+  function limparBusca() { setBuscaInput(''); setBusca(''); setPagina(1); }
 
   // Abre o modal de exportação com apenas o "Nome" (ou "Razão social") marcado por padrão
   function abrirExport() {
@@ -185,11 +192,11 @@ export default function Pessoas() {
           <input
             className="form-control" style={{maxWidth:'300px'}}
             placeholder={aba==='fisicas' ? 'Buscar por nome, CPF, RG, PIS, telefone, endereço...' : 'Buscar por razão social, CNPJ, telefone, endereço...'}
-            value={busca}
-            onChange={e => { setBusca(e.target.value); setPagina(1); }}
+            value={buscaInput}
+            onChange={e => setBuscaInput(e.target.value)}
           />
           {/* Limpar pesquisa — só aparece quando há algo digitado na busca */}
-          {busca && (
+          {buscaInput && (
             <button className="btn btn-outline" onClick={limparBusca}>Limpar pesquisa</button>
           )}
           <button className="btn btn-primary" onClick={abrirNovoCadastro}>

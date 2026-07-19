@@ -794,6 +794,7 @@ CREATE TABLE IF NOT EXISTS `pessoas_fisicas` (
   KEY `fk_pf_criado_por` (`criado_por`),
   KEY `fk_pf_alterado_por` (`alterado_por`),
   KEY `nacionalidade_id` (`nacionalidade_id`),
+  KEY `idx_pf_ativo_nome` (`ativo`,`nome`),
   CONSTRAINT `fk_pf_alterado_por` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `fk_pf_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `pessoas_fisicas_ibfk_1` FOREIGN KEY (`estado_civil_id`) REFERENCES `estado_civil` (`id`),
@@ -829,6 +830,7 @@ CREATE TABLE IF NOT EXISTS `pessoas_juridicas` (
   UNIQUE KEY `uq_pj_cnpj` (`cnpj`),
   KEY `fk_pj_criado_por` (`criado_por`),
   KEY `fk_pj_alterado_por` (`alterado_por`),
+  KEY `idx_pj_ativo_razao` (`ativo`,`razao_social`),
   CONSTRAINT `fk_pj_alterado_por` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `fk_pj_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=2879 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -1121,6 +1123,7 @@ CREATE TABLE IF NOT EXISTS `tblproc` (
   KEY `criado_por` (`criado_por`),
   KEY `alterado_por` (`alterado_por`),
   KEY `idx_proc_numproc` (`numProc`),
+  KEY `idx_proc_pasta_ativo` (`pasta_id`,`ativo`),
   CONSTRAINT `tblproc_ibfk_1` FOREIGN KEY (`pasta_id`) REFERENCES `tblpasta` (`id`),
   CONSTRAINT `tblproc_ibfk_2` FOREIGN KEY (`vara_id`) REFERENCES `tblvara` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblproc_ibfk_3` FOREIGN KEY (`tipo_id`) REFERENCES `tbltipoproc` (`id`) ON DELETE SET NULL,

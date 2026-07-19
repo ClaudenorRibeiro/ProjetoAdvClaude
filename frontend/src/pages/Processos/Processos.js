@@ -16,7 +16,8 @@ export default function Processos() {
   const navigate = useNavigate();
   const [lista, setLista]           = useState([]);
   const [total, setTotal]           = useState(0);
-  const [busca, setBusca]           = useState('');
+  const [busca, setBusca]           = useState('');     // termo já aplicado (usado na consulta)
+  const [buscaInput, setBuscaInput] = useState('');     // texto digitado na caixa (instantâneo)
   const [pagina, setPagina]         = useState(1);
   const [carregando, setCarregando] = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
@@ -31,6 +32,12 @@ export default function Processos() {
   }, [busca, pagina]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  // Debounce da busca: consulta só 350ms após parar de digitar (evita 1 consulta por tecla)
+  useEffect(() => {
+    const t = setTimeout(() => { setBusca(buscaInput); setPagina(1); }, 350);
+    return () => clearTimeout(t);
+  }, [buscaInput]);
 
   function aoFecharModal(reload, pastaId) {
     setModalAberto(false);
@@ -53,8 +60,8 @@ export default function Processos() {
             className="form-control"
             style={{ maxWidth: '340px' }}
             placeholder="Buscar por nº pasta, título ou número CNJ..."
-            value={busca}
-            onChange={e => { setBusca(e.target.value); setPagina(1); }}
+            value={buscaInput}
+            onChange={e => setBuscaInput(e.target.value)}
           />
           <button className="btn btn-primary" onClick={() => setModalAberto(true)}>
             + Novo Processo
