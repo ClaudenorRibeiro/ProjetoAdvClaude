@@ -10,6 +10,7 @@ import GerarDocumentoPartesBotao from '../../components/GerarDocumentoPartes';
 import MenuAcoes from '../../components/MenuAcoes';
 import { useAuth } from '../../context/AuthContext';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
+import ModalConfirmar from '../../components/ui/ModalConfirmar';
 
 // Campos disponíveis para exportar em Excel (mesmas chaves do backend; sem campos de auditoria)
 const CAMPOS_EXPORT_FISICA = [
@@ -626,6 +627,7 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
   const [form, setForm]         = useState(pessoa || {});
   const [auxiliares, setAux]    = useState({ estados_civis: [], generos: [], profissoes: [], nacionalidades: [] });
   const [salvando, setSalvando] = useState(false);
+  const [confirmar, setConfirmar] = useState(null); // modal de aviso "campos sem informação"
   const [telefones, setTelefones] = useState(pessoa?.telefones || [{ numero: '', tipo: '', principal: true }]);
   const [emails, setEmails]       = useState(pessoa?.emails || [{ email: '', principal: true }]);
   // Ref do campo Número — recebe o foco automaticamente após o CEP ser preenchido
@@ -683,46 +685,8 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
     setTimeout(() => refNumero.current?.focus(), 100);
   }
 
-  async function salvar() {
-    if (tipo === 'fisicas') {
-      // ── Campos obrigatórios de Pessoa Física ──────────────────────────
-      if (!form.nome?.trim()) return toast.error('Nome é obrigatório');
-      const partes = form.nome.trim().split(/\s+/).filter(Boolean);
-      if (partes.length < 2)  return toast.error('Informe o nome completo (nome e sobrenome)');
-
-      if (!form.cpf?.replace(/\D/g, ''))
-        return toast.error('CPF é obrigatório');
-      if (!form.data_nascimento)
-        return toast.error('Data de nascimento é obrigatória');
-      if (!form.genero_id)
-        return toast.error('Gênero é obrigatório');
-      if (!form.estado_civil_id)
-        return toast.error('Estado civil é obrigatório');
-      if (!form.profissao_id)
-        return toast.error('Profissão é obrigatória');
-      if (!form.nacionalidade_id)
-        return toast.error('Nacionalidade é obrigatória');
-
-      // Primeiro telefone obrigatório
-      if (!telefones[0]?.numero?.replace(/\D/g, ''))
-        return toast.error('Pelo menos um telefone é obrigatório');
-
-      // Valida formato dos e-mails preenchidos
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      for (const em of emails) {
-        if (em.email && !emailRegex.test(em.email.trim())) {
-          return toast.error(`E-mail inválido: "${em.email}"`);
-        }
-      }
-
-      // Valida data de nascimento — não pode ser futura
-      const hoje = new Date().toISOString().split('T')[0];
-      if (form.data_nascimento > hoje)
-        return toast.error('Data de nascimento não pode ser uma data futura');
-    }
-
-    if (!form.razao_social && tipo === 'juridicas') return toast.error('Razão social é obrigatória');
-
+  // Grava de fato (chamado direto ou após o usuário confirmar o aviso de campos vazios).
+  async function executarSalvar() {
     setSalvando(true);
     try {
       const payload = { ...form, telefones, emails };
@@ -742,8 +706,56 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
     } finally { setSalvando(false); }
   }
 
+  async function salvar() {
+    if (tipo === 'fisicas') {
+      // ── Únicos OBRIGATÓRIOS de Pessoa Física: nome completo + CPF ──────
+      if (!form.nome?.trim()) return toast.error('Nome é obrigatório');
+      const partes = form.nome.trim().split(/\s+/).filter(Boolean);
+      if (partes.length < 2)  return toast.error('Informe o nome completo (nome e sobrenome)');
+      if (!form.cpf?.replace(/\D/g, ''))
+        return toast.error('CPF é obrigatório');
+
+      // ── Validações de FORMATO (mantidas — só disparam se o campo estiver preenchido) ──
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      for (const em of emails) {
+        if (em.email && !emailRegex.test(em.email.trim())) {
+          return toast.error(`E-mail inválido: "${em.email}"`);
+        }
+      }
+      const hoje = new Date().toISOString().split('T')[0];
+      if (form.data_nascimento && form.data_nascimento > hoje)
+        return toast.error('Data de nascimento não pode ser uma data futura');
+
+      // ── Campos que agora são OPCIONAIS: avisa antes de salvar se ficarem vazios ──
+      const vazios = [];
+      if (!form.data_nascimento)                       vazios.push('Data de nascimento');
+      if (!form.genero_id)                             vazios.push('Gênero');
+      if (!form.estado_civil_id)                       vazios.push('Estado civil');
+      if (!form.profissao_id)                          vazios.push('Profissão');
+      if (!form.nacionalidade_id)                      vazios.push('Nacionalidade');
+      if (!telefones[0]?.numero?.replace(/\D/g, ''))   vazios.push('Telefone');
+
+      if (vazios.length) {
+        setConfirmar({
+          titulo: 'Campos sem informação',
+          mensagem: `Os campos ${vazios.join(', ')} ficarão sem informação. Deseja salvar assim mesmo?`,
+          textoBotao: 'Salvar assim',
+          tipo: 'aviso',
+          acao: executarSalvar,
+        });
+        return;
+      }
+      return executarSalvar();
+    }
+
+    // Jurídica
+    if (!form.razao_social) return toast.error('Razão social é obrigatória');
+    return executarSalvar();
+  }
+
   return (
     <div className="modal-overlay">
+      {confirmar && <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(null)} />}
       <div className="modal-box modal-grande">
         <div className="modal-header">
           <h3>{pessoa ? 'Editar' : 'Nova'} {tipo === 'fisicas' ? 'Pessoa Física' : 'Pessoa Jurídica'}</h3>
