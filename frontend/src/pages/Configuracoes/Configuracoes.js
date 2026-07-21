@@ -7,6 +7,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { configuracaoAPI, manutencaoAPI } from '../../services/api';
 import { formatarData, toTitleCase } from '../../utils/formatters';
+import { UFS } from '../../utils/ufs';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import MenuAcoes from '../../components/MenuAcoes';
@@ -545,6 +546,17 @@ function TabEscritorio() {
           value={form.prazo_fazendo_timeout || 60}
           onChange={e => set('prazo_fazendo_timeout', e.target.value)} />
         <small style={{color:'#888'}}>O prazo volta ao status anterior se ninguém concluiu no prazo definido</small>
+      </div>
+
+      <div className="form-group" style={{marginTop:'8px'}}>
+        <label className="form-label">Mensagem de aniversário</label>
+        <textarea className="form-control" rows={3} value={form.mensagem_aniversario || ''}
+          onChange={e => set('mensagem_aniversario', e.target.value)}
+          placeholder="Olá, {{nome}}! O escritório {{escritorio}} deseja a você um feliz aniversário! 🎂" />
+        <small style={{color:'#888'}}>
+          Usada no relatório de Aniversariantes (WhatsApp e e-mail). Use <b>{'{{nome}}'}</b> para o nome do
+          cliente e <b>{'{{escritorio}}'}</b> para o nome do escritório. Se ficar em branco, um texto padrão é usado.
+        </small>
       </div>
 
       <div style={{marginTop:'8px'}}>
@@ -1311,6 +1323,15 @@ function TabIntegracoes() {
   }
 
   async function salvarModulo(modulo) {
+    // CNJ (DJEN): nenhuma OAB pode ficar incompleta. Toda linha precisa de número E UF
+    // (não pode linha vazia). Escritório sem nenhuma OAB (zero linhas) pode salvar.
+    if (modulo === 'cnj') {
+      const listaOabs = Array.isArray(integracoes.cnj?.oabs) ? integracoes.cnj.oabs : [];
+      const temIncompleta = listaOabs.some(o => !String(o?.numero || '').trim() || !String(o?.uf || '').trim());
+      if (temIncompleta) {
+        return toast.error('Cada OAB monitorada precisa ter número e UF. Preencha ou remova as linhas incompletas.');
+      }
+    }
     setSalvando(modulo);
     try {
       await configuracaoAPI.salvarIntegracao(modulo, integracoes[modulo] || {});
@@ -1323,7 +1344,6 @@ function TabIntegracoes() {
 
   const aasp      = integracoes.aasp      || {};
   const cnj       = integracoes.cnj       || {};
-  const whatsapp  = integracoes.whatsapp  || {};
   const email     = integracoes.email     || {};
 
   // Lista de OABs monitoradas no CNJ (cada item: { numero, uf }).
@@ -1409,9 +1429,11 @@ function TabIntegracoes() {
                   <input className="form-control" style={{ maxWidth: '160px' }}
                     value={o.numero || ''} placeholder="Número (ex.: 150000)"
                     onChange={e => setOabCnj(i, 'numero', e.target.value.replace(/\D/g, ''))} />
-                  <input className="form-control" style={{ maxWidth: '90px', textTransform: 'uppercase' }}
-                    value={o.uf || ''} placeholder="UF" maxLength={2}
-                    onChange={e => setOabCnj(i, 'uf', e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase())} />
+                  <select className="form-control" style={{ maxWidth: '90px' }}
+                    value={o.uf || ''} onChange={e => setOabCnj(i, 'uf', e.target.value)}>
+                    <option value="">UF</option>
+                    {UFS.map(uf => <option key={uf.sigla} value={uf.sigla}>{uf.sigla}</option>)}
+                  </select>
                   <button type="button" className="btn btn-outline" title="Remover"
                     onClick={() => removeOabCnj(i)}>✕</button>
                 </div>
@@ -1429,36 +1451,6 @@ function TabIntegracoes() {
         <button className="btn btn-primary" onClick={() => salvarModulo('cnj')}
           disabled={salvando === 'cnj'}>
           {salvando === 'cnj' ? 'Salvando...' : 'Salvar configurações CNJ'}
-        </button>
-      </div>
-
-      {/* WhatsApp Z-API */}
-      <div className="card">
-        <div style={{display:'flex',alignItems:'center',gap:'12px',marginBottom:'16px'}}>
-          <h3 style={{margin:0,fontSize:'15px',color:'#1e2a3a'}}>WhatsApp (Z-API)</h3>
-          <label style={{display:'flex',alignItems:'center',gap:'6px',cursor:'pointer',marginLeft:'auto'}}>
-            <input type="checkbox" checked={!!whatsapp.ativo}
-              onChange={e => setModulo('whatsapp','ativo', e.target.checked)} />
-            <span style={{fontSize:'13px'}}>Integração ativa</span>
-          </label>
-        </div>
-        {whatsapp.ativo && (
-          <div className="grid-2">
-            <div className="form-group">
-              <label className="form-label">Instance ID (Z-API)</label>
-              <input className="form-control" value={whatsapp.instancia||''}
-                onChange={e => setModulo('whatsapp','instancia', e.target.value)} />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Token Z-API</label>
-              <input type="password" className="form-control" value={whatsapp.token||''}
-                onChange={e => setModulo('whatsapp','token', e.target.value)} />
-            </div>
-          </div>
-        )}
-        <button className="btn btn-primary" onClick={() => salvarModulo('whatsapp')}
-          disabled={salvando === 'whatsapp'}>
-          {salvando === 'whatsapp' ? 'Salvando...' : 'Salvar configurações WhatsApp'}
         </button>
       </div>
 

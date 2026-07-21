@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { dashboardAPI, audienciasAPI } from '../../services/api';
 import { formatarData, formatarMoeda } from '../../utils/formatters';
+import AcoesAniversariante from '../../components/AcoesAniversariante';
 import './Dashboard.css';
 
 export default function Dashboard() {
@@ -86,6 +87,28 @@ export default function Dashboard() {
 
         {/* Coluna direita */}
         <div>
+          {/* Aniversariantes de hoje (clientes) — só aparece quando há aniversariantes */}
+          {dados.aniversariantes_hoje?.length > 0 && (
+            <div className="card">
+              <div className="card-titulo">🎂 Aniversariantes de hoje ({dados.aniversariantes_hoje.length})</div>
+              <div className="tabela-wrapper">
+                <table className="tabela">
+                  <thead><tr><th>Nome</th><th>Idade</th><th>Contato</th><th></th></tr></thead>
+                  <tbody>
+                    {dados.aniversariantes_hoje.map(r => (
+                      <tr key={r.id}>
+                        <td><strong>{r.nome}</strong></td>
+                        <td>{r.idade != null ? `${r.idade} anos` : '—'}</td>
+                        <td>{r.telefone || r.email || '—'}</td>
+                        <td><AcoesAniversariante pessoa={r} onFeito={carregarDados} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {/* Audiências de hoje e amanhã */}
           <div className="card">
             <div className="card-titulo">⚖️ Audiências</div>

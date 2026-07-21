@@ -99,6 +99,9 @@ export const pessoasAPI = {
   unificarFisicas:  (dados) => api.post('/pessoas/fisicas/unificar', dados),
   // Lista os processos de uma pessoa (tipo = 'fisicas' | 'juridicas') — ao clicar na "Qtde Proc"
   processosDaPessoa:(tipo, id) => api.get(`/pessoas/${tipo}/${id}/processos`),
+  // Aniversariantes (clientes PF) — relatório e ação de parabenizar
+  aniversariantes: (params) => api.get('/pessoas/aniversariantes', { params }),
+  parabenizar:     (id, dados) => api.post(`/pessoas/${id}/parabens`, dados),
   // Auxiliares (estados civis, gêneros, profissões)
   auxiliares: () => api.get('/pessoas/auxiliares'),
 };
@@ -150,6 +153,7 @@ export const prazosAPI = {
   marcarFazendo:    (id)        => api.put(`/prazos/${id}/fazendo`),
   liberarFazendo:   (id)        => api.put(`/prazos/${id}/liberar-fazendo`),
   tipos:            ()          => api.get('/prazos/tipos'),
+  usuariosFiltro:   ()          => api.get('/prazos/usuarios'),
   criarTipo:        (dados)     => api.post('/prazos/tipos', dados),
   criarSubtipo:     (dados)     => api.post('/prazos/subtipos', dados),
   vencemHoje:       ()          => api.get('/prazos/hoje'),

@@ -65,20 +65,28 @@ async function listar(req, res) {
     if (data_de)  { where += ' AND pp.data_vencimento >= ?'; params.push(data_de); }
     if (data_ate) { where += ' AND pp.data_vencimento <= ?'; params.push(data_ate); }
 
-    // Filtra por usuário respeitando a permissão 'prazos.ver_todos > visualizar'
-    if (usuario_id) {
-      where += ' AND (pp.delegado_para = ? OR pp.delegado_para IS NULL)';
-      params.push(usuario_id);
-    } else if (req.usuario.nivel > 1) {
+    // Filtra por usuário respeitando a permissão 'prazos.ver_todos > visualizar'.
+    // podeVerTodos: admin/super (nível <= 1) OU usuário comum com a permissão explícita.
+    let podeVerTodos = Number(req.usuario.nivel) <= 1;
+    if (!podeVerTodos) {
       const [verTodosPerm] = await pool.execute(
         "SELECT permitido FROM permissoes WHERE usuario_id = ? AND modulo = 'prazos' AND submodulo = 'ver_todos' AND acao = 'visualizar'",
         [req.usuario.id]
       );
-      if (!verTodosPerm[0]?.permitido) {
-        where += ' AND (pp.delegado_para = ? OR pp.delegado_para IS NULL)';
-        params.push(req.usuario.id);
-      }
+      podeVerTodos = Number(verTodosPerm[0]?.permitido) === 1;
     }
+
+    if (!podeVerTodos) {
+      // Sem permissão de ver todos: sempre restrito aos próprios prazos + os do escritório
+      // (delegado_para NULL). Ignora qualquer usuario_id recebido — impede burlar a permissão.
+      where += ' AND (pp.delegado_para = ? OR pp.delegado_para IS NULL)';
+      params.push(req.usuario.id);
+    } else if (usuario_id) {
+      // Pode ver todos e escolheu uma pessoa: os prazos dela + os do escritório (delegado_para NULL).
+      where += ' AND (pp.delegado_para = ? OR pp.delegado_para IS NULL)';
+      params.push(usuario_id);
+    }
+    // Pode ver todos e não escolheu ninguém (usuario_id vazio = "Todos"): sem filtro por usuário.
 
     const limitInt  = parseInt(limite) || 30;
     const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
@@ -669,4 +677,17 @@ function labelStatus(s) {
   return map[s] || s || '—';
 }
 
-module.exports = { listar, criar, editar, excluir, mudarStatus, buscarTipos, criarTipo, criarSubtipo, vencemHoje, calcularDataFinal, calcularDias, marcarFazendo, liberarFazendo, liberarFazendoExpirados, buscarHistorico };
+// GET /api/prazos/usuarios — Lista os usuários ativos para o filtro "Responsável".
+// Protegida pela permissão prazos.ver_todos (admin passa automático no middleware).
+async function listarUsuariosFiltro(req, res) {
+  try {
+    const [usuarios] = await pool.execute(
+      'SELECT id, nome FROM usuarios WHERE ativo = 1 ORDER BY nome'
+    );
+    return sucesso(res, usuarios);
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+module.exports = { listar, criar, editar, excluir, mudarStatus, buscarTipos, criarTipo, criarSubtipo, vencemHoje, calcularDataFinal, calcularDias, marcarFazendo, liberarFazendo, liberarFazendoExpirados, buscarHistorico, listarUsuariosFiltro };

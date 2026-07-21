@@ -121,7 +121,7 @@ async function atualizarEscritorio(req, res) {
       alerta_atrasado_ativo, alerta_emails,
       dias_alerta_audiencia, dias_alerta_pericia, dias_sem_movimentacao,
       prazo_fazendo_timeout, dias_audiencia_sem_adv,
-      titulo_aba
+      titulo_aba, mensagem_aniversario
     } = req.body;
 
     if (!nome) return erro(res, 'Nome do escritório é obrigatório');
@@ -148,8 +148,8 @@ async function atualizarEscritorio(req, res) {
           cor_principal, horario_alerta_prazos, horario_alerta_prazos_2,
           alerta_atrasado_ativo, alerta_emails,
           dias_alerta_audiencia, dias_alerta_pericia, dias_sem_movimentacao,
-          prazo_fazendo_timeout, dias_audiencia_sem_adv, titulo_aba, setup_concluido)
-       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+          prazo_fazendo_timeout, dias_audiencia_sem_adv, titulo_aba, mensagem_aniversario, setup_concluido)
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
        ON DUPLICATE KEY UPDATE
          nome=VALUES(nome), cnpj_cpf=VALUES(cnpj_cpf), email=VALUES(email), telefone=VALUES(telefone),
          cep=VALUES(cep), logradouro=VALUES(logradouro), numero=VALUES(numero),
@@ -160,6 +160,7 @@ async function atualizarEscritorio(req, res) {
          dias_alerta_audiencia=VALUES(dias_alerta_audiencia), dias_alerta_pericia=VALUES(dias_alerta_pericia),
          dias_sem_movimentacao=VALUES(dias_sem_movimentacao), prazo_fazendo_timeout=VALUES(prazo_fazendo_timeout),
          dias_audiencia_sem_adv=VALUES(dias_audiencia_sem_adv), titulo_aba=VALUES(titulo_aba),
+         mensagem_aniversario=VALUES(mensagem_aniversario),
          setup_concluido=1`,
       [
         nome, cnpj_cpf || null, email || null, telefone || null,
@@ -168,7 +169,7 @@ async function atualizarEscritorio(req, res) {
         alerta_atrasado_ativo ? 1 : 0, alerta_emails || null,
         dias_alerta_audiencia || 3, dias_alerta_pericia || 2, dias_sem_movimentacao || 30,
         parseInt(prazo_fazendo_timeout) || 60, parseInt(dias_audiencia_sem_adv) || 7,
-        titulo_aba || null
+        titulo_aba || null, mensagem_aniversario || null
       ]
     );
 
@@ -468,9 +469,19 @@ async function salvarIntegracao(req, res) {
     // Separamos o "ativo" do resto (que vira o JSON de configurações).
     const { ativo, ...configuracoes } = req.body || {};
 
-    // CNJ (DJEN): no máximo 10 OABs por escritório (defesa no servidor, além da tela).
-    if (modulo === 'cnj' && Array.isArray(configuracoes.oabs) && configuracoes.oabs.length > 10) {
-      return erro(res, 'O CNJ (DJEN) permite no máximo 10 OABs.');
+    // CNJ (DJEN): defesa no servidor, além da tela.
+    if (modulo === 'cnj' && Array.isArray(configuracoes.oabs)) {
+      // No máximo 10 OABs por escritório.
+      if (configuracoes.oabs.length > 10) {
+        return erro(res, 'O CNJ (DJEN) permite no máximo 10 OABs.');
+      }
+      // Toda OAB precisa ter número E UF — não pode linha incompleta/vazia.
+      const temIncompleta = configuracoes.oabs.some(
+        o => !String(o?.numero || '').trim() || !String(o?.uf || '').trim()
+      );
+      if (temIncompleta) {
+        return erro(res, 'Cada OAB monitorada precisa ter número e UF.');
+      }
     }
 
     await pool.execute(

@@ -9,6 +9,7 @@ import { toast } from 'react-toastify';
 import MenuAcoes from '../../components/MenuAcoes';
 import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
+import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
 
 // Status calculados pela data — concluido/cancelado são os únicos armazenados no banco
 // 'fazendo' é filtro auxiliar que mostra prazos ativos com alguém fazendo
@@ -41,9 +42,15 @@ function labelStatus(s) {
 
 export default function Prazos() {
   const { temPermissao, usuario, ehAdmin } = useAuth();
+  // Pode ver prazos de todos: admin/super OU usuário com a permissão prazos.ver_todos.
+  // Só esses veem o dropdown "Responsável"; os demais ficam restritos aos próprios + escritório.
+  const podeVerTodos = ehAdmin || temPermissao('prazos.ver_todos', 'visualizar');
   const [lista, setLista]                   = useState([]);
   const [total, setTotal]                   = useState(0);
-  const [filtros, setFiltros]               = useState({ status: '', data_de: '', data_ate: '', mostrar_encerrados: false, pagina: 1 });
+  // Padrão do filtro "Responsável" = usuário logado (vê os prazos dele + os do escritório).
+  // usuario_id vazio ('') significa "Todos" — só disponível para quem pode ver todos.
+  const [filtros, setFiltros]               = useState({ status: '', usuario_id: usuario?.id || '', data_de: '', data_ate: '', mostrar_encerrados: false, pagina: 1 });
+  const [usuarios, setUsuarios]             = useState([]); // lista de usuários para o dropdown de Responsável
   const [tipos, setTipos]                   = useState({ tipos: [], subtipos: [] });
   const [carregando, setCarregando]         = useState(false);
   const [modalAberto, setModalAberto]       = useState(false);
@@ -65,6 +72,12 @@ export default function Prazos() {
 
   useEffect(() => { carregar(); }, [carregar]);
   useEffect(() => { prazosAPI.tipos().then(r => setTipos(r.data.dados)); }, []);
+  // Lista de usuários do filtro "Responsável" — só carrega para quem pode ver todos
+  useEffect(() => {
+    if (podeVerTodos) {
+      prazosAPI.usuariosFiltro().then(r => setUsuarios(r.data.dados)).catch(() => {});
+    }
+  }, [podeVerTodos]);
 
   // Marca o prazo como concluído (também libera o "Fazendo" automaticamente no backend)
   function concluirPrazo(id) {
@@ -128,6 +141,15 @@ export default function Prazos() {
               {STATUS_OPCOES.map(s => <option key={s} value={s}>{labelStatus(s)}</option>)}
             </select>
           </div>
+          {podeVerTodos && (
+            <div className="form-group" style={{margin:0}}>
+              <label className="form-label">Responsável</label>
+              <select className="form-control" value={filtros.usuario_id} onChange={e=>setFiltro('usuario_id', e.target.value)}>
+                <option value="">Todos</option>
+                {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+              </select>
+            </div>
+          )}
           <div className="form-group" style={{margin:0}}>
             <label className="form-label">Vencimento de</label>
             <input type="date" className="form-control" value={filtros.data_de} onChange={e=>setFiltro('data_de',e.target.value)} />
@@ -143,7 +165,7 @@ export default function Prazos() {
             <span style={{fontSize:'13px', color:'#475569'}}>Mostrar concluídos e cancelados</span>
           </label>
           <button className="btn btn-secondary" style={{marginBottom:'1px'}}
-            onClick={() => setFiltros({ status: '', data_de: '', data_ate: '', mostrar_encerrados: false, pagina: 1 })}>
+            onClick={() => setFiltros({ status: '', usuario_id: usuario?.id || '', data_de: '', data_ate: '', mostrar_encerrados: false, pagina: 1 })}>
             ✕ Limpar filtros
           </button>
           <button className="btn btn-primary" style={{marginBottom:'1px'}} onClick={() => setModalAberto(true)}>
@@ -172,7 +194,7 @@ export default function Prazos() {
                   const ativo         = !['concluido','cancelado'].includes(p.status);
                   return (
                   <tr key={p.id} className={['concluido','cancelado'].includes(p.status) ? '' : corPrazo(p.dias_restantes)}>
-                    <td>{p.processo_numero || '—'}</td>
+                    <td><NumeroProcessoCopiavel numero={p.processo_numero} /></td>
                     <td>{p.pasta_numero_fmt} — {p.pasta_titulo}</td>
                     <td>{p.subtipo_nome || p.descricao || '—'}</td>
                     <td>{formatarData(p.data_vencimento)}</td>

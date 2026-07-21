@@ -6,6 +6,7 @@
 const { pool } = require('../config/database');
 const { sucesso, erroInterno } = require('../utils/response');
 const { hojeBrasilia } = require('../utils/helpers');
+const { buscarAniversariantes } = require('./pessoasController');
 
 // GET /api/dashboard — Retorna todos os dados do dashboard
 async function buscarDados(req, res) {
@@ -187,7 +188,11 @@ async function buscarDados(req, res) {
       ),
     ]);
 
+    // Clientes que fazem aniversário hoje (reaproveita a lógica do relatório de aniversariantes).
+    const aniversariantesHoje = await buscarAniversariantes({ filtro: 'hoje' });
+
     return sucesso(res, {
+      aniversariantes_hoje:    aniversariantesHoje,
       prazos_hoje:             prazosHoje[0],
       prazos_atrasados:        prazosAtrasados[0],
       tarefas_pendentes:       tarefasPendentes[0],
@@ -210,6 +215,7 @@ async function buscarDados(req, res) {
         pericias_hoje:     periciasHoje[0].length,
         sem_ata:              audienciasSemAta[0].length,
         audiencias_sem_adv:   audienciasSemAdvogado[0].length,
+        aniversariantes_hoje: aniversariantesHoje.length,
       },
     });
   } catch (err) {

@@ -68,6 +68,9 @@ router.delete('/agenda/compromissos/:id', autenticar, agendaCompromissoCtrl.excl
 router.get('/dashboard', autenticar, dashboardCtrl.buscarDados);
 
 // ---- PESSOAS ----
+// Aniversariantes (clientes PF) — rotas estáticas ANTES das de /:id.
+router.get('/pessoas/aniversariantes',         autenticar, verificarPermissao('relatorios','visualizar'), pessoasCtrl.listarAniversariantes);
+router.post('/pessoas/:id/parabens',           autenticar, pessoasCtrl.registrarParabens);
 router.get('/pessoas/auxiliares',              autenticar, pessoasCtrl.buscarAuxiliares);
 // Cadastra novo item em tabela auxiliar (generos, estados_civis, profissoes)
 router.post('/pessoas/auxiliares/:tipo',       autenticar, verificarPermissao('pessoas','cadastrar'), pessoasCtrl.criarAuxiliar);
@@ -131,6 +134,8 @@ router.post('/prazos/subtipos',   autenticar, verificarPermissao('prazos','cadas
 router.get('/prazos/calcular',      autenticar, prazosCtrl.calcularDataFinal);
 router.get('/prazos/calcular-dias', autenticar, prazosCtrl.calcularDias);
 router.get('/prazos/hoje',        autenticar, prazosCtrl.vencemHoje);
+// Lista de usuários para o filtro "Responsável" — só quem pode ver prazos de todos (admin passa automático)
+router.get('/prazos/usuarios',    autenticar, verificarPermissao('prazos','ver_todos','visualizar'), prazosCtrl.listarUsuariosFiltro);
 router.get('/prazos',             autenticar, verificarPermissao('prazos','visualizar'), prazosCtrl.listar);
 router.post('/prazos',            autenticar, verificarPermissao('prazos','cadastrar'),  prazosCtrl.criar);
 router.put('/prazos/:id/status',          autenticar, prazosCtrl.mudarStatus);

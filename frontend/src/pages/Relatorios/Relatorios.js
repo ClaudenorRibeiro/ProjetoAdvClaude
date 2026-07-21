@@ -4,18 +4,22 @@
 // ============================================================
 
 import React, { useState } from 'react';
-import { prazosAPI, tarefasAPI, audienciasAPI, processosAPI, financeiroAPI } from '../../services/api';
+import { prazosAPI, tarefasAPI, audienciasAPI, processosAPI, financeiroAPI, pessoasAPI } from '../../services/api';
 import { formatarData, formatarNumeroPasta, formatarMoeda, labelStatusPrazo, labelPrioridade } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
+import AcoesAniversariante from '../../components/AcoesAniversariante';
 
 const MODULOS = [
-  { key: 'prazos',      label: 'Prazos' },
-  { key: 'tarefas',     label: 'Tarefas' },
-  { key: 'audiencias',  label: 'Audiências' },
-  { key: 'pastas',      label: 'Processos / Pastas' },
-  { key: 'financeiro',  label: 'Financeiro (admin)' },
+  { key: 'prazos',          label: 'Prazos' },
+  { key: 'tarefas',         label: 'Tarefas' },
+  { key: 'audiencias',      label: 'Audiências' },
+  { key: 'pastas',          label: 'Processos / Pastas' },
+  { key: 'aniversariantes', label: 'Aniversariantes (clientes)' },
+  { key: 'financeiro',      label: 'Financeiro (admin)' },
 ];
+
+const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
 export default function Relatorios() {
   const { ehAdmin } = useAuth();
@@ -53,6 +57,10 @@ export default function Relatorios() {
         case 'pastas':
           ({ data } = await processosAPI.listarPastas({ ...filtros, limite: 200 }));
           if (data.ok) { setResultado({ tipo: 'pastas', registros: data.dados.registros }); setTotal(data.dados.total); }
+          break;
+        case 'aniversariantes':
+          ({ data } = await pessoasAPI.aniversariantes({ filtro: filtros.periodo || 'hoje', mes: filtros.mes }));
+          if (data.ok) { setResultado({ tipo: 'aniversariantes', registros: data.dados.registros }); setTotal(data.dados.total); }
           break;
         case 'financeiro':
           if (!ehAdmin) { toast.error('Apenas administradores podem acessar o relatório financeiro'); return; }
@@ -94,6 +102,12 @@ export default function Relatorios() {
       cabecalho = ['Nº Pasta','Título','Cliente','Área','Processos'];
       linhas = resultado.registros.map(r => [
         formatarNumeroPasta(r.numero), r.titulo, r.cliente_nome, r.area_direito, r.total_processos
+      ]);
+    } else if (resultado.tipo === 'aniversariantes') {
+      cabecalho = ['Nome','Dia','Idade','Telefone','E-mail','Parabéns'];
+      linhas = resultado.registros.map(r => [
+        r.nome, r.dia, r.idade != null ? `${r.idade} anos` : '', r.telefone||'', r.email||'',
+        r.ja_parabenizado ? 'Já parabenizado' : 'Pendente'
       ]);
     } else if (resultado.tipo === 'financeiro') {
       cabecalho = ['Data','Pasta','Cliente','Descrição','Tipo','Valor'];
@@ -201,6 +215,29 @@ export default function Relatorios() {
             </div>
           )}
 
+          {(modulo === 'aniversariantes') && (
+            <>
+              <div className="form-group" style={{margin:0}}>
+                <label className="form-label">Período</label>
+                <select className="form-control" value={filtros.periodo || 'hoje'}
+                  onChange={e => setFiltro('periodo', e.target.value)}>
+                  <option value="hoje">Hoje</option>
+                  <option value="semana">Próximos 7 dias</option>
+                  <option value="mes">Mês</option>
+                </select>
+              </div>
+              {(filtros.periodo === 'mes') && (
+                <div className="form-group" style={{margin:0}}>
+                  <label className="form-label">Mês</label>
+                  <select className="form-control" value={filtros.mes || (new Date().getMonth() + 1)}
+                    onChange={e => setFiltro('mes', e.target.value)}>
+                    {MESES.map((nome, i) => <option key={i + 1} value={i + 1}>{nome}</option>)}
+                  </select>
+                </div>
+              )}
+            </>
+          )}
+
           {(modulo === 'financeiro') && (
             <>
               <div className="form-group" style={{margin:0}}>
@@ -265,7 +302,7 @@ export default function Relatorios() {
             </div>
           )}
 
-          <TabelaResultado resultado={resultado} />
+          <TabelaResultado resultado={resultado} onRecarregar={buscar} />
         </div>
       )}
     </div>
@@ -273,8 +310,38 @@ export default function Relatorios() {
 }
 
 // Tabela de resultados de acordo com o tipo
-function TabelaResultado({ resultado }) {
+function TabelaResultado({ resultado, onRecarregar }) {
   const { tipo, registros, lancamentos } = resultado;
+
+  if (tipo === 'aniversariantes') {
+    return (
+      <div className="tabela-wrapper">
+        <table className="tabela">
+          <thead>
+            <tr><th>Nome</th><th>Dia</th><th>Idade</th><th>Telefone / WhatsApp</th><th>E-mail</th><th>Parabéns</th><th></th></tr>
+          </thead>
+          <tbody>
+            {registros.map(r => (
+              <tr key={r.id}>
+                <td><strong>{r.nome}</strong></td>
+                <td>{r.dia}</td>
+                <td>{r.idade != null ? `${r.idade} anos` : '—'}</td>
+                <td>{r.telefone || '—'}</td>
+                <td>{r.email || '—'}</td>
+                <td>
+                  {r.ja_parabenizado
+                    ? <span className="badge badge-verde">Já parabenizado</span>
+                    : <span className="badge badge-cinza">Pendente</span>}
+                </td>
+                <td><AcoesAniversariante pessoa={r} onFeito={onRecarregar} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {registros.length === 0 && <p className="lista-vazia">Nenhum aniversariante no período</p>}
+      </div>
+    );
+  }
 
   if (tipo === 'prazos') {
     return (

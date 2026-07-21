@@ -207,7 +207,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
 
   // Busca de pessoas (só usada quando partes estão desbloqueadas)
   const [tipoAutor, setTipoAutor]         = useState('fisica');
-  const [tipoReu, setTipoReu]             = useState('fisica');
+  const [tipoReu, setTipoReu]             = useState('juridica'); // padrão do réu = Jurídica (polo passivo geralmente é empresa)
   const [buscaAutor, setBuscaAutor]       = useState('');
   const [buscaReu, setBuscaReu]           = useState('');
   const [resultAutor, setResultAutor]     = useState([]);

@@ -7,6 +7,7 @@ const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
 const { hojeBrasilia } = require('../utils/helpers');
+const { enviarEmail } = require('../utils/email');
 
 // ---- Filtros de busca reutilizáveis (listagem E exportação) — evita duplicar a mesma condição ----
 
@@ -1143,8 +1144,187 @@ async function processosDaPessoa(req, res) {
   }
 }
 
+// ============================================================
+// ANIVERSARIANTES (somente CLIENTES pessoa física)
+// "Cliente" = PF que é a parte do cliente_polo (autor OU réu) de >=1 processo ativo.
+// ============================================================
+
+// Subconsulta reutilizável: ids das PF que são a parte-cliente de algum processo ativo.
+const SUB_CLIENTES_PF = `
+  SELECT a.pessoa_id FROM tbltituloprocautor a
+    JOIN tblproc p ON a.proc_id = p.id
+   WHERE p.cliente_polo = 'autor' AND a.tipo_pessoa = 'fisica' AND p.ativo = 1
+  UNION
+  SELECT r.pessoa_id FROM tbltituloprocreu r
+    JOIN tblproc p ON r.proc_id = p.id
+   WHERE p.cliente_polo = 'reu' AND r.tipo_pessoa = 'fisica' AND p.ativo = 1`;
+
+// Próxima ocorrência do aniversário (este ano se ainda não passou; senão, ano que vem).
+const PROX_ANIV = `
+  DATE_ADD(pf.data_nascimento,
+    INTERVAL (YEAR(CURDATE()) - YEAR(pf.data_nascimento)
+      + IF(DATE_FORMAT(pf.data_nascimento,'%m%d') < DATE_FORMAT(CURDATE(),'%m%d'), 1, 0)) YEAR)`;
+
+// Lê nome do escritório + template da mensagem. Tolerante à coluna mensagem_aniversario
+// ainda não existir (se o ALTER não tiver sido rodado, usa o texto padrão).
+// Aceita 'pool' ou uma conexão de transação (ambos têm .execute).
+async function lerConfigEscritorio(exec) {
+  try {
+    const [r] = await exec.execute('SELECT nome, mensagem_aniversario FROM configuracoes_escritorio LIMIT 1');
+    return { nome: r[0]?.nome || '', template: r[0]?.mensagem_aniversario || '' };
+  } catch (_) {
+    const [r] = await exec.execute('SELECT nome FROM configuracoes_escritorio LIMIT 1');
+    return { nome: r[0]?.nome || '', template: '' };
+  }
+}
+
+// Monta a mensagem resolvendo {{nome}} (1º nome do cliente) e {{escritorio}}.
+function montarMensagemParabens(template, nomeCliente, nomeEscritorio) {
+  const primeiroNome = String(nomeCliente || '').trim().split(/\s+/)[0] || String(nomeCliente || '');
+  const padrao = 'Olá, {{nome}}! O escritório {{escritorio}} deseja a você um feliz aniversário! 🎂';
+  const txt = (template && template.trim()) ? template : padrao;
+  return txt
+    .replace(/\{\{\s*nome\s*\}\}/gi, primeiroNome)
+    .replace(/\{\{\s*escritorio\s*\}\}/gi, nomeEscritorio || '');
+}
+
+// Busca a lista de clientes aniversariantes conforme o filtro (usada pelo relatório e pelo dashboard).
+// Retorna registros já com a mensagem resolvida e o status "já parabenizado neste ano".
+async function buscarAniversariantes({ filtro = 'hoje', mes } = {}) {
+  let filtroData = '';
+  const params = [];
+  if (filtro === 'semana') {
+    filtroData = `AND ${PROX_ANIV} BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 6 DAY)`;
+  } else if (filtro === 'mes') {
+    filtroData = `AND MONTH(pf.data_nascimento) = ?`;
+    params.push(parseInt(mes) || (new Date().getMonth() + 1));
+  } else { // hoje (padrão)
+    filtroData = `AND ${PROX_ANIV} = CURDATE()`;
+  }
+
+  const [rows] = await pool.execute(
+    `SELECT pf.id, pf.nome,
+            DATE_FORMAT(pf.data_nascimento, '%d/%m') AS dia,
+            (YEAR(${PROX_ANIV}) - YEAR(pf.data_nascimento)) AS idade,
+            YEAR(${PROX_ANIV}) AS ano_aniversario,
+            (SELECT t.numero FROM telefones_pf t WHERE t.pessoa_id = pf.id AND t.ativo = 1
+               ORDER BY t.principal DESC, t.id ASC LIMIT 1) AS telefone,
+            (SELECT e.email FROM emails_pf e WHERE e.pessoa_id = pf.id AND e.ativo = 1
+               ORDER BY e.principal DESC, e.id ASC LIMIT 1) AS email
+       FROM pessoas_fisicas pf
+      WHERE pf.ativo = 1
+        AND pf.data_nascimento IS NOT NULL
+        AND pf.id IN (${SUB_CLIENTES_PF})
+        ${filtroData}
+      ORDER BY MONTH(pf.data_nascimento), DAY(pf.data_nascimento), pf.nome`,
+    params
+  );
+
+  // Mensagem configurada do escritório (nome + template).
+  const cfg = await lerConfigEscritorio(pool);
+
+  // "Já parabenizado" neste ano: busca os registros dos clientes retornados.
+  const ids = rows.map(r => r.id);
+  const mapa = {};
+  if (ids.length) {
+    const ph = ids.map(() => '?').join(',');
+    const [pbs] = await pool.execute(
+      `SELECT pe.pessoa_id, pe.ano, pe.canal, pe.enviado_em, u.nome AS usuario_nome
+         FROM parabens_enviados pe
+         JOIN usuarios u ON u.id = pe.usuario_id
+        WHERE pe.pessoa_id IN (${ph})
+        ORDER BY pe.enviado_em ASC`,
+      ids
+    );
+    for (const p of pbs) {
+      const chave = `${p.pessoa_id}_${p.ano}`;
+      if (!mapa[chave]) mapa[chave] = [];
+      mapa[chave].push({ canal: p.canal, usuario_nome: p.usuario_nome, enviado_em: p.enviado_em });
+    }
+  }
+
+  return rows.map(r => {
+    const jaEnviados = mapa[`${r.id}_${r.ano_aniversario}`] || [];
+    return {
+      ...r,
+      mensagem: montarMensagemParabens(cfg.template, r.nome, cfg.nome),
+      ja_parabenizado: jaEnviados.length > 0,
+      parabens: jaEnviados,
+    };
+  });
+}
+
+// GET /api/pessoas/aniversariantes?filtro=hoje|semana|mes&mes=MM
+async function listarAniversariantes(req, res) {
+  try {
+    const registros = await buscarAniversariantes(req.query);
+    return sucesso(res, { registros, total: registros.length });
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// POST /api/pessoas/:id/parabens — Body { canal: 'whatsapp' | 'email' }
+// E-mail: envia de fato e registra. WhatsApp: só registra (o link wa.me é aberto no navegador).
+async function registrarParabens(req, res) {
+  const { id } = req.params;
+  const { canal } = req.body;
+  if (!['whatsapp', 'email'].includes(canal)) {
+    return erro(res, 'Canal inválido (use whatsapp ou email)');
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    const [pRows] = await conn.execute(
+      `SELECT pf.id, pf.nome, YEAR(${PROX_ANIV}) AS ano_aniversario,
+              (SELECT e.email FROM emails_pf e WHERE e.pessoa_id = pf.id AND e.ativo = 1
+                 ORDER BY e.principal DESC, e.id ASC LIMIT 1) AS email
+         FROM pessoas_fisicas pf
+        WHERE pf.id = ? AND pf.data_nascimento IS NOT NULL`,
+      [id]
+    );
+    if (!pRows.length) {
+      return naoEncontrado(res, 'Cliente não encontrado ou sem data de nascimento');
+    }
+    const pessoa = pRows[0];
+
+    // E-mail: envia ANTES de registrar (só registra se o envio deu certo).
+    if (canal === 'email') {
+      if (!pessoa.email) {
+        return erro(res, 'Este cliente não tem e-mail cadastrado');
+      }
+      const cfg = await lerConfigEscritorio(conn);
+      const texto = montarMensagemParabens(cfg.template, pessoa.nome, cfg.nome);
+      try {
+        await enviarEmail({
+          para: pessoa.email,
+          assunto: 'Feliz Aniversário! 🎂',
+          html: `<p>${texto.replace(/\n/g, '<br>')}</p>`,
+        });
+      } catch (e) {
+        return erro(res, 'Não foi possível enviar o e-mail. Verifique a configuração de e-mail (SMTP).');
+      }
+    }
+
+    await conn.beginTransaction();
+    await conn.execute(
+      `INSERT INTO parabens_enviados (pessoa_id, ano, canal, usuario_id) VALUES (?, ?, ?, ?)`,
+      [pessoa.id, pessoa.ano_aniversario, canal, req.usuario.id]
+    );
+    await conn.commit();
+
+    return sucesso(res, null, canal === 'email' ? 'Parabéns enviado por e-mail!' : 'Parabéns registrado!');
+  } catch (err) {
+    try { await conn.rollback(); } catch (_) { /* nada a desfazer */ }
+    return erroInterno(res, err);
+  } finally {
+    conn.release();
+  }
+}
+
 module.exports = {
   listarFisicas, buscarFisica, criarFisica, atualizarFisica, excluirFisica, unificarFisicas, adicionarHistorico,
   listarJuridicas, buscarJuridica, criarJuridica, atualizarJuridica, excluirJuridica, unificarJuridicas, buscarAuxiliares, buscarPorCPF, criarAuxiliar,
-  processosDaPessoa, exportarFisicas, exportarJuridicas
+  processosDaPessoa, exportarFisicas, exportarJuridicas,
+  listarAniversariantes, registrarParabens, buscarAniversariantes
 };

@@ -11359,13 +11359,12 @@ INSERT IGNORE INTO `tbltipoproc` (`id`, `nome`, `codTipoProc`, `ativo`, `criado_
 
 -- feriados: 0 registros (vazia na producao) — nada a inserir
 
--- configuracoes_integracoes: 4 linhas VAZIAS (andaime; cada escritorio
+-- configuracoes_integracoes: 3 linhas VAZIAS (andaime; cada escritorio
 -- configura a sua). A chave AASP do Antonio NAO vai aqui.
 INSERT IGNORE INTO `configuracoes_integracoes` (`id`, `modulo`, `ativo`, `configuracoes`, `atualizado_em`) VALUES
-	(1, 'whatsapp', 0, NULL, NOW()),
-	(2, 'email',    0, NULL, NOW()),
-	(3, 'aasp',          0, NULL, NOW()),
-	(4, 'cnj',           0, NULL, NOW());
+	(1, 'email',    0, NULL, NOW()),
+	(2, 'aasp',          0, NULL, NOW()),
+	(3, 'cnj',           0, NULL, NOW());
 
 -- Zera "criado por/alterado por" (apontavam para usuarios do Antonio).
 UPDATE feriados SET criado_por=NULL;
