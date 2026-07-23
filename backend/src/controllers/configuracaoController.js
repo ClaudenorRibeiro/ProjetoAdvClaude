@@ -121,10 +121,13 @@ async function atualizarEscritorio(req, res) {
       alerta_atrasado_ativo, alerta_emails,
       dias_alerta_audiencia, dias_alerta_pericia, dias_sem_movimentacao,
       prazo_fazendo_timeout, dias_audiencia_sem_adv,
-      titulo_aba, mensagem_aniversario
+      titulo_aba, mensagem_aniversario, tempo_inatividade_min
     } = req.body;
 
     if (!nome) return erro(res, 'Nome do escritório é obrigatório');
+
+    // Piso de 15 minutos no tempo de inatividade (defesa no servidor, além da tela).
+    const tempoInat = Math.max(15, parseInt(tempo_inatividade_min, 10) || 15);
 
     // Validação: se os DOIS horários de alerta estiverem preenchidos, eles
     // precisam ter no mínimo 1 hora (60 min) de diferença entre si.
@@ -148,8 +151,8 @@ async function atualizarEscritorio(req, res) {
           cor_principal, horario_alerta_prazos, horario_alerta_prazos_2,
           alerta_atrasado_ativo, alerta_emails,
           dias_alerta_audiencia, dias_alerta_pericia, dias_sem_movimentacao,
-          prazo_fazendo_timeout, dias_audiencia_sem_adv, titulo_aba, mensagem_aniversario, setup_concluido)
-       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+          prazo_fazendo_timeout, dias_audiencia_sem_adv, titulo_aba, mensagem_aniversario, tempo_inatividade_min, setup_concluido)
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
        ON DUPLICATE KEY UPDATE
          nome=VALUES(nome), cnpj_cpf=VALUES(cnpj_cpf), email=VALUES(email), telefone=VALUES(telefone),
          cep=VALUES(cep), logradouro=VALUES(logradouro), numero=VALUES(numero),
@@ -161,6 +164,7 @@ async function atualizarEscritorio(req, res) {
          dias_sem_movimentacao=VALUES(dias_sem_movimentacao), prazo_fazendo_timeout=VALUES(prazo_fazendo_timeout),
          dias_audiencia_sem_adv=VALUES(dias_audiencia_sem_adv), titulo_aba=VALUES(titulo_aba),
          mensagem_aniversario=VALUES(mensagem_aniversario),
+         tempo_inatividade_min=VALUES(tempo_inatividade_min),
          setup_concluido=1`,
       [
         nome, cnpj_cpf || null, email || null, telefone || null,
@@ -169,7 +173,7 @@ async function atualizarEscritorio(req, res) {
         alerta_atrasado_ativo ? 1 : 0, alerta_emails || null,
         dias_alerta_audiencia || 3, dias_alerta_pericia || 2, dias_sem_movimentacao || 30,
         parseInt(prazo_fazendo_timeout) || 60, parseInt(dias_audiencia_sem_adv) || 7,
-        titulo_aba || null, mensagem_aniversario || null
+        titulo_aba || null, mensagem_aniversario || null, tempoInat
       ]
     );
 

@@ -367,6 +367,10 @@ function TabEscritorio() {
     if (horariosInvalidos) {
       return toast.error('Os dois horários de alerta devem ter no mínimo 1 hora de diferença');
     }
+    // Tempo de inatividade não pode ser menor que 15 minutos (mesma regra do backend)
+    if (form.tempo_inatividade_min !== undefined && form.tempo_inatividade_min !== '' && Number(form.tempo_inatividade_min) < 15) {
+      return toast.error('O tempo de inatividade não pode ser menor que 15 minutos');
+    }
     setSalvando(true);
     try {
       await configuracaoAPI.atualizarEscritorio(form);
@@ -546,6 +550,18 @@ function TabEscritorio() {
           value={form.prazo_fazendo_timeout || 60}
           onChange={e => set('prazo_fazendo_timeout', e.target.value)} />
         <small style={{color:'#888'}}>O prazo volta ao status anterior se ninguém concluiu no prazo definido</small>
+      </div>
+
+      <h4 style={{margin:'20px 0 12px',fontSize:'13px',fontWeight:600,color:'#555'}}>Segurança da sessão</h4>
+      <div className="form-group" style={{maxWidth:'300px'}}>
+        <label className="form-label">Tempo de inatividade até o logout automático (minutos)</label>
+        <input type="number" min="15" className="form-control"
+          value={form.tempo_inatividade_min ?? 15}
+          onChange={e => set('tempo_inatividade_min', e.target.value)} />
+        <small style={{color:'#888'}}>
+          Mínimo 15 minutos. Após esse tempo sem atividade, o usuário é desconectado automaticamente.
+          (Fechar o navegador também já desconecta.)
+        </small>
       </div>
 
       <div className="form-group" style={{marginTop:'8px'}}>

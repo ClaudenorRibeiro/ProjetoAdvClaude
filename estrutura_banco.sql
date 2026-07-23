@@ -378,6 +378,7 @@ CREATE TABLE IF NOT EXISTS `configuracoes_escritorio` (
   `prazo_fazendo_timeout` int NOT NULL DEFAULT '60',
   `titulo_aba` varchar(100) DEFAULT NULL COMMENT 'Título exibido na aba do navegador',
   `documentos_maiusculas` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Se 1, o nome do autor/réu sai em CAIXA ALTA nos documentos',
+  `tempo_inatividade_min` int NOT NULL DEFAULT '15' COMMENT 'Minutos de inatividade ate o logout automatico (minimo 15)',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 

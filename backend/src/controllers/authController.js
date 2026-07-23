@@ -21,6 +21,19 @@ function validarSenha(senha) {
   return null;
 }
 
+// Lê o tempo de inatividade (em minutos) configurado pelo escritório.
+// Piso de 15 min (regra do sistema) e TOLERANTE: se a coluna ainda não existir
+// num banco, ou vier inválida, assume 15 e não quebra o login/verificação.
+async function lerTempoInatividade() {
+  try {
+    const [rows] = await pool.execute('SELECT tempo_inatividade_min FROM configuracoes_escritorio LIMIT 1');
+    const v = parseInt(rows[0] && rows[0].tempo_inatividade_min, 10);
+    return Number.isFinite(v) && v >= 15 ? v : 15;
+  } catch (e) {
+    return 15;
+  }
+}
+
 // POST /api/auth/login
 // Autentica o usuário e retorna o token JWT
 async function login(req, res) {
@@ -94,6 +107,8 @@ async function login(req, res) {
         ver_todos_processos: usuario.ver_todos_processos,
       },
       permissoes,
+      // Tempo de inatividade (min) do escritório — o frontend usa para o logout automático.
+      tempo_inatividade_min: await lerTempoInatividade(),
     }, 'Login realizado com sucesso');
 
   } catch (err) {
@@ -150,7 +165,9 @@ async function criarPrimeiroAdmin(req, res) {
 async function verificarToken(req, res) {
   try {
     const permissoes = await buscarPermissoesUsuario(req.usuario.id);
-    return sucesso(res, { usuario: req.usuario, permissoes });
+    // Tempo de inatividade (min) do escritório — para o frontend rearmar o logout automático ao recarregar.
+    const tempo_inatividade_min = await lerTempoInatividade();
+    return sucesso(res, { usuario: req.usuario, permissoes, tempo_inatividade_min });
   } catch (err) {
     return erroInterno(res, err);
   }
