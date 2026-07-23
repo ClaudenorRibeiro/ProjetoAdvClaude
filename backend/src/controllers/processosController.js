@@ -63,7 +63,7 @@ async function listarPastas(req, res) {
         OR EXISTS (
           SELECT 1 FROM tblproc p WHERE p.pasta_id = pa.id AND p.ativo = 1
           AND (
-            p.NomeTituloProc LIKE ? OR p.numProc LIKE ?
+            p.NomeTituloProc LIKE ? OR p.numProc LIKE ? OR p.protocolo LIKE ?
             -- Autores físicos: nome, CPF, telefone
             OR EXISTS (
               SELECT 1 FROM tbltituloprocautor ta
@@ -101,7 +101,7 @@ async function listarPastas(req, res) {
       )`;
       params.push(
         bL,              // nº pasta
-        bL, bL,          // NomeTituloProc, numProc
+        bL, bL, bL,      // NomeTituloProc, numProc, protocolo
         bL, bD, bD,      // autor físico:   nome, cpf, telefone
         bL, bL, bD, bD,  // autor jurídico: razao_social, nome_fantasia, cnpj, telefone
         bL, bD, bD,      // réu físico:     nome, cpf, telefone
@@ -120,6 +120,9 @@ async function listarPastas(req, res) {
          (SELECT pr.numProc
           FROM tblproc pr WHERE pr.pasta_id = pa.id AND pr.ativo = 1
           ORDER BY pr.id DESC LIMIT 1) AS num_proc,
+         (SELECT pr.protocolo
+          FROM tblproc pr WHERE pr.pasta_id = pa.id AND pr.ativo = 1
+          ORDER BY pr.id DESC LIMIT 1) AS protocolo,
          -- Tipo: exibe o nome somente se TODOS os processos da pasta têm o mesmo tipo
          CASE
            WHEN (SELECT COUNT(DISTINCT pr.tipo_id)
@@ -330,6 +333,7 @@ async function criarProcesso(req, res) {
     pasta_id,
     numPasta,
     numProc,
+    protocolo,
     NomeTituloProc,
     vara_id, tipo_id, status_id, instancia_id,
     data_distribuicao,
@@ -392,14 +396,28 @@ async function criarProcesso(req, res) {
       }
     }
 
+    // Verifica duplicidade de protocolo (ignora null/vazio) — não pode haver 2 iguais no banco
+    const protocoloLimpo = protocolo?.trim() || null;
+    if (protocoloLimpo) {
+      const [dupProt] = await conn.execute(
+        'SELECT id FROM tblproc WHERE protocolo = ? AND ativo = 1 LIMIT 1',
+        [protocoloLimpo]
+      );
+      if (dupProt.length) {
+        await conn.rollback();
+        return erro(res, `O protocolo "${protocoloLimpo}" já está cadastrado no sistema`);
+      }
+    }
+
     // Cria o processo
     const [procResult] = await conn.execute(
       `INSERT INTO tblproc
-         (pasta_id, numProc, NomeTituloProc, cliente_polo, vara_id, tipo_id, status_id, instancia_id,
+         (pasta_id, numProc, protocolo, NomeTituloProc, cliente_polo, vara_id, tipo_id, status_id, instancia_id,
           data_distribuicao, observacoes, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [pastaId,
        numProcLimpo,
+       protocoloLimpo,
        NomeTituloProc,
        cliente_polo     || null,
        vara_id          || null,
@@ -528,7 +546,7 @@ async function excluirProcesso(req, res) {
 async function atualizarProcesso(req, res) {
   const { id } = req.params;
   const {
-    numProc, NomeTituloProc,
+    numProc, protocolo, NomeTituloProc,
     vara_id, tipo_id, status_id, instancia_id,
     data_distribuicao, observacoes,
     autores, reus, peritos, cliente_polo,
@@ -565,14 +583,28 @@ async function atualizarProcesso(req, res) {
       }
     }
 
+    // Verifica duplicidade de protocolo (exclui o próprio processo) — não pode haver 2 iguais no banco
+    const protocoloLimpo = protocolo?.trim() || null;
+    if (protocoloLimpo) {
+      const [dupProt] = await conn.execute(
+        'SELECT id FROM tblproc WHERE protocolo = ? AND ativo = 1 AND id != ? LIMIT 1',
+        [protocoloLimpo, id]
+      );
+      if (dupProt.length) {
+        await conn.rollback();
+        return erro(res, `O protocolo "${protocoloLimpo}" já está cadastrado em outro processo`);
+      }
+    }
+
     await conn.execute(
       `UPDATE tblproc SET
-         numProc=?, NomeTituloProc=?, cliente_polo=?,
+         numProc=?, protocolo=?, NomeTituloProc=?, cliente_polo=?,
          vara_id=?, tipo_id=?, status_id=?, instancia_id=?,
          data_distribuicao=?, observacoes=?,
          alterado_por=?, alterado_em=NOW()
        WHERE id = ?`,
       [numProc          || null,
+       protocoloLimpo,
        NomeTituloProc   || antes[0].NomeTituloProc,
        // se não veio no body, preserva o valor atual; se veio vazio, grava NULL
        cliente_polo !== undefined ? (cliente_polo || null) : antes[0].cliente_polo,

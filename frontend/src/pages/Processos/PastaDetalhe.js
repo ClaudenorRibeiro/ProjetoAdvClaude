@@ -476,7 +476,7 @@ export default function PastaDetalhe() {
       <option value="todos">— Todos os processos —</option>
       {processos.map(pr => (
         <option key={pr.id} value={pr.id}>
-          {pr.numProc || `Processo #${pr.id}`}
+          {pr.numProc || (pr.protocolo ? `Protocolo ${pr.protocolo}` : `Processo #${pr.id}`)}
         </option>
       ))}
     </select>
@@ -598,7 +598,13 @@ export default function PastaDetalhe() {
                         <div style={{ fontWeight: '500' }}>{pr.NomeTituloProc || '—'}</div>
                       </td>
                       <td>
-                        <NumeroProcessoCopiavel numero={pr.numProc} />
+                        {pr.numProc
+                          ? <NumeroProcessoCopiavel numero={pr.numProc} />
+                          : pr.protocolo
+                            ? <span style={{ fontSize: '12px', color: '#64748b' }}>
+                                Protocolo:{' '}<NumeroProcessoCopiavel numero={pr.protocolo} />
+                              </span>
+                            : <NumeroProcessoCopiavel numero={null} />}
                       </td>
                       <td>{pr.tipo_nome   ? <span className="badge badge-azul">{pr.tipo_nome}</span>  : '—'}</td>
                       <td>{pr.status_nome ? <span className="badge badge-cinza">{pr.status_nome}</span> : '—'}</td>

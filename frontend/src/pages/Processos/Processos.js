@@ -59,7 +59,7 @@ export default function Processos() {
           <input
             className="form-control"
             style={{ maxWidth: '340px' }}
-            placeholder="Buscar por nº pasta, título ou número CNJ..."
+            placeholder="Buscar por nº pasta, título, nº CNJ ou protocolo..."
             value={buscaInput}
             onChange={e => setBuscaInput(e.target.value)}
           />
@@ -184,6 +184,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
   const [form, setForm] = useState({
     numPasta: '',
     numProc: '',
+    protocolo: '',
     forum_id: '',
     vara_id: '',
     tipo_id: '',
@@ -439,6 +440,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
         pasta_id:          pastaId || null,
         numPasta:          pastaId ? undefined : parseInt(form.numPasta),
         numProc:           form.numProc || null,
+        protocolo:         form.protocolo?.trim() || null,
         NomeTituloProc:    nomeTitulo,
         vara_id:           form.vara_id      || null,
         tipo_id:           form.tipo_id      || null,
@@ -705,17 +707,29 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
             </div>
           </div>
 
-          {/* Número CNJ */}
-          <div className="form-group">
-            <label className="form-label">Número do Processo (CNJ)</label>
-            <input
-              className="form-control"
-              value={form.numProc}
-              onChange={e => { set('numProc', mascaraCNJ(e.target.value)); preencherTipoPorCNJ(e.target.value); }}
-              placeholder="0000000-00.0000.0.00.0000"
-              maxLength={25}
-              style={{ maxWidth: '260px' }}
-            />
+          {/* Número CNJ + Número de Protocolo (lado a lado) */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="form-group">
+              <label className="form-label">Número do Processo (CNJ)</label>
+              <input
+                className="form-control"
+                value={form.numProc}
+                onChange={e => { set('numProc', mascaraCNJ(e.target.value)); preencherTipoPorCNJ(e.target.value); }}
+                placeholder="0000000-00.0000.0.00.0000"
+                maxLength={25}
+              />
+            </div>
+            {/* Protocolo: processos ainda não distribuídos (ex.: previdenciário) só têm protocolo */}
+            <div className="form-group">
+              <label className="form-label">Número de Protocolo</label>
+              <input
+                className="form-control"
+                value={form.protocolo}
+                onChange={e => set('protocolo', e.target.value)}
+                placeholder="Protocolo (antes de existir o nº CNJ)"
+                maxLength={60}
+              />
+            </div>
           </div>
 
           {/* Tipo, Status, Instância — 3 selects com botão (...) */}
@@ -850,6 +864,7 @@ export function ModalEditarProcesso({ processo, onFechar }) {
 
   const [form, setForm] = useState({
     numProc:           processo.numProc          || '',
+    protocolo:         processo.protocolo        || '',
     forum_id:          processo.forum_id         ? String(processo.forum_id)      : '',
     vara_id:           processo.vara_id          ? String(processo.vara_id)       : '',
     tipo_id:           processo.tipo_id          ? String(processo.tipo_id)       : '',
@@ -973,6 +988,7 @@ export function ModalEditarProcesso({ processo, onFechar }) {
     try {
       await processosAPI.atualizarProcesso(processo.id, {
         numProc:           form.numProc           || null,
+        protocolo:         form.protocolo?.trim()  || null,
         NomeTituloProc:    nomeTitulo,
         vara_id:           form.vara_id           || null,
         tipo_id:           form.tipo_id           || null,
@@ -1144,14 +1160,25 @@ export function ModalEditarProcesso({ processo, onFechar }) {
             </div>
           </div>
 
-          {/* Número CNJ */}
-          <div className="form-group">
-            <label className="form-label">Número do Processo (CNJ)</label>
-            <input className="form-control"
-              value={form.numProc}
-              onChange={e => set('numProc', mascaraCNJ(e.target.value))}
-              placeholder="0000000-00.0000.0.00.0000"
-              maxLength={25} style={{ maxWidth: '260px' }} />
+          {/* Número CNJ + Número de Protocolo (lado a lado) */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="form-group">
+              <label className="form-label">Número do Processo (CNJ)</label>
+              <input className="form-control"
+                value={form.numProc}
+                onChange={e => set('numProc', mascaraCNJ(e.target.value))}
+                placeholder="0000000-00.0000.0.00.0000"
+                maxLength={25} />
+            </div>
+            {/* Protocolo: processos ainda não distribuídos (ex.: previdenciário) só têm protocolo */}
+            <div className="form-group">
+              <label className="form-label">Número de Protocolo</label>
+              <input className="form-control"
+                value={form.protocolo}
+                onChange={e => set('protocolo', e.target.value)}
+                placeholder="Protocolo (antes de existir o nº CNJ)"
+                maxLength={60} />
+            </div>
           </div>
 
           {/* Tipo, Status, Instância com botão (...) */}
