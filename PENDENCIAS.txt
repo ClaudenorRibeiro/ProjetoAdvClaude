@@ -1,0 +1,13 @@
+
+Sobram só as 6 pendências abertas para as próximas sessões:
+
+1) Publicações — coluna "OAB/UF" (precisa análise primeiro)
+2) Financeiro multi-banco (grande)
+3) Config global de capitalização (grande e transversal)
+4) Hardening do servidor AWS (infra; + rotacionar chaves AWS em texto puro)
+ 
+6) Renovar senha de app do Gmail no .env
+7) agenda google 
+8) agenda, ver todos usuários, consultas, etc...
+9) tarefas colocar horário e temporizador ?
+10) andamento de cada processo

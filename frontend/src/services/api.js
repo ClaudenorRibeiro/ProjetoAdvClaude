@@ -354,6 +354,9 @@ export const periciasAPI = {
 export const configuracaoAPI = {
   buscarEscritorio:    () => api.get('/configuracoes/escritorio'),
   atualizarEscritorio: (dados) => api.put('/configuracoes/escritorio', dados),
+  // Liga/desliga da CAIXA ALTA no nome do autor/réu nos documentos (admin)
+  buscarDocumentosMaiusculas: () => api.get('/configuracoes/documentos-maiusculas'),
+  salvarDocumentosMaiusculas: (ativo) => api.put('/configuracoes/documentos-maiusculas', { ativo }),
   salvarLogo:          (formData) => api.post('/configuracoes/logo', formData),   // envia a imagem (multipart)
   removerLogo:         () => api.delete('/configuracoes/logo'),
   concluirSetup:       () => api.put('/configuracoes/setup-concluido'),

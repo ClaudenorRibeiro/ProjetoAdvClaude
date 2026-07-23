@@ -577,18 +577,57 @@ async function resolverMultipessoas(autores, reus, usuario) {
   const refReu = reusArr.map(r => r.nome).filter(Boolean).join(', ');
   const referencia = [refAut && `Autores: ${refAut}`, refReu && `Réus: ${refReu}`].filter(Boolean).join(' · ').slice(0, 300);
 
+  // CAIXA ALTA nos nomes de autores/réus, se o escritório ligou a opção.
+  if (await escritorioUsaMaiusculas()) aplicarCaixaAltaNomes(dados);
+
   return { dados, clienteNome, numProcDigitos: '', referencia };
+}
+
+// ============================================================
+// CAIXA ALTA nos NOMES das partes (opção liga/desliga por escritório)
+// ------------------------------------------------------------
+// Quando o escritório liga a opção (coluna configuracoes_escritorio.documentos_maiusculas),
+// os documentos saem com o NOME do autor e do réu em CAIXA ALTA. Afeta SÓ o nome das partes:
+//   - nome_cliente  (o cliente é o autor OU o réu do caso)
+//   - parte_adversa (nome da outra parte)
+//   - o nome de cada autor/réu nas regiões repetíveis {{#autores}}/{{#reus}}
+// NENHUM outro campo é tocado (CPF, RG, endereço, profissão, links, e-mails, escritório...).
+// ============================================================
+function paraMaiusculas(v) {
+  return (v == null || v === '') ? v : String(v).toUpperCase();
+}
+function aplicarCaixaAltaNomes(dados) {
+  if (!dados) return dados;
+  if (dados.nome_cliente)  dados.nome_cliente  = paraMaiusculas(dados.nome_cliente);
+  if (dados.parte_adversa) dados.parte_adversa = paraMaiusculas(dados.parte_adversa);
+  if (Array.isArray(dados.autores)) dados.autores.forEach(p => { if (p && p.nome) p.nome = paraMaiusculas(p.nome); });
+  if (Array.isArray(dados.reus))    dados.reus.forEach(p => { if (p && p.nome) p.nome = paraMaiusculas(p.nome); });
+  return dados;
+}
+// Lê a opção do escritório. TOLERANTE: se a coluna ainda não existir no banco
+// (schema não atualizado numa instância), assume "desligado" e NÃO quebra a
+// geração do documento — apenas não aplica a caixa alta.
+async function escritorioUsaMaiusculas() {
+  try {
+    const [rows] = await pool.execute('SELECT documentos_maiusculas FROM configuracoes_escritorio LIMIT 1');
+    return !!(rows[0] && rows[0].documentos_maiusculas);
+  } catch (e) {
+    return false;
+  }
 }
 
 // ---- Ponto de entrada: resolve as variáveis conforme o tipo de âncora ----
 async function resolver(ancoraTipo, ancoraId, usuario, opcoes = {}) {
-  if (ancoraTipo === 'audiencia')        return resolverAudiencia(ancoraId, usuario, opcoes);
-  if (ancoraTipo === 'pericia')          return resolverPericia(ancoraId, usuario, opcoes);
-  if (ancoraTipo === 'prazo')            return resolverPrazo(ancoraId, usuario);
-  if (ancoraTipo === 'pagamento')        return resolverPagamento(ancoraId, usuario, opcoes);
-  if (ancoraTipo === 'pessoa_fisica')    return resolverPessoa('fisica', ancoraId, usuario);
-  if (ancoraTipo === 'pessoa_juridica')  return resolverPessoa('juridica', ancoraId, usuario);
-  return null;
+  let ctx = null;
+  if (ancoraTipo === 'audiencia')             ctx = await resolverAudiencia(ancoraId, usuario, opcoes);
+  else if (ancoraTipo === 'pericia')          ctx = await resolverPericia(ancoraId, usuario, opcoes);
+  else if (ancoraTipo === 'prazo')            ctx = await resolverPrazo(ancoraId, usuario);
+  else if (ancoraTipo === 'pagamento')        ctx = await resolverPagamento(ancoraId, usuario, opcoes);
+  else if (ancoraTipo === 'pessoa_fisica')    ctx = await resolverPessoa('fisica', ancoraId, usuario);
+  else if (ancoraTipo === 'pessoa_juridica')  ctx = await resolverPessoa('juridica', ancoraId, usuario);
+  // CAIXA ALTA nos nomes das partes, se o escritório ligou a opção.
+  if (ctx && ctx.dados && await escritorioUsaMaiusculas()) aplicarCaixaAltaNomes(ctx.dados);
+  return ctx;
 }
 
 module.exports = { resolver, resolverMultipessoas, blocosAlcancados, modeloCompativel };

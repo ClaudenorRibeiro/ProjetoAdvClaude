@@ -7,7 +7,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { documentosAPI } from '../../services/api';
+import { documentosAPI, configuracaoAPI } from '../../services/api';
 import { toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
@@ -29,7 +29,7 @@ function rotuloDestino(m) {
 }
 
 export default function Documentos() {
-  const { temPermissao } = useAuth();
+  const { temPermissao, ehAdmin } = useAuth();
   const podeVer        = temPermissao('documentos.modelos', 'visualizar');
   const podeCadastrar  = temPermissao('documentos.modelos', 'cadastrar');
   const podeAlterar    = temPermissao('documentos.modelos', 'alterar');
@@ -41,6 +41,10 @@ export default function Documentos() {
   const [modalAberto, setModalAberto] = useState(false);
   const [modeloEditando, setModeloEditando] = useState(null);
   const [modeloExcluir, setModeloExcluir] = useState(null); // modelo aguardando confirmação de exclusão
+
+  // Liga/desliga da CAIXA ALTA no nome do autor/réu (opção do escritório; só admin vê/edita).
+  const [maiusculas, setMaiusculas] = useState(false);
+  const [salvandoMaiusc, setSalvandoMaiusc] = useState(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -56,6 +60,28 @@ export default function Documentos() {
   }, []);
 
   useEffect(() => { if (podeVer) carregar(); }, [podeVer, carregar]);
+
+  // Carrega o estado atual do liga/desliga da CAIXA ALTA (somente admin).
+  useEffect(() => {
+    if (!ehAdmin) return;
+    configuracaoAPI.buscarDocumentosMaiusculas()
+      .then(({ data }) => { if (data.ok) setMaiusculas(!!data.dados.documentos_maiusculas); })
+      .catch(() => {});
+  }, [ehAdmin]);
+
+  // Liga/desliga a CAIXA ALTA e salva no escritório (efeito imediato nos próximos documentos).
+  async function alternarMaiusculas(valor) {
+    setSalvandoMaiusc(true);
+    try {
+      const { data } = await configuracaoAPI.salvarDocumentosMaiusculas(valor);
+      setMaiusculas(valor);
+      toast.success(data.mensagem || 'Configuração salva');
+    } catch {
+      toast.error('Não foi possível salvar a configuração');
+    } finally {
+      setSalvandoMaiusc(false);
+    }
+  }
 
   // Baixa o .docx original do modelo (para editar no Word e re-subir).
   async function baixar(m) {
@@ -101,6 +127,25 @@ export default function Documentos() {
 
   return (
     <div>
+      {/* ===== CAIXA ALTA no nome do autor/réu (opção do escritório — só admin) ===== */}
+      {ehAdmin && (
+        <div className="card" style={{ marginBottom: '16px' }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
+            <input type="checkbox" checked={maiusculas} disabled={salvandoMaiusc}
+              style={{ marginTop: '3px' }}
+              onChange={e => alternarMaiusculas(e.target.checked)} />
+            <span>
+              <strong>Usar CAIXA ALTA no nome do autor e do réu</strong>
+              <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
+                Quando ligado, os documentos gerados saem com o NOME do autor e do réu em
+                maiúsculas (ex.: JOÃO DA SILVA). Os demais dados (CPF, endereço, etc.) não mudam.
+                Vale para todo o escritório. Só o administrador pode alterar.
+              </div>
+            </span>
+          </label>
+        </div>
+      )}
+
       {/* ===== MODELOS ===== */}
       <div className="card" style={{ marginBottom: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px', gap: '8px', flexWrap: 'wrap' }}>

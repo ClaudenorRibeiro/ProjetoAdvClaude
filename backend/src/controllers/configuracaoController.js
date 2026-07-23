@@ -182,6 +182,38 @@ async function atualizarEscritorio(req, res) {
   }
 }
 
+// GET /api/configuracoes/documentos-maiusculas — lê o liga/desliga da CAIXA ALTA
+// no NOME do autor/réu nos documentos gerados (somente admin). Tolerante à coluna ausente.
+async function buscarDocumentosMaiusculas(req, res) {
+  try {
+    const [rows] = await pool.execute('SELECT documentos_maiusculas FROM configuracoes_escritorio LIMIT 1');
+    return sucesso(res, { documentos_maiusculas: !!(rows[0] && rows[0].documentos_maiusculas) });
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// PUT /api/configuracoes/documentos-maiusculas — liga/desliga a CAIXA ALTA no NOME
+// do autor/réu nos documentos (somente admin). Body: { ativo: true|false }.
+// A opção vale para TODO o escritório; afeta só o nome das partes na geração.
+async function salvarDocumentosMaiusculas(req, res) {
+  try {
+    const ativo = req.body && req.body.ativo ? 1 : 0;
+    // Mesma abordagem do logo: atualiza a linha única do escritório (id=1).
+    await pool.execute('UPDATE configuracoes_escritorio SET documentos_maiusculas = ? LIMIT 1', [ativo]);
+    await auditoria.registrar(req.usuario.id, 'configuracoes_escritorio', 'editar', 1);
+    return sucesso(
+      res,
+      { documentos_maiusculas: !!ativo },
+      ativo
+        ? 'Ligado: os documentos passam a usar CAIXA ALTA no nome do autor e do réu.'
+        : 'Desligado: os nomes do autor e do réu voltam ao normal nos documentos.'
+    );
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
 // PUT /api/configuracoes/setup-concluido — Marca setup como concluído
 async function marcarSetupConcluido(req, res) {
   try {
@@ -613,6 +645,7 @@ module.exports = {
   infoPublica,
   uploadLogo, salvarLogo, removerLogo,
   buscarEscritorio, atualizarEscritorio, marcarSetupConcluido,
+  buscarDocumentosMaiusculas, salvarDocumentosMaiusculas,
   listarFeriados, criarFeriado, excluirFeriado,
   listarUsuarios, criarUsuario, atualizarUsuario, redefinirSenhaAdmin, excluirUsuario, historicoUsuario,
   buscarPermissoes, salvarPermissoes,

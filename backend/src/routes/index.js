@@ -294,6 +294,9 @@ router.delete('/publicacoes/:id',         autenticar, verificarPermissao('public
 // ---- CONFIGURAÇÕES (somente admin) ----
 router.get('/configuracoes/escritorio',           autenticar, apenasAdmin, configuracaoCtrl.buscarEscritorio);
 router.put('/configuracoes/escritorio',           autenticar, apenasAdmin, configuracaoCtrl.atualizarEscritorio);
+// Liga/desliga da CAIXA ALTA no nome do autor/réu nos documentos (somente admin)
+router.get('/configuracoes/documentos-maiusculas', autenticar, apenasAdmin, configuracaoCtrl.buscarDocumentosMaiusculas);
+router.put('/configuracoes/documentos-maiusculas', autenticar, apenasAdmin, configuracaoCtrl.salvarDocumentosMaiusculas);
 router.post('/configuracoes/logo',                autenticar, apenasAdmin, configuracaoCtrl.uploadLogo, configuracaoCtrl.salvarLogo);
 router.delete('/configuracoes/logo',              autenticar, apenasAdmin, configuracaoCtrl.removerLogo);
 router.put('/configuracoes/setup-concluido',      autenticar, apenasAdmin, configuracaoCtrl.marcarSetupConcluido);
