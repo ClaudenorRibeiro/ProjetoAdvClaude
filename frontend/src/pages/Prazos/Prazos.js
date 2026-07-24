@@ -49,7 +49,10 @@ export default function Prazos() {
   const [total, setTotal]                   = useState(0);
   // Padrão do filtro "Responsável" = usuário logado (vê os prazos dele + os do escritório).
   // usuario_id vazio ('') significa "Todos" — só disponível para quem pode ver todos.
-  const [filtros, setFiltros]               = useState({ status: '', usuario_id: usuario?.id || '', data_de: '', data_ate: '', mostrar_encerrados: false, pagina: 1 });
+  // numero_processo: filtro por trecho do nº do processo (só dígitos; aplicado a partir de 3 caracteres).
+  const [filtros, setFiltros]               = useState({ status: '', usuario_id: usuario?.id || '', numero_processo: '', data_de: '', data_ate: '', mostrar_encerrados: false, pagina: 1 });
+  // Valor "cru" digitado no campo Número do Processo (o que aparece na tela). É debounced para dentro de filtros.
+  const [numeroInput, setNumeroInput]       = useState('');
   const [usuarios, setUsuarios]             = useState([]); // lista de usuários para o dropdown de Responsável
   const [tipos, setTipos]                   = useState({ tipos: [], subtipos: [] });
   const [carregando, setCarregando]         = useState(false);
@@ -72,6 +75,17 @@ export default function Prazos() {
 
   useEffect(() => { carregar(); }, [carregar]);
   useEffect(() => { prazosAPI.tipos().then(r => setTipos(r.data.dados)); }, []);
+
+  // Debounce do campo "Número do Processo": só busca 350ms depois de parar de digitar
+  // (mesmo padrão da tela de Pessoas — evita 1 consulta por tecla). Considera só os dígitos:
+  // com 3 ou mais, aplica o filtro; com menos (ou vazio), limpa o filtro e mostra todos.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const dig = numeroInput.replace(/\D/g, '');
+      setFiltros(f => ({ ...f, numero_processo: dig.length >= 3 ? dig : '', pagina: 1 }));
+    }, 350);
+    return () => clearTimeout(t);
+  }, [numeroInput]);
   // Lista de usuários do filtro "Responsável" — só carrega para quem pode ver todos
   useEffect(() => {
     if (podeVerTodos) {
@@ -151,6 +165,15 @@ export default function Prazos() {
             </div>
           )}
           <div className="form-group" style={{margin:0}}>
+            <label className="form-label">Número do Processo</label>
+            {/* Filtra por trecho do número (a partir do 3º caractere), com debounce de 350ms.
+                Aceita com ou sem pontuação — o backend ignora pontos e traços na comparação. */}
+            <input className="form-control" placeholder="Parte do número..."
+              value={numeroInput} maxLength={25}
+              style={{ minWidth: '170px', fontFamily: 'monospace', letterSpacing: '0.5px' }}
+              onChange={e => setNumeroInput(e.target.value)} />
+          </div>
+          <div className="form-group" style={{margin:0}}>
             <label className="form-label">Vencimento de</label>
             <input type="date" className="form-control" value={filtros.data_de} onChange={e=>setFiltro('data_de',e.target.value)} />
           </div>
@@ -165,7 +188,7 @@ export default function Prazos() {
             <span style={{fontSize:'13px', color:'#475569'}}>Mostrar concluídos e cancelados</span>
           </label>
           <button className="btn btn-secondary" style={{marginBottom:'1px'}}
-            onClick={() => setFiltros({ status: '', usuario_id: usuario?.id || '', data_de: '', data_ate: '', mostrar_encerrados: false, pagina: 1 })}>
+            onClick={() => { setNumeroInput(''); setFiltros({ status: '', usuario_id: usuario?.id || '', numero_processo: '', data_de: '', data_ate: '', mostrar_encerrados: false, pagina: 1 }); }}>
             ✕ Limpar filtros
           </button>
           <button className="btn btn-primary" style={{marginBottom:'1px'}} onClick={() => setModalAberto(true)}>

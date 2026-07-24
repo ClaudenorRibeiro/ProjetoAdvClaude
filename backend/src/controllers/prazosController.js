@@ -34,7 +34,7 @@ async function liberarFazendoExpirados() {
 // Status é calculado dinamicamente pela data (concluido/cancelado são armazenados)
 async function listar(req, res) {
   try {
-    const { processo_id, usuario_id, status, data_de, data_ate, mostrar_encerrados, pagina = 1, limite = 30 } = req.query;
+    const { processo_id, usuario_id, status, data_de, data_ate, mostrar_encerrados, numero_processo, pagina = 1, limite = 30 } = req.query;
     const params = [];
     let where = 'WHERE 1=1';
 
@@ -42,6 +42,18 @@ async function listar(req, res) {
     const mostrarEncerrados = mostrar_encerrados === 'true' || mostrar_encerrados === true;
 
     if (processo_id) { where += ' AND pp.processo_id = ?'; params.push(processo_id); }
+
+    // Filtro por TRECHO do número do processo (digitado na tela de Prazos). Só entra em ação
+    // a partir de 3 dígitos. Ignora a pontuação dos dois lados (o numProc é gravado com máscara,
+    // ex.: 0000000-00.0000.0.00.0000): removemos '.', '-' e espaço da coluna e comparamos só dígitos.
+    // Referencia pr.numProc → a query do COUNT também faz JOIN em tblproc (abaixo).
+    if (numero_processo) {
+      const digitos = String(numero_processo).replace(/\D/g, '');
+      if (digitos.length >= 3) {
+        where += " AND REPLACE(REPLACE(REPLACE(pr.numProc, '.', ''), '-', ''), ' ', '') LIKE ?";
+        params.push(`%${digitos}%`);
+      }
+    }
 
     // Filtro de status calculado dinamicamente
     if (status) {
@@ -133,8 +145,14 @@ async function listar(req, res) {
       params
     );
 
+    // O COUNT usa o MESMO `where` da listagem. Como o filtro de número referencia pr.numProc,
+    // fazemos o mesmo JOIN em tblproc aqui (é 1:1 — todo prazo tem um processo válido, igual à
+    // listagem que já usa JOIN tblproc), então a contagem continua batendo com a lista.
     const [total] = await pool.execute(
-      `SELECT COUNT(*) as total FROM prazos_processo pp ${where}`, params
+      `SELECT COUNT(*) as total
+         FROM prazos_processo pp
+         JOIN tblproc pr ON pp.processo_id = pr.id
+         ${where}`, params
     );
 
     return sucesso(res, { registros: rows, total: total[0].total });

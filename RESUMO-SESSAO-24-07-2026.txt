@@ -1,0 +1,158 @@
+================================================================================
+ RESUMO DA SESSAO - 24/07/2026 (retomada em outro PC) - Sistema Advocacia
+ Escrito para voce (leigo) e para o Claude do outro computador continuar.
+================================================================================
+
+VISAO GERAL
+-----------
+Sessao de LIMPEZA DE PENDENCIAS e ANALISE. Nao mexemos em NENHUMA linha de
+codigo e NAO subimos NADA no git. O trabalho foi: analisar a pasta local e as
+memorias, VERIFICAR o estado real (git e memorias), ENCERRAR 6 pendencias (voce
+confirmou uma a uma) e EXPLICAR algumas pendencias que voce nao lembrava o que
+eram. Comecamos o "Hardening da AWS", mas ele ficou PAUSADO esperando voce
+mandar prints do servidor. No fim voce mandou: atualizar so a pasta local, NAO
+subir no git, escrever tudo nas memorias, sincronizar as 2 memorias (identicas)
+e gerar este resumo.
+
+
+--------------------------------------------------------------------------------
+ 0) VERIFICACOES DE FATO (feitas no inicio - sem supor nada)
+--------------------------------------------------------------------------------
+- GIT LIMPO E EM DIA: nao ha nada pendente. O ultimo commit (HEAD) e o "0a7d18d"
+  ("aumentou o tamanho do campo em publicacoes") e ele JA ESTA no GitHub. Ou
+  seja: a correcao das Publicacoes JA ESTAVA COMMITADA E ENVIADA. Isso corrige o
+  resumo da tarde de 23/07, que dizia que ela estava "nao commitada".
+  * OBS.: voce abriu dizendo "a pasta local esta mais atualizada e o git esta
+    desatualizado". No que verifiquei NESTE PC, o git nao estava desatualizado
+    (tudo commitado e enviado). Se voce mexeu em OUTRO computador e ainda nao
+    trouxe para este, ai sim este PC estaria "atras" - mas isso eu nao tinha
+    como verificar daqui. Segui sua ordem: nao mexer no git.
+- MEMORIAS IDENTICAS: a pasta de memoria do projeto e a minha memoria interna
+  estavam iguaizinhas (39 arquivos). A cada mudanca do dia eu conferi de novo.
+
+
+--------------------------------------------------------------------------------
+ 1) PENDENCIAS ENCERRADAS HOJE (6) - voce confirmou cada uma
+--------------------------------------------------------------------------------
+
+1) LOGOUT POR INATIVIDADE -> voce: "ja fiz e esta funcionando".
+   Deploy feito + testado. Esta no ar (LIVE). Saiu das pendencias.
+
+2) SENHA DE APP DO GMAIL (no arquivo .env) -> voce: "ja esta funcionando".
+   O QUE ERA: o sistema envia e-mail pelo Gmail (conta antonioadv.sistema@gmail)
+   para "redefinir senha" e "aniversario". A senha guardada no .env NAO e a
+   senha normal do Gmail - e uma "senha de app" (16 letras) que o Google gera
+   so para programas. Ela tinha expirado/sido revogada (por isso o e-mail de
+   aniversario falhou em 21/07). NAO era bug do sistema. Voce renovou a senha de
+   app e atualizou o .env do servidor -> voltou a enviar. Saiu das pendencias.
+
+3) "codVaraNoProc" VAZIO nas varas do TRT15 -> encerrado por sua decisao.
+   O QUE E (verifiquei no codigo inteiro): e o campo "Codigo CNJ" no cadastro de
+   Vara. Serve para UMA comodidade so: quando voce COLA um numero de processo
+   CNJ completo ao cadastrar um processo, o sistema le esse codigo e preenche o
+   Forum e a Vara sozinho. SE FICAR VAZIO, nada quebra: o sistema so nao
+   preenche automatico e voce escolhe a Vara na mao no dropdown (como sempre).
+   O campo e opcional no banco, sem amarracao (sem chave estrangeira). NAO E
+   GRAVE deixar vazio. Voce decidiu tirar da lista; quem quiser o preenchimento
+   automatico preenche esse codigo manualmente na tela de Vara.
+
+4) CAPITALIZACAO GLOBAL / "PRIMEIRA MAIUSCULA" -> encerrado por sua decisao.
+   O QUE ERA: uma ideia mais ampla de configurar como as letras aparecem
+   (MAIUSCULA / minuscula / Primeira Maiuscula) em telas, relatorios e
+   documentos. Voce ja tinha feito uma fatia disso: o seletor "Usar CAIXA ALTA
+   no nome do autor e do reu" nos documentos (admin liga; ja esta no ar nos 2).
+   Faltava a opcao "Primeira Maiuscula" e as outras telas. Voce disse que a
+   caixa alta ja basta -> pendencia retirada.
+
+5) SQL DAS PUBLICACOES (bug "Data too long") -> voce rodou e resolveu.
+   O QUE ERA: a importacao de publicacoes (AASP) quebrava com "Erro interno"
+   porque uma coluna do banco (cabecalho) era pequena demais e uma publicacao
+   estourava; como a importacao e tudo-ou-nada, nada entrava. A correcao foi so
+   no banco (aumentar as colunas cabecalho/titulo para TEXT e hash_cnj para
+   varchar(255)). Voce rodou o SQL nas 3 instancias e reimportou o dia 20/07 ->
+   as publicacoes voltaram a entrar. Encerrado.
+
+6) FEATURE NUMERO DE PROTOCOLO no processo -> voce testou e esta OK.
+   (Campo de protocolo ao lado do numero CNJ, para processos que ainda nao tem
+   CNJ; entra na busca; mostra "Protocolo: ..." no detalhe; nao deixa repetir o
+   mesmo protocolo.) Ja estava no ar; voce testou em uso e aprovou. Encerrada.
+
+
+--------------------------------------------------------------------------------
+ 2) HARDENING DA AWS - COMECAMOS, MAS ESTA PAUSADO (RETOMAR AQUI)
+--------------------------------------------------------------------------------
+Voce perguntou o que era a pendencia "Hardening do servidor AWS + rotacionar as
+chaves AWS + reboot". Expliquei que sao 3 coisas de INFRAESTRUTURA (nenhum
+codigo do sistema muda):
+
+  (a) BYPASS DO CLOUDFLARE (porta 80): hoje da para acessar o servidor direto
+      pelo IP e pular a protecao do Cloudflare. Ideia: liberar a porta 80 so
+      para as faixas de IP do Cloudflare.
+  (b) MYSQL (porta 3306): garantir que o banco NAO esta aberto para a internet
+      (so local / pelo tunel do HeidiSQL). E o risco mais serio.
+  (c) SSH (porta 22): so por chave, de preferencia so do seu IP.
+  - ROTACIONAR AS CHAVES DA AWS: as chaves de acesso (que o backup usa para o
+    S3) estao escritas abertas no arquivo "backups/chaves aws usuadio s3 dev e
+    prod.txt". Gerar chaves novas na AWS e invalidar as antigas. (Nao estao no
+    GitHub - a pasta e ignorada; o risco e estarem em texto puro no disco.)
+  - REBOOT: o servidor do Erick mostrava "System restart required" (atualizacoes
+    de seguranca que so valem depois de reiniciar; ~1 min fora do ar).
+
+COMO VAMOS FAZER (sua decisao): voce quer CERTEZA ABSOLUTA, sem eu supor nada.
+Entao voce vai me mandar PRINTS do servidor e eu confirmo o estado REAL antes de
+propor qualquer comando. Pela sua regra, eu NAO acesso a AWS: eu entrego os
+comandos prontos e voce roda.
+
+>>> PROXIMO PASSO (quando voltar): voce me manda o PRINT do FIREWALL do Lightsail
+    da instancia do ANTONIO -> abrir o Lightsail, clicar na instancia do Antonio,
+    aba "Networking", e printar a tabela do "IPv4 Firewall" (e "IPv6 Firewall" se
+    tiver). E onde vejo quais portas estao abertas. Foco: confirmar se o MySQL
+    3306 esta exposto; depois vemos SSH 22 e 80/443. Depois: reboot e troca das
+    chaves.
+
+
+--------------------------------------------------------------------------------
+ PENDENCIAS ABERTAS (lista atualizada - para as proximas sessoes)
+--------------------------------------------------------------------------------
+  1) Publicacoes - coluna "OAB/UF" na tela (analisar antes: ver se a OAB de
+     origem e gravada na importacao).
+  2) Financeiro multi-banco (item grande).
+  3) Hardening do servidor AWS + rotacionar chaves AWS + reboot (EM ANDAMENTO -
+     aguardando o print do firewall do Lightsail do Antonio; ver secao 2).
+  4) Agenda Google (integracao).
+  5) Agenda - "ver todos os usuarios", consultas, etc.
+  6) Tarefas - colocar horario e temporizador (a definir).
+  7) Andamento de cada processo.
+
+
+--------------------------------------------------------------------------------
+ ESTADO DO GIT (fato verificado no fim)
+--------------------------------------------------------------------------------
+  - Working tree LIMPO. HEAD = origin/main = 0a7d18d. NADA foi codado hoje,
+    NADA a subir no git.
+  - Sem rastrear (nao vao ao git): os arquivos de resumo do dia
+    (RESUMO-SESSAO-23-07-2026-TARDE.txt e este RESUMO-SESSAO-24-07-2026.txt) e a
+    pasta memory/. Memoria e resumos NAO vao ao git (seu pedido).
+
+
+--------------------------------------------------------------------------------
+ REGRAS QUE VOCE FEZ QUESTAO DE REFORCAR (gravadas na memoria, eternas)
+--------------------------------------------------------------------------------
+  - TABELAS SEMPRE EM MINUSCULAS, no BANCO e no CODIGO.
+  - NUNCA codar sem sua autorizacao: primeiro eu EXPLICO o que entendi do pedido,
+    e so depois do seu "pode codar" e que eu mexo. Responder pergunta de escopo
+    NAO e autorizacao.
+  - NUNCA supor: analisar o codigo inteiro (front + back + banco) e ter certeza;
+    muito cuidado para nao quebrar nada. (Hoje isso valeu: nao chutei nada sobre
+    o codVaraNoProc, o Gmail nem o hardening - verifiquei na fonte, e no
+    hardening pedi os prints em vez de supor.)
+  - CORRIGIR voce se um pedido prejudicar outra parte do sistema OU ferir uma
+    regra sua (voce pode ter esquecido).
+  - Nenhuma exclusao pode deixar orfaos; tratar as amarracoes antes.
+  - Nao mandar trechos de codigo no chat (voce e leigo).
+  - Anotar sempre as pendencias e manter esta lista atualizada.
+  - Todo SQL e MULTI-INSTANCIA: rodar no local, testar, depois em TODAS as AWS.
+
+================================================================================
+ FIM DO RESUMO - 24/07/2026
+================================================================================
