@@ -358,7 +358,7 @@ export function ModalCancelarPrazo({ prazo, onFechar }) {
         <div className="modal-body">
           <p style={{marginBottom:'12px',color:'#555'}}>
             <strong>{prazo.subtipo_nome || prazo.descricao || 'Prazo'}</strong><br/>
-            Vencimento: {prazo.data_vencimento}
+            Vencimento: {formatarData(prazo.data_vencimento)}
           </p>
           <div className="form-group">
             <label className="form-label">Motivo do cancelamento *</label>

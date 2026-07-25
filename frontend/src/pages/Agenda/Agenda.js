@@ -10,9 +10,10 @@ import { format, parse, startOfWeek, getDay, startOfMonth, endOfMonth } from 'da
 import ptBR from 'date-fns/locale/pt-BR';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
-import { prazosAPI, audienciasAPI, tarefasAPI, periciasAPI, agendaAPI } from '../../services/api';
+import { prazosAPI, audienciasAPI, tarefasAPI, periciasAPI, agendaAPI, configuracaoAPI } from '../../services/api';
+import { formatarData } from '../../utils/formatters';
 import { useAuth } from '../../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { ModalTarefa } from '../Tarefas/Tarefas';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 
@@ -50,21 +51,22 @@ const COR_EVENTO = {
   pericia:     '#7c3aed', // roxo
   tarefa:      '#d97706', // laranja
   compromisso: '#0891b2', // ciano — compromissos pessoais da agenda
+  feriado:     '#059669', // verde — feriados (iguais para todos; só leitura na agenda)
 };
 
 export default function Agenda() {
-  const { usuario } = useAuth();
-  const navigate = useNavigate();
+  const { usuario, temPermissao } = useAuth();
   const [eventos, setEventos]   = useState([]);
   const [dataAtual, setDataAtual] = useState(new Date());
   const [visao, setVisao]       = useState('month');
   const [carregando, setCarregando] = useState(false);
   const [eventoSelecionado, setEventoSelecionado] = useState(null);
   const [modalCompromisso, setModalCompromisso] = useState(null); // null | {} (novo) | {dataInicial} | {compromisso} (editar)
+  const [modalTarefa, setModalTarefa] = useState(null);           // null | {dataInicial} — nova tarefa aberta DENTRO da Agenda
   const [confirmarExcluir, setConfirmarExcluir] = useState(null); // compromisso aguardando confirmação de exclusão
   const [diaSelecionado, setDiaSelecionado] = useState(null);     // dia clicado no calendário (para adicionar)
   const [filtros, setFiltros]   = useState({
-    prazos: true, audiencias: true, pericias: true, tarefas: true, compromissos: true, escritorio: false
+    prazos: true, audiencias: true, pericias: true, tarefas: true, compromissos: true, feriados: true, escritorio: false
   });
 
   // Título dinâmico
@@ -171,6 +173,30 @@ export default function Agenda() {
         );
       }
 
+      // Feriados: são os MESMOS para todos os usuários (não filtram por usuário nem por
+      // Escritório) — só obedecem ao checkbox "Feriados". A API lista por ANO; filtramos aqui
+      // para o mês visível (mesma faixa data_de/data_ate das outras categorias). Só leitura na agenda.
+      if (filtros.feriados) {
+        promises.push(
+          configuracaoAPI.listarFeriados({ ano: dataAtual.getFullYear() })
+            .then(r => r.data.ok ? (r.data.dados || [])
+              .filter(f => {
+                const d = String(f.data).slice(0, 10);
+                return d >= data_de && d <= data_ate;
+              })
+              .map(f => ({
+                id: `feriado-${f.id}`,
+                title: `🎌 ${f.descricao}`,
+                start: new Date(String(f.data).slice(0, 10) + 'T00:00:00'),
+                end:   new Date(String(f.data).slice(0, 10) + 'T23:59:00'),
+                allDay: true,
+                tipo: 'feriado',
+                dados: f,
+              })) : [])
+            .catch(() => [])
+        );
+      }
+
       const resultados = await Promise.all(promises);
       setEventos(resultados.flat());
     } catch { toast.error('Erro ao carregar eventos'); }
@@ -214,6 +240,7 @@ export default function Agenda() {
             { key:'pericias',  label:'Perícias',  cor: COR_EVENTO.pericia },
             { key:'tarefas',   label:'Tarefas',   cor: COR_EVENTO.tarefa },
             { key:'compromissos', label:'Compromissos', cor: COR_EVENTO.compromisso },
+            { key:'feriados',  label:'Feriados',  cor: COR_EVENTO.feriado },
           ].map(({ key, label, cor }) => (
             <label key={key} style={{display:'flex',alignItems:'center',gap:'6px',cursor:'pointer',fontSize:'13px'}}>
               <input type="checkbox" checked={filtros[key]} onChange={() => toggleFiltro(key)} />
@@ -312,6 +339,15 @@ export default function Agenda() {
         />
       )}
 
+      {/* Modal: nova tarefa criada direto na Agenda — reaproveita o ModalTarefa (sem duplicar formulário).
+          Ao salvar (onFechar(true)), fecha e recarrega os eventos para a tarefa nova já aparecer no calendário. */}
+      {modalTarefa && (
+        <ModalTarefa
+          dataInicial={modalTarefa.dataInicial}
+          onFechar={(reload) => { setModalTarefa(null); if (reload) carregarEventos(); }}
+        />
+      )}
+
       {/* Clique num dia → escolher o que adicionar */}
       {diaSelecionado && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setDiaSelecionado(null); }}>
@@ -327,10 +363,15 @@ export default function Agenda() {
                   onClick={() => { setModalCompromisso({ dataInicial: format(diaSelecionado, 'yyyy-MM-dd') }); setDiaSelecionado(null); }}>
                   📌 Novo compromisso
                 </button>
-                <button className="btn btn-outline"
-                  onClick={() => { navigate(`/tarefas?nova=1&data=${format(diaSelecionado, 'yyyy-MM-dd')}`); setDiaSelecionado(null); }}>
-                  ✅ Nova tarefa
-                </button>
+                {/* Nova tarefa: abre o MESMO ModalTarefa da tela de Tarefas, aqui dentro da Agenda (não navega mais
+                    para /tarefas — o usuário fica na tela que escolheu). Gated por 'tarefas.cadastrar', igual ao botão
+                    "+ Nova tarefa" da tela de Tarefas (o backend também exige essa permissão no POST /tarefas). */}
+                {temPermissao('tarefas', 'cadastrar') && (
+                  <button className="btn btn-outline"
+                    onClick={() => { setModalTarefa({ dataInicial: format(diaSelecionado, 'yyyy-MM-dd') }); setDiaSelecionado(null); }}>
+                    ✅ Nova tarefa
+                  </button>
+                )}
               </div>
             </div>
             <div className="modal-footer">
@@ -369,21 +410,21 @@ function EventoDetalhe({ evento }) {
     if (dados.pasta_titulo)    linhas.push(['Pasta', dados.pasta_titulo]);
     if (dados.subtipo_nome)    linhas.push(['Tipo', dados.subtipo_nome]);
     if (dados.descricao)       linhas.push(['Descrição', dados.descricao]);
-    linhas.push(['Vencimento', dados.data_vencimento]);
+    linhas.push(['Vencimento', formatarData(dados.data_vencimento)]);
     linhas.push(['Status', dados.status]);
     if (dados.responsavel_nome) linhas.push(['Responsável', dados.responsavel_nome]);
   } else if (tipo === 'audiencia') {
     if (dados.processo_numero) linhas.push(['Processo', dados.processo_numero]);
     if (dados.pasta_titulo)    linhas.push(['Pasta', dados.pasta_titulo]);
     if (dados.tipo_nome)       linhas.push(['Tipo', dados.tipo_nome]);
-    linhas.push(['Data', `${dados.data} ${dados.hora?.slice(0,5) || ''}`]);
+    linhas.push(['Data', `${formatarData(String(dados.data).slice(0, 10))}${dados.hora ? ' ' + dados.hora.slice(0, 5) : ''}`]);
     linhas.push(['Modalidade', dados.modalidade]);
     if (dados.local)           linhas.push(['Local', dados.local]);
     if (dados.link_virtual)    linhas.push(['Link', dados.link_virtual]);
   } else if (tipo === 'pericia') {
     if (dados.processo_numero) linhas.push(['Processo', dados.processo_numero]);
     if (dados.tipo_nome)       linhas.push(['Tipo', dados.tipo_nome]);
-    linhas.push(['Data', `${dados.data} ${dados.hora?.slice(0,5) || ''}`]);
+    linhas.push(['Data', `${formatarData(String(dados.data).slice(0, 10))}${dados.hora ? ' ' + dados.hora.slice(0, 5) : ''}`]);
     if (dados.local)           linhas.push(['Local', dados.local]);
     if (dados.perito_nome)     linhas.push(['Perito', dados.perito_nome]);
     if (dados.assistente_nome) linhas.push(['Assistente', dados.assistente_nome]);
@@ -391,16 +432,20 @@ function EventoDetalhe({ evento }) {
     linhas.push(['Título', dados.titulo]);
     if (dados.descricao)       linhas.push(['Descrição', dados.descricao]);
     linhas.push(['Prioridade', dados.prioridade]);
-    if (dados.data_vencimento) linhas.push(['Vencimento', dados.data_vencimento]);
+    if (dados.data_vencimento) linhas.push(['Vencimento', formatarData(dados.data_vencimento)]);
     if (dados.atribuida_para_nome) linhas.push(['Atribuída para', dados.atribuida_para_nome]);
   } else if (tipo === 'compromisso') {
     linhas.push(['Título', dados.titulo]);
     if (dados.descricao) linhas.push(['Descrição', dados.descricao]);
-    linhas.push(['Data', String(dados.data).slice(0, 10).split('-').reverse().join('/')]);
+    linhas.push(['Data', formatarData(String(dados.data).slice(0, 10))]);
     if (dados.dia_todo) linhas.push(['Período', 'Dia todo']);
     else if (dados.hora_inicio) linhas.push(['Hora', `${dados.hora_inicio.slice(0, 5)}${dados.hora_fim ? ' às ' + dados.hora_fim.slice(0, 5) : ''}`]);
     if (dados.escritorio) linhas.push(['Visibilidade', 'Escritório (compartilhado)']);
     if (dados.usuario_nome) linhas.push(['De', dados.usuario_nome]);
+  } else if (tipo === 'feriado') {
+    linhas.push(['Feriado', dados.descricao]);
+    linhas.push(['Data', formatarData(String(dados.data).slice(0, 10))]);
+    if (dados.tipo) linhas.push(['Tipo', dados.tipo]);
   }
 
   return (

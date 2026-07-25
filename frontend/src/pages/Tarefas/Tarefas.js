@@ -22,10 +22,19 @@ function tipoTarefa(t) {
 }
 
 export default function Tarefas() {
-  const { temPermissao, ehAdmin } = useAuth();
+  const { temPermissao, ehAdmin, usuario } = useAuth();
+  // Só admin/super OU quem tem a permissão tarefas.ver_todos enxerga o filtro "Para" (responsável).
+  // Os demais ficam sempre restritos às próprias tarefas + as do escritório (regra aplicada no backend).
+  const podeVerTodos = ehAdmin || temPermissao('tarefas.ver_todos', 'visualizar');
   const [lista, setLista]             = useState([]);
   const [total, setTotal]             = useState(0);
-  const [filtros, setFiltros]         = useState({ concluida: '0', prioridade: '', pagina: 1 });
+  // concluida: '0' pendentes | '1' concluídas | '' todas.
+  // atrasadas: '1' mostra só as pendentes já vencidas (atalho); quando ativo, concluida fica '' (o backend cuida).
+  // usuario_id: filtro "Para" — começa no usuário logado (vê as dele + as do escritório); '' = Todos.
+  // numero_processo: trecho do nº do processo (a partir de 3 dígitos). data_de / data_ate: intervalo de vencimento.
+  const [filtros, setFiltros]         = useState({ concluida: '0', prioridade: '', atrasadas: '', usuario_id: usuario?.id || '', numero_processo: '', data_de: '', data_ate: '', pagina: 1 });
+  const [numeroInput, setNumeroInput] = useState(''); // valor cru do campo Número do Processo (debounced p/ filtros)
+  const [usuarios, setUsuarios]       = useState([]); // lista para o dropdown "Para" (só carrega p/ quem vê todos)
   const [carregando, setCarregando]   = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
   const [editando, setEditando]       = useState(null);
@@ -54,6 +63,23 @@ export default function Tarefas() {
   }, [filtros]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  // Lista de usuários do filtro "Para" — só carrega para quem pode ver todos
+  useEffect(() => {
+    if (podeVerTodos) {
+      processosAPI.auxiliares().then(r => setUsuarios(r.data.dados.usuarios || [])).catch(() => {});
+    }
+  }, [podeVerTodos]);
+
+  // Debounce do campo "Número do Processo": busca 350ms depois de parar de digitar (mesmo padrão de Prazos).
+  // Considera só os dígitos: com 3 ou mais aplica o filtro; com menos (ou vazio) limpa e mostra tudo.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const dig = numeroInput.replace(/\D/g, '');
+      setFiltros(f => ({ ...f, numero_processo: dig.length >= 3 ? dig : '', pagina: 1 }));
+    }, 350);
+    return () => clearTimeout(t);
+  }, [numeroInput]);
 
   async function toggleConcluir(tarefa) {
     try {
@@ -121,10 +147,19 @@ export default function Tarefas() {
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Mostrar</label>
-            <select className="form-control" value={filtros.concluida} onChange={e => setFiltro('concluida', e.target.value)}>
+            {/* Dropdown único. "Atrasadas" é um atalho: mostra só as pendentes já vencidas.
+                Quando escolhido, guardamos atrasadas='1' e limpamos concluida (o backend aplica a regra). */}
+            <select className="form-control"
+              value={filtros.atrasadas === '1' ? 'atrasadas' : filtros.concluida}
+              onChange={e => {
+                const v = e.target.value;
+                if (v === 'atrasadas') setFiltros(f => ({ ...f, concluida: '', atrasadas: '1', pagina: 1 }));
+                else                   setFiltros(f => ({ ...f, concluida: v,  atrasadas: '',  pagina: 1 }));
+              }}>
               <option value="0">Pendentes</option>
               <option value="1">Concluídas</option>
               <option value="">Todas</option>
+              <option value="atrasadas">Atrasadas</option>
             </select>
           </div>
           <div className="form-group" style={{ margin: 0 }}>
@@ -136,6 +171,36 @@ export default function Tarefas() {
               <option value="baixa">🟢 Baixa</option>
             </select>
           </div>
+          {podeVerTodos && (
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Para</label>
+              <select className="form-control" value={filtros.usuario_id} onChange={e => setFiltro('usuario_id', e.target.value)}>
+                <option value="">Todos</option>
+                {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+              </select>
+            </div>
+          )}
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Número do Processo</label>
+            {/* Filtra por trecho do número (a partir do 3º caractere), com debounce de 350ms.
+                Aceita com ou sem pontuação — o backend ignora pontos e traços na comparação. */}
+            <input className="form-control" placeholder="Parte do número..."
+              value={numeroInput} maxLength={25}
+              style={{ minWidth: '170px', fontFamily: 'monospace', letterSpacing: '0.5px' }}
+              onChange={e => setNumeroInput(e.target.value)} />
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Vencimento de</label>
+            <input type="date" className="form-control" value={filtros.data_de} onChange={e => setFiltro('data_de', e.target.value)} />
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Até</label>
+            <input type="date" className="form-control" value={filtros.data_ate} onChange={e => setFiltro('data_ate', e.target.value)} />
+          </div>
+          <button className="btn btn-secondary" style={{ marginBottom: '1px' }}
+            onClick={() => { setNumeroInput(''); setFiltros({ concluida: '0', prioridade: '', atrasadas: '', usuario_id: usuario?.id || '', numero_processo: '', data_de: '', data_ate: '', pagina: 1 }); }}>
+            ✕ Limpar filtros
+          </button>
           {temPermissao('tarefas', 'cadastrar') && (
             <button className="btn btn-primary" style={{ marginBottom: '1px' }}
               onClick={() => { setEditando(null); setNovaData(''); setModalAberto(true); }}>

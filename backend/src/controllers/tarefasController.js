@@ -9,33 +9,67 @@ const auditoria = require('../middleware/auditoria');
 // GET /api/tarefas — Lista tarefas com filtros
 async function listar(req, res) {
   try {
-    const { usuario_id, concluida, prioridade, processo_id, pagina = 1, limite = 30 } = req.query;
+    const { usuario_id, concluida, prioridade, processo_id, atrasadas, numero_processo, data_de, data_ate, pagina = 1, limite = 30 } = req.query;
     const params = [];
     let where = 'WHERE 1=1';
+
+    // "Atrasadas": atalho que mostra só as tarefas pendentes (não concluídas) cujo vencimento
+    // já passou. Tarefas sem data de vencimento nunca entram aqui (não há como estar atrasada).
+    // Quando ativo, ignora o filtro de "concluída" (a regra abaixo já garante concluida = 0).
+    const soAtrasadas = atrasadas === '1' || atrasadas === 'true' || atrasadas === true;
 
     // Vazio ('') significa "sem filtro / todas". Só filtra quando vem um valor real
     // ('0' pendentes, '1' concluídas). Sem o "!== ''", o MySQL leria '' como 0 e
     // mostraria só as pendentes (era o motivo de a concluída "sumir" da aba da pasta).
-    if (concluida !== undefined && concluida !== '') { where += ' AND t.concluida = ?'; params.push(concluida); }
+    if (soAtrasadas) {
+      where += ' AND t.concluida = 0 AND t.data_vencimento IS NOT NULL AND t.data_vencimento < CURDATE()';
+    } else if (concluida !== undefined && concluida !== '') {
+      where += ' AND t.concluida = ?'; params.push(concluida);
+    }
     if (prioridade)              { where += ' AND t.prioridade = ?'; params.push(prioridade); }
     // Filtro por processo (aba de Tarefas dentro do processo/pasta). SEM processo_id (tela do menu
     // lateral) mostra TODAS. Tarefas "Rotina Interna" (processo_id NULL) só aparecem no menu lateral.
     if (processo_id)             { where += ' AND t.processo_id = ?'; params.push(processo_id); }
 
-    // Filtra por usuário respeitando a permissão 'tarefas.ver_todos > visualizar'
-    if (usuario_id) {
-      where += ' AND (t.atribuida_para = ? OR t.atribuida_para IS NULL)';
-      params.push(usuario_id);
-    } else if (req.usuario.nivel > 1) {
+    // Filtro por TRECHO do número do processo (digitado na tela de Tarefas). Só a partir de 3 dígitos.
+    // Ignora a pontuação dos dois lados (numProc é gravado com máscara). Referencia pr.numProc —
+    // a query do COUNT também faz LEFT JOIN em tblproc (abaixo), então a contagem continua batendo.
+    // Tarefas "Rotina Interna" (processo_id NULL) naturalmente ficam de fora quando este filtro está ativo.
+    if (numero_processo) {
+      const digitos = String(numero_processo).replace(/\D/g, '');
+      if (digitos.length >= 3) {
+        where += " AND REPLACE(REPLACE(REPLACE(pr.numProc, '.', ''), '-', ''), ' ', '') LIKE ?";
+        params.push(`%${digitos}%`);
+      }
+    }
+
+    // Intervalo de vencimento (de / até)
+    if (data_de)  { where += ' AND t.data_vencimento >= ?'; params.push(data_de); }
+    if (data_ate) { where += ' AND t.data_vencimento <= ?'; params.push(data_ate); }
+
+    // Filtra por usuário respeitando a permissão 'tarefas.ver_todos > visualizar'.
+    // podeVerTodos: admin/super (nível <= 1) OU usuário comum com a permissão explícita.
+    let podeVerTodos = Number(req.usuario.nivel) <= 1;
+    if (!podeVerTodos) {
       const [verTodosPerm] = await pool.execute(
         "SELECT permitido FROM permissoes WHERE usuario_id = ? AND modulo = 'tarefas' AND submodulo = 'ver_todos' AND acao = 'visualizar'",
         [req.usuario.id]
       );
-      if (!verTodosPerm[0]?.permitido) {
-        where += ' AND (t.atribuida_para = ? OR t.atribuida_para IS NULL)';
-        params.push(req.usuario.id);
-      }
+      podeVerTodos = Number(verTodosPerm[0]?.permitido) === 1;
     }
+
+    if (!podeVerTodos) {
+      // Sem permissão de ver todos: SEMPRE restrito às próprias tarefas + as do escritório
+      // (atribuida_para NULL). Ignora qualquer usuario_id recebido — impede burlar a permissão
+      // passando o filtro por outra pessoa direto pela URL.
+      where += ' AND (t.atribuida_para = ? OR t.atribuida_para IS NULL)';
+      params.push(req.usuario.id);
+    } else if (usuario_id) {
+      // Pode ver todos e escolheu uma pessoa: as tarefas dela + as do escritório (atribuida_para NULL).
+      where += ' AND (t.atribuida_para = ? OR t.atribuida_para IS NULL)';
+      params.push(usuario_id);
+    }
+    // Pode ver todos e não escolheu ninguém (usuario_id vazio = "Todos"): sem filtro por usuário.
 
     const limitInt  = parseInt(limite) || 30;
     const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
@@ -67,8 +101,14 @@ async function listar(req, res) {
       params
     );
 
+    // O COUNT usa o MESMO `where`. Como o filtro de número referencia pr.numProc, fazemos o mesmo
+    // LEFT JOIN em tblproc aqui (LEFT preserva as tarefas de "Rotina Interna" sem processo, então a
+    // contagem continua idêntica à de antes quando esse filtro não está em uso).
     const [total] = await pool.execute(
-      `SELECT COUNT(*) as total FROM tarefas t ${where}`, params
+      `SELECT COUNT(*) as total
+         FROM tarefas t
+         LEFT JOIN tblproc pr ON t.processo_id = pr.id
+         ${where}`, params
     );
 
     return sucesso(res, { registros: rows, total: total[0].total });

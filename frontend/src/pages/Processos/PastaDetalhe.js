@@ -38,10 +38,13 @@ export default function PastaDetalhe() {
   const location  = useLocation();
   const { temPermissao, usuario, ehAdmin } = useAuth();
 
-  // Lê parâmetros da URL para abrir aba e processo corretos ao chegar pelo Dashboard
+  // Lê parâmetros da URL para abrir a aba correta ao chegar pelo Dashboard/links (?aba=).
   const urlParams       = new URLSearchParams(location.search);
   const abaInicial      = urlParams.get('aba')      || 'processos';
-  const processoInicial = urlParams.get('processo') || 'todos';
+  // Processo: SEMPRE começa em 'todos' (decisão do usuário 25/07). Ignoramos o ?processo= do link
+  // de propósito — a pasta abre mostrando TODOS os processos em todas as abas; o usuário estreita
+  // no seletor se quiser. (Para CADASTRAR é preciso escolher um processo: o "+ Novo" só aparece então.)
+  const processoInicial = 'todos';
 
   const [pasta, setPasta]           = useState(null);
   const [carregando, setCarregando] = useState(true);
@@ -55,7 +58,13 @@ export default function PastaDetalhe() {
   const [andamentos, setAndamentos]       = useState([]);
   const [prazos, setPrazos]               = useState([]);
   const [tarefas, setTarefas]             = useState([]);
-  const [mostrarConcluidas, setMostrarConcluidas] = useState(false); // aba Tarefas: esconde concluídas por padrão
+  // Filtros da aba Tarefas (dentro da pasta) — espelham a tela de Tarefas, MENOS "Número do Processo".
+  // Estado próprio. "Mostrar" combina concluida ('' todas | '0' pendentes | '1' concluídas) e atrasadas ('1').
+  // "Para" (usuario_id) começa em '' = Todos (dentro da pasta queremos ver tudo). Operam DENTRO do escopo do seletor.
+  const [filtrosTarefa, setFiltrosTarefa]     = useState({ concluida: '0', prioridade: '', atrasadas: '', usuario_id: '', data_de: '', data_ate: '' });
+  const [usuariosTarefa, setUsuariosTarefa]   = useState([]); // dropdown "Para" (só p/ quem vê todos)
+  // Pode ver tarefas de todos: admin/super OU permissão tarefas.ver_todos. A trava real é no backend.
+  const podeVerTodosTarefas = ehAdmin || temPermissao('tarefas.ver_todos', 'visualizar');
   const [audiencias, setAudiencias]       = useState([]);
   const [contaCorrente, setContaCorrente] = useState(null);   // { lancamentos, saldo_total } do processo
   const [acordosFin, setAcordosFin]       = useState([]);     // acordos do processo
@@ -70,6 +79,13 @@ export default function PastaDetalhe() {
   const [prazoEditando, setPrazoEditando]     = useState(null);
   const [modalNovoPrazo, setModalNovoPrazo]   = useState(false);
   const [tiposPrazo, setTiposPrazo]           = useState({ tipos: [], subtipos: [] });
+  // Filtros da aba Prazos (dentro da pasta) — espelham a tela de Prazos, MENOS "Número do Processo"
+  // (redundante aqui). Estado PRÓPRIO (não mistura com o mostrarConcluidas das Tarefas). Operam DENTRO
+  // do escopo do seletor de processo. Responsável ('usuario_id') começa em '' = Todos.
+  const [filtrosPrazo, setFiltrosPrazo]       = useState({ status: '', usuario_id: '', data_de: '', data_ate: '', mostrar_encerrados: false });
+  const [usuariosPrazo, setUsuariosPrazo]     = useState([]); // dropdown "Responsável" (só p/ quem vê todos)
+  // Pode ver prazos de todos: admin/super OU permissão prazos.ver_todos. A trava real é no backend.
+  const podeVerTodosPrazos = ehAdmin || temPermissao('prazos.ver_todos', 'visualizar');
 
   // Modais — Tarefas
   const [modalTarefa, setModalTarefa]         = useState(false);
@@ -120,6 +136,20 @@ export default function PastaDetalhe() {
 
   useEffect(() => { carregarPasta(); }, [carregarPasta]);
 
+  // Lista de usuários do filtro "Responsável" da aba Prazos — só carrega para quem pode ver todos.
+  useEffect(() => {
+    if (podeVerTodosPrazos) {
+      prazosAPI.usuariosFiltro().then(r => { if (r.data.ok) setUsuariosPrazo(r.data.dados); }).catch(() => {});
+    }
+  }, [podeVerTodosPrazos]);
+
+  // Lista de usuários do filtro "Para" da aba Tarefas — só carrega para quem pode ver todos.
+  useEffect(() => {
+    if (podeVerTodosTarefas) {
+      processosAPI.auxiliares().then(r => { if (r.data.ok) setUsuariosTarefa(r.data.dados.usuarios || []); }).catch(() => {});
+    }
+  }, [podeVerTodosTarefas]);
+
   // ---- Recarrega dados quando muda a aba ou o filtro de processo ----
   useEffect(() => {
     if (!pasta) return;
@@ -132,7 +162,7 @@ export default function PastaDetalhe() {
     if (abaAtiva === 'audiencias') carregarAudiencias();
     if (abaAtiva === 'pericias')   carregarPericias();
     if (abaAtiva === 'financeiro') carregarFinanceiro();
-  }, [abaAtiva, pasta, processoFiltro, mostrarConcluidas]); // eslint-disable-line
+  }, [abaAtiva, pasta, processoFiltro, filtrosTarefa, filtrosPrazo]); // eslint-disable-line
 
   // Retorna os IDs dos processos a buscar conforme o filtro atual
   function idsParaBuscar() {
@@ -160,8 +190,10 @@ export default function PastaDetalhe() {
   async function carregarPrazos() {
     const ids = idsParaBuscar();
     try {
+      // Aplica os filtros da aba (status/responsável/datas/encerrados) a cada processo do escopo.
+      // O backend já respeita a permissão ver_todos (ignora usuario_id de quem não pode ver todos).
       const resultados = await Promise.all(
-        ids.map(pid => prazosAPI.listar({ processo_id: pid, limite: 50 }))
+        ids.map(pid => prazosAPI.listar({ processo_id: pid, ...filtrosPrazo, limite: 50 }))
       );
       const todos = resultados.flatMap(r => r.data.ok ? r.data.dados.registros : []);
       setPrazos(todos);
@@ -230,7 +262,7 @@ export default function PastaDetalhe() {
     const ids = idsParaBuscar();
     try {
       const resultados = await Promise.all(
-        ids.map(pid => tarefasAPI.listar({ processo_id: pid, concluida: mostrarConcluidas ? '' : '0', limite: 100 }))
+        ids.map(pid => tarefasAPI.listar({ processo_id: pid, ...filtrosTarefa, limite: 100 }))
       );
       const todos = resultados.flatMap(r => r.data.ok ? r.data.dados.registros : []);
       setTarefas(todos);
@@ -703,6 +735,49 @@ export default function PastaDetalhe() {
                 </button>
               )}
             </div>
+            {/* Filtros da aba Prazos (espelham a tela de Prazos, sem "Número do Processo").
+                Operam DENTRO do escopo do seletor de processo acima. Responsável só p/ quem vê todos. */}
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: '16px' }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Status</label>
+                <select className="form-control" value={filtrosPrazo.status}
+                  onChange={e => setFiltrosPrazo(f => ({ ...f, status: e.target.value }))}>
+                  <option value="">Todos</option>
+                  {['agendado','pendente','atrasado','fazendo','concluido','cancelado'].map(s =>
+                    <option key={s} value={s}>{s === 'fazendo' ? 'Fazendo' : labelStatusPrazo(s)}</option>
+                  )}
+                </select>
+              </div>
+              {podeVerTodosPrazos && (
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">Responsável</label>
+                  <select className="form-control" value={filtrosPrazo.usuario_id}
+                    onChange={e => setFiltrosPrazo(f => ({ ...f, usuario_id: e.target.value }))}>
+                    <option value="">Todos</option>
+                    {usuariosPrazo.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+                  </select>
+                </div>
+              )}
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Vencimento de</label>
+                <input type="date" className="form-control" value={filtrosPrazo.data_de}
+                  onChange={e => setFiltrosPrazo(f => ({ ...f, data_de: e.target.value }))} />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Até</label>
+                <input type="date" className="form-control" value={filtrosPrazo.data_ate}
+                  onChange={e => setFiltrosPrazo(f => ({ ...f, data_ate: e.target.value }))} />
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                <input type="checkbox" checked={filtrosPrazo.mostrar_encerrados}
+                  onChange={e => setFiltrosPrazo(f => ({ ...f, mostrar_encerrados: e.target.checked }))} />
+                <span style={{ fontSize: '13px', color: '#475569' }}>Mostrar concluídos e cancelados</span>
+              </label>
+              <button className="btn btn-secondary"
+                onClick={() => setFiltrosPrazo({ status: '', usuario_id: '', data_de: '', data_ate: '', mostrar_encerrados: false })}>
+                ✕ Limpar filtros
+              </button>
+            </div>
             <div className="tabela-wrapper">
               <table className="tabela">
                 <thead>
@@ -900,17 +975,64 @@ export default function PastaDetalhe() {
         {/* === ABA: TAREFAS === */}
         {abaAtiva === 'tarefas' && (
           <div>
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
+            {/* Filtros da aba Tarefas (espelham a tela de Tarefas, sem "Número do Processo").
+                Operam DENTRO do escopo do seletor de processo. "Para" só p/ quem vê todos. */}
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: '12px' }}>
               {selectProcesso}
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Mostrar</label>
+                {/* "Atrasadas" é atalho: só as pendentes já vencidas (o backend aplica a regra). */}
+                <select className="form-control"
+                  value={filtrosTarefa.atrasadas === '1' ? 'atrasadas' : filtrosTarefa.concluida}
+                  onChange={e => {
+                    const v = e.target.value;
+                    if (v === 'atrasadas') setFiltrosTarefa(f => ({ ...f, concluida: '', atrasadas: '1' }));
+                    else                   setFiltrosTarefa(f => ({ ...f, concluida: v,  atrasadas: '' }));
+                  }}>
+                  <option value="0">Pendentes</option>
+                  <option value="1">Concluídas</option>
+                  <option value="">Todas</option>
+                  <option value="atrasadas">Atrasadas</option>
+                </select>
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Prioridade</label>
+                <select className="form-control" value={filtrosTarefa.prioridade}
+                  onChange={e => setFiltrosTarefa(f => ({ ...f, prioridade: e.target.value }))}>
+                  <option value="">Todas</option>
+                  <option value="urgente">🔴 Urgente</option>
+                  <option value="normal">🟡 Normal</option>
+                  <option value="baixa">🟢 Baixa</option>
+                </select>
+              </div>
+              {podeVerTodosTarefas && (
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">Para</label>
+                  <select className="form-control" value={filtrosTarefa.usuario_id}
+                    onChange={e => setFiltrosTarefa(f => ({ ...f, usuario_id: e.target.value }))}>
+                    <option value="">Todos</option>
+                    {usuariosTarefa.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+                  </select>
+                </div>
+              )}
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Vencimento de</label>
+                <input type="date" className="form-control" value={filtrosTarefa.data_de}
+                  onChange={e => setFiltrosTarefa(f => ({ ...f, data_de: e.target.value }))} />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Até</label>
+                <input type="date" className="form-control" value={filtrosTarefa.data_ate}
+                  onChange={e => setFiltrosTarefa(f => ({ ...f, data_ate: e.target.value }))} />
+              </div>
+              <button className="btn btn-secondary"
+                onClick={() => setFiltrosTarefa({ concluida: '0', prioridade: '', atrasadas: '', usuario_id: '', data_de: '', data_ate: '' })}>
+                ✕ Limpar filtros
+              </button>
               <button className="btn btn-primary"
                 onClick={() => { setTarefaEditando(null); setModalTarefa(true); }}>
                 + Nova Tarefa
               </button>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', userSelect: 'none' }}>
-                <input type="checkbox" checked={mostrarConcluidas}
-                  onChange={e => setMostrarConcluidas(e.target.checked)} />
-                <span style={{ fontSize: '13px', color: '#475569' }}>Mostrar concluídas</span>
-              </label>
             </div>
             <div className="tabela-wrapper">
               <table className="tabela">

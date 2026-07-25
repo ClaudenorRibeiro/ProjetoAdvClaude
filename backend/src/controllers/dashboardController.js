@@ -59,9 +59,13 @@ async function buscarDados(req, res) {
       ),
 
       // Tarefas pendentes (sem data ou com data futura)
+      // Traz o nome do responsável (mesma lógica da tela de Tarefas) para o Dashboard mostrar
+      // "Para" corretamente; sem esse JOIN a coluna caía sempre em "Escritório".
       pool.execute(
-        `SELECT t.id, t.titulo, t.prioridade, t.data_vencimento
+        `SELECT t.id, t.titulo, t.prioridade, t.data_vencimento,
+                u.nome AS atribuida_para_nome
          FROM tarefas t
+         LEFT JOIN usuarios u ON t.atribuida_para = u.id
          WHERE t.concluida = 0
            AND (t.data_vencimento IS NULL OR t.data_vencimento >= ?)
            AND (t.atribuida_para = ? OR t.atribuida_para IS NULL)

@@ -851,3 +851,13 @@ body {
   z-index: 1;
   box-shadow: inset 0 -1px 0 #9ca3af;  /* mantém o separador visível ao rolar */
 }
+
+/* Título do mês na Agenda (react-big-calendar). O padrão da biblioteca fica pequeno e
+   apagado; aqui deixamos maior, semibold e na cor escura dos títulos do sistema.
+   Seletor com 2 classes de propósito, para vencer o CSS padrão da lib em qualquer ordem
+   de carregamento. Escopo restrito à barra do calendário — não afeta outras telas. */
+.rbc-toolbar .rbc-toolbar-label {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e2a3a;
+}

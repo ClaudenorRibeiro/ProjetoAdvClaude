@@ -1,7 +1,8 @@
 -- ================================================================
 -- dados_iniciais.sql — TABELAS DE APOIO
 -- Gerado a partir do backup da producao (bkp-BD-170726-0943-AWS) em 17/07/2026.
--- 16 tabelas de apoio (feriados e forma_pagamento vem vazias, como na producao)
+-- 16 tabelas de apoio (forma_pagamento vem vazia, como na producao; feriados carrega
+--   os feriados NACIONAIS 2026-2056, sincronizados com calendario.dia_util)
 -- + configuracoes_integracoes com 4 linhas VAZIAS (andaime que o backend exige).
 -- Contem SOMENTE tabelas de apoio: NENHUM dado de cliente, NENHUMA chave/senha.
 -- NAO troca de banco (sem USE/CREATE DATABASE): cai no banco passado no -p.
@@ -11609,7 +11610,87 @@ INSERT IGNORE INTO `tbltipoproc` (`id`, `nome`, `codTipoProc`, `ativo`, `criado_
 	(5, 'Criminal', NULL, 1, NULL, '2026-05-26 00:58:03', NULL, NULL),
 	(6, 'Tributário', NULL, 1, NULL, '2026-05-26 00:58:03', NULL, NULL);
 
--- feriados: 0 registros (vazia na producao) — nada a inserir
+-- feriados: FERIADOS NACIONAIS (apenas nacionais de lei) 25/07/2026 -> 30/04/2056.
+-- Insere em 'feriados' e sincroniza 'calendario.dia_util' (o calendario ja foi
+-- carregado acima). Idempotente (NOT EXISTS) e so toca datas que existem no calendario.
+-- Fixos: 01/01, 21/04, 01/05, 07/09, 12/10, 02/11, 15/11, 20/11, 25/12.
+-- Movel: Sexta-feira Santa (calculada pela Pascoa de cada ano).
+START TRANSACTION;
+
+INSERT INTO feriados (data, descricao, tipo, criado_por)
+SELECT c.data,
+  CASE
+    WHEN MONTH(c.data)=1  AND DAY(c.data)=1  THEN 'Confraternização Universal'
+    WHEN MONTH(c.data)=4  AND DAY(c.data)=21 THEN 'Tiradentes'
+    WHEN MONTH(c.data)=5  AND DAY(c.data)=1  THEN 'Dia do Trabalho'
+    WHEN MONTH(c.data)=9  AND DAY(c.data)=7  THEN 'Independência do Brasil'
+    WHEN MONTH(c.data)=10 AND DAY(c.data)=12 THEN 'Nossa Senhora Aparecida'
+    WHEN MONTH(c.data)=11 AND DAY(c.data)=2  THEN 'Finados'
+    WHEN MONTH(c.data)=11 AND DAY(c.data)=15 THEN 'Proclamação da República'
+    WHEN MONTH(c.data)=11 AND DAY(c.data)=20 THEN 'Consciência Negra'
+    WHEN MONTH(c.data)=12 AND DAY(c.data)=25 THEN 'Natal'
+  END,
+  'nacional', NULL
+FROM calendario c
+WHERE c.data BETWEEN '2026-07-25' AND '2056-04-30'
+  AND (
+       (MONTH(c.data)=1  AND DAY(c.data)=1)
+    OR (MONTH(c.data)=4  AND DAY(c.data)=21)
+    OR (MONTH(c.data)=5  AND DAY(c.data)=1)
+    OR (MONTH(c.data)=9  AND DAY(c.data)=7)
+    OR (MONTH(c.data)=10 AND DAY(c.data)=12)
+    OR (MONTH(c.data)=11 AND DAY(c.data)=2)
+    OR (MONTH(c.data)=11 AND DAY(c.data)=15)
+    OR (MONTH(c.data)=11 AND DAY(c.data)=20)
+    OR (MONTH(c.data)=12 AND DAY(c.data)=25)
+  )
+  AND NOT EXISTS (SELECT 1 FROM feriados f WHERE f.data = c.data AND f.tipo = 'nacional');
+
+INSERT INTO feriados (data, descricao, tipo, criado_por)
+SELECT n.d, 'Sexta-feira Santa', 'nacional', NULL
+FROM (
+    SELECT '2027-03-26' AS d
+    UNION ALL SELECT '2028-04-14'
+    UNION ALL SELECT '2029-03-30'
+    UNION ALL SELECT '2030-04-19'
+    UNION ALL SELECT '2031-04-11'
+    UNION ALL SELECT '2032-03-26'
+    UNION ALL SELECT '2033-04-15'
+    UNION ALL SELECT '2034-04-07'
+    UNION ALL SELECT '2035-03-23'
+    UNION ALL SELECT '2036-04-11'
+    UNION ALL SELECT '2037-04-03'
+    UNION ALL SELECT '2038-04-23'
+    UNION ALL SELECT '2039-04-08'
+    UNION ALL SELECT '2040-03-30'
+    UNION ALL SELECT '2041-04-19'
+    UNION ALL SELECT '2042-04-04'
+    UNION ALL SELECT '2043-03-27'
+    UNION ALL SELECT '2044-04-15'
+    UNION ALL SELECT '2045-04-07'
+    UNION ALL SELECT '2046-03-23'
+    UNION ALL SELECT '2047-04-12'
+    UNION ALL SELECT '2048-04-03'
+    UNION ALL SELECT '2049-04-16'
+    UNION ALL SELECT '2050-04-08'
+    UNION ALL SELECT '2051-03-31'
+    UNION ALL SELECT '2052-04-19'
+    UNION ALL SELECT '2053-04-04'
+    UNION ALL SELECT '2054-03-27'
+    UNION ALL SELECT '2055-04-16'
+    UNION ALL SELECT '2056-03-31'
+) AS n
+WHERE EXISTS (SELECT 1 FROM calendario c WHERE c.data = n.d)
+  AND NOT EXISTS (SELECT 1 FROM feriados f WHERE f.data = n.d AND f.tipo = 'nacional');
+
+UPDATE calendario
+SET dia_util = 0
+WHERE data IN (
+  SELECT data FROM feriados
+  WHERE tipo = 'nacional' AND data BETWEEN '2026-07-25' AND '2056-04-30'
+);
+
+COMMIT;
 
 -- configuracoes_integracoes: 3 linhas VAZIAS (andaime; cada escritorio
 -- configura a sua). A chave AASP do Antonio NAO vai aqui.
