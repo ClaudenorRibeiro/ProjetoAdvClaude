@@ -53,6 +53,10 @@ api.interceptors.response.use(
 export const authAPI = {
   infoPublica:    () => api.get('/public/info'),           // nome, logo, titulo_aba — sem autenticação
   login:          (dados) => api.post('/auth/login', dados),
+  // Registra o logout. Recebe o token EXPLÍCITO no cabeçalho: o AuthContext limpa o sessionStorage
+  // na hora (p/ evitar corrida se o usuário logar de novo em seguida), então o interceptor não teria
+  // mais o token p/ anexar — por isso enviamos aqui direto.
+  logout:         (dados, token) => api.post('/auth/logout', dados || {}, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined),
   verificar:      () => api.get('/auth/verificar'),
   criarAdmin:     (dados) => api.post('/auth/criar-admin', dados),
   esqueciSenha:   (dados) => api.post('/auth/esqueci-senha', dados),

@@ -48,6 +48,7 @@ router.get('/public/info',              configuracaoCtrl.infoPublica);
 
 // ---- AUTENTICAÇÃO (rotas públicas) ----
 router.post('/auth/login',              loginLimiter, authCtrl.login);
+router.post('/auth/logout',             autenticar, authCtrl.logout);
 router.post('/auth/criar-admin',        authCtrl.criarPrimeiroAdmin);
 router.get('/auth/verificar',           autenticar, authCtrl.verificarToken);
 // Redefinição de senha via e-mail (rotas públicas — sem autenticação)

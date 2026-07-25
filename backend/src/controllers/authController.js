@@ -78,6 +78,15 @@ async function login(req, res) {
       [usuario.id]
     );
 
+    // Registra o LOGIN no histórico de auditoria (aparece no "Histórico do usuário").
+    // Blindado: se a gravação falhar por qualquer motivo, o login NÃO é interrompido.
+    try {
+      await pool.execute(
+        "INSERT INTO logs_auditoria (usuario_id, tabela, acao, registro_id, descricao, criado_em) VALUES (?, 'acesso', 'login', NULL, 'Login no sistema', NOW())",
+        [usuario.id]
+      );
+    } catch (e) { /* auditoria nunca derruba o login */ }
+
     // Busca permissões do usuário (para montar o menu no frontend)
     const permissoes = await buscarPermissoesUsuario(usuario.id);
 
@@ -335,4 +344,19 @@ async function verificarSenha(req, res) {
   }
 }
 
-module.exports = { login, criarPrimeiroAdmin, verificarToken, esqueciSenha, validarToken, redefinirSenha, trocarSenha, verificarSenha };
+// POST /api/auth/logout
+// Registra o LOGOUT no histórico de auditoria. Exige token (rota autenticada) para saber QUEM saiu.
+// O logout de fato acontece no frontend (limpa o token); aqui só gravamos o evento.
+// `motivo` (opcional, vindo do frontend): 'inatividade' distingue o logout automático do manual.
+async function logout(req, res) {
+  const descricao = req.body?.motivo === 'inatividade' ? 'Logout por inatividade' : 'Logout do sistema';
+  try {
+    await pool.execute(
+      "INSERT INTO logs_auditoria (usuario_id, tabela, acao, registro_id, descricao, criado_em) VALUES (?, 'acesso', 'logout', NULL, ?, NOW())",
+      [req.usuario.id, descricao]
+    );
+  } catch (e) { /* não impede o logout do frontend */ }
+  return sucesso(res, null, 'Logout registrado');
+}
+
+module.exports = { login, logout, criarPrimeiroAdmin, verificarToken, esqueciSenha, validarToken, redefinirSenha, trocarSenha, verificarSenha };

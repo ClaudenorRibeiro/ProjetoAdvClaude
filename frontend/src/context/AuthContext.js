@@ -55,12 +55,21 @@ export function AuthProvider({ children }) {
     return data;
   }
 
-  // Limpa tudo e redireciona para login
-  function deslogar() {
+  // Limpa tudo e redireciona para login.
+  // Limpamos o token IMEDIATAMENTE (como sempre foi) — assim, se o usuário logar de novo logo em
+  // seguida, não há risco de uma chamada de logout atrasada apagar o token NOVO (corrida).
+  // Só nos logouts DELIBERADOS (manual ou por inatividade) registramos o evento no backend: guardamos
+  // o token ANTES de limpar e o enviamos explícito no cabeçalho (fire-and-forget, nunca trava a saída).
+  // Sem motivo (ex.: token inválido na abertura do app), apenas limpa, sem logar (evita 401 à toa).
+  function deslogar(motivo) {
+    const token = sessionStorage.getItem('token');
     sessionStorage.removeItem('token');
     sessionStorage.removeItem('usuario');
     setUsuario(null);
     setPermissoes({});
+    if (motivo && token) {
+      authAPI.logout({ motivo }, token).catch(() => {});
+    }
   }
 
   // Logout automático por INATIVIDADE.
@@ -74,7 +83,7 @@ export function AuthProvider({ children }) {
     let timer;
     const reiniciar = () => {
       clearTimeout(timer);
-      timer = setTimeout(() => { deslogar(); }, limiteMs);
+      timer = setTimeout(() => { deslogar('inatividade'); }, limiteMs);
     };
     const eventos = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
     eventos.forEach(ev => window.addEventListener(ev, reiniciar, { passive: true }));

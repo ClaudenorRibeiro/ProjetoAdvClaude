@@ -727,17 +727,11 @@ export default function PastaDetalhe() {
         {/* === ABA: PRAZOS === */}
         {abaAtiva === 'prazos' && (
           <div>
-            <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
-              {selectProcesso}
-              {processoSelecionado && (
-                <button className="btn btn-primary" onClick={() => setModalNovoPrazo(true)}>
-                  + Novo Prazo
-                </button>
-              )}
-            </div>
-            {/* Filtros da aba Prazos (espelham a tela de Prazos, sem "Número do Processo").
-                Operam DENTRO do escopo do seletor de processo acima. Responsável só p/ quem vê todos. */}
+            {/* Filtros da aba Prazos (espelham a tela de Prazos, sem "Número do Processo"), numa ÚNICA linha
+                junto do seletor de processo — mesmo layout da aba Tarefas. Operam DENTRO do escopo do seletor.
+                Responsável só p/ quem vê todos. "+ Novo Prazo" (no fim) só aparece com UM processo selecionado. */}
             <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: '16px' }}>
+              {selectProcesso}
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">Status</label>
                 <select className="form-control" value={filtrosPrazo.status}
@@ -777,6 +771,11 @@ export default function PastaDetalhe() {
                 onClick={() => setFiltrosPrazo({ status: '', usuario_id: '', data_de: '', data_ate: '', mostrar_encerrados: false })}>
                 ✕ Limpar filtros
               </button>
+              {processoSelecionado && (
+                <button className="btn btn-primary" onClick={() => setModalNovoPrazo(true)}>
+                  + Novo Prazo
+                </button>
+              )}
             </div>
             <div className="tabela-wrapper">
               <table className="tabela">

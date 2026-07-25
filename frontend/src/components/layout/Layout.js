@@ -161,7 +161,7 @@ export default function Layout({ children }) {
   }
 
   function handleLogout() {
-    deslogar();
+    deslogar('manual');   // logout manual (botão "Sair") — registra na auditoria
     navigate('/login');
   }
 
