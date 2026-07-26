@@ -86,6 +86,10 @@ router.post('/pessoas/fisicas',           autenticar, verificarPermissao('pessoa
 router.put('/pessoas/fisicas/:id',        autenticar, verificarPermissao('pessoas','alterar'),    pessoasCtrl.atualizarFisica);
 router.delete('/pessoas/fisicas/:id',     autenticar, verificarPermissao('pessoas','excluir'),    pessoasCtrl.excluirFisica);
 router.post('/pessoas/fisicas/:id/historico', autenticar, pessoasCtrl.adicionarHistorico);
+// Anotações de atendimento (jurídica adicionar; editar/excluir por id da anotação — regra de dono+hoje/admin no controller)
+router.post('/pessoas/juridicas/:id/historico', autenticar, pessoasCtrl.adicionarHistorico);
+router.put('/pessoas/historico/:histId',    autenticar, pessoasCtrl.editarHistorico);
+router.delete('/pessoas/historico/:histId', autenticar, pessoasCtrl.excluirHistorico);
 router.get('/pessoas/juridicas',          autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.listarJuridicas);
 router.get('/pessoas/juridicas/exportar', autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.exportarJuridicas);
 // Busca 1 empresa com telefones/e-mails (edição) — DEPOIS de /exportar para não capturar a palavra como id

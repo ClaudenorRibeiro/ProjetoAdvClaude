@@ -857,7 +857,49 @@ body {
    Seletor com 2 classes de propósito, para vencer o CSS padrão da lib em qualquer ordem
    de carregamento. Escopo restrito à barra do calendário — não afeta outras telas. */
 .rbc-toolbar .rbc-toolbar-label {
-  font-size: 18px;
+  font-size: 24px;
   font-weight: 600;
   color: #1e2a3a;
+}
+
+/* Dia atual na Agenda (react-big-calendar). O azul padrão da lib é bem apagado;
+   aqui deixamos um azul mais forte para destacar melhor "hoje". Seletor com 2 classes
+   de propósito para vencer o CSS padrão da lib. Escopo restrito ao calendário. */
+.rbc-month-view .rbc-today,
+.rbc-time-view .rbc-today {
+  background-color: #bcd8f5;
+}
+
+/* Popup "+N mais" da Agenda (react-big-calendar): por padrão os eventos ficam
+   praticamente colados (a lib força margin-top: 1px). Usamos !important para vencer
+   o CSS padrão da biblioteca em qualquer ordem de carregamento, dando respiro entre
+   os itens e um pouco de folga interna em cada um. */
+.rbc-overlay > * + * {
+  margin-top: 12px !important;
+}
+/* Dica "ESC para fechar" no canto superior direito do popup. O cabeçalho da lib mostra a
+   data à esquerda; adicionamos a dica à direita via pseudo-elemento (sem tocar no JS da lib). */
+.rbc-overlay .rbc-overlay-header {
+  position: relative;
+  padding-right: 96px;
+}
+.rbc-overlay .rbc-overlay-header::after {
+  content: "ESC para fechar";
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  font-size: 11px;
+  color: #888;
+  white-space: nowrap;
+}
+.rbc-overlay .rbc-event {
+  padding: 4px 8px;
+  font-size: 14px !important;
+}
+
+/* Link "+N mais" dentro das células da Agenda: o padrão da lib é 85% (pequeno);
+   subimos para 120%. !important para vencer o CSS padrão da biblioteca. */
+.rbc-row-segment .rbc-show-more {
+  font-size: 120% !important;
 }

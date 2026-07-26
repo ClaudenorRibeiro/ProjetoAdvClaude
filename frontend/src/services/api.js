@@ -84,7 +84,10 @@ export const pessoasAPI = {
   criarFisica:     (dados) => api.post('/pessoas/fisicas', dados),
   atualizarFisica: (id, dados) => api.put(`/pessoas/fisicas/${id}`, dados),
   excluirFisica:   (id) => api.delete(`/pessoas/fisicas/${id}`),
-  adicionarHistorico: (id, dados) => api.post(`/pessoas/fisicas/${id}/historico`, dados),
+  // Anotações de atendimento. tipoPlural = 'fisicas' | 'juridicas'. dados = { descricao, tipo_pessoa }
+  adicionarHistorico: (tipoPlural, id, dados) => api.post(`/pessoas/${tipoPlural}/${id}/historico`, dados),
+  editarHistorico:    (histId, dados) => api.put(`/pessoas/historico/${histId}`, dados),
+  excluirHistorico:   (histId) => api.delete(`/pessoas/historico/${histId}`),
   // Verifica se CPF já existe — retorna { existe: false } ou { existe: true, pessoa: { id, nome, cpf } }
   verificarCPF: (cpf) => api.get(`/pessoas/fisicas/cpf/${cpf}`),
   // Cria novo item em tabela auxiliar: tipo = 'generos' | 'estados_civis' | 'profissoes'

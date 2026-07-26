@@ -1,7 +1,8 @@
 
 Sobram só as 6 pendências abertas para as próximas sessões:
 
-1) Publicações — coluna "OAB/UF" (precisa análise primeiro)
+1) [FEITO 26/07 - testado no LOCAL] Publicações — coluna "OAB" na aba CNJ/DJEN (só aparece com >1 OAB).
+   FALTA: rodar o ALTER nas AWS + deploy + push git ->  ALTER TABLE publicacoes ADD COLUMN oab varchar(20) DEFAULT NULL AFTER tribunal;
 2) Financeiro multi-banco (grande)
 3) Config global de capitalização (grande e transversal)
 4) Hardening do servidor AWS (infra; + rotacionar chaves AWS em texto puro)

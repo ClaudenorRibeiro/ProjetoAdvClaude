@@ -578,6 +578,7 @@ function PublicacoesCNJ() {
   const podeExcluir  = temPermissao('publicacoes', 'excluir');
 
   const [configurado, setConfigurado] = useState(null); // null = ainda verificando
+  const [qtdOabs, setQtdOabs]         = useState(0);     // nº de OABs cadastradas (col. OAB só aparece com >1)
   const [dataInicio, setDataInicio]   = useState(hojeLocal());
   const [dataFim, setDataFim]         = useState(hojeLocal());
   const [importando, setImportando]   = useState(false);
@@ -600,7 +601,12 @@ function PublicacoesCNJ() {
   // Verifica se o CNJ está configurado (para mostrar o aviso, sem quebrar a tela).
   useEffect(() => {
     publicacoesAPI.statusCnj()
-      .then(({ data }) => { if (data.ok) setConfigurado(!!data.dados.configurado); })
+      .then(({ data }) => {
+        if (data.ok) {
+          setConfigurado(!!data.dados.configurado);
+          setQtdOabs(Number(data.dados.qtdOabs) || 0);
+        }
+      })
       .catch(() => setConfigurado(false));
   }, []);
 
@@ -861,6 +867,7 @@ function PublicacoesCNJ() {
                   )}
                   {thOrder('data', 'Data')}
                   {thOrder('tribunal', 'Tribunal')}
+                  {qtdOabs > 1 && <th style={{ whiteSpace: 'nowrap' }}>OAB</th>}
                   {thOrder('processo', 'Processo')}
                   {thOrder('conteudo', 'Conteúdo')}
                   {thOrder('direcionada', 'Direcionada a')}
@@ -881,6 +888,7 @@ function PublicacoesCNJ() {
                     )}
                     <td style={{ whiteSpace: 'nowrap' }}>{formatarData(p.data_publicacao)}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>{p.tribunal || '—'}</td>
+                    {qtdOabs > 1 && <td style={{ whiteSpace: 'nowrap' }}>{p.oab || '—'}</td>}
                     <td style={{ whiteSpace: 'nowrap' }}>{p.numero_processo || '—'}</td>
                     <td style={{ maxWidth: '360px' }}>
                       <div style={{

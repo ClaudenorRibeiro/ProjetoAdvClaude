@@ -66,8 +66,11 @@ async function lerConfigCnj() {
 async function statusCnj(req, res) {
   try {
     const cfg = await lerConfigCnj();
-    const temOab = cfg.oabs.some(o => o && o.numero && o.uf);
-    return sucesso(res, { configurado: !!(cfg.ativo && temOab) });
+    const oabsValidas = cfg.oabs.filter(o => o && o.numero && o.uf);
+    return sucesso(res, {
+      configurado: !!(cfg.ativo && oabsValidas.length),
+      qtdOabs: oabsValidas.length,
+    });
   } catch (err) {
     return erroInterno(res, err);
   }
@@ -91,16 +94,22 @@ async function importarCnj(req, res) {
         'A integração com o CNJ não está configurada. Configure em Configurações → Integrações.');
     }
 
-    // Busca no CNJ para cada OAB configurada e junta tudo.
+    // Busca no CNJ para cada OAB configurada e junta tudo. Cada item recebe o rótulo
+    // da OAB que o trouxe (número/UF) — é a OAB exibida na coluna da tela. A primeira
+    // OAB que trouxe uma comunicação "fica" com ela (o dedup por id_cnj mantém a 1ª).
     let itens = [];
     try {
       for (const o of oabs) {
+        const numeroOab = String(o.numero).trim();
+        const ufOab     = String(o.uf).trim().toUpperCase();
         const lote = await cnjService.buscarComunicacoes({
           url: cfg.url,
-          numeroOab: String(o.numero).trim(),
-          ufOab: String(o.uf).trim().toUpperCase(),
+          numeroOab,
+          ufOab,
           dataInicio, dataFim,
         });
+        const rotuloOab = `${numeroOab}/${ufOab}`;
+        for (const it of lote) { if (it && it.__oab == null) it.__oab = rotuloOab; }
         itens = itens.concat(lote);
       }
     } catch (e) {
@@ -122,6 +131,7 @@ async function importarCnj(req, res) {
         titulo: it.nomeOrgao || null,             // órgão/vara
         numero_publicacao: it.numeroComunicacao != null ? String(it.numeroComunicacao) : null,
         hash_cnj: it.hash || null,                // usado para baixar a certidão em PDF
+        oab: it.__oab || null,                    // OAB (número/UF) que trouxe esta publicação
         data_publicacao: it.data_disponibilizacao
           ? String(it.data_disponibilizacao).slice(0, 10) : dataInicio,
       });
@@ -162,10 +172,10 @@ async function importarCnj(req, res) {
       for (const c of novos) {
         await conn.execute(
           `INSERT INTO publicacoes
-             (fonte, id_cnj, data_publicacao, numero_processo, tribunal, titulo, cabecalho,
+             (fonte, id_cnj, data_publicacao, numero_processo, tribunal, oab, titulo, cabecalho,
               numero_publicacao, texto, texto_hash, hash_cnj, escritorio, importada_por)
-           VALUES ('cnj', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-          [c.id_cnj, c.data_publicacao, c.numero_processo, c.tribunal, c.titulo, c.cabecalho,
+           VALUES ('cnj', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+          [c.id_cnj, c.data_publicacao, c.numero_processo, c.tribunal, c.oab, c.titulo, c.cabecalho,
            c.numero_publicacao, c.texto, c.hash, c.hash_cnj, req.usuario.id]
         );
       }
@@ -271,7 +281,7 @@ async function listar(req, res) {
     //   mais antiga (a "original"), ajudando o usuário a identificar quais excluir manualmente.
     const [rows] = await pool.execute(
       `SELECT p.id, p.fonte, p.data_publicacao, p.numero_processo, p.numero_publicacao,
-              p.tribunal, p.hash_cnj,
+              p.tribunal, p.oab, p.hash_cnj,
               p.titulo, p.cabecalho, p.texto, p.escritorio, p.tratada, p.tratada_em,
               ut.nome AS tratada_por_nome,
               (SELECT GROUP_CONCAT(u.nome SEPARATOR ', ')

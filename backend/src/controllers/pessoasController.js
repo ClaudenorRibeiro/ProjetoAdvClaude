@@ -673,21 +673,84 @@ async function unificarFisicas(req, res) {
   }
 }
 
-// POST /api/pessoas/fisicas/:id/historico — Adiciona histórico de atendimento
+// POST /api/pessoas/(fisicas|juridicas)/:id/historico — Adiciona uma anotação de atendimento.
+// tipo_pessoa vem no corpo, mas é sempre normalizado para 'fisica' ou 'juridica' (nunca confia no
+// valor cru do cliente). Qualquer usuário logado pode registrar — quem atende, anota.
 async function adicionarHistorico(req, res) {
   try {
     const { id } = req.params;
-    const { descricao, tipo_pessoa } = req.body;
+    const { descricao } = req.body;
+    const tipoPessoa = req.body.tipo_pessoa === 'juridica' ? 'juridica' : 'fisica';
 
-    if (!descricao) return erro(res, 'A descrição é obrigatória');
+    if (!descricao || !descricao.trim()) return erro(res, 'A anotação não pode ficar em branco');
 
     await pool.execute(
       `INSERT INTO historico_atendimento (tipo_pessoa, pessoa_id, descricao, usuario_id)
        VALUES (?, ?, ?, ?)`,
-      [tipo_pessoa || 'fisica', id, descricao, req.usuario.id]
+      [tipoPessoa, id, descricao.trim(), req.usuario.id]
     );
 
-    return sucesso(res, null, 'Histórico registrado com sucesso', 201);
+    return sucesso(res, null, 'Anotação registrada com sucesso', 201);
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// Regra de permissão das anotações (usada por editar e excluir):
+//   - Admin (nível <= 1): pode tudo, em qualquer data e de qualquer usuário.
+//   - Demais: só a PRÓPRIA anotação E somente no dia de hoje (a data de "hoje" é a do
+//     servidor — DATE(criado_em) = CURDATE() —, para não depender do relógio do navegador).
+// Retorna { ok, motivo } onde motivo é null (permitido) ou uma mensagem amigável.
+async function podeAlterarAnotacao(histId, usuario) {
+  const [rows] = await pool.execute(
+    `SELECT usuario_id, (DATE(criado_em) = CURDATE()) AS hoje
+       FROM historico_atendimento WHERE id = ?`,
+    [histId]
+  );
+  if (!rows.length) return { ok: false, naoEncontrado: true };
+  const anotacao = rows[0];
+  const ehAdmin = Number(usuario.nivel) <= 1;
+  if (ehAdmin) return { ok: true };
+  const ehDono = Number(anotacao.usuario_id) === Number(usuario.id);
+  const ehHoje = Number(anotacao.hoje) === 1;
+  if (ehDono && ehHoje) return { ok: true };
+  return { ok: false, motivo: 'Você só pode editar ou excluir as anotações que você escreveu hoje.' };
+}
+
+// PUT /api/pessoas/historico/:histId — Edita o texto de uma anotação (respeitando a regra acima).
+async function editarHistorico(req, res) {
+  try {
+    const { histId } = req.params;
+    const { descricao } = req.body;
+    if (!descricao || !descricao.trim()) return erro(res, 'A anotação não pode ficar em branco');
+
+    const permissao = await podeAlterarAnotacao(histId, req.usuario);
+    if (permissao.naoEncontrado) return naoEncontrado(res, 'Anotação não encontrada');
+    if (!permissao.ok)           return erro(res, permissao.motivo, 403);
+
+    await pool.execute(
+      'UPDATE historico_atendimento SET descricao = ? WHERE id = ?',
+      [descricao.trim(), histId]
+    );
+    await auditoria.registrar(req.usuario.id, 'historico_atendimento', 'alterar', histId);
+    return sucesso(res, null, 'Anotação atualizada com sucesso');
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// DELETE /api/pessoas/historico/:histId — Exclui uma anotação (respeitando a regra acima).
+async function excluirHistorico(req, res) {
+  try {
+    const { histId } = req.params;
+
+    const permissao = await podeAlterarAnotacao(histId, req.usuario);
+    if (permissao.naoEncontrado) return naoEncontrado(res, 'Anotação não encontrada');
+    if (!permissao.ok)           return erro(res, permissao.motivo, 403);
+
+    await pool.execute('DELETE FROM historico_atendimento WHERE id = ?', [histId]);
+    await auditoria.registrar(req.usuario.id, 'historico_atendimento', 'excluir', histId);
+    return sucesso(res, null, 'Anotação excluída com sucesso');
   } catch (err) {
     return erroInterno(res, err);
   }
@@ -822,7 +885,17 @@ async function buscarJuridica(req, res) {
       'SELECT * FROM emails_pj WHERE pessoa_id = ? ORDER BY principal DESC, id ASC', [id]
     );
 
-    return sucesso(res, { ...pessoa, telefones, emails });
+    // Anotações de atendimento (mesma tabela da física, filtrando pelo tipo jurídica).
+    const [historico] = await pool.execute(
+      `SELECT h.*, u.nome AS usuario_nome
+       FROM historico_atendimento h
+       JOIN usuarios u ON h.usuario_id = u.id
+       WHERE h.tipo_pessoa = 'juridica' AND h.pessoa_id = ?
+       ORDER BY h.criado_em DESC`,
+      [id]
+    );
+
+    return sucesso(res, { ...pessoa, telefones, emails, historico });
   } catch (err) {
     return erroInterno(res, err);
   }
@@ -1323,7 +1396,7 @@ async function registrarParabens(req, res) {
 }
 
 module.exports = {
-  listarFisicas, buscarFisica, criarFisica, atualizarFisica, excluirFisica, unificarFisicas, adicionarHistorico,
+  listarFisicas, buscarFisica, criarFisica, atualizarFisica, excluirFisica, unificarFisicas, adicionarHistorico, editarHistorico, excluirHistorico,
   listarJuridicas, buscarJuridica, criarJuridica, atualizarJuridica, excluirJuridica, unificarJuridicas, buscarAuxiliares, buscarPorCPF, criarAuxiliar,
   processosDaPessoa, exportarFisicas, exportarJuridicas,
   listarAniversariantes, registrarParabens, buscarAniversariantes

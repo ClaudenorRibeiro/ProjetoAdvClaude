@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { pessoasAPI } from '../../services/api';
-import { formatarCPF, formatarCNPJ, formatarData, mascaraCPF, validarCPF, mascaraCNPJ, validarCNPJ, toTitleCase } from '../../utils/formatters';
+import { formatarCPF, formatarCNPJ, formatarData, formatarDataHora, mascaraCPF, validarCPF, mascaraCNPJ, validarCNPJ, toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import GerarDocumentoPartesBotao from '../../components/GerarDocumentoPartes';
 import MenuAcoes from '../../components/MenuAcoes';
@@ -61,6 +61,9 @@ export default function Pessoas() {
   // Janela com a lista de processos de uma pessoa (ao clicar na "Qtde Proc")
   const [verProcessosDe, setVerProcessosDe] = useState(null); // { pessoa, tipo }
   function abrirProcessos(pessoa) { setVerProcessosDe({ pessoa, tipo: aba }); }
+
+  const [verAnotacoesDe, setVerAnotacoesDe] = useState(null); // { pessoa, tipo } — Anotações de atendimento
+  function abrirAnotacoes(pessoa) { setVerAnotacoesDe({ pessoa, tipo: aba }); }
 
   // Sai do modo de unificação e limpa a seleção
   function sairModoUnificar() { setModoUnificar(false); setSelUnificar([]); }
@@ -231,11 +234,11 @@ export default function Pessoas() {
           <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
             {aba === 'fisicas' ? (
               <TabelaFisicas lista={lista} onEditar={abrirEdicao} onExcluir={pedirConfirmacaoExclusao}
-                onVerProcessos={abrirProcessos}
+                onVerProcessos={abrirProcessos} onAnotacoes={abrirAnotacoes}
                 modoUnificar={modoUnificar} selecionados={selUnificar} onToggleSel={toggleSelUnificar} />
             ) : (
               <TabelaJuridicas lista={lista} onEditar={abrirEdicao} onExcluir={pedirConfirmacaoExclusao}
-                onVerProcessos={abrirProcessos}
+                onVerProcessos={abrirProcessos} onAnotacoes={abrirAnotacoes}
                 modoUnificar={modoUnificar} selecionados={selUnificar} onToggleSel={toggleSelUnificar} />
             )}
             {lista.length === 0 && <p className="lista-vazia">Nenhum registro encontrado</p>}
@@ -268,6 +271,15 @@ export default function Pessoas() {
           pessoa={verProcessosDe.pessoa}
           tipo={verProcessosDe.tipo}
           onFechar={() => setVerProcessosDe(null)}
+        />
+      )}
+
+      {/* Janela de Anotações de atendimento da pessoa (item do menu ⋮) */}
+      {verAnotacoesDe && (
+        <ModalAnotacoes
+          pessoa={verAnotacoesDe.pessoa}
+          tipo={verAnotacoesDe.tipo}
+          onFechar={() => setVerAnotacoesDe(null)}
         />
       )}
 
@@ -430,6 +442,197 @@ function ModalProcessosDaPessoa({ pessoa, tipo, onFechar }) {
   );
 }
 
+// ============================================================
+// MODAL "Anotações de atendimento" — histórico de contatos da pessoa (PF ou PJ).
+// Qualquer usuário logado registra; a lista mostra autor + data/hora, mais recente em cima.
+// Editar/excluir: usuário comum só a PRÓPRIA anotação e só de hoje; admin qualquer uma.
+// O backend é a autoridade da regra — aqui só escondemos botões e confirmamos ações.
+// ============================================================
+function ModalAnotacoes({ pessoa, tipo, onFechar }) {
+  const { usuario, ehAdmin } = useAuth();
+  const [lista, setLista]           = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [novoTexto, setNovoTexto]   = useState('');
+  const [salvando, setSalvando]     = useState(false);
+  const [editandoId, setEditandoId] = useState(null);
+  const [editTexto, setEditTexto]   = useState('');
+  const [ajuda, setAjuda]           = useState(false);
+  const [confirmar, setConfirmar]   = useState(null);
+
+  const tipoPessoa = tipo === 'juridicas' ? 'juridica' : 'fisica';
+  const nomePessoa = pessoa.nome || pessoa.razao_social || 'Pessoa';
+
+  const carregar = useCallback(() => {
+    setCarregando(true);
+    const req = tipo === 'juridicas'
+      ? pessoasAPI.buscarJuridica(pessoa.id)
+      : pessoasAPI.buscarFisica(pessoa.id);
+    return req
+      .then(r => { if (r.data.ok) setLista(r.data.dados.historico || []); })
+      .catch(() => toast.error('Erro ao carregar as anotações'))
+      .finally(() => setCarregando(false));
+  }, [tipo, pessoa.id]);
+
+  useEffect(() => { carregar(); }, [carregar]);
+
+  // Fecha com Escape (não fecha o modal de fundo enquanto a confirmação estiver aberta)
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape' && !confirmar) onFechar(); }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onFechar, confirmar]);
+
+  // "Hoje" aqui serve só para MOSTRAR/esconder os botões; quem decide de verdade é o servidor.
+  function ehDeHoje(criadoEm) {
+    if (!criadoEm) return false;
+    const d = new Date(criadoEm);
+    if (isNaN(d.getTime())) return false;
+    const fmt = (x) => x.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    return fmt(d) === fmt(new Date());
+  }
+  function podeMexer(nota) {
+    return ehAdmin || (Number(nota.usuario_id) === Number(usuario?.id) && ehDeHoje(nota.criado_em));
+  }
+
+  async function adicionar() {
+    const texto = novoTexto.trim();
+    if (!texto) return;
+    setSalvando(true);
+    try {
+      await pessoasAPI.adicionarHistorico(tipo, pessoa.id, { descricao: texto, tipo_pessoa: tipoPessoa });
+      setNovoTexto('');
+      await carregar();
+      toast.success('Anotação registrada');
+    } catch (e) {
+      toast.error(e.response?.data?.mensagem || 'Erro ao registrar a anotação');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  function iniciarEdicao(nota) { setEditandoId(nota.id); setEditTexto(nota.descricao); }
+  function cancelarEdicao()    { setEditandoId(null); setEditTexto(''); }
+
+  async function gravarEdicao(nota) {
+    await pessoasAPI.editarHistorico(nota.id, { descricao: editTexto.trim() });
+    cancelarEdicao();
+    await carregar();
+    toast.success('Anotação atualizada');
+  }
+  function salvarEdicao(nota) {
+    if (!editTexto.trim()) { toast.error('A anotação não pode ficar em branco'); return; }
+    // Admin mexendo em anotação de outro dia ou de outro usuário → confirma antes.
+    const precisaConfirmar = ehAdmin && !(Number(nota.usuario_id) === Number(usuario?.id) && ehDeHoje(nota.criado_em));
+    if (precisaConfirmar) {
+      setConfirmar({
+        titulo: 'Editar anotação',
+        mensagem: 'Você está alterando uma anotação de outro dia ou de outro usuário. Deseja continuar?',
+        textoBotao: 'Salvar', tipo: 'aviso',
+        acao: () => gravarEdicao(nota),
+      });
+    } else {
+      gravarEdicao(nota).catch(e => toast.error(e.response?.data?.mensagem || 'Erro ao salvar a anotação'));
+    }
+  }
+
+  function pedirExcluir(nota) {
+    setConfirmar({
+      titulo: 'Excluir anotação',
+      mensagem: 'Esta anotação será excluída definitivamente. Esta ação não tem volta.',
+      textoBotao: 'Excluir', tipo: 'perigo',
+      acao: async () => {
+        await pessoasAPI.excluirHistorico(nota.id);
+        await carregar();
+        toast.success('Anotação excluída');
+      },
+    });
+  }
+
+  const btnAcao = { background:'none', border:'none', cursor:'pointer', fontSize:'12px', padding:0, textDecoration:'underline' };
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box modal-grande">
+        <div className="modal-header">
+          <h3 style={{display:'flex',alignItems:'center',gap:'8px'}}>
+            Anotações de atendimento — {nomePessoa}
+            <button type="button" onClick={() => setAjuda(a => !a)}
+              title="Anote aqui informações referentes ao atendimento realizado."
+              aria-label="Ajuda sobre as anotações de atendimento"
+              style={{width:'20px',height:'20px',borderRadius:'50%',border:'1px solid #bbb',
+                      background:'#f3f3f3',color:'#555',fontSize:'12px',cursor:'pointer',lineHeight:1,padding:0}}>?</button>
+          </h3>
+          <button className="modal-fechar" onClick={onFechar}>✕</button>
+        </div>
+        <div className="modal-body">
+          {ajuda && (
+            <p style={{background:'#eef4ff',border:'1px solid #cfe0ff',borderRadius:'6px',
+                       padding:'8px 12px',fontSize:'13px',color:'#33518a',margin:'0 0 12px'}}>
+              Anote aqui informações referentes ao atendimento realizado.
+            </p>
+          )}
+
+          {/* Caixa para registrar uma nova anotação */}
+          <div style={{marginBottom:'16px'}}>
+            <textarea value={novoTexto} onChange={e => setNovoTexto(e.target.value)}
+              placeholder="Escreva o que foi tratado neste atendimento..."
+              rows={3} style={{width:'100%',resize:'vertical',padding:'8px',fontSize:'14px',
+                               border:'1px solid #ccc',borderRadius:'6px',boxSizing:'border-box'}} />
+            <div style={{display:'flex',justifyContent:'flex-end',marginTop:'8px'}}>
+              <button className="btn btn-primary" onClick={adicionar} disabled={salvando || !novoTexto.trim()}>
+                {salvando ? 'Salvando...' : 'Adicionar'}
+              </button>
+            </div>
+          </div>
+
+          {/* Lista de anotações — mais recente em cima */}
+          {carregando ? (
+            <p style={{color:'#888',textAlign:'center',padding:'20px'}}>Carregando...</p>
+          ) : lista.length === 0 ? (
+            <p className="lista-vazia">Nenhuma anotação registrada ainda</p>
+          ) : (
+            <div style={{display:'flex',flexDirection:'column',gap:'10px',maxHeight:'50vh',overflowY:'auto'}}>
+              {lista.map(nota => (
+                <div key={nota.id} style={{border:'1px solid #eee',borderRadius:'8px',padding:'10px 12px',background:'#fafafa'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px',gap:'8px'}}>
+                    <span style={{fontSize:'14px',color:'#333'}}>
+                      <strong style={{color:'#111',fontWeight:700}}>{nota.usuario_nome || '—'}</strong>
+                      <span style={{color:'#333'}}> · {formatarDataHora(nota.criado_em)}</span>
+                    </span>
+                    {podeMexer(nota) && editandoId !== nota.id && (
+                      <span style={{display:'flex',gap:'10px',flexShrink:0}}>
+                        <button onClick={() => iniciarEdicao(nota)} style={{...btnAcao,color:'#1a56db'}}>Editar</button>
+                        <button onClick={() => pedirExcluir(nota)} style={{...btnAcao,color:'#dc3545'}}>Excluir</button>
+                      </span>
+                    )}
+                  </div>
+                  {editandoId === nota.id ? (
+                    <div>
+                      <textarea value={editTexto} onChange={e => setEditTexto(e.target.value)} rows={3}
+                        style={{width:'100%',resize:'vertical',padding:'8px',fontSize:'14px',border:'1px solid #ccc',borderRadius:'6px',boxSizing:'border-box'}} />
+                      <div style={{display:'flex',justifyContent:'flex-end',gap:'8px',marginTop:'6px'}}>
+                        <button className="btn btn-outline" onClick={cancelarEdicao}>Cancelar</button>
+                        <button className="btn btn-primary" onClick={() => salvarEdicao(nota)}>Salvar</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{fontSize:'14px',color:'#333',whiteSpace:'pre-wrap',lineHeight:1.5}}>{nota.descricao}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onFechar}>Fechar</button>
+        </div>
+      </div>
+
+      {confirmar && <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(null)} />}
+    </div>
+  );
+}
+
 // Célula clicável da coluna "Qtde Proc": abre a lista de processos (só quando > 0)
 function CelulaQtdeProc({ qtde, onClick }) {
   const n = qtde ?? 0;
@@ -444,7 +647,7 @@ function CelulaQtdeProc({ qtde, onClick }) {
   );
 }
 
-function TabelaFisicas({ lista, onEditar, onExcluir, onVerProcessos, modoUnificar, selecionados = [], onToggleSel }) {
+function TabelaFisicas({ lista, onEditar, onExcluir, onVerProcessos, onAnotacoes, modoUnificar, selecionados = [], onToggleSel }) {
   const { temPermissao } = useAuth();
   const estaSel = (id) => selecionados.some(x => x.id === id);
   return (
@@ -475,6 +678,7 @@ function TabelaFisicas({ lista, onEditar, onExcluir, onVerProcessos, modoUnifica
                 { label: 'Gerar documento', icone: '📄',
                   oculto: !temPermissao('documentos','cadastrar'),
                   gerarDoc: { ancoraTipo: 'pessoa_fisica', ancoraId: p.id } },
+                { label: 'Anotações de atendimento', icone: '📝', onClick: () => onAnotacoes(p) },
                 { label: 'Editar',  icone: '✏️', onClick: () => onEditar(p) },
                 { label: 'Excluir', icone: '🗑️', perigo: true, onClick: () => onExcluir(p) },
               ]} />
@@ -487,7 +691,7 @@ function TabelaFisicas({ lista, onEditar, onExcluir, onVerProcessos, modoUnifica
 }
 
 // Tabela de pessoas jurídicas
-function TabelaJuridicas({ lista, onEditar, onExcluir, onVerProcessos, modoUnificar, selecionados = [], onToggleSel }) {
+function TabelaJuridicas({ lista, onEditar, onExcluir, onVerProcessos, onAnotacoes, modoUnificar, selecionados = [], onToggleSel }) {
   const { temPermissao } = useAuth();
   const estaSel = (id) => selecionados.some(x => x.id === id);
   return (
@@ -518,6 +722,7 @@ function TabelaJuridicas({ lista, onEditar, onExcluir, onVerProcessos, modoUnifi
                 { label: 'Gerar documento', icone: '📄',
                   oculto: !temPermissao('documentos','cadastrar'),
                   gerarDoc: { ancoraTipo: 'pessoa_juridica', ancoraId: p.id } },
+                { label: 'Anotações de atendimento', icone: '📝', onClick: () => onAnotacoes(p) },
                 { label: 'Editar',  icone: '✏️', onClick: () => onEditar(p) },
                 { label: 'Excluir', icone: '🗑️', perigo: true, onClick: () => onExcluir(p) },
               ]} />

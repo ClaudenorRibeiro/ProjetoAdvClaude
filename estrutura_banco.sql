@@ -948,6 +948,7 @@ CREATE TABLE IF NOT EXISTS `publicacoes` (
   `data_publicacao` date NOT NULL,
   `numero_processo` varchar(45) DEFAULT NULL,
   `tribunal` varchar(20) DEFAULT NULL,
+  `oab` varchar(20) DEFAULT NULL,
   `titulo` text,
   `cabecalho` text,
   `numero_publicacao` varchar(30) DEFAULT NULL,

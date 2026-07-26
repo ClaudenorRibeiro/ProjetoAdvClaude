@@ -205,6 +205,21 @@ export default function Agenda() {
 
   useEffect(() => { carregarEventos(); }, [carregarEventos]);
 
+  // Fecha o popup "+N mais" (nativo do react-big-calendar) com a tecla Esc. A biblioteca
+  // não expõe um "fechar"; então, ao apertar Esc COM o popup aberto, disparamos o mesmo
+  // "clique fora" que ela já usa para fechá-lo (APIs padrão — funciona em todos os navegadores
+  // atuais). Só age quando o popup existe, para não interferir em nada da tela.
+  useEffect(() => {
+    function onEsc(e) {
+      if (e.key !== 'Escape') return;
+      if (!document.querySelector('.rbc-overlay')) return;
+      document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    }
+    document.addEventListener('keydown', onEsc);
+    return () => document.removeEventListener('keydown', onEsc);
+  }, []);
+
   // Estilo customizado por tipo de evento
   function eventPropGetter(evento) {
     return {
@@ -233,7 +248,7 @@ export default function Agenda() {
       {/* Filtros e legenda */}
       <div className="card" style={{marginBottom:'16px'}}>
         <div style={{display:'flex',gap:'16px',flexWrap:'wrap',alignItems:'center'}}>
-          <span style={{fontSize:'13px',color:'#555',fontWeight:500}}>Mostrar:</span>
+          <span style={{fontSize:'15px',color:'#555',fontWeight:500}}>Mostrar:</span>
           {[
             { key:'prazos',    label:'Prazos',    cor: COR_EVENTO.prazo },
             { key:'audiencias',label:'Audiências',cor: COR_EVENTO.audiencia },
@@ -242,11 +257,11 @@ export default function Agenda() {
             { key:'compromissos', label:'Compromissos', cor: COR_EVENTO.compromisso },
             { key:'feriados',  label:'Feriados',  cor: COR_EVENTO.feriado },
           ].map(({ key, label, cor }) => (
-            <label key={key} style={{display:'flex',alignItems:'center',gap:'6px',cursor:'pointer',fontSize:'13px'}}>
+            <label key={key} style={{display:'flex',alignItems:'center',gap:'6px',cursor:'pointer',fontSize:'15px'}}>
               <input type="checkbox" checked={filtros[key]} onChange={() => toggleFiltro(key)} />
               <span style={{
-                display:'inline-block', width:'10px', height:'10px',
-                borderRadius:'2px', background: filtros[key] ? cor : '#d1d5db'
+                display:'inline-block', width:'16px', height:'16px',
+                borderRadius:'3px', background: filtros[key] ? cor : '#d1d5db'
               }} />
               {label}
             </label>
@@ -256,7 +271,7 @@ export default function Agenda() {
           <span style={{borderLeft:'1px solid #e5e7eb',height:'18px'}} />
 
           {/* Checkbox Escritório */}
-          <label style={{display:'flex',alignItems:'center',gap:'6px',cursor:'pointer',fontSize:'13px',color: filtros.escritorio ? '#1a56db' : '#555',fontWeight: filtros.escritorio ? 600 : 400}}>
+          <label style={{display:'flex',alignItems:'center',gap:'6px',cursor:'pointer',fontSize:'15px',color: filtros.escritorio ? '#1a56db' : '#555',fontWeight: filtros.escritorio ? 600 : 400}}>
             <input type="checkbox" checked={filtros.escritorio} onChange={() => toggleFiltro('escritorio')} />
             🏢 Escritório
           </label>
