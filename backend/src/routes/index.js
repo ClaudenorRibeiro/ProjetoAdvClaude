@@ -60,10 +60,12 @@ router.post('/auth/verificar-senha',   autenticar, authCtrl.verificarSenha);
 router.get('/calendario/dia-util',     autenticar, configuracaoCtrl.verificarDiaUtil);
 
 // --- AGENDA: compromissos pessoais/avulsos (cada usuário gerencia os seus) ---
-router.get('/agenda/compromissos',        autenticar, agendaCompromissoCtrl.listar);
-router.post('/agenda/compromissos',       autenticar, agendaCompromissoCtrl.criar);
-router.put('/agenda/compromissos/:id',    autenticar, agendaCompromissoCtrl.atualizar);
-router.delete('/agenda/compromissos/:id', autenticar, agendaCompromissoCtrl.excluir);
+router.get('/agenda/usuarios',                autenticar, agendaCompromissoCtrl.listarUsuariosAtivos);
+router.get('/agenda/compromissos',            autenticar, agendaCompromissoCtrl.listar);
+router.post('/agenda/compromissos',           autenticar, agendaCompromissoCtrl.criar);
+router.put('/agenda/compromissos/:id/baixa',  autenticar, agendaCompromissoCtrl.darBaixa);
+router.put('/agenda/compromissos/:id',        autenticar, agendaCompromissoCtrl.atualizar);
+router.delete('/agenda/compromissos/:id',     autenticar, agendaCompromissoCtrl.excluir);
 
 // ---- DASHBOARD ----
 router.get('/dashboard', autenticar, dashboardCtrl.buscarDados);

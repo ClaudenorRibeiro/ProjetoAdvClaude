@@ -409,6 +409,8 @@ export const agendaAPI = {
   criarCompromisso:     (dados) => api.post('/agenda/compromissos', dados),
   atualizarCompromisso: (id, dados) => api.put(`/agenda/compromissos/${id}`, dados),
   excluirCompromisso:   (id) => api.delete(`/agenda/compromissos/${id}`),
+  darBaixaCompromisso:  (id) => api.put(`/agenda/compromissos/${id}/baixa`),
+  listarUsuarios:       () => api.get('/agenda/usuarios'),
 };
 
 export default api;

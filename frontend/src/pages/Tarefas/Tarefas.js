@@ -433,6 +433,8 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial }) {
   });
   const [salvando, setSalvando]   = useState(false);
   const [usuarios, setUsuarios]   = useState([]);
+  const [confirmarData, setConfirmarData] = useState(false); // confirmação do admin p/ data passada
+  const { ehAdmin } = useAuth();
 
   // Busca de processo (CNJ) — inicializa com pré-seleção se vier do PastaDetalhe
   const [buscaProc, setBuscaProc]             = useState(preSelecao?.processo_numero || '');
@@ -504,10 +506,8 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial }) {
 
   // ── Salvar ────────────────────────────────────────────────────────────────
 
-  async function salvar() {
-    if (!form.titulo?.trim())                     return toast.error('Título é obrigatório');
-    if (tipo === 'processo' && !form.processo_id) return toast.error('Selecione o processo');
-
+  // Grava de fato (chamado direto ou após a confirmação da data passada)
+  async function executarSalvar() {
     setSalvando(true);
     try {
       const payload = {
@@ -532,7 +532,21 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial }) {
     }
   }
 
+  function salvar() {
+    if (!form.titulo?.trim())                     return toast.error('Título é obrigatório');
+    if (tipo === 'processo' && !form.processo_id) return toast.error('Selecione o processo');
+    // Vencimento anterior a hoje: usuário comum é bloqueado; admin confirma. (Tarefa sem data não entra aqui.)
+    const h = new Date();
+    const hojeStr = `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}-${String(h.getDate()).padStart(2, '0')}`;
+    if (form.data_vencimento && form.data_vencimento < hojeStr) {
+      if (!ehAdmin) return toast.error('Apenas o administrador pode agendar tarefa com data anterior a hoje. Escolha uma data a partir de hoje.');
+      return setConfirmarData(true);
+    }
+    executarSalvar();
+  }
+
   return (
+    <>
     <div className="modal-overlay">
       <div className="modal-box modal-grande">
         <div className="modal-header">
@@ -673,5 +687,19 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial }) {
         </div>
       </div>
     </div>
+    {confirmarData && (
+      // z-index acima do modal: mantém a confirmação sempre à frente (mesmo padrão do compromisso).
+      <div style={{ position: 'relative', zIndex: 2000 }}>
+      <ModalConfirmar
+        titulo="Data anterior a hoje"
+        tipo="aviso"
+        mensagem={`A data de vencimento (${formatarData(form.data_vencimento)}) é anterior a hoje. Deseja agendar mesmo assim?`}
+        textoBotao="Agendar assim mesmo"
+        acao={async () => { await executarSalvar(); }}
+        onCancelar={() => setConfirmarData(false)}
+      />
+      </div>
+    )}
+    </>
   );
 }

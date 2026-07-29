@@ -120,6 +120,7 @@ DROP TABLE IF EXISTS `agenda_compromisso`;
 CREATE TABLE IF NOT EXISTS `agenda_compromisso` (
   `id` int NOT NULL AUTO_INCREMENT,
   `usuario_id` int NOT NULL,
+  `delegado_para` int DEFAULT NULL,
   `titulo` varchar(150) NOT NULL,
   `descricao` text,
   `data` date NOT NULL,
@@ -127,12 +128,19 @@ CREATE TABLE IF NOT EXISTS `agenda_compromisso` (
   `hora_fim` time DEFAULT NULL,
   `dia_todo` tinyint(1) NOT NULL DEFAULT '0',
   `escritorio` tinyint(1) NOT NULL DEFAULT '0',
+  `concluido` tinyint(1) NOT NULL DEFAULT '0',
+  `concluido_por` int DEFAULT NULL,
+  `concluido_em` datetime DEFAULT NULL,
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   `alterado_em` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `usuario_id` (`usuario_id`),
   KEY `data` (`data`),
-  CONSTRAINT `fk_agcomp_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+  KEY `idx_agcomp_delegado` (`delegado_para`),
+  KEY `idx_agcomp_concluido_por` (`concluido_por`),
+  CONSTRAINT `fk_agcomp_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_agcomp_delegado` FOREIGN KEY (`delegado_para`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_agcomp_concluido_por` FOREIGN KEY (`concluido_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.

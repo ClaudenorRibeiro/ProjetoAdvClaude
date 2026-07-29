@@ -5,6 +5,7 @@
 const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
+const { bloqueiaAgendarPassado } = require('../utils/helpers');
 
 // GET /api/tarefas — Lista tarefas com filtros
 async function listar(req, res) {
@@ -124,6 +125,9 @@ async function criar(req, res) {
           atribuida_para, data_vencimento } = req.body;
 
   if (!titulo) return erro(res, 'O título é obrigatório');
+  if (bloqueiaAgendarPassado(req.usuario, data_vencimento)) {
+    return erro(res, 'Apenas o administrador pode agendar tarefa com data anterior a hoje. Escolha uma data a partir de hoje.');
+  }
 
   const conn = await pool.getConnection();
   try {
@@ -302,6 +306,10 @@ async function atualizar(req, res) {
   const { id } = req.params;
   const { titulo, descricao, prioridade, atribuida_para, data_vencimento,
           pasta_id, processo_id } = req.body;
+
+  if (bloqueiaAgendarPassado(req.usuario, data_vencimento)) {
+    return erro(res, 'Apenas o administrador pode agendar tarefa com data anterior a hoje. Escolha uma data a partir de hoje.');
+  }
 
   const conn = await pool.getConnection();
   try {

@@ -904,6 +904,13 @@ body {
   font-size: 120% !important;
 }
 
+/* Respiro vertical entre os eventos dentro de cada dia (SÓ na visão de Mês).
+   O padrão da lib deixa os eventos colados; aqui damos um pequeno espaço embaixo
+   de cada segmento. Não afeta as visões Semana/Dia/Agenda. */
+.rbc-month-view .rbc-row-segment {
+  padding-bottom: 3px;
+}
+
 /* Detalhes/Editar da audiência: valores dos campos em negrito e escuros, para os dois modais
    (Editar e Detalhes) ficarem com a MESMA aparência. */
 .audiencia-detalhe input,

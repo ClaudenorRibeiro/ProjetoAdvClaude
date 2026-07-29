@@ -55,6 +55,14 @@ function hojeBrasilia(maisDias = 0) {
     .toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
 }
 
+// Bloqueia agendamento retroativo para quem NÃO é admin (nível > 1): retorna true
+// quando há data e ela é anterior a HOJE (fuso de Brasília via hojeBrasilia). Admin
+// (nível <= 1) nunca é bloqueado. Usado por Agenda (compromissos) e Tarefas.
+function bloqueiaAgendarPassado(usuario, data) {
+  if (!data || Number(usuario?.nivel) <= 1) return false;
+  return String(data).slice(0, 10) < hojeBrasilia();
+}
+
 // Trunca um texto longo adicionando "..." no final
 function truncar(texto, limite = 100) {
   if (!texto) return '';
@@ -75,6 +83,7 @@ module.exports = {
   dataParaMySQL,
   agora,
   hojeBrasilia,
+  bloqueiaAgendarPassado,
   truncar,
   formatarNumeroPasta,
 };

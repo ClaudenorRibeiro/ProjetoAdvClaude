@@ -54,8 +54,15 @@ const COR_EVENTO = {
   feriado:     '#059669', // verde — feriados (iguais para todos; só leitura na agenda)
 };
 
+// Formata 'YYYY-MM-DD HH:MM:SS' (ou ISO) em 'dd/MM/yyyy HH:MM'
+function fmtDataHora(v) {
+  if (!v) return '';
+  const s = String(v).replace('T', ' ');
+  return `${formatarData(s.slice(0, 10))} ${s.slice(11, 16)}`;
+}
+
 export default function Agenda() {
-  const { usuario, temPermissao } = useAuth();
+  const { usuario, temPermissao, ehAdmin } = useAuth();
   const [eventos, setEventos]   = useState([]);
   const [dataAtual, setDataAtual] = useState(new Date());
   const [visao, setVisao]       = useState('month');
@@ -69,11 +76,23 @@ export default function Agenda() {
     prazos: true, audiencias: true, pericias: true, tarefas: true, compromissos: true, feriados: true, escritorio: false
   });
 
-  // Título dinâmico
-  const titulo = filtros.escritorio ? 'Escritório' : (usuario?.nome || '');
+  // Admin/super (nível <= 1, via ehAdmin do contexto) vê a agenda de todos e pode filtrar por usuário.
+  const [usuarios, setUsuarios]     = useState([]);                       // usuários ativos (delegar + filtro admin)
+  const [verAgendaDe, setVerAgendaDe] = useState(String(usuario?.id || '')); // admin: '' = Todos; senão um id
 
-  // ID do usuário logado — null quando modo escritório (sem filtro)
-  const usuarioId = filtros.escritorio ? null : usuario?.id;
+  // ID do usuário cuja agenda mostrar — null quando modo escritório OU quando admin escolhe "Todos".
+  const usuarioId = filtros.escritorio
+    ? null
+    : (ehAdmin ? (verAgendaDe || null) : usuario?.id);
+
+  // Título dinâmico
+  const titulo = filtros.escritorio
+    ? 'Escritório'
+    : (ehAdmin
+        ? (verAgendaDe
+            ? (usuarios.find(u => String(u.id) === String(verAgendaDe))?.nome || usuario?.nome || '')
+            : 'Todos os usuários')
+        : (usuario?.nome || ''));
 
   // Carrega eventos quando o mês ou filtros mudam
   const carregarEventos = useCallback(async () => {
@@ -154,7 +173,7 @@ export default function Agenda() {
 
       if (filtros.compromissos) {
         promises.push(
-          agendaAPI.listarCompromissos({ de: data_de, ate: data_ate, escritorio: filtros.escritorio ? 1 : 0 })
+          agendaAPI.listarCompromissos({ de: data_de, ate: data_ate, escritorio: filtros.escritorio ? 1 : 0, ...(usuarioId && { usuario_id: usuarioId }) })
             .then(r => r.data.ok ? r.data.dados.map(c => {
               const horaIni = (!c.dia_todo && c.hora_inicio) ? c.hora_inicio.slice(0, 5) : '00:00';
               const horaFim = (!c.dia_todo && c.hora_fim) ? c.hora_fim.slice(0, 5)
@@ -205,6 +224,13 @@ export default function Agenda() {
 
   useEffect(() => { carregarEventos(); }, [carregarEventos]);
 
+  // Carrega os usuários ativos uma vez (para o seletor "Delegar para" e o filtro do admin).
+  useEffect(() => {
+    agendaAPI.listarUsuarios()
+      .then(r => { if (r.data.ok) setUsuarios(r.data.dados || []); })
+      .catch(() => { /* silencioso: a agenda funciona mesmo sem a lista */ });
+  }, []);
+
   // Fecha o popup "+N mais" (nativo do react-big-calendar) com a tecla Esc. A biblioteca
   // não expõe um "fechar"; então, ao apertar Esc COM o popup aberto, disparamos o mesmo
   // "clique fora" que ela já usa para fechá-lo (APIs padrão — funciona em todos os navegadores
@@ -220,8 +246,19 @@ export default function Agenda() {
     return () => document.removeEventListener('keydown', onEsc);
   }, []);
 
+  // Esc fecha o modal "Adicionar em dd/mm/aaaa" (o que abre ao clicar num dia),
+  // além do botão Cancelar e do clique fora. Só ativo enquanto o modal existe.
+  useEffect(() => {
+    if (!diaSelecionado) return;
+    function onEscDia(e) { if (e.key === 'Escape') setDiaSelecionado(null); }
+    document.addEventListener('keydown', onEscDia);
+    return () => document.removeEventListener('keydown', onEscDia);
+  }, [diaSelecionado]);
+
   // Estilo customizado por tipo de evento
   function eventPropGetter(evento) {
+    // Compromisso concluído (com baixa): fica esmaecido e riscado.
+    const concluido = evento.tipo === 'compromisso' && evento.dados?.concluido;
     return {
       style: {
         backgroundColor: COR_EVENTO[evento.tipo] || '#6b7280',
@@ -230,6 +267,7 @@ export default function Agenda() {
         color: '#fff',
         fontSize: '11px',
         padding: '1px 4px',
+        ...(concluido ? { opacity: 0.55, textDecoration: 'line-through' } : {}),
       }
     };
   }
@@ -275,6 +313,18 @@ export default function Agenda() {
             <input type="checkbox" checked={filtros.escritorio} onChange={() => toggleFiltro('escritorio')} />
             🏢 Escritório
           </label>
+
+          {/* Admin: escolhe de qual usuário ver a agenda (ou Todos). Não aparece no modo Escritório. */}
+          {ehAdmin && !filtros.escritorio && (
+            <label style={{display:'flex',alignItems:'center',gap:'6px',fontSize:'14px',color:'#555'}}>
+              👤 Ver agenda de:
+              <select className="form-control" style={{width:'auto',fontSize:'13px',padding:'4px 8px'}}
+                value={verAgendaDe} onChange={e => setVerAgendaDe(e.target.value)}>
+                <option value="">Todos</option>
+                {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+              </select>
+            </label>
+          )}
 
           <button className="btn btn-primary" style={{marginLeft:'auto',fontSize:'13px',padding:'6px 12px'}}
             onClick={() => setModalCompromisso({})}>
@@ -324,12 +374,27 @@ export default function Agenda() {
               <EventoDetalhe evento={eventoSelecionado} />
             </div>
             <div className="modal-footer">
-              {/* Compromisso próprio: pode editar/excluir direto na agenda */}
-              {eventoSelecionado.tipo === 'compromisso' && eventoSelecionado.dados.usuario_id === usuario?.id && (
+              {/* Compromisso: quem agendou, quem recebeu (delegado) ou o admin podem editar/excluir/dar baixa */}
+              {eventoSelecionado.tipo === 'compromisso' && (
+                eventoSelecionado.dados.usuario_id === usuario?.id
+                || eventoSelecionado.dados.delegado_para === usuario?.id
+                || ehAdmin
+              ) && (
                 <>
                   <button className="btn btn-danger" style={{ marginRight: 'auto' }}
                     onClick={() => { setConfirmarExcluir(eventoSelecionado.dados); setEventoSelecionado(null); }}>
                     Excluir
+                  </button>
+                  <button className="btn" style={{ background: eventoSelecionado.dados.concluido ? '#6b7280' : '#059669', color: '#fff' }}
+                    onClick={async () => {
+                      const estava = eventoSelecionado.dados.concluido;
+                      try {
+                        await agendaAPI.darBaixaCompromisso(eventoSelecionado.dados.id);
+                        toast.success(estava ? 'Compromisso reaberto' : 'Compromisso concluído');
+                        setEventoSelecionado(null); carregarEventos();
+                      } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao dar baixa'); }
+                    }}>
+                    {eventoSelecionado.dados.concluido ? '↩ Reabrir' : '✓ Dar baixa'}
                   </button>
                   <button className="btn btn-primary"
                     onClick={() => { setModalCompromisso(eventoSelecionado.dados); setEventoSelecionado(null); }}>
@@ -350,6 +415,9 @@ export default function Agenda() {
         <ModalCompromisso
           compromisso={modalCompromisso.id ? modalCompromisso : null}
           dataInicial={modalCompromisso.dataInicial}
+          usuarios={usuarios}
+          usuarioLogadoId={usuario?.id}
+          ehAdmin={ehAdmin}
           onFechar={(reload) => { setModalCompromisso(null); if (reload) carregarEventos(); }}
         />
       )}
@@ -456,7 +524,11 @@ function EventoDetalhe({ evento }) {
     if (dados.dia_todo) linhas.push(['Período', 'Dia todo']);
     else if (dados.hora_inicio) linhas.push(['Hora', `${dados.hora_inicio.slice(0, 5)}${dados.hora_fim ? ' às ' + dados.hora_fim.slice(0, 5) : ''}`]);
     if (dados.escritorio) linhas.push(['Visibilidade', 'Escritório (compartilhado)']);
-    if (dados.usuario_nome) linhas.push(['De', dados.usuario_nome]);
+    if (dados.delegado_nome) linhas.push(['Delegado para', dados.delegado_nome]);
+    if (dados.usuario_nome) linhas.push(['Agendado por', `${dados.usuario_nome}${dados.criado_em ? ' em ' + fmtDataHora(dados.criado_em) : ''}`]);
+    if (Number(dados.concluido) === 1) {
+      linhas.push(['Situação', `Concluído${dados.concluido_nome ? ' por ' + dados.concluido_nome : ''}${dados.concluido_em ? ' em ' + fmtDataHora(dados.concluido_em) : ''}`]);
+    }
   } else if (tipo === 'feriado') {
     linhas.push(['Feriado', dados.descricao]);
     linhas.push(['Data', formatarData(String(dados.data).slice(0, 10))]);
@@ -481,7 +553,7 @@ function EventoDetalhe({ evento }) {
 // MODAL: criar / editar compromisso pessoal da agenda
 // `compromisso` = registro p/ editar (ou null p/ novo). `dataInicial` (opcional) pré-preenche a data.
 // ============================================================
-function ModalCompromisso({ compromisso, dataInicial, onFechar }) {
+function ModalCompromisso({ compromisso, dataInicial, usuarios = [], usuarioLogadoId, ehAdmin, onFechar }) {
   const editando = !!(compromisso && compromisso.id);
   const [form, setForm] = useState({
     titulo: compromisso?.titulo || '',
@@ -491,13 +563,20 @@ function ModalCompromisso({ compromisso, dataInicial, onFechar }) {
     hora_inicio: compromisso?.hora_inicio ? compromisso.hora_inicio.slice(0, 5) : '',
     hora_fim: compromisso?.hora_fim ? compromisso.hora_fim.slice(0, 5) : '',
     escritorio: compromisso?.escritorio ? true : false,
+    // Delegar para: por padrão o próprio usuário logado. Ao editar, o delegado atual
+    // (ou o criador, se o compromisso não tiver delegado).
+    delegado_para: String(
+      compromisso
+        ? (compromisso.delegado_para || compromisso.usuario_id || usuarioLogadoId || '')
+        : (usuarioLogadoId || '')
+    ),
   });
   const [salvando, setSalvando] = useState(false);
+  const [confirmarData, setConfirmarData] = useState(false); // confirmação do admin p/ data passada
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  async function salvar() {
-    if (!form.titulo.trim()) return toast.error('Informe o título');
-    if (!form.data) return toast.error('Informe a data');
+  // Grava de fato (chamado direto ou após a confirmação da data passada)
+  async function executarSalvar() {
     setSalvando(true);
     try {
       if (editando) await agendaAPI.atualizarCompromisso(compromisso.id, form);
@@ -511,7 +590,19 @@ function ModalCompromisso({ compromisso, dataInicial, onFechar }) {
     }
   }
 
+  function salvar() {
+    if (!form.titulo.trim()) return toast.error('Informe o título');
+    if (!form.data) return toast.error('Informe a data');
+    // Data anterior a hoje: usuário comum é bloqueado; admin precisa confirmar.
+    if (form.data < format(new Date(), 'yyyy-MM-dd')) {
+      if (!ehAdmin) return toast.error('Apenas o administrador pode agendar com data anterior a hoje. Escolha uma data a partir de hoje.');
+      return setConfirmarData(true);
+    }
+    executarSalvar();
+  }
+
   return (
+    <>
     <div className="modal-overlay" style={{ zIndex: 1100 }}>
       <div className="modal-box" style={{ maxWidth: '460px' }}>
         <div className="modal-header">
@@ -527,6 +618,15 @@ function ModalCompromisso({ compromisso, dataInicial, onFechar }) {
           <div className="form-group">
             <label className="form-label">Descrição</label>
             <textarea className="form-control" rows={2} value={form.descricao} onChange={e => set('descricao', e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Delegar para</label>
+            <select className="form-control" value={form.delegado_para} onChange={e => set('delegado_para', e.target.value)}>
+              {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+            </select>
+            <small style={{ color: '#6b7280', fontSize: 12 }}>
+              O compromisso aparece na agenda de quem for escolhido aqui.
+            </small>
           </div>
           <div className="grid-2">
             <div className="form-group">
@@ -558,6 +658,12 @@ function ModalCompromisso({ compromisso, dataInicial, onFechar }) {
               🏢 Compartilhar com o escritório (aparece para todos no modo Escritório)
             </label>
           </div>
+          {editando && compromisso?.usuario_nome && (
+            <p style={{ color: '#6b7280', fontSize: 12, margin: '4px 0 0' }}>
+              🗓️ Agendado por: <strong>{compromisso.usuario_nome}</strong>
+              {compromisso.criado_em ? ` em ${fmtDataHora(compromisso.criado_em)}` : ''}
+            </p>
+          )}
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
@@ -567,6 +673,20 @@ function ModalCompromisso({ compromisso, dataInicial, onFechar }) {
         </div>
       </div>
     </div>
+    {confirmarData && (
+      // z-index acima do modal (1100): senão a confirmação renderiza ATRÁS dele e fica invisível.
+      <div style={{ position: 'relative', zIndex: 2000 }}>
+        <ModalConfirmar
+          titulo="Data anterior a hoje"
+          tipo="aviso"
+          mensagem={`A data escolhida (${formatarData(form.data)}) é anterior a hoje. Deseja agendar mesmo assim?`}
+          textoBotao="Agendar assim mesmo"
+          acao={async () => { await executarSalvar(); }}
+          onCancelar={() => setConfirmarData(false)}
+        />
+      </div>
+    )}
+    </>
   );
 }
 

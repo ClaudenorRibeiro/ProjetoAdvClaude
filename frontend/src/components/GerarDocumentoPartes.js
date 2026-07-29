@@ -34,8 +34,8 @@ export default function GerarDocumentoPartesBotao({ label = '📄 Gerar document
 // Seletor de um polo (autores OU réus): busca pessoa (física/jurídica) já
 // cadastrada e monta a lista. Impede repetir a mesma pessoa no polo e no oposto.
 // ------------------------------------------------------------
-function SeletorPolo({ titulo, cor, lista, setLista, listaOposta }) {
-  const [tipo, setTipo] = useState('fisica');
+function SeletorPolo({ titulo, cor, lista, setLista, listaOposta, tipoInicial = 'fisica' }) {
+  const [tipo, setTipo] = useState(tipoInicial);
   const [busca, setBusca] = useState('');
   const [resultados, setResultados] = useState([]);
 
@@ -211,7 +211,7 @@ function ModalGerarPartes({ onFechar }) {
                 <SeletorPolo titulo="Autor(es)" cor="badge-roxo"
                   lista={autores} setLista={setAutores} listaOposta={reus} />
                 <SeletorPolo titulo="Réu(s)" cor="badge-cinza"
-                  lista={reus} setLista={setReus} listaOposta={autores} />
+                  lista={reus} setLista={setReus} listaOposta={autores} tipoInicial="juridica" />
               </div>
             </>
           )}
