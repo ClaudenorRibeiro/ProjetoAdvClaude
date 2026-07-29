@@ -377,6 +377,7 @@ CREATE TABLE IF NOT EXISTS `configuracoes_escritorio` (
   `alerta_emails` text,
   `prazo_fazendo_timeout` int NOT NULL DEFAULT '60',
   `titulo_aba` varchar(100) DEFAULT NULL COMMENT 'Título exibido na aba do navegador',
+  `mensagem_aniversario` text,
   `documentos_maiusculas` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Se 1, o nome do autor/réu sai em CAIXA ALTA nos documentos',
   `tempo_inatividade_min` int NOT NULL DEFAULT '15' COMMENT 'Minutos de inatividade ate o logout automatico (minimo 15)',
   PRIMARY KEY (`id`)
@@ -688,6 +689,22 @@ CREATE TABLE IF NOT EXISTS `notificacoes` (
   CONSTRAINT `fk_notif_prazo` FOREIGN KEY (`prazo_id`) REFERENCES `prazos_processo` (`id`),
   CONSTRAINT `fk_notif_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Exportação de dados foi desmarcado.
+
+-- Copiando estrutura para tabela sistema_advocacia.parabens_enviados
+DROP TABLE IF EXISTS `parabens_enviados`;
+CREATE TABLE IF NOT EXISTS `parabens_enviados` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `pessoa_id` int NOT NULL,
+  `ano` smallint NOT NULL,
+  `canal` varchar(10) NOT NULL,
+  `usuario_id` int NOT NULL,
+  `enviado_em` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_pessoa_ano` (`pessoa_id`,`ano`),
+  CONSTRAINT `fk_parabens_pessoa` FOREIGN KEY (`pessoa_id`) REFERENCES `pessoas_fisicas` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
 

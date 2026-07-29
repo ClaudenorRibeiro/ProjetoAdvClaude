@@ -51,9 +51,10 @@ async function registrarLog(para, assunto, status, erro) {
 }
 
 // Envia um e-mail genérico.
-// Parâmetros: { para, assunto, html, linkDev? }
+// Parâmetros: { para, assunto, html, linkDev?, anexos? }
+//   anexos: array opcional no formato do Nodemailer [{ filename, content(Buffer), contentType }]
 // Em desenvolvimento sem SMTP, imprime o link no console e retorna sem erro.
-async function enviarEmail({ para, assunto, html, linkDev }) {
+async function enviarEmail({ para, assunto, html, linkDev, anexos }) {
   if (!smtpConfigurado()) {
     if (process.env.NODE_ENV === 'production') {
       const msg = 'Servidor de e-mail não configurado. Configure SMTP_HOST no arquivo .env';
@@ -71,12 +72,15 @@ async function enviarEmail({ para, assunto, html, linkDev }) {
   }
   const transporte = criarTransporte();
   try {
-    await transporte.sendMail({
+    const opcoes = {
       from:    process.env.EMAIL_FROM || 'Sistema Advocacia <noreply@advocacia.com>',
       to:      para,
       subject: assunto,
       html,
-    });
+    };
+    // Anexos (opcional): só entram quando vierem — mantém 100% compatível com quem chama sem anexo.
+    if (Array.isArray(anexos) && anexos.length) opcoes.attachments = anexos;
+    await transporte.sendMail(opcoes);
     await registrarLog(para, assunto, 'sucesso', null);
   } catch (err) {
     await registrarLog(para, assunto, 'falha', err.message);

@@ -5,12 +5,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { audienciasAPI, processosAPI, pessoasAPI, authAPI, calendarioAPI } from '../../services/api';
-import { formatarData, toTitleCase, mascaraMoeda, parseMoeda } from '../../utils/formatters';
+import { formatarData, toTitleCase, validarCPF, mascaraCPF } from '../../utils/formatters';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import ModalGerarLote from '../../components/GerarLote';
 import MenuAcoes from '../../components/MenuAcoes';
+import { ModalAcordo } from '../Financeiro/Financeiro';
 
 const STATUS_COR = {
   agendada:  'badge-azul',
@@ -21,14 +22,19 @@ const STATUS_COR = {
   acordo:    'badge-verde',
 };
 
+// Ordem lógica (também usada para montar o filtro de Status — fonte única, sem duplicar).
 const STATUS_LABEL = {
   agendada:  'Agendada',
-  realizada: 'Realizada',
   adiada:    'Adiada',
-  cancelada: 'Cancelada',
-  remarcada: 'Remarcada',
+  realizada: 'Realizada',
   acordo:    'Acordo',
+  remarcada: 'Remarcada',
+  cancelada: 'Cancelada',
 };
+// Status APOSENTADOS: continuam no STATUS_LABEL só para EXIBIR registros antigos que porventura
+// os tenham, mas NÃO são oferecidos no filtro (não nascem mais). "adiada" e "acordo" foram
+// aposentados como status da audiência (o acordo agora é registrado no Financeiro).
+const STATUS_APOSENTADOS = ['adiada', 'acordo'];
 
 export default function Audiencias() {
   const { temPermissao, ehAdmin }  = useAuth();
@@ -49,7 +55,9 @@ export default function Audiencias() {
   const [carregando, setCarregando] = useState(false);
   const [modalNova, setModalNova]  = useState(false);
   const [modalEditar, setModalEditar] = useState(null); // audiência selecionada para editar
+  const [modalEditarLeitura, setModalEditarLeitura] = useState(false); // true = abre em modo somente leitura
   const [modalAta, setModalAta]    = useState(null);    // audiência selecionada para registrar ata
+  const [modalReverter, setModalReverter] = useState(null); // audiência (Realizada) p/ reverter status — só admin
   const [confirmarExcluir, setConfirmarExcluir] = useState(null); // audiência selecionada para excluir
   const [modalHistorico, setModalHistorico]     = useState(null); // audiência selecionada para ver histórico
   const [modalCancelar, setModalCancelar]       = useState(null); // audiência selecionada para cancelar
@@ -132,14 +140,11 @@ export default function Audiencias() {
             <label className="form-label">Status</label>
             <select className="form-control" value={filtros.status} onChange={e => setFiltro('status', e.target.value)}>
               <option value="">Todos</option>
-              <option value="agendada">Agendada</option>
-              <option value="realizada">Realizada</option>
-              <option value="agendada">Agendada</option>
-              <option value="adiada">Adiada</option>
-              <option value="realizada">Realizada</option>
-              <option value="acordo">Acordo</option>
-              <option value="remarcada">Remarcada</option>
-              <option value="cancelada">Cancelada</option>
+              {Object.entries(STATUS_LABEL)
+                .filter(([valor]) => !STATUS_APOSENTADOS.includes(valor))
+                .map(([valor, rotulo]) => (
+                  <option key={valor} value={valor}>{rotulo}</option>
+                ))}
             </select>
           </div>
           <div className="form-group" style={{margin:0}}>
@@ -184,7 +189,7 @@ export default function Audiencias() {
                         title="Selecionar todas (agendadas/adiadas)" />
                     </th>
                   )}
-                  <th>Processo</th><th>Pasta</th><th>Tipo</th>
+                  <th>Processo</th><th>Pasta</th><th>Título do Processo</th><th>Tipo</th>
                   <th>Data / Hora</th><th>Modalidade</th><th>Responsável</th><th>Status</th><th>Ações</th>
                 </tr>
               </thead>
@@ -210,8 +215,16 @@ export default function Audiencias() {
                           : (a.processo_numero || '—')
                         }
                       </td>
-                      <td style={{maxWidth:'200px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                        {a.pasta_titulo || '—'}
+                      <td style={{fontSize:'13px'}}>{a.pasta_numero_fmt || '—'}</td>
+                      <td style={{maxWidth:'220px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                        {a.pasta_titulo
+                          ? <span
+                              style={{ color: '#2563eb', cursor: 'pointer', textDecoration: 'underline', fontSize: '13px' }}
+                              title="Ver detalhes da audiência"
+                              onClick={() => { setModalEditar(a); setModalEditarLeitura(true); }}>
+                              {a.pasta_titulo}
+                            </span>
+                          : '—'}
                       </td>
                       <td>{a.tipo_nome || '—'}</td>
                       <td>
@@ -239,11 +252,12 @@ export default function Audiencias() {
                           <MenuAcoes itens={[
                             // Registrar ata — só agendadas/adiadas
                             { label: 'Registrar ata', icone: '📝', oculto: !(a.status === 'agendada' || a.status === 'adiada'), onClick: () => setModalAta(a) },
-                            { label: 'Gerar documento', icone: '📄', oculto: !temPermissao('documentos','cadastrar'), gerarDoc: { ancoraTipo: 'audiencia', ancoraId: a.id } },
+                            { label: 'Gerar documento', icone: '📄', oculto: !temPermissao('documentos','cadastrar') || ['remarcada','cancelada'].includes(a.status), gerarDoc: { ancoraTipo: 'audiencia', ancoraId: a.id } },
                             { label: 'Cancelar', icone: '✖', oculto: !((a.status === 'agendada' || a.status === 'adiada') && temPermissao('audiencias','alterar')), onClick: () => setModalCancelar(a) },
                             { label: 'Remarcar', icone: '🔁', oculto: !((a.status === 'agendada' || a.status === 'adiada') && temPermissao('audiencias','alterar')), onClick: () => setModalRemarcar(a) },
                             { label: 'Marcar impressa', icone: '🖨️', oculto: !(['realizada','adiada','acordo','cancelada'].includes(a.status) && !a.ata_impressa), onClick: () => marcarAtaImpressa(a.id) },
-                            { label: 'Editar', icone: '✏️', oculto: !podeEditar(a), onClick: () => setModalEditar(a) },
+                            { label: 'Reverter status', icone: '↩️', oculto: !(a.status === 'realizada' && ehAdmin), onClick: () => setModalReverter(a) },
+                            { label: 'Editar', icone: '✏️', oculto: !podeEditar(a), onClick: () => { setModalEditar(a); setModalEditarLeitura(false); } },
                             { label: 'Histórico', icone: '📋', onClick: () => setModalHistorico(a) },
                             { label: 'Excluir', icone: '🗑️', perigo: true, oculto: !podeExcluir(a), onClick: () => setConfirmarExcluir(a) },
                           ]} />
@@ -275,20 +289,30 @@ export default function Audiencias() {
           onFechar={(reload) => { setModalNova(false); if(reload) carregar(); }} />
       )}
 
-      {/* Modal editar audiência */}
+      {/* Modal editar audiência (também abre em modo somente leitura ao clicar no título do processo) */}
       {modalEditar && (
         <ModalEditarAudiencia
           audiencia={modalEditar}
           tipos={tipos}
+          somenteLeitura={modalEditarLeitura}
+          podeEditar={podeEditar(modalEditar)}
           onTiposChange={() => audienciasAPI.tipos().then(r => { if (r.data.ok) setTipos(r.data.dados); })}
-          onFechar={(reload) => { setModalEditar(null); if (reload) carregar(); }}
+          onFechar={(reload) => { setModalEditar(null); setModalEditarLeitura(false); if (reload) carregar(); }}
         />
       )}
 
       {/* Modal registrar ata */}
       {modalAta && (
         <ModalRegistrarAta audiencia={modalAta}
+          tipos={tipos}
+          onTiposChange={() => audienciasAPI.tipos().then(r => { if (r.data.ok) setTipos(r.data.dados); })}
           onFechar={(reload) => { setModalAta(null); if(reload) carregar(); }} />
+      )}
+
+      {/* Modal reverter status (só admin) */}
+      {modalReverter && (
+        <ModalReverterStatus audiencia={modalReverter}
+          onFechar={(reload) => { setModalReverter(null); if (reload) carregar(); }} />
       )}
 
       {/* Modal cancelar audiência */}
@@ -564,6 +588,7 @@ function ModalCadastroRapidoPessoa({ onFechar, onSalvo }) {
   const [salvando, setSalvando] = useState(false);
   const [auxiliares, setAux]    = useState({ generos: [], estados_civis: [], profissoes: [] });
   const [buscandoCep, setBuscandoCep] = useState(false);
+  const [confirmar, setConfirmar] = useState(null); // aviso "campos sem informação" (igual ao cadastro de Pessoas)
 
   useEffect(() => {
     pessoasAPI.auxiliares().then(r => { if (r.data.ok) setAux(r.data.dados); }).catch(() => {});
@@ -592,8 +617,8 @@ function ModalCadastroRapidoPessoa({ onFechar, onSalvo }) {
     finally { setBuscandoCep(false); }
   }
 
-  async function salvar() {
-    if (!form.nome?.trim()) return toast.error('Nome é obrigatório');
+  // Gravação efetiva (chamada direto ou após o usuário confirmar o aviso de dados faltando).
+  async function executarSalvar() {
     setSalvando(true);
     try {
       const { data } = await pessoasAPI.criarFisica(form);
@@ -605,8 +630,43 @@ function ModalCadastroRapidoPessoa({ onFechar, onSalvo }) {
     finally { setSalvando(false); }
   }
 
+  function salvar() {
+    // ── Obrigatórios (mesma regra do cadastro de Pessoas): nome completo + CPF ──
+    if (!form.nome?.trim()) return toast.error('Nome é obrigatório');
+    const partes = form.nome.trim().split(/\s+/).filter(Boolean);
+    if (partes.length < 2)  return toast.error('Informe o nome completo (nome e sobrenome)');
+    const cpfLimpo = form.cpf?.replace(/\D/g, '') || '';
+    if (!cpfLimpo)          return toast.error('CPF é obrigatório');
+    if (!validarCPF(cpfLimpo)) return toast.error('CPF inválido');
+
+    // ── Validação de formato (só se preenchido): data de nascimento não pode ser futura ──
+    const hoje = new Date().toISOString().split('T')[0];
+    if (form.data_nascimento && form.data_nascimento > hoje)
+      return toast.error('Data de nascimento não pode ser uma data futura');
+
+    // ── Campos opcionais vazios → aviso antes de salvar (idêntico ao cadastro de Pessoas) ──
+    const vazios = [];
+    if (!form.data_nascimento) vazios.push('Data de nascimento');
+    if (!form.genero_id)       vazios.push('Gênero');
+    if (!form.estado_civil_id) vazios.push('Estado civil');
+    if (!form.profissao_id)    vazios.push('Profissão');
+
+    if (vazios.length) {
+      setConfirmar({
+        titulo: 'Campos sem informação',
+        mensagem: `Os campos ${vazios.join(', ')} ficarão sem informação. Deseja salvar assim mesmo?`,
+        textoBotao: 'Salvar assim',
+        tipo: 'aviso',
+        acao: executarSalvar,
+      });
+      return;
+    }
+    return executarSalvar();
+  }
+
   return (
     <div className="modal-overlay" style={{ zIndex: 1100 }}>
+      {confirmar && <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(null)} />}
       <div className="modal-box modal-grande">
         <div className="modal-header">
           <h3>Cadastrar Pessoa (Testemunha)</h3>
@@ -628,7 +688,7 @@ function ModalCadastroRapidoPessoa({ onFechar, onSalvo }) {
             <div className="form-group">
               <label className="form-label">CPF</label>
               <input className="form-control" value={form.cpf || ''} placeholder="000.000.000-00"
-                onChange={e => set('cpf', e.target.value)} />
+                onChange={e => set('cpf', mascaraCPF(e.target.value))} />
             </div>
             <div className="form-group">
               <label className="form-label">Data de nascimento</label>
@@ -737,12 +797,16 @@ function ModalCadastroRapidoPessoa({ onFechar, onSalvo }) {
 // testemunhas: [{ id, nome, telefone, polo }]
 // onChange: função chamada quando a lista muda
 // ============================================================
-function SecaoTestemunhas({ processoId, testemunhas, onChange }) {
+function SecaoTestemunhas({ processoId, testemunhas, onChange, somenteLeitura = false, onPendenteChange }) {
   const [busca, setBusca]           = useState('');
   const [sugestoes, setSugestoes]   = useState([]);
   const [partes, setPartes]         = useState([]); // IDs das partes do processo
   const [pendente, setPendente]     = useState(null); // pessoa selecionada aguardando polo
   const [modalCadastro, setModalCadastro] = useState(false);
+
+  // Avisa o modal quando há (ou deixou de haver) uma testemunha aguardando qualificação de polo,
+  // para o "Salvar" poder bloquear e pedir que o usuário escolha Autor/Réu (ou cancele) antes.
+  useEffect(() => { onPendenteChange?.(!!pendente); }, [pendente]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Carrega partes do processo para bloquear na busca e remover da lista existente
   useEffect(() => {
@@ -800,7 +864,8 @@ function SecaoTestemunhas({ processoId, testemunhas, onChange }) {
     <div className="form-group">
       <label className="form-label">Testemunhas</label>
 
-      {/* Busca + botão cadastrar nova pessoa */}
+      {/* Busca + botão cadastrar nova pessoa (escondido no modo somente leitura) */}
+      {!somenteLeitura && (
       <div style={{ display: 'flex', gap: '6px' }}>
         <div style={{ position: 'relative', flex: 1 }}>
           <input className="form-control"
@@ -826,6 +891,12 @@ function SecaoTestemunhas({ processoId, testemunhas, onChange }) {
           style={{ padding:'0 12px', border:'1px solid #ddd', borderRadius:'6px', background:'#f8fafc', cursor:'pointer', fontSize:'16px', whiteSpace:'nowrap' }}
           onClick={() => setModalCadastro(true)}>…</button>
       </div>
+      )}
+
+      {/* Sem testemunhas no modo leitura — deixa claro que não há */}
+      {somenteLeitura && testemunhas.length === 0 && (
+        <div style={{ fontSize:'13px', color:'#94a3b8' }}>Nenhuma testemunha cadastrada.</div>
+      )}
 
       {/* Mini-seletor de polo — aparece após selecionar uma pessoa */}
       {pendente && (
@@ -861,6 +932,7 @@ function SecaoTestemunhas({ processoId, testemunhas, onChange }) {
                   {t.polo === 'autor' ? 'Testem. Autor' : 'Testem. Réu'}
                 </span>
               </div>
+              {!somenteLeitura && (
               <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
                 {/* Troca de polo com um clique */}
                 <button type="button"
@@ -872,6 +944,7 @@ function SecaoTestemunhas({ processoId, testemunhas, onChange }) {
                 <button type="button" onClick={() => remover(t.id)}
                   style={{ background:'none', border:'none', color:'#ef4444', cursor:'pointer', fontSize:'16px', lineHeight:1 }}>×</button>
               </div>
+              )}
             </div>
           ))}
         </div>
@@ -941,11 +1014,15 @@ function ModalConfirmarSenhaDiaUtil({ descricao, onCancelar, onConfirmar }) {
   );
 }
 
-export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoInicial }) {
+export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoInicial, valoresIniciais }) {
   const { temPermissao } = useAuth();
   const [modalSenhaDiaUtil, setModalSenhaDiaUtil] = useState(null); // { descricao, obs, onConfirm }
+  // valoresIniciais (opcional): pré-preenche tipo/modalidade/responsável/vara — usado quando a
+  // audiência é designada a partir do "Registrar Ata" (copia os dados da audiência realizada).
   const [form, setForm]                     = useState({
-    modalidade: 'presencial', hora: '09:00',
+    modalidade: valoresIniciais?.modalidade || 'presencial', hora: '09:00',
+    tipo_audiencia_id: valoresIniciais?.tipo_audiencia_id || '',
+    responsavel_id: valoresIniciais?.responsavel_id || '',
     ...(processoInicial ? { processo_id: processoInicial.id } : {})
   });
   const [salvando, setSalvando]             = useState(false);
@@ -963,10 +1040,12 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
   const [advogados, setAdvogados]           = useState([]);
   // Testemunhas — [{id, nome, telefone, polo}]
   const [testemunhas, setTestemunhas]       = useState([]);
-  // Local — vara selecionada
+  const [testemunhaPendente, setTestemunhaPendente] = useState(false); // testemunha selecionada sem polo definido
+  // Local — vara selecionada. Começa com a vara do próprio processo (quando aberto de um
+  // processo), já mostrando o endereço; o usuário pode trocar por outra vara à vontade.
   const [varas, setVaras]                   = useState([]);
   const [foruns, setForuns]                 = useState([]);
-  const [varaId, setVaraId]                 = useState(null);
+  const [varaId, setVaraId]                 = useState(valoresIniciais?.vara_id ?? processoInicial?.vara_id ?? null);
   // Modais internos
   const [modalTipos, setModalTipos]         = useState(false);
   const [modalNovoFreela, setModalNovoFreela] = useState(false);
@@ -1001,6 +1080,8 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
     setSugestoes([]);
     setProcSelecionado(proc);
     set('processo_id', proc.id);
+    // Preenche o "Local da audiência" com a vara do processo (se tiver); o usuário pode trocar.
+    if (proc.vara_id) setVaraId(proc.vara_id);
   }
 
   // Valida data no blur — exibe aviso inline abaixo do campo
@@ -1045,6 +1126,16 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
     if (!form.processo_id) return toast.error('Processo é obrigatório');
     if (!form.data)        return toast.error('Data é obrigatória');
     if (!form.hora)        return toast.error('Hora é obrigatória');
+    if (testemunhaPendente) {
+      setConfirmar({
+        titulo: 'Testemunha sem qualificação',
+        mensagem: 'Há uma testemunha selecionada que ainda não foi qualificada como Autor ou Réu. Escolha o polo dela (ou cancele) antes de salvar.',
+        textoBotao: 'Entendi',
+        tipo: 'aviso',
+        acao: () => {},
+      });
+      return;
+    }
 
     const hoje = new Date().toISOString().split('T')[0];
     const h    = parseInt(form.hora.split(':')[0], 10);
@@ -1097,7 +1188,7 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
 
   return (
     <div className="modal-overlay">
-      <div className="modal-box modal-grande">
+      <div className="modal-box modal-grande audiencia-detalhe">
         <div className="modal-header">
           <h3>Nova Audiência</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
@@ -1244,6 +1335,7 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
             processoId={form.processo_id}
             testemunhas={testemunhas}
             onChange={setTestemunhas}
+            onPendenteChange={setTestemunhaPendente}
           />
 
         </div>
@@ -1313,8 +1405,11 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
 // Processo é somente leitura — para trocar processo: excluir + criar nova
 // Mesmas validações de blur (data retroativa / hora incomum) do modal de criação
 // ============================================================
-export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar }) {
+export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar, somenteLeitura = false, podeEditar = true }) {
   const { temPermissao, ehAdmin }             = useAuth();
+  // leitura = true → todos os campos travados e rodapé só com "Editar"/"Fechar".
+  // Ao clicar em "Editar" (quando permitido), destrava para o modo de edição normal.
+  const [leitura, setLeitura]                 = useState(somenteLeitura);
   const [form, setForm]                       = useState({ modalidade: 'presencial' });
   const [carregando, setCarregando]           = useState(true);
   const [salvando, setSalvando]               = useState(false);
@@ -1325,6 +1420,7 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
   const [advogados, setAdvogados]             = useState([]);
   // Testemunhas — formato {id, nome, polo, telefone}
   const [testemunhas, setTestemunhas]         = useState([]);
+  const [testemunhaPendente, setTestemunhaPendente] = useState(false); // testemunha selecionada sem polo definido
   // Local — vara selecionada
   const [varas, setVaras]                     = useState([]);
   const [foruns, setForuns]                   = useState([]);
@@ -1435,6 +1531,16 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
   async function salvar() {
     if (!form.data) return toast.error('Data é obrigatória');
     if (!form.hora) return toast.error('Hora é obrigatória');
+    if (testemunhaPendente) {
+      setConfirmar({
+        titulo: 'Testemunha sem qualificação',
+        mensagem: 'Há uma testemunha selecionada que ainda não foi qualificada como Autor ou Réu. Escolha o polo dela (ou cancele) antes de salvar.',
+        textoBotao: 'Entendi',
+        tipo: 'aviso',
+        acao: () => {},
+      });
+      return;
+    }
 
     const hoje = new Date().toISOString().split('T')[0];
     const h    = parseInt(form.hora.split(':')[0], 10);
@@ -1497,9 +1603,9 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
 
   return (
     <div className="modal-overlay">
-      <div className="modal-box modal-grande">
+      <div className={`modal-box modal-grande audiencia-detalhe ${leitura ? 'audiencia-leitura' : ''}`}>
         <div className="modal-header">
-          <h3>Editar Audiência</h3>
+          <h3>{leitura ? 'Detalhes da Audiência' : 'Editar Audiência'}</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
         </div>
         <div className="modal-body">
@@ -1514,7 +1620,7 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
           {/* Processo — somente leitura */}
           <div className="form-group">
             <label className="form-label">Processo</label>
-            <div style={{ padding: '8px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '14px', color: '#475569' }}>
+            <div style={{ padding: '8px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '14px', color: '#111827', fontWeight: 600 }}>
               {audiencia.processo_numero || '(sem número)'} — {audiencia.pasta_titulo || ''}
             </div>
             <small style={{ color: '#94a3b8', fontSize: '12px' }}>
@@ -1527,12 +1633,12 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
             <div className="form-group">
               <label className="form-label">Tipo de audiência</label>
               <div style={{ display: 'flex', gap: '6px' }}>
-                <select className="form-control" value={form.tipo_audiencia_id || ''}
+                <select className="form-control" value={form.tipo_audiencia_id || ''} disabled={leitura}
                   onChange={e => set('tipo_audiencia_id', e.target.value)}>
                   <option value="">— Selecione —</option>
                   {tipos.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
                 </select>
-                {podeTipos && (
+                {podeTipos && !leitura && (
                   <button type="button" title="Gerenciar tipos"
                     style={{ padding: '0 10px', border: '1px solid #ddd', borderRadius: '6px', background: '#f8fafc', cursor: 'pointer', fontSize: '16px', whiteSpace: 'nowrap' }}
                     onClick={() => setModalTipos(true)}>…</button>
@@ -1541,7 +1647,7 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
             </div>
             <div className="form-group">
               <label className="form-label">Data *</label>
-              <input type="date" className="form-control" value={form.data || ''}
+              <input type="date" className="form-control" value={form.data || ''} disabled={leitura}
                 onChange={e => { set('data', e.target.value); setAvisos(a => ({ ...a, data: '' })); }}
                 onBlur={validarDataBlur} />
               {avisos.data && (
@@ -1552,7 +1658,7 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
             </div>
             <div className="form-group">
               <label className="form-label">Hora *</label>
-              <input type="time" className="form-control" value={form.hora || ''}
+              <input type="time" className="form-control" value={form.hora || ''} disabled={leitura}
                 onChange={e => { set('hora', e.target.value); setAvisos(a => ({ ...a, hora: '' })); }}
                 onBlur={validarHoraBlur} />
               {avisos.hora && (
@@ -1567,7 +1673,7 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Modalidade</label>
-              <select className="form-control" value={form.modalidade}
+              <select className="form-control" value={form.modalidade} disabled={leitura}
                 onChange={e => set('modalidade', e.target.value)}>
                 <option value="presencial">Presencial</option>
                 <option value="virtual">Virtual (online)</option>
@@ -1576,7 +1682,7 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
             <div className="form-group">
               <label className="form-label">Responsável pela condução</label>
               <div style={{ display: 'flex', gap: '6px' }}>
-                <select className="form-control" value={form.responsavel_id || ''}
+                <select className="form-control" value={form.responsavel_id || ''} disabled={leitura}
                   onChange={e => set('responsavel_id', e.target.value)}>
                   <option value="">Escritório (sem advogado definido)</option>
                   {advogados.filter(a => a.origem === 'usuario').length > 0 && (
@@ -1594,9 +1700,11 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
                     </optgroup>
                   )}
                 </select>
-                <button type="button" title="Cadastrar novo freelancer"
-                  style={{ padding: '0 10px', border: '1px solid #ddd', borderRadius: '6px', background: '#f8fafc', cursor: 'pointer', fontSize: '16px', whiteSpace: 'nowrap' }}
-                  onClick={() => setModalNovoFreela(true)}>…</button>
+                {!leitura && (
+                  <button type="button" title="Cadastrar novo freelancer"
+                    style={{ padding: '0 10px', border: '1px solid #ddd', borderRadius: '6px', background: '#f8fafc', cursor: 'pointer', fontSize: '16px', whiteSpace: 'nowrap' }}
+                    onClick={() => setModalNovoFreela(true)}>…</button>
+                )}
               </div>
             </div>
           </div>
@@ -1608,6 +1716,7 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
             varaId={varaId}
             onChange={setVaraId}
             onRecarregarVaras={recarregarVaras}
+            somenteLeitura={leitura}
           />
 
           {/* Plataforma e Link — somente para audiências virtuais */}
@@ -1615,13 +1724,13 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
             <div className="grid-2">
               <div className="form-group">
                 <label className="form-label">Plataforma</label>
-                <input className="form-control" value={form.plataforma_virtual || ''}
+                <input className="form-control" value={form.plataforma_virtual || ''} disabled={leitura}
                   onChange={e => set('plataforma_virtual', e.target.value)}
                   placeholder="Zoom, Teams, Meet..." />
               </div>
               <div className="form-group">
                 <label className="form-label">Link</label>
-                <input className="form-control" value={form.link_virtual || ''}
+                <input className="form-control" value={form.link_virtual || ''} disabled={leitura}
                   onChange={e => set('link_virtual', e.target.value)}
                   placeholder="https://..." />
               </div>
@@ -1633,14 +1742,27 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
             processoId={audiencia.processo_id}
             testemunhas={testemunhas}
             onChange={setTestemunhas}
+            somenteLeitura={leitura}
+            onPendenteChange={setTestemunhaPendente}
           />
 
         </div>
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
-            {salvando ? 'Salvando...' : 'Salvar Alterações'}
-          </button>
+          {leitura ? (
+            <>
+              <button className="btn btn-secondary" onClick={() => onFechar(false)}>Fechar</button>
+              {podeEditar && (
+                <button className="btn btn-primary" onClick={() => setLeitura(false)}>Editar</button>
+              )}
+            </>
+          ) : (
+            <>
+              <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+                {salvando ? 'Salvando...' : 'Salvar Alterações'}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -1933,17 +2055,72 @@ function ModalGerenciarTipos({ onFechar, onAtualizar }) {
 }
 
 // Modal para registrar ata da audiência
-export function ModalRegistrarAta({ audiencia, onFechar }) {
-  const [form, setForm]       = useState({ resultado: 'realizada', houve_acordo: false });
+export function ModalRegistrarAta({ audiencia, onFechar, tipos, onTiposChange }) {
+  // "Registrar Ata" pressupõe que a audiência ACONTECEU → status Realizada. Cancelar/Remarcar são
+  // ações à parte; o acordo é registrado pelo modal completo do Financeiro (botão abaixo).
+  const [form, setForm]       = useState({});
   const [salvando, setSalvando] = useState(false);
+  const [modalNovaAud, setModalNovaAud] = useState(null); // dados p/ abrir a Nova Audiência pré-preenchida
+  const [abrindoNova, setAbrindoNova]   = useState(false);
+  const [modalAcordo, setModalAcordo]   = useState(null); // { processoId, descricaoInicial }
+  const [abrindoAcordo, setAbrindoAcordo] = useState(false);
+  const [acordoRegistrado, setAcordoRegistrado] = useState(false); // marca que houve acordo (registro na ata)
+  const [novaAudRegistrada, setNovaAudRegistrada] = useState(false); // marca que uma nova audiência foi designada
 
   function set(k, v) { setForm(f => ({...f, [k]: v})); }
 
+  // "Registrar acordo": abre o modal COMPLETO de Acordo (Financeiro) no processo desta audiência,
+  // com a descrição já indicando a origem ("Acordo em audiência de dd/mm/aaaa"). Criação independente.
+  async function abrirAcordo() {
+    setAbrindoAcordo(true);
+    try {
+      const { data } = await audienciasAPI.buscar(audiencia.id);
+      if (!data.ok) throw new Error();
+      setModalAcordo({
+        processoId: data.dados.processo_id,
+        descricaoInicial: `Acordo em audiência de ${formatarData(audiencia.data)}`,
+      });
+    } catch { toast.error('Não foi possível carregar os dados para o acordo'); }
+    finally { setAbrindoAcordo(false); }
+  }
+
+  // "Designar nova audiência": abre o modal COMPLETO de Nova Audiência já pré-preenchido com os
+  // dados desta audiência (processo, tipo, local, modalidade, responsável). A criação é independente
+  // (feita pelo próprio modal), como combinado.
+  async function abrirNovaAudiencia() {
+    setAbrindoNova(true);
+    try {
+      const { data } = await audienciasAPI.buscar(audiencia.id);
+      if (!data.ok) throw new Error();
+      const d = data.dados;
+      // Responsável no formato "usuario:id" | "freela:id" (mesmo padrão do Editar)
+      let responsavel_id = '';
+      if (d.responsavel_id)        responsavel_id = `usuario:${d.responsavel_id}`;
+      if (d.responsavel_freela_id) responsavel_id = `freela:${d.responsavel_freela_id}`;
+      setModalNovaAud({
+        processoInicial: {
+          id: d.processo_id,
+          numProc: d.processo_numero || audiencia.processo_numero || '',
+          NomeTituloProc: audiencia.pasta_titulo || '',
+          numPasta: audiencia.pasta_numero_fmt || '',
+          vara_id: d.vara_id || null,
+        },
+        valoresIniciais: {
+          tipo_audiencia_id: d.tipo_audiencia_id || '',
+          modalidade: d.modalidade || 'presencial',
+          responsavel_id,
+          vara_id: d.vara_id || null,
+        },
+      });
+    } catch { toast.error('Não foi possível carregar os dados para a nova audiência'); }
+    finally { setAbrindoNova(false); }
+  }
+
   async function salvar() {
-    if (!form.resultado) return toast.error('Resultado é obrigatório');
     setSalvando(true);
-    // Converte os campos de moeda mascarados de volta p/ número antes de enviar
-    const payload = { ...form, valor_acordo: parseMoeda(form.valor_acordo), valor_parcela: parseMoeda(form.valor_parcela) };
+    // O acordo (se houve) já foi criado no Financeiro pelo modal próprio; aqui só marcamos na ata
+    // que esta audiência teve acordo. O status da audiência é sempre "Realizada".
+    const payload = { ...form, houve_acordo: acordoRegistrado };
     try {
       await audienciasAPI.registrarAta(audiencia.id, payload);
       toast.success('Ata registrada com sucesso!');
@@ -1961,16 +2138,6 @@ export function ModalRegistrarAta({ audiencia, onFechar }) {
         </div>
         <div className="modal-body">
           <div className="form-group">
-            <label className="form-label">Resultado *</label>
-            <select className="form-control" value={form.resultado}
-              onChange={e => set('resultado', e.target.value)}>
-              <option value="realizada">Realizada</option>
-              <option value="adiada">Adiada</option>
-              <option value="cancelada">Cancelada</option>
-              <option value="acordo">Acordo</option>
-            </select>
-          </div>
-          <div className="form-group">
             <label className="form-label">Resumo / Termos</label>
             <textarea className="form-control" rows={4} value={form.resultado_texto||''}
               onChange={e => set('resultado_texto', e.target.value)}
@@ -1978,51 +2145,26 @@ export function ModalRegistrarAta({ audiencia, onFechar }) {
               placeholder="Descreva os principais pontos da audiência..." />
           </div>
 
-          {/* Se houve acordo */}
-          <div className="form-group">
-            <label style={{display:'flex',alignItems:'center',gap:'8px',cursor:'pointer'}}>
-              <input type="checkbox" checked={form.houve_acordo}
-                onChange={e => set('houve_acordo', e.target.checked)} />
-              <span className="form-label" style={{margin:0}}>Houve acordo?</span>
-            </label>
+          {/* Registrar acordo: abre o modal completo do Financeiro (parcelas/honorário/parceria) */}
+          <div className="form-group" style={{marginTop:'12px', display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap'}}>
+            <button type="button" className="btn btn-outline" onClick={abrirAcordo} disabled={abrindoAcordo}>
+              {abrindoAcordo ? 'Abrindo...' : '💰 Registrar acordo'}
+            </button>
+            {acordoRegistrado && (
+              <span style={{color:'#16a34a', fontSize:'13px', fontWeight:600}}>✓ Acordo registrado no Financeiro</span>
+            )}
           </div>
 
-          {form.houve_acordo && (
-            <div style={{background:'#f0fdf4',padding:'14px',borderRadius:'8px',border:'1px solid #bbf7d0'}}>
-              <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">Valor total do acordo (R$)</label>
-                  <input type="text" inputMode="numeric" className="form-control" value={form.valor_acordo||''}
-                    onChange={e => set('valor_acordo', mascaraMoeda(e.target.value))} placeholder="0,00" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Número de parcelas</label>
-                  <input type="number" className="form-control" value={form.parcelas||''}
-                    onChange={e => set('parcelas', e.target.value)} />
-                </div>
-              </div>
-              <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">Valor da parcela (R$)</label>
-                  <input type="text" inputMode="numeric" className="form-control" value={form.valor_parcela||''}
-                    onChange={e => set('valor_parcela', mascaraMoeda(e.target.value))} placeholder="0,00" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Data do 1º pagamento</label>
-                  <input type="date" className="form-control" value={form.data_primeiro_pagamento||''}
-                    onChange={e => set('data_primeiro_pagamento', e.target.value)} />
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="form-group" style={{marginTop:'12px'}}>
-            <label style={{display:'flex',alignItems:'center',gap:'8px',cursor:'pointer'}}>
-              <input type="checkbox" checked={form.nova_audiencia||false}
-                onChange={e => set('nova_audiencia', e.target.checked)} />
-              <span className="form-label" style={{margin:0}}>Designar nova audiência?</span>
-            </label>
+          {/* Designar nova audiência: abre o modal completo de Nova Audiência já pré-preenchido */}
+          <div className="form-group" style={{marginTop:'4px', display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap'}}>
+            <button type="button" className="btn btn-outline" onClick={abrirNovaAudiencia} disabled={abrindoNova}>
+              {abrindoNova ? 'Abrindo...' : '📅 Designar nova audiência'}
+            </button>
+            {novaAudRegistrada && (
+              <span style={{color:'#16a34a', fontSize:'13px', fontWeight:600}}>✓ Nova audiência designada</span>
+            )}
           </div>
+
           <div className="form-group">
             <label className="form-label">Observações</label>
             <textarea className="form-control" rows={2} value={form.observacoes||''}
@@ -2037,6 +2179,77 @@ export function ModalRegistrarAta({ audiencia, onFechar }) {
           </button>
         </div>
       </div>
+
+      {/* Nova Audiência (pré-preenchida) aberta pelo botão "Designar nova audiência" */}
+      {modalNovaAud && (
+        <ModalNovaAudiencia
+          tipos={tipos}
+          onTiposChange={onTiposChange}
+          processoInicial={modalNovaAud.processoInicial}
+          valoresIniciais={modalNovaAud.valoresIniciais}
+          onFechar={(reload) => { setModalNovaAud(null); if (reload) { setNovaAudRegistrada(true); toast.success('Nova audiência criada.'); } }}
+        />
+      )}
+
+      {/* Acordo (modal completo do Financeiro) aberto pelo botão "Registrar acordo" */}
+      {modalAcordo && (
+        <ModalAcordo
+          processoId={modalAcordo.processoId}
+          acordoId={null}
+          tipo="acordo"
+          descricaoInicial={modalAcordo.descricaoInicial}
+          onFechar={(reload) => { setModalAcordo(null); if (reload) { setAcordoRegistrado(true); toast.success('Acordo registrado no Financeiro.'); } }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// Modal para REVERTER o status de uma audiência Realizada -> Agendada (SOMENTE admin).
+// Apaga a ata (para poder retrabalhar) e exige motivo. Prazos/tarefas/acordo permanecem.
+// ============================================================
+function ModalReverterStatus({ audiencia, onFechar }) {
+  const [motivo, setMotivo] = useState('');
+  const [salvando, setSalvando] = useState(false);
+
+  async function confirmar() {
+    if (!motivo.trim()) return toast.error('Informe o motivo da reversão');
+    setSalvando(true);
+    try {
+      await audienciasAPI.reverterStatus(audiencia.id, { motivo: motivo.trim() });
+      toast.success('Status revertido para Agendada.');
+      onFechar(true);
+    } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao reverter o status'); }
+    finally { setSalvando(false); }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box" style={{ maxWidth: '480px' }}>
+        <div className="modal-header">
+          <h3>Reverter status</h3>
+          <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:8, padding:'10px 14px', marginBottom:14, fontSize:13, color:'#92400e' }}>
+            ⚠️ A audiência voltará para <strong>Agendada</strong> e a <strong>ata registrada será apagada</strong>.
+            Os prazos, tarefas e o acordo que a ata tenha gerado <strong>permanecem</strong> — trate-os manualmente se necessário.
+          </div>
+          <div className="form-group">
+            <label className="form-label">Motivo *</label>
+            <textarea className="form-control" rows={3} value={motivo}
+              onChange={e => setMotivo(e.target.value)}
+              placeholder="Descreva o motivo da reversão (fica registrado no histórico)" />
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={() => onFechar(false)} disabled={salvando}>Cancelar</button>
+          <button className="btn btn-danger" onClick={confirmar} disabled={salvando}>
+            {salvando ? 'Revertendo...' : 'Reverter para Agendada'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2045,7 +2258,7 @@ export function ModalRegistrarAta({ audiencia, onFechar }) {
 // Campo de busca de vara para o Local da audiência
 // Usado nos modais Nova e Editar — busca por nome, abrev, fórum, cidade
 // ============================================================
-function CampoLocalVara({ varas, foruns, varaId, onChange, onRecarregarVaras }) {
+function CampoLocalVara({ varas, foruns, varaId, onChange, onRecarregarVaras, somenteLeitura = false }) {
   const [busca, setBusca]       = useState('');
   const [aberto, setAberto]     = useState(false);
   const [modalNova, setModalNova] = useState(false);
@@ -2083,17 +2296,22 @@ function CampoLocalVara({ varas, foruns, varaId, onChange, onRecarregarVaras }) 
       <div style={{ display: 'flex', gap: 6 }}>
         <div style={{ position: 'relative', flex: 1 }}>
           {varaSelecionada ? (
-            /* Vara selecionada — exibe chip com botão × para limpar */
+            /* Vara selecionada — exibe chip (com botão × só quando NÃO é somente leitura) */
             <div style={{ display: 'flex', alignItems: 'center', padding: '7px 12px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#f8fafc', minHeight: 38 }}>
               <span style={{ flex: 1, fontSize: 14 }}>
                 <strong>{varaSelecionada.abrev_nome || varaSelecionada.nome}</strong>
                 {' — '}{varaSelecionada.forum_nome}
               </span>
-              <button type="button"
-                onClick={() => { onChange(null); setBusca(''); }}
-                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 0 0 8px' }}
-                title="Limpar seleção">×</button>
+              {!somenteLeitura && (
+                <button type="button"
+                  onClick={() => { onChange(null); setBusca(''); }}
+                  style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 0 0 8px' }}
+                  title="Limpar seleção">×</button>
+              )}
             </div>
+          ) : somenteLeitura ? (
+            /* Somente leitura sem vara: mostra aviso, sem campo de busca */
+            <div style={{ padding: '7px 12px', fontSize: 13, color: '#94a3b8' }}>Local não informado</div>
           ) : (
             /* Campo de busca */
             <input className="form-control"
@@ -2133,15 +2351,17 @@ function CampoLocalVara({ varas, foruns, varaId, onChange, onRecarregarVaras }) 
           )}
         </div>
 
-        {/* Botão para cadastrar nova vara */}
-        <button type="button" title="Cadastrar nova vara"
-          style={{ padding: '0 10px', border: '1px solid #ddd', borderRadius: 6, background: '#f8fafc', cursor: 'pointer', fontSize: 16, whiteSpace: 'nowrap' }}
-          onClick={() => setModalNova(true)}>…</button>
+        {/* Botão para cadastrar nova vara (escondido no modo somente leitura) */}
+        {!somenteLeitura && (
+          <button type="button" title="Cadastrar nova vara"
+            style={{ padding: '0 10px', border: '1px solid #ddd', borderRadius: 6, background: '#f8fafc', cursor: 'pointer', fontSize: 16, whiteSpace: 'nowrap' }}
+            onClick={() => setModalNova(true)}>…</button>
+        )}
       </div>
 
       {/* Endereço informativo abaixo */}
       {varaSelecionada && endereco && (
-        <div style={{ marginTop: 6, padding: '7px 12px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, fontSize: 12, color: '#1e40af' }}>
+        <div style={{ marginTop: 6, padding: '7px 12px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, fontSize: 14, fontWeight: 600, color: '#1e40af' }}>
           📍 {endereco}
         </div>
       )}

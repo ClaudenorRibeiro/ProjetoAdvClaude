@@ -552,9 +552,9 @@ export default function PastaDetalhe() {
                 /* Modo visualização — badge + botão de edição */
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{
-                    fontSize: '13px', fontWeight: '700', color: '#fff',
+                    fontSize: '18px', fontWeight: '700', color: '#fff',
                     background: '#2d6be4', borderRadius: '6px',
-                    padding: '2px 10px', letterSpacing: '0.5px'
+                    padding: '4px 14px', letterSpacing: '0.5px'
                   }}>
                     Pasta {formatarNumeroPasta(pasta.numPasta)}
                   </span>
@@ -562,7 +562,7 @@ export default function PastaDetalhe() {
                     <button
                       title="Alterar número da pasta"
                       onClick={() => { setNovaNrPasta(String(pasta.numPasta)); setEditandoNrPasta(true); }}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#aaa', fontSize: '13px', padding: '0', lineHeight: '1' }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#aaa', fontSize: '16px', padding: '0', lineHeight: '1' }}
                     >✎</button>
                   )}
                 </div>
@@ -795,9 +795,12 @@ export default function PastaDetalhe() {
                         <td>{p.subtipo_nome || p.descricao || '—'}</td>
                         <td>{formatarData(p.data_vencimento)}</td>
                         <td>
-                          {p.dias_restantes < 0
-                            ? <span className="badge badge-vermelho">{Math.abs(p.dias_restantes)}d atraso</span>
-                            : <span>{p.dias_restantes}d</span>
+                          {/* Prazo concluído/cancelado não conta dias/atraso — mostra "—" (igual à tela Prazos). */}
+                          {!ativo
+                            ? <span>—</span>
+                            : p.dias_restantes < 0
+                              ? <span className="badge badge-vermelho">{Math.abs(p.dias_restantes)}d atraso</span>
+                              : <span>{p.dias_restantes}d</span>
                           }
                         </td>
                         <td>{p.responsavel_nome || 'Escritório'}</td>

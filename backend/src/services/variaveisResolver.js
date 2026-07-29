@@ -616,6 +616,60 @@ async function escritorioUsaMaiusculas() {
   }
 }
 
+// ============================================================
+// DESTINATÁRIO SUGERIDO (para "enviar documento por e-mail" a partir do ModalGerar)
+// Retorna quem naturalmente recebe o documento: a própria pessoa (âncora pessoa)
+// ou o CLIENTE do processo (âncoras audiência/perícia/prazo/recibo). Só sugestão —
+// no front o e-mail pode ser conferido/trocado. Não altera nada no banco.
+// ============================================================
+
+// Descobre o processo_id de uma âncora ligada a processo (null nas de pessoa).
+async function processoIdDaAncora(ancoraTipo, ancoraId) {
+  const id = Number(ancoraId);
+  if (!id) return null;
+  if (ancoraTipo === 'audiencia') { const [r] = await pool.execute('SELECT processo_id FROM audiencia WHERE id = ? LIMIT 1', [id]); return r[0]?.processo_id || null; }
+  if (ancoraTipo === 'pericia')   { const [r] = await pool.execute('SELECT processo_id FROM pericia WHERE id = ? LIMIT 1', [id]); return r[0]?.processo_id || null; }
+  if (ancoraTipo === 'prazo')     { const [r] = await pool.execute('SELECT processo_id FROM prazos_processo WHERE id = ? LIMIT 1', [id]); return r[0]?.processo_id || null; }
+  if (ancoraTipo === 'pagamento') { const [r] = await pool.execute('SELECT a.processo_id FROM acordo_parcela ap JOIN acordo a ON ap.acordo_id = a.id WHERE ap.id = ? LIMIT 1', [id]); return r[0]?.processo_id || null; }
+  return null;
+}
+
+// Cliente do processo = primeira parte do polo marcado em cliente_polo (padrão 'autor').
+async function clienteDoProcesso(processoId) {
+  const [pr] = await pool.execute('SELECT cliente_polo FROM tblproc WHERE id = ? LIMIT 1', [processoId]);
+  if (!pr.length) return null;
+  const tabela = pr[0].cliente_polo === 'reu' ? 'tbltituloprocreu' : 'tbltituloprocautor';
+  const [v] = await pool.execute(`SELECT tipo_pessoa, pessoa_id FROM ${tabela} WHERE proc_id = ? ORDER BY id ASC LIMIT 1`, [processoId]);
+  if (!v.length) return null;
+  return { tipo_pessoa: v[0].tipo_pessoa, pessoa_id: v[0].pessoa_id };
+}
+
+// Nome + e-mails ATIVOS de uma pessoa (principal primeiro).
+async function nomeEEmailsDaPessoa(tipoPessoa, pessoaId) {
+  let nome = '';
+  if (tipoPessoa === 'fisica') { const [r] = await pool.execute('SELECT nome FROM pessoas_fisicas WHERE id = ? LIMIT 1', [pessoaId]); nome = r[0]?.nome || ''; }
+  else { const [r] = await pool.execute('SELECT razao_social FROM pessoas_juridicas WHERE id = ? LIMIT 1', [pessoaId]); nome = r[0]?.razao_social || ''; }
+  const tabEml = tipoPessoa === 'fisica' ? 'emails_pf' : 'emails_pj';
+  const [em] = await pool.execute(`SELECT email FROM ${tabEml} WHERE pessoa_id = ? AND ativo = 1 ORDER BY principal DESC, id ASC`, [pessoaId]);
+  return { nome, emails: em.map(e => e.email).filter(Boolean) };
+}
+
+async function resolverDestinatario(ancoraTipo, ancoraId) {
+  let tipo_pessoa = null, pessoa_id = null, processo_id = null;
+  if (ancoraTipo === 'pessoa_fisica')        { tipo_pessoa = 'fisica';   pessoa_id = Number(ancoraId); }
+  else if (ancoraTipo === 'pessoa_juridica') { tipo_pessoa = 'juridica'; pessoa_id = Number(ancoraId); }
+  else {
+    processo_id = await processoIdDaAncora(ancoraTipo, ancoraId);
+    if (processo_id) {
+      const cli = await clienteDoProcesso(processo_id);
+      if (cli) { tipo_pessoa = cli.tipo_pessoa; pessoa_id = cli.pessoa_id; }
+    }
+  }
+  if (!pessoa_id) return { tipo_pessoa: null, pessoa_id: null, nome: '', emails: [], processo_id };
+  const { nome, emails } = await nomeEEmailsDaPessoa(tipo_pessoa, pessoa_id);
+  return { tipo_pessoa, pessoa_id, nome, emails, processo_id };
+}
+
 // ---- Ponto de entrada: resolve as variáveis conforme o tipo de âncora ----
 async function resolver(ancoraTipo, ancoraId, usuario, opcoes = {}) {
   let ctx = null;
@@ -630,4 +684,4 @@ async function resolver(ancoraTipo, ancoraId, usuario, opcoes = {}) {
   return ctx;
 }
 
-module.exports = { resolver, resolverMultipessoas, blocosAlcancados, modeloCompativel };
+module.exports = { resolver, resolverMultipessoas, blocosAlcancados, modeloCompativel, resolverDestinatario };

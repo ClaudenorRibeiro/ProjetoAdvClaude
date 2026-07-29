@@ -8,6 +8,33 @@ const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response
 const auditoria = require('../middleware/auditoria');
 const { hojeBrasilia } = require('../utils/helpers');
 const { enviarEmail } = require('../utils/email');
+const { registrarComunicacao } = require('../utils/logComunicacao');
+const multer = require('multer');
+
+// ---- Anexos do "Enviar e-mail" avulso (Pessoas) ----
+// Upload em memória: os arquivos são anexados ao e-mail e DESCARTADOS (nada vai para
+// disco, S3 ou banco). O total é limitado a 20 MB para respeitar o teto do Gmail (25 MB
+// por mensagem, com folga para a codificação do anexo).
+const LIMITE_TOTAL_ANEXOS = 20 * 1024 * 1024; // 20 MB somando todos os anexos
+const MAX_ANEXOS = 20;                          // no máximo 20 arquivos por e-mail
+const uploadAnexosMemoria = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: LIMITE_TOTAL_ANEXOS, files: MAX_ANEXOS }, // por-arquivo <= 20MB; até 20 arquivos
+});
+// Middleware de upload com erro em JSON (em vez do erro genérico do multer).
+function uploadAnexosEmail(req, res, next) {
+  uploadAnexosMemoria.array('anexos', MAX_ANEXOS)(req, res, (err) => {
+    if (err) {
+      const msg = err.code === 'LIMIT_FILE_SIZE'
+        ? 'Cada arquivo deve ter no máximo 20 MB'
+        : err.code === 'LIMIT_FILE_COUNT'
+          ? `Máximo de ${MAX_ANEXOS} arquivos por e-mail`
+          : (err.message || 'Falha ao anexar o(s) arquivo(s)');
+      return erro(res, msg);
+    }
+    next();
+  });
+}
 
 // ---- Filtros de busca reutilizáveis (listagem E exportação) — evita duplicar a mesma condição ----
 
@@ -1395,9 +1422,79 @@ async function registrarParabens(req, res) {
   }
 }
 
+// ============================================================
+// ENVIAR E-MAIL AVULSO (recurso "Enviar Email" do menu de Pessoas).
+// Recebe { para, assunto, mensagem } + anexos opcionais (arquivos do PC, campo 'anexos')
+// e envia pelo SMTP do escritório (utils/email), que já registra o resultado em log_emails.
+// Os anexos vêm em memória (multer) e são DESCARTADOS após o envio — nada é salvo em disco,
+// S3 ou banco; o e-mail em si e os anexos não ficam arquivados (só o log da comunicação).
+// Não abre transação: o único INSERT (log_emails) acontece dentro de enviarEmail.
+// ============================================================
+async function enviarEmailAvulso(req, res) {
+  const para     = String(req.body.para || '').trim();
+  const assunto  = String(req.body.assunto || '').trim();
+  const mensagem = String(req.body.mensagem || '').trim();
+  // Pessoa destinatária (opcional) — só para registrar no log "quem enviou p/ quem".
+  const tipoPessoa = (req.body.tipo_pessoa === 'fisica' || req.body.tipo_pessoa === 'juridica') ? req.body.tipo_pessoa : null;
+  const pessoaId   = Number(req.body.pessoa_id) || null;
+
+  // Validações básicas
+  const emailValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(para);
+  if (!emailValido) return erro(res, 'Informe um e-mail de destino válido');
+  if (!assunto)     return erro(res, 'Informe o assunto do e-mail');
+  if (!mensagem)    return erro(res, 'Escreva a mensagem do e-mail');
+
+  // Anexos (arquivos do PC). Confere o total mesmo com o limite do multer, pois o
+  // multer só valida o TAMANHO de cada arquivo — a soma precisa ser checada aqui.
+  const arquivos = Array.isArray(req.files) ? req.files : [];
+  // Lista branca de tipos (mesma do front): o Gmail bloqueia executáveis. Reforço no
+  // servidor para o caso de a validação do front ser burlada.
+  const permitidas = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'];
+  const extInvalida = arquivos.some(f => !permitidas.includes(String(f.originalname || '').split('.').pop().toLowerCase()));
+  if (extInvalida) {
+    return erro(res, 'Tipo de arquivo não permitido. Aceita somente PDF, DOC, DOCX, JPG, JPEG ou PNG.');
+  }
+  const totalBytes = arquivos.reduce((s, f) => s + (f.size || 0), 0);
+  if (totalBytes > LIMITE_TOTAL_ANEXOS) {
+    return erro(res, 'Os anexos somam mais de 20 MB (limite do e-mail). Remova algum arquivo.');
+  }
+  const anexos = arquivos.map(f => ({ filename: f.originalname, content: f.buffer, contentType: f.mimetype }));
+
+  // Monta o corpo HTML a partir do texto digitado: escapa os caracteres de HTML
+  // (para o texto do usuário nunca quebrar/alterar o layout) e troca quebras de linha por <br>.
+  const escaparHtml = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const corpo = escaparHtml(mensagem).replace(/\r?\n/g, '<br>');
+  const html  = `<div style="font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.5;">${corpo}</div>`;
+
+  // Conteúdo do log: a mensagem + os NOMES dos anexos (não o arquivo em si).
+  const nomesAnexos = arquivos.map(f => f.originalname).filter(Boolean).join(', ');
+  const conteudoLog = nomesAnexos ? `${mensagem}\n\n[Anexos: ${nomesAnexos}]` : mensagem;
+
+  try {
+    await enviarEmail({ para, assunto, html, anexos });
+  } catch (err) {
+    // enviarEmail já gravou a falha em log_emails; registra a comunicação como falha e avisa.
+    await registrarComunicacao({ canal: 'email', destinatario: para, assunto, conteudo: conteudoLog, enviado: 0, erro: err.message, tipo_pessoa: tipoPessoa, pessoa_id: pessoaId, usuario_id: req.usuario.id });
+    return erro(res, 'Não foi possível enviar o e-mail. Verifique a configuração de e-mail (SMTP).');
+  }
+  await registrarComunicacao({ canal: 'email', destinatario: para, assunto, conteudo: conteudoLog, enviado: 1, erro: null, tipo_pessoa: tipoPessoa, pessoa_id: pessoaId, usuario_id: req.usuario.id });
+  return sucesso(res, null, 'E-mail enviado com sucesso');
+}
+
+// Registra no log que o usuário abriu o WhatsApp (wa.me) de uma pessoa. Não envia nada —
+// o envio é manual no WhatsApp; aqui só fica o registro "usuário X abriu zap p/ pessoa Y".
+async function registrarEnvioZap(req, res) {
+  const telefone   = String(req.body.telefone || '').trim();
+  const tipoPessoa = (req.body.tipo_pessoa === 'fisica' || req.body.tipo_pessoa === 'juridica') ? req.body.tipo_pessoa : null;
+  const pessoaId   = Number(req.body.pessoa_id) || null;
+  if (!telefone) return erro(res, 'Telefone é obrigatório');
+  await registrarComunicacao({ canal: 'whatsapp', destinatario: telefone, enviado: 1, tipo_pessoa: tipoPessoa, pessoa_id: pessoaId, usuario_id: req.usuario.id });
+  return sucesso(res, null, 'Registrado');
+}
+
 module.exports = {
   listarFisicas, buscarFisica, criarFisica, atualizarFisica, excluirFisica, unificarFisicas, adicionarHistorico, editarHistorico, excluirHistorico,
   listarJuridicas, buscarJuridica, criarJuridica, atualizarJuridica, excluirJuridica, unificarJuridicas, buscarAuxiliares, buscarPorCPF, criarAuxiliar,
   processosDaPessoa, exportarFisicas, exportarJuridicas,
-  listarAniversariantes, registrarParabens, buscarAniversariantes
+  listarAniversariantes, registrarParabens, buscarAniversariantes, uploadAnexosEmail, enviarEmailAvulso, registrarEnvioZap
 };

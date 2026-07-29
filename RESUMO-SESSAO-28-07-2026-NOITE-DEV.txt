@@ -1,0 +1,179 @@
+========================================================================================
+RESUMO DETALHADO DA SESSÃO — 28/07/2026 (NOITE — continuação do dia)
+Sistema de Advocacia (NovoJud) — backend Node/Express + MySQL, frontend React/Vite
+========================================================================================
+
+*** ESTADO DO GIT (conferido): eu (Claude) NÃO rodei nenhum comando git.
+    - HEAD local = c549d74.
+    - origin/main = c76bc29 (UM commit À FRENTE do HEAD) — é a reforma de Audiências de
+      26/07-tarde, que o SEU .bat já commitou/pushou. O working tree local ainda tem essa
+      camada + o trabalho de 28/07 (dia) + tudo desta noite, tudo NÃO commitado.
+    - IMPORTANTE p/ quando for subir: o "main" local está atrás do origin por 1 commit;
+      vai precisar reconciliar (o conteúdo é quase o mesmo, tende a ser tranquilo).
+    - (Correção: o resumo de 28/07-DIA dizia "HEAD=origin=c549d74"; na verdade origin=c76bc29.)
+
+*** SQL / BANCO: NENHUM script rodado nesta noite. Nenhuma entrega precisou de banco.
+    (O único SQL futuro é a tabela nova "modelo_corpo_email", quando o E-MAIL EM LOTE for
+     autorizado — e aí eu mando o script para o HeidiSQL.)
+
+*** PARA O DEPLOY (quando você quiser): o BACKEND mudou (Pessoas, rotas) -> REINICIAR o
+    servidor Node. O frontend é só build + Ctrl+F5.
+
+----------------------------------------------------------------------------------------
+1) E-MAIL FASE 3 — ANEXAR ARQUIVO DO PC na janela "Enviar e-mail" de Pessoas
+----------------------------------------------------------------------------------------
+- DECISÃO SUA de LUGAR: o anexo avulso do PC entra na janela "Enviar e-mail" de PESSOAS
+  (não no "Gerar documento" — esse é contexto de documento e fica só com o doc do sistema).
+- Como ficou: botão "Escolher arquivos" (VÁRIOS de uma vez), lista com nome + tamanho +
+  botão remover, e o total somado. Você anexa, confere e envia.
+- LISTA BRANCA de tipos (no front E no back): aceita SOMENTE PDF, DOC, DOCX, JPG, JPEG, PNG.
+  Qualquer outro tipo mostra o aviso "Tipo de arquivo não permitido. Aceita somente PDF,
+  DOC, DOCX, JPG, JPEG ou PNG."
+  * POR QUÊ: o GMAIL BLOQUEIA anexos executáveis (.bat, .exe, .js, .cmd, .com, .vbs, .msi,
+    .scr, .jar...). Isso foi CONFIRMADO no banco (tabela log_emails): o erro real do seu
+    teste com "iniciar_pc_escrit.bat" foi "552-5.7.0 ... message was blocked ... security
+    issue" (BlockedMessage do Google). Sem anexo o e-mail ia normal; com o .bat, o Gmail
+    barrava. Agora barramos ANTES, com mensagem clara.
+- TETO de 20 MB no total (somando todos os anexos), validado no front (na hora de anexar)
+  e também no servidor (soma real). O limite do Gmail é 25 MB por mensagem.
+- NADA é salvo (nem no S3, nem no banco): os anexos vão em memória, são enviados e
+  descartados. Fica só o registro em log_comunicacoes (agora anota também os NOMES dos
+  anexos — não o arquivo em si).
+- SUA PERGUNTA sobre VÍRUS ("algum desses 3 pode mandar vírus pro servidor?"): NÃO, para o
+  servidor não há risco — ele NUNCA abre, executa ou salva o anexo; só transporta os bytes
+  para o e-mail. Esses tipos PODEM conter malware, mas o risco seria de quem RECEBE e ABRE
+  o arquivo, não do servidor. A lista branca serve p/ evitar o bloqueio do Gmail e guiar o
+  usuário — não é antivírus.
+- Arquivos: pessoasController.js, routes/index.js, Pessoas.js. (api.js NÃO precisou mudar —
+  ele já sabia lidar com upload.)
+
+----------------------------------------------------------------------------------------
+2) AVISO "DO PRÓPRIO SISTEMA" no lugar da mensagem do canto — SÓ na janela de e-mail
+----------------------------------------------------------------------------------------
+- Você nunca gostou da notificação no canto (o "toast"). Ela é o padrão em TODO o sistema
+  (são 422 avisos). Você escolheu trocar SOMENTE na janela "Enviar e-mail" (escopo
+  confirmado) — o resto do sistema ficou como estava.
+- Agora os avisos dessa janela (anexo grande, campo faltando, erro ao enviar) aparecem numa
+  FAIXA VERMELHA DENTRO do próprio modal. Ela some quando você corrige e tem um "x" p/ fechar.
+- O aviso de SUCESSO continua no canto (porque a janela fecha ao enviar, e não haveria onde
+  mostrar a faixa). Você ciente; se quiser, dá para mudar depois.
+- CONFIRMAÇÃO SEMPRE ANTES DE ENVIAR (você escolheu a opção A): ao clicar em Enviar, aparece
+  uma confirmação com o texto honesto: "Este e-mail será enviado agora. O sistema registra
+  apenas que o envio aconteceu (quem enviou, para quem, assunto e data) — mas NÃO guarda uma
+  cópia do e-mail nem dos anexos. Se você precisa manter um comprovante..., use também um
+  serviço de e-mail próprio (Gmail etc.)...". Só envia depois do "Enviar assim mesmo".
+  * OBS: eu te CORRIGI aqui — sua ideia de aviso ("não fica registrado em nenhum lugar") não
+    era verdadeira, porque o envio JÁ grava em log_comunicacoes. Ajustamos p/ o texto acima.
+- "Assunto" já era obrigatório (não precisou mexer).
+
+----------------------------------------------------------------------------------------
+3) MENU DOS 3 PONTINHOS (⋮) — realce do hover mais forte
+----------------------------------------------------------------------------------------
+- O item sob o mouse estava fraquinho (cinza #f1f5f9). Agora é um azul-claro (#dbeafe), que
+  lê como "selecionado" e combina com o tema.
+- É um COMPONENTE COMPARTILHADO (MenuAcoes.js), então o realce melhorou em TODAS as telas de
+  uma vez. Só frontend, sem banco. Fácil de calibrar se quiser mais suave/forte.
+
+----------------------------------------------------------------------------------------
+4) AUDIÊNCIAS — por que não dá p/ editar o nº do processo (é DE PROPÓSITO)
+----------------------------------------------------------------------------------------
+- Você perguntou. Resposta (conferida no código): na EDIÇÃO da audiência o campo Processo é
+  somente-leitura DE PROPÓSITO, com a dica "Para alterar o processo, exclua esta audiência e
+  crie uma nova". Motivo: a audiência é amarrada ao processo (vara/Local, testemunhas ligadas
+  às partes, documentos, pasta). Trocar o processo deixaria essas amarrações erradas.
+- Você decidiu DEIXAR COMO ESTÁ. NÃO mexi em nada nas Audiências.
+
+----------------------------------------------------------------------------------------
+5) ONDE FICA O .env DO ANTÔNIO (sua pergunta de infra)
+----------------------------------------------------------------------------------------
+- No SERVIDOR AWS do Antônio (com base nos scripts de deploy): /var/www/advocacia/backend/.env
+- No seu PC (dev): backend/.env
+- Para editar no servidor: "nano /var/www/advocacia/backend/.env" e depois REINICIAR
+  ("pm2 restart advocacia"). RESSALVA: não consigo confirmar o servidor ao vivo daqui; se a
+  instância dele usou outro caminho, muda (dá p/ conferir com "pm2 info advocacia | grep cwd").
+
+----------------------------------------------------------------------------------------
+6) E-MAIL EM LOTE (Audiências) — PLANEJADO, **NÃO CODADO** (você mandou parar e registrar)
+----------------------------------------------------------------------------------------
+- Ideia (sua, simples e direta): botão "Email em Lote" na tela de Audiências -> abre um modal
+  -> escolhe o modelo de cada audiência -> cada cliente recebe um e-mail com o corpo de um
+  modelo e o anexo (documento) dele. E pronto.
+- DECISÕES JÁ FECHADAS nesta conversa:
+  * O CORPO do e-mail = um MODELO DE TEXTO próprio para e-mail (com variáveis) — NÃO o
+    conteúdo do .docx.
+    -> MOTIVO técnico: hoje o sistema NÃO sabe transformar um Word (.docx) em corpo de
+       e-mail; fazer isso exigiria um conversor e a formatação ficaria infiel. O anexo .docx
+       continua perfeito.
+  * O corpo é UM SÓ para o lote todo (as variáveis preenchem os dados de cada audiência).
+  * O ANEXO = o documento .docx gerado de cada audiência (modelo escolhido por audiência).
+  * Cada e-mail vai para o CLIENTE do processo daquela audiência.
+  * Quem NÃO tem e-mail: PULA para a próxima e NÃO envia nada. No fim, um aviso "X pulados".
+  * NADA é salvo (só log_comunicacoes), como na Fase 2.
+- O QUE FALTA VOCÊ AUTORIZAR (antes de eu codar):
+  (1) Criar a tabela NOVA "modelo_corpo_email" (guarda os modelos de corpo — texto + variáveis).
+      -> Não cabe na tabela dos .docx (lá o arquivo Word é obrigatório). Quando você autorizar,
+         eu mando o SCRIPT SQL para você rodar no HeidiSQL (e depois nas AWS).
+  (2) Onde cadastrar esses modelos de corpo (sugestão: aba "Modelos de e-mail" em Documentos).
+  (3) Confirmar: o assunto entra dentro do modelo de corpo? o destinatário é só o cliente ou
+      editável por linha?
+- Detalhes completos guardados na memória: memory/email_lote_audiencias.md
+
+----------------------------------------------------------------------------------------
+VERIFICAÇÃO (a cada entrega)
+----------------------------------------------------------------------------------------
+- node --check no backend + npm run build (Vite) no frontend passaram em todas as entregas
+  (só o aviso antigo de "chunk > 500 kB", sem relação). Fiz análise de impacto (front + back
+  + banco) antes de cada alteração. Você testou a manutenção em foco.
+
+----------------------------------------------------------------------------------------
+ARQUIVOS MEXIDOS NESTA NOITE (todos LOCAIS, não commitados)
+----------------------------------------------------------------------------------------
+Backend:  controllers/pessoasController.js, routes/index.js
+Frontend: pages/Pessoas/Pessoas.js, components/MenuAcoes.js
+(E-mail em lote: nenhum arquivo — só a spec em memory/email_lote_audiencias.md)
+
+----------------------------------------------------------------------------------------
+LISTA DE PENDÊNCIAS ABERTAS (atualizada)
+----------------------------------------------------------------------------------------
+GRUPO A (continuações, menores):
+  - E-MAIL EM LOTE (Audiências) — spec pronta; AGUARDA sua autorização (tabela
+    modelo_corpo_email + onde cadastrar). [Fase 3 do e-mail: anexar arquivo do PC = FEITA hoje.]
+  - Registrar Ata: Fase 2 (Prazos+Tarefas), Fase 3 (Perícias+perito), Fase 4 (Anotações),
+    Fase 5 (Notificações).
+  - "Ver/Editar (Detalhes)" em outras telas.
+
+GRUPO B (grandes/transversais):
+  - Financeiro multi-banco.
+  - Capitalização global (MAIÚSCULA/minúscula/Primeira maiúscula).
+  - Andamento de cada processo (detalhar).
+  - Agenda: ver todos os usuários / consultas.
+  - Agenda Google (integração).
+  - Tarefas: horário e temporizador.
+
+GRUPO C (infra — você roda, eu oriento):
+  - Hardening do servidor AWS + rotacionar chaves AWS em texto puro (aguarda seus prints).
+  - Renovar a senha de app do Gmail no .env (SMTP_PASS) em /var/www/advocacia/backend/.env.
+
+MENORES:
+  - Adicionar coluna de E-mail na lista de Pessoa Jurídica (p/ ter o "Copiar?" lá).
+  - Export CSV do Relatório mostrar "—" nos dias de prazo concluído.
+  - DEPLOY da produção p/ valer a correção "prazo concluído sem atraso" (feita 28/07-dia).
+
+----------------------------------------------------------------------------------------
+LEMBRETES DAS SUAS REGRAS (reforçadas na memória — feedback_codigo.md)
+----------------------------------------------------------------------------------------
+- NUNCA CODAR SEM SUA AUTORIZAÇÃO (fluxo: eu explico o que entendi -> você autoriza -> eu codo
+  -> você testa a manutenção em foco).
+- NUNCA SUPOR — verificar na fonte (código/arquivo/banco); na dúvida, dizer que não tenho
+  certeza e confirmar.
+- TABELAS SEMPRE EM MINÚSCULAS, no banco E no código. (Regra absoluta e eterna.)
+- Te CORRIGIR quando um pedido prejudicar outra parte do sistema ou ferir uma regra sua.
+- Nenhuma exclusão pode deixar órfãos; tratar amarrações antes.
+- Transações no banco com BEGIN/COMMIT/ROLLBACK; MySQL sem middleware (SQL à mão).
+- SQL é multi-instância: rodar no local, testar, depois nas AWS.
+- Sem trechos de código no chat; "build não é teste".
+
+========================================================================================
+Fim do resumo — 28/07/2026 (NOITE). Nada subido ao git, nada deployado, nenhum SQL rodado.
+Memórias (interna e pasta do projeto) atualizadas e sincronizadas, idênticas.
+========================================================================================

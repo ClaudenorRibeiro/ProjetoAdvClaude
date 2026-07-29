@@ -90,10 +90,14 @@ export default function Processos() {
                 </tr>
               </thead>
               <tbody>
-                {lista.map(p => (
+                {lista.map(p => {
+                  // Destaque verde: célula da pasta cujo número é exatamente o pesquisado
+                  // (só quando a busca é numérica; compara pelo valor, então 430 == 0430)
+                  const pastaDestacada = /^\d+$/.test(busca.trim()) && Number(busca) === Number(p.numPasta);
+                  return (
                   <tr key={p.id}>
-                    <td>
-                      <strong style={{ fontFamily: 'monospace', fontSize: '14px' }}>
+                    <td style={pastaDestacada ? { backgroundColor: '#dcfce7' } : undefined}>
+                      <strong style={{ fontFamily: 'monospace', fontSize: '14px', color: pastaDestacada ? '#166534' : undefined }}>
                         {formatarNumeroPasta(p.numPasta)}
                       </strong>
                     </td>
@@ -127,7 +131,8 @@ export default function Processos() {
                       ]} />
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
             {lista.length === 0 && (

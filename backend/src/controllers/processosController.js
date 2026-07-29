@@ -952,7 +952,7 @@ async function buscarProcessosPorNumero(req, res) {
 
     const termo = `%${q}%`;
     const [rows] = await pool.execute(
-      `SELECT p.id, p.numProc, p.NomeTituloProc, pa.numPasta
+      `SELECT p.id, p.numProc, p.NomeTituloProc, p.vara_id, pa.numPasta
        FROM tblproc p
        JOIN tblpasta pa ON pa.id = p.pasta_id
        WHERE p.ativo = 1

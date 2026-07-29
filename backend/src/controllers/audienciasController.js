@@ -543,7 +543,7 @@ async function remarcar(req, res) {
 // POST /api/audiencias/:id/ata — Registra a ata de uma audiência
 async function registrarAta(req, res) {
   const { id } = req.params;
-  const { resultado, houve_acordo, valor_acordo, parcelas, valor_parcela,
+  const { houve_acordo, valor_acordo, parcelas, valor_parcela,
           data_primeiro_pagamento, nova_audiencia, observacoes,
           prazos = [], tarefas = [] } = req.body;
 
@@ -562,13 +562,19 @@ async function registrarAta(req, res) {
   try {
     await conn.beginTransaction();
 
+    // "Registrar Ata" pressupõe que a audiência ACONTECEU → status sempre Realizada.
+    // (Cancelar/Remarcar são ações à parte; "Adiada" e "Acordo" foram aposentados como status da
+    // audiência — o acordo, quando há, é registrado no Financeiro pelo modal próprio. O flag
+    // houve_acordo fica guardado na ata só como registro de que aquela audiência teve acordo.)
+    const statusFinal = 'realizada';
+
     const [result] = await conn.execute(
       `INSERT INTO ata_audiencia
          (audiencia_id, resultado, houve_acordo, valor_acordo, parcelas,
           valor_parcela, data_primeiro_pagamento, nova_audiencia, observacoes, criado_por)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        id, resultado || null,
+        id, statusFinal,
         houve_acordo ? 1 : 0,
         valor_acordo || null, parcelas || null, valor_parcela || null,
         data_primeiro_pagamento || null, nova_audiencia ? 1 : 0,
@@ -576,17 +582,12 @@ async function registrarAta(req, res) {
       ]
     );
 
-    const [aud] = await conn.execute('SELECT processo_id FROM audiencia WHERE id = ?', [id]);
-    const processoId = aud[0]?.processo_id;
+    const [aud] = await conn.execute('SELECT * FROM audiencia WHERE id = ?', [id]);
+    const orig = aud[0] || {};
+    const processoId = orig.processo_id;
 
-    // Acordo em audiência → entrada na conta corrente do PROCESSO (modelo novo do financeiro)
-    if (houve_acordo && valor_acordo && processoId) {
-      await conn.execute(
-        `INSERT INTO conta_corrente (processo_id, data, descricao, tipo, valor, origem, usuario_id)
-         VALUES (?, CURDATE(), 'Acordo em audiência', 'entrada', ?, 'manual', ?)`,
-        [processoId, valor_acordo, req.usuario.id]
-      );
-    }
+    // (O acordo, quando há, é criado pelo modal completo do Financeiro — parcelas/honorário/parceria.
+    //  Por isso NÃO lançamos mais nada na conta corrente aqui, para não duplicar o Financeiro.)
 
     for (const p of prazos) {
       if (p.descricao && p.data_inicio) {
@@ -617,18 +618,16 @@ async function registrarAta(req, res) {
       }
     }
 
-    // Atualiza status da audiência conforme resultado da ata
-    if (resultado) {
-      await conn.execute(
-        `UPDATE audiencia SET status = ?, alterado_por = ?, alterado_em = NOW() WHERE id = ?`,
-        [resultado, req.usuario.id, id]
-      );
-      await conn.execute(
-        `INSERT INTO auditoria_audiencia (audiencia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
-         VALUES (?, 'status', 'agendada', ?, ?)`,
-        [id, resultado, req.usuario.id]
-      );
-    }
+    // Atualiza o status da audiência (a ata sempre conclui a audiência: Realizada ou Acordo).
+    await conn.execute(
+      `UPDATE audiencia SET status = ?, alterado_por = ?, alterado_em = NOW() WHERE id = ?`,
+      [statusFinal, req.usuario.id, id]
+    );
+    await conn.execute(
+      `INSERT INTO auditoria_audiencia (audiencia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
+       VALUES (?, 'status', ?, ?, ?)`,
+      [id, orig.status || 'agendada', statusFinal, req.usuario.id]
+    );
 
     // Auditoria na MESMA transação (tudo ou nada): antes do commit, com conn
     await auditoria.registrar(req.usuario.id, 'ata_audiencia', 'criar', result.insertId, null, null, conn);
@@ -981,10 +980,57 @@ async function excluirFreela(req, res) {
   }
 }
 
+// PUT /api/audiencias/:id/reverter — ADMIN reverte uma audiência "Realizada" de volta para "Agendada".
+// Apaga a ATA registrada (para poder retrabalhar) e zera o flag de ata impressa. Os prazos/tarefas/
+// acordo criados pela ata NÃO são apagados (são registros independentes — o admin trata manualmente).
+// A ata_audiencia é tabela folha (nada aponta para ela), então apagá-la não deixa órfão.
+// Exige motivo (fica no motivo_status e embutido no histórico).
+async function reverterStatus(req, res) {
+  const { id } = req.params;
+  const { motivo } = req.body;
+  if (!motivo || !motivo.trim()) return erro(res, 'Informe o motivo da reversão');
+
+  const conn = await pool.getConnection();
+  try {
+    const [rows] = await conn.execute('SELECT status FROM audiencia WHERE id = ?', [id]);
+    if (!rows.length) return naoEncontrado(res, 'Audiência não encontrada');
+    if (rows[0].status !== 'realizada') {
+      return erro(res, 'Só é possível reverter audiências com status "Realizada"');
+    }
+
+    await conn.beginTransaction();
+
+    // Apaga a ata registrada (tabela folha — sem dependentes; mesmo DELETE usado em excluirAudiencia)
+    await conn.execute('DELETE FROM ata_audiencia WHERE audiencia_id = ?', [id]);
+
+    // Volta para Agendada, grava o motivo e zera o flag de ata impressa (coerência)
+    await conn.execute(
+      `UPDATE audiencia SET status = 'agendada', motivo_status = ?, ata_impressa = 0,
+              alterado_por = ?, alterado_em = NOW() WHERE id = ?`,
+      [motivo.trim(), req.usuario.id, id]
+    );
+
+    // Histórico (com o motivo embutido, para ficar visível no "Histórico")
+    await conn.execute(
+      `INSERT INTO auditoria_audiencia (audiencia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
+       VALUES (?, 'status', 'realizada', ?, ?)`,
+      [id, `agendada — motivo: ${motivo.trim()}`, req.usuario.id]
+    );
+
+    await conn.commit();
+    return sucesso(res, null, 'Status revertido para Agendada. A ata foi removida.');
+  } catch (err) {
+    await conn.rollback();
+    return erroInterno(res, err);
+  } finally {
+    conn.release();
+  }
+}
+
 module.exports = {
   listarAdvogados,
   listar, buscar, criar, atualizar, excluir, cancelar, remarcar,
-  registrarAta, marcarAtaImpressa,
+  registrarAta, marcarAtaImpressa, reverterStatus,
   buscarHistorico,
   buscarPartesProcesso,
   adicionarTestemunha, editarTestemunha, excluirTestemunha,

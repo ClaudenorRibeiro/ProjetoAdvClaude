@@ -1,0 +1,159 @@
+========================================================================================
+RESUMO DETALHADO DA SESSÃO — 26/07/2026 (DIA ENORME de código)
+Sistema de Advocacia (NovoJud) — backend Node/Express + MySQL, frontend React/Vite
+========================================================================================
+
+*** ESTADO DO GIT (verificado no fechamento): eu (Claude) NÃO rodei nenhum comando git.
+    Porém o HEAD virou c549d74 ("260726-0921") — foi o SEU .bat de salvar no git, por volta
+    das 09:21, que COMMITOU a parte da MANHÃ (itens 1, 2 e 3 abaixo: Publicações OAB, Anotações
+    de Atendimento e ajustes da Agenda). A REFORMA DE AUDIÊNCIAS DA TARDE (itens 4 a 11) está
+    NÃO COMMITADA no working tree: Audiencias.js, audienciasController.js, processosController.js,
+    Financeiro.js + 2ª rodada de Layout.css/api.js/routes/index.js, PENDENCIAS.txt e este RESUMO.
+    (Se c549d74 foi pushado, foi pelo seu .bat — não por mim.)
+
+*** SQL PENDENTE PARA AS AWS (único do dia):
+      ALTER TABLE publicacoes ADD COLUMN oab varchar(20) DEFAULT NULL AFTER tribunal;
+    (Já rodei/testei no LOCAL. Todo o resto do dia reaproveitou tabelas existentes = SEM banco.)
+
+----------------------------------------------------------------------------------------
+1) PUBLICAÇÕES — COLUNA "OAB" NA ABA CNJ/DJEN  (pendência antiga #1) — TESTADO no LOCAL
+----------------------------------------------------------------------------------------
+- Mostra por qual OAB veio cada publicação. Só na aba CNJ/DJEN e só quando há MAIS DE 1 OAB
+  cadastrada (com 1 OAB não aparece, seria redundante).
+- Achado: a importação do DJEN percorria cada OAB e jogava fora de qual OAB veio a publicação;
+  a tabela publicacoes não tinha coluna. Precisou de banco + backend + frontend.
+- OAB gravada no formato numero/UF (ex.: 123456/SP), vinda do laço de busca. Publicações antigas
+  ficam em branco. Dedup por id_cnj mantém a 1ª OAB.
+- Arquivos: publicacoesController.js, Publicacoes.js (só o componente CNJ), estrutura_banco.sql.
+
+----------------------------------------------------------------------------------------
+2) NOVO RECURSO — "ANOTAÇÕES DE ATENDIMENTO" (Pessoa Física e Jurídica) — SEM banco
+----------------------------------------------------------------------------------------
+- Para quem atende o cliente (presencial/telefone) anotar; o próximo atendente lê o histórico.
+- Reaproveitou 100% a tabela historico_atendimento que JÁ existia. NENHUM SQL.
+- Item novo "Anotações de atendimento" no menu de 3 pontinhos de cada pessoa (Física e Jurídica).
+  Abre uma janela com: título + "?" de ajuda, caixa para escrever, e a lista (autor + data/hora,
+  mais recente em cima).
+- Regras (validadas no SERVIDOR): usuário comum edita/exclui só as PRÓPRIAS anotações e só de HOJE;
+  admin pode qualquer uma, qualquer data. Toda exclusão pede confirmação "não tem volta".
+- Arquivos: pessoasController.js, routes/index.js, api.js, Pessoas.js.
+
+----------------------------------------------------------------------------------------
+3) AGENDA — VÁRIOS AJUSTES VISUAIS — SEM banco
+----------------------------------------------------------------------------------------
+- Fonte do menu "Mostrar:" e filtros: 13 -> 15px. Quadradinhos coloridos: 10 -> 16px.
+- Dia atual (hoje): azul mais forte (#bcd8f5).
+- Título do mês ("julho 2026"): 18 -> 24px.
+- Popup "+N mais": itens mais separados (12px); fonte dos itens 14px; o link "+N mais" maior (120%).
+- Popup fecha com a tecla Esc + aviso "ESC para fechar" no canto superior direito.
+- Arquivos: Agenda.js, components/layout/Layout.css.
+
+----------------------------------------------------------------------------------------
+4) AUDIÊNCIAS — AUTO-PREENCHIMENTO DA VARA no "Local da audiência" — SEM banco
+----------------------------------------------------------------------------------------
+- Ao criar "Nova Audiência" de um processo, o "Local da audiência" já vem com a vara do processo
+  (mostrando o endereço). Se o processo não tiver vara, fica em branco. Vale pela pasta e pela tela.
+- Arquivos: processosController.js (a busca de processo passou a devolver a vara), Audiencias.js.
+
+----------------------------------------------------------------------------------------
+5) AUDIÊNCIAS — CADASTRO RÁPIDO DE TESTEMUNHA corrigido
+----------------------------------------------------------------------------------------
+- Diagnóstico (conferido no banco a seu pedido): a PESSOA sempre salvou. O que estava vazio era a
+  tabela de testemunhas, porque o vínculo só é gravado JUNTO com a audiência (não era bug).
+- Correção: o cadastro rápido agora exige nome completo + CPF, valida CPF, trava CPF duplicado e
+  mostra o mesmo aviso amigável "Campos sem informação" do cadastro de Pessoas.
+- Arquivo: Audiencias.js.
+
+----------------------------------------------------------------------------------------
+6) AUDIÊNCIAS — COLUNAS + MODO "DETALHES" (somente leitura) + botão EDITAR
+----------------------------------------------------------------------------------------
+- Colunas: Processo (CNJ) | Pasta (número) | Título do Processo | Tipo | Data/Hora | ...
+  (o número da pasta já vinha do backend, só não era mostrado.)
+- Clicar no "Título do Processo" abre a MESMA tela de Editar em modo SOMENTE LEITURA
+  ("Detalhes da Audiência"): campos travados, botões de adicionar/remover/trocar escondidos.
+  Rodapé: Fechar + Editar (o "Editar" só aparece para quem pode editar). Clicar em Editar destrava.
+- Melhorei a legibilidade (valores em negrito escuro), o endereço maior e em negrito, e deixei a
+  tela "Nova Audiência" com a MESMA fonte do "Editar".
+- DECISÃO: por enquanto só na tela de Audiências. Você quer o mesmo "ver/editar" em outras telas depois.
+- Arquivos: Audiencias.js, Layout.css.
+
+----------------------------------------------------------------------------------------
+7) AUDIÊNCIAS — TRAVA DE TESTEMUNHA SEM POLO
+----------------------------------------------------------------------------------------
+- Ao salvar (Nova ou Editar) com uma testemunha selecionada mas SEM polo (Autor/Réu), o sistema
+  agora AVISA (mensagem amigável) e NÃO salva, pedindo para qualificar ou cancelar. Antes descartava.
+- Arquivo: Audiencias.js.
+
+----------------------------------------------------------------------------------------
+8) AUDIÊNCIAS — FILTRO DE STATUS + "GERAR DOCUMENTO"
+----------------------------------------------------------------------------------------
+- Filtro de Status: acabaram as opções duplicadas (2x Agendada / 2x Realizada). Agora é montado de
+  uma fonte única. NÃO era nada quebrado (só copiar/colar antigo).
+- "Gerar documento" escondido nas audiências Remarcada e Cancelada.
+- "Adiada" e "Acordo" APOSENTADOS como status (ver itens 9 e 10): saem do filtro, mas continuam
+  aparecendo como rótulo para audiências antigas que já os tenham.
+
+----------------------------------------------------------------------------------------
+9) "REGISTRAR ATA" — REMOVIDO o campo "Resultado"
+----------------------------------------------------------------------------------------
+- Seu raciocínio (concordei): se você clicou em "Registrar Ata" é porque a audiência ACONTECEU ->
+  o status é sempre "Realizada". "Cancelada"/"Adiada" não fazem sentido na ata (Cancelar/Remarcar
+  são ações à parte). Então o dropdown "Resultado" ficou redundante e foi removido.
+- "Adiada" foi APOSENTADA (o único lugar que a definia era esse dropdown). Você concordou 100%.
+
+----------------------------------------------------------------------------------------
+10) "REGISTRAR ATA" — REFORMA EM FASES (a ata como central pós-audiência)
+----------------------------------------------------------------------------------------
+- Plano completo aprovado por você e registrado no PENDENCIAS.txt. Cada item é OPCIONAL por ata.
+- FASE 1 (FEITO) — Nova audiência: o "Designar nova audiência?" virou um BOTÃO que abre o modal
+  COMPLETO de Nova Audiência já PRÉ-PREENCHIDO com os dados desta audiência (processo, tipo, local,
+  modalidade, responsável). Você ajusta a data e cria. A criação é INDEPENDENTE (pelo próprio modal).
+  Indicador "✓ Nova audiência designada".
+- ACORDO (FEITO) — o "Houve acordo?" virou um BOTÃO "Registrar acordo" que abre o modal COMPLETO de
+  acordo do Financeiro (com parcelas, honorário, parceria), já no processo desta audiência e com a
+  descrição pré-preenchida "Acordo em audiência de dd/mm/aaaa" (para distinguir de acordo avulso).
+  Removi o lançamento simplificado que a ata fazia (senão duplicaria o Financeiro). A audiência fica
+  sempre "Realizada" e o acordo vive no Financeiro (decisão sua, motivada pelo caso "2 réus, 1 faz
+  acordo e o processo segue com o outro"). Por isso "Acordo" foi aposentado como status.
+  Indicador "✓ Acordo registrado no Financeiro".
+- A FAZER (próximas fases): Fase 2 Prazos+Tarefas na ata (o backend já aceita, falta a tela);
+  Fase 3 Perícias + cadastro de perito; Fase 4 Anotações de atendimento direto da ata;
+  Fase 5 Notificações (e-mail/WhatsApp para o autor + e-mail para o perito).
+  PADRÃO: cada botão novo mostra o indicador "✓ ..." ao lado.
+
+----------------------------------------------------------------------------------------
+11) AUDIÊNCIAS — "REVERTER STATUS" (SÓ ADMIN) — SEM banco
+----------------------------------------------------------------------------------------
+- No menu de 3 pontinhos de uma audiência "Realizada", só para ADMIN, aparece "Reverter status".
+- Abre um modal com MOTIVO obrigatório + aviso. Ao confirmar: o status volta para "Agendada",
+  a ata é APAGADA (para você poder retrabalhar), o flag "ata impressa" é zerado, e o motivo fica
+  gravado no detalhe da audiência E no Histórico.
+- Análise de órfãos (a seu pedido): apagar a ata NÃO deixa órfão nenhum (a tabela da ata é "folha",
+  nada aponta para ela). Prazos, tarefas e acordo que a ata tenha gerado PERMANECEM (você trata
+  manualmente cada um).
+- Arquivos: audienciasController.js, routes/index.js, api.js, Audiencias.js.
+
+----------------------------------------------------------------------------------------
+ARQUIVOS MEXIDOS HOJE (todos LOCAIS, não commitados)
+----------------------------------------------------------------------------------------
+Backend:  publicacoesController.js, pessoasController.js, processosController.js,
+          audienciasController.js, routes/index.js, estrutura_banco.sql
+Frontend: Publicacoes.js, Pessoas.js, Agenda.js, Audiencias.js, Financeiro.js,
+          services/api.js, components/layout/Layout.css
+
+----------------------------------------------------------------------------------------
+VERIFICAÇÃO
+----------------------------------------------------------------------------------------
+Em TODAS as entregas rodei: node --check (backend) + npm run build / Vite (frontend) = OK.
+Antes de cada alteração fiz a análise de impacto front + back + banco. Você testou a manutenção
+em foco de cada item.
+
+----------------------------------------------------------------------------------------
+PENDÊNCIAS ABERTAS (ver PENDENCIAS.txt para a lista completa e o plano das Fases)
+----------------------------------------------------------------------------------------
+- Rodar o ALTER da coluna OAB nas AWS + deploy + push git (nada subido).
+- Fases 2 a 5 do "Registrar Ata" (Prazos+Tarefas / Perícias+perito / Anotações / Notificações).
+- Levar o comportamento "ver/editar (Detalhes + Editar)" para outras telas do sistema.
+- Financeiro multi-banco; capitalização global; hardening AWS; renovar senha Gmail; agenda Google;
+  agenda "ver todos"/consultas; tarefas horário/temporizador; andamento por processo.
+========================================================================================

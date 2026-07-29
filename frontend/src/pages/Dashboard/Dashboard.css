@@ -23,10 +23,11 @@
   text-align: center;
   text-decoration: none;
   box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
   border-top: 3px solid transparent;
 }
-.contador-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+/* Ao passar o mouse: o cartao "salta" mais (sobe 6px) e ganha uma sombra mais forte */
+.contador-card:hover { transform: translateY(-6px); box-shadow: 0 10px 20px rgba(0,0,0,0.16); }
 
 .contador-valor {
   font-size: 28px;

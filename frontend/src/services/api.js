@@ -109,6 +109,10 @@ export const pessoasAPI = {
   // Aniversariantes (clientes PF) — relatório e ação de parabenizar
   aniversariantes: (params) => api.get('/pessoas/aniversariantes', { params }),
   parabenizar:     (id, dados) => api.post(`/pessoas/${id}/parabens`, dados),
+  // Enviar e-mail avulso (mensagem digitada na hora) — { para, assunto, mensagem, tipo_pessoa?, pessoa_id? }
+  enviarEmail:     (dados) => api.post('/pessoas/enviar-email', dados),
+  // Registra no log que o usuário abriu o WhatsApp de uma pessoa — { telefone, tipo_pessoa?, pessoa_id? }
+  registrarZap:    (dados) => api.post('/pessoas/registrar-zap', dados),
   // Auxiliares (estados civis, gêneros, profissões)
   auxiliares: () => api.get('/pessoas/auxiliares'),
 };
@@ -209,6 +213,7 @@ export const audienciasAPI = {
   remarcar:          (id, dados) => api.put(`/audiencias/${id}/remarcar`, dados),
   registrarAta:      (id, dados) => api.post(`/audiencias/${id}/ata`, dados),
   marcarAtaImpressa: (id) => api.put(`/audiencias/${id}/ata-impressa`),
+  reverterStatus:    (id, dados) => api.put(`/audiencias/${id}/reverter`, dados),
   historico:         (id) => api.get(`/audiencias/${id}/historico`),
   advogados:         () => api.get('/audiencias/advogados'),
   // Partes do processo — para filtrar testemunhas inválidas
@@ -304,6 +309,10 @@ export const documentosAPI = {
   // Geração de documentos a partir de uma âncora (audiência, processo, etc.)
   modelosParaGerar: (ancora, ancoraId, beneficiario) => api.get('/documentos/modelos-gerar', { params: { ancora, ancora_id: ancoraId, beneficiario } }),
   gerar:            (dados) => api.post('/documentos/gerar', dados, { responseType: 'blob' }),
+  // Quem naturalmente recebe o documento (pessoa da âncora ou cliente do processo) — { nome, emails[], ... }
+  destinatarioSugerido: (ancora_tipo, ancora_id) => api.get('/documentos/destinatario-sugerido', { params: { ancora_tipo, ancora_id } }),
+  // Gera o documento e ENVIA por e-mail (anexado). Nada é salvo — só o log de comunicação.
+  gerarEEnviar:     (dados) => api.post('/documentos/gerar-e-enviar', dados),
   // Geração de "Documento de partes" (vários autores × réus; sem âncora). Devolve blob (docx/pdf).
   gerarMultipessoas: (dados) => api.post('/documentos/gerar-multipessoas', dados, { responseType: 'blob' }),
   // Geração em LOTE (audiências/perícias):

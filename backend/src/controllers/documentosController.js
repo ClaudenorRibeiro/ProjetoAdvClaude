@@ -19,6 +19,8 @@ const docxModeloService = require('../services/docxModeloService');
 const variaveisResolver = require('../services/variaveisResolver');
 const pdfConvertService = require('../services/pdfConvertService');
 const { CATALOGO, CATALOGO_PARTE } = require('../config/variaveisDocumento');
+const { enviarEmail } = require('../utils/email');
+const { registrarComunicacao } = require('../utils/logComunicacao');
 
 const CONTENT_TYPE_DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
@@ -437,68 +439,148 @@ async function modelosParaGerar(req, res) {
   }
 }
 
-// POST /api/documentos/gerar — gera o documento preenchido a partir de uma âncora.
-// Body: { modelo_id, ancora_tipo, ancora_id, formato }  (FASE 2a: só 'docx')
+// Núcleo da geração de documento — REAPROVEITADO pelo download E pelo envio por e-mail.
+// Preenche o modelo com os dados da âncora e devolve o arquivo EM MEMÓRIA.
+// NÃO grava log nem escreve na resposta (quem chama decide). Em falhas conhecidas
+// lança Error com .userMessage (e .naoEncontrado quando o modelo não existe).
+async function montarDocumento({ modelo_id, ancora_tipo, ancora_id, formato, usuario }) {
+  const fmt = formato === 'pdf' ? 'pdf' : 'docx';
+
+  // Busca o modelo (ativo) e seu arquivo no S3.
+  const [rows] = await pool.execute(
+    'SELECT id, nome, arquivo_s3_key, destino, minutos_antes FROM modelo_documento WHERE id = ? AND ativo = 1', [modelo_id]
+  );
+  if (!rows.length) { const e = new Error('Modelo não encontrado ou desativado'); e.userMessage = e.message; e.naoEncontrado = true; throw e; }
+  const modelo = rows[0];
+
+  // Para recibos, o destino do modelo define se o valor é do cliente (líquido) ou do parceiro (repasse).
+  // minutosAntes: opção do modelo para imprimir horário (audiência/perícia) X minutos antes do real (0 = real).
+  const opcoes = {
+    tipoRecibo: modelo.destino === 'recibo_parceria' ? 'parceiro' : 'cliente',
+    minutosAntes: Number(modelo.minutos_antes) || 0,
+  };
+
+  // Resolve as variáveis a partir do registro âncora.
+  const ctx = await variaveisResolver.resolver(ancora_tipo, ancora_id, usuario, opcoes);
+  if (!ctx) { const e = new Error('Não foi possível carregar os dados de origem do documento'); e.userMessage = e.message; throw e; }
+
+  // Baixa o .docx do S3 e preenche os marcadores.
+  const original = await s3Service.baixarArquivo(modelo.arquivo_s3_key);
+  let preenchido;
+  try {
+    preenchido = docxModeloService.preencher(original, ctx.dados);
+  } catch (e2) {
+    const e = new Error('Falha ao preencher o modelo (verifique os marcadores no .docx): ' + (e2.message || '')); e.userMessage = e.message; throw e;
+  }
+
+  // Saída: DOCX preenchido OU sua conversão para PDF (sem timbre — PDF simples).
+  let saida = preenchido;
+  let contentType = CONTENT_TYPE_DOCX;
+  if (fmt === 'pdf') {
+    try {
+      saida = await pdfConvertService.docxParaPdf(preenchido);
+      contentType = 'application/pdf';
+    } catch (e2) {
+      const e = new Error('Falha ao converter o documento para PDF: ' + (e2.message || '')); e.userMessage = e.message; throw e;
+    }
+  }
+
+  const nomeArquivo = montarNomeArquivo(modelo.nome, ctx.clienteNome, ctx.numProcDigitos, fmt);
+  return { buffer: saida, nomeArquivo, contentType, formato: fmt, modeloId: modelo.id, modeloNome: modelo.nome, referencia: ctx.referencia || null };
+}
+
+// POST /api/documentos/gerar — gera o documento preenchido a partir de uma âncora e o BAIXA.
+// Body: { modelo_id, ancora_tipo, ancora_id, formato }
 async function gerar(req, res) {
   try {
     const { modelo_id, ancora_tipo, ancora_id, formato } = req.body;
     if (!modelo_id) return erro(res, 'Modelo é obrigatório');
     if (!ancora_tipo || !ancora_id) return erro(res, 'Origem do documento (âncora) é obrigatória');
 
-    const fmt = formato === 'pdf' ? 'pdf' : 'docx';
+    const doc = await montarDocumento({ modelo_id, ancora_tipo, ancora_id, formato, usuario: req.usuario });
 
-    // Busca o modelo (ativo) e seu arquivo no S3.
-    const [rows] = await pool.execute(
-      'SELECT id, nome, arquivo_s3_key, destino, minutos_antes FROM modelo_documento WHERE id = ? AND ativo = 1', [modelo_id]
-    );
-    if (!rows.length) return naoEncontrado(res, 'Modelo não encontrado ou desativado');
-    const modelo = rows[0];
-
-    // Para recibos, o destino do modelo define se o valor é do cliente (líquido) ou do parceiro (repasse).
-    // minutosAntes: opção do modelo para imprimir horário (audiência/perícia) X minutos antes do real (0 = real).
-    const opcoes = {
-      tipoRecibo: modelo.destino === 'recibo_parceria' ? 'parceiro' : 'cliente',
-      minutosAntes: Number(modelo.minutos_antes) || 0,
-    };
-
-    // Resolve as variáveis a partir do registro âncora.
-    const ctx = await variaveisResolver.resolver(ancora_tipo, ancora_id, req.usuario, opcoes);
-    if (!ctx) return erro(res, 'Não foi possível carregar os dados de origem do documento');
-
-    // Baixa o .docx do S3 e preenche os marcadores.
-    const original = await s3Service.baixarArquivo(modelo.arquivo_s3_key);
-    let preenchido;
-    try {
-      preenchido = docxModeloService.preencher(original, ctx.dados);
-    } catch (e) {
-      return erro(res, 'Falha ao preencher o modelo (verifique os marcadores no .docx): ' + (e.message || ''));
-    }
-
-    // Saída: DOCX preenchido OU sua conversão para PDF (sem timbre — PDF simples).
-    let saida = preenchido;
-    let contentType = CONTENT_TYPE_DOCX;
-    if (fmt === 'pdf') {
-      try {
-        saida = await pdfConvertService.docxParaPdf(preenchido);
-        contentType = 'application/pdf';
-      } catch (e) {
-        return erro(res, 'Falha ao converter o documento para PDF: ' + (e.message || ''));
-      }
-    }
-
-    const nomeArquivo = montarNomeArquivo(modelo.nome, ctx.clienteNome, ctx.numProcDigitos, fmt);
-
-    // Registra o log (nomes legíveis gravados na escrita).
+    // Registra o log de documento GERADO (só o download registra aqui).
     await pool.execute(
       `INSERT INTO log_documentos_gerados
          (modelo_id, modelo_nome, formato, ancora_tipo, ancora_id, referencia, nome_arquivo, usuario_id, usuario_nome)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [modelo.id, modelo.nome, fmt, ancora_tipo, ancora_id, ctx.referencia || null, nomeArquivo, req.usuario.id, req.usuario.nome]
+      [doc.modeloId, doc.modeloNome, doc.formato, ancora_tipo, ancora_id, doc.referencia, doc.nomeArquivo, req.usuario.id, req.usuario.nome]
     );
 
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`);
-    return res.send(saida);
+    res.setHeader('Content-Type', doc.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${doc.nomeArquivo}"`);
+    return res.send(doc.buffer);
+  } catch (err) {
+    if (err.naoEncontrado) return naoEncontrado(res, err.userMessage);
+    if (err.userMessage)   return erro(res, err.userMessage);
+    return erroInterno(res, err);
+  }
+}
+
+// POST /api/documentos/gerar-e-enviar — gera o documento e ENVIA por e-mail (anexado).
+// O documento NÃO é salvo (nem S3, nem banco): só entra 1 linha em log_comunicacoes
+// (quem enviou, canal e para quem). Body: { modelo_id, ancora_tipo, ancora_id, formato, para, assunto, mensagem }.
+async function gerarEEnviarEmail(req, res) {
+  const { modelo_id, ancora_tipo, ancora_id, formato } = req.body;
+  const para     = String(req.body.para || '').trim();
+  const assunto  = String(req.body.assunto || '').trim();
+  const mensagem = String(req.body.mensagem || '').trim();
+
+  if (!modelo_id) return erro(res, 'Modelo é obrigatório');
+  if (!ancora_tipo || !ancora_id) return erro(res, 'Origem do documento (âncora) é obrigatória');
+  const emailValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(para);
+  if (!emailValido) return erro(res, 'Informe um e-mail de destino válido');
+  if (!assunto)     return erro(res, 'Informe o assunto do e-mail');
+  if (!mensagem)    return erro(res, 'Escreva a mensagem do e-mail');
+
+  // Gera o documento em memória (MESMO núcleo do "Gerar e Baixar"). NÃO grava log_documentos_gerados.
+  let doc;
+  try {
+    doc = await montarDocumento({ modelo_id, ancora_tipo, ancora_id, formato, usuario: req.usuario });
+  } catch (err) {
+    if (err.naoEncontrado) return naoEncontrado(res, err.userMessage);
+    if (err.userMessage)   return erro(res, err.userMessage);
+    return erroInterno(res, err);
+  }
+
+  // Corpo HTML a partir do texto (escapa HTML e troca quebras de linha por <br>).
+  const escaparHtml = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const html = `<div style="font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.5;">${escaparHtml(mensagem).replace(/\r?\n/g, '<br>')}</div>`;
+
+  // Descobre a pessoa/processo do destinatário (só para o log). Best-effort.
+  let dest = { tipo_pessoa: null, pessoa_id: null, processo_id: null };
+  try { dest = await variaveisResolver.resolverDestinatario(ancora_tipo, ancora_id); } catch (_) { /* log é best-effort */ }
+
+  try {
+    await enviarEmail({
+      para, assunto, html,
+      anexos: [{ filename: doc.nomeArquivo, content: doc.buffer, contentType: doc.contentType }],
+    });
+  } catch (err) {
+    await registrarComunicacao({
+      canal: 'email', destinatario: para, assunto, conteudo: `Documento: ${doc.nomeArquivo}`,
+      enviado: 0, erro: err.message, tipo_pessoa: dest.tipo_pessoa, pessoa_id: dest.pessoa_id,
+      processo_id: dest.processo_id, usuario_id: req.usuario.id,
+    });
+    return erro(res, 'Não foi possível enviar o e-mail. Verifique a configuração de e-mail (SMTP).');
+  }
+
+  await registrarComunicacao({
+    canal: 'email', destinatario: para, assunto, conteudo: `Documento: ${doc.nomeArquivo}`,
+    enviado: 1, erro: null, tipo_pessoa: dest.tipo_pessoa, pessoa_id: dest.pessoa_id,
+    processo_id: dest.processo_id, usuario_id: req.usuario.id,
+  });
+  return sucesso(res, null, 'E-mail enviado com sucesso');
+}
+
+// GET /api/documentos/destinatario-sugerido?ancora_tipo=&ancora_id= — quem naturalmente recebe o documento
+// (a própria pessoa, ou o cliente do processo). Retorna { tipo_pessoa, pessoa_id, nome, emails[], processo_id }.
+async function destinatarioSugerido(req, res) {
+  try {
+    const { ancora_tipo, ancora_id } = req.query;
+    if (!ancora_tipo || !ancora_id) return erro(res, 'Origem do documento (âncora) é obrigatória');
+    const d = await variaveisResolver.resolverDestinatario(ancora_tipo, ancora_id);
+    return sucesso(res, d);
   } catch (err) {
     return erroInterno(res, err);
   }
@@ -825,6 +907,8 @@ module.exports = {
   excluirModelo,
   modelosParaGerar,
   gerar,
+  gerarEEnviarEmail,
+  destinatarioSugerido,
   gerarMultipessoas,
   prepararLote,
   gerarLote,

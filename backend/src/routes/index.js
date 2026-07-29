@@ -72,6 +72,8 @@ router.get('/dashboard', autenticar, dashboardCtrl.buscarDados);
 // Aniversariantes (clientes PF) — rotas estáticas ANTES das de /:id.
 router.get('/pessoas/aniversariantes',         autenticar, verificarPermissao('relatorios','visualizar'), pessoasCtrl.listarAniversariantes);
 router.post('/pessoas/:id/parabens',           autenticar, pessoasCtrl.registrarParabens);
+router.post('/pessoas/enviar-email',           autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.uploadAnexosEmail, pessoasCtrl.enviarEmailAvulso);
+router.post('/pessoas/registrar-zap',          autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.registrarEnvioZap);
 router.get('/pessoas/auxiliares',              autenticar, pessoasCtrl.buscarAuxiliares);
 // Cadastra novo item em tabela auxiliar (generos, estados_civis, profissoes)
 router.post('/pessoas/auxiliares/:tipo',       autenticar, verificarPermissao('pessoas','cadastrar'), pessoasCtrl.criarAuxiliar);
@@ -190,6 +192,8 @@ router.put('/audiencias/:id/cancelar',       autenticar, verificarPermissao('aud
 router.put('/audiencias/:id/remarcar',       autenticar, verificarPermissao('audiencias','alterar'),    audienciasCtrl.remarcar);
 router.post('/audiencias/:id/ata',              autenticar, verificarPermissao('audiencias','alterar'),    audienciasCtrl.registrarAta);
 router.put('/audiencias/:id/ata-impressa',      autenticar, audienciasCtrl.marcarAtaImpressa);
+// Reverter status (Realizada -> Agendada): SOMENTE admin. Apaga a ata; exige motivo.
+router.put('/audiencias/:id/reverter',          autenticar, apenasAdmin, audienciasCtrl.reverterStatus);
 // Testemunhas — CRUD individual
 router.post('/audiencias/:id/testemunhas',             autenticar, verificarPermissao('audiencias','alterar'), audienciasCtrl.adicionarTestemunha);
 router.put('/audiencias/:id/testemunhas/:testId',      autenticar, verificarPermissao('audiencias','alterar'), audienciasCtrl.editarTestemunha);
@@ -246,6 +250,8 @@ router.get('/documentos/destinos-opcoes',      autenticar, verificarPermissao('d
 // Geração de documentos (permissão 'documentos/cadastrar')
 router.get('/documentos/modelos-gerar',        autenticar, verificarPermissao('documentos','cadastrar'), documentosCtrl.modelosParaGerar);
 router.post('/documentos/gerar',               autenticar, verificarPermissao('documentos','cadastrar'), documentosCtrl.gerar);
+router.get('/documentos/destinatario-sugerido',autenticar, verificarPermissao('documentos','cadastrar'), documentosCtrl.destinatarioSugerido);
+router.post('/documentos/gerar-e-enviar',      autenticar, verificarPermissao('documentos','cadastrar'), documentosCtrl.gerarEEnviarEmail);
 // Geração de "Documento de partes" (vários autores × réus; sem âncora de registro)
 router.post('/documentos/gerar-multipessoas',  autenticar, verificarPermissao('documentos','cadastrar'), documentosCtrl.gerarMultipessoas);
 // Geração em LOTE (audiências/perícias): preparar (agrupa por tipo + modelos) e gerar (ZIP)

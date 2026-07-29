@@ -358,9 +358,12 @@ function TabelaResultado({ resultado, onRecarregar }) {
                 <td>{r.subtipo_nome || r.descricao || '—'}</td>
                 <td>{formatarData(r.data_vencimento)}</td>
                 <td>
-                  {r.dias_restantes < 0
-                    ? <span className="badge badge-vermelho">{Math.abs(r.dias_restantes)}d atraso</span>
-                    : <span>{r.dias_restantes}d</span>
+                  {/* Prazo concluído/cancelado não conta dias/atraso — mostra "—" (igual à tela Prazos). */}
+                  {['concluido','cancelado'].includes(r.status)
+                    ? <span>—</span>
+                    : r.dias_restantes < 0
+                      ? <span className="badge badge-vermelho">{Math.abs(r.dias_restantes)}d atraso</span>
+                      : <span>{r.dias_restantes}d</span>
                   }
                 </td>
                 <td>{r.responsavel_nome || 'Escritório'}</td>

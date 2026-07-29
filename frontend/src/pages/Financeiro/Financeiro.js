@@ -1185,10 +1185,11 @@ export function ModalLancamento({ processoId, lancamento, onFechar }) {
 // ============================================================
 // MODAL: ACORDO — gera a tabela de parcelas, edita linha a linha, salva
 // ============================================================
-export function ModalAcordo({ processoId, acordoId, tipo, onFechar }) {
+export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoInicial }) {
   const [tipoAcordo, setTipoAcordo] = useState(tipo || 'acordo'); // 'acordo' | 'alvara'
   const tipoLabel = tipoAcordo === 'alvara' ? 'Alvará' : 'Acordo';
-  const [cab, setCab] = useState({ descricao: '', valor_total: '', qtd_parcelas: '', data_primeira: '', honor_percentual: 30 });
+  // descricaoInicial: pré-preenche a descrição (usado quando o acordo é aberto a partir do "Registrar Ata")
+  const [cab, setCab] = useState({ descricao: descricaoInicial || '', valor_total: '', qtd_parcelas: '', data_primeira: '', honor_percentual: 30 });
   const [parcelas, setParcelas] = useState([]);
   const [gerando, setGerando] = useState(false);
   const [salvando, setSalvando] = useState(false);

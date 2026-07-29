@@ -11,6 +11,7 @@ import MenuAcoes from '../../components/MenuAcoes';
 import { useAuth } from '../../context/AuthContext';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
+import { linkWhatsApp } from '../../utils/whatsapp';
 
 // Campos disponíveis para exportar em Excel (mesmas chaves do backend; sem campos de auditoria)
 const CAMPOS_EXPORT_FISICA = [
@@ -64,6 +65,53 @@ export default function Pessoas() {
 
   const [verAnotacoesDe, setVerAnotacoesDe] = useState(null); // { pessoa, tipo } — Anotações de atendimento
   function abrirAnotacoes(pessoa) { setVerAnotacoesDe({ pessoa, tipo: aba }); }
+
+  // "Enviar Email" e "Enviar WhatsApp" do menu ⋮ — os contatos são buscados só ao clicar (sob demanda).
+  const [enviarEmailDe, setEnviarEmailDe] = useState(null); // { pessoa, emails: [] }  — janela de envio de e-mail
+  const [escolherZapDe, setEscolherZapDe] = useState(null); // { pessoa, telefones: [] } — janela de escolha (só com 2+ telefones)
+
+  // Abre um número no WhatsApp (wa.me). O 55 (Brasil) é adicionado pela função linkWhatsApp quando falta.
+  // ctx (opcional) = { pessoa, tipo } → registra no log "usuário abriu zap para a pessoa".
+  function abrirZap(numero, ctx) {
+    const link = linkWhatsApp(numero);
+    if (!link) { toast.error('Telefone inválido para o WhatsApp'); return; }
+    window.open(link, '_blank', 'noopener');
+    if (ctx?.pessoa) {
+      const tipo_pessoa = ctx.tipo === 'juridicas' ? 'juridica' : 'fisica';
+      pessoasAPI.registrarZap({ telefone: numero, tipo_pessoa, pessoa_id: ctx.pessoa.id }).catch(() => {});
+    }
+  }
+
+  // "Enviar WhatsApp": busca os telefones da pessoa; 1 abre direto, vários abrem a janela de escolha.
+  async function abrirEnviarZap(pessoa) {
+    try {
+      const fn = aba === 'fisicas' ? pessoasAPI.buscarFisica : pessoasAPI.buscarJuridica;
+      const { data } = await fn(pessoa.id);
+      const telefones = (data.dados?.telefones || []).filter(t => t.ativo !== 0).map(t => t.numero).filter(Boolean);
+      if (telefones.length === 0) { toast.info('Esta pessoa não tem telefone cadastrado'); return; }
+      if (telefones.length === 1) { abrirZap(telefones[0], { pessoa, tipo: aba }); return; }
+      setEscolherZapDe({ pessoa, telefones });
+    } catch { toast.error('Erro ao buscar os telefones da pessoa'); }
+  }
+
+  // "Enviar Email": busca os e-mails da pessoa; se não houver, avisa; senão abre a janela de envio.
+  async function abrirEnviarEmail(pessoa) {
+    try {
+      const fn = aba === 'fisicas' ? pessoasAPI.buscarFisica : pessoasAPI.buscarJuridica;
+      const { data } = await fn(pessoa.id);
+      const emails = (data.dados?.emails || []).filter(e => e.ativo !== 0).map(e => e.email).filter(Boolean);
+      if (emails.length === 0) { toast.info('Esta pessoa não tem e-mail cadastrado'); return; }
+      setEnviarEmailDe({ pessoa, emails, tipo: aba });
+    } catch { toast.error('Erro ao buscar os e-mails da pessoa'); }
+  }
+
+  // "Copiar telefone" (do TelefoneCopiavel): a pessoa tem mais de um telefone → abre o modal de escolha.
+  const [copiarTelDe, setCopiarTelDe] = useState(null); // { pessoa, telefones: [] }
+  function abrirCopiarMultiplos(pessoa, telefones) { setCopiarTelDe({ pessoa, telefones }); }
+
+  // "Copiar e-mail" (do EmailCopiavel): a pessoa tem mais de um e-mail → abre o modal de escolha.
+  const [copiarEmailDe, setCopiarEmailDe] = useState(null); // { pessoa, emails: [] }
+  function abrirCopiarEmailMultiplos(pessoa, emails) { setCopiarEmailDe({ pessoa, emails }); }
 
   // Sai do modo de unificação e limpa a seleção
   function sairModoUnificar() { setModoUnificar(false); setSelUnificar([]); }
@@ -235,10 +283,12 @@ export default function Pessoas() {
             {aba === 'fisicas' ? (
               <TabelaFisicas lista={lista} onEditar={abrirEdicao} onExcluir={pedirConfirmacaoExclusao}
                 onVerProcessos={abrirProcessos} onAnotacoes={abrirAnotacoes}
+                onEnviarEmail={abrirEnviarEmail} onEnviarZap={abrirEnviarZap} onCopiarMultiplos={abrirCopiarMultiplos} onCopiarEmailMultiplos={abrirCopiarEmailMultiplos}
                 modoUnificar={modoUnificar} selecionados={selUnificar} onToggleSel={toggleSelUnificar} />
             ) : (
               <TabelaJuridicas lista={lista} onEditar={abrirEdicao} onExcluir={pedirConfirmacaoExclusao}
                 onVerProcessos={abrirProcessos} onAnotacoes={abrirAnotacoes}
+                onEnviarEmail={abrirEnviarEmail} onEnviarZap={abrirEnviarZap} onCopiarMultiplos={abrirCopiarMultiplos} onCopiarEmailMultiplos={abrirCopiarEmailMultiplos}
                 modoUnificar={modoUnificar} selecionados={selUnificar} onToggleSel={toggleSelUnificar} />
             )}
             {lista.length === 0 && <p className="lista-vazia">Nenhum registro encontrado</p>}
@@ -280,6 +330,44 @@ export default function Pessoas() {
           pessoa={verAnotacoesDe.pessoa}
           tipo={verAnotacoesDe.tipo}
           onFechar={() => setVerAnotacoesDe(null)}
+        />
+      )}
+
+      {/* Janela "Enviar Email" (item do menu ⋮) */}
+      {enviarEmailDe && (
+        <ModalEnviarEmail
+          pessoa={enviarEmailDe.pessoa}
+          emails={enviarEmailDe.emails}
+          tipo={enviarEmailDe.tipo}
+          onFechar={() => setEnviarEmailDe(null)}
+        />
+      )}
+
+      {/* Janela "Enviar WhatsApp" — só aparece quando a pessoa tem mais de um telefone */}
+      {escolherZapDe && (
+        <ModalEscolherWhatsapp
+          pessoa={escolherZapDe.pessoa}
+          telefones={escolherZapDe.telefones}
+          onEscolher={(numero) => { const p = escolherZapDe.pessoa; setEscolherZapDe(null); abrirZap(numero, { pessoa: p, tipo: aba }); }}
+          onFechar={() => setEscolherZapDe(null)}
+        />
+      )}
+
+      {/* Janela "Copiar telefone" — só aparece quando a pessoa tem mais de um telefone */}
+      {copiarTelDe && (
+        <ModalCopiarTelefone
+          pessoa={copiarTelDe.pessoa}
+          telefones={copiarTelDe.telefones}
+          onFechar={() => setCopiarTelDe(null)}
+        />
+      )}
+
+      {/* Janela "Copiar e-mail" — só aparece quando a pessoa tem mais de um e-mail */}
+      {copiarEmailDe && (
+        <ModalCopiarEmail
+          pessoa={copiarEmailDe.pessoa}
+          emails={copiarEmailDe.emails}
+          onFechar={() => setCopiarEmailDe(null)}
         />
       )}
 
@@ -633,6 +721,502 @@ function ModalAnotacoes({ pessoa, tipo, onFechar }) {
   );
 }
 
+// ============================================================
+// MODAL "Enviar Email" — mensagem avulsa digitada na hora + anexos opcionais do PC.
+// Escolhe o e-mail (o principal já vem selecionado quando há mais de um), assunto e
+// mensagem, pode anexar um ou mais arquivos (até 20 MB somando tudo) e envia pelo SMTP
+// do escritório. Antes de enviar, mostra um aviso: o sistema registra que o envio ocorreu,
+// mas NÃO guarda cópia do e-mail nem dos anexos.
+// ============================================================
+const LIMITE_TOTAL_ANEXOS = 20 * 1024 * 1024; // 20 MB somando todos os anexos (teto do Gmail)
+// Lista branca de anexos: o Gmail bloqueia executáveis (.bat/.exe/.js...), então só
+// deixamos passar tipos seguros e comuns. Mesma lista é validada no backend.
+const ANEXOS_PERMITIDOS = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'];
+const MSG_TIPO_INVALIDO = 'Tipo de arquivo não permitido. Aceita somente PDF, DOC, DOCX, JPG, JPEG ou PNG.';
+const extDe = (nome) => String(nome || '').split('.').pop().toLowerCase();
+const fmtTamanho = (b) =>
+  b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(0)} KB` : `${(b / 1048576).toFixed(1)} MB`;
+
+function ModalEnviarEmail({ pessoa, emails, tipo, onFechar }) {
+  const nomePessoa = pessoa.nome || pessoa.razao_social || 'Pessoa';
+  const [para, setPara]         = useState(emails[0] || ''); // principal (emails vêm ordenados: principal primeiro)
+  const [assunto, setAssunto]   = useState('');
+  const [mensagem, setMensagem] = useState('');
+  const [anexos, setAnexos]     = useState([]);    // File[] escolhidos do PC
+  const [mostrarAviso, setMostrarAviso] = useState(false); // janela de confirmação antes do envio
+  const [enviando, setEnviando] = useState(false);
+  const [aviso, setAviso]       = useState('');    // faixa de aviso DENTRO do modal (substitui o toast do canto)
+
+  // Fecha com Escape: se o aviso estiver aberto, fecha só o aviso; senão fecha o modal.
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key !== 'Escape' || enviando) return;
+      if (mostrarAviso) setMostrarAviso(false);
+      else onFechar();
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onFechar, enviando, mostrarAviso]);
+
+  // Adiciona arquivos escolhidos, validando o total (20 MB). Limpa o input para
+  // permitir reescolher o mesmo arquivo depois de remover.
+  function adicionarArquivos(fileList, inputEl) {
+    const novos = Array.from(fileList || []);
+    if (!novos.length) return;
+    // Lista branca de tipos (evita o bloqueio do Gmail a executáveis).
+    if (novos.some(f => !ANEXOS_PERMITIDOS.includes(extDe(f.name)))) {
+      setAviso(MSG_TIPO_INVALIDO);
+      if (inputEl) inputEl.value = '';
+      return;
+    }
+    const juntos = [...anexos, ...novos];
+    const total = juntos.reduce((s, f) => s + f.size, 0);
+    if (total > LIMITE_TOTAL_ANEXOS) {
+      setAviso(`Os anexos somariam ${fmtTamanho(total)}. O limite total é 20 MB (limite do Gmail). Remova ou troque algum arquivo.`);
+    } else {
+      setAnexos(juntos);
+      setAviso('');
+    }
+    if (inputEl) inputEl.value = '';
+  }
+  function removerArquivo(idx) {
+    setAnexos(anexos.filter((_, i) => i !== idx));
+    setAviso('');
+  }
+
+  // Passo 1: valida os campos e abre o aviso (a confirmação de envio).
+  function abrirAviso() {
+    if (!assunto.trim())  { setAviso('Informe o assunto do e-mail.'); return; }
+    if (!mensagem.trim()) { setAviso('Escreva a mensagem do e-mail.'); return; }
+    setAviso('');
+    setMostrarAviso(true);
+  }
+
+  // Passo 2: envia de verdade (após o usuário confirmar no aviso).
+  async function enviar() {
+    setMostrarAviso(false);
+    setEnviando(true);
+    try {
+      const tipo_pessoa = tipo === 'juridicas' ? 'juridica' : 'fisica';
+      const fd = new FormData();
+      fd.append('para', para);
+      fd.append('assunto', assunto.trim());
+      fd.append('mensagem', mensagem.trim());
+      fd.append('tipo_pessoa', tipo_pessoa);
+      fd.append('pessoa_id', pessoa.id);
+      anexos.forEach(f => fd.append('anexos', f, f.name));
+      await pessoasAPI.enviarEmail(fd);
+      toast.success('E-mail enviado com sucesso');
+      onFechar();
+    } catch (e) {
+      setAviso(e.response?.data?.mensagem || 'Não foi possível enviar o e-mail.');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  const rotulo = { display:'block', fontSize:'13px', color:'#555', margin:'0 0 4px' };
+  const campo  = { width:'100%', padding:'8px', fontSize:'14px', border:'1px solid #ccc', borderRadius:'6px', boxSizing:'border-box', marginBottom:'12px' };
+
+  return (
+    <>
+    <div className="modal-overlay">
+      <div className="modal-box">
+        <div className="modal-header">
+          <h3>Enviar e-mail — {nomePessoa}</h3>
+          <button className="modal-fechar" onClick={onFechar}>✕</button>
+        </div>
+        <div className="modal-body">
+          {/* Faixa de aviso do próprio sistema (no lugar da notificação do canto) */}
+          {aviso && (
+            <div style={{ background:'#fef2f2', border:'1px solid #fecaca', color:'#b91c1c',
+              borderRadius:'6px', padding:'8px 10px', marginBottom:'12px', fontSize:'13px',
+              display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'8px' }}>
+              <span>⚠️ {aviso}</span>
+              <button type="button" onClick={() => setAviso('')}
+                style={{ background:'none', border:'none', color:'#b91c1c', cursor:'pointer', fontSize:'15px', lineHeight:1 }}
+                title="Fechar">✕</button>
+            </div>
+          )}
+
+          {/* Destinatário: se houver mais de um e-mail, permite escolher; o principal já vem selecionado */}
+          <label style={rotulo}>Para</label>
+          {emails.length > 1 ? (
+            <select value={para} onChange={e => setPara(e.target.value)} style={campo}>
+              {emails.map((em, i) => <option key={i} value={em}>{em}</option>)}
+            </select>
+          ) : (
+            <div style={{...campo, background:'#f5f5f5', color:'#333'}}>{para}</div>
+          )}
+
+          <label style={rotulo}>Assunto</label>
+          <input value={assunto} onChange={e => setAssunto(e.target.value)} maxLength={200}
+            placeholder="Assunto do e-mail" style={campo} />
+
+          <label style={rotulo}>Mensagem</label>
+          <textarea value={mensagem} onChange={e => setMensagem(e.target.value)} rows={7}
+            placeholder="Escreva a mensagem..."
+            style={{...campo, resize:'vertical'}} />
+
+          {/* Anexos do PC (opcional) — até 20 MB somando tudo */}
+          <label style={rotulo}>Anexos (opcional)</label>
+          <div style={{ marginBottom: '4px' }}>
+            <label className="btn btn-outline" style={{ fontSize:'13px', padding:'6px 12px', cursor:'pointer', display:'inline-block' }}>
+              📎 Escolher arquivos
+              <input type="file" multiple style={{ display:'none' }}
+                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                onChange={e => adicionarArquivos(e.target.files, e.target)} />
+            </label>
+            <span style={{ fontSize:'12px', color:'#888', marginLeft:'8px' }}>Até 20 MB no total</span>
+          </div>
+          {anexos.length > 0 && (
+            <ul style={{ listStyle:'none', margin:'6px 0 0', padding:0 }}>
+              {anexos.map((f, i) => (
+                <li key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+                  fontSize:'13px', color:'#333', background:'#f5f7fa', border:'1px solid #e2e8f0',
+                  borderRadius:'6px', padding:'6px 8px', marginBottom:'4px' }}>
+                  <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                    📄 {f.name} <span style={{ color:'#888' }}>({fmtTamanho(f.size)})</span>
+                  </span>
+                  <button type="button" onClick={() => removerArquivo(i)} disabled={enviando}
+                    style={{ background:'none', border:'none', color:'#dc2626', cursor:'pointer', fontSize:'16px', lineHeight:1, marginLeft:'8px' }}
+                    title="Remover">✕</button>
+                </li>
+              ))}
+              <li style={{ fontSize:'12px', color:'#666', marginTop:'2px' }}>
+                Total: {fmtTamanho(anexos.reduce((s, f) => s + f.size, 0))}
+              </li>
+            </ul>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onFechar} disabled={enviando}>Cancelar</button>
+          <button className="btn btn-primary" onClick={abrirAviso} disabled={enviando || !assunto.trim() || !mensagem.trim()}>
+            {enviando ? 'Enviando...' : 'Enviar'}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    {/* Aviso antes de enviar: o sistema NÃO arquiva o e-mail nem os anexos (só o log). */}
+    {mostrarAviso && (
+      <div className="modal-overlay" style={{ zIndex: 1100 }}>
+        <div className="modal-box" style={{ maxWidth: '480px' }}>
+          <div className="modal-header">
+            <h3>Confirmar envio</h3>
+            <button className="modal-fechar" onClick={() => setMostrarAviso(false)} disabled={enviando}>✕</button>
+          </div>
+          <div className="modal-body">
+            <p style={{ margin:0, fontSize:'14px', color:'#334155', lineHeight:1.6 }}>
+              Este e-mail será enviado agora. O sistema registra apenas que o envio aconteceu
+              (quem enviou, para quem, assunto e data) — mas <strong>não guarda uma cópia do
+              e-mail nem dos anexos</strong>. Se você precisa manter um arquivo/comprovante do
+              que foi enviado, use também um serviço de e-mail próprio (Gmail etc.), que mantém
+              a pasta "Enviados".
+            </p>
+          </div>
+          <div className="modal-footer">
+            <button className="btn btn-secondary" onClick={() => setMostrarAviso(false)} disabled={enviando}>Cancelar</button>
+            <button className="btn btn-primary" onClick={enviar} disabled={enviando}>
+              {enviando ? 'Enviando...' : 'Enviar assim mesmo'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
+  );
+}
+
+// ============================================================
+// MODAL "Escolher telefone" — aparece só quando a pessoa tem MAIS DE UM telefone.
+// O principal já vem selecionado; ao confirmar, abre a conversa no WhatsApp (wa.me).
+// ============================================================
+function ModalEscolherWhatsapp({ pessoa, telefones, onEscolher, onFechar }) {
+  const nomePessoa = pessoa.nome || pessoa.razao_social || 'Pessoa';
+  const [numero, setNumero] = useState(telefones[0] || ''); // principal primeiro
+
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onFechar(); }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onFechar]);
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box">
+        <div className="modal-header">
+          <h3>Enviar WhatsApp — {nomePessoa}</h3>
+          <button className="modal-fechar" onClick={onFechar}>✕</button>
+        </div>
+        <div className="modal-body">
+          <p style={{fontSize:'13px', color:'#555', marginTop:0}}>
+            Esta pessoa tem mais de um telefone. Escolha para qual abrir a conversa:
+          </p>
+          <div style={{display:'flex', flexDirection:'column', gap:'8px'}}>
+            {telefones.map((tel, i) => (
+              <label key={i} style={{display:'flex', alignItems:'center', gap:'8px', fontSize:'14px', cursor:'pointer'}}>
+                <input type="radio" name="zap-tel" value={tel} checked={numero === tel} onChange={() => setNumero(tel)} />
+                {tel}
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onFechar}>Cancelar</button>
+          <button className="btn btn-primary" onClick={() => onEscolher(numero)}>Abrir WhatsApp</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// CÓPIA DE TELEFONE (só o número local) — usado no "Copiar?" da lista.
+// soNumeroLocal: tira símbolos, o código do país (55) e o DDD. Ex.: "(11) 94685-0741" -> "946850741".
+// Se não houver DDD (8 ou 9 dígitos), mantém como está.
+// ============================================================
+function soNumeroLocal(telefone) {
+  let d = String(telefone || '').replace(/\D/g, '');
+  if (d.startsWith('55') && d.length >= 12) d = d.slice(2); // remove o código do país (Brasil), se houver
+  if (d.length === 10 || d.length === 11) d = d.slice(2);   // remove o DDD (2 dígitos)
+  return d;
+}
+
+// Copia um texto para a área de transferência. Usa a API moderna (localhost/HTTPS) e,
+// se ela falhar, cai no método antigo (textarea + execCommand) — assim funciona sempre.
+function copiarParaAreaTransferencia(texto, onOk) {
+  if (!texto) return;
+  const feito = () => { if (onOk) onOk(); };
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(texto).then(feito).catch(() => copiaLegado(texto, feito));
+  } else {
+    copiaLegado(texto, feito);
+  }
+}
+function copiaLegado(texto, feito) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = texto; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    feito && feito();
+  } catch (_) { /* silencioso */ }
+}
+
+// ============================================================
+// TELEFONE DA LISTA COM "Copiar?" (igual ao número do processo).
+// Ao clicar: busca os telefones da pessoa (sob demanda). Se houver 1, copia direto
+// (só o número, sem DDD/símbolos) e mostra "Copiado!!". Se houver vários, abre o
+// modal de escolha (onMultiplos) — o modal copia ao clicar no telefone escolhido.
+// ============================================================
+function TelefoneCopiavel({ telefone, pessoaId, tipo, onMultiplos }) {
+  const [copiado, setCopiado] = useState(false);
+  const [hover, setHover]     = useState(false);
+  const [ocupado, setOcupado] = useState(false);
+
+  if (!telefone) return <span>—</span>;
+
+  async function aoClicar() {
+    if (ocupado) return;
+    setOcupado(true);
+    try {
+      const fn = tipo === 'juridicas' ? pessoasAPI.buscarJuridica : pessoasAPI.buscarFisica;
+      const { data } = await fn(pessoaId);
+      const nums = (data.dados?.telefones || []).filter(t => t.ativo !== 0).map(t => t.numero).filter(Boolean);
+      if (nums.length > 1) {
+        onMultiplos(nums);
+      } else {
+        copiarParaAreaTransferencia(soNumeroLocal(nums[0] || telefone),
+          () => { setCopiado(true); setTimeout(() => setCopiado(false), 1500); });
+      }
+    } catch {
+      // Falhou buscar: copia ao menos o principal que já está na tela
+      copiarParaAreaTransferencia(soNumeroLocal(telefone),
+        () => { setCopiado(true); setTimeout(() => setCopiado(false), 1500); });
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  const mostrarBalao = hover || copiado;
+  return (
+    <span style={{ position:'relative', display:'inline-block' }}
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      <span onClick={aoClicar} style={{ cursor:'pointer', borderBottom:'1px dotted #94a3b8' }}>
+        {telefone}
+      </span>
+      {mostrarBalao && (
+        <span style={{ position:'absolute', bottom:'100%', left:'50%', transform:'translateX(-50%)',
+          marginBottom:'4px', whiteSpace:'nowrap', background: copiado ? '#16a34a' : '#334155',
+          color:'#fff', fontSize:'11px', fontWeight:600, padding:'3px 8px', borderRadius:'4px',
+          zIndex:20, pointerEvents:'none', boxShadow:'0 2px 6px rgba(0,0,0,0.2)' }}>
+          {copiado ? 'Copiado!!' : 'Copiar?'}
+        </span>
+      )}
+    </span>
+  );
+}
+
+// ============================================================
+// MODAL "Copiar telefone" — aparece quando a pessoa tem MAIS DE UM telefone.
+// Clicar num telefone copia SÓ o número (sem DDD e sem "-") e fecha o modal.
+// ============================================================
+function ModalCopiarTelefone({ pessoa, telefones, onFechar }) {
+  const nomePessoa = pessoa.nome || pessoa.razao_social || 'Pessoa';
+
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onFechar(); }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onFechar]);
+
+  function copiar(num) {
+    copiarParaAreaTransferencia(soNumeroLocal(num), () => {
+      toast.success('Telefone copiado (só o número)');
+      onFechar();
+    });
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box">
+        <div className="modal-header">
+          <h3>Copiar telefone — {nomePessoa}</h3>
+          <button className="modal-fechar" onClick={onFechar}>✕</button>
+        </div>
+        <div className="modal-body">
+          <p style={{fontSize:'13px', color:'#555', marginTop:0}}>
+            Clique no telefone para copiar (só o número, sem DDD e sem traço):
+          </p>
+          <div style={{display:'flex', flexDirection:'column', gap:'8px'}}>
+            {telefones.map((tel, i) => (
+              <button key={i} type="button" onClick={() => copiar(tel)}
+                style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px',
+                  padding:'10px 12px', fontSize:'14px', border:'1px solid #ddd', borderRadius:'6px',
+                  background:'#fff', cursor:'pointer', textAlign:'left'}}
+                onMouseEnter={e => (e.currentTarget.style.background = '#f1f5f9')}
+                onMouseLeave={e => (e.currentTarget.style.background = '#fff')}>
+                <span>{tel}</span>
+                <span style={{fontSize:'12px', color:'#2563eb', fontWeight:600}}>Copiar</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onFechar}>Fechar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// E-MAIL DA LISTA COM "Copiar?" (igual ao do telefone, mas copia o endereço inteiro).
+// Ao clicar: busca os e-mails da pessoa. Se houver 1, copia direto e mostra "Copiado!!".
+// Se houver vários, abre o modal de escolha (onMultiplos).
+// ============================================================
+function EmailCopiavel({ email, pessoaId, tipo, onMultiplos }) {
+  const [copiado, setCopiado] = useState(false);
+  const [hover, setHover]     = useState(false);
+  const [ocupado, setOcupado] = useState(false);
+
+  if (!email) return <span>—</span>;
+
+  async function aoClicar() {
+    if (ocupado) return;
+    setOcupado(true);
+    try {
+      const fn = tipo === 'juridicas' ? pessoasAPI.buscarJuridica : pessoasAPI.buscarFisica;
+      const { data } = await fn(pessoaId);
+      const emails = (data.dados?.emails || []).filter(e => e.ativo !== 0).map(e => e.email).filter(Boolean);
+      if (emails.length > 1) {
+        onMultiplos(emails);
+      } else {
+        copiarParaAreaTransferencia(emails[0] || email,
+          () => { setCopiado(true); setTimeout(() => setCopiado(false), 1500); });
+      }
+    } catch {
+      // Falhou buscar: copia ao menos o principal que já está na tela
+      copiarParaAreaTransferencia(email,
+        () => { setCopiado(true); setTimeout(() => setCopiado(false), 1500); });
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  const mostrarBalao = hover || copiado;
+  return (
+    <span style={{ position:'relative', display:'inline-block' }}
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      <span onClick={aoClicar} style={{ cursor:'pointer', borderBottom:'1px dotted #94a3b8' }}>
+        {email}
+      </span>
+      {mostrarBalao && (
+        <span style={{ position:'absolute', bottom:'100%', left:'50%', transform:'translateX(-50%)',
+          marginBottom:'4px', whiteSpace:'nowrap', background: copiado ? '#16a34a' : '#334155',
+          color:'#fff', fontSize:'11px', fontWeight:600, padding:'3px 8px', borderRadius:'4px',
+          zIndex:20, pointerEvents:'none', boxShadow:'0 2px 6px rgba(0,0,0,0.2)' }}>
+          {copiado ? 'Copiado!!' : 'Copiar?'}
+        </span>
+      )}
+    </span>
+  );
+}
+
+// ============================================================
+// MODAL "Copiar e-mail" — aparece quando a pessoa tem MAIS DE UM e-mail.
+// Clicar num e-mail copia o endereço inteiro e fecha o modal.
+// ============================================================
+function ModalCopiarEmail({ pessoa, emails, onFechar }) {
+  const nomePessoa = pessoa.nome || pessoa.razao_social || 'Pessoa';
+
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onFechar(); }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onFechar]);
+
+  function copiar(em) {
+    copiarParaAreaTransferencia(em, () => {
+      toast.success('E-mail copiado');
+      onFechar();
+    });
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box">
+        <div className="modal-header">
+          <h3>Copiar e-mail — {nomePessoa}</h3>
+          <button className="modal-fechar" onClick={onFechar}>✕</button>
+        </div>
+        <div className="modal-body">
+          <p style={{fontSize:'13px', color:'#555', marginTop:0}}>
+            Clique no e-mail para copiar:
+          </p>
+          <div style={{display:'flex', flexDirection:'column', gap:'8px'}}>
+            {emails.map((em, i) => (
+              <button key={i} type="button" onClick={() => copiar(em)}
+                style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px',
+                  padding:'10px 12px', fontSize:'14px', border:'1px solid #ddd', borderRadius:'6px',
+                  background:'#fff', cursor:'pointer', textAlign:'left'}}
+                onMouseEnter={e => (e.currentTarget.style.background = '#f1f5f9')}
+                onMouseLeave={e => (e.currentTarget.style.background = '#fff')}>
+                <span>{em}</span>
+                <span style={{fontSize:'12px', color:'#2563eb', fontWeight:600}}>Copiar</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onFechar}>Fechar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Célula clicável da coluna "Qtde Proc": abre a lista de processos (só quando > 0)
 function CelulaQtdeProc({ qtde, onClick }) {
   const n = qtde ?? 0;
@@ -647,7 +1231,7 @@ function CelulaQtdeProc({ qtde, onClick }) {
   );
 }
 
-function TabelaFisicas({ lista, onEditar, onExcluir, onVerProcessos, onAnotacoes, modoUnificar, selecionados = [], onToggleSel }) {
+function TabelaFisicas({ lista, onEditar, onExcluir, onVerProcessos, onAnotacoes, onEnviarEmail, onEnviarZap, onCopiarMultiplos, onCopiarEmailMultiplos, modoUnificar, selecionados = [], onToggleSel }) {
   const { temPermissao } = useAuth();
   const estaSel = (id) => selecionados.some(x => x.id === id);
   return (
@@ -669,8 +1253,8 @@ function TabelaFisicas({ lista, onEditar, onExcluir, onVerProcessos, onAnotacoes
             )}
             <td><strong>{p.nome}</strong></td>
             <td>{formatarCPF(p.cpf)}</td>
-            <td>{p.telefone || '—'}</td>
-            <td>{p.email || '—'}</td>
+            <td><TelefoneCopiavel telefone={p.telefone} pessoaId={p.id} tipo="fisicas" onMultiplos={(nums) => onCopiarMultiplos(p, nums)} /></td>
+            <td><EmailCopiavel email={p.email} pessoaId={p.id} tipo="fisicas" onMultiplos={(ems) => onCopiarEmailMultiplos(p, ems)} /></td>
             <CelulaQtdeProc qtde={p.qtde_proc} onClick={() => onVerProcessos(p)} />
             <td>
               {/* Gerar documento — o modal lista os modelos desta origem (ou avisa se não houver). */}
@@ -679,6 +1263,8 @@ function TabelaFisicas({ lista, onEditar, onExcluir, onVerProcessos, onAnotacoes
                   oculto: !temPermissao('documentos','cadastrar'),
                   gerarDoc: { ancoraTipo: 'pessoa_fisica', ancoraId: p.id } },
                 { label: 'Anotações de atendimento', icone: '📝', onClick: () => onAnotacoes(p) },
+                { label: 'Enviar Email', icone: '✉️', onClick: () => onEnviarEmail(p) },
+                { label: 'Enviar WhatsApp', icone: '🟢', onClick: () => onEnviarZap(p) },
                 { label: 'Editar',  icone: '✏️', onClick: () => onEditar(p) },
                 { label: 'Excluir', icone: '🗑️', perigo: true, onClick: () => onExcluir(p) },
               ]} />
@@ -691,7 +1277,7 @@ function TabelaFisicas({ lista, onEditar, onExcluir, onVerProcessos, onAnotacoes
 }
 
 // Tabela de pessoas jurídicas
-function TabelaJuridicas({ lista, onEditar, onExcluir, onVerProcessos, onAnotacoes, modoUnificar, selecionados = [], onToggleSel }) {
+function TabelaJuridicas({ lista, onEditar, onExcluir, onVerProcessos, onAnotacoes, onEnviarEmail, onEnviarZap, onCopiarMultiplos, onCopiarEmailMultiplos, modoUnificar, selecionados = [], onToggleSel }) {
   const { temPermissao } = useAuth();
   const estaSel = (id) => selecionados.some(x => x.id === id);
   return (
@@ -714,7 +1300,7 @@ function TabelaJuridicas({ lista, onEditar, onExcluir, onVerProcessos, onAnotaco
             <td><strong>{p.razao_social}</strong></td>
             <td>{p.nome_fantasia || '—'}</td>
             <td>{formatarCNPJ(p.cnpj)}</td>
-            <td>{p.telefone || '—'}</td>
+            <td><TelefoneCopiavel telefone={p.telefone} pessoaId={p.id} tipo="juridicas" onMultiplos={(nums) => onCopiarMultiplos(p, nums)} /></td>
             <CelulaQtdeProc qtde={p.qtde_proc} onClick={() => onVerProcessos(p)} />
             <td>
               {/* Gerar documento — o modal lista os modelos desta origem (ou avisa se não houver). */}
@@ -723,6 +1309,8 @@ function TabelaJuridicas({ lista, onEditar, onExcluir, onVerProcessos, onAnotaco
                   oculto: !temPermissao('documentos','cadastrar'),
                   gerarDoc: { ancoraTipo: 'pessoa_juridica', ancoraId: p.id } },
                 { label: 'Anotações de atendimento', icone: '📝', onClick: () => onAnotacoes(p) },
+                { label: 'Enviar Email', icone: '✉️', onClick: () => onEnviarEmail(p) },
+                { label: 'Enviar WhatsApp', icone: '🟢', onClick: () => onEnviarZap(p) },
                 { label: 'Editar',  icone: '✏️', onClick: () => onEditar(p) },
                 { label: 'Excluir', icone: '🗑️', perigo: true, onClick: () => onExcluir(p) },
               ]} />

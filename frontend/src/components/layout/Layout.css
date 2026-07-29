@@ -903,3 +903,25 @@ body {
 .rbc-row-segment .rbc-show-more {
   font-size: 120% !important;
 }
+
+/* Detalhes/Editar da audiência: valores dos campos em negrito e escuros, para os dois modais
+   (Editar e Detalhes) ficarem com a MESMA aparência. */
+.audiencia-detalhe input,
+.audiencia-detalhe select,
+.audiencia-detalhe textarea {
+  color: #111827;
+  font-weight: 600;
+}
+
+/* Modo SOMENTE LEITURA: os campos ficam "disabled" e o navegador clareia o texto.
+   Aqui forçamos texto escuro e em negrito (com opacidade cheia) para ficar bem legível. */
+.audiencia-leitura input:disabled,
+.audiencia-leitura select:disabled,
+.audiencia-leitura textarea:disabled {
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+  font-weight: 600;
+  opacity: 1;
+  background: #f8fafc;
+  cursor: default;
+}

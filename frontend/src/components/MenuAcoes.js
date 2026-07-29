@@ -105,7 +105,7 @@ export default function MenuAcoes({ itens = [], titulo = 'Mais ações' }) {
               style={{ display: 'flex', gap: '8px', alignItems: 'center', width: '100%', textAlign: 'left',
                 background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', padding: '8px 10px',
                 borderRadius: '6px', color: it.perigo ? '#dc2626' : '#334155', whiteSpace: 'nowrap' }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#f1f5f9')}
+              onMouseEnter={e => (e.currentTarget.style.background = '#dbeafe')}
               onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
               {it.icone && <span aria-hidden="true">{it.icone}</span>}{it.label}
             </button>
