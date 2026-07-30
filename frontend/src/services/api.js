@@ -113,6 +113,9 @@ export const pessoasAPI = {
   enviarEmail:     (dados) => api.post('/pessoas/enviar-email', dados),
   // Registra no log que o usuário abriu o WhatsApp de uma pessoa — { telefone, tipo_pessoa?, pessoa_id? }
   registrarZap:    (dados) => api.post('/pessoas/registrar-zap', dados),
+  // SMS (Comtele) — enviar { numero, mensagem, tipo_pessoa?, pessoa_id? } e saber se está ativo
+  enviarSMS:       (dados) => api.post('/pessoas/enviar-sms', dados),
+  smsAtivo:        () => api.get('/pessoas/sms-ativo'),
   // Auxiliares (estados civis, gêneros, profissões)
   auxiliares: () => api.get('/pessoas/auxiliares'),
 };

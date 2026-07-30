@@ -19,6 +19,18 @@ function moedaBR(v) {
   return Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// CPF só-números -> "000.000.000-00" (mantém como veio se não tiver 11 dígitos)
+function fmtCPF(v) {
+  const s = String(v || '').replace(/\D/g, '');
+  return s.length === 11 ? s.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : (v || '');
+}
+
+// CNPJ só-números -> "00.000.000/0000-00" (mantém como veio se não tiver 14 dígitos)
+function fmtCNPJ(v) {
+  const s = String(v || '').replace(/\D/g, '');
+  return s.length === 14 ? s.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5') : (v || '');
+}
+
 const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
   'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 
@@ -114,10 +126,10 @@ async function buscarPartes(processoId, tabela) {
          LEFT JOIN nacionalidade nac ON pf.nacionalidade_id = nac.id
          WHERE pf.id = ?`, [v.pessoa_id]
       );
-      if (pf.length) partes.push({ tipo: 'fisica', d: pf[0], nome: pf[0].nome, documento: pf[0].cpf || '' });
+      if (pf.length) partes.push({ tipo: 'fisica', d: pf[0], nome: pf[0].nome, documento: fmtCPF(pf[0].cpf) });
     } else {
       const [pj] = await pool.execute('SELECT * FROM pessoas_juridicas WHERE id = ?', [v.pessoa_id]);
-      if (pj.length) partes.push({ tipo: 'juridica', d: pj[0], nome: pj[0].razao_social, documento: pj[0].cnpj || '' });
+      if (pj.length) partes.push({ tipo: 'juridica', d: pj[0], nome: pj[0].razao_social, documento: fmtCNPJ(pj[0].cnpj) });
     }
   }
   return partes;
@@ -153,8 +165,8 @@ function blocoClienteDeParte(parte) {
     return {
       ...comum,
       nome_cliente: d.nome || '',
-      documento_cliente: d.cpf || '',
-      cpf_cliente: d.cpf || '',
+      documento_cliente: fmtCPF(d.cpf),
+      cpf_cliente: fmtCPF(d.cpf),
       rg_cliente: d.rg || '',
       rg_orgao: d.rg_orgao || '',
       pis_cliente: d.pis || '',
@@ -172,8 +184,8 @@ function blocoClienteDeParte(parte) {
     ...comum,
     nome_cliente: d.razao_social || '',
     nome_fantasia: d.nome_fantasia || '',
-    documento_cliente: d.cnpj || '',
-    cnpj_cliente: d.cnpj || '',
+    documento_cliente: fmtCNPJ(d.cnpj),
+    cnpj_cliente: fmtCNPJ(d.cnpj),
     inscricao_estadual: d.inscricao_estadual || '',
   };
 }
@@ -501,8 +513,8 @@ async function carregarParte(tipo, pessoaId) {
     base = {
       nome: d.nome || '',
       nome_fantasia: '',
-      documento: d.cpf || '',
-      cpf: d.cpf || '', cnpj: '',
+      documento: fmtCPF(d.cpf),
+      cpf: fmtCPF(d.cpf), cnpj: '',
       rg: d.rg || '', rg_orgao: d.rg_orgao || '', pis: d.pis || '',
       ctps: [d.ctps_numero, d.ctps_serie].filter(Boolean).join(' / '),
       nacionalidade: d.nacionalidade_nome || '',
@@ -523,8 +535,8 @@ async function carregarParte(tipo, pessoaId) {
     base = {
       nome: d.razao_social || '',
       nome_fantasia: d.nome_fantasia || '',
-      documento: d.cnpj || '',
-      cpf: '', cnpj: d.cnpj || '',
+      documento: fmtCNPJ(d.cnpj),
+      cpf: '', cnpj: fmtCNPJ(d.cnpj),
       rg: '', rg_orgao: '', pis: '', ctps: '', nacionalidade: '',
       estado_civil: '', profissao: '', genero: '', data_nascimento: '',
       nome_mae: '', nome_pai: '',
@@ -546,7 +558,7 @@ async function carregarParte(tipo, pessoaId) {
   );
 
   base.telefones = tels.map(t => ({ numero: t.numero || '', tipo: t.tipo || '' }));
-  base.emails = emls.map(e => ({ email: e.email || '' }));
+  base.emails = emls.map(e => ({ email: (e.email || '').toLowerCase() }));
   base.telefone = base.telefones[0] ? base.telefones[0].numero : '';
   base.telefone_tipo = base.telefones[0] ? base.telefones[0].tipo : '';
   base.email = base.emails[0] ? base.emails[0].email : '';
@@ -651,7 +663,7 @@ async function nomeEEmailsDaPessoa(tipoPessoa, pessoaId) {
   else { const [r] = await pool.execute('SELECT razao_social FROM pessoas_juridicas WHERE id = ? LIMIT 1', [pessoaId]); nome = r[0]?.razao_social || ''; }
   const tabEml = tipoPessoa === 'fisica' ? 'emails_pf' : 'emails_pj';
   const [em] = await pool.execute(`SELECT email FROM ${tabEml} WHERE pessoa_id = ? AND ativo = 1 ORDER BY principal DESC, id ASC`, [pessoaId]);
-  return { nome, emails: em.map(e => e.email).filter(Boolean) };
+  return { nome, emails: em.map(e => (e.email || '').toLowerCase()).filter(Boolean) };
 }
 
 async function resolverDestinatario(ancoraTipo, ancoraId) {

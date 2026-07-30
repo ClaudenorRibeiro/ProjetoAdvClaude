@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { pessoasAPI } from '../../services/api';
-import { formatarCPF, formatarCNPJ, formatarData, formatarDataHora, mascaraCPF, validarCPF, mascaraCNPJ, validarCNPJ, toTitleCase } from '../../utils/formatters';
+import { formatarCPF, formatarCNPJ, formatarTelefone, formatarData, formatarDataHora, mascaraCPF, validarCPF, mascaraCNPJ, validarCNPJ, toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import GerarDocumentoPartesBotao from '../../components/GerarDocumentoPartes';
 import MenuAcoes from '../../components/MenuAcoes';
@@ -47,6 +47,7 @@ export default function Pessoas() {
   const [carregando, setCarregando] = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
   const [pessoaSelecionada, setPessoaSelecionada] = useState(null);
+  const [modalLeitura, setModalLeitura] = useState(false); // abre o form travado (só ver) ao clicar no nome
   const [confirmarExclusao, setConfirmarExclusao] = useState(null); // { id, nome } da pessoa a excluir
   const [excluindo, setExcluindo] = useState(false);
   const [modalExport, setModalExport] = useState(false);   // modal de seleção de campos p/ exportar
@@ -68,6 +69,8 @@ export default function Pessoas() {
 
   // "Enviar Email" e "Enviar WhatsApp" do menu ⋮ — os contatos são buscados só ao clicar (sob demanda).
   const [enviarEmailDe, setEnviarEmailDe] = useState(null); // { pessoa, emails: [] }  — janela de envio de e-mail
+  const [enviarSmsDe, setEnviarSmsDe]     = useState(null); // { pessoa, telefones: [] } — janela de envio de SMS
+  const [smsAtivo, setSmsAtivo]           = useState(false); // integração Comtele (SMS) ativa?
   const [escolherZapDe, setEscolherZapDe] = useState(null); // { pessoa, telefones: [] } — janela de escolha (só com 2+ telefones)
 
   // Abre um número no WhatsApp (wa.me). O 55 (Brasil) é adicionado pela função linkWhatsApp quando falta.
@@ -105,6 +108,17 @@ export default function Pessoas() {
     } catch { toast.error('Erro ao buscar os e-mails da pessoa'); }
   }
 
+  // "Enviar SMS": busca os telefones da pessoa; se não houver, avisa; senão abre a janela de envio.
+  async function abrirEnviarSMS(pessoa) {
+    try {
+      const fn = aba === 'fisicas' ? pessoasAPI.buscarFisica : pessoasAPI.buscarJuridica;
+      const { data } = await fn(pessoa.id);
+      const telefones = (data.dados?.telefones || []).filter(t => t.ativo !== 0).map(t => t.numero).filter(Boolean);
+      if (telefones.length === 0) { toast.info('Esta pessoa não tem telefone cadastrado'); return; }
+      setEnviarSmsDe({ pessoa, telefones, tipo: aba });
+    } catch { toast.error('Erro ao buscar os telefones da pessoa'); }
+  }
+
   // "Copiar telefone" (do TelefoneCopiavel): a pessoa tem mais de um telefone → abre o modal de escolha.
   const [copiarTelDe, setCopiarTelDe] = useState(null); // { pessoa, telefones: [] }
   function abrirCopiarMultiplos(pessoa, telefones) { setCopiarTelDe({ pessoa, telefones }); }
@@ -138,14 +152,19 @@ export default function Pessoas() {
 
   useEffect(() => { carregar(); }, [carregar]);
 
+  // Descobre se o envio de SMS está ativo (para mostrar/ocultar o item "Enviar SMS" no menu).
+  useEffect(() => { pessoasAPI.smsAtivo().then(r => setSmsAtivo(!!r.data?.dados?.ativo)).catch(() => {}); }, []);
+
   // Debounce da busca: consulta só 350ms após parar de digitar (evita 1 consulta por tecla)
   useEffect(() => {
     const t = setTimeout(() => { setBusca(buscaInput); setPagina(1); }, 350);
     return () => clearTimeout(t);
   }, [buscaInput]);
 
-  function abrirNovoCadastro() { setPessoaSelecionada(null); setModalAberto(true); }
-  function abrirEdicao(pessoa) { setPessoaSelecionada(pessoa); setModalAberto(true); }
+  function abrirNovoCadastro() { setPessoaSelecionada(null); setModalLeitura(false); setModalAberto(true); }
+  function abrirEdicao(pessoa) { setPessoaSelecionada(pessoa); setModalLeitura(false); setModalAberto(true); }
+  // Clique no nome: abre o mesmo form, porém travado (só visualização) com botão "Editar".
+  function abrirDetalhes(pessoa) { setPessoaSelecionada(pessoa); setModalLeitura(true); setModalAberto(true); }
 
   // Abre o modal de confirmação de exclusão
   function pedirConfirmacaoExclusao(pessoa) {
@@ -180,6 +199,7 @@ export default function Pessoas() {
       // Pequeno delay para o React processar o fechamento antes de reabrir
       setTimeout(() => {
         setPessoaSelecionada(pessoaParaEditar);
+        setModalLeitura(false);
         setModalAberto(true);
       }, 50);
     } else if (recarregar) {
@@ -281,12 +301,13 @@ export default function Pessoas() {
         {carregando ? <div className="loading">Carregando...</div> : (
           <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
             {aba === 'fisicas' ? (
-              <TabelaFisicas lista={lista} onEditar={abrirEdicao} onExcluir={pedirConfirmacaoExclusao}
+              <TabelaFisicas lista={lista} onEditar={abrirEdicao} onVerDetalhes={abrirDetalhes} onExcluir={pedirConfirmacaoExclusao}
                 onVerProcessos={abrirProcessos} onAnotacoes={abrirAnotacoes}
-                onEnviarEmail={abrirEnviarEmail} onEnviarZap={abrirEnviarZap} onCopiarMultiplos={abrirCopiarMultiplos} onCopiarEmailMultiplos={abrirCopiarEmailMultiplos}
+                onEnviarEmail={abrirEnviarEmail} onEnviarZap={abrirEnviarZap} onEnviarSMS={abrirEnviarSMS} smsAtivo={smsAtivo}
+                onCopiarMultiplos={abrirCopiarMultiplos} onCopiarEmailMultiplos={abrirCopiarEmailMultiplos}
                 modoUnificar={modoUnificar} selecionados={selUnificar} onToggleSel={toggleSelUnificar} />
             ) : (
-              <TabelaJuridicas lista={lista} onEditar={abrirEdicao} onExcluir={pedirConfirmacaoExclusao}
+              <TabelaJuridicas lista={lista} onEditar={abrirEdicao} onVerDetalhes={abrirDetalhes} onExcluir={pedirConfirmacaoExclusao}
                 onVerProcessos={abrirProcessos} onAnotacoes={abrirAnotacoes}
                 onEnviarEmail={abrirEnviarEmail} onEnviarZap={abrirEnviarZap} onCopiarMultiplos={abrirCopiarMultiplos} onCopiarEmailMultiplos={abrirCopiarEmailMultiplos}
                 modoUnificar={modoUnificar} selecionados={selUnificar} onToggleSel={toggleSelUnificar} />
@@ -310,6 +331,7 @@ export default function Pessoas() {
         <ModalPessoa
           tipo={aba}
           pessoa={pessoaSelecionada}
+          somenteLeitura={modalLeitura}
           onFechar={fecharModal}
           onAbrirEdicao={(p) => fecharModal(false, p)}
         />
@@ -340,6 +362,16 @@ export default function Pessoas() {
           emails={enviarEmailDe.emails}
           tipo={enviarEmailDe.tipo}
           onFechar={() => setEnviarEmailDe(null)}
+        />
+      )}
+
+      {/* Janela "Enviar SMS" (item do menu ⋮ — Pessoas Físicas) */}
+      {enviarSmsDe && (
+        <ModalEnviarSMS
+          pessoa={enviarSmsDe.pessoa}
+          telefones={enviarSmsDe.telefones}
+          tipo={enviarSmsDe.tipo}
+          onFechar={() => setEnviarSmsDe(null)}
         />
       )}
 
@@ -737,6 +769,118 @@ const extDe = (nome) => String(nome || '').split('.').pop().toLowerCase();
 const fmtTamanho = (b) =>
   b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(0)} KB` : `${(b / 1048576).toFixed(1)} MB`;
 
+// ============================================================
+// MODAL "Enviar SMS" (Comtele) — só Pessoas Físicas. Escolhe o telefone,
+// escreve a mensagem (com contador de caracteres/segmentos) e confirma o envio
+// (custa crédito). O backend valida o DDD e loga em log_comunicacoes.
+// ============================================================
+function ModalEnviarSMS({ pessoa, telefones, tipo, onFechar }) {
+  const nomePessoa = pessoa.nome || pessoa.razao_social || 'Pessoa';
+  const [numero, setNumero]       = useState(telefones[0] || ''); // número cru (com DDD)
+  const [mensagem, setMensagem]   = useState('');
+  const [enviando, setEnviando]   = useState(false);
+  const [confirmar, setConfirmar] = useState(false);
+  const [aviso, setAviso]         = useState('');
+
+  // Esc: se estiver no passo de confirmação, volta; senão fecha o modal.
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key !== 'Escape' || enviando) return;
+      if (confirmar) setConfirmar(false); else onFechar();
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onFechar, enviando, confirmar]);
+
+  const len = mensagem.trim().length;
+  const segmentos = len === 0 ? 0 : Math.ceil(len / 160);
+
+  function pedirConfirmacao() {
+    if (!numero)          { setAviso('Selecione um telefone.'); return; }
+    if (!mensagem.trim()) { setAviso('Escreva a mensagem do SMS.'); return; }
+    setAviso('');
+    setConfirmar(true);
+  }
+
+  async function enviar() {
+    setConfirmar(false);
+    setEnviando(true);
+    try {
+      const tipo_pessoa = tipo === 'juridicas' ? 'juridica' : 'fisica';
+      await pessoasAPI.enviarSMS({ numero, mensagem: mensagem.trim(), tipo_pessoa, pessoa_id: pessoa.id });
+      toast.success('SMS enviado com sucesso');
+      onFechar();
+    } catch (e) {
+      setAviso(e.response?.data?.mensagem || 'Não foi possível enviar o SMS.');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  const rotulo = { display:'block', fontSize:'13px', color:'#555', margin:'0 0 4px' };
+  const campo  = { width:'100%', padding:'8px', fontSize:'14px', border:'1px solid #ccc', borderRadius:'6px', boxSizing:'border-box', marginBottom:'12px' };
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box">
+        <div className="modal-header">
+          <h3>Enviar SMS — {nomePessoa}</h3>
+          <button className="modal-fechar" onClick={onFechar}>✕</button>
+        </div>
+        <div className="modal-body">
+          {aviso && (
+            <div style={{ background:'#fff4e5', border:'1px solid #ffcf99', color:'#8a5300',
+              padding:'8px 12px', borderRadius:'6px', fontSize:'13px', marginBottom:'12px' }}>
+              {aviso}
+            </div>
+          )}
+
+          <label style={rotulo}>Telefone</label>
+          {telefones.length > 1 ? (
+            <select style={campo} value={numero} onChange={e => setNumero(e.target.value)}>
+              {telefones.map((t, i) => <option key={i} value={t}>{formatarTelefone(t)}</option>)}
+            </select>
+          ) : (
+            <input style={campo} value={formatarTelefone(numero)} disabled />
+          )}
+
+          <label style={rotulo}>Mensagem</label>
+          <textarea style={{ ...campo, resize:'vertical', minHeight:'90px' }}
+            value={mensagem} onChange={e => setMensagem(e.target.value)}
+            placeholder="Escreva o SMS..." />
+          <small style={{ color: segmentos > 1 ? '#c0392b' : '#888', fontSize:'12px' }}>
+            {len} caractere(s){segmentos > 1
+              ? ` — ${segmentos} SMS (cada 160 caracteres = 1 crédito)`
+              : ' — 1 SMS (até 160 caracteres = 1 crédito)'}
+          </small>
+
+          {confirmar && (
+            <div style={{ marginTop:'12px', background:'#eef4ff', border:'1px solid #c5d0e6',
+              padding:'10px 12px', borderRadius:'6px', fontSize:'13px' }}>
+              Enviar SMS para <strong>{formatarTelefone(numero)}</strong>? Isso consome crédito da conta Comtele configurada.
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          {confirmar ? (
+            <>
+              <button className="btn btn-secondary" onClick={() => setConfirmar(false)} disabled={enviando}>Voltar</button>
+              <button className="btn btn-primary" onClick={enviar} disabled={enviando}>
+                {enviando ? 'Enviando...' : 'Confirmar envio'}
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="btn btn-secondary" onClick={onFechar}>Cancelar</button>
+              <button className="btn btn-primary" onClick={pedirConfirmacao} disabled={enviando}>Enviar SMS</button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ModalEnviarEmail({ pessoa, emails, tipo, onFechar }) {
   const nomePessoa = pessoa.nome || pessoa.razao_social || 'Pessoa';
   const [para, setPara]         = useState(emails[0] || ''); // principal (emails vêm ordenados: principal primeiro)
@@ -1044,7 +1188,7 @@ function TelefoneCopiavel({ telefone, pessoaId, tipo, onMultiplos }) {
     <span style={{ position:'relative', display:'inline-block' }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       <span onClick={aoClicar} style={{ cursor:'pointer', borderBottom:'1px dotted #94a3b8' }}>
-        {telefone}
+        {formatarTelefone(telefone)}
       </span>
       {mostrarBalao && (
         <span style={{ position:'absolute', bottom:'100%', left:'50%', transform:'translateX(-50%)',
@@ -1231,7 +1375,7 @@ function CelulaQtdeProc({ qtde, onClick }) {
   );
 }
 
-function TabelaFisicas({ lista, onEditar, onExcluir, onVerProcessos, onAnotacoes, onEnviarEmail, onEnviarZap, onCopiarMultiplos, onCopiarEmailMultiplos, modoUnificar, selecionados = [], onToggleSel }) {
+function TabelaFisicas({ lista, onEditar, onVerDetalhes, onExcluir, onVerProcessos, onAnotacoes, onEnviarEmail, onEnviarZap, onEnviarSMS, smsAtivo, onCopiarMultiplos, onCopiarEmailMultiplos, modoUnificar, selecionados = [], onToggleSel }) {
   const { temPermissao } = useAuth();
   const estaSel = (id) => selecionados.some(x => x.id === id);
   return (
@@ -1251,7 +1395,8 @@ function TabelaFisicas({ lista, onEditar, onExcluir, onVerProcessos, onAnotacoes
                 <input type="checkbox" checked={estaSel(p.id)} onChange={() => onToggleSel(p)} />
               </td>
             )}
-            <td><strong>{p.nome}</strong></td>
+            <td><strong onClick={() => onVerDetalhes(p)} title="Ver detalhes"
+                  style={{cursor:'pointer'}}>{p.nome}</strong></td>
             <td>{formatarCPF(p.cpf)}</td>
             <td><TelefoneCopiavel telefone={p.telefone} pessoaId={p.id} tipo="fisicas" onMultiplos={(nums) => onCopiarMultiplos(p, nums)} /></td>
             <td><EmailCopiavel email={p.email} pessoaId={p.id} tipo="fisicas" onMultiplos={(ems) => onCopiarEmailMultiplos(p, ems)} /></td>
@@ -1265,6 +1410,9 @@ function TabelaFisicas({ lista, onEditar, onExcluir, onVerProcessos, onAnotacoes
                 { label: 'Anotações de atendimento', icone: '📝', onClick: () => onAnotacoes(p) },
                 { label: 'Enviar Email', icone: '✉️', onClick: () => onEnviarEmail(p) },
                 { label: 'Enviar WhatsApp', icone: '🟢', onClick: () => onEnviarZap(p) },
+                { label: 'Enviar SMS', icone: '📱',
+                  oculto: !smsAtivo || !temPermissao('sms','cadastrar'),
+                  onClick: () => onEnviarSMS(p) },
                 { label: 'Editar',  icone: '✏️', onClick: () => onEditar(p) },
                 { label: 'Excluir', icone: '🗑️', perigo: true, onClick: () => onExcluir(p) },
               ]} />
@@ -1277,7 +1425,7 @@ function TabelaFisicas({ lista, onEditar, onExcluir, onVerProcessos, onAnotacoes
 }
 
 // Tabela de pessoas jurídicas
-function TabelaJuridicas({ lista, onEditar, onExcluir, onVerProcessos, onAnotacoes, onEnviarEmail, onEnviarZap, onCopiarMultiplos, onCopiarEmailMultiplos, modoUnificar, selecionados = [], onToggleSel }) {
+function TabelaJuridicas({ lista, onEditar, onVerDetalhes, onExcluir, onVerProcessos, onAnotacoes, onEnviarEmail, onEnviarZap, onCopiarMultiplos, onCopiarEmailMultiplos, modoUnificar, selecionados = [], onToggleSel }) {
   const { temPermissao } = useAuth();
   const estaSel = (id) => selecionados.some(x => x.id === id);
   return (
@@ -1297,7 +1445,8 @@ function TabelaJuridicas({ lista, onEditar, onExcluir, onVerProcessos, onAnotaco
                 <input type="checkbox" checked={estaSel(p.id)} onChange={() => onToggleSel(p)} />
               </td>
             )}
-            <td><strong>{p.razao_social}</strong></td>
+            <td><strong onClick={() => onVerDetalhes(p)} title="Ver detalhes"
+                  style={{cursor:'pointer'}}>{p.razao_social}</strong></td>
             <td>{p.nome_fantasia || '—'}</td>
             <td>{formatarCNPJ(p.cnpj)}</td>
             <td><TelefoneCopiavel telefone={p.telefone} pessoaId={p.id} tipo="juridicas" onMultiplos={(nums) => onCopiarMultiplos(p, nums)} /></td>
@@ -1416,7 +1565,10 @@ function ModalUnificarPessoas({ tipo, selecionados, onFechar }) {
 }
 
 // Modal de cadastro / edição de pessoa
-function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
+function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeitura = false }) {
+  // leitura = true → todos os campos travados e rodapé só com "Editar"/"Fechar".
+  // Ao clicar em "Editar", destrava para o modo de edição normal.
+  const [leitura, setLeitura]   = useState(somenteLeitura);
   const [form, setForm]         = useState(pessoa || {});
   const [auxiliares, setAux]    = useState({ estados_civis: [], generos: [], profissoes: [], nacionalidades: [] });
   const [salvando, setSalvando] = useState(false);
@@ -1551,7 +1703,7 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
       {confirmar && <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(null)} />}
       <div className="modal-box modal-grande">
         <div className="modal-header">
-          <h3>{pessoa ? 'Editar' : 'Nova'} {tipo === 'fisicas' ? 'Pessoa Física' : 'Pessoa Jurídica'}</h3>
+          <h3>{leitura ? 'Detalhes da' : (pessoa ? 'Editar' : 'Nova')} {tipo === 'fisicas' ? 'Pessoa Física' : 'Pessoa Jurídica'}</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
         </div>
 
@@ -1560,31 +1712,34 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
             <>
               <div className="grid-2">
                 {/* CampoNome exige ao menos duas palavras ao sair do campo */}
-                <CampoNomeCompleto value={form.nome||''} onChange={v=>set('nome',v)} />
+                <CampoNomeCompleto value={form.nome||''} onChange={v=>set('nome',v)} somenteLeitura={leitura} />
                 {/* CampoCPF aplica máscara, valida algoritmo e verifica duplicata no banco */}
                 <CampoCPF
                   value={form.cpf||''}
                   onChange={v=>set('cpf',v)}
                   pessoaIdAtual={pessoa?.id || null}
                   onAbrirEdicao={onAbrirEdicao}
+                  somenteLeitura={leitura}
                 />
               </div>
               <div className="grid-4">
-                <Campo label="RG" value={form.rg||''} onChange={v=>set('rg',v)} />
+                <Campo label="RG" value={form.rg||''} onChange={v=>set('rg',v)} somenteLeitura={leitura} />
                 {/* Órgão expedidor: SSP/SP, DETRAN/RJ, etc. */}
-                <Campo label="Órgão Expedidor" value={form.rg_orgao||''} onChange={v=>set('rg_orgao',v)} placeholder="SSP/SP" />
+                <Campo label="Órgão Expedidor" value={form.rg_orgao||''} onChange={v=>set('rg_orgao',v)} placeholder="SSP/SP" somenteLeitura={leitura} />
                 {/* CampoData bloqueia datas futuras — ninguém nasce amanhã */}
-                <CampoDataNascimento value={form.data_nascimento?.split('T')[0]||''} onChange={v=>set('data_nascimento',v)} />
+                <CampoDataNascimento value={form.data_nascimento?.split('T')[0]||''} onChange={v=>set('data_nascimento',v)} somenteLeitura={leitura} />
                 <SelectComAdicao
                   label="Gênero" value={form.genero_id||''} onChange={v=>set('genero_id',v)}
                   opcoes={auxiliares.generos} tipo="generos"
                   onNovoItem={item => handleNovoAuxiliar('generos', item)}
+                  somenteLeitura={leitura}
                 />
               </div>
               {/* Linha 2: PIS + CTPS (Digital/Física com campos condicionais) */}
               <div className="grid-2">
-                <Campo label="PIS" value={form.pis||''} onChange={v=>set('pis',v)} placeholder="000.00000.00-0" />
+                <Campo label="PIS" value={form.pis||''} onChange={v=>set('pis',v)} placeholder="000.00000.00-0" somenteLeitura={leitura} />
                 <CampoCTPS
+                  somenteLeitura={leitura}
                   // Tipo derivado do valor salvo: "Digital" no campo = digital, qualquer outro = física
                   tipo={form.ctps_numero === 'Digital' ? 'digital' : 'fisica'}
                   numero={form.ctps_numero === 'Digital' ? '' : (form.ctps_numero||'')}
@@ -1604,32 +1759,35 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
                   label="Estado civil" value={form.estado_civil_id||''} onChange={v=>set('estado_civil_id',v)}
                   opcoes={auxiliares.estados_civis} tipo="estados_civis"
                   onNovoItem={item => handleNovoAuxiliar('estados_civis', item)}
+                  somenteLeitura={leitura}
                 />
                 <SelectComAdicao
                   label="Profissão" value={form.profissao_id||''} onChange={v=>set('profissao_id',v)}
                   opcoes={auxiliares.profissoes} tipo="profissoes"
                   onNovoItem={item => handleNovoAuxiliar('profissoes', item)}
+                  somenteLeitura={leitura}
                 />
                 <SelectComAdicao
                   label="Nacionalidade" value={form.nacionalidade_id||''} onChange={v=>set('nacionalidade_id',v)}
                   opcoes={auxiliares.nacionalidades} tipo="nacionalidades"
                   onNovoItem={item => handleNovoAuxiliar('nacionalidades', item)}
+                  somenteLeitura={leitura}
                 />
               </div>
               {/* Filiação */}
               <div className="grid-2">
-                <Campo label="Pai" value={form.nome_pai||''} onChange={v=>set('nome_pai',v)} onBlur={()=>set('nome_pai', toTitleCase(form.nome_pai))} />
-                <Campo label="Mãe" value={form.nome_mae||''} onChange={v=>set('nome_mae',v)} onBlur={()=>set('nome_mae', toTitleCase(form.nome_mae))} />
+                <Campo label="Pai" value={form.nome_pai||''} onChange={v=>set('nome_pai',v)} onBlur={()=>set('nome_pai', toTitleCase(form.nome_pai))} somenteLeitura={leitura} />
+                <Campo label="Mãe" value={form.nome_mae||''} onChange={v=>set('nome_mae',v)} onBlur={()=>set('nome_mae', toTitleCase(form.nome_mae))} somenteLeitura={leitura} />
               </div>
             </>
           ) : (
             <>
               <div className="grid-2">
-                <Campo label="Razão Social *" value={form.razao_social||''} onChange={v=>set('razao_social',v)} onBlur={()=>set('razao_social', toTitleCase(form.razao_social))} />
-                <Campo label="Nome Fantasia" value={form.nome_fantasia||''} onChange={v=>set('nome_fantasia',v)} onBlur={()=>set('nome_fantasia', toTitleCase(form.nome_fantasia))} />
+                <Campo label="Razão Social *" value={form.razao_social||''} onChange={v=>set('razao_social',v)} onBlur={()=>set('razao_social', toTitleCase(form.razao_social))} somenteLeitura={leitura} />
+                <Campo label="Nome Fantasia" value={form.nome_fantasia||''} onChange={v=>set('nome_fantasia',v)} onBlur={()=>set('nome_fantasia', toTitleCase(form.nome_fantasia))} somenteLeitura={leitura} />
               </div>
               <div className="grid-2">
-                <CampoCNPJ value={form.cnpj||''} onChange={v=>set('cnpj',v)} />
+                <CampoCNPJ value={form.cnpj||''} onChange={v=>set('cnpj',v)} somenteLeitura={leitura} />
               </div>
             </>
           )}
@@ -1638,19 +1796,19 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
           <h4 style={{margin:'16px 0 8px',color:'#555',fontSize:'13px',fontWeight:600}}>Endereço</h4>
           {/* Linha 1: CEP (busca automática) + Logradouro */}
           <div className="grid-2">
-            <CampoCEP value={form.cep||''} onChange={v=>set('cep',v)} onAutoFill={handleCEPAutoFill} />
-            <Campo label="Logradouro" value={form.logradouro||''} onChange={v=>set('logradouro',v)} onBlur={()=>set('logradouro', toTitleCase(form.logradouro))} />
+            <CampoCEP value={form.cep||''} onChange={v=>set('cep',v)} onAutoFill={handleCEPAutoFill} somenteLeitura={leitura} />
+            <Campo label="Logradouro" value={form.logradouro||''} onChange={v=>set('logradouro',v)} onBlur={()=>set('logradouro', toTitleCase(form.logradouro))} somenteLeitura={leitura} />
           </div>
           {/* Linha 2: Número (recebe foco do CEP) + Complemento + Bairro */}
           <div className="grid-3">
-            <Campo label="Número" value={form.numero||''} onChange={v=>set('numero',v)} ref={refNumero} />
-            <Campo label="Complemento" value={form.complemento||''} onChange={v=>set('complemento',v)} onBlur={()=>set('complemento', toTitleCase(form.complemento))} placeholder="Apto, sala, bloco..." />
-            <Campo label="Bairro" value={form.bairro||''} onChange={v=>set('bairro',v)} onBlur={()=>set('bairro', toTitleCase(form.bairro))} />
+            <Campo label="Número" value={form.numero||''} onChange={v=>set('numero',v)} ref={refNumero} somenteLeitura={leitura} />
+            <Campo label="Complemento" value={form.complemento||''} onChange={v=>set('complemento',v)} onBlur={()=>set('complemento', toTitleCase(form.complemento))} placeholder="Apto, sala, bloco..." somenteLeitura={leitura} />
+            <Campo label="Bairro" value={form.bairro||''} onChange={v=>set('bairro',v)} onBlur={()=>set('bairro', toTitleCase(form.bairro))} somenteLeitura={leitura} />
           </div>
           {/* Linha 3: Cidade + Estado */}
           <div className="grid-2">
-            <Campo label="Cidade" value={form.cidade||''} onChange={v=>set('cidade',v)} onBlur={()=>set('cidade', toTitleCase(form.cidade))} />
-            <Campo label="Estado" value={form.estado||''} onChange={v=>set('estado',v)} placeholder="SP" />
+            <Campo label="Cidade" value={form.cidade||''} onChange={v=>set('cidade',v)} onBlur={()=>set('cidade', toTitleCase(form.cidade))} somenteLeitura={leitura} />
+            <Campo label="Estado" value={form.estado||''} onChange={v=>set('estado',v)} placeholder="SP" somenteLeitura={leitura} />
           </div>
 
           {/* Telefones */}
@@ -1660,13 +1818,16 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
               key={i}
               tel={tel}
               index={i}
+              somenteLeitura={leitura}
               onChange={v => setTelefones(t => t.map((x,j) => j===i ? v : x))}
               onRemove={() => setTelefones(t => t.filter((_,j) => j!==i))}
             />
           ))}
-          <button className="btn btn-outline" style={{fontSize:'12px'}} onClick={() => setTelefones(t=>[...t,{numero:'',tipo:'',principal:false}])}>
-            + Adicionar telefone
-          </button>
+          {!leitura && (
+            <button className="btn btn-outline" style={{fontSize:'12px'}} onClick={() => setTelefones(t=>[...t,{numero:'',tipo:'',principal:false}])}>
+              + Adicionar telefone
+            </button>
+          )}
 
           {/* E-mails */}
           <h4 style={{margin:'16px 0 8px',color:'#555',fontSize:'13px',fontWeight:600}}>E-mails</h4>
@@ -1675,26 +1836,38 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
               key={i}
               email={em.email}
               index={i}
+              somenteLeitura={leitura}
               onChange={v => setEmails(t => t.map((x,j) => j===i ? {...x, email: v} : x))}
               onRemove={() => setEmails(t => t.filter((_,j) => j!==i))}
             />
           ))}
-          <button className="btn btn-outline" style={{fontSize:'12px'}} onClick={() => setEmails(e=>[...e,{email:'',principal:false}])}>
-            + Adicionar e-mail
-          </button>
+          {!leitura && (
+            <button className="btn btn-outline" style={{fontSize:'12px'}} onClick={() => setEmails(e=>[...e,{email:'',principal:false}])}>
+              + Adicionar e-mail
+            </button>
+          )}
 
           {/* Observações */}
           <div className="form-group" style={{marginTop:'16px'}}>
             <label className="form-label">Observações</label>
-            <textarea className="form-control" rows={3} value={form.observacoes||''} onChange={e=>set('observacoes',e.target.value)} onBlur={()=>set('observacoes', toTitleCase(form.observacoes))} />
+            <textarea className="form-control" rows={3} value={form.observacoes||''} disabled={leitura} onChange={e=>set('observacoes',e.target.value)} onBlur={()=>set('observacoes', toTitleCase(form.observacoes))} />
           </div>
         </div>
 
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
-            {salvando ? 'Salvando...' : 'Salvar'}
-          </button>
+          {leitura ? (
+            <>
+              <button className="btn btn-secondary" onClick={() => onFechar(false)}>Fechar</button>
+              <button className="btn btn-primary" onClick={() => setLeitura(false)}>Editar</button>
+            </>
+          ) : (
+            <>
+              <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+                {salvando ? 'Salvando...' : 'Salvar'}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -1706,7 +1879,7 @@ function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao }) {
 // pessoaIdAtual: id da pessoa em edição (evita alertar sobre ela mesma)
 // onAbrirEdicao: callback chamado com { id, nome, cpf } quando usuário quer editar a duplicata
 // ============================================================
-function CampoCPF({ value, onChange, pessoaIdAtual = null, onAbrirEdicao = null }) {
+function CampoCPF({ value, onChange, pessoaIdAtual = null, onAbrirEdicao = null, somenteLeitura = false }) {
   const [erroCpf, setErroCpf]       = useState('');
   const [verificando, setVerificando] = useState(false);
   const [duplicata, setDuplicata]   = useState(null); // { id, nome, cpf } se já existe no banco
@@ -1756,7 +1929,8 @@ function CampoCPF({ value, onChange, pessoaIdAtual = null, onAbrirEdicao = null 
       <input
         type="text"
         className={`form-control ${erroCpf ? 'is-invalid' : ''}`}
-        value={value}
+        value={mascaraCPF(value || '')}
+        disabled={somenteLeitura}
         onChange={handleChange}
         onBlur={handleBlur}
         placeholder="000.000.000-00"
@@ -1811,7 +1985,7 @@ function CampoCPF({ value, onChange, pessoaIdAtual = null, onAbrirEdicao = null 
 // ============================================================
 // CAMPO CNPJ — máscara automática + validação do algoritmo ao perder foco
 // ============================================================
-function CampoCNPJ({ value, onChange }) {
+function CampoCNPJ({ value, onChange, somenteLeitura = false }) {
   const [erroCnpj, setErroCnpj] = useState('');
 
   // Aplica máscara enquanto o usuário digita
@@ -1835,7 +2009,8 @@ function CampoCNPJ({ value, onChange }) {
       <input
         type="text"
         className={`form-control ${erroCnpj ? 'is-invalid' : ''}`}
-        value={value}
+        value={mascaraCNPJ(value || '')}
+        disabled={somenteLeitura}
         onChange={handleChange}
         onBlur={handleBlur}
         placeholder="00.000.000/0000-00"
@@ -1851,7 +2026,7 @@ function CampoCNPJ({ value, onChange }) {
 // ============================================================
 // CAMPO DATA NASCIMENTO — impede datas futuras
 // ============================================================
-function CampoDataNascimento({ value, onChange }) {
+function CampoDataNascimento({ value, onChange, somenteLeitura = false }) {
   const [erroData, setErroData] = useState('');
   // Calcula "hoje" no formato YYYY-MM-DD para o atributo max
   const hoje = new Date().toISOString().split('T')[0];
@@ -1873,6 +2048,7 @@ function CampoDataNascimento({ value, onChange }) {
         className={`form-control ${erroData ? 'is-invalid' : ''}`}
         value={value}
         max={hoje}
+        disabled={somenteLeitura}
         onChange={e => handleChange(e.target.value)}
       />
       {erroData && <small style={{ color: '#e74c3c', fontSize: '12px' }}>⚠️ {erroData}</small>}
@@ -1886,7 +2062,7 @@ function CampoDataNascimento({ value, onChange }) {
 // tipo: 'generos' | 'estados_civis' | 'profissoes'
 // onNovoItem: callback chamado com { id, nome } após salvar
 // ============================================================
-function SelectComAdicao({ label, value, onChange, opcoes = [], tipo, onNovoItem }) {
+function SelectComAdicao({ label, value, onChange, opcoes = [], tipo, onNovoItem, somenteLeitura = false }) {
   const [miniFormAberto, setMiniFormAberto] = useState(false);
   const [novoNome, setNovoNome]             = useState('');
   const [salvando, setSalvando]             = useState(false);
@@ -1921,6 +2097,7 @@ function SelectComAdicao({ label, value, onChange, opcoes = [], tipo, onNovoItem
         <select
           className="form-control"
           value={value}
+          disabled={somenteLeitura}
           onChange={e => onChange(e.target.value)}
           style={{ flex: 1 }}
         >
@@ -1928,15 +2105,17 @@ function SelectComAdicao({ label, value, onChange, opcoes = [], tipo, onNovoItem
           {opcoes.map(o => <option key={o.id} value={o.id}>{o.nome}</option>)}
         </select>
         {/* Botão "..." abre mini formulário para cadastrar novo item */}
-        <button
-          type="button"
-          title={`Cadastrar novo(a) ${label} que não está na lista`}
-          className="btn btn-outline"
-          style={{ padding: '6px 10px', fontSize: '15px', flexShrink: 0, lineHeight: 1 }}
-          onClick={() => setMiniFormAberto(v => !v)}
-        >
-          …
-        </button>
+        {!somenteLeitura && (
+          <button
+            type="button"
+            title={`Cadastrar novo(a) ${label} que não está na lista`}
+            className="btn btn-outline"
+            style={{ padding: '6px 10px', fontSize: '15px', flexShrink: 0, lineHeight: 1 }}
+            onClick={() => setMiniFormAberto(v => !v)}
+          >
+            …
+          </button>
+        )}
       </div>
 
       {/* Mini formulário inline — aparece abaixo do select quando "..." é clicado */}
@@ -1987,7 +2166,7 @@ function SelectComAdicao({ label, value, onChange, opcoes = [], tipo, onNovoItem
 // CAMPO NOME COMPLETO — exige pelo menos duas palavras (nome + sobrenome)
 // Avisa ao sair do campo, bloqueia no Salvar também
 // ============================================================
-function CampoNomeCompleto({ value, onChange }) {
+function CampoNomeCompleto({ value, onChange, somenteLeitura = false }) {
   const [erroNome, setErroNome] = useState('');
 
   function handleBlur() {
@@ -2008,6 +2187,7 @@ function CampoNomeCompleto({ value, onChange }) {
         type="text"
         className={`form-control ${erroNome ? 'is-invalid' : ''}`}
         value={value}
+        disabled={somenteLeitura}
         onChange={e => { setErroNome(''); onChange(e.target.value); }}
         onBlur={handleBlur}
         placeholder="Nome e Sobrenome"
@@ -2021,7 +2201,7 @@ function CampoNomeCompleto({ value, onChange }) {
 // LINHA FONE — número com máscara + campo de texto livre para descrição
 // O usuário digita o que quiser: "Celular", "esposa Edna", "WhatsApp trabalho", etc.
 // ============================================================
-function LinhaFone({ tel, index, onChange, onRemove }) {
+function LinhaFone({ tel, index, onChange, onRemove, somenteLeitura = false }) {
   // Máscara adaptativa: fixo (xx) xxxx-xxxx ou celular (xx) xxxxx-xxxx
   function mascaraTelefone(value) {
     const limpo = value.replace(/\D/g, '').slice(0, 11);
@@ -2041,6 +2221,7 @@ function LinhaFone({ tel, index, onChange, onRemove }) {
         placeholder="(11) 99999-9999"
         value={tel.numero}
         maxLength={15}
+        disabled={somenteLeitura}
         onChange={e => onChange({ ...tel, numero: mascaraTelefone(e.target.value) })}
       />
       {/* Descrição livre: Celular, Comercial, esposa Edna, recado... */}
@@ -2049,10 +2230,11 @@ function LinhaFone({ tel, index, onChange, onRemove }) {
         style={{ flex: 1 }}
         placeholder="Descrição do Telefone"
         value={tel.tipo || ''}
+        disabled={somenteLeitura}
         onChange={e => onChange({ ...tel, tipo: e.target.value })}
       />
       {/* Botão remover — só aparece a partir da segunda linha */}
-      {index > 0 && (
+      {index > 0 && !somenteLeitura && (
         <button
           type="button"
           className="btn btn-danger"
@@ -2067,7 +2249,7 @@ function LinhaFone({ tel, index, onChange, onRemove }) {
 // ============================================================
 // LINHA EMAIL — campo de e-mail com validação de formato no blur
 // ============================================================
-function LinhaEmail({ email, index, onChange, onRemove }) {
+function LinhaEmail({ email, index, onChange, onRemove, somenteLeitura = false }) {
   const [erroEmail, setErroEmail] = useState('');
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -2087,10 +2269,11 @@ function LinhaEmail({ email, index, onChange, onRemove }) {
           style={{ flex: 1 }}
           placeholder="email@exemplo.com"
           value={email}
-          onChange={e => { setErroEmail(''); onChange(e.target.value); }}
+          disabled={somenteLeitura}
+          onChange={e => { setErroEmail(''); onChange(e.target.value.toLowerCase()); }}
           onBlur={handleBlur}
         />
-        {index > 0 && (
+        {index > 0 && !somenteLeitura && (
           <button
             type="button"
             className="btn btn-danger"
@@ -2109,7 +2292,7 @@ function LinhaEmail({ email, index, onChange, onRemove }) {
 // onAutoFill: chamado com { logradouro, bairro, cidade, estado }
 // após busca bem-sucedida
 // ============================================================
-function CampoCEP({ value, onChange, onAutoFill }) {
+function CampoCEP({ value, onChange, onAutoFill, somenteLeitura = false }) {
   const [buscando, setBuscando] = useState(false);
   const [erroCep, setErroCep]   = useState('');
 
@@ -2163,6 +2346,7 @@ function CampoCEP({ value, onChange, onAutoFill }) {
         autoComplete="off"
         className={`form-control ${erroCep ? 'is-invalid' : ''}`}
         value={value}
+        disabled={somenteLeitura}
         onChange={handleChange}
         onBlur={handleBlur}
         placeholder="00000-000"
@@ -2179,7 +2363,7 @@ function CampoCEP({ value, onChange, onAutoFill }) {
 // Quando Digital: oculta Núm/Série e persiste "Digital" no banco
 // Quando Física: exibe campos Núm. e Série para preenchimento
 // ============================================================
-function CampoCTPS({ tipo, numero, serie, onChangeTipo, onChangeNumero, onChangeSerie }) {
+function CampoCTPS({ tipo, numero, serie, onChangeTipo, onChangeNumero, onChangeSerie, somenteLeitura = false }) {
   const eFisica = tipo !== 'digital';
 
   return (
@@ -2190,11 +2374,11 @@ function CampoCTPS({ tipo, numero, serie, onChangeTipo, onChangeNumero, onChange
         {/* Seleção de tipo: Digital ou Física */}
         <div style={{ display: 'flex', gap: '16px', flexShrink: 0 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px' }}>
-            <input type="radio" checked={!eFisica} onChange={() => onChangeTipo('digital')} />
+            <input type="radio" checked={!eFisica} disabled={somenteLeitura} onChange={() => onChangeTipo('digital')} />
             Digital
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px' }}>
-            <input type="radio" checked={eFisica} onChange={() => onChangeTipo('fisica')} />
+            <input type="radio" checked={eFisica} disabled={somenteLeitura} onChange={() => onChangeTipo('fisica')} />
             Física
           </label>
         </div>
@@ -2206,12 +2390,14 @@ function CampoCTPS({ tipo, numero, serie, onChangeTipo, onChangeNumero, onChange
               className="form-control" style={{ flex: 1, minWidth: '100px' }}
               placeholder="Núm. CTPS"
               value={numero}
+              disabled={somenteLeitura}
               onChange={e => onChangeNumero(e.target.value)}
             />
             <input
               className="form-control" style={{ flex: '0 0 90px' }}
               placeholder="Série"
               value={serie}
+              disabled={somenteLeitura}
               onChange={e => onChangeSerie(e.target.value)}
             />
           </>
@@ -2227,11 +2413,11 @@ function CampoCTPS({ tipo, numero, serie, onChangeTipo, onChangeNumero, onChange
 // (usado pelo CampoCEP para mover o cursor para o campo Número)
 // ============================================================
 // onBlur opcional — usado para aplicar Title Case ao sair do campo
-const Campo = React.forwardRef(function Campo({ label, value, onChange, onBlur, type='text', placeholder='' }, ref) {
+const Campo = React.forwardRef(function Campo({ label, value, onChange, onBlur, type='text', placeholder='', somenteLeitura=false }, ref) {
   return (
     <div className="form-group">
       <label className="form-label">{label}</label>
-      <input ref={ref} type={type} autoComplete="off" className="form-control" value={value} onChange={e=>onChange(e.target.value)} onBlur={onBlur} placeholder={placeholder} />
+      <input ref={ref} type={type} autoComplete="off" className="form-control" value={value} disabled={somenteLeitura} onChange={e=>onChange(e.target.value)} onBlur={onBlur} placeholder={placeholder} />
     </div>
   );
 });

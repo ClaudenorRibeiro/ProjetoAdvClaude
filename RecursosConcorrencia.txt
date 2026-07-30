@@ -1,0 +1,102 @@
+========================================================================================
+RECURSOS DA CONCORRÊNCIA (ADVBOX) QUE FALTAM NO NOVOJUD
+Levantado em 30/07/2026 — comparação: https://advbox.com.br/software-juridico
+(fontes: site + página de IA + página de planos do AdvBox)
+Base do NovoJud: conferida DIRETO NO CÓDIGO (pages, controllers, services, greps),
+não apenas na memória. "✅ verificado" = confirmei no código; "dedução" = pela análise.
+Observação: o site do AdvBox é material de marketing (ex.: "99,9% de precisão").
+Aqui comparo EXISTÊNCIA da funcionalidade, não qualidade.
+NADA foi codado. Este arquivo é só o levantamento numerado.
+========================================================================================
+
+----------------------------------------------------------------------------------------
+IMPACTO GRANDE (maior fosso competitivo)
+----------------------------------------------------------------------------------------
+1) IA que LÊ e INTERPRETA intimações/publicações (tipo Donna/Justine): resume o
+   conteúdo, sugere a próxima tarefa e CALCULA o prazo automaticamente a partir da
+   publicação.
+   NovoJud hoje: captura publicações (DJEN/CNJ + AASP), mas SEM IA — leitura e cálculo
+   de prazo são manuais. (✅ verificado: cnjService, publicacoesController; nenhuma IA)
+
+2) AGENTES de IA que GERAM petições e recursos (mais de 20 áreas do Direito).
+   NovoJud hoje: gera documento por MODELO com variáveis {{tag}} — sem IA generativa.
+   (✅ verificado: docxModeloService, variaveisResolver)
+
+3) WORKFLOW AUTOMÁTICO por eventos (tipo Flowter): "aconteceu X -> cria automaticamente
+   a tarefa Y, com responsável e prazo", com regras configuráveis pelo escritório.
+   NovoJud hoje: tem comunicados/alertas fixos, mas NÃO um motor de automação
+   configurável. (✅ verificado)
+
+4) BUSINESS INTELLIGENCE / relatórios avançados: processos ganhos x perdidos,
+   rentabilidade por ação, safras por ano, tempo de tramitação, processos parados +120
+   dias, recontratações, estoque de processos.
+   NovoJud hoje: relatórios básicos + aniversariantes. (memória + pasta Relatorios/)
+
+5) FINANCEIRO com COBRANÇA: emissão de boleto/cartão, cobrança recorrente, integração
+   com gateway (ex.: Asaas), DRE/DFC, controle de inadimplência e notificação de
+   cobrança por SMS/WhatsApp.
+   NovoJud hoje: financeiro MANUAL (acordos, parcelas, recibos, alvará) — SEM
+   boleto/gateway. (✅ verificado: 0 ocorrências de boleto/asaas/gateway)
+
+----------------------------------------------------------------------------------------
+IMPACTO MÉDIO (incremental, agrega valor)
+----------------------------------------------------------------------------------------
+6) KANBAN (quadro visual de atividades e também por fase processual).
+   NovoJud hoje: só listas com filtros — sem kanban. (✅ verificado: 0 ocorrências)
+
+7) TASKSCORE / gamificação de produtividade: pontuar tarefas e ranquear a equipe,
+   indicadores de produtividade em tempo real.
+   NovoJud hoje: não existe. (✅ verificado)
+
+8) TIMESHEET / controle de horas: honorários por hora, cronômetro/registro de tempo por
+   tarefa ou processo.
+   NovoJud hoje: não existe. (✅ verificado: 0 ocorrências)
+
+9) INTEGRAÇÃO de AGENDA com Google / Apple / Outlook (sincronizar compromissos).
+   NovoJud hoje: agenda própria robusta, mas SEM sync externo (o único "OAuth" do
+   sistema é o do Gmail para ENVIAR e-mail). (✅ verificado — já consta nas suas
+   pendências como "Agenda Google")
+
+10) CRM de CAPTAÇÃO/FUNIL: origem do lead, funil de conversão, kanban por fase do
+    cliente, análise da carteira, integração com marketing (ex.: RD Station).
+    NovoJud hoje: cadastro PF/PJ + anotações + aniversariantes — sem funil/origem.
+    (✅ verificado)
+
+11) API PÚBLICA / Hub de integrações para terceiros conectarem no sistema.
+    NovoJud hoje: sem API pública documentada. (dedução — memória)
+
+12) MONITORAMENTO AUTOMÁTICO de andamentos/movimentações dos tribunais em tempo real
+    (além das publicações).
+    NovoJud hoje: só via publicações (DJEN/AASP); o andamento do processo é mais manual.
+    (parcial — andamentoController existe; captura ativa é pendência sua)
+
+----------------------------------------------------------------------------------------
+MENORES
+----------------------------------------------------------------------------------------
+13) CONTINGENCIAMENTO / provisão de risco: valor esperado de perda por processo
+    (provisionamento).
+    NovoJud hoje: não tem. (dedução)
+
+14) MODO ESCURO (tema escuro na interface).
+    NovoJud hoje: não tem. (✅ verificado: 0 ocorrências)
+
+15) COBRANÇA/LEMBRETE multicanal AUTOMÁTICO (SMS).
+    NovoJud hoje: só e-mail (cron) e WhatsApp por link wa.me manual — sem SMS
+    automático. (✅ verificado)
+
+----------------------------------------------------------------------------------------
+ONDE O NOVOJUD JÁ ESTÁ EM PARIDADE (ou à frente) — só para referência
+----------------------------------------------------------------------------------------
+- Processos/pastas, prazos com cálculo de dias úteis, 299 feriados nacionais 2026-2056.
+- Audiências com "Registrar Ata", MÓDULO DE PERÍCIAS dedicado (o AdvBox não destaca isso).
+- Documentos .docx via S3 com variáveis, "Gerar documento" + "Enviar por e-mail".
+- Publicações DJEN/CNJ (grátis) + AASP (paga), com dedup e coluna OAB.
+- Agenda com delegação/dar baixa/filtro do admin, trava de data retroativa.
+- Backup S3 diário, logout por inatividade, multi-instância, responsivo.
+
+========================================================================================
+RESUMO EM UMA FRASE
+O maior fosso é: IA (leitura de intimação + geração de peças) + automação de workflow +
+financeiro com cobrança (boleto/gateway) + BI. O restante (Kanban, Taskscore, timesheet,
+sync de agenda, CRM de funil) é mais incremental.
+========================================================================================

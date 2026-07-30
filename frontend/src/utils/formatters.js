@@ -105,6 +105,22 @@ export function formatarCNPJ(cnpj) {
   return limpo.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
 }
 
+// Formata telefone SÓ para exibição (não altera o valor guardado). Cobre:
+//   8  → 2053-8881 (fixo local) | 9 → 95048-7461 (celular local)
+//   10 → (11) 2053-8881 (DDD+fixo) | 11 → (11) 95048-7461 (DDD+celular)
+//   com "55" na frente (12+ dígitos) → remove o código do país e formata o resto
+// Tamanho inesperado: devolve como veio (não inventa máscara).
+export function formatarTelefone(tel) {
+  if (!tel) return '—';
+  let d = String(tel).replace(/\D/g, '');
+  if (d.startsWith('55') && d.length >= 12) d = d.slice(2); // remove código do país (Brasil)
+  if (d.length === 11) return d.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+  if (d.length === 10) return d.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
+  if (d.length === 9)  return d.replace(/(\d{5})(\d{4})/, '$1-$2');
+  if (d.length === 8)  return d.replace(/(\d{4})(\d{4})/, '$1-$2');
+  return tel;
+}
+
 // Aplica máscara durante digitação: "12345678000195" → "12.345.678/0001-95"
 export function mascaraCNPJ(value) {
   const limpo = value.replace(/\D/g, '').slice(0, 14);

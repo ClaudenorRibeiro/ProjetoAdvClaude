@@ -520,11 +520,21 @@ async function salvarIntegracao(req, res) {
       }
     }
 
-    await pool.execute(
+    const cfgJson = Object.keys(configuracoes).length ? JSON.stringify(configuracoes) : null;
+    const [upd] = await pool.execute(
       `UPDATE configuracoes_integracoes SET ativo=?, configuracoes=?, atualizado_em=NOW()
        WHERE modulo=?`,
-      [ativo ? 1 : 0, Object.keys(configuracoes).length ? JSON.stringify(configuracoes) : null, modulo]
+      [ativo ? 1 : 0, cfgJson, modulo]
     );
+    // Se o módulo ainda não existe (ex.: primeira configuração de uma integração nova),
+    // cria a linha. Assim não é preciso rodar SQL manual para cada integração nova.
+    if (upd.affectedRows === 0) {
+      await pool.execute(
+        `INSERT INTO configuracoes_integracoes (modulo, ativo, configuracoes, atualizado_em)
+         VALUES (?, ?, ?, NOW())`,
+        [modulo, ativo ? 1 : 0, cfgJson]
+      );
+    }
 
     return sucesso(res, null, 'Integração atualizada');
   } catch (err) {

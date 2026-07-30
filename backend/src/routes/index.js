@@ -76,6 +76,8 @@ router.get('/pessoas/aniversariantes',         autenticar, verificarPermissao('r
 router.post('/pessoas/:id/parabens',           autenticar, pessoasCtrl.registrarParabens);
 router.post('/pessoas/enviar-email',           autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.uploadAnexosEmail, pessoasCtrl.enviarEmailAvulso);
 router.post('/pessoas/registrar-zap',          autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.registrarEnvioZap);
+router.get('/pessoas/sms-ativo',               autenticar, pessoasCtrl.smsAtivo);
+router.post('/pessoas/enviar-sms',             autenticar, verificarPermissao('sms','cadastrar'), pessoasCtrl.enviarSMS);
 router.get('/pessoas/auxiliares',              autenticar, pessoasCtrl.buscarAuxiliares);
 // Cadastra novo item em tabela auxiliar (generos, estados_civis, profissoes)
 router.post('/pessoas/auxiliares/:tipo',       autenticar, verificarPermissao('pessoas','cadastrar'), pessoasCtrl.criarAuxiliar);

@@ -1,0 +1,206 @@
+========================================================================================
+RESUMO DETALHADO DA SESSÃO — 29/07/2026 (DEV)
+Sistema de Advocacia (NovoJud) — backend Node/Express + MySQL, frontend React/Vite
+========================================================================================
+
+*** ESTADO DO GIT (conferido; eu, Claude, NÃO rodei comando de git de escrita)
+    - HEAD atual = 0949294 ("290726-12.01.21,73 - 290726-1201"). VOCÊ commitou hoje ~12:01.
+      Esse commit já inclui: seu trabalho de 26-28/07 + as PRIMEIRAS coisas de hoje ->
+      exclusão do pdfService (código morto), o VERDE na coluna Pasta e o badge "Pasta NNNN" maior.
+    - NÃO commitados (10 arquivos, feitos DEPOIS das 12:01) -> as entregas 5 a 11 abaixo.
+    - NADA foi enviado (push) ao GitHub. Você sobe quando quiser (seu .bat faz push --force).
+    - Provei (git + datas dos arquivos) que SÓ 10 arquivos mudaram e que NENHUM outro setor
+      foi tocado por mim (Audiências, Financeiro, Dashboard, Publicações, Perícias, Documentos,
+      controller de Processos, cadastro de Pessoas etc. continuam intactos).
+
+*** SQL / BANCO — IMPORTANTE (PENDENTE nas AWS)
+    - Você JÁ rodou 1 ALTER no LOCAL (HeidiSQL). FALTA rodar nas instâncias AWS (multi-instância).
+    - Regra: SQL ANTES do código (o código novo grava as colunas novas).
+    - O ALTER (colar no HeidiSQL de cada instância):
+      ------------------------------------------------------------------------------------
+      ALTER TABLE `agenda_compromisso`
+        ADD COLUMN `delegado_para` int DEFAULT NULL AFTER `usuario_id`,
+        ADD COLUMN `concluido` tinyint(1) NOT NULL DEFAULT '0' AFTER `escritorio`,
+        ADD COLUMN `concluido_por` int DEFAULT NULL AFTER `concluido`,
+        ADD COLUMN `concluido_em` datetime DEFAULT NULL AFTER `concluido_por`,
+        ADD KEY `idx_agcomp_delegado` (`delegado_para`),
+        ADD KEY `idx_agcomp_concluido_por` (`concluido_por`),
+        ADD CONSTRAINT `fk_agcomp_delegado` FOREIGN KEY (`delegado_para`)
+            REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+        ADD CONSTRAINT `fk_agcomp_concluido_por` FOREIGN KEY (`concluido_por`)
+            REFERENCES `usuarios` (`id`) ON DELETE SET NULL;
+      ------------------------------------------------------------------------------------
+    - O estrutura_banco.sql já foi atualizado com essas colunas (instalações novas nascem certas).
+      Continua 61 tabelas.
+
+*** PARA O DEPLOY (quando você quiser)
+    - Backend MUDOU (agenda, tarefas, helpers, rotas) -> REINICIAR o Node.
+    - Frontend -> build + Ctrl+F5.
+    - E rodar o ALTER acima em cada AWS ANTES de subir o código.
+
+----------------------------------------------------------------------------------------
+0) ABERTURA — memória sincronizada
+----------------------------------------------------------------------------------------
+- A memória do PROJETO estava mais atualizada que a minha interna (faltava a sessão da NOITE de
+  28/07). Sincronizei projeto -> interna (45 arquivos idênticos).
+- E-MAIL EM LOTE (Audiências): você decidiu DEIXAR como pendência (não codar agora). A spec
+  continua guardada, aguardando 2 autorizações (criar tabela modelo_corpo_email + onde cadastrar).
+
+----------------------------------------------------------------------------------------
+1) PERGUNTA (sem código) — campos da busca de Processos
+----------------------------------------------------------------------------------------
+- A busca da tela Processos procura em: nº da pasta, título, nº CNJ, protocolo E nas partes
+  (autor e réu, PF e PJ): nome/razão social, CPF/CNPJ e telefone. Você mandou deixar o texto de
+  ajuda da caixa como está.
+
+----------------------------------------------------------------------------------------
+2) PROCESSOS — destaque VERDE na coluna "Pasta"  [JÁ NO COMMIT 0949294]
+----------------------------------------------------------------------------------------
+- Quando você pesquisa um NÚMERO e ele é igual ao nº de uma pasta, aquela célula da coluna Pasta
+  fica com FUNDO VERDE. Compara pelo valor (430 acha 0430). Busca vazia ou por nome/CPF: nada
+  verde. Como o número da pasta é único, no máximo 1 célula acende. (Só frontend.)
+
+----------------------------------------------------------------------------------------
+3) LIMPEZA — apagado código morto (pdfService.js)  [JÁ NO COMMIT 0949294]
+----------------------------------------------------------------------------------------
+- Confirmei EXAUSTIVAMENTE que ninguém usava o pdfService.js (o serviço de PDF ativo é outro, o
+  pdfConvertService). Apaguei o arquivo. Nada mais depende dele.
+
+----------------------------------------------------------------------------------------
+4) PASTA (detalhe) — badge "Pasta NNNN" maior  [JÁ NO COMMIT 0949294]
+----------------------------------------------------------------------------------------
+- O balão azul "Pasta 2222" no topo estava pequeno: aumentei a fonte (13 -> 18px) e o lápis de
+  editar acompanhou (13 -> 16px). Só visual.
+
+----------------------------------------------------------------------------------------
+5) GERAR DOCUMENTOS (Pessoas) — Réu vem "Jurídica" por padrão
+----------------------------------------------------------------------------------------
+- Na janela "Gerar documentos", o Autor continua vindo "Física" e o Réu agora vem "Jurídica" por
+  padrão. Você pode trocar qualquer um dos dois na hora. Essa janela é usada só na tela de Pessoas
+  (verificado) -> sem efeito em outro lugar.
+
+----------------------------------------------------------------------------------------
+6) AGENDA (grande) — DELEGAR compromisso + DAR BAIXA + FILTRO DO ADMIN
+----------------------------------------------------------------------------------------
+Decisões que travamos com você:
+  (A) Compromisso delegado aparece SÓ na agenda de quem recebeu (sai da sua).
+  - O ADMIN (nível 0/1) vê tudo e tem o seletor "Ver agenda de: Todos / Fulano".
+  (B) Editar, excluir e dar baixa: quem AGENDOU, quem RECEBEU (delegado) e o ADMIN.
+  - Delegar para: qualquer usuário ativo; o seletor já vem com o SEU nome por padrão.
+  - No compromisso aparece "Agendado por: Fulano em dd/mm/aaaa hh:mm".
+  - "Dar baixa" é NOVO para compromissos (concluir/reabrir); o baixado fica esmaecido e riscado.
+
+O que foi feito:
+  - BANCO: a tabela agenda_compromisso ganhou 4 colunas (delegado_para, concluido, concluido_por,
+    concluido_em). As ligações com usuarios são "ON DELETE SET NULL" -> se um usuário for excluído,
+    o compromisso NÃO fica órfão (só perde a delegação/baixa e volta para o criador).
+  - BACK: a listagem passou a mostrar cada compromisso para o "responsável" (o delegado; se não
+    houver, o criador). Admin filtra por usuário ou vê todos. O "modo Escritório" continua igual.
+    Novo botão de dar baixa e novo endpoint que lista os usuários ativos (para os seletores).
+  - FRONT: seletor "Delegar para", seletor do admin "Ver agenda de", botão "Dar baixa/Reabrir",
+    visual do concluído e as linhas de detalhe (Delegado / Agendado por / Situação).
+  - Isso também resolveu a antiga pendência "Agenda: ver todos os usuários".
+
+----------------------------------------------------------------------------------------
+7) AGENDA — Esc fecha o modal "Adicionar em dd/mm/aaaa"
+----------------------------------------------------------------------------------------
+- Aquele modal que abre ao clicar num dia agora fecha também com a tecla Esc (além de Cancelar e
+  do clique fora).
+
+----------------------------------------------------------------------------------------
+8) TRAVA DE DATA RETROATIVA — Agenda (compromisso) E Tarefas
+----------------------------------------------------------------------------------------
+- Só o ADMIN pode agendar compromisso OU tarefa com data ANTERIOR a hoje, tanto ao CRIAR quanto
+  ao EDITAR (sua opção B).
+  * Usuário comum: BLOQUEADO, com mensagem amigável.
+  * Admin: aparece uma JANELA DE CONFIRMAÇÃO do sistema ("A data é anterior a hoje. Deseja agendar
+    mesmo assim?") e só grava se confirmar.
+- Vale no frontend (experiência) E no backend (segurança - o comum não burla pela API). Hoje é
+  permitido; tarefa SEM data não entra na regra.
+- Efeito da opção B (você está ciente): um usuário comum com um item JÁ em data passada precisa
+  mudar a data para hoje/depois para conseguir salvar uma edição.
+
+----------------------------------------------------------------------------------------
+9) FAXINA (você perguntou se estava tudo limpo/robusto/escalável)
+----------------------------------------------------------------------------------------
+- Fui honesto: achei UMA redundância minha -> eu tinha duplicado a função de checagem em 2 lugares
+  e ainda batia no banco para saber "que dia é hoje", sendo que já existia uma função pronta
+  (hojeBrasilia) no sistema.
+- Corrigi: agora é UMA função só, compartilhada (utils/helpers.js), usando o hojeBrasilia -> sem
+  consulta extra ao banco e com o fuso de Brasília correto. Mais limpo, mais rápido e mais correto.
+
+----------------------------------------------------------------------------------------
+10) BUG CORRIGIDO — a confirmação de data passada "não aparecia"
+----------------------------------------------------------------------------------------
+- Causa: a janela de confirmação estava sendo desenhada ATRÁS do modal de compromisso (que fica
+  numa camada alta para cobrir o calendário) -> ficava invisível.
+- Corrigido: a confirmação agora fica sempre À FRENTE. Na tela de tarefa já aparecia; na de
+  compromisso passou a aparecer também.
+
+----------------------------------------------------------------------------------------
+11) AGENDA — respiro entre eventos no mês (só CSS)
+----------------------------------------------------------------------------------------
+- Dentro de cada dia do calendário (visão Mês), coloquei 3px de espaço entre os eventos, que
+  estavam colados. Testado e aprovado.
+
+----------------------------------------------------------------------------------------
+VERIFICAÇÃO (a cada entrega)
+----------------------------------------------------------------------------------------
+- node --check no backend + npm run build (Vite) no front passaram em todas as entregas. Fiz
+  análise de impacto (front + back + banco) antes de cada alteração. Você testou a manutenção em foco.
+
+----------------------------------------------------------------------------------------
+ARQUIVOS NÃO COMMITADOS (10 - as entregas 5 a 11; todos LOCAIS)
+----------------------------------------------------------------------------------------
+Backend:  controllers/agendaCompromissoController.js, controllers/tarefasController.js,
+          utils/helpers.js, routes/index.js, estrutura_banco.sql
+Frontend: pages/Agenda/Agenda.js, pages/Tarefas/Tarefas.js, components/GerarDocumentoPartes.js,
+          services/api.js, components/layout/Layout.css
+
+----------------------------------------------------------------------------------------
+PENDÊNCIAS ABERTAS (atualizada)
+----------------------------------------------------------------------------------------
+DO DIA (deploy):
+  - Rodar o ALTER da agenda_compromisso em CADA instância AWS + reiniciar o Node + build do front.
+  - Subir ao git quando quiser (nada foi enviado).
+
+GRUPO A (continuações):
+  - E-mail em Lote (Audiências) - aguarda 2 autorizações (tabela modelo_corpo_email + onde cadastrar).
+  - Registrar Ata: Fase 2 (Prazos+Tarefas), Fase 3 (Perícias+perito), Fase 4 (Anotações), Fase 5 (Notificações).
+  - "Ver/Editar (Detalhes)" em outras telas.
+  - Agenda Etapa C: clicar num evento de processo (prazo/audiência/perícia/tarefa) abrir/editar no módulo de origem.
+
+GRUPO B (grandes/transversais):
+  - Financeiro multi-banco.
+  - Capitalização global (MAIÚSCULA/minúscula/Primeira maiúscula).
+  - Andamento de cada processo (detalhar).
+  - Agenda Google (integração).
+  - Tarefas: horário e temporizador.
+
+GRUPO C (infra - você roda, eu oriento):
+  - Hardening do servidor AWS + rotacionar chaves AWS em texto puro (aguarda seus prints).
+  - Renovar a senha de app do Gmail no .env (SMTP_PASS).
+
+MENORES:
+  - Coluna de E-mail na lista de Pessoa Jurídica (para ter o "Copiar?" lá).
+  - Export CSV do Relatório mostrar "-" nos dias de prazo concluído.
+  - (Opcional) unificar o cálculo de "hoje" dos 2 modais do front (um usa date-fns, outro manual;
+    ambos corretos).
+
+----------------------------------------------------------------------------------------
+LEMBRETES DAS SUAS REGRAS (reforçadas na memória - feedback_codigo.md)
+----------------------------------------------------------------------------------------
+- NUNCA CODAR SEM SUA AUTORIZAÇÃO (eu explico o que entendi -> você autoriza -> eu codo -> você
+  testa a manutenção em foco).
+- NUNCA SUPOR - verificar na fonte (código/arquivo/banco); na dúvida, dizer que não tenho certeza.
+- TABELAS SEMPRE EM MINÚSCULAS, no banco E no código. (Regra absoluta e eterna.)
+- Te CORRIGIR quando um pedido prejudicar outra parte do sistema ou ferir uma regra sua.
+- Nenhuma exclusão pode deixar órfãos; tratar amarrações antes (as FKs novas de hoje são SET NULL).
+- Transações no banco com BEGIN/COMMIT/ROLLBACK; MySQL sem middleware (SQL à mão).
+- SQL é multi-instância: rodar no local, testar, depois nas AWS.
+- Sem trechos de código no chat; "build não é teste".
+
+========================================================================================
+Fim do resumo - 29/07/2026. Nada subido ao git, nada deployado nas AWS, 1 ALTER rodado só no LOCAL.
+Memórias (interna e pasta do projeto) atualizadas e sincronizadas, idênticas.
+========================================================================================

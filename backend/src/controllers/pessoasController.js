@@ -9,6 +9,7 @@ const auditoria = require('../middleware/auditoria');
 const { hojeBrasilia } = require('../utils/helpers');
 const { enviarEmail } = require('../utils/email');
 const { registrarComunicacao } = require('../utils/logComunicacao');
+const smsService = require('../services/smsService');
 const multer = require('multer');
 
 // ---- Anexos do "Enviar e-mail" avulso (Pessoas) ----
@@ -255,10 +256,11 @@ async function criarFisica(req, res) {
 
     // Insere e-mails vinculados à pessoa
     for (const em of emails) {
-      if (em.email) {
+      const emailNorm = em.email ? em.email.trim().toLowerCase() : '';
+      if (emailNorm) {
         await conn.execute(
           'INSERT INTO emails_pf (pessoa_id, email, principal) VALUES (?, ?, ?)',
-          [pessoaId, em.email, em.principal ? 1 : 0]
+          [pessoaId, emailNorm, em.principal ? 1 : 0]
         );
       }
     }
@@ -335,10 +337,11 @@ async function atualizarFisica(req, res) {
     }
     await conn.execute('DELETE FROM emails_pf WHERE pessoa_id = ?', [id]);
     for (const em of emails) {
-      if (em.email) {
+      const emailNorm = em.email ? em.email.trim().toLowerCase() : '';
+      if (emailNorm) {
         await conn.execute(
           'INSERT INTO emails_pf (pessoa_id, email, principal) VALUES (?, ?, ?)',
-          [id, em.email, em.principal ? 1 : 0]
+          [id, emailNorm, em.principal ? 1 : 0]
         );
       }
     }
@@ -874,10 +877,11 @@ async function criarJuridica(req, res) {
 
     // Insere e-mails vinculados à empresa
     for (const em of emails) {
-      if (em.email) {
+      const emailNorm = em.email ? em.email.trim().toLowerCase() : '';
+      if (emailNorm) {
         await conn.execute(
           'INSERT INTO emails_pj (pessoa_id, email, principal) VALUES (?, ?, ?)',
-          [pessoaId, em.email, em.principal ? 1 : 0]
+          [pessoaId, emailNorm, em.principal ? 1 : 0]
         );
       }
     }
@@ -978,10 +982,11 @@ async function atualizarJuridica(req, res) {
     }
     await conn.execute('DELETE FROM emails_pj WHERE pessoa_id = ?', [id]);
     for (const em of emails) {
-      if (em.email) {
+      const emailNorm = em.email ? em.email.trim().toLowerCase() : '';
+      if (emailNorm) {
         await conn.execute(
           'INSERT INTO emails_pj (pessoa_id, email, principal) VALUES (?, ?, ?)',
-          [id, em.email, em.principal ? 1 : 0]
+          [id, emailNorm, em.principal ? 1 : 0]
         );
       }
     }
@@ -1492,9 +1497,64 @@ async function registrarEnvioZap(req, res) {
   return sucesso(res, null, 'Registrado');
 }
 
+// Lê a config da Comtele (configuracoes_integracoes, modulo='comtele'). Retorna
+// { apiKey, route } — apiKey vazio quando a integração não está ativa/configurada.
+async function lerConfigComtele() {
+  const [rows] = await pool.execute(
+    "SELECT ativo, configuracoes FROM configuracoes_integracoes WHERE modulo = 'comtele' LIMIT 1"
+  );
+  if (!rows.length || !rows[0].ativo) return { apiKey: '', route: '' };
+  const cfg = rows[0].configuracoes
+    ? (typeof rows[0].configuracoes === 'string' ? JSON.parse(rows[0].configuracoes) : rows[0].configuracoes)
+    : {};
+  return { apiKey: cfg.api_key || '', route: cfg.route || '' };
+}
+
+// POST /pessoas/enviar-sms — envia 1 SMS pela Comtele e registra em log_comunicacoes.
+// Protegida por verificarPermissao('sms','cadastrar'). O número é normalizado (DDD, sem 55)
+// dentro do smsService, que bloqueia telefone sem DDD.
+async function enviarSMS(req, res) {
+  const numero     = String(req.body.numero || '').trim();
+  const mensagem   = String(req.body.mensagem || '').trim();
+  const tipoPessoa = (req.body.tipo_pessoa === 'fisica' || req.body.tipo_pessoa === 'juridica') ? req.body.tipo_pessoa : null;
+  const pessoaId   = Number(req.body.pessoa_id) || null;
+
+  if (!numero)   return erro(res, 'Telefone é obrigatório');
+  if (!mensagem) return erro(res, 'A mensagem do SMS é obrigatória');
+
+  let apiKey, route;
+  try {
+    ({ apiKey, route } = await lerConfigComtele());
+  } catch (e) {
+    return erroInterno(res, e);
+  }
+  if (!apiKey) return erro(res, 'O envio de SMS não está configurado/ativo. Configure em Configurações → Integrações.');
+
+  try {
+    const r = await smsService.enviarSMS(apiKey, numero, mensagem, route);
+    await registrarComunicacao({ canal: 'sms', destinatario: numero, conteudo: mensagem, enviado: 1, tipo_pessoa: tipoPessoa, pessoa_id: pessoaId, usuario_id: req.usuario.id });
+    return sucesso(res, { id: r.id }, 'SMS enviado com sucesso');
+  } catch (err) {
+    await registrarComunicacao({ canal: 'sms', destinatario: numero, conteudo: mensagem, enviado: 0, erro: err.message, tipo_pessoa: tipoPessoa, pessoa_id: pessoaId, usuario_id: req.usuario.id });
+    return erro(res, err.message || 'Não foi possível enviar o SMS');
+  }
+}
+
+// GET /pessoas/sms-ativo — informa se o envio de SMS está ativo (para mostrar/ocultar
+// o botão "Enviar SMS" no menu). Acessível a qualquer usuário logado.
+async function smsAtivo(req, res) {
+  try {
+    const { apiKey } = await lerConfigComtele();
+    return sucesso(res, { ativo: !!apiKey });
+  } catch (e) {
+    return erroInterno(res, e);
+  }
+}
+
 module.exports = {
   listarFisicas, buscarFisica, criarFisica, atualizarFisica, excluirFisica, unificarFisicas, adicionarHistorico, editarHistorico, excluirHistorico,
   listarJuridicas, buscarJuridica, criarJuridica, atualizarJuridica, excluirJuridica, unificarJuridicas, buscarAuxiliares, buscarPorCPF, criarAuxiliar,
   processosDaPessoa, exportarFisicas, exportarJuridicas,
-  listarAniversariantes, registrarParabens, buscarAniversariantes, uploadAnexosEmail, enviarEmailAvulso, registrarEnvioZap
+  listarAniversariantes, registrarParabens, buscarAniversariantes, uploadAnexosEmail, enviarEmailAvulso, registrarEnvioZap,
+  enviarSMS, smsAtivo
 };

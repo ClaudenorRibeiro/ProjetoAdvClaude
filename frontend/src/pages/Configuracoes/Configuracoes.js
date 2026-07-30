@@ -43,6 +43,7 @@ const MODULOS_PERM = [
   ]},
   { chave: 'publicacoes',  label: 'Publicações' },
   { chave: 'relatorios',   label: 'Relatórios' },
+  { chave: 'sms',          label: 'SMS (enviar)' },
 ];
 // 'historico' aparece para todos os módulos — futuras implementações de histórico
 // já encontram a permissão pronta; para módulos sem histórico, a coluna fica disponível mas inativa
@@ -1361,6 +1362,7 @@ function TabIntegracoes() {
   const aasp      = integracoes.aasp      || {};
   const cnj       = integracoes.cnj       || {};
   const email     = integracoes.email     || {};
+  const comtele   = integracoes.comtele   || {};
 
   // Lista de OABs monitoradas no CNJ (cada item: { numero, uf }).
   const oabsCnj = Array.isArray(cnj.oabs) ? cnj.oabs : [];
@@ -1410,6 +1412,46 @@ function TabIntegracoes() {
         <button className="btn btn-primary" onClick={() => salvarModulo('aasp')}
           disabled={salvando === 'aasp'}>
           {salvando === 'aasp' ? 'Salvando...' : 'Salvar configurações AASP'}
+        </button>
+      </div>
+
+      {/* SMS (Comtele) — envio de SMS para o celular das pessoas */}
+      <div className="card">
+        <div style={{display:'flex',alignItems:'center',gap:'12px',marginBottom:'16px'}}>
+          <h3 style={{margin:0,fontSize:'15px',color:'#1e2a3a'}}>SMS (Comtele)</h3>
+          <label style={{display:'flex',alignItems:'center',gap:'6px',cursor:'pointer',marginLeft:'auto'}}>
+            <input type="checkbox" checked={!!comtele.ativo}
+              onChange={e => setModulo('comtele','ativo', e.target.checked)} />
+            <span style={{fontSize:'13px'}}>Integração ativa</span>
+          </label>
+        </div>
+        {comtele.ativo && (
+          <>
+            <div className="form-group">
+              <label className="form-label">Chave de API (x-api-key) da Comtele</label>
+              <input className="form-control" value={comtele.api_key||''}
+                onChange={e => setModulo('comtele','api_key', e.target.value)}
+                placeholder="Chave em Configurações → Chaves de API (painel Comtele)" />
+              <small style={{ color: '#888' }}>
+                A chave fica no painel da Comtele em <strong>Configurações → Chaves de API</strong>. Cada
+                escritório usa a própria conta/crédito da Comtele; o custo do SMS é da conta cadastrada aqui.
+              </small>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Rota de envio (route)</label>
+              <input className="form-control" value={comtele.route||''}
+                onChange={e => setModulo('comtele','route', e.target.value)}
+                placeholder="ID da rota de envio da sua conta Comtele" />
+              <small style={{ color: '#888' }}>
+                A API de envio da Comtele exige a <strong>rota (route)</strong> da sua conta. Pegue esse
+                valor no painel da Comtele — sem ele o envio é recusado.
+              </small>
+            </div>
+          </>
+        )}
+        <button className="btn btn-primary" onClick={() => salvarModulo('comtele')}
+          disabled={salvando === 'comtele'}>
+          {salvando === 'comtele' ? 'Salvando...' : 'Salvar configurações SMS'}
         </button>
       </div>
 
