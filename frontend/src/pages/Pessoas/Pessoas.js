@@ -774,7 +774,7 @@ const fmtTamanho = (b) =>
 // escreve a mensagem (com contador de caracteres/segmentos) e confirma o envio
 // (custa crédito). O backend valida o DDD e loga em log_comunicacoes.
 // ============================================================
-function ModalEnviarSMS({ pessoa, telefones, tipo, onFechar }) {
+export function ModalEnviarSMS({ pessoa, telefones, tipo, onFechar }) {
   const nomePessoa = pessoa.nome || pessoa.razao_social || 'Pessoa';
   const [numero, setNumero]       = useState(telefones[0] || ''); // número cru (com DDD)
   const [mensagem, setMensagem]   = useState('');
@@ -881,7 +881,7 @@ function ModalEnviarSMS({ pessoa, telefones, tipo, onFechar }) {
   );
 }
 
-function ModalEnviarEmail({ pessoa, emails, tipo, onFechar }) {
+export function ModalEnviarEmail({ pessoa, emails, tipo, onFechar }) {
   const nomePessoa = pessoa.nome || pessoa.razao_social || 'Pessoa';
   const [para, setPara]         = useState(emails[0] || ''); // principal (emails vêm ordenados: principal primeiro)
   const [assunto, setAssunto]   = useState('');
@@ -1076,7 +1076,7 @@ function ModalEnviarEmail({ pessoa, emails, tipo, onFechar }) {
 // MODAL "Escolher telefone" — aparece só quando a pessoa tem MAIS DE UM telefone.
 // O principal já vem selecionado; ao confirmar, abre a conversa no WhatsApp (wa.me).
 // ============================================================
-function ModalEscolherWhatsapp({ pessoa, telefones, onEscolher, onFechar }) {
+export function ModalEscolherWhatsapp({ pessoa, telefones, onEscolher, onFechar }) {
   const nomePessoa = pessoa.nome || pessoa.razao_social || 'Pessoa';
   const [numero, setNumero] = useState(telefones[0] || ''); // principal primeiro
 
@@ -1120,7 +1120,7 @@ function ModalEscolherWhatsapp({ pessoa, telefones, onEscolher, onFechar }) {
 // soNumeroLocal: tira símbolos, o código do país (55) e o DDD. Ex.: "(11) 94685-0741" -> "946850741".
 // Se não houver DDD (8 ou 9 dígitos), mantém como está.
 // ============================================================
-function soNumeroLocal(telefone) {
+export function soNumeroLocal(telefone) {
   let d = String(telefone || '').replace(/\D/g, '');
   if (d.startsWith('55') && d.length >= 12) d = d.slice(2); // remove o código do país (Brasil), se houver
   if (d.length === 10 || d.length === 11) d = d.slice(2);   // remove o DDD (2 dígitos)
@@ -1129,7 +1129,7 @@ function soNumeroLocal(telefone) {
 
 // Copia um texto para a área de transferência. Usa a API moderna (localhost/HTTPS) e,
 // se ela falhar, cai no método antigo (textarea + execCommand) — assim funciona sempre.
-function copiarParaAreaTransferencia(texto, onOk) {
+export function copiarParaAreaTransferencia(texto, onOk) {
   if (!texto) return;
   const feito = () => { if (onOk) onOk(); };
   if (navigator.clipboard?.writeText) {
@@ -1206,7 +1206,7 @@ function TelefoneCopiavel({ telefone, pessoaId, tipo, onMultiplos }) {
 // MODAL "Copiar telefone" — aparece quando a pessoa tem MAIS DE UM telefone.
 // Clicar num telefone copia SÓ o número (sem DDD e sem "-") e fecha o modal.
 // ============================================================
-function ModalCopiarTelefone({ pessoa, telefones, onFechar }) {
+export function ModalCopiarTelefone({ pessoa, telefones, onFechar }) {
   const nomePessoa = pessoa.nome || pessoa.razao_social || 'Pessoa';
 
   useEffect(() => {
@@ -1312,7 +1312,7 @@ function EmailCopiavel({ email, pessoaId, tipo, onMultiplos }) {
 // MODAL "Copiar e-mail" — aparece quando a pessoa tem MAIS DE UM e-mail.
 // Clicar num e-mail copia o endereço inteiro e fecha o modal.
 // ============================================================
-function ModalCopiarEmail({ pessoa, emails, onFechar }) {
+export function ModalCopiarEmail({ pessoa, emails, onFechar }) {
   const nomePessoa = pessoa.nome || pessoa.razao_social || 'Pessoa';
 
   useEffect(() => {
@@ -1565,7 +1565,7 @@ function ModalUnificarPessoas({ tipo, selecionados, onFechar }) {
 }
 
 // Modal de cadastro / edição de pessoa
-function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeitura = false }) {
+export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeitura = false }) {
   // leitura = true → todos os campos travados e rodapé só com "Editar"/"Fechar".
   // Ao clicar em "Editar", destrava para o modo de edição normal.
   const [leitura, setLeitura]   = useState(somenteLeitura);

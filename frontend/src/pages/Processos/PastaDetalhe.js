@@ -6,8 +6,11 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { processosAPI, andamentoAPI, prazosAPI, tarefasAPI, audienciasAPI, periciasAPI, financeiroAPI } from '../../services/api';
+import { processosAPI, andamentoAPI, prazosAPI, tarefasAPI, audienciasAPI, periciasAPI, financeiroAPI, pessoasAPI } from '../../services/api';
 import { formatarData, formatarNumeroPasta, formatarMoeda, labelStatusPrazo, corPrazo, toTitleCase } from '../../utils/formatters';
+// Janelas de contato/ficha reutilizadas da tela de Pessoas (painel "Partes do processo")
+import { ModalPessoa, ModalEnviarEmail, ModalEnviarSMS, ModalEscolherWhatsapp, ModalCopiarTelefone, ModalCopiarEmail, soNumeroLocal, copiarParaAreaTransferencia } from '../Pessoas/Pessoas';
+import { linkWhatsApp } from '../../utils/whatsapp';
 import { ModalNovoProcesso, ModalEditarProcesso } from './Processos';
 import { ModalNovoPrazo, ModalCancelarPrazo, ModalEditarPrazo } from '../Prazos/Prazos';
 import { ModalTarefa, ModalHistoricoTarefa } from '../Tarefas/Tarefas';
@@ -123,6 +126,10 @@ export default function PastaDetalhe() {
   const [editandoNrPasta, setEditandoNrPasta] = useState(false);
   const [novaNrPasta, setNovaNrPasta]         = useState('');
   const [salvandoNrPasta, setSalvandoNrPasta] = useState(false);
+
+  // Integração de SMS (Comtele) ativa? — controla o item "Enviar SMS" no painel de partes.
+  const [smsAtivo, setSmsAtivo] = useState(false);
+  useEffect(() => { pessoasAPI.smsAtivo().then(r => setSmsAtivo(!!r.data?.dados?.ativo)).catch(() => {}); }, []);
 
   // ---- Carrega a pasta ----
   const carregarPasta = useCallback(async () => {
@@ -582,6 +589,9 @@ export default function PastaDetalhe() {
           </div>
         </div>
       </div>
+
+      {/* Painel "Partes do processo" — acesso rápido à ficha e aos contatos de cada parte */}
+      <PainelPartes processos={processos} smsAtivo={smsAtivo} onReload={carregarPasta} />
 
       {/* Abas */}
       <div className="card">
@@ -1435,3 +1445,189 @@ function ModalAndamento({ processoId, andamento, onFechar }) {
 // Modal de lançamento financeiro
 // ============================================================
 // (ModalLancamento financeiro agora é reutilizado de ../Financeiro/Financeiro — ModalLancamentoFin)
+
+// ============================================================
+// PAINEL "PARTES DO PROCESSO" (topo do PastaDetalhe)
+// Lista Autores, Réus e Peritos ÚNICOS da pasta, cada um com um menu "⋮":
+// Ver cadastro (ficha em leitura), Copiar telefone/e-mail, Enviar e-mail/WhatsApp/SMS.
+// Reaproveita as MESMAS janelas da tela de Pessoas (sem duplicar). Os contatos
+// são buscados sob demanda (só ao clicar), então não pesa o carregamento da pasta.
+// ============================================================
+
+// Junta as partes de TODOS os processos da pasta, sem repetir a mesma pessoa no mesmo papel.
+function partesUnicasDaPasta(processos) {
+  const vistos = { autor: new Set(), reu: new Set(), perito: new Set() };
+  const out    = { autor: [], reu: [], perito: [] };
+  const juntar = (arr, papel) => (arr || []).forEach(p => {
+    if (!p.pessoa_id) return;
+    const chave = `${p.tipo_pessoa}:${p.pessoa_id}`;
+    if (vistos[papel].has(chave)) return;
+    vistos[papel].add(chave);
+    out[papel].push({ pessoa_id: p.pessoa_id, tipo_pessoa: p.tipo_pessoa, nome: p.nome });
+  });
+  (processos || []).forEach(pr => {
+    juntar(pr.autores, 'autor');
+    juntar(pr.reus,    'reu');
+    juntar(pr.peritos, 'perito');
+  });
+  return out;
+}
+
+const PAPEL_INFO = {
+  autor:  { label: 'Autor',  cls: 'badge-azul' },
+  reu:    { label: 'Réu',    cls: 'badge-vermelho' },
+  perito: { label: 'Perito', cls: 'badge-roxo' },
+};
+
+function PainelPartes({ processos, smsAtivo, onReload }) {
+  // Começa ENCOLHIDO (fechado): processos com muitas partes não ocupam a tela.
+  const [aberto, setAberto] = useState(false);
+  const partes = partesUnicasDaPasta(processos);
+  const linhas = [
+    ...partes.autor.map(p  => ({ ...p, papel: 'autor'  })),
+    ...partes.reu.map(p    => ({ ...p, papel: 'reu'    })),
+    ...partes.perito.map(p => ({ ...p, papel: 'perito' })),
+  ];
+  if (linhas.length === 0) return null;
+
+  return (
+    <div className="card" style={{ marginBottom: '16px' }}>
+      {/* Cabeçalho clicável: seta + título + contagem. Clica para abrir/fechar. */}
+      <div onClick={() => setAberto(a => !a)}
+        style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer',
+          fontSize: '13px', fontWeight: 600, color: '#64748b', userSelect: 'none' }}>
+        <span aria-hidden="true" style={{ fontSize: '11px', color: '#94a3b8' }}>{aberto ? '▼' : '▶'}</span>
+        Partes do processo
+        <span style={{ color: '#94a3b8', fontWeight: 500 }}>({linhas.length})</span>
+      </div>
+
+      {aberto && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '10px' }}>
+          {linhas.map(parte => (
+            <ItemParteContato
+              key={`${parte.papel}:${parte.tipo_pessoa}:${parte.pessoa_id}`}
+              parte={parte} smsAtivo={smsAtivo} onReload={onReload} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ItemParteContato({ parte, smsAtivo, onReload }) {
+  const { temPermissao } = useAuth();
+  const info      = PAPEL_INFO[parte.papel] || { label: parte.papel, cls: 'badge-cinza' };
+  const tipoAba   = parte.tipo_pessoa === 'juridica' ? 'juridicas' : 'fisicas';
+  const pessoaObj = { id: parte.pessoa_id, nome: parte.nome, razao_social: parte.nome };
+
+  const [verCadastro, setVerCadastro] = useState(false);
+  const [enviarEmail, setEnviarEmail] = useState(null); // { emails }
+  const [enviarSms, setEnviarSms]     = useState(null); // { telefones }
+  const [escolherZap, setEscolherZap] = useState(null); // { telefones }
+  const [copiarTel, setCopiarTel]     = useState(null); // { telefones }
+  const [copiarEmail, setCopiarEmail] = useState(null); // { emails }
+
+  // Busca a ficha completa da pessoa (telefones + e-mails) só quando a ação é acionada.
+  async function contatos() {
+    const fn = parte.tipo_pessoa === 'fisica' ? pessoasAPI.buscarFisica : pessoasAPI.buscarJuridica;
+    const { data } = await fn(parte.pessoa_id);
+    return data.dados || {};
+  }
+  const soTelefones = (d) => (d.telefones || []).filter(t => t.ativo !== 0).map(t => t.numero).filter(Boolean);
+  const soEmails    = (d) => (d.emails    || []).filter(e => e.ativo !== 0).map(e => e.email ).filter(Boolean);
+
+  function abrirZap(numero) {
+    const link = linkWhatsApp(numero);
+    if (!link) { toast.error('Telefone inválido para o WhatsApp'); return; }
+    window.open(link, '_blank', 'noopener');
+    pessoasAPI.registrarZap({ telefone: numero, tipo_pessoa: parte.tipo_pessoa, pessoa_id: parte.pessoa_id }).catch(() => {});
+  }
+
+  async function acaoEmail() {
+    try {
+      const ems = soEmails(await contatos());
+      if (!ems.length) return toast.info('Esta pessoa não tem e-mail cadastrado');
+      setEnviarEmail({ emails: ems });
+    } catch { toast.error('Erro ao buscar os e-mails da pessoa'); }
+  }
+  async function acaoZap() {
+    try {
+      const tels = soTelefones(await contatos());
+      if (!tels.length) return toast.info('Esta pessoa não tem telefone cadastrado');
+      if (tels.length === 1) return abrirZap(tels[0]);
+      setEscolherZap({ telefones: tels });
+    } catch { toast.error('Erro ao buscar os telefones da pessoa'); }
+  }
+  async function acaoSms() {
+    try {
+      const tels = soTelefones(await contatos());
+      if (!tels.length) return toast.info('Esta pessoa não tem telefone cadastrado');
+      setEnviarSms({ telefones: tels });
+    } catch { toast.error('Erro ao buscar os telefones da pessoa'); }
+  }
+  async function acaoCopiarTel() {
+    try {
+      const tels = soTelefones(await contatos());
+      if (!tels.length) return toast.info('Esta pessoa não tem telefone cadastrado');
+      if (tels.length === 1) { copiarParaAreaTransferencia(soNumeroLocal(tels[0]), () => toast.success('Telefone copiado!')); return; }
+      setCopiarTel({ telefones: tels });
+    } catch { toast.error('Erro ao buscar os telefones da pessoa'); }
+  }
+  async function acaoCopiarEmail() {
+    try {
+      const ems = soEmails(await contatos());
+      if (!ems.length) return toast.info('Esta pessoa não tem e-mail cadastrado');
+      if (ems.length === 1) { copiarParaAreaTransferencia(ems[0], () => toast.success('E-mail copiado!')); return; }
+      setCopiarEmail({ emails: ems });
+    } catch { toast.error('Erro ao buscar os e-mails da pessoa'); }
+  }
+
+  return (
+    <div
+      onMouseEnter={e => (e.currentTarget.style.background = '#aec6e4')}
+      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+      style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 8px',
+        borderBottom: '1px solid #f1f5f9', borderRadius: '6px',
+        background: 'transparent', transition: 'background-color 0.15s' }}>
+      <span className={`badge ${info.cls}`} style={{ minWidth: '58px', textAlign: 'center' }}>{info.label}</span>
+      <span style={{ flex: 1, fontSize: '14px', color: '#1e2a3a' }}>{parte.nome}</span>
+      <MenuAcoes itens={[
+        { label: 'Ver cadastro',    icone: '👁️', onClick: () => setVerCadastro(true) },
+        { label: 'Copiar telefone', icone: '📋', onClick: acaoCopiarTel },
+        { label: 'Copiar e-mail',   icone: '📋', onClick: acaoCopiarEmail },
+        { label: 'Enviar e-mail',   icone: '✉️', onClick: acaoEmail },
+        { label: 'Enviar WhatsApp', icone: '🟢', onClick: acaoZap },
+        { label: 'Enviar SMS',      icone: '📱',
+          oculto: parte.tipo_pessoa !== 'fisica' || !smsAtivo || !temPermissao('sms', 'cadastrar'),
+          onClick: acaoSms },
+      ]} />
+
+      {verCadastro && (
+        <ModalPessoa tipo={tipoAba} pessoa={pessoaObj} somenteLeitura
+          onAbrirEdicao={() => {}}
+          onFechar={() => { setVerCadastro(false); onReload && onReload(); }} />
+      )}
+      {enviarEmail && (
+        <ModalEnviarEmail pessoa={pessoaObj} emails={enviarEmail.emails} tipo={tipoAba}
+          onFechar={() => setEnviarEmail(null)} />
+      )}
+      {enviarSms && (
+        <ModalEnviarSMS pessoa={pessoaObj} telefones={enviarSms.telefones} tipo={tipoAba}
+          onFechar={() => setEnviarSms(null)} />
+      )}
+      {escolherZap && (
+        <ModalEscolherWhatsapp pessoa={pessoaObj} telefones={escolherZap.telefones}
+          onEscolher={(n) => { setEscolherZap(null); abrirZap(n); }}
+          onFechar={() => setEscolherZap(null)} />
+      )}
+      {copiarTel && (
+        <ModalCopiarTelefone pessoa={pessoaObj} telefones={copiarTel.telefones}
+          onFechar={() => setCopiarTel(null)} />
+      )}
+      {copiarEmail && (
+        <ModalCopiarEmail pessoa={pessoaObj} emails={copiarEmail.emails}
+          onFechar={() => setCopiarEmail(null)} />
+      )}
+    </div>
+  );
+}

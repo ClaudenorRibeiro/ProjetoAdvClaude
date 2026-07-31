@@ -6,11 +6,111 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { processosAPI, pessoasAPI } from '../../services/api';
-import { formatarNumeroPasta, mascaraCNJ, toTitleCase } from '../../utils/formatters';
+import { formatarNumeroPasta, mascaraCNJ, toTitleCase, mascaraCPF, validarCPF, mascaraCNPJ, validarCNPJ } from '../../utils/formatters';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import MenuAcoes from '../../components/MenuAcoes';
+
+// ============================================================
+// MINI-MODAL DE CADASTRO RÁPIDO DE PARTE (Física ou Jurídica)
+// Usado pelo botão "…" ao lado dos campos Autor/Réu/Perito nos modais de
+// Novo/Editar Processo. Grava só o essencial (Física: nome + CPF; Jurídica:
+// razão social + CNPJ) pela MESMA rota/transação do cadastro normal; o restante
+// dos dados pode ser completado depois em Pessoas. Devolve a pessoa criada
+// ({ id, nome } ou { id, razao_social }) no formato que `adicionarParte` espera.
+// ============================================================
+function ModalCadastroRapidoParte({ tipo, onFechar, onSalvo }) {
+  const ehFisica = tipo === 'fisica';
+  const [form, setForm]         = useState({});
+  const [salvando, setSalvando] = useState(false);
+  function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
+
+  async function salvar() {
+    if (ehFisica) {
+      if (!form.nome?.trim()) return toast.error('O nome é obrigatório');
+      const cpfLimpo = form.cpf?.replace(/\D/g, '') || '';
+      if (cpfLimpo && !validarCPF(cpfLimpo)) return toast.error('CPF inválido');
+    } else {
+      if (!form.razao_social?.trim()) return toast.error('A razão social é obrigatória');
+      const cnpjLimpo = form.cnpj?.replace(/\D/g, '') || '';
+      if (cnpjLimpo && !validarCNPJ(cnpjLimpo)) return toast.error('CNPJ inválido');
+    }
+
+    setSalvando(true);
+    try {
+      if (ehFisica) {
+        const { data } = await pessoasAPI.criarFisica({ nome: form.nome.trim(), cpf: form.cpf || null });
+        if (data.ok) {
+          toast.success('Pessoa física cadastrada!');
+          onSalvo({ id: data.dados.id, nome: form.nome.trim() });
+        }
+      } else {
+        const { data } = await pessoasAPI.criarJuridica({ razao_social: form.razao_social.trim(), cnpj: form.cnpj || null });
+        if (data.ok) {
+          toast.success('Pessoa jurídica cadastrada!');
+          onSalvo({ id: data.dados.id, razao_social: form.razao_social.trim() });
+        }
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.mensagem || 'Erro ao cadastrar');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 1100 }}>
+      <div className="modal-box" style={{ maxWidth: '460px' }}>
+        <div className="modal-header">
+          <h3>{ehFisica ? 'Cadastrar Pessoa Física' : 'Cadastrar Pessoa Jurídica'}</h3>
+          <button className="modal-fechar" onClick={onFechar}>✕</button>
+        </div>
+        <div className="modal-body">
+          <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '14px' }}>
+            Cadastro rápido — os demais dados podem ser completados depois em <strong>Pessoas</strong>.
+          </p>
+
+          {ehFisica ? (
+            <>
+              <div className="form-group">
+                <label className="form-label">Nome completo *</label>
+                <input className="form-control" autoFocus
+                  value={form.nome || ''} onChange={e => set('nome', e.target.value)}
+                  onBlur={() => set('nome', toTitleCase(form.nome))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">CPF</label>
+                <input className="form-control" placeholder="000.000.000-00"
+                  value={form.cpf || ''} onChange={e => set('cpf', mascaraCPF(e.target.value))} />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="form-group">
+                <label className="form-label">Razão social *</label>
+                <input className="form-control" autoFocus
+                  value={form.razao_social || ''} onChange={e => set('razao_social', e.target.value)}
+                  onBlur={() => set('razao_social', toTitleCase(form.razao_social))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">CNPJ</label>
+                <input className="form-control" placeholder="00.000.000/0000-00"
+                  value={form.cnpj || ''} onChange={e => set('cnpj', mascaraCNPJ(e.target.value))} />
+              </div>
+            </>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onFechar} disabled={salvando}>Cancelar</button>
+          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+            {salvando ? 'Salvando...' : 'Cadastrar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Processos() {
   const navigate = useNavigate();
@@ -185,6 +285,8 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
   const { temPermissao } = useAuth();
   // Modal auxiliar: null = fechado, string = tipo aberto ('tipos','status','instancias','foruns','varas')
   const [modalAux, setModalAux] = useState(null);
+  // Cadastro rápido de parte: null = fechado; 'autor' | 'reu' | 'perito' = campo que abriu
+  const [cadastroRapido, setCadastroRapido] = useState(null);
 
   const [form, setForm] = useState({
     numPasta: '',
@@ -583,6 +685,10 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
                     </div>
                   )}
                 </div>
+                <button type="button" className="btn btn-outline"
+                  title="Cadastrar nova pessoa (conforme o tipo selecionado)"
+                  style={{ padding: '0 12px', fontSize: '16px', flexShrink: 0 }}
+                  onClick={() => setCadastroRapido('autor')}>…</button>
               </div>
             )}
 
@@ -639,6 +745,10 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
                     </div>
                   )}
                 </div>
+                <button type="button" className="btn btn-outline"
+                  title="Cadastrar nova pessoa (conforme o tipo selecionado)"
+                  style={{ padding: '0 12px', fontSize: '16px', flexShrink: 0 }}
+                  onClick={() => setCadastroRapido('reu')}>…</button>
               </div>
             )}
 
@@ -699,6 +809,10 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
                   </div>
                 )}
               </div>
+              <button type="button" className="btn btn-outline"
+                title="Cadastrar novo perito (conforme o tipo selecionado)"
+                style={{ padding: '0 12px', fontSize: '16px', flexShrink: 0 }}
+                onClick={() => setCadastroRapido('perito')}>…</button>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '28px' }}>
               {peritos.map((pe, i) => (
@@ -841,6 +955,20 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
           />
         )}
 
+        {/* Cadastro rápido de nova parte (Física/Jurídica conforme o tipo do campo) */}
+        {cadastroRapido && (
+          <ModalCadastroRapidoParte
+            tipo={cadastroRapido === 'autor' ? tipoAutor : cadastroRapido === 'reu' ? tipoReu : tipoPerito}
+            onFechar={() => setCadastroRapido(null)}
+            onSalvo={(nova) => {
+              if (cadastroRapido === 'autor')    adicionarParte(nova, tipoAutor,  autores, setAutores, reus,    setBuscaAutor,  setResultAutor);
+              else if (cadastroRapido === 'reu') adicionarParte(nova, tipoReu,    reus,    setReus,    autores, setBuscaReu,    setResultReu);
+              else                               adicionarParte(nova, tipoPerito, peritos, setPeritos, [],      setBuscaPerito, setResultPerito);
+              setCadastroRapido(null);
+            }}
+          />
+        )}
+
         {/* Aviso amigável: pasta já em uso — confirmar antes de anexar outro processo */}
         {confirmar && (
           <ModalConfirmar
@@ -866,6 +994,8 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
 export function ModalEditarProcesso({ processo, onFechar }) {
   const { temPermissao } = useAuth();
   const [modalAux, setModalAux] = useState(null);
+  // Cadastro rápido de parte: null = fechado; 'autor' | 'reu' | 'perito' = campo que abriu
+  const [cadastroRapido, setCadastroRapido] = useState(null);
 
   const [form, setForm] = useState({
     numProc:           processo.numProc          || '',
@@ -1063,6 +1193,10 @@ export function ModalEditarProcesso({ processo, onFechar }) {
                   </div>
                 )}
               </div>
+              <button type="button" className="btn btn-outline"
+                title="Cadastrar nova pessoa (conforme o tipo selecionado)"
+                style={{ padding: '0 12px', fontSize: '16px', flexShrink: 0 }}
+                onClick={() => setCadastroRapido('autor')}>…</button>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '28px' }}>
               {autores.map((a, i) => (
@@ -1100,6 +1234,10 @@ export function ModalEditarProcesso({ processo, onFechar }) {
                   </div>
                 )}
               </div>
+              <button type="button" className="btn btn-outline"
+                title="Cadastrar nova pessoa (conforme o tipo selecionado)"
+                style={{ padding: '0 12px', fontSize: '16px', flexShrink: 0 }}
+                onClick={() => setCadastroRapido('reu')}>…</button>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '28px' }}>
               {reus.map((r, i) => (
@@ -1152,6 +1290,10 @@ export function ModalEditarProcesso({ processo, onFechar }) {
                   </div>
                 )}
               </div>
+              <button type="button" className="btn btn-outline"
+                title="Cadastrar novo perito (conforme o tipo selecionado)"
+                style={{ padding: '0 12px', fontSize: '16px', flexShrink: 0 }}
+                onClick={() => setCadastroRapido('perito')}>…</button>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '28px' }}>
               {peritos.map((pe, i) => (
@@ -1283,6 +1425,20 @@ export function ModalEditarProcesso({ processo, onFechar }) {
             foruns={aux.foruns || []}
             onFechar={() => setModalAux(null)}
             onAtualizado={async () => { await recarregarAux(); }}
+          />
+        )}
+
+        {/* Cadastro rápido de nova parte (Física/Jurídica conforme o tipo do campo) */}
+        {cadastroRapido && (
+          <ModalCadastroRapidoParte
+            tipo={cadastroRapido === 'autor' ? tipoAutor : cadastroRapido === 'reu' ? tipoReu : tipoPerito}
+            onFechar={() => setCadastroRapido(null)}
+            onSalvo={(nova) => {
+              if (cadastroRapido === 'autor')    adicionarParte(nova, tipoAutor,  autores, setAutores, reus,    setBuscaAutor,  setResultAutor);
+              else if (cadastroRapido === 'reu') adicionarParte(nova, tipoReu,    reus,    setReus,    autores, setBuscaReu,    setResultReu);
+              else                               adicionarParte(nova, tipoPerito, peritos, setPeritos, [],      setBuscaPerito, setResultPerito);
+              setCadastroRapido(null);
+            }}
           />
         )}
       </div>

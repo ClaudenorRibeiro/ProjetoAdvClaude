@@ -1443,8 +1443,9 @@ function TabIntegracoes() {
                 onChange={e => setModulo('comtele','route', e.target.value)}
                 placeholder="ID da rota de envio da sua conta Comtele" />
               <small style={{ color: '#888' }}>
-                A API de envio da Comtele exige a <strong>rota (route)</strong> da sua conta. Pegue esse
-                valor no painel da Comtele — sem ele o envio é recusado.
+                A API de envio da Comtele exige a <strong>rota (route)</strong> da sua conta
+                (ex.: <strong>16</strong> para marketing ou <strong>17</strong> para prioritário/avisos).
+                Pegue esse valor no painel da Comtele — sem ele o envio é recusado.
               </small>
             </div>
           </>

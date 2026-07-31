@@ -1,0 +1,155 @@
+========================================================================================
+RESUMO DA SESSÃO DE DESENVOLVIMENTO — 30/07/2026
+Sistema de Advocacia (NovoJud) — Antônio Ferreira
+========================================================================================
+LEIA PRIMEIRO: este arquivo resume TUDO que foi feito hoje, para o Claude de outro
+computador continuar de onde paramos. O detalhamento técnico está nas memórias do
+projeto (pasta memory/), principalmente em sessao_30072026.md e comunicacoes.md.
+
+----------------------------------------------------------------------------------------
+ESTADO DO GIT / DEPLOY — CICLO TOTALMENTE FECHADO
+----------------------------------------------------------------------------------------
+- HEAD = origin/main = 58e78e1 ("300726-14.00.52"). As 5 manutenções de hoje foram
+  COMMITADAS e PUSHADAS (pelo .bat de deploy do usuário, ~14:00).
+- DEPLOY FEITO nas 2 instâncias AWS (Antônio e Erick): Node reiniciado + front buildado.
+- SQL dos e-mails RODADO nas 2 AWS. Tudo funcionando (confirmado: "tudo certo").
+- No fim do dia o usuário pediu para NÃO subir mais nada ao git (o push das manutenções
+  já tinha saído antes; o pedido vale para o trabalho de memória/resumo).
+- Único item no working tree: exclusão do RESUMO-SESSAO-29-07-2026-DEV.txt (limpeza).
+
+========================================================================================
+O QUE FIZEMOS HOJE (6 blocos: 1 análise + 5 manutenções)
+========================================================================================
+
+--- BLOCO 0: ANÁLISE DE CONCORRÊNCIA (AdvBox) ------------------------------------------
+- Comparei o site do AdvBox com o NovoJud, conferindo os módulos REAIS no código.
+- Gerei o arquivo RecursosConcorrencia.txt (na raiz) com 15 LACUNAS NUMERADAS que o
+  AdvBox tem e o NovoJud (ainda) não tem. Resumo:
+  * Impacto GRANDE (1-5): IA que lê intimação, agentes de IA p/ petições, workflow
+    automático por eventos, Business Intelligence, financeiro com cobrança (boleto/gateway).
+  * Impacto MÉDIO (6-12): Kanban, Taskscore/gamificação, timesheet, sync de agenda
+    (Google/Apple/Outlook), CRM de funil, API pública, monitor de andamentos.
+  * Menores (13-15): contingenciamento/provisão de risco, modo escuro, SMS automático.
+  (Nota: o item 15, SMS, foi justamente o que começamos a implementar hoje.)
+
+--- MANUTENÇÃO 1: E-MAILS EM MINÚSCULAS -----------------------------------------------
+- Problema: e-mail era salvo como digitado (ex.: "Williamoliveirahonorio@gmail.com").
+- Decisão do usuário: e-mail INTEIRO em minúsculas + corrigir os antigos.
+- Backend (cadastro): nos 4 pontos de gravação (criar/editar x PF/PJ) o e-mail é salvo
+  com .trim().toLowerCase().
+- Backend (documentos): as variáveis de e-mail dos documentos saem em minúsculas.
+- Frontend: o campo de e-mail já baixa para minúsculas enquanto digita.
+- SQL (rodado no LOCAL e nas 2 AWS): UPDATE em emails_pf e emails_pj passando LOWER,
+  só nas linhas que tinham maiúscula (comparação BINARY), dentro de transação.
+- Arquivos: pessoasController.js, variaveisResolver.js, Pessoas.js.
+
+--- MANUTENÇÃO 2: MÁSCARA DE CPF/CNPJ (SÓ NA EXIBIÇÃO) --------------------------------
+- Diagnóstico: no banco, CPF/CNPJ são guardados SÓ COM DÍGITOS (o backend tira a máscara
+  ao salvar). A LISTA já mostrava com máscara; faltava no FORMULÁRIO de edição e nos
+  DOCUMENTOS. IMPORTANTE: guardar só-dígitos é PROPOSITAL (busca, unificar duplicados e
+  a unicidade do CPF dependem disso) — NÃO mudar isso.
+- Correção: máscara só na EXIBIÇÃO. Formulário (CPF e CNPJ) agora mostra com máscara ao
+  abrir; documentos formatam CPF/CNPJ (helpers no variaveisResolver). SEM SQL.
+- Descoberta honesta: o histórico do git foi ZERADO em 10/06/2026, então NÃO dá para
+  provar "por que parou de funcionar" antes dessa data (não supor).
+- Arquivos: variaveisResolver.js, Pessoas.js.
+
+--- MANUTENÇÃO 3: MÁSCARA DE TELEFONE NA COLUNA DA LISTA (SÓ EXIBIÇÃO) -----------------
+- Só frontend. Novo formatarTelefone (em formatters.js) cobre fixo (8), celular (9),
+  com DDD (10/11) e com 55 na frente. Aplicado na coluna Telefone (serve PF e PJ).
+- "Copiar?" e WhatsApp continuam iguais (usam o número cru). Banco intacto. SEM SQL.
+- Arquivos: formatters.js, Pessoas.js.
+
+--- MANUTENÇÃO 4: TELA "DETALHES" (SÓ LEITURA) EM PESSOAS ------------------------------
+- Clicar no NOME (PF e PJ) abre o mesmo formulário TRAVADO (só ver), com botão "Editar"
+  que destrava. Padrão reusado do ModalEditarAudiencia (Audiências).
+- Trava CAMPO A CAMPO (o usuário escolheu esse jeito em vez de <fieldset disabled>, por
+  consistência com Audiências). CONSEQUÊNCIA IMPORTANTE (já gravada na memória
+  tela_somente_leitura.md): ao adicionar um CAMPO NOVO nesse formulário no futuro, o
+  campo PRECISA herdar a trava (somenteLeitura/disabled), senão fica editável no modo ver.
+- Ajuste visual pedido depois: o nome ficou SEM azul e SEM sublinhado (visual padrão),
+  mas continua clicável.
+- Só frontend. SEM SQL. Arquivo: Pessoas.js.
+
+--- MANUTENÇÃO 5: SMS (COMTELE) — FASE 1 (BÁSICO) — TESTADO, CHEGOU NO CELULAR ---------
+- Modelo escolhido: B (à la AASP). Cada escritório contrata a PRÓPRIA conta Comtele e
+  configura em Configurações -> Integrações -> SMS. O custo do SMS é da conta do cliente.
+- A API é a NOVA (V4, do "Painel Novo" da Comtele) — NÃO a antiga:
+  * Endpoint: POST https://api.comtele.com.br/messages/sms/send
+  * Autenticação: header x-api-key
+  * Número: 55 + DDD + número (ex.: 5511999999999)
+  * Sucesso: a resposta traz hasError:false
+- ROTA (route) é OBRIGATÓRIA e específica da conta. O suporte da Comtele confirmou os
+  valores: 16 = marketing (R$0,10) e 17 = prioritário/premium (R$0,12). Usamos 17 para
+  avisos jurídicos. Sem rota válida a Comtele recusa (erro "rota de envio inválida").
+- SEM tabela nova e SEM SQL: reusa configuracoes_integracoes (linha modulo='comtele',
+  guarda a chave e a rota), log_comunicacoes (registra o envio com canal='sms') e
+  permissoes (novo módulo "sms" na matriz de permissões — a ação "Cadastrar" = pode
+  enviar SMS; admin já tem tudo).
+- O botão "Enviar SMS" aparece no menu (3 pontinhos) das PESSOAS FÍSICAS, e SÓ aparece
+  se (a) a integração estiver ativa naquela instância E (b) o usuário tiver permissão.
+- Janela de envio: escolhe o telefone, escreve a mensagem (com contador de caracteres —
+  160 = 1 crédito), e pede CONFIRMAÇÃO antes de enviar (porque custa). Se o telefone não
+  tiver DDD, o envio é bloqueado com aviso.
+- STATUS: testado de ponta a ponta no LOCAL, o SMS CHEGOU no celular do usuário.
+- Na AWS: o código está deployado, mas o SMS fica DORMENTE em Antônio/Erick até cada um
+  configurar a própria conta Comtele. Só o ambiente de teste do usuário está configurado.
+- Arquivos: NOVO backend/src/services/smsService.js; alterados pessoasController.js,
+  configuracaoController.js (salvarIntegracao virou "upsert" p/ criar a linha de uma
+  integração nova sem SQL manual), routes/index.js, Configuracoes.js, Pessoas.js, api.js.
+
+========================================================================================
+PENDÊNCIAS FUTURAS (lista atualizada)
+========================================================================================
+SMS — EXTRAS aprovados pelo usuário, mas a fazer EM FASES (só o básico foi feito hoje):
+  1. Modelos de mensagem (com variáveis {{nome}}, {{data}}) — precisa tabela nova.
+  2. Opt-out / LGPD — precisa decidir: automático (responder "SAIR", exige SMS de mão
+     dupla/número dedicado) OU manual (marca "não enviar SMS" no cadastro). Precisa tabela.
+  3. Envio em lote (vários de uma vez).
+  4. Status de entrega (a Comtele avisa se entregou) — precisa webhook público + guardar
+     o status; depende de a Comtele suportar retorno (DLR).
+  5. Agendamento (programar SMS) — precisa tabela nova + cron.
+  6. Cota/limite diário de SMS (proteção contra custo/engano).
+  7. Encurtador de link (economiza caracteres) — precisa tabela + rota pública.
+  Decisões que ficaram em aberto p/ as fases 2/3: item 2 (opt-out automático x manual),
+  item 4 (confirmar se a Comtele manda o status de entrega), item 7 (fazer ou não).
+
+Outras pendências que já existiam (do roadmap):
+  - E-mail em Lote (Audiências): planejado, NÃO codado, aguarda 2 autorizações do usuário
+    (criar tabela modelo_corpo_email + onde cadastrar). Ver memória email_lote_audiencias.
+  - Audiências "Registrar Ata": fases 2 a 5.
+  - Financeiro multi-banco; capitalização/padronização global; hardening da AWS (pausado,
+    aguarda prints do usuário).
+  - Do levantamento AdvBox (RecursosConcorrencia.txt), 15 lacunas para eventual roadmap
+    (IA, workflow, BI, Kanban, timesheet, sync de agenda Google, CRM de funil, etc.).
+
+========================================================================================
+REGRAS DO USUÁRIO (reforçadas — valem SEMPRE)
+========================================================================================
+- NUNCA CODAR SEM AUTORIZAÇÃO: a cada pedido, primeiro EXPLICAR o que entendeu e ESPERAR
+  o "pode codar". Responder pergunta de escopo NÃO é autorização.
+- NUNCA SUPOR: analisar o código inteiro (front + back + banco) e ter certeza; se não der
+  para confirmar, dizer "não tenho certeza, preciso confirmar" e esperar.
+- TODOS OS NOMES DE TABELAS DO BANCO EM LETRAS MINÚSCULAS — no banco E no código. Regra
+  eterna, sem exceção.
+- Nenhuma exclusão pode deixar órfãos no banco; tratar as amarrações (FKs) antes de apagar.
+- Transações SEMPRE com BEGIN/COMMIT/ROLLBACK. MySQL sem middleware (SQL à mão).
+- Corrigir o usuário se um pedido dele prejudicar outra rotina do sistema (ele pode ter
+  esquecido) — analisar efeitos colaterais antes.
+- SQL é MULTI-INSTÂNCIA: testar no LOCAL e depois rodar em TODAS as AWS.
+- "Build não é teste": antes de mexer, verificar que não quebra front/back/banco. O
+  usuário testa APENAS a manutenção em foco — o resto é responsabilidade do Claude conferir.
+- Só subir no git com autorização explícita. Não mandar trechos de código no chat (o
+  usuário é leigo).
+
+========================================================================================
+NOTA SOBRE MEMÓRIA E SINCRONIZAÇÃO
+========================================================================================
+- As memórias do projeto ficam em: (pasta do usuário)\.claude\projects\
+  C--Users-Claudio-Downloads-ProjetoAdvClaude\memory\
+- Essa pasta É a fonte única (a "memória interna" do Claude e a "pasta memory do projeto"
+  são o MESMO lugar aqui — não há duas cópias para divergir). O índice é o MEMORY.md.
+- Arquivos de memória tocados hoje: MEMORY.md (índice), sessao_30072026.md (NOVO),
+  comunicacoes.md (bloco SMS), tela_somente_leitura.md (NOVO), sessao_29072026.md
+  (ajuste de "ciclo fechado").
+========================================================================================

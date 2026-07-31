@@ -1,0 +1,139 @@
+========================================================================================
+RESUMO DA SESSÃO DE DESENVOLVIMENTO — 31/07/2026
+Sistema de Advocacia (NovoJud) — Antônio Ferreira
+========================================================================================
+LEIA PRIMEIRO: este arquivo resume TUDO que foi feito hoje, para o Claude de outro
+computador continuar de onde paramos. O detalhamento técnico está nas memórias do
+projeto (pasta memory/), principalmente em sessao_31072026.md, processos_pastas.md,
+cadastro_pessoas.md e comunicacoes.md.
+
+----------------------------------------------------------------------------------------
+ESTADO DO GIT / DEPLOY — NADA SUBIDO (por decisão do usuário)
+----------------------------------------------------------------------------------------
+- HEAD = origin/main = 58e78e1 ("300726-14.00.52") — INALTERADO. Nada foi commitado nem
+  pushado nesta sessão. O usuário pediu explicitamente para NÃO subir no git hoje.
+- Tudo foi feito LOCALMENTE. NENHUM script SQL. NENHUMA mudança de backend. NENHUMA
+  tabela nova. As duas features de hoje são 100% front e reusam rotas/tabelas existentes.
+- Arquivos alterados (LOCAIS, não commitados):
+    * frontend/src/pages/Processos/Processos.js      (Feature 1)
+    * frontend/src/pages/Pessoas/Pessoas.js          (Feature 2 — só 8 "export" novos)
+    * frontend/src/pages/Processos/PastaDetalhe.js    (Features 2, 3 e 4)
+    * frontend/src/pages/Configuracoes/Configuracoes.js  (⚠️ pré-existente de sessão
+      anterior — só texto de ajuda do campo "rota" do SMS; continua não commitado)
+- "Build não é teste": rodei o build (Vite) após cada mudança — compila sem erros. O
+  usuário testa a manutenção em foco; a análise de não-quebrar o resto é responsabilidade
+  do Claude (feita: front + back + banco).
+
+========================================================================================
+O QUE FIZEMOS HOJE (2 features + 2 ajustes visuais)
+========================================================================================
+
+--- FEATURE 1: CADASTRO RÁPIDO DE PARTES no cadastro de processo (botão "…") -----------
+- Necessidade: nos campos Autor / Réu / Perito do "Novo Processo", cadastrar uma pessoa
+  nova na hora (Física OU Jurídica CONFORME o seletor do campo), quando ela ainda não
+  existe — sem sair da tela do processo.
+- Decisões do usuário: (a) mini-formulário RÁPIDO (não o cadastro completo de Pessoas);
+  (b) o botão vale nos 3 campos (Autor, Réu e Perito).
+- O que foi feito (Processos.js):
+    * Botão "…" (mesmo estilo dos "…" de Tipo/Status/Fórum) ao lado de cada busca, nos
+      DOIS modais: "Novo Processo" E "Editar Processo". Como a tela da Pasta reusa esses
+      dois modais, o botão aparece também no "+ Novo Processo (mesma pasta)" e na edição —
+      SEM duplicar código.
+    * Nova janelinha "ModalCadastroRapidoParte" que respeita o tipo escolhido:
+        - Física:   Nome completo* + CPF
+        - Jurídica: Razão social*  + CNPJ
+      CPF/CNPJ são OPCIONAIS (validados só se preenchidos) — igual ao cadastro atual e à
+      trava de duplicidade do banco. Nome/Razão saem em "Title Case" (padrão do sistema).
+    * Salva pela MESMA rota e transação do cadastro normal (criar física / criar
+      jurídica; o backend já usa transação). A pessoa criada já entra como parte na hora.
+- Sem SQL, sem backend, sem tabela nova.
+
+--- FEATURE 2: PAINEL "PARTES DO PROCESSO" na tela da Pasta ----------------------------
+- Necessidade: enquanto olha o processo, consultar o cadastro das partes e ter à mão:
+  copiar telefone/e-mail e enviar e-mail / WhatsApp / SMS — de forma fácil.
+- Decisão do usuário sobre o local: painel FIXO no topo (não aba nova, não nome clicável).
+- O que foi feito (PastaDetalhe.js):
+    * Painel "Partes do processo" logo abaixo do título, listando Autores, Réus e Peritos
+      ÚNICOS da pasta (sem repetir a mesma pessoa; junta todos os processos da pasta).
+    * Cada parte tem um menu "⋮" com: Ver cadastro (ficha em modo leitura, com botão
+      Editar), Copiar telefone, Copiar e-mail, Enviar e-mail, Enviar WhatsApp, e Enviar
+      SMS (SMS só para Pessoa Física, e só se a integração Comtele estiver ativa e o
+      usuário tiver permissão — mesma regra da tela de Pessoas).
+    * Os contatos (telefone/e-mail) são buscados SÓ NA HORA DO CLIQUE (a tela da pasta só
+      traz os nomes das partes). Assim não pesa o carregamento.
+- Como foi reaproveitado SEM duplicar (o usuário autorizou):
+    * As janelas já existiam na tela de Pessoas. A única mudança lá foi marcar 8 itens
+      como "exportáveis" (só a palavra "export", SEM mudar o comportamento). A tela de
+      Pessoas continua idêntica. É o mesmo padrão que a tela da Pasta já usa (ela reusa
+      janelas de Prazos, Tarefas, Audiências, Perícias, Financeiro e Processos).
+
+--- AJUSTE 3: PAINEL COLAPSÁVEL --------------------------------------------------------
+- O painel "Partes do processo" começa ENCOLHIDO (fechado), para processos com muita
+  gente não ocuparem a tela. O cabeçalho é clicável (seta ▶ fechado / ▼ aberto) e mostra
+  a contagem, ex.: "Partes do processo (2)". Clica para abrir/fechar.
+
+--- AJUSTE 4: REALCE (HOVER) DAS LINHAS ------------------------------------------------
+- Cada linha de parte realça ao passar o mouse. O usuário pediu para ficar IGUAL à
+  tabela de baixo, então usei a MESMA cor da tabela (azul-claro #aec6e4).
+
+========================================================================================
+VERIFICAÇÃO DE EFEITOS COLATERAIS (o que confirmei para não quebrar nada)
+========================================================================================
+- Banco/backend: NADA foi tocado. Sem SQL, sem rota nova. Só endpoints já existentes.
+- Tela de Pessoas: intacta (só ganhou "export" em 8 itens).
+- SMS: respeita tipo (só Física) + integração ativa + permissão, igual em Pessoas.
+- WhatsApp / cópia: usam o número cru e registram o log, como já era.
+- Dedup de parte por pessoa + tipo (a mesma pessoa não entra duas vezes).
+- Build (Vite) compila sem erros em todas as etapas.
+
+========================================================================================
+PENDÊNCIAS FUTURAS (nada do roadmap foi fechado hoje)
+========================================================================================
+- Deploy quando o usuário quiser: front → build + Ctrl+F5 (backend não mudou).
+  Git → subir quando autorizar (nada desta sessão foi commitado).
+- SMS — EXTRAS aprovados, a fazer EM FASES (só o básico existe): (1) modelos de mensagem
+  com variáveis; (2) opt-out/LGPD (automático x manual — precisa decidir + tabela);
+  (3) envio em lote; (4) status de entrega (DLR/webhook público); (5) agendamento
+  (tabela + cron); (6) cota/limite diário; (7) encurtador de link.
+- Audiências "Registrar Ata": faltam as Fases 2 a 5 (próxima = Fase 2, Prazos + Tarefas
+  na ata; o backend já aceita). Ver PENDENCIAS.txt.
+- E-mail em Lote (Audiências): planejado, NÃO codado, aguarda 2 autorizações (criar
+  tabela modelo_corpo_email + onde cadastrar).
+- Financeiro multi-banco; capitalização/padronização global; hardening da AWS (pausado,
+  aguarda prints); renovar senha de app do Gmail; agenda Google; "ver todos" na agenda;
+  horário/temporizador em tarefas; andamento por processo.
+- Levantamento de concorrência (RecursosConcorrencia.txt): 15 lacunas vs AdvBox para
+  eventual roadmap (IA que lê intimação, workflow, BI, Kanban, timesheet, sync de agenda,
+  CRM de funil, etc.).
+
+========================================================================================
+REGRAS DO USUÁRIO (reforçadas hoje — valem SEMPRE, "memória eterna e definitiva")
+========================================================================================
+- NUNCA CODAR SEM AUTORIZAÇÃO: a cada pedido, primeiro EXPLICAR o que entendeu e ESPERAR
+  o "pode codar". Responder pergunta de escopo NÃO é autorização.
+- NUNCA SUPOR: analisar o código inteiro (front + back + banco) e ter certeza; se não der
+  para confirmar, dizer "não tenho certeza, preciso confirmar" e esperar.
+- TODOS OS NOMES DE TABELAS DO BANCO EM LETRAS MINÚSCULAS — no banco E no código. Regra
+  eterna, sem exceção.
+- Nenhuma exclusão pode deixar órfãos no banco; tratar as amarrações (FKs) antes de apagar.
+- Transações SEMPRE com BEGIN/COMMIT/ROLLBACK. MySQL sem middleware (SQL à mão).
+- Corrigir o usuário se um pedido dele prejudicar outra rotina do sistema (ele pode ter
+  esquecido) — analisar efeitos colaterais antes.
+- SQL é MULTI-INSTÂNCIA: testar no LOCAL e depois rodar em TODAS as AWS (sistema idêntico).
+- "Build não é teste": antes de mexer, verificar que não quebra front/back/banco. O
+  usuário testa APENAS a manutenção em foco.
+- Só subir no git com autorização explícita. Não mandar trechos de código no chat (o
+  usuário é leigo).
+
+========================================================================================
+NOTA SOBRE MEMÓRIA E SINCRONIZAÇÃO (feito nesta sessão)
+========================================================================================
+- DESCOBERTA: as DUAS pastas de memória tinham DIVERGIDO:
+    * Interna: ...\.claude\projects\C--Users-Claudio-Downloads-ProjetoAdvClaude\memory\
+    * Projeto: ...\Downloads\ProjetoAdvClaude\memory\
+  A interna estava mais nova (tinha sessao_30072026.md e tela_somente_leitura.md, que
+  faltavam na do projeto). Escrevi o trabalho de hoje na interna e SINCRONIZEI interna →
+  projeto: as duas estão agora IDÊNTICAS (49 arquivos cada), índice MEMORY.md incluso.
+- Arquivos de memória tocados hoje: MEMORY.md (índice), sessao_31072026.md (NOVO),
+  processos_pastas.md, cadastro_pessoas.md, comunicacoes.md, feedback_codigo.md.
+========================================================================================
