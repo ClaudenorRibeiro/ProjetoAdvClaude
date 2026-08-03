@@ -568,7 +568,7 @@ function ModalProcessosDaPessoa({ pessoa, tipo, onFechar }) {
 // Editar/excluir: usuário comum só a PRÓPRIA anotação e só de hoje; admin qualquer uma.
 // O backend é a autoridade da regra — aqui só escondemos botões e confirmamos ações.
 // ============================================================
-function ModalAnotacoes({ pessoa, tipo, onFechar }) {
+export function ModalAnotacoes({ pessoa, tipo, onFechar }) {
   const { usuario, ehAdmin } = useAuth();
   const [lista, setLista]           = useState([]);
   const [carregando, setCarregando] = useState(true);

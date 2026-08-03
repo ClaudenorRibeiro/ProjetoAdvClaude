@@ -9,7 +9,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { processosAPI, andamentoAPI, prazosAPI, tarefasAPI, audienciasAPI, periciasAPI, financeiroAPI, pessoasAPI } from '../../services/api';
 import { formatarData, formatarNumeroPasta, formatarMoeda, labelStatusPrazo, corPrazo, toTitleCase } from '../../utils/formatters';
 // Janelas de contato/ficha reutilizadas da tela de Pessoas (painel "Partes do processo")
-import { ModalPessoa, ModalEnviarEmail, ModalEnviarSMS, ModalEscolherWhatsapp, ModalCopiarTelefone, ModalCopiarEmail, soNumeroLocal, copiarParaAreaTransferencia } from '../Pessoas/Pessoas';
+import { ModalPessoa, ModalEnviarEmail, ModalEnviarSMS, ModalEscolherWhatsapp, ModalCopiarTelefone, ModalCopiarEmail, ModalAnotacoes, soNumeroLocal, copiarParaAreaTransferencia } from '../Pessoas/Pessoas';
 import { linkWhatsApp } from '../../utils/whatsapp';
 import { ModalNovoProcesso, ModalEditarProcesso } from './Processos';
 import { ModalNovoPrazo, ModalCancelarPrazo, ModalEditarPrazo } from '../Prazos/Prazos';
@@ -1521,6 +1521,7 @@ function ItemParteContato({ parte, smsAtivo, onReload }) {
   const pessoaObj = { id: parte.pessoa_id, nome: parte.nome, razao_social: parte.nome };
 
   const [verCadastro, setVerCadastro] = useState(false);
+  const [anotacoes, setAnotacoes]     = useState(false); // Anotações de atendimento da pessoa
   const [enviarEmail, setEnviarEmail] = useState(null); // { emails }
   const [enviarSms, setEnviarSms]     = useState(null); // { telefones }
   const [escolherZap, setEscolherZap] = useState(null); // { telefones }
@@ -1593,6 +1594,7 @@ function ItemParteContato({ parte, smsAtivo, onReload }) {
       <span style={{ flex: 1, fontSize: '14px', color: '#1e2a3a' }}>{parte.nome}</span>
       <MenuAcoes itens={[
         { label: 'Ver cadastro',    icone: '👁️', onClick: () => setVerCadastro(true) },
+        { label: 'Anotações de atendimento', icone: '📝', onClick: () => setAnotacoes(true) },
         { label: 'Copiar telefone', icone: '📋', onClick: acaoCopiarTel },
         { label: 'Copiar e-mail',   icone: '📋', onClick: acaoCopiarEmail },
         { label: 'Enviar e-mail',   icone: '✉️', onClick: acaoEmail },
@@ -1606,6 +1608,10 @@ function ItemParteContato({ parte, smsAtivo, onReload }) {
         <ModalPessoa tipo={tipoAba} pessoa={pessoaObj} somenteLeitura
           onAbrirEdicao={() => {}}
           onFechar={() => { setVerCadastro(false); onReload && onReload(); }} />
+      )}
+      {anotacoes && (
+        <ModalAnotacoes pessoa={pessoaObj} tipo={tipoAba}
+          onFechar={() => setAnotacoes(false)} />
       )}
       {enviarEmail && (
         <ModalEnviarEmail pessoa={pessoaObj} emails={enviarEmail.emails} tipo={tipoAba}

@@ -21,6 +21,31 @@ function tipoTarefa(t) {
   return 'rotina';
 }
 
+// Data (YYYY-MM-DD) de hoje + N dias, em horário LOCAL — evita o off-by-one do toISOString (UTC).
+function dataMaisDias(dias) {
+  const d = new Date();
+  d.setDate(d.getDate() + dias);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Botões de período rápido: teto de vencimento em hoje + N dias (as atrasadas e as sem data entram junto).
+const PERIODOS = [
+  { chave: 'hoje', label: 'Hoje',    dias: 0 },
+  { chave: '7',    label: '7 dias',  dias: 7 },
+  { chave: '30',   label: '30 dias', dias: 30 },
+];
+
+// Estado inicial/limpo dos filtros: padrão da tela (Pendentes, Todas, usuário logado) + período "7 dias" aceso.
+function filtrosPadrao(usuarioId) {
+  return {
+    concluida: '0', prioridade: '', atrasadas: '',
+    usuario_id: usuarioId || '',
+    numero_processo: '',
+    data_de: '', data_ate: dataMaisDias(7), incluir_sem_data: '1',
+    pagina: 1,
+  };
+}
+
 export default function Tarefas() {
   const { temPermissao, ehAdmin, usuario } = useAuth();
   // Só admin/super OU quem tem a permissão tarefas.ver_todos enxerga o filtro "Para" (responsável).
@@ -32,7 +57,7 @@ export default function Tarefas() {
   // atrasadas: '1' mostra só as pendentes já vencidas (atalho); quando ativo, concluida fica '' (o backend cuida).
   // usuario_id: filtro "Para" — começa no usuário logado (vê as dele + as do escritório); '' = Todos.
   // numero_processo: trecho do nº do processo (a partir de 3 dígitos). data_de / data_ate: intervalo de vencimento.
-  const [filtros, setFiltros]         = useState({ concluida: '0', prioridade: '', atrasadas: '', usuario_id: usuario?.id || '', numero_processo: '', data_de: '', data_ate: '', pagina: 1 });
+  const [filtros, setFiltros]         = useState(() => filtrosPadrao(usuario?.id));
   const [numeroInput, setNumeroInput] = useState(''); // valor cru do campo Número do Processo (debounced p/ filtros)
   const [usuarios, setUsuarios]       = useState([]); // lista para o dropdown "Para" (só carrega p/ quem vê todos)
   const [carregando, setCarregando]   = useState(false);
@@ -116,6 +141,22 @@ export default function Tarefas() {
     setFiltros(f => ({ ...f, [k]: v, ...(k !== 'pagina' ? { pagina: 1 } : {}) }));
   }
 
+  // Botão de período rápido: teto = hoje + N dias, sem piso (atrasadas entram), e incluir_sem_data liga as sem-data.
+  function aplicarPeriodo(dias) {
+    setFiltros(f => ({ ...f, data_de: '', data_ate: dataMaisDias(dias), incluir_sem_data: '1', pagina: 1 }));
+  }
+
+  // Edição manual dos campos "Vencimento de / Até": vira um intervalo EXATO — desliga o período rápido
+  // (nenhum botão fica aceso) e para de incluir as tarefas sem data.
+  function setDataManual(k, v) {
+    setFiltros(f => ({ ...f, [k]: v, incluir_sem_data: '', pagina: 1 }));
+  }
+
+  // Qual botão de período está aceso (derivado do estado — sem estado redundante).
+  const periodoAtivo = filtros.incluir_sem_data === '1' && filtros.data_de === ''
+    ? (PERIODOS.find(p => filtros.data_ate === dataMaisDias(p.dias))?.chave || null)
+    : null;
+
   // Renderiza o vínculo da tarefa na coluna — com hiperlink se for pasta ou processo
   function renderVinculo(t) {
     const tipo = tipoTarefa(t);
@@ -191,14 +232,14 @@ export default function Tarefas() {
           </div>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Vencimento de</label>
-            <input type="date" className="form-control" value={filtros.data_de} onChange={e => setFiltro('data_de', e.target.value)} />
+            <input type="date" className="form-control" value={filtros.data_de} onChange={e => setDataManual('data_de', e.target.value)} />
           </div>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Até</label>
-            <input type="date" className="form-control" value={filtros.data_ate} onChange={e => setFiltro('data_ate', e.target.value)} />
+            <input type="date" className="form-control" value={filtros.data_ate} onChange={e => setDataManual('data_ate', e.target.value)} />
           </div>
           <button className="btn btn-secondary" style={{ marginBottom: '1px' }}
-            onClick={() => { setNumeroInput(''); setFiltros({ concluida: '0', prioridade: '', atrasadas: '', usuario_id: usuario?.id || '', numero_processo: '', data_de: '', data_ate: '', pagina: 1 }); }}>
+            onClick={() => { setNumeroInput(''); setFiltros(filtrosPadrao(usuario?.id)); }}>
             ✕ Limpar filtros
           </button>
           {temPermissao('tarefas', 'cadastrar') && (
@@ -210,6 +251,19 @@ export default function Tarefas() {
           <span style={{ marginLeft: 'auto', color: '#888', fontSize: '13px', marginBottom: '1px' }}>
             {total} tarefa(s)
           </span>
+        </div>
+
+        {/* Período rápido: sempre inclui as atrasadas e as sem data; muda só o teto de vencimento (hoje/hoje+7/hoje+30). */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '12px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 500 }}>Período rápido:</span>
+          {PERIODOS.map(p => (
+            <button key={p.chave} type="button"
+              className={`btn ${periodoAtivo === p.chave ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ padding: '6px 16px', fontSize: '13px' }}
+              onClick={() => aplicarPeriodo(p.dias)}>
+              {p.label}
+            </button>
+          ))}
         </div>
       </div>
 

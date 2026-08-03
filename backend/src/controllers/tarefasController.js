@@ -10,7 +10,7 @@ const { bloqueiaAgendarPassado } = require('../utils/helpers');
 // GET /api/tarefas — Lista tarefas com filtros
 async function listar(req, res) {
   try {
-    const { usuario_id, concluida, prioridade, processo_id, atrasadas, numero_processo, data_de, data_ate, pagina = 1, limite = 30 } = req.query;
+    const { usuario_id, concluida, prioridade, processo_id, atrasadas, numero_processo, data_de, data_ate, incluir_sem_data, pagina = 1, limite = 30 } = req.query;
     const params = [];
     let where = 'WHERE 1=1';
 
@@ -44,9 +44,17 @@ async function listar(req, res) {
       }
     }
 
-    // Intervalo de vencimento (de / até)
+    // Intervalo de vencimento (de / até).
+    // incluir_sem_data='1' (usado pelos botões de período rápido "Hoje/7 dias/30 dias" da tela de Tarefas):
+    // além do teto de data, também deixa passar as tarefas SEM vencimento (data_vencimento NULL), para elas
+    // aparecerem junto. Os demais consumidores (Relatórios, Pasta, Agenda) não enviam este parâmetro, então
+    // mantêm exatamente o filtro estrito de antes.
+    const incluirSemData = incluir_sem_data === '1' || incluir_sem_data === 'true' || incluir_sem_data === true;
     if (data_de)  { where += ' AND t.data_vencimento >= ?'; params.push(data_de); }
-    if (data_ate) { where += ' AND t.data_vencimento <= ?'; params.push(data_ate); }
+    if (data_ate) {
+      if (incluirSemData) { where += ' AND (t.data_vencimento <= ? OR t.data_vencimento IS NULL)'; params.push(data_ate); }
+      else                { where += ' AND t.data_vencimento <= ?'; params.push(data_ate); }
+    }
 
     // Filtra por usuário respeitando a permissão 'tarefas.ver_todos > visualizar'.
     // podeVerTodos: admin/super (nível <= 1) OU usuário comum com a permissão explícita.
