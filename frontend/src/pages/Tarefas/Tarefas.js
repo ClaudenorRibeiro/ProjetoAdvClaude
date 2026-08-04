@@ -10,6 +10,7 @@ import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import MenuAcoes from '../../components/MenuAcoes';
+import ModalLerPublicacao from '../../components/ModalLerPublicacao';
 
 const PRIORIDADE_COR = { urgente: 'badge-vermelho', normal: 'badge-laranja', baixa: 'badge-verde' };
 const LIMITE = 100;
@@ -65,6 +66,7 @@ export default function Tarefas() {
   const [editando, setEditando]       = useState(null);
   const [confirmar, setConfirmar]     = useState(null);
   const [tarefaHistorico, setTarefaHistorico] = useState(null);
+  const [tarefaVerPub, setTarefaVerPub]       = useState(null); // publicacao_id p/ ler a publicação de origem
   const location = useLocation();
   const [novaData, setNovaData] = useState(''); // data pré-preenchida vinda da Agenda (deep-link)
 
@@ -320,6 +322,9 @@ export default function Tarefas() {
                         { label: 'Histórico', icone: '📋',
                           oculto: !temPermissao('tarefas','historico'),
                           onClick: () => setTarefaHistorico(t) },
+                        { label: 'Ver publicação de origem', icone: '📄',
+                          oculto: !t.publicacao_id || !temPermissao('publicacoes','visualizar'),
+                          onClick: () => setTarefaVerPub(t.publicacao_id) },
                         { label: 'Excluir', icone: '🗑️', perigo: true,
                           oculto: !temPermissao('tarefas','excluir'),
                           onClick: () => confirmarExcluir(t) },
@@ -357,6 +362,7 @@ export default function Tarefas() {
 
       {confirmar && <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(null)} />}
       {tarefaHistorico && <ModalHistoricoTarefa tarefa={tarefaHistorico} onFechar={() => setTarefaHistorico(null)} />}
+      {tarefaVerPub    && <ModalLerPublicacao publicacaoId={tarefaVerPub} onFechar={() => setTarefaVerPub(null)} />}
 
       {modalAberto && (
         <ModalTarefa
@@ -373,8 +379,10 @@ export default function Tarefas() {
 // MODAL HISTÓRICO DE TAREFA — Linha do tempo de eventos
 // ============================================================
 export function ModalHistoricoTarefa({ tarefa, onFechar }) {
+  const { temPermissao } = useAuth();
   const [historico, setHistorico] = useState(null);
   const [carregando, setCarregando] = useState(true);
+  const [verPub, setVerPub] = useState(false); // ler a publicação de origem
 
   useEffect(() => {
     tarefasAPI.historico(tarefa.id)
@@ -398,6 +406,7 @@ export function ModalHistoricoTarefa({ tarefa, onFechar }) {
   }
 
   return (
+    <>
     <div className="modal-overlay">
       <div className="modal-box modal-grande">
         <div className="modal-header">
@@ -456,10 +465,15 @@ export function ModalHistoricoTarefa({ tarefa, onFechar }) {
           )}
         </div>
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onFechar}>Fechar</button>
+          {tarefa.publicacao_id && temPermissao('publicacoes','visualizar') && (
+            <button className="btn btn-outline" onClick={() => setVerPub(true)}>📄 Ver publicação de origem</button>
+          )}
+          <button className="btn btn-secondary" style={{ marginLeft: 'auto' }} onClick={onFechar}>Fechar</button>
         </div>
       </div>
     </div>
+    {verPub && <ModalLerPublicacao publicacaoId={tarefa.publicacao_id} onFechar={() => setVerPub(false)} />}
+    </>
   );
 }
 
@@ -468,7 +482,7 @@ export function ModalHistoricoTarefa({ tarefa, onFechar }) {
 // preSelecao: { tipo, processo_id, processo_numero }
 //   usado quando aberto a partir do PastaDetalhe
 // ============================================================
-export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial }) {
+export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publicacaoId }) {
   // Deduz tipo inicial: tarefa existente → preSelecao → 'rotina'
   // Obs: tipo 'pasta' foi removido da UI — tarefas antigas com pasta_id continuam exibidas
   //      corretamente na listagem, mas não é mais possível criar/editar com esse vínculo
@@ -488,6 +502,7 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial }) {
   const [salvando, setSalvando]   = useState(false);
   const [usuarios, setUsuarios]   = useState([]);
   const [confirmarData, setConfirmarData] = useState(false); // confirmação do admin p/ data passada
+  const [aviso, setAviso] = useState(''); // faixa de aviso DENTRO do modal (nunca toast do canto)
   const { ehAdmin } = useAuth();
 
   // Busca de processo (CNJ) — inicializa com pré-seleção se vier do PastaDetalhe
@@ -495,42 +510,71 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial }) {
   const [sugestoesProc, setSugestoesProc]     = useState([]);
   const [processosDaPasta, setProcessosDaPasta] = useState([]);
   const [pastaSelecionada, setPastaSelecionada] = useState(null);
+  const [naoCadastrado, setNaoCadastrado]       = useState(false); // pesquisou o número e não achou pasta
 
   useEffect(() => {
     processosAPI.auxiliares().then(r => setUsuarios(r.data.dados.usuarios || []));
+    // Vindo de uma publicação (número no ar, mas ainda sem processo escolhido): já dispara a
+    // busca da pasta para o usuário escolher. Não afeta o uso da PastaDetalhe (que já vem com
+    // processo_id) nem o botão "Nova Tarefa" (sem preSelecao).
+    if (preSelecao?.processo_numero && !form.processo_id) preselecionarProcesso(preSelecao.processo_numero);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
-  // Muda o tipo e limpa os vínculos anteriores
+  // Muda o tipo e limpa os vínculos anteriores. Se voltar para "Processo" trazendo um
+  // número da publicação, RESTAURA esse número (fica disponível p/ aceitar ou trocar) e
+  // já tenta reselecionar; nos demais casos, limpa (comportamento normal).
   function mudarTipo(novoTipo) {
     setTipo(novoTipo);
     set('processo_id', null);
-    setBuscaProc('');
     setSugestoesProc([]);
     setProcessosDaPasta([]);
     setPastaSelecionada(null);
+    setNaoCadastrado(false);
+    const seed = preSelecao?.processo_numero || '';
+    if (novoTipo === 'processo' && seed) {
+      setBuscaProc(seed);
+      preselecionarProcesso(seed);
+    } else {
+      setBuscaProc('');
+    }
   }
 
   // ── Busca de PROCESSO (por CNJ) ───────────────────────────────────────────
 
   async function buscarProcessos(termo) {
     const semMask = termo.replace(/\D/g, '');
-    if (semMask.length < 3 && termo.length < 3) return setSugestoesProc([]);
+    if (semMask.length < 3 && termo.length < 3) { setSugestoesProc([]); setNaoCadastrado(false); return; }
     try {
       const { data } = await processosAPI.listarPastas({ busca: termo, limite: 8 });
-      if (data.ok) setSugestoesProc(data.dados.registros);
+      if (data.ok) { const regs = data.dados.registros || []; setSugestoesProc(regs); setNaoCadastrado(regs.length === 0); }
     } catch {}
   }
 
-  async function selecionarPastaParaProcesso(pasta) {
+  // Vindo de publicação: pesquisa a pasta pelo número; se achar UMA só, já seleciona
+  // (resolvendo o processo). Se achar várias, mostra as sugestões para o usuário escolher.
+  async function preselecionarProcesso(termo) {
+    if (!termo) return;
+    try {
+      const { data } = await processosAPI.listarPastas({ busca: termo, limite: 8 });
+      if (!data.ok) return;
+      const regs = data.dados.registros || [];
+      if (regs.length === 1) { await selecionarPastaParaProcesso(regs[0], termo); }
+      else                   { setSugestoesProc(regs); setNaoCadastrado(regs.length === 0); }
+    } catch {}
+  }
+
+  async function selecionarPastaParaProcesso(pasta, numeroBusca) {
     setSugestoesProc([]);
+    setNaoCadastrado(false);
     setPastaSelecionada(pasta);
     try {
       const { data } = await processosAPI.buscarPasta(pasta.id);
       if (data.ok) {
         const procs = data.dados.processos || [];
-        const cnj   = buscaProc.replace(/\D/g, '');
+        const cnj   = (numeroBusca != null ? numeroBusca : buscaProc).replace(/\D/g, '');
         const match = procs.find(p => p.numProc?.replace(/\D/g, '') === cnj);
 
         if (match) {
@@ -556,6 +600,7 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial }) {
     set('processo_id', proc.id);
     setProcessosDaPasta([]);
     setPastaSelecionada(null);
+    setNaoCadastrado(false);
   }
 
   // ── Salvar ────────────────────────────────────────────────────────────────
@@ -575,27 +620,29 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial }) {
         await tarefasAPI.atualizar(tarefa.id, payload);
         toast.success('Tarefa atualizada!');
       } else {
-        await tarefasAPI.criar(payload);
+        // Vínculo de origem (quando a tarefa nasce de uma publicação). Só na criação.
+        await tarefasAPI.criar({ ...payload, publicacao_id: publicacaoId || null });
         toast.success('Tarefa criada!');
       }
       onFechar(true);
     } catch (err) {
-      toast.error(err.response?.data?.mensagem || 'Erro ao salvar');
+      setAviso(err.response?.data?.mensagem || 'Não foi possível salvar a tarefa.');
     } finally {
       setSalvando(false);
     }
   }
 
   function salvar() {
-    if (!form.titulo?.trim())                     return toast.error('Título é obrigatório');
-    if (tipo === 'processo' && !form.processo_id) return toast.error('Selecione o processo');
+    if (!form.titulo?.trim())                     return setAviso('Informe o título da tarefa.');
+    if (tipo === 'processo' && !form.processo_id) return setAviso('Selecione o processo.');
     // Vencimento anterior a hoje: usuário comum é bloqueado; admin confirma. (Tarefa sem data não entra aqui.)
     const h = new Date();
     const hojeStr = `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}-${String(h.getDate()).padStart(2, '0')}`;
     if (form.data_vencimento && form.data_vencimento < hojeStr) {
-      if (!ehAdmin) return toast.error('Apenas o administrador pode agendar tarefa com data anterior a hoje. Escolha uma data a partir de hoje.');
+      if (!ehAdmin) return setAviso('Apenas o administrador pode agendar tarefa com data anterior a hoje. Escolha uma data a partir de hoje.');
       return setConfirmarData(true);
     }
+    setAviso('');
     executarSalvar();
   }
 
@@ -608,6 +655,12 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial }) {
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
         </div>
         <div className="modal-body">
+          {aviso && (
+            <div style={{ background:'#fff4e5', border:'1px solid #ffcf99', color:'#8a5300',
+              padding:'8px 12px', borderRadius:'6px', fontSize:'13px', marginBottom:'12px' }}>
+              {aviso}
+            </div>
+          )}
 
           {/* ── Seleção de tipo ── */}
           <div className="form-group">
@@ -638,6 +691,13 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial }) {
           {tipo === 'processo' && (
             <div className="form-group" style={{ position: 'relative' }}>
               <label className="form-label">Processo *</label>
+              {naoCadastrado && !form.processo_id && (
+                <span style={{ display: 'inline-block', background: '#fef2f2', border: '1px solid #fecaca',
+                  color: '#b91c1c', fontWeight: 700, fontSize: '12px', padding: '4px 10px',
+                  borderRadius: '6px', marginBottom: '6px' }}>
+                  ⚠️ PROCESSO NÃO CADASTRADO
+                </span>
+              )}
               <input className="form-control"
                 placeholder="0000000-00.0000.0.00.0000"
                 value={buscaProc} maxLength={25}

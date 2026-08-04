@@ -8,6 +8,7 @@ import { formatarData, labelStatusPrazo, corPrazo, toTitleCase } from '../../uti
 import { toast } from 'react-toastify';
 import MenuAcoes from '../../components/MenuAcoes';
 import { useAuth } from '../../context/AuthContext';
+import ModalLerPublicacao from '../../components/ModalLerPublicacao';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
 
@@ -60,6 +61,7 @@ export default function Prazos() {
   const [prazoEditando, setPrazoEditando]   = useState(null);
   const [prazoCancelando, setPrazoCancelando]   = useState(null);
   const [prazoHistorico, setPrazoHistorico]     = useState(null); // prazo selecionado para ver histórico
+  const [prazoVerPub, setPrazoVerPub]           = useState(null); // publicacao_id p/ ler a publicação de origem
   const [confirmar, setConfirmar]               = useState(null);
 
   const LIMITE = 100;
@@ -279,6 +281,9 @@ export default function Prazos() {
                         { label: 'Histórico', icone: '📋',
                           oculto: !temPermissao('prazos','historico'),
                           onClick: () => setPrazoHistorico(p) },
+                        { label: 'Ver publicação de origem', icone: '📄',
+                          oculto: !p.publicacao_id || !temPermissao('publicacoes','visualizar'),
+                          onClick: () => setPrazoVerPub(p.publicacao_id) },
                         { label: 'Excluir', icone: '🗑️', perigo: true,
                           oculto: !(ativo && temPermissao('prazos','excluir') && (!outroFazendo || ehAdmin)),
                           onClick: () => confirmarExcluir(p.id) },
@@ -326,6 +331,7 @@ export default function Prazos() {
       {prazoEditando   && <ModalEditarPrazo prazo={prazoEditando} tipos={tipos} onFechar={(reload) => { setPrazoEditando(null);  if(reload) carregar(); }} />}
       {prazoCancelando && <ModalCancelarPrazo prazo={prazoCancelando} onFechar={(reload) => { setPrazoCancelando(null); if(reload) carregar(); }} />}
       {prazoHistorico  && <ModalHistoricoPrazo prazo={prazoHistorico} onFechar={() => setPrazoHistorico(null)} />}
+      {prazoVerPub     && <ModalLerPublicacao publicacaoId={prazoVerPub} onFechar={() => setPrazoVerPub(null)} />}
     </div>
   );
 }
@@ -459,18 +465,23 @@ function SelectComAdicao({ label, nomeEntidade, value, onChange, opcoes = [],
 }
 
 // processoInicial: { processo_id, numero, titulo } — quando vem da PastaDetalhe já preenchido
-export function ModalNovoPrazo({ tipos, onFechar, processoInicial }) {
+// buscaInicial: nº de processo para JÁ pesquisar a pasta (sem travar o campo) — usado quando o
+//   prazo nasce de uma publicação e a pasta ainda precisa ser escolhida pelo usuário.
+// publicacaoId: vínculo de origem (publicação que gerou o prazo).
+export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial, publicacaoId }) {
   const [form, setForm]         = useState({
     tipo_dias: 'uteis',
     data_inicio: new Date().toISOString().split('T')[0],
     ...(processoInicial ? { processo_id: processoInicial.processo_id, titulo: processoInicial.titulo } : {}),
   });
   const [salvando, setSalvando] = useState(false);
+  const [aviso, setAviso]       = useState(''); // faixa de aviso DENTRO do modal (nunca toast do canto)
   // Guarda qual campo o usuário mexeu por último ('dias' ou 'data') para os dois cálculos
   // (dias→data e data→dias) não ficarem se recalculando em loop. Começa null: nada recalcula sozinho.
   const [modo, setModo] = useState(null);
   const [pastas, setPastas]         = useState([]);
-  const [buscaPasta, setBuscaPasta] = useState(processoInicial?.numero || '');
+  const [naoCadastrado, setNaoCadastrado] = useState(false); // pesquisou o número e não achou pasta
+  const [buscaPasta, setBuscaPasta] = useState(processoInicial?.numero || buscaInicial || '');
   const [usuarios, setUsuarios]     = useState([]);
   // Cópia local de tipos/subtipos: começa com a prop e é recarregada ao cadastrar um item novo
   const [tiposLocal, setTiposLocal] = useState(tipos);
@@ -483,6 +494,10 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial }) {
   useEffect(() => {
     processosAPI.auxiliares().then(r => setUsuarios(r.data.dados.usuarios || []));
     recarregarTipos(); // garante a lista mais atual toda vez que o modal abre
+    // Prazo vindo de publicação (sem pasta travada): pesquisa pelo número; se houver
+    // uma única pasta, já vem selecionada; se houver várias, mostra as sugestões.
+    if (!processoInicial && buscaInicial) preselecionarPorNumero(buscaInicial);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recarregarTipos]);
 
   // CAMINHO DIAS → DATA: quando o usuário digita a Quantidade, calcula a data final.
@@ -534,14 +549,32 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial }) {
   }, [modo, form.data_inicio, form.data_final, form.tipo_dias]);
 
   async function buscarPastas(termo) {
-    if (termo.length < 2) return setPastas([]);
+    if (termo.length < 2) { setPastas([]); setNaoCadastrado(false); return; }
     const { data } = await processosAPI.listarPastas({ busca: termo, limite: 10 });
-    if (data.ok) setPastas(data.dados.registros);
+    if (data.ok) {
+      const regs = data.dados.registros || [];
+      setPastas(regs);
+      setNaoCadastrado(regs.length === 0); // pesquisou e não achou → processo não cadastrado
+    }
+  }
+
+  // Vindo de publicação: pesquisa a pasta pelo número. Se achar UMA só, já seleciona
+  // (resolvendo o processo, quando é único na pasta ou o número bate com o da publicação).
+  // Se achar várias, mostra as sugestões. Se não achar nenhuma, marca "não cadastrado".
+  async function preselecionarPorNumero(termo) {
+    try {
+      const { data } = await processosAPI.listarPastas({ busca: termo, limite: 10 });
+      if (!data.ok) return;
+      const regs = data.dados.registros || [];
+      if (regs.length === 1) { await selecionarPasta(regs[0]); }
+      else                   { setPastas(regs); setNaoCadastrado(regs.length === 0); }
+    } catch {}
   }
 
   async function selecionarPasta(pasta) {
     const numFmt = String(pasta.numPasta).padStart(4, '0');
     setPastas([]);
+    setNaoCadastrado(false);
     set('titulo', `${numFmt} — ${pasta.titulo_proc || ''}`);
     set('processo_id', '');
     try {
@@ -559,16 +592,20 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial }) {
   function set(k, v) { setForm(f => ({...f, [k]: v})); }
 
   async function salvar() {
-    if (!form.processo_id || !form.data_inicio) return toast.error('Processo e data de início são obrigatórios');
-    if (!form.tipo_prazo_id) return toast.error('Tipo de prazo é obrigatório');
-    if (!form.subtipo_id)    return toast.error('Subtipo é obrigatório');
-    if (!form.data_final)    return toast.error('A data final é obrigatória. Informe a data final ou a quantidade de dias.');
+    if (!form.processo_id) return setAviso(naoCadastrado
+      ? 'Processo não cadastrado no sistema. Cadastre o processo/pasta antes de criar o prazo — ou use Tarefa/Compromisso, que não dependem de processo.'
+      : 'Selecione o processo: pesquise pelo número e escolha a pasta na lista.');
+    if (!form.data_inicio) return setAviso('Informe a data de início.');
+    if (!form.tipo_prazo_id) return setAviso('Selecione o tipo de prazo.');
+    if (!form.subtipo_id)    return setAviso('Selecione o subtipo.');
+    if (!form.data_final)    return setAviso('Informe a data final (ou a quantidade de dias).');
+    setAviso('');
     setSalvando(true);
     try {
-      await prazosAPI.criar(form);
+      await prazosAPI.criar({ ...form, publicacao_id: publicacaoId || null });
       toast.success('Prazo criado com sucesso!');
       onFechar(true);
-    } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao criar prazo'); }
+    } catch (err) { setAviso(err.response?.data?.mensagem || 'Não foi possível criar o prazo.'); }
     finally { setSalvando(false); }
   }
 
@@ -584,14 +621,29 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial }) {
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
         </div>
         <div className="modal-body">
+          {aviso && (
+            <div style={{ background:'#fff4e5', border:'1px solid #ffcf99', color:'#8a5300',
+              padding:'8px 12px', borderRadius:'6px', fontSize:'13px', marginBottom:'12px' }}>
+              {aviso}
+            </div>
+          )}
           <div className="form-group">
             <label className="form-label">Número do Processo *</label>
-            <input className="form-control" placeholder="0000000-00.0000.0.00.0000"
-              value={buscaPasta} maxLength={25}
-              style={{ maxWidth: '260px', fontFamily: 'monospace', letterSpacing: '0.5px',
-                       ...(processoInicial ? { background: '#f8fafc', cursor: 'default' } : {}) }}
-              readOnly={!!processoInicial}
-              onChange={processoInicial ? undefined : e => { const masked = mascaraCNJ(e.target.value); setBuscaPasta(masked); buscarPastas(masked); }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <input className="form-control" placeholder="0000000-00.0000.0.00.0000"
+                value={buscaPasta} maxLength={25}
+                style={{ maxWidth: '260px', fontFamily: 'monospace', letterSpacing: '0.5px',
+                         ...(processoInicial ? { background: '#f8fafc', cursor: 'default' } : {}) }}
+                readOnly={!!processoInicial}
+                onChange={processoInicial ? undefined : e => { const masked = mascaraCNJ(e.target.value); setBuscaPasta(masked); buscarPastas(masked); }} />
+              {naoCadastrado && !form.processo_id && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px',
+                  background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c',
+                  fontWeight: 700, fontSize: '12px', padding: '6px 10px', borderRadius: '6px', whiteSpace: 'nowrap' }}>
+                  ⚠️ PROCESSO NÃO CADASTRADO
+                </span>
+              )}
+            </div>
             {pastas.length > 0 && (
               <div style={{border:'1px solid #ddd',borderRadius:'6px',marginTop:'4px',maxHeight:'140px',overflowY:'auto',background:'#fff',zIndex:10,position:'relative'}}>
                 {pastas.map(p => (
@@ -875,8 +927,10 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
 // Exibe criação, mudanças de status, conclusão e cancelamento
 // ============================================================
 function ModalHistoricoPrazo({ prazo, onFechar }) {
+  const { temPermissao } = useAuth();
   const [historico, setHistorico] = useState(null);
   const [carregando, setCarregando] = useState(true);
+  const [verPub, setVerPub] = useState(false); // ler a publicação de origem
 
   useEffect(() => {
     prazosAPI.historico(prazo.id)
@@ -908,6 +962,7 @@ function ModalHistoricoPrazo({ prazo, onFechar }) {
   }
 
   return (
+    <>
     <div className="modal-overlay">
       <div className="modal-box modal-grande">
         <div className="modal-header">
@@ -982,9 +1037,14 @@ function ModalHistoricoPrazo({ prazo, onFechar }) {
           )}
         </div>
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onFechar}>Fechar</button>
+          {prazo.publicacao_id && temPermissao('publicacoes','visualizar') && (
+            <button className="btn btn-outline" onClick={() => setVerPub(true)}>📄 Ver publicação de origem</button>
+          )}
+          <button className="btn btn-secondary" style={{ marginLeft: 'auto' }} onClick={onFechar}>Fechar</button>
         </div>
       </div>
     </div>
+    {verPub && <ModalLerPublicacao publicacaoId={prazo.publicacao_id} onFechar={() => setVerPub(false)} />}
+    </>
   );
 }

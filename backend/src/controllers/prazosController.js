@@ -105,7 +105,7 @@ async function listar(req, res) {
 
     const [rows] = await pool.execute(
       `SELECT pp.id, pp.descricao, pp.data_inicio, pp.data_vencimento,
-              pp.quantidade, pp.tipo_dias, pp.delegado_para,
+              pp.quantidade, pp.tipo_dias, pp.delegado_para, pp.publicacao_id,
               pp.subtipo_id, tp.id AS tipo_prazo_id,
               pp.motivo_cancelamento,
               pp.criado_por, uc.nome AS criado_por_nome, pp.criado_em,
@@ -166,7 +166,7 @@ async function criar(req, res) {
   try {
     const {
       processo_id, subtipo_id, descricao, data_inicio,
-      quantidade, tipo_dias, data_final, delegado_para
+      quantidade, tipo_dias, data_final, delegado_para, publicacao_id
     } = req.body;
 
     if (!processo_id || !data_inicio) {
@@ -188,12 +188,12 @@ async function criar(req, res) {
     const [result] = await pool.execute(
       `INSERT INTO prazos_processo
          (processo_id, subtipo_id, descricao, data_inicio, quantidade, tipo_dias,
-          data_vencimento, delegado_para, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          data_vencimento, delegado_para, criado_por, publicacao_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         processo_id, subtipo_id || null, descricao || null, data_inicio,
         quantidade || null, tipo_dias || 'uteis', data_vencimento,
-        delegado_para || null, req.usuario.id
+        delegado_para || null, req.usuario.id, publicacao_id || null
       ]
     );
 

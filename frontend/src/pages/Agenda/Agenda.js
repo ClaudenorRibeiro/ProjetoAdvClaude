@@ -16,6 +16,7 @@ import { useAuth } from '../../context/AuthContext';
 import { ModalTarefa } from '../Tarefas/Tarefas';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
+import ModalLerPublicacao from '../../components/ModalLerPublicacao';
 
 // Configuração do localizador com pt-BR
 const locales = { 'pt-BR': ptBR };
@@ -68,6 +69,7 @@ export default function Agenda() {
   const [visao, setVisao]       = useState('month');
   const [carregando, setCarregando] = useState(false);
   const [eventoSelecionado, setEventoSelecionado] = useState(null);
+  const [verPubOrigem, setVerPubOrigem] = useState(null); // publicacao_id da ação, p/ ler a publicação de origem
   const [modalCompromisso, setModalCompromisso] = useState(null); // null | {} (novo) | {dataInicial} | {compromisso} (editar)
   const [modalTarefa, setModalTarefa] = useState(null);           // null | {dataInicial} — nova tarefa aberta DENTRO da Agenda
   const [confirmarExcluir, setConfirmarExcluir] = useState(null); // compromisso aguardando confirmação de exclusão
@@ -402,12 +404,23 @@ export default function Agenda() {
                   </button>
                 </>
               )}
+              {eventoSelecionado.dados?.publicacao_id && temPermissao('publicacoes','visualizar') && (
+                <button className="btn btn-outline"
+                  onClick={() => setVerPubOrigem(eventoSelecionado.dados.publicacao_id)}>
+                  📄 Ver publicação de origem
+                </button>
+              )}
               <button className="btn btn-secondary" onClick={() => setEventoSelecionado(null)}>
                 Fechar
               </button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal: ler a publicação que originou a ação (prazo/tarefa/compromisso) */}
+      {verPubOrigem && (
+        <ModalLerPublicacao publicacaoId={verPubOrigem} onFechar={() => setVerPubOrigem(null)} />
       )}
 
       {/* Modal: criar / editar compromisso pessoal */}
@@ -553,7 +566,7 @@ function EventoDetalhe({ evento }) {
 // MODAL: criar / editar compromisso pessoal da agenda
 // `compromisso` = registro p/ editar (ou null p/ novo). `dataInicial` (opcional) pré-preenche a data.
 // ============================================================
-function ModalCompromisso({ compromisso, dataInicial, usuarios = [], usuarioLogadoId, ehAdmin, onFechar }) {
+export function ModalCompromisso({ compromisso, dataInicial, usuarios = [], usuarioLogadoId, ehAdmin, onFechar, publicacaoId }) {
   const editando = !!(compromisso && compromisso.id);
   const [form, setForm] = useState({
     titulo: compromisso?.titulo || '',
@@ -573,6 +586,7 @@ function ModalCompromisso({ compromisso, dataInicial, usuarios = [], usuarioLoga
   });
   const [salvando, setSalvando] = useState(false);
   const [confirmarData, setConfirmarData] = useState(false); // confirmação do admin p/ data passada
+  const [aviso, setAviso] = useState(''); // faixa de aviso DENTRO do modal (nunca toast do canto)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   // Grava de fato (chamado direto ou após a confirmação da data passada)
@@ -580,24 +594,25 @@ function ModalCompromisso({ compromisso, dataInicial, usuarios = [], usuarioLoga
     setSalvando(true);
     try {
       if (editando) await agendaAPI.atualizarCompromisso(compromisso.id, form);
-      else          await agendaAPI.criarCompromisso(form);
+      else          await agendaAPI.criarCompromisso({ ...form, publicacao_id: publicacaoId || null });
       toast.success(editando ? 'Compromisso atualizado' : 'Compromisso criado');
       onFechar(true);
     } catch (err) {
-      toast.error(err.response?.data?.mensagem || 'Erro ao salvar');
+      setAviso(err.response?.data?.mensagem || 'Não foi possível salvar o compromisso.');
     } finally {
       setSalvando(false);
     }
   }
 
   function salvar() {
-    if (!form.titulo.trim()) return toast.error('Informe o título');
-    if (!form.data) return toast.error('Informe a data');
+    if (!form.titulo.trim()) return setAviso('Informe o título do compromisso.');
+    if (!form.data) return setAviso('Informe a data.');
     // Data anterior a hoje: usuário comum é bloqueado; admin precisa confirmar.
     if (form.data < format(new Date(), 'yyyy-MM-dd')) {
-      if (!ehAdmin) return toast.error('Apenas o administrador pode agendar com data anterior a hoje. Escolha uma data a partir de hoje.');
+      if (!ehAdmin) return setAviso('Apenas o administrador pode agendar com data anterior a hoje. Escolha uma data a partir de hoje.');
       return setConfirmarData(true);
     }
+    setAviso('');
     executarSalvar();
   }
 
@@ -610,6 +625,12 @@ function ModalCompromisso({ compromisso, dataInicial, usuarios = [], usuarioLoga
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
         </div>
         <div className="modal-body">
+          {aviso && (
+            <div style={{ background:'#fff4e5', border:'1px solid #ffcf99', color:'#8a5300',
+              padding:'8px 12px', borderRadius:'6px', fontSize:'13px', marginBottom:'12px' }}>
+              {aviso}
+            </div>
+          )}
           <div className="form-group">
             <label className="form-label obrigatorio">Título</label>
             <input className="form-control" value={form.titulo} onChange={e => set('titulo', e.target.value)}

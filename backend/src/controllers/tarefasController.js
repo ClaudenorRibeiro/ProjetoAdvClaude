@@ -86,7 +86,7 @@ async function listar(req, res) {
     const [rows] = await pool.execute(
       `SELECT t.id, t.titulo, t.descricao, t.prioridade, t.data_vencimento,
               t.concluida, t.concluida_em, t.criado_em,
-              t.pasta_id, t.processo_id,
+              t.pasta_id, t.processo_id, t.publicacao_id,
               u.nome  AS atribuida_para_nome,
               uc.nome AS criado_por_nome,
               -- Vínculo: pasta direta
@@ -130,7 +130,7 @@ async function listar(req, res) {
 // Transação: INSERT da tarefa + registro de auditoria (tudo ou nada)
 async function criar(req, res) {
   const { titulo, descricao, prioridade, processo_id, pasta_id, prazo_id,
-          atribuida_para, data_vencimento } = req.body;
+          atribuida_para, data_vencimento, publicacao_id } = req.body;
 
   if (!titulo) return erro(res, 'O título é obrigatório');
   if (bloqueiaAgendarPassado(req.usuario, data_vencimento)) {
@@ -144,14 +144,14 @@ async function criar(req, res) {
     const [result] = await conn.execute(
       `INSERT INTO tarefas
          (titulo, descricao, prioridade, processo_id, pasta_id, prazo_id,
-          atribuida_para, data_vencimento, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          atribuida_para, data_vencimento, criado_por, publicacao_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         titulo.trim(), descricao || null,
         prioridade || 'normal',
         processo_id || null, pasta_id || null, prazo_id || null,
         atribuida_para || null, data_vencimento || null,
-        req.usuario.id
+        req.usuario.id, publicacao_id || null
       ]
     );
 

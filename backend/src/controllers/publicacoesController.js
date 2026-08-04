@@ -291,7 +291,11 @@ async function listar(req, res) {
                        WHERE p2.data_publicacao = p.data_publicacao
                          AND p2.texto_hash = p.texto_hash
                          AND p2.fonte = p.fonte
-                         AND p2.id < p.id) AS duplicada
+                         AND p2.id < p.id) AS duplicada,
+              EXISTS (SELECT 1 FROM tblproc t
+                       WHERE p.numero_processo IS NOT NULL AND p.numero_processo <> ''
+                         AND REPLACE(REPLACE(REPLACE(t.numProc,'.',''),'-',''),' ','')
+                             = REPLACE(REPLACE(REPLACE(p.numero_processo,'.',''),'-',''),' ','')) AS processo_cadastrado
        FROM publicacoes p
        LEFT JOIN usuarios ut ON p.tratada_por = ut.id
        ${where}
@@ -480,8 +484,23 @@ async function tratar(req, res) {
   try {
     const { id } = req.params;
     const tratada = !!req.body.tratada;
-    const [exists] = await pool.execute('SELECT id FROM publicacoes WHERE id = ?', [id]);
-    if (!exists.length) return naoEncontrado(res, 'Publicação não encontrada');
+    // Junto com a existência, calcula se o PROCESSO da publicação está cadastrado (tblproc),
+    // comparando só os dígitos (ignora a pontuação da máscara nos dois lados).
+    const [rows] = await pool.execute(
+      `SELECT p.id,
+              EXISTS (SELECT 1 FROM tblproc t
+                       WHERE p.numero_processo IS NOT NULL AND p.numero_processo <> ''
+                         AND REPLACE(REPLACE(REPLACE(t.numProc,'.',''),'-',''),' ','')
+                             = REPLACE(REPLACE(REPLACE(p.numero_processo,'.',''),'-',''),' ','')) AS proc_cadastrado
+         FROM publicacoes p WHERE p.id = ?`, [id]
+    );
+    if (!rows.length) return naoEncontrado(res, 'Publicação não encontrada');
+
+    // REGRA: só vira TRATADA se o processo estiver cadastrado no sistema. Sem processo
+    // cadastrado, a publicação fica SEMPRE Pendente. (Reabrir é sempre permitido.)
+    if (tratada && !rows[0].proc_cadastrado) {
+      return erro(res, 'Esta publicação não pode ser tratada: o processo não está cadastrado no sistema. Cadastre o processo — ou exclua a publicação, se não precisar dela.');
+    }
 
     if (tratada) {
       await pool.execute(
@@ -534,9 +553,42 @@ async function historico(req, res) {
        WHERE pu.publicacao_id = ? ORDER BY u.nome`, [id]
     );
 
+    // Ações que NASCERAM desta publicação (vínculo publicacao_id nas 3 tabelas).
+    // Cada uma sobrevive à exclusão da publicação (FK ON DELETE SET NULL), então aqui
+    // só listamos as que ainda existem e ainda apontam para esta publicação.
+    // Em cada ação, além dos dados, trazemos para QUEM ela foi direcionada:
+    //   Prazo -> delegado_para | Tarefa -> atribuida_para | Compromisso -> delegado_para.
+    // Sem usuário específico, o front mostra "Escritório".
+    const [prazos] = await pool.execute(
+      `SELECT pp.id, pp.data_vencimento, pp.status,
+              COALESCE(ps.nome, pp.descricao) AS titulo, pr.numProc AS processo_numero,
+              ud.nome AS direcionado_nome
+         FROM prazos_processo pp
+         LEFT JOIN prazo_subtipo ps ON pp.subtipo_id = ps.id
+         LEFT JOIN tblproc pr       ON pp.processo_id = pr.id
+         LEFT JOIN usuarios ud      ON pp.delegado_para = ud.id
+        WHERE pp.publicacao_id = ?
+        ORDER BY pp.data_vencimento ASC, pp.id ASC`, [id]
+    );
+    const [tarefas] = await pool.execute(
+      `SELECT t.id, t.titulo, t.data_vencimento, t.concluida,
+              ua.nome AS direcionado_nome
+         FROM tarefas t
+         LEFT JOIN usuarios ua ON t.atribuida_para = ua.id
+        WHERE t.publicacao_id = ? ORDER BY t.id ASC`, [id]
+    );
+    const [compromissos] = await pool.execute(
+      `SELECT c.id, c.titulo, c.data, c.concluido, c.escritorio,
+              ud.nome AS direcionado_nome
+         FROM agenda_compromisso c
+         LEFT JOIN usuarios ud ON c.delegado_para = ud.id
+        WHERE c.publicacao_id = ? ORDER BY c.data ASC, c.id ASC`, [id]
+    );
+
     return sucesso(res, {
       ...rows[0],
       direcionada_usuarios: usuarios.map(u => u.nome),
+      acoes: { prazos, tarefas, compromissos },
     });
   } catch (err) {
     return erroInterno(res, err);
@@ -546,8 +598,13 @@ async function historico(req, res) {
 // DELETE /api/publicacoes/:id — exclui a publicação (vínculos caem por CASCADE) + registra log.
 async function excluir(req, res) {
   const { id } = req.params;
-  const [pub] = await pool.execute('SELECT data_publicacao FROM publicacoes WHERE id = ?', [id]);
+  const [pub] = await pool.execute('SELECT data_publicacao, tratada FROM publicacoes WHERE id = ?', [id]);
   if (!pub.length) return naoEncontrado(res, 'Publicação não encontrada');
+  // Publicação tratada é preservada (pode ter originado prazo/tarefa/compromisso).
+  // Para excluir, o usuário precisa Reabrir antes.
+  if (pub[0].tratada) {
+    return erro(res, 'Publicações tratadas não podem ser excluídas. Reabra a publicação antes de excluir.');
+  }
 
   const conn = await pool.getConnection();
   try {
@@ -596,6 +653,10 @@ async function excluirLote(req, res) {
     alvoParams = [...params, ...ids];
   }
 
+  // Publicações tratadas NUNCA são excluídas (nem em lote) — ficam preservadas para
+  // consulta a partir das ações que geraram. Só as pendentes entram na exclusão.
+  alvoSql += ' AND p.tratada = 0';
+
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -632,7 +693,24 @@ async function excluirLote(req, res) {
   }
 }
 
+// GET /api/publicacoes/:id — devolve UMA publicação para leitura (usado pela ação
+// — prazo/tarefa/compromisso — para consultar a publicação que a originou).
+async function obter(req, res) {
+  try {
+    const { id } = req.params;
+    const [rows] = await pool.execute(
+      `SELECT id, fonte, data_publicacao, numero_processo, numero_publicacao,
+              tribunal, oab, titulo, cabecalho, texto, hash_cnj, tratada
+         FROM publicacoes WHERE id = ?`, [id]
+    );
+    if (!rows.length) return naoEncontrado(res, 'Publicação não encontrada');
+    return sucesso(res, rows[0]);
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
 module.exports = {
   statusAasp, listar, importar, direcionar, tratar, historico, excluir, excluirLote, usuariosParaDirecionar,
-  statusCnj, importarCnj,
+  statusCnj, importarCnj, obter,
 };

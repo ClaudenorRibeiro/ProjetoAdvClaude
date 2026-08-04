@@ -1,0 +1,187 @@
+========================================================================================
+RESUMO DA SESSÃO DE DESENVOLVIMENTO — 03/08/2026
+Sistema de Advocacia (NovoJud) — Antônio Ferreira
+========================================================================================
+LEIA PRIMEIRO: este arquivo resume TUDO que foi feito hoje, para o Claude de outro
+computador continuar de onde paramos. O detalhamento técnico está nas memórias do
+projeto (pasta memory/), principalmente em sessao_03082026.md, tarefas.md,
+processos_pastas.md, cadastro_pessoas.md e feedback_codigo.md.
+
+----------------------------------------------------------------------------------------
+ESTADO DO GIT / DEPLOY — ✅ JÁ SUBIU NESTA SESSÃO
+----------------------------------------------------------------------------------------
+- O usuário SUBIU na AWS durante a sessão. O .bat commitou e pushou os 4 arquivos de
+  código no commit 93a5753 ("030826-10.12.20").
+- HEAD = origin/main = 93a5753. Working tree LIMPO.
+- BANCO: NADA foi rodado (sem ALTER/SQL nesta subida — nenhuma das features mexe no banco).
+- BACKEND mudou (tarefasController.js) -> precisa REINICIAR O NODE em cada instância,
+  senão a tela de Tarefas fica com o filtro antigo naquela instância. (Não é a regra
+  "SQL-antes-do-código" — não há coluna nova; é só reiniciar o Node.)
+- FRONTEND -> build + Ctrl+F5.
+- A pasta memory/ é IGNORADA pelo git (as memórias não entram no commit; viajam com a
+  pasta local do projeto).
+- Observação honesta (regra "nunca supor"): confirmei só o que verifiquei = o push do
+  93a5753. O restart do Node em cada instância (Antônio + Erick) foi conduzido pelo
+  usuário; não confirmei ao vivo cada um.
+
+========================================================================================
+O QUE FIZEMOS HOJE (2 features entregues + 1 pedido recusado por decisão do usuário)
+========================================================================================
+
+--- ABERTURA: análise da pasta + correção do estado do git -----------------------------
+- Analisei a pasta local + as memórias. DESCOBERTA importante: a memória do dia 31/07
+  dizia "nada no git / HEAD=58e78e1", mas isso estava DESATUALIZADO — o .bat de deploy
+  já tinha commitado e pushado o trabalho de 31/07 no commit 1025aa2 (em 31/07, ~13:43).
+  Na abertura de hoje o HEAD já era 1025aa2 (e depois virou 93a5753 com o deploy de hoje).
+- As DUAS pastas de memória (a interna do Claude e a memory/ do projeto) estavam
+  IDÊNTICAS (49 arquivos). Reforcei as regras do usuário em feedback_codigo.md.
+
+--- FEATURE 1: BOTÕES DE PERÍODO RÁPIDO EM TAREFAS (Hoje / 7 dias / 30 dias) ------------
+- Necessidade: na tela de Tarefas (menu lateral), 3 botões de filtro rápido para o
+  vencimento, e ao ENTRAR na tela o botão "7 dias" já vem aceso por padrão (mantendo o
+  padrão da tela: Pendentes, Todas as prioridades, do usuário logado).
+
+- ALERTA que levantei ANTES de codar (regra "corrigir o usuário / analisar efeitos"):
+  o filtro de data no banco é por data_vencimento. Uma tarefa SEM data (mostra "—") não
+  passa por nenhum filtro de período, e as ATRASADAS (venceram antes de hoje) sairiam do
+  padrão "7 dias". Ou seja, do jeito literal, ao abrir a tela com "7 dias" poderia sumir
+  quase tudo. Perguntei antes de fazer.
+
+- DECISÕES DO USUÁRIO (confirmadas por perguntas):
+  (a) Os botões mostram SEMPRE as atrasadas + as pendentes vencendo até hoje / hoje+7 /
+      hoje+30. (As atrasadas SEMPRE aparecem.)
+  (b) As tarefas SEM data ("—") aparecem SEMPRE junto.
+  (c) "Limpar filtros" volta para o padrão com "7 dias" aceso.
+
+- COMO FICOU (comportamento):
+  * "Hoje"   = tudo com vencimento até hoje       (inclui atrasadas) + sem data.
+  * "7 dias" = tudo com vencimento até hoje + 7   (inclui atrasadas) + sem data.  [PADRÃO]
+  * "30 dias"= tudo com vencimento até hoje + 30  (inclui atrasadas) + sem data.
+  * Ao abrir a tela: "7 dias" já aceso.
+  * "Limpar filtros": volta ao padrão com "7 dias" aceso.
+  * Se o usuário mexer manualmente nos campos "Vencimento de / Até": vira um intervalo
+    EXATO daquelas datas, e nenhum dos 3 botões fica aceso (previsível).
+
+- ONDE MEXEU:
+  * frontend/src/pages/Tarefas/Tarefas.js — botões, estado padrão, funções.
+  * backend/src/controllers/tarefasController.js — 1 ajuste no filtro: quando os botões
+    estão ativos (mandam um sinalizador), o teto de data passa a aceitar também as
+    tarefas sem data. TOTALMENTE retrocompatível: Relatórios, aba Tarefas da Pasta e
+    Agenda NÃO mandam esse sinalizador, então continuam idênticos ao que eram.
+
+- SEM SQL, SEM tabela nova, SEM mexer no api.js. Build (Vite) OK; node --check OK.
+
+--- FEATURE 2: "ANOTAÇÕES DE ATENDIMENTO" NO MENU (...) DAS PARTES DA PASTA -------------
+- Necessidade: no painel "Partes do processo" (topo da tela da Pasta), cada parte tem um
+  menu de 3 pontinhos (Ver cadastro, Copiar telefone/e-mail, Enviar e-mail/WhatsApp/SMS).
+  O usuário pediu para incluir também "Anotações de atendimento" nesse menu.
+
+- Por que é limpo (diferente do pedido recusado): abre as anotações DA PRÓPRIA PESSOA
+  (o mesmo que já existe na tela de Pessoas) — não mistura casos.
+
+- COMO FICOU: novo item "📝 Anotações de atendimento" no menu de cada parte, LOGO APÓS
+  "Ver cadastro". Vale para Pessoa Física E Jurídica. Abre a MESMA janela de anotações
+  da tela de Pessoas. As regras de adicionar/editar/excluir anotação continuam as mesmas
+  (o backend já cuida: dono no mesmo dia ou admin).
+
+- ONDE MEXEU (só front, reuso sem duplicar):
+  * frontend/src/pages/Pessoas/Pessoas.js — a janela de anotações virou "exportável"
+    (só a palavra export; a tela de Pessoas continua idêntica).
+  * frontend/src/pages/Processos/PastaDetalhe.js — importou a janela + adicionou o item
+    no menu + render.
+
+- SEM banco, SEM backend, SEM SQL. Build (Vite) OK.
+
+--- PEDIDO RECUSADO PELO USUÁRIO: aba "Histórico" na Pasta (Andamentos + Anotações) -----
+- O usuário perguntou se dava para criar uma aba "Histórico" na Pasta unindo os
+  "Andamentos" do processo com as "Anotações de atendimento" da pessoa.
+- Eu ANALISEI e avisei do problema (regra "corrigir o usuário"): a tabela de anotações
+  (historico_atendimento) é amarrada à PESSOA, não ao processo/pasta (não tem processo_id
+  nem pasta_id). Como a mesma pessoa pode ser parte em vários processos/pastas, mostrar
+  as anotações dela na pasta MISTURARIA assuntos de casos diferentes, sem como separar.
+- Diante disso, o usuário DECIDIU NÃO FAZER e deixar tudo como está. Nada foi alterado
+  para esse pedido.
+
+========================================================================================
+VERIFICAÇÃO DE EFEITOS COLATERAIS (o que confirmei para não quebrar nada)
+========================================================================================
+- Tarefas (backend): o ajuste do filtro só age com o sinalizador novo. Confirmei no
+  código que os OUTROS consumidores da listagem de tarefas — Relatórios, aba Tarefas da
+  Pasta e Agenda — NÃO enviam esse sinalizador, então o comportamento deles é idêntico.
+- O filtro "Atrasadas" (do seletor "Mostrar") continua correto — ele já exige data
+  preenchida, então as sem-data não entram nele.
+- Anotações nas Partes: reuso da MESMA janela de Pessoas; a tela de Pessoas continua
+  intacta (só ganhou a palavra "export"). Import cruzado Pasta->Pessoas não gera ciclo
+  (build passou).
+- BANCO: nada foi tocado em nenhuma das duas features. Sem SQL.
+- Build (Vite) compila sem erros; node --check do backend OK.
+  Lembrete: "build não é teste" — o teste de comportamento é do usuário, na manutenção
+  em foco; a análise de não-quebrar o resto (front+back+banco) é responsabilidade minha.
+
+========================================================================================
+PENDÊNCIAS FUTURAS (lista atualizada — nada novo foi fechado do roadmap grande hoje)
+========================================================================================
+Da tela de Audiências / Ata (ver PENDENCIAS.txt):
+  - "Registrar Ata": faltam as Fases 2 a 5 (próxima = Fase 2, Prazos + Tarefas na ata;
+    o backend já aceita). Fase 3 (Perícias), Fase 4 (Anotações de atendimento na ata),
+    Fase 5 (Notificações e-mail/WhatsApp).
+
+Publicações:
+  - Rodar o ALTER da coluna "oab" nas AWS + deploy (só isso falta):
+    ALTER TABLE publicacoes ADD COLUMN oab varchar(20) DEFAULT NULL AFTER tribunal;
+    (já testado no LOCAL; falta AWS.)
+
+SMS (Comtele) — extras aprovados, a fazer EM FASES (só o básico existe):
+  1) modelos de mensagem com variáveis
+  2) opt-out / LGPD (automático x manual — precisa decidir + tabela)
+  3) envio em lote
+  4) status de entrega (DLR / webhook público)
+  5) agendamento (tabela + cron)
+  6) cota / limite diário
+  7) encurtador de link
+
+E-mail em Lote (Audiências): planejado, NÃO codado, aguarda 2 autorizações (criar tabela
+  modelo_corpo_email + onde cadastrar).
+
+Outras (histórico):
+  - Financeiro multi-banco (grande)
+  - Config global de capitalização (grande e transversal)
+  - Hardening do servidor AWS (infra; + rotacionar chaves AWS em texto puro) — aguarda prints
+  - Renovar senha de app do Gmail no .env
+  - Agenda Google
+  - Agenda: "ver todos" usuários / consultas
+  - Tarefas: colocar horário e temporizador?
+  - Andamento de cada processo
+
+Roadmap de concorrência (RecursosConcorrencia.txt): 15 lacunas vs AdvBox (IA que lê
+  intimação, workflow, BI, Kanban, timesheet, sync de agenda, CRM de funil, etc.).
+
+========================================================================================
+REGRAS DO USUÁRIO (reforçadas hoje — valem SEMPRE, "memória eterna e definitiva")
+========================================================================================
+- NUNCA CODAR SEM AUTORIZAÇÃO: a cada pedido, primeiro EXPLICAR o que entendeu e ESPERAR
+  o "pode codar". Responder pergunta de escopo NÃO é autorização.
+- NUNCA SUPOR: analisar o código inteiro (front + back + banco) e ter certeza; se não der
+  para confirmar, dizer "não tenho certeza, preciso confirmar" e esperar.
+- TODOS OS NOMES DE TABELAS DO BANCO EM LETRAS MINÚSCULAS — no banco E no código. Regra
+  eterna, sem exceção. "NÃO QUERO MAIS TER PROBLEMAS COM ISSO."
+- Nenhuma exclusão pode deixar órfãos no banco; tratar as amarrações (FKs) antes de apagar.
+- Transações SEMPRE com BEGIN/COMMIT/ROLLBACK. MySQL sem middleware (SQL à mão).
+- CORRIGIR o usuário se um pedido dele prejudicar outra rotina do sistema (ele pode ter
+  esquecido) — analisar efeitos colaterais antes. (Hoje: barrei o filtro de Tarefas que
+  esconderia atrasadas/sem-data, e a aba "Histórico" que misturaria casos.)
+- SQL é MULTI-INSTÂNCIA: testar no LOCAL e depois rodar em TODAS as AWS (sistema idêntico).
+- "Build não é teste": antes de mexer, verificar que não quebra front/back/banco. O
+  usuário testa APENAS a manutenção em foco.
+- Só subir no git com autorização. Não mandar trechos de código no chat (usuário é leigo).
+
+========================================================================================
+NOTA SOBRE MEMÓRIA E SINCRONIZAÇÃO (feito nesta sessão)
+========================================================================================
+- As DUAS pastas de memória:
+    * Interna: ...\.claude\projects\C--Users-Claudio-Downloads-ProjetoAdvClaude\memory\
+    * Projeto: ...\Downloads\ProjetoAdvClaude\memory\
+  Foram deixadas IDÊNTICAS ao final do dia (índice MEMORY.md incluso).
+- Arquivos de memória tocados hoje: MEMORY.md (índice), sessao_03082026.md (NOVO),
+  feedback_codigo.md (reforço das regras — abertura e fechamento do dia).
+========================================================================================

@@ -342,6 +342,7 @@ export const publicacoesAPI = {
   direcionar:   (id, dados) => api.put(`/publicacoes/${id}/direcionar`, dados),
   tratar:       (id, dados) => api.put(`/publicacoes/${id}/tratar`, dados),
   historico:    (id) => api.get(`/publicacoes/${id}/historico`),
+  obter:        (id) => api.get(`/publicacoes/${id}`),   // leitura da publicação de origem
   excluir:      (id) => api.delete(`/publicacoes/${id}`),
   excluirLote:  (dados) => api.post('/publicacoes/excluir-lote', dados),
 };

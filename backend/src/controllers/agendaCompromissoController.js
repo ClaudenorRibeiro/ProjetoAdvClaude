@@ -52,7 +52,7 @@ async function listar(req, res) {
     const where = cond.length ? 'WHERE ' + cond.join(' AND ') : '';
     const [rows] = await pool.execute(
       `SELECT c.id, c.usuario_id, c.delegado_para, c.titulo, c.descricao, c.data,
-              c.hora_inicio, c.hora_fim, c.dia_todo, c.escritorio,
+              c.hora_inicio, c.hora_fim, c.dia_todo, c.escritorio, c.publicacao_id,
               c.concluido, c.concluido_por, c.concluido_em, c.criado_em,
               u.nome  AS usuario_nome,
               ud.nome AS delegado_nome,
@@ -84,6 +84,8 @@ function dadosDoCorpo(body) {
     escritorio: body.escritorio ? 1 : 0,
     // Delegado: para quem é o compromisso. Vazio/0 → null (compromisso do próprio criador).
     delegado_para: body.delegado_para ? Number(body.delegado_para) : null,
+    // Origem opcional: publicação que gerou este compromisso (só na criação). Vazio → null.
+    publicacao_id: body.publicacao_id ? Number(body.publicacao_id) : null,
   };
 }
 
@@ -98,9 +100,9 @@ async function criar(req, res) {
     }
     const [r] = await pool.execute(
       `INSERT INTO agenda_compromisso
-         (usuario_id, delegado_para, titulo, descricao, data, hora_inicio, hora_fim, dia_todo, escritorio)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [req.usuario.id, d.delegado_para, d.titulo, d.descricao, d.data, d.hora_inicio, d.hora_fim, d.dia_todo, d.escritorio]
+         (usuario_id, delegado_para, titulo, descricao, data, hora_inicio, hora_fim, dia_todo, escritorio, publicacao_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [req.usuario.id, d.delegado_para, d.titulo, d.descricao, d.data, d.hora_inicio, d.hora_fim, d.dia_todo, d.escritorio, d.publicacao_id]
     );
     return sucesso(res, { id: r.insertId }, 'Compromisso criado', 201);
   } catch (e) {

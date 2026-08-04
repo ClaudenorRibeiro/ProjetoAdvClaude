@@ -8,12 +8,17 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { publicacoesAPI } from '../../services/api';
-import { formatarData, hojeLocal } from '../../utils/formatters';
+import { publicacoesAPI, agendaAPI } from '../../services/api';
+import { formatarData, hojeLocal, textoLimpo } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import MenuAcoes from '../../components/MenuAcoes';
+// Reuso dos modais de criação já existentes (sem duplicar código): a partir de uma
+// publicação o usuário cria Prazo, Tarefa ou Compromisso, já com o vínculo de origem.
+import { ModalNovoPrazo } from '../Prazos/Prazos';
+import { ModalTarefa } from '../Tarefas/Tarefas';
+import { ModalCompromisso } from '../Agenda/Agenda';
 
 const POR_PAGINA = 30;
 
@@ -62,21 +67,6 @@ function realcarTexto(texto, termo) {
   return out;
 }
 
-// Deixa o texto legível: quando o conteúdo vem em HTML (acontece em algumas publicações
-// do CNJ), remove as tags e decodifica os símbolos. Texto puro (o caso normal, e toda a
-// AASP) passa INTACTO — inclusive as quebras de linha do modal.
-function textoLimpo(texto) {
-  const s = String(texto == null ? '' : texto);
-  if (!/<\/?[a-z][^>]*>/i.test(s)) return s;   // não parece HTML → devolve como está
-  let t = s
-    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')                 // remove script/style + conteúdo
-    .replace(/<\s*(br|\/p|\/div|\/tr|\/li|\/h[1-6])\s*\/?>/gi, '\n') // quebras viram nova linha
-    .replace(/<[^>]+>/g, ' ');                                       // remove o resto das tags
-  t = t.replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<')
-       .replace(/&gt;/gi, '>').replace(/&quot;/gi, '"').replace(/&#39;/gi, "'");
-  return t.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
-}
-
 // Trava de 3 meses da pesquisa: true se o período De→Até passar de 3 meses.
 function excede3Meses(dataInicio, dataFim) {
   if (!dataInicio || !dataFim) return false;
@@ -91,6 +81,47 @@ function excede3Meses(dataInicio, dataFim) {
 function diasAtras(n) {
   const d = new Date(); d.setDate(d.getDate() - n);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// ------------------------------------------------------------
+// A partir de uma publicação: cria Prazo, Tarefa ou Compromisso reusando os modais
+// existentes, já injetando o vínculo de origem (publicacao_id). No Prazo, o número do
+// processo da publicação já dispara a busca da pasta (o usuário escolhe qual é).
+// Compartilhado pelas duas abas (AASP e CNJ).
+// ------------------------------------------------------------
+function ModalAcaoDaPublicacao({ acao, usuariosAgenda, usuarioLogadoId, ehAdmin, onFechar }) {
+  const { tipo, pub } = acao;
+  const numero = pub.numero_processo || '';
+  if (tipo === 'prazo') {
+    return <ModalNovoPrazo tipos={{ tipos: [], subtipos: [] }}
+      buscaInicial={numero} publicacaoId={pub.id} onFechar={onFechar} />;
+  }
+  if (tipo === 'tarefa') {
+    return <ModalTarefa
+      preSelecao={numero ? { tipo: 'processo', processo_numero: numero } : undefined}
+      publicacaoId={pub.id} onFechar={onFechar} />;
+  }
+  return <ModalCompromisso usuarios={usuariosAgenda} usuarioLogadoId={usuarioLogadoId}
+    ehAdmin={ehAdmin} publicacaoId={pub.id} onFechar={onFechar} />;
+}
+
+// Barra com os mesmos botões de ação do menu ⋮, para usar DENTRO da janela de leitura
+// da publicação. Só aparece para quem pode alterar. Compartilhada pelas duas abas.
+function BarraAcoesPublicacao({ pub, podeAlterar, onCriar, onTratar }) {
+  if (!podeAlterar) return null;
+  return (
+    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+      <button className="btn btn-outline" onClick={() => onCriar('prazo', pub)}>📌 Criar prazo</button>
+      <button className="btn btn-outline" onClick={() => onCriar('tarefa', pub)}>✓ Criar tarefa</button>
+      <button className="btn btn-outline" onClick={() => onCriar('compromisso', pub)}>📅 Criar compromisso</button>
+      {/* Só pode marcar tratada com o processo cadastrado; Reabrir é sempre permitido. */}
+      {(pub.tratada || pub.processo_cadastrado) && (
+        <button className="btn btn-outline" onClick={() => onTratar(pub)}>
+          {pub.tratada ? '↩️ Reabrir' : '✔️ Tratada / sem ação'}
+        </button>
+      )}
+    </div>
+  );
 }
 
 export default function Publicacoes() {
@@ -116,7 +147,7 @@ export default function Publicacoes() {
 // Aba AASP
 // ------------------------------------------------------------
 function PublicacoesAASP() {
-  const { temPermissao } = useAuth();
+  const { temPermissao, usuario, ehAdmin } = useAuth();
   const podeImportar = temPermissao('publicacoes', 'cadastrar');
   const podeAlterar  = temPermissao('publicacoes', 'alterar');
   const podeExcluir  = temPermissao('publicacoes', 'excluir');
@@ -138,7 +169,8 @@ function PublicacoesAASP() {
   const [selecionados, setSelecionados] = useState([]); // ids marcados na página atual
 
   const [textoAberto, setTextoAberto]         = useState(null);
-  const [direcionarAberto, setDirecionarAberto] = useState(null);
+  const [acaoAberta, setAcaoAberta]           = useState(null); // { tipo:'prazo'|'tarefa'|'compromisso', pub }
+  const [usuariosAgenda, setUsuariosAgenda]   = useState([]);   // p/ "Delegar para" do compromisso
   const [historicoAberto, setHistoricoAberto]   = useState(null);
   const [confirmar, setConfirmar]             = useState(null);
 
@@ -147,6 +179,13 @@ function PublicacoesAASP() {
     publicacoesAPI.statusAasp()
       .then(({ data }) => { if (data.ok) setConfigurado(!!data.dados.configurado); })
       .catch(() => setConfigurado(false));
+  }, []);
+
+  // Lista de usuários para o "Delegar para" do compromisso (criado a partir da publicação).
+  useEffect(() => {
+    agendaAPI.listarUsuarios()
+      .then(({ data }) => { if (data.ok) setUsuariosAgenda(data.dados || []); })
+      .catch(() => {});
   }, []);
 
   const carregar = useCallback(async () => {
@@ -201,7 +240,7 @@ function PublicacoesAASP() {
   }
 
   // ---- Seleção e exclusão em lote (age só na fonte AASP) ----
-  const idsPagina = lista.map(p => p.id);
+  const idsPagina = lista.filter(p => !p.tratada).map(p => p.id); // tratadas não entram na seleção/lote
   const todasMarcadas = idsPagina.length > 0 && idsPagina.every(id => selecionados.includes(id));
   function toggleSel(id) {
     setSelecionados(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
@@ -225,8 +264,9 @@ function PublicacoesAASP() {
     if (total === 0) return;
     setConfirmar({
       titulo: 'Excluir todas',
-      mensagem: `Isto vai excluir TODAS as ${total} publicação(ões) do resultado atual `
-        + '(com os filtros aplicados). A exclusão é permanente e fica registrada no log. Deseja continuar?',
+      mensagem: `Isto vai excluir as publicação(ões) PENDENTES do resultado atual `
+        + '(com os filtros aplicados). As publicações já tratadas são preservadas (não são excluídas). '
+        + 'A exclusão é permanente e fica registrada no log. Deseja continuar?',
       textoBotao: `Excluir todas (${total})`, tipo: 'perigo',
       acao: async () => {
         const payload = { todas: true, fonte: 'aasp', tratada: filtros.tratada, busca: filtros.busca, escopo: filtros.escopo };
@@ -286,7 +326,7 @@ function PublicacoesAASP() {
       await publicacoesAPI.tratar(p.id, { tratada: !p.tratada });
       toast.success(p.tratada ? 'Publicação reaberta' : 'Publicação marcada como tratada');
       carregar();
-    } catch { toast.error('Erro ao atualizar'); }
+    } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao atualizar'); }
   }
 
   function excluirPublicacao(p) {
@@ -301,12 +341,6 @@ function PublicacoesAASP() {
         carregar();
       },
     });
-  }
-
-  // Texto curto da coluna "Direcionada a".
-  function direcionadaTexto(p) {
-    if (p.escritorio) return 'Escritório (todos)';
-    return p.direcionada_nomes || '—';
   }
 
   const totalPaginas = Math.max(1, Math.ceil(total / POR_PAGINA));
@@ -369,14 +403,6 @@ function PublicacoesAASP() {
             )}
           </div>
           <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label">Exibir</label>
-            <select className="form-control" value={filtros.escopo}
-              onChange={e => setFiltro('escopo', e.target.value)}>
-              <option value="todas">Todas</option>
-              <option value="minhas">Direcionadas a mim</option>
-            </select>
-          </div>
-          <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Status</label>
             <select className="form-control" value={filtros.tratada}
               onChange={e => setFiltro('tratada', e.target.value)}>
@@ -424,7 +450,6 @@ function PublicacoesAASP() {
                   {thOrder('processo', 'Processo')}
                   {thOrder('publicacao', 'Nº Publ.')}
                   {thOrder('conteudo', 'Conteúdo')}
-                  {thOrder('direcionada', 'Direcionada a')}
                   {thOrder('status', 'Status')}
                   <th>Ações</th>
                 </tr>
@@ -439,7 +464,8 @@ function PublicacoesAASP() {
                     {podeExcluir && (
                       <td style={{ textAlign: 'center' }}>
                         <input type="checkbox" checked={selecionados.includes(p.id)}
-                          onChange={() => toggleSel(p.id)} />
+                          onChange={() => toggleSel(p.id)}
+                          disabled={p.tratada} title={p.tratada ? 'Publicação tratada não pode ser excluída' : undefined} />
                       </td>
                     )}
                     <td style={{ whiteSpace: 'nowrap' }}>{formatarData(p.data_publicacao)}</td>
@@ -454,7 +480,6 @@ function PublicacoesAASP() {
                         {textoLimpo(p.texto)}
                       </div>
                     </td>
-                    <td style={{ fontSize: '12px' }}>{direcionadaTexto(p)}</td>
                     <td>
                       {p.tratada
                         ? <span className="badge badge-verde">Tratada</span>
@@ -462,16 +487,24 @@ function PublicacoesAASP() {
                     </td>
                     <td>
                       <MenuAcoes itens={[
-                        { label: 'Direcionar', icone: '📨',
+                        { label: 'Criar prazo', icone: '📌',
                           oculto: !podeAlterar,
-                          onClick: () => setDirecionarAberto(p) },
-                        { label: p.tratada ? 'Reabrir' : 'Tratar', icone: p.tratada ? '↩️' : '✓',
+                          onClick: () => setAcaoAberta({ tipo: 'prazo', pub: p }) },
+                        { label: 'Criar tarefa', icone: '✓',
                           oculto: !podeAlterar,
+                          onClick: () => setAcaoAberta({ tipo: 'tarefa', pub: p }) },
+                        { label: 'Criar compromisso', icone: '📅',
+                          oculto: !podeAlterar,
+                          onClick: () => setAcaoAberta({ tipo: 'compromisso', pub: p }) },
+                        { label: p.tratada ? 'Reabrir' : 'Tratada / sem ação',
+                          icone: p.tratada ? '↩️' : '✔️',
+                          // Só pode marcar tratada com o processo cadastrado; Reabrir é sempre permitido.
+                          oculto: !podeAlterar || (!p.tratada && !p.processo_cadastrado),
                           onClick: () => alternarTratada(p) },
                         { label: 'Histórico', icone: '📋',
                           onClick: () => setHistoricoAberto(p) },
                         { label: 'Excluir', icone: '🗑️', perigo: true,
-                          oculto: !podeExcluir,
+                          oculto: !podeExcluir || p.tratada,   // tratada não pode ser excluída
                           onClick: () => excluirPublicacao(p) },
                       ]} />
                     </td>
@@ -509,8 +542,6 @@ function PublicacoesAASP() {
       {/* Modal: texto completo (navega só dentro do resultado atual da tela) */}
       {textoAberto && (() => {
         const idx = lista.findIndex(p => p.id === textoAberto.id);
-        const anterior = idx > 0 ? lista[idx - 1] : null;
-        const proxima  = (idx >= 0 && idx < lista.length - 1) ? lista[idx + 1] : null;
         return (
           <div className="modal-overlay">
             <div className="modal-box modal-largo">
@@ -522,9 +553,15 @@ function PublicacoesAASP() {
                 <button className="modal-fechar" onClick={() => setTextoAberto(null)}>✕</button>
               </div>
               <div className="modal-body">
-                <div style={{ marginBottom: '12px', fontSize: '13px', color: '#555' }}>
-                  {textoAberto.titulo && <div>{textoAberto.titulo}</div>}
-                  {textoAberto.numero_processo && <div><strong>Processo:</strong> {textoAberto.numero_processo}</div>}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                  gap: '12px', marginBottom: '12px', fontSize: '13px', color: '#555' }}>
+                  <div>
+                    {textoAberto.titulo && <div>{textoAberto.titulo}</div>}
+                    {textoAberto.numero_processo && <div><strong>Processo:</strong> {textoAberto.numero_processo}</div>}
+                  </div>
+                  {textoAberto.numero_publicacao && (
+                    <div style={{ whiteSpace: 'nowrap' }}><strong>Nº da publicação:</strong> {textoAberto.numero_publicacao}</div>
+                  )}
                 </div>
                 <div style={{
                   background: '#f8fafc', padding: '16px', borderRadius: '8px',
@@ -534,10 +571,9 @@ function PublicacoesAASP() {
                 </div>
               </div>
               <div className="modal-footer">
-                <button className="btn btn-outline" disabled={!anterior}
-                  onClick={() => setTextoAberto(anterior)}>◀ Anterior</button>
-                <button className="btn btn-outline" disabled={!proxima}
-                  onClick={() => setTextoAberto(proxima)}>Próxima ▶</button>
+                <BarraAcoesPublicacao pub={textoAberto} podeAlterar={podeAlterar}
+                  onCriar={(tipo, p) => setAcaoAberta({ tipo, pub: p })}
+                  onTratar={(p) => alternarTratada(p)} />
                 <button className="btn btn-secondary" style={{ marginLeft: 'auto' }}
                   onClick={() => setTextoAberto(null)}>Fechar</button>
               </div>
@@ -546,10 +582,24 @@ function PublicacoesAASP() {
         );
       })()}
 
-      {/* Modal: direcionar */}
-      {direcionarAberto && (
-        <ModalDirecionar publicacao={direcionarAberto}
-          onFechar={(recarregar) => { setDirecionarAberto(null); if (recarregar) carregar(); }} />
+      {/* Modais de ação (Prazo/Tarefa/Compromisso) criados a partir da publicação.
+          Ao salvar, a publicação é marcada como tratada automaticamente. */}
+      {acaoAberta && (
+        <ModalAcaoDaPublicacao
+          acao={acaoAberta}
+          usuariosAgenda={usuariosAgenda}
+          usuarioLogadoId={usuario?.id}
+          ehAdmin={ehAdmin}
+          onFechar={async (salvou) => {
+            const pub = acaoAberta.pub;
+            setAcaoAberta(null);
+            if (salvou) {
+              // Só marca Tratada se o processo estiver cadastrado (regra). Sem processo
+              // cadastrado, a publicação continua Pendente mesmo tendo gerado uma ação.
+              if (pub.processo_cadastrado) { try { await publicacoesAPI.tratar(pub.id, { tratada: true }); } catch {} }
+              carregar();
+            }
+          }} />
       )}
 
       {/* Modal: histórico */}
@@ -572,7 +622,7 @@ function PublicacoesAASP() {
 const CNJ_CERTIDAO_BASE = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
 
 function PublicacoesCNJ() {
-  const { temPermissao } = useAuth();
+  const { temPermissao, usuario, ehAdmin } = useAuth();
   const podeImportar = temPermissao('publicacoes', 'cadastrar');
   const podeAlterar  = temPermissao('publicacoes', 'alterar');
   const podeExcluir  = temPermissao('publicacoes', 'excluir');
@@ -594,7 +644,8 @@ function PublicacoesCNJ() {
   const [selecionados, setSelecionados] = useState([]); // ids marcados na página atual
 
   const [textoAberto, setTextoAberto]           = useState(null);
-  const [direcionarAberto, setDirecionarAberto] = useState(null);
+  const [acaoAberta, setAcaoAberta]           = useState(null); // { tipo:'prazo'|'tarefa'|'compromisso', pub }
+  const [usuariosAgenda, setUsuariosAgenda]   = useState([]);   // p/ "Delegar para" do compromisso
   const [historicoAberto, setHistoricoAberto]   = useState(null);
   const [confirmar, setConfirmar]               = useState(null);
 
@@ -608,6 +659,13 @@ function PublicacoesCNJ() {
         }
       })
       .catch(() => setConfigurado(false));
+  }, []);
+
+  // Lista de usuários para o "Delegar para" do compromisso (criado a partir da publicação).
+  useEffect(() => {
+    agendaAPI.listarUsuarios()
+      .then(({ data }) => { if (data.ok) setUsuariosAgenda(data.dados || []); })
+      .catch(() => {});
   }, []);
 
   const carregar = useCallback(async () => {
@@ -662,7 +720,7 @@ function PublicacoesCNJ() {
   }
 
   // ---- Seleção e exclusão em lote (age só na fonte CNJ) ----
-  const idsPagina = lista.map(p => p.id);
+  const idsPagina = lista.filter(p => !p.tratada).map(p => p.id); // tratadas não entram na seleção/lote
   const todasMarcadas = idsPagina.length > 0 && idsPagina.every(id => selecionados.includes(id));
   function toggleSel(id) {
     setSelecionados(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
@@ -686,8 +744,9 @@ function PublicacoesCNJ() {
     if (total === 0) return;
     setConfirmar({
       titulo: 'Excluir todas',
-      mensagem: `Isto vai excluir TODAS as ${total} publicação(ões) do resultado atual `
-        + '(com os filtros aplicados). A exclusão é permanente e fica registrada no log. Deseja continuar?',
+      mensagem: `Isto vai excluir as publicação(ões) PENDENTES do resultado atual `
+        + '(com os filtros aplicados). As publicações já tratadas são preservadas (não são excluídas). '
+        + 'A exclusão é permanente e fica registrada no log. Deseja continuar?',
       textoBotao: `Excluir todas (${total})`, tipo: 'perigo',
       acao: async () => {
         const payload = { todas: true, fonte: 'cnj', tratada: filtros.tratada, busca: filtros.busca, escopo: filtros.escopo };
@@ -728,7 +787,7 @@ function PublicacoesCNJ() {
       await publicacoesAPI.tratar(p.id, { tratada: !p.tratada });
       toast.success(p.tratada ? 'Publicação reaberta' : 'Publicação marcada como tratada');
       carregar();
-    } catch { toast.error('Erro ao atualizar'); }
+    } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao atualizar'); }
   }
 
   function excluirPublicacao(p) {
@@ -743,11 +802,6 @@ function PublicacoesCNJ() {
         carregar();
       },
     });
-  }
-
-  function direcionadaTexto(p) {
-    if (p.escritorio) return 'Escritório (todos)';
-    return p.direcionada_nomes || '—';
   }
 
   const totalPaginas = Math.max(1, Math.ceil(total / POR_PAGINA));
@@ -815,14 +869,6 @@ function PublicacoesCNJ() {
             )}
           </div>
           <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label">Exibir</label>
-            <select className="form-control" value={filtros.escopo}
-              onChange={e => setFiltro('escopo', e.target.value)}>
-              <option value="todas">Todas</option>
-              <option value="minhas">Direcionadas a mim</option>
-            </select>
-          </div>
-          <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Status</label>
             <select className="form-control" value={filtros.tratada}
               onChange={e => setFiltro('tratada', e.target.value)}>
@@ -870,7 +916,6 @@ function PublicacoesCNJ() {
                   {qtdOabs > 1 && <th style={{ whiteSpace: 'nowrap' }}>OAB</th>}
                   {thOrder('processo', 'Processo')}
                   {thOrder('conteudo', 'Conteúdo')}
-                  {thOrder('direcionada', 'Direcionada a')}
                   {thOrder('status', 'Status')}
                   <th>Ações</th>
                 </tr>
@@ -883,7 +928,8 @@ function PublicacoesCNJ() {
                     {podeExcluir && (
                       <td style={{ textAlign: 'center' }}>
                         <input type="checkbox" checked={selecionados.includes(p.id)}
-                          onChange={() => toggleSel(p.id)} />
+                          onChange={() => toggleSel(p.id)}
+                          disabled={p.tratada} title={p.tratada ? 'Publicação tratada não pode ser excluída' : undefined} />
                       </td>
                     )}
                     <td style={{ whiteSpace: 'nowrap' }}>{formatarData(p.data_publicacao)}</td>
@@ -899,7 +945,6 @@ function PublicacoesCNJ() {
                         {textoLimpo(p.texto)}
                       </div>
                     </td>
-                    <td style={{ fontSize: '12px' }}>{direcionadaTexto(p)}</td>
                     <td>
                       {p.tratada
                         ? <span className="badge badge-verde">Tratada</span>
@@ -907,16 +952,24 @@ function PublicacoesCNJ() {
                     </td>
                     <td>
                       <MenuAcoes itens={[
-                        { label: 'Direcionar', icone: '📨',
+                        { label: 'Criar prazo', icone: '📌',
                           oculto: !podeAlterar,
-                          onClick: () => setDirecionarAberto(p) },
-                        { label: p.tratada ? 'Reabrir' : 'Tratar', icone: p.tratada ? '↩️' : '✓',
+                          onClick: () => setAcaoAberta({ tipo: 'prazo', pub: p }) },
+                        { label: 'Criar tarefa', icone: '✓',
                           oculto: !podeAlterar,
+                          onClick: () => setAcaoAberta({ tipo: 'tarefa', pub: p }) },
+                        { label: 'Criar compromisso', icone: '📅',
+                          oculto: !podeAlterar,
+                          onClick: () => setAcaoAberta({ tipo: 'compromisso', pub: p }) },
+                        { label: p.tratada ? 'Reabrir' : 'Tratada / sem ação',
+                          icone: p.tratada ? '↩️' : '✔️',
+                          // Só pode marcar tratada com o processo cadastrado; Reabrir é sempre permitido.
+                          oculto: !podeAlterar || (!p.tratada && !p.processo_cadastrado),
                           onClick: () => alternarTratada(p) },
                         { label: 'Histórico', icone: '📋',
                           onClick: () => setHistoricoAberto(p) },
                         { label: 'Excluir', icone: '🗑️', perigo: true,
-                          oculto: !podeExcluir,
+                          oculto: !podeExcluir || p.tratada,   // tratada não pode ser excluída
                           onClick: () => excluirPublicacao(p) },
                       ]} />
                     </td>
@@ -953,8 +1006,6 @@ function PublicacoesCNJ() {
       {/* Modal: texto completo (navega só dentro do resultado atual da tela) */}
       {textoAberto && (() => {
         const idx = lista.findIndex(p => p.id === textoAberto.id);
-        const anterior = idx > 0 ? lista[idx - 1] : null;
-        const proxima  = (idx >= 0 && idx < lista.length - 1) ? lista[idx + 1] : null;
         return (
           <div className="modal-overlay">
             <div className="modal-box modal-largo">
@@ -966,7 +1017,12 @@ function PublicacoesCNJ() {
                 <button className="modal-fechar" onClick={() => setTextoAberto(null)}>✕</button>
               </div>
               <div className="modal-body">
-                <div style={{ marginBottom: '12px', fontSize: '13px', color: '#555' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                  gap: '12px', marginBottom: '12px', fontSize: '13px', color: '#555' }}>
+                  {textoAberto.numero_publicacao && (
+                    <div style={{ whiteSpace: 'nowrap', order: 2 }}><strong>Nº da publicação:</strong> {textoAberto.numero_publicacao}</div>
+                  )}
+                  <div style={{ order: 1 }}>
                   {textoAberto.tribunal && <div><strong>Tribunal:</strong> {textoAberto.tribunal}</div>}
                   {textoAberto.titulo && <div>{textoAberto.titulo}</div>}
                   {textoAberto.numero_processo && <div><strong>Processo:</strong> {textoAberto.numero_processo}</div>}
@@ -979,6 +1035,7 @@ function PublicacoesCNJ() {
                       </a>
                     </div>
                   )}
+                  </div>
                 </div>
                 <div style={{
                   background: '#f8fafc', padding: '16px', borderRadius: '8px',
@@ -988,10 +1045,9 @@ function PublicacoesCNJ() {
                 </div>
               </div>
               <div className="modal-footer">
-                <button className="btn btn-outline" disabled={!anterior}
-                  onClick={() => setTextoAberto(anterior)}>◀ Anterior</button>
-                <button className="btn btn-outline" disabled={!proxima}
-                  onClick={() => setTextoAberto(proxima)}>Próxima ▶</button>
+                <BarraAcoesPublicacao pub={textoAberto} podeAlterar={podeAlterar}
+                  onCriar={(tipo, p) => setAcaoAberta({ tipo, pub: p })}
+                  onTratar={(p) => alternarTratada(p)} />
                 <button className="btn btn-secondary" style={{ marginLeft: 'auto' }}
                   onClick={() => setTextoAberto(null)}>Fechar</button>
               </div>
@@ -1000,10 +1056,24 @@ function PublicacoesCNJ() {
         );
       })()}
 
-      {/* Modal: direcionar (compartilhado com a AASP) */}
-      {direcionarAberto && (
-        <ModalDirecionar publicacao={direcionarAberto}
-          onFechar={(recarregar) => { setDirecionarAberto(null); if (recarregar) carregar(); }} />
+      {/* Modais de ação (Prazo/Tarefa/Compromisso) criados a partir da publicação.
+          Ao salvar, a publicação é marcada como tratada automaticamente. */}
+      {acaoAberta && (
+        <ModalAcaoDaPublicacao
+          acao={acaoAberta}
+          usuariosAgenda={usuariosAgenda}
+          usuarioLogadoId={usuario?.id}
+          ehAdmin={ehAdmin}
+          onFechar={async (salvou) => {
+            const pub = acaoAberta.pub;
+            setAcaoAberta(null);
+            if (salvou) {
+              // Só marca Tratada se o processo estiver cadastrado (regra). Sem processo
+              // cadastrado, a publicação continua Pendente mesmo tendo gerado uma ação.
+              if (pub.processo_cadastrado) { try { await publicacoesAPI.tratar(pub.id, { tratada: true }); } catch {} }
+              carregar();
+            }
+          }} />
       )}
 
       {/* Modal: histórico (compartilhado com a AASP) */}
@@ -1142,6 +1212,36 @@ function ModalHistorico({ publicacao, onFechar }) {
                   ? <>por {dados.tratada_por_nome || '—'} <span style={{ color: '#888' }}>· {dataHora(dados.tratada_em)}</span></>
                   : 'Ainda não tratada'}
               </li>
+              {dados.acoes && (() => {
+                const { prazos = [], tarefas = [], compromissos = [] } = dados.acoes;
+                const total = prazos.length + tarefas.length + compromissos.length;
+                return (
+                  <li style={{ marginTop: '10px', borderTop: '1px solid #eef2f7', paddingTop: '8px' }}>
+                    <strong>Ações criadas a partir desta publicação:</strong>{' '}
+                    {total === 0 ? 'nenhuma ainda.' : (
+                      <ul style={{ margin: '6px 0 0', paddingLeft: '18px', lineHeight: '1.7' }}>
+                        {prazos.map(a => (
+                          <li key={'p' + a.id}>📌 Prazo: {a.titulo || 'Prazo'} — vence {formatarData(a.data_vencimento)}
+                            {a.processo_numero ? ` · proc. ${a.processo_numero}` : ''}
+                            {a.status === 'cancelado' ? ' (cancelado)' : a.status === 'concluido' ? ' (concluído)' : ''}
+                            <span style={{ color: '#1a56db' }}> · 👤 {a.direcionado_nome || 'Escritório'}</span></li>
+                        ))}
+                        {tarefas.map(a => (
+                          <li key={'t' + a.id}>✓ Tarefa: {a.titulo}
+                            {a.data_vencimento ? ` — vence ${formatarData(a.data_vencimento)}` : ''}
+                            {a.concluida ? ' (concluída)' : ''}
+                            <span style={{ color: '#1a56db' }}> · 👤 {a.direcionado_nome || 'Escritório'}</span></li>
+                        ))}
+                        {compromissos.map(a => (
+                          <li key={'c' + a.id}>📅 Compromisso: {a.titulo} — {formatarData(a.data)}
+                            {a.concluido ? ' (concluído)' : ''}
+                            <span style={{ color: '#1a56db' }}> · 👤 {a.direcionado_nome || (a.escritorio ? 'Escritório' : '—')}</span></li>
+                        ))}
+                      </ul>
+                    )}
+                  </li>
+                );
+              })()}
             </ul>
           )}
         </div>

@@ -300,6 +300,7 @@ router.post('/publicacoes/cnj/importar',  autenticar, verificarPermissao('public
 router.get('/publicacoes/usuarios',       autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.usuariosParaDirecionar);
 router.get('/publicacoes',                autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.listar);
 router.get('/publicacoes/:id/historico',  autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.historico);
+router.get('/publicacoes/:id',            autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.obter);
 router.post('/publicacoes/importar',      autenticar, verificarPermissao('publicacoes','cadastrar'),  publicacoesCtrl.importar);
 router.put('/publicacoes/:id/direcionar', autenticar, verificarPermissao('publicacoes','alterar'),    publicacoesCtrl.direcionar);
 router.put('/publicacoes/:id/tratar',     autenticar, verificarPermissao('publicacoes','alterar'),    publicacoesCtrl.tratar);

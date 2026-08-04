@@ -20,6 +20,22 @@ export function formatarData(data) {
   return d.toLocaleDateString('pt-BR');
 }
 
+// Deixa o texto de uma publicação legível: quando vem em HTML (acontece em algumas do CNJ),
+// remove as tags e decodifica os símbolos. Texto puro (o caso normal, e toda a AASP) passa
+// INTACTO — inclusive as quebras de linha. Usado na tela de Publicações e no modal de leitura
+// da publicação de origem (a partir de um prazo/tarefa/compromisso).
+export function textoLimpo(texto) {
+  const s = String(texto == null ? '' : texto);
+  if (!/<\/?[a-z][^>]*>/i.test(s)) return s;   // não parece HTML → devolve como está
+  let t = s
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')                 // remove script/style + conteúdo
+    .replace(/<\s*(br|\/p|\/div|\/tr|\/li|\/h[1-6])\s*\/?>/gi, '\n') // quebras viram nova linha
+    .replace(/<[^>]+>/g, ' ');                                       // remove o resto das tags
+  t = t.replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<')
+       .replace(/&gt;/gi, '>').replace(/&quot;/gi, '"').replace(/&#39;/gi, "'");
+  return t.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 // Formata data e hora ISO para DD/MM/YYYY HH:MM
 export function formatarDataHora(data) {
   if (!data) return '—';

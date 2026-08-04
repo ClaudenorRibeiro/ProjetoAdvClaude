@@ -123,6 +123,7 @@ CREATE TABLE IF NOT EXISTS `agenda_compromisso` (
   `delegado_para` int DEFAULT NULL,
   `titulo` varchar(150) NOT NULL,
   `descricao` text,
+  `publicacao_id` int DEFAULT NULL,
   `data` date NOT NULL,
   `hora_inicio` time DEFAULT NULL,
   `hora_fim` time DEFAULT NULL,
@@ -138,9 +139,11 @@ CREATE TABLE IF NOT EXISTS `agenda_compromisso` (
   KEY `data` (`data`),
   KEY `idx_agcomp_delegado` (`delegado_para`),
   KEY `idx_agcomp_concluido_por` (`concluido_por`),
+  KEY `idx_agcomp_publicacao` (`publicacao_id`),
   CONSTRAINT `fk_agcomp_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_agcomp_delegado` FOREIGN KEY (`delegado_para`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `fk_agcomp_concluido_por` FOREIGN KEY (`concluido_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+  CONSTRAINT `fk_agcomp_concluido_por` FOREIGN KEY (`concluido_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_agcomp_publicacao` FOREIGN KEY (`publicacao_id`) REFERENCES `publicacoes` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exportação de dados foi desmarcado.
@@ -869,6 +872,7 @@ DROP TABLE IF EXISTS `prazos_processo`;
 CREATE TABLE IF NOT EXISTS `prazos_processo` (
   `id` int NOT NULL AUTO_INCREMENT,
   `processo_id` int NOT NULL,
+  `publicacao_id` int DEFAULT NULL,
   `subtipo_id` int DEFAULT NULL,
   `descricao` varchar(300) DEFAULT NULL,
   `data_inicio` date NOT NULL,
@@ -896,7 +900,9 @@ CREATE TABLE IF NOT EXISTS `prazos_processo` (
   KEY `criado_por` (`criado_por`),
   KEY `fk_pp_fazendo_por` (`fazendo_por`),
   KEY `idx_vencimento_status` (`data_vencimento`,`status`),
+  KEY `idx_pp_publicacao` (`publicacao_id`),
   CONSTRAINT `fk_pp_fazendo_por` FOREIGN KEY (`fazendo_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_pp_publicacao` FOREIGN KEY (`publicacao_id`) REFERENCES `publicacoes` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_prazos_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`),
   CONSTRAINT `prazos_processo_ibfk_2` FOREIGN KEY (`subtipo_id`) REFERENCES `prazo_subtipo` (`id`),
   CONSTRAINT `prazos_processo_ibfk_3` FOREIGN KEY (`delegado_para`) REFERENCES `usuarios` (`id`),
@@ -1032,6 +1038,7 @@ CREATE TABLE IF NOT EXISTS `tarefas` (
   `processo_id` int DEFAULT NULL,
   `pasta_id` int DEFAULT NULL,
   `prazo_id` int DEFAULT NULL,
+  `publicacao_id` int DEFAULT NULL,
   `atribuida_para` int DEFAULT NULL,
   `data_vencimento` date DEFAULT NULL,
   `concluida` tinyint(1) DEFAULT '0',
@@ -1047,8 +1054,10 @@ CREATE TABLE IF NOT EXISTS `tarefas` (
   KEY `concluida_por` (`concluida_por`),
   KEY `criado_por` (`criado_por`),
   KEY `idx_concluida_vencimento` (`concluida`,`data_vencimento`),
+  KEY `idx_tarefas_publicacao` (`publicacao_id`),
   CONSTRAINT `fk_tarefas_tblpasta` FOREIGN KEY (`pasta_id`) REFERENCES `tblpasta` (`id`),
   CONSTRAINT `fk_tarefas_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`),
+  CONSTRAINT `fk_tarefas_publicacao` FOREIGN KEY (`publicacao_id`) REFERENCES `publicacoes` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tarefas_ibfk_3` FOREIGN KEY (`prazo_id`) REFERENCES `prazos_processo` (`id`),
   CONSTRAINT `tarefas_ibfk_4` FOREIGN KEY (`atribuida_para`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `tarefas_ibfk_5` FOREIGN KEY (`concluida_por`) REFERENCES `usuarios` (`id`),
