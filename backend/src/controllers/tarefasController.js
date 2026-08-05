@@ -6,6 +6,7 @@ const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
 const { bloqueiaAgendarPassado } = require('../utils/helpers');
+const { notificarConclusao } = require('../services/notificacaoService');
 
 // GET /api/tarefas — Lista tarefas com filtros
 async function listar(req, res) {
@@ -87,6 +88,7 @@ async function listar(req, res) {
       `SELECT t.id, t.titulo, t.descricao, t.prioridade, t.data_vencimento,
               t.concluida, t.concluida_em, t.criado_em,
               t.pasta_id, t.processo_id, t.publicacao_id,
+              t.atribuida_para, t.notificar_conclusao,
               u.nome  AS atribuida_para_nome,
               uc.nome AS criado_por_nome,
               -- Vínculo: pasta direta
@@ -130,7 +132,7 @@ async function listar(req, res) {
 // Transação: INSERT da tarefa + registro de auditoria (tudo ou nada)
 async function criar(req, res) {
   const { titulo, descricao, prioridade, processo_id, pasta_id, prazo_id,
-          atribuida_para, data_vencimento, publicacao_id } = req.body;
+          atribuida_para, data_vencimento, publicacao_id, notificar_conclusao } = req.body;
 
   if (!titulo) return erro(res, 'O título é obrigatório');
   if (bloqueiaAgendarPassado(req.usuario, data_vencimento)) {
@@ -144,14 +146,14 @@ async function criar(req, res) {
     const [result] = await conn.execute(
       `INSERT INTO tarefas
          (titulo, descricao, prioridade, processo_id, pasta_id, prazo_id,
-          atribuida_para, data_vencimento, criado_por, publicacao_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          atribuida_para, data_vencimento, criado_por, publicacao_id, notificar_conclusao)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         titulo.trim(), descricao || null,
         prioridade || 'normal',
         processo_id || null, pasta_id || null, prazo_id || null,
         atribuida_para || null, data_vencimento || null,
-        req.usuario.id, publicacao_id || null
+        req.usuario.id, publicacao_id || null, notificar_conclusao ? 1 : 0
       ]
     );
 
@@ -171,8 +173,11 @@ async function criar(req, res) {
 // Transação: UPDATE da tarefa + registro de auditoria (tudo ou nada)
 async function concluir(req, res) {
   const { id } = req.params;
-  const [exists] = await pool.execute('SELECT id FROM tarefas WHERE id = ?', [id]);
+  const [exists] = await pool.execute(
+    'SELECT id, titulo, criado_por, notificar_conclusao FROM tarefas WHERE id = ?', [id]
+  );
   if (!exists.length) return naoEncontrado(res, 'Tarefa não encontrada');
+  const tarefa = exists[0];
 
   const conn = await pool.getConnection();
   try {
@@ -183,6 +188,16 @@ async function concluir(req, res) {
       [req.usuario.id, id]
     );
     await auditoria.registrar(req.usuario.id, 'tarefas', 'concluir', id, null, null, conn);
+
+    // Aviso no sino ao criador (só se ele pediu ao criar e não foi ele mesmo quem concluiu)
+    if (tarefa.notificar_conclusao && tarefa.criado_por !== req.usuario.id) {
+      await notificarConclusao({
+        conn,
+        usuario_id: tarefa.criado_por,
+        tarefa_id:  Number(id),
+        mensagem:   `A tarefa "${tarefa.titulo}" foi concluída por ${req.usuario.nome}`,
+      });
+    }
 
     await conn.commit();
     return sucesso(res, null, 'Tarefa concluída');
@@ -313,7 +328,7 @@ async function excluir(req, res) {
 async function atualizar(req, res) {
   const { id } = req.params;
   const { titulo, descricao, prioridade, atribuida_para, data_vencimento,
-          pasta_id, processo_id } = req.body;
+          pasta_id, processo_id, notificar_conclusao } = req.body;
 
   if (bloqueiaAgendarPassado(req.usuario, data_vencimento)) {
     return erro(res, 'Apenas o administrador pode agendar tarefa com data anterior a hoje. Escolha uma data a partir de hoje.');
@@ -325,11 +340,12 @@ async function atualizar(req, res) {
 
     await conn.execute(
       `UPDATE tarefas SET titulo=?, descricao=?, prioridade=?,
-       atribuida_para=?, data_vencimento=?, pasta_id=?, processo_id=?
+       atribuida_para=?, data_vencimento=?, pasta_id=?, processo_id=?, notificar_conclusao=?
        WHERE id = ?`,
       [titulo, descricao || null, prioridade || 'normal',
        atribuida_para || null, data_vencimento || null,
-       pasta_id || null, processo_id || null, id]
+       pasta_id || null, processo_id || null,
+       (notificar_conclusao && atribuida_para) ? 1 : 0, id]
     );
     await auditoria.registrar(req.usuario.id, 'tarefas', 'alterar', id, null, null, conn);
 

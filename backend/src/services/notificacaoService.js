@@ -20,6 +20,16 @@ async function criarNotificacao(usuario_id, prazo_id, mensagem) {
   }
 }
 
+// Notificação de CONCLUSÃO (prazo OU tarefa) — grava DENTRO da transação da conclusão
+// (recebe a conexão `conn`), para ser atômica com o UPDATE que concluiu o item.
+// prazo_id e tarefa_id são mutuamente exclusivos: um é o vínculo, o outro fica NULL.
+async function notificarConclusao({ conn, usuario_id, prazo_id = null, tarefa_id = null, mensagem }) {
+  await conn.execute(
+    'INSERT INTO notificacoes (usuario_id, prazo_id, tarefa_id, mensagem) VALUES (?, ?, ?, ?)',
+    [usuario_id, prazo_id, tarefa_id, mensagem]
+  );
+}
+
 // ── E-mail imediato ao ser delegado ───────────────────────────────────────
 
 // Enviado assim que um prazo é atribuído a alguém
@@ -139,6 +149,7 @@ async function emailPrazosAtrasados({ destinatarios, prazos, escritorio }) {
 
 module.exports = {
   criarNotificacao,
+  notificarConclusao,
   emailPrazoDelegado,
   emailPrazosPendentes,
   emailPrazosAtrasados,

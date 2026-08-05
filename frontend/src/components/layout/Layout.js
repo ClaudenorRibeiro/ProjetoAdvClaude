@@ -68,6 +68,7 @@ export default function Layout({ children }) {
   const [qtdNotif, setQtdNotif]   = useState(0);
   const [sobrecarga, setSobrecarga] = useState(false); // true = pool saturado há pouco (aviso de capacidade, só admin)
   const [notifs, setNotifs]       = useState([]);
+  const [verTodas, setVerTodas]   = useState(false); // false = só novas (não lidas); true = histórico completo
   const [sinoAberto, setSinoAberto]       = useState(false);
   const [menuUsuario, setMenuUsuario]     = useState(false);
   const [modalSenha, setModalSenha]       = useState(false);
@@ -123,6 +124,7 @@ export default function Layout({ children }) {
   async function abrirSino() {
     setSinoAberto(v => !v);
     if (!sinoAberto) {
+      setVerTodas(false); // sempre abre em "só novas"
       try {
         const { data } = await notificacoesAPI.listar();
         if (data.ok) setNotifs(data.dados);
@@ -130,10 +132,26 @@ export default function Layout({ children }) {
     }
   }
 
+  // "Ver todas": histórico completo (lidas e não lidas). É só leitura — não marca nada como lida.
+  async function carregarTodas() {
+    try {
+      const { data } = await notificacoesAPI.listarTodas();
+      if (data.ok) { setNotifs(data.dados); setVerTodas(true); }
+    } catch {}
+  }
+
+  // Volta para a visão "só novas" (não lidas)
+  async function carregarNovas() {
+    try {
+      const { data } = await notificacoesAPI.listar();
+      if (data.ok) { setNotifs(data.dados); setVerTodas(false); }
+    } catch {}
+  }
+
   async function marcarLidas() {
     try {
       await notificacoesAPI.marcarLidas();
-      setQtdNotif(0); setNotifs([]); setSinoAberto(false);
+      setQtdNotif(0); setNotifs([]); setSinoAberto(false); setVerTodas(false);
     } catch {}
   }
 
@@ -313,16 +331,27 @@ export default function Layout({ children }) {
                   </div>
                   <div style={{maxHeight:'320px',overflowY:'auto'}}>
                     {notifs.length === 0
-                      ? <p style={{padding:'20px',textAlign:'center',color:'#9ca3af',fontSize:'13px'}}>Nenhuma notificação nova</p>
-                      : notifs.map(n => (
+                      ? <p style={{padding:'20px',textAlign:'center',color:'#9ca3af',fontSize:'13px'}}>
+                          {verTodas ? 'Nenhuma notificação' : 'Nenhuma notificação nova'}
+                        </p>
+                      : notifs.map(n => {
+                        // No histórico ("Ver todas"), as já lidas aparecem em cinza claro; as novas em preto.
+                        const cor = n.lida ? '#9ca3af' : '#111';
+                        return (
                         <div key={n.id} style={{padding:'12px 16px',borderBottom:'1px solid #f3f4f6',fontSize:'13px'}}>
-                          <div style={{color:'#111'}}>{n.mensagem}</div>
-                          <div style={{color:'#9ca3af',fontSize:'11px',marginTop:'4px'}}>
+                          <div style={{color:cor}}>{n.mensagem}</div>
+                          <div style={{color:cor,fontSize:'11px',marginTop:'4px'}}>
                             {new Date(n.criado_em).toLocaleString('pt-BR')}
                           </div>
                         </div>
-                      ))
+                      );})
                     }
+                  </div>
+                  <div style={{padding:'10px 16px',borderTop:'1px solid #e5e7eb',textAlign:'center'}}>
+                    <button onClick={verTodas ? carregarNovas : carregarTodas}
+                      style={{background:'none',border:'none',color:'#3b82f6',cursor:'pointer',fontSize:'12px'}}>
+                      {verTodas ? '← Ver só as novas' : 'Ver todas'}
+                    </button>
                   </div>
                 </div>
               )}

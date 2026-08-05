@@ -29,6 +29,29 @@ async function listar(req, res) {
   }
 }
 
+// GET /api/notificacoes/todas — Histórico: lidas E não lidas (para o "Ver todas" do sino)
+async function listarTodas(req, res) {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT n.id, n.mensagem, n.criado_em, n.lida,
+              pp.data_vencimento,
+              ps.nome AS subtipo_nome,
+              pr.numProc AS processo_numero
+       FROM notificacoes n
+       LEFT JOIN prazos_processo pp ON n.prazo_id = pp.id
+       LEFT JOIN prazo_subtipo ps   ON pp.subtipo_id = ps.id
+       LEFT JOIN tblproc pr         ON pp.processo_id = pr.id
+       WHERE n.usuario_id = ?
+       ORDER BY n.criado_em DESC
+       LIMIT 50`,
+      [req.usuario.id]
+    );
+    return sucesso(res, rows);
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
 // GET /api/notificacoes/contagem — Só o número de não lidas (para o badge)
 async function contagem(req, res) {
   try {
@@ -57,4 +80,4 @@ async function marcarLidas(req, res) {
   }
 }
 
-module.exports = { listar, contagem, marcarLidas };
+module.exports = { listar, listarTodas, contagem, marcarLidas };

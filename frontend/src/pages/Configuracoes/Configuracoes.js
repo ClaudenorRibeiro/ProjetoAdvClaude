@@ -895,8 +895,13 @@ function ModalUsuario({ usuario, onFechar }) {
             </div>
             <div className="form-group">
               <label className="form-label">Login (usuário) *</label>
-              <input className="form-control" value={form.login||''} onChange={e => set('login', e.target.value)}
-                disabled={!!usuario} />
+              {/* Só letras: bloqueia número/espaço/símbolo já na digitação (backend também valida) */}
+              <input className="form-control" value={form.login||''}
+                onChange={e => set('login', e.target.value.replace(/[^A-Za-z]/g, ''))}
+                disabled={!!usuario} placeholder="Apenas letras" />
+              {!usuario && (
+                <small style={{ color: '#6b7280', fontSize: '12px' }}>Apenas letras (sem números, espaços ou símbolos).</small>
+              )}
             </div>
           </div>
           {!usuario && (

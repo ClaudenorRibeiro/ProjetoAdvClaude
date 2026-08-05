@@ -186,6 +186,7 @@ export const prazosAPI = {
 // ============================================================
 export const notificacoesAPI = {
   listar:      () => api.get('/notificacoes'),
+  listarTodas: () => api.get('/notificacoes/todas'),
   contagem:    () => api.get('/notificacoes/contagem'),
   marcarLidas: () => api.put('/notificacoes/marcar-lidas'),
 };

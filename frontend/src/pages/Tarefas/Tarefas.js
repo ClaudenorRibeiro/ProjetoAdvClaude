@@ -2,13 +2,14 @@
 // PÁGINA DE TAREFAS
 // ============================================================
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { tarefasAPI, processosAPI } from '../../services/api';
 import { formatarData, labelPrioridade, toTitleCase, mascaraCNJ } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
+import ModalInfo from '../../components/ui/ModalInfo';
 import MenuAcoes from '../../components/MenuAcoes';
 import ModalLerPublicacao from '../../components/ModalLerPublicacao';
 
@@ -502,7 +503,14 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
   const [salvando, setSalvando]   = useState(false);
   const [usuarios, setUsuarios]   = useState([]);
   const [confirmarData, setConfirmarData] = useState(false); // confirmação do admin p/ data passada
-  const [aviso, setAviso] = useState(''); // faixa de aviso DENTRO do modal (nunca toast do canto)
+  const [aviso, setAviso] = useState(''); // faixa de aviso DENTRO do modal (erros de salvamento)
+  const [info, setInfo]   = useState(null); // pequeno modal informativo p/ validações obrigatórias
+  // Refs dos campos obrigatórios — ao fechar o aviso, o foco vai para o campo que faltou
+  const tituloRef    = useRef(null);
+  const buscaProcRef = useRef(null);
+  const dataVencRef  = useRef(null);
+  // Avisar o criador (você) no sino quando a tarefa for concluída (criar E editar).
+  const [notificarConclusao, setNotificarConclusao] = useState(!!tarefa?.notificar_conclusao);
   const { ehAdmin } = useAuth();
 
   // Busca de processo (CNJ) — inicializa com pré-seleção se vier do PastaDetalhe
@@ -617,11 +625,11 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
       };
 
       if (tarefa?.id) {
-        await tarefasAPI.atualizar(tarefa.id, payload);
+        await tarefasAPI.atualizar(tarefa.id, { ...payload, notificar_conclusao: (notificarConclusao && form.atribuida_para) ? 1 : 0 });
         toast.success('Tarefa atualizada!');
       } else {
-        // Vínculo de origem (quando a tarefa nasce de uma publicação). Só na criação.
-        await tarefasAPI.criar({ ...payload, publicacao_id: publicacaoId || null });
+        // Vínculo de origem (quando a tarefa nasce de uma publicação) + aviso de conclusão. Só na criação.
+        await tarefasAPI.criar({ ...payload, publicacao_id: publicacaoId || null, notificar_conclusao: (notificarConclusao && form.atribuida_para) ? 1 : 0 });
         toast.success('Tarefa criada!');
       }
       onFechar(true);
@@ -633,13 +641,15 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
   }
 
   function salvar() {
-    if (!form.titulo?.trim())                     return setAviso('Informe o título da tarefa.');
-    if (tipo === 'processo' && !form.processo_id) return setAviso('Selecione o processo.');
+    // Validações obrigatórias: pequeno modal informativo (a pedido do usuário, só nesta tela)
+    // Ao fechar o aviso, o foco vai para o campo que faltou (focar).
+    if (!form.titulo?.trim())                     return setInfo({ titulo: 'Título obrigatório', mensagem: 'Informe o título da tarefa.', focar: () => tituloRef.current?.focus() });
+    if (tipo === 'processo' && !form.processo_id) return setInfo({ titulo: 'Processo obrigatório', mensagem: 'Selecione o processo: pesquise pelo número e escolha a pasta na lista.', focar: () => buscaProcRef.current?.focus() });
     // Vencimento anterior a hoje: usuário comum é bloqueado; admin confirma. (Tarefa sem data não entra aqui.)
     const h = new Date();
     const hojeStr = `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}-${String(h.getDate()).padStart(2, '0')}`;
     if (form.data_vencimento && form.data_vencimento < hojeStr) {
-      if (!ehAdmin) return setAviso('Apenas o administrador pode agendar tarefa com data anterior a hoje. Escolha uma data a partir de hoje.');
+      if (!ehAdmin) return setInfo({ titulo: 'Data não permitida', mensagem: 'Apenas o administrador pode agendar tarefa com data anterior a hoje. Escolha uma data a partir de hoje.', focar: () => dataVencRef.current?.focus() });
       return setConfirmarData(true);
     }
     setAviso('');
@@ -698,7 +708,7 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
                   ⚠️ PROCESSO NÃO CADASTRADO
                 </span>
               )}
-              <input className="form-control"
+              <input className="form-control" ref={buscaProcRef}
                 placeholder="0000000-00.0000.0.00.0000"
                 value={buscaProc} maxLength={25}
                 style={{ fontFamily: 'monospace', letterSpacing: '0.5px',
@@ -755,7 +765,7 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
           {/* ── Título e Descrição ── */}
           <div className="form-group">
             <label className="form-label">Título *</label>
-            <input className="form-control" value={form.titulo}
+            <input className="form-control" ref={tituloRef} value={form.titulo}
               onChange={e => set('titulo', e.target.value)}
               onBlur={() => set('titulo', toTitleCase(form.titulo))}
               placeholder="Descreva a tarefa..." />
@@ -780,16 +790,30 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
             </div>
             <div className="form-group">
               <label className="form-label">Vencimento</label>
-              <input type="date" className="form-control" value={form.data_vencimento}
+              <input type="date" className="form-control" ref={dataVencRef} value={form.data_vencimento}
                 onChange={e => set('data_vencimento', e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Atribuir para</label>
-              <select className="form-control" value={form.atribuida_para} onChange={e => set('atribuida_para', e.target.value)}>
+              <select className="form-control" value={form.atribuida_para}
+                onChange={e => { set('atribuida_para', e.target.value); if (!e.target.value) setNotificarConclusao(false); }}>
                 <option value="">Escritório</option>
                 {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
               </select>
             </div>
+          </div>
+
+          {/* Aviso de conclusão (criar e editar) — só com um usuário responsável (não para "Escritório") */}
+          <div className="form-group" style={{ marginTop: 4 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14,
+                            cursor: form.atribuida_para ? 'pointer' : 'not-allowed',
+                            color: form.atribuida_para ? '#111' : '#9ca3af' }}>
+              <input type="checkbox" disabled={!form.atribuida_para}
+                checked={notificarConclusao && !!form.atribuida_para}
+                onChange={e => setNotificarConclusao(e.target.checked)} />
+              🔔 Avisar-me quando esta tarefa for concluída
+              {!form.atribuida_para && <span style={{ fontSize: 12 }}>— disponível ao atribuir a um usuário</span>}
+            </label>
           </div>
 
         </div>
@@ -812,6 +836,12 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
         acao={async () => { await executarSalvar(); }}
         onCancelar={() => setConfirmarData(false)}
       />
+      </div>
+    )}
+    {info && (
+      // z-index acima do modal para o aviso ficar sempre à frente
+      <div style={{ position: 'relative', zIndex: 2000 }}>
+        <ModalInfo {...info} onFechar={() => { const f = info.focar; setInfo(null); if (f) setTimeout(f, 50); }} />
       </div>
     )}
     </>

@@ -367,6 +367,11 @@ async function criarUsuario(req, res) {
     const { nome, login, senha, email, oab, tipo, nivel, ver_todos_processos } = req.body;
     if (!nome || !login || !senha) return erro(res, 'Nome, login e senha são obrigatórios');
 
+    // Login só pode ter letras (sem números, espaços ou símbolos) — regra do sistema
+    if (!/^[A-Za-z]+$/.test((login || '').trim())) {
+      return erro(res, 'O login deve conter apenas letras (sem números, espaços ou símbolos).');
+    }
+
     const errSenha = validarSenha(senha);
     if (errSenha) return erro(res, errSenha);
 

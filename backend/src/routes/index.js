@@ -159,6 +159,7 @@ router.delete('/prazos/:id',              autenticar, verificarPermissao('prazos
 
 // ---- NOTIFICAÇÕES ----
 router.get('/notificacoes/contagem',     autenticar, notificacoesCtrl.contagem);
+router.get('/notificacoes/todas',        autenticar, notificacoesCtrl.listarTodas);
 router.get('/notificacoes',              autenticar, notificacoesCtrl.listar);
 router.put('/notificacoes/marcar-lidas', autenticar, notificacoesCtrl.marcarLidas);
 

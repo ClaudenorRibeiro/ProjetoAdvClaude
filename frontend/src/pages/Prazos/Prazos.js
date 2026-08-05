@@ -2,7 +2,7 @@
 // PÁGINA DE PRAZOS
 // ============================================================
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { prazosAPI, processosAPI } from '../../services/api';
 import { formatarData, labelStatusPrazo, corPrazo, toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
@@ -10,6 +10,7 @@ import MenuAcoes from '../../components/MenuAcoes';
 import { useAuth } from '../../context/AuthContext';
 import ModalLerPublicacao from '../../components/ModalLerPublicacao';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
+import ModalInfo from '../../components/ui/ModalInfo';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
 
 // Status calculados pela data — concluido/cancelado são os únicos armazenados no banco
@@ -475,7 +476,16 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
     ...(processoInicial ? { processo_id: processoInicial.processo_id, titulo: processoInicial.titulo } : {}),
   });
   const [salvando, setSalvando] = useState(false);
-  const [aviso, setAviso]       = useState(''); // faixa de aviso DENTRO do modal (nunca toast do canto)
+  const [aviso, setAviso]       = useState(''); // faixa de aviso DENTRO do modal (erros de salvamento)
+  const [info, setInfo]         = useState(null); // pequeno modal informativo p/ validações obrigatórias
+  // Refs dos campos obrigatórios — ao fechar o aviso, o foco vai para o campo que faltou
+  const procRef        = useRef(null);
+  const tipoWrapRef    = useRef(null);
+  const subtipoWrapRef = useRef(null);
+  const dataInicioRef  = useRef(null);
+  const dataFinalRef   = useRef(null);
+  // Avisar o criador (você) no sino quando o prazo for concluído. Este modal é só de CRIAÇÃO.
+  const [notificarConclusao, setNotificarConclusao] = useState(false);
   // Guarda qual campo o usuário mexeu por último ('dias' ou 'data') para os dois cálculos
   // (dias→data e data→dias) não ficarem se recalculando em loop. Começa null: nada recalcula sozinho.
   const [modo, setModo] = useState(null);
@@ -592,17 +602,21 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
   function set(k, v) { setForm(f => ({...f, [k]: v})); }
 
   async function salvar() {
-    if (!form.processo_id) return setAviso(naoCadastrado
-      ? 'Processo não cadastrado no sistema. Cadastre o processo/pasta antes de criar o prazo — ou use Tarefa/Compromisso, que não dependem de processo.'
-      : 'Selecione o processo: pesquise pelo número e escolha a pasta na lista.');
-    if (!form.data_inicio) return setAviso('Informe a data de início.');
-    if (!form.tipo_prazo_id) return setAviso('Selecione o tipo de prazo.');
-    if (!form.subtipo_id)    return setAviso('Selecione o subtipo.');
-    if (!form.data_final)    return setAviso('Informe a data final (ou a quantidade de dias).');
+    // Validações obrigatórias: pequeno modal informativo; ao fechar, o foco vai para o campo que faltou.
+    if (!form.processo_id) return setInfo({
+      titulo: naoCadastrado ? 'Processo não cadastrado' : 'Processo obrigatório',
+      mensagem: naoCadastrado
+        ? 'Processo não cadastrado no sistema. Cadastre o processo/pasta antes de criar o prazo — ou use Tarefa/Compromisso, que não dependem de processo.'
+        : 'Selecione o processo: pesquise pelo número e escolha a pasta na lista.',
+      focar: () => procRef.current?.focus() });
+    if (!form.data_inicio)   return setInfo({ titulo: 'Data de início obrigatória', mensagem: 'Informe a data de início.', focar: () => dataInicioRef.current?.focus() });
+    if (!form.tipo_prazo_id) return setInfo({ titulo: 'Tipo de prazo obrigatório', mensagem: 'Selecione o tipo de prazo.', focar: () => tipoWrapRef.current?.querySelector('select')?.focus() });
+    if (!form.subtipo_id)    return setInfo({ titulo: 'Subtipo obrigatório', mensagem: 'Selecione o subtipo.', focar: () => subtipoWrapRef.current?.querySelector('select')?.focus() });
+    if (!form.data_final)    return setInfo({ titulo: 'Data final obrigatória', mensagem: 'Informe a data final (ou a quantidade de dias).', focar: () => dataFinalRef.current?.focus() });
     setAviso('');
     setSalvando(true);
     try {
-      await prazosAPI.criar({ ...form, publicacao_id: publicacaoId || null });
+      await prazosAPI.criar({ ...form, publicacao_id: publicacaoId || null, notificar_conclusao: (notificarConclusao && form.delegado_para) ? 1 : 0 });
       toast.success('Prazo criado com sucesso!');
       onFechar(true);
     } catch (err) { setAviso(err.response?.data?.mensagem || 'Não foi possível criar o prazo.'); }
@@ -614,6 +628,7 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
     : tiposLocal.subtipos;
 
   return (
+    <>
     <div className="modal-overlay">
       <div className="modal-box modal-grande">
         <div className="modal-header">
@@ -630,7 +645,7 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
           <div className="form-group">
             <label className="form-label">Número do Processo *</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-              <input className="form-control" placeholder="0000000-00.0000.0.00.0000"
+              <input className="form-control" ref={procRef} placeholder="0000000-00.0000.0.00.0000"
                 value={buscaPasta} maxLength={25}
                 style={{ maxWidth: '260px', fontFamily: 'monospace', letterSpacing: '0.5px',
                          ...(processoInicial ? { background: '#f8fafc', cursor: 'default' } : {}) }}
@@ -660,6 +675,7 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
             <input className="form-control" value={form.titulo||''} readOnly style={{background:'#f8fafc', cursor:'default'}} />
           </div>
           <div className="grid-2">
+            <div ref={tipoWrapRef}>
             <SelectComAdicao
               label="Tipo de prazo *"
               nomeEntidade="tipo de prazo"
@@ -674,6 +690,8 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
                 return data.dados.id;
               }}
             />
+            </div>
+            <div ref={subtipoWrapRef}>
             <SelectComAdicao
               label="Subtipo *"
               nomeEntidade="subtipo"
@@ -689,6 +707,7 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
                 return data.dados.id;
               }}
             />
+            </div>
           </div>
           <div className="form-group">
             <label className="form-label">Descrição</label>
@@ -698,7 +717,7 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
           <div className="grid-4">
             <div className="form-group">
               <label className="form-label">Data início *</label>
-              <input type="date" className="form-control" value={form.data_inicio} onChange={e=>set('data_inicio',e.target.value)} />
+              <input type="date" className="form-control" ref={dataInicioRef} value={form.data_inicio} onChange={e=>set('data_inicio',e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Quantidade de dias</label>
@@ -713,15 +732,28 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
             </div>
             <div className="form-group">
               <label className="form-label">Data final *</label>
-              <input type="date" className="form-control" value={form.data_final||''} onChange={e=>{ set('data_final',e.target.value); setModo('data'); }} />
+              <input type="date" className="form-control" ref={dataFinalRef} value={form.data_final||''} onChange={e=>{ set('data_final',e.target.value); setModo('data'); }} />
             </div>
           </div>
           <div className="form-group">
             <label className="form-label">Delegar para</label>
-            <select className="form-control" value={form.delegado_para||''} onChange={e=>set('delegado_para',e.target.value)}>
+            <select className="form-control" value={form.delegado_para||''}
+              onChange={e=>{ set('delegado_para',e.target.value); if(!e.target.value) setNotificarConclusao(false); }}>
               <option value="">Escritório (sem responsável)</option>
               {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
             </select>
+          </div>
+          {/* Aviso de conclusão: só faz sentido com um usuário responsável (não para "Escritório") */}
+          <div className="form-group" style={{ marginTop: 4 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14,
+                            cursor: form.delegado_para ? 'pointer' : 'not-allowed',
+                            color: form.delegado_para ? '#111' : '#9ca3af' }}>
+              <input type="checkbox" disabled={!form.delegado_para}
+                checked={notificarConclusao && !!form.delegado_para}
+                onChange={e => setNotificarConclusao(e.target.checked)} />
+              🔔 Avisar-me quando este prazo for concluído
+              {!form.delegado_para && <span style={{ fontSize: 12 }}>— disponível ao delegar para um usuário</span>}
+            </label>
           </div>
         </div>
         <div className="modal-footer">
@@ -732,6 +764,12 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
         </div>
       </div>
     </div>
+    {info && (
+      <div style={{ position: 'relative', zIndex: 2000 }}>
+        <ModalInfo {...info} onFechar={() => { const f = info.focar; setInfo(null); if (f) setTimeout(f, 50); }} />
+      </div>
+    )}
+    </>
   );
 }
 
@@ -751,6 +789,8 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
   });
   const [salvando, setSalvando] = useState(false);
   const [usuarios, setUsuarios] = useState([]);
+  // Avisar o criador (você) no sino quando o prazo for concluído — pré-marcado com o valor salvo.
+  const [notificarConclusao, setNotificarConclusao] = useState(!!prazo.notificar_conclusao);
   // Qual campo o usuário mexeu por último ('dias' ou 'data'). Começa null: ao ABRIR a edição,
   // nada recalcula sozinho — preserva a data final e a quantidade que já estavam gravadas.
   const [modo, setModo] = useState(null);
@@ -816,7 +856,7 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
     if (!form.data_final)    return toast.error('A data final é obrigatória. Informe a data final ou a quantidade de dias.');
     setSalvando(true);
     try {
-      await prazosAPI.editar(prazo.id, form);
+      await prazosAPI.editar(prazo.id, { ...form, notificar_conclusao: (notificarConclusao && form.delegado_para) ? 1 : 0 });
       toast.success('Prazo atualizado!');
       onFechar(true);
     } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao salvar'); }
@@ -905,10 +945,23 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
           </div>
           <div className="form-group">
             <label className="form-label">Delegar para</label>
-            <select className="form-control" value={form.delegado_para} onChange={e=>set('delegado_para',e.target.value)}>
+            <select className="form-control" value={form.delegado_para}
+              onChange={e=>{ set('delegado_para',e.target.value); if(!e.target.value) setNotificarConclusao(false); }}>
               <option value="">Escritório (sem responsável)</option>
               {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
             </select>
+          </div>
+          {/* Aviso de conclusão: só faz sentido com um usuário responsável (não para "Escritório") */}
+          <div className="form-group" style={{ marginTop: 4 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14,
+                            cursor: form.delegado_para ? 'pointer' : 'not-allowed',
+                            color: form.delegado_para ? '#111' : '#9ca3af' }}>
+              <input type="checkbox" disabled={!form.delegado_para}
+                checked={notificarConclusao && !!form.delegado_para}
+                onChange={e => setNotificarConclusao(e.target.checked)} />
+              🔔 Avisar-me quando este prazo for concluído
+              {!form.delegado_para && <span style={{ fontSize: 12 }}>— disponível ao delegar para um usuário</span>}
+            </label>
           </div>
         </div>
         <div className="modal-footer">

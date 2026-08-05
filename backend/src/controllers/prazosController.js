@@ -6,7 +6,7 @@
 const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const { calcularVencimento, calcularQuantidade } = require('../services/calendarioService');
-const { criarNotificacao, emailPrazoDelegado } = require('../services/notificacaoService');
+const { criarNotificacao, notificarConclusao, emailPrazoDelegado } = require('../services/notificacaoService');
 const { hojeBrasilia } = require('../utils/helpers');
 const auditoria = require('../middleware/auditoria');
 
@@ -106,6 +106,7 @@ async function listar(req, res) {
     const [rows] = await pool.execute(
       `SELECT pp.id, pp.descricao, pp.data_inicio, pp.data_vencimento,
               pp.quantidade, pp.tipo_dias, pp.delegado_para, pp.publicacao_id,
+              pp.notificar_conclusao,
               pp.subtipo_id, tp.id AS tipo_prazo_id,
               pp.motivo_cancelamento,
               pp.criado_por, uc.nome AS criado_por_nome, pp.criado_em,
@@ -166,7 +167,7 @@ async function criar(req, res) {
   try {
     const {
       processo_id, subtipo_id, descricao, data_inicio,
-      quantidade, tipo_dias, data_final, delegado_para, publicacao_id
+      quantidade, tipo_dias, data_final, delegado_para, publicacao_id, notificar_conclusao
     } = req.body;
 
     if (!processo_id || !data_inicio) {
@@ -188,12 +189,12 @@ async function criar(req, res) {
     const [result] = await pool.execute(
       `INSERT INTO prazos_processo
          (processo_id, subtipo_id, descricao, data_inicio, quantidade, tipo_dias,
-          data_vencimento, delegado_para, criado_por, publicacao_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          data_vencimento, delegado_para, criado_por, publicacao_id, notificar_conclusao)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         processo_id, subtipo_id || null, descricao || null, data_inicio,
         quantidade || null, tipo_dias || 'uteis', data_vencimento,
-        delegado_para || null, req.usuario.id, publicacao_id || null
+        delegado_para || null, req.usuario.id, publicacao_id || null, notificar_conclusao ? 1 : 0
       ]
     );
 
@@ -249,7 +250,11 @@ async function mudarStatus(req, res) {
   }
 
   const [antes] = await pool.execute(
-    'SELECT status, fazendo_por FROM prazos_processo WHERE id = ?', [id]
+    `SELECT pp.status, pp.fazendo_por, pp.notificar_conclusao, pp.criado_por,
+            COALESCE(ps.nome, pp.descricao, 'Prazo') AS rotulo
+       FROM prazos_processo pp
+       LEFT JOIN prazo_subtipo ps ON pp.subtipo_id = ps.id
+      WHERE pp.id = ?`, [id]
   );
   if (!antes.length) return naoEncontrado(res, 'Prazo não encontrado');
   if (['concluido', 'cancelado'].includes(antes[0].status)) {
@@ -291,6 +296,16 @@ async function mudarStatus(req, res) {
       [id, antes[0].status, status, req.usuario.id,
        status === 'cancelado' ? motivo_cancelamento.trim() : (observacao || null)]
     );
+
+    // Aviso no sino ao criador quando CONCLUÍDO (só se ele pediu ao criar e não foi ele mesmo)
+    if (status === 'concluido' && antes[0].notificar_conclusao && antes[0].criado_por !== req.usuario.id) {
+      await notificarConclusao({
+        conn,
+        usuario_id: antes[0].criado_por,
+        prazo_id:   Number(id),
+        mensagem:   `O prazo "${antes[0].rotulo}" foi concluído por ${req.usuario.nome}`,
+      });
+    }
 
     await conn.commit();
     return sucesso(res, null, `Prazo marcado como "${status}"`);
@@ -431,7 +446,7 @@ async function calcularDias(req, res) {
 async function editar(req, res) {
   try {
     const { id } = req.params;
-    const { subtipo_id, descricao, data_inicio, quantidade, tipo_dias, data_final, delegado_para } = req.body;
+    const { subtipo_id, descricao, data_inicio, quantidade, tipo_dias, data_final, delegado_para, notificar_conclusao } = req.body;
 
     if (!data_inicio) return erro(res, 'Data de início é obrigatória');
 
@@ -453,11 +468,11 @@ async function editar(req, res) {
     await pool.execute(
       `UPDATE prazos_processo
          SET subtipo_id = ?, descricao = ?, data_inicio = ?, quantidade = ?,
-             tipo_dias = ?, data_vencimento = ?, delegado_para = ?
+             tipo_dias = ?, data_vencimento = ?, delegado_para = ?, notificar_conclusao = ?
        WHERE id = ?`,
       [subtipo_id || null, descricao || null, data_inicio,
        quantidade || null, tipo_dias || 'uteis', data_vencimento,
-       delegado_para || null, id]
+       delegado_para || null, (notificar_conclusao && delegado_para) ? 1 : 0, id]
     );
 
     await auditoria.registrar(req.usuario.id, 'prazos_processo', 'editar', id);

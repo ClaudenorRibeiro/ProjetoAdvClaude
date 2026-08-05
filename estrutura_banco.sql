@@ -690,14 +690,17 @@ DROP TABLE IF EXISTS `notificacoes`;
 CREATE TABLE IF NOT EXISTS `notificacoes` (
   `id` int NOT NULL AUTO_INCREMENT,
   `usuario_id` int NOT NULL,
-  `prazo_id` int NOT NULL,
+  `prazo_id` int DEFAULT NULL,
+  `tarefa_id` int DEFAULT NULL,
   `mensagem` varchar(300) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
   `lida` tinyint(1) DEFAULT '0',
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `usuario_id` (`usuario_id`),
   KEY `prazo_id` (`prazo_id`),
+  KEY `idx_notif_tarefa` (`tarefa_id`),
   CONSTRAINT `fk_notif_prazo` FOREIGN KEY (`prazo_id`) REFERENCES `prazos_processo` (`id`),
+  CONSTRAINT `fk_notif_tarefa` FOREIGN KEY (`tarefa_id`) REFERENCES `tarefas` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_notif_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -887,6 +890,7 @@ CREATE TABLE IF NOT EXISTS `prazos_processo` (
   `concluido_em` datetime DEFAULT NULL,
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   `criado_por` int NOT NULL,
+  `notificar_conclusao` tinyint(1) NOT NULL DEFAULT '0',
   `motivo_cancelamento` varchar(500) DEFAULT NULL,
   `fazendo_por` int DEFAULT NULL,
   `fazendo_desde` datetime DEFAULT NULL,
@@ -1046,6 +1050,7 @@ CREATE TABLE IF NOT EXISTS `tarefas` (
   `concluida_em` datetime DEFAULT NULL,
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   `criado_por` int NOT NULL,
+  `notificar_conclusao` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `processo_id` (`processo_id`),
   KEY `pasta_id` (`pasta_id`),
