@@ -1,0 +1,162 @@
+=========================================================================
+RESUMO DA SESSÃO — 05/08/2026 (DEV)
+Sistema de Advocacia (produto NovoJud) — Backend Node/Express + MySQL, Frontend React/Vite
+=========================================================================
+
+ESTADO NO FIM DO DIA:
+- Tudo testado no LOCAL ao longo da sessão.
+- SQL rodado nas 3 instâncias (local + 2 AWS: Antônio + Erick).
+- Código já subido no GIT.
+- Deploy nas 2 AWS em andamento/feito pelo usuário.
+- "Por hoje, chega." Memórias atualizadas e sincronizadas (interna == pasta memory/ do projeto).
+
+Foram só alterações de FRONT + BACK. Houve 1 (um) bloco de SQL (as colunas de
+notificação + a generalização da tabela de notificações).
+
+-------------------------------------------------------------------------
+O QUE FIZEMOS HOJE (5 entregas + 1 correção de bug)
+-------------------------------------------------------------------------
+
+1) NOTIFICAÇÃO DE CONCLUSÃO DE TAREFA E PRAZO (feature principal)
+   O QUE É: ao CRIAR (e depois também ao EDITAR) uma Tarefa ou um Prazo, existe
+   uma opção "🔔 Avisar-me quando for concluída/concluído". Se ligada, quando a
+   PESSOA ATRIBUÍDA marcar como concluída, o CRIADOR recebe um aviso no sino:
+     - Tarefa: "A tarefa 'XXXX' foi concluída por Fulano"
+     - Prazo:  "O prazo 'XXXX' foi concluído por Fulano"
+
+   REGRAS (decididas por você via perguntas):
+   - Canal: SOMENTE o sininho (sem e-mail).
+   - Vale para Tarefa E Prazo.
+   - A opção só fica DISPONÍVEL quando há um usuário responsável (Atribuir/Delegar
+     diferente de "Escritório"). Se você trocar para "Escritório", a caixinha
+     desabilita e se desmarca sozinha.
+   - NÃO avisa se foi o próprio criador que concluiu (evita aviso à toa).
+   - O aviso é gravado DENTRO da mesma transação da conclusão (tudo ou nada).
+   - Sem órfãos: se a Tarefa for excluída, a notificação some junto (FK CASCADE).
+
+   ONDE MEXEU:
+   - Banco (SQL rodado): coluna "notificar_conclusao" em 'tarefas' e em
+     'prazos_processo'; a tabela 'notificacoes' passou a servir também tarefas
+     (o campo do prazo virou opcional e entrou um campo para a tarefa, com
+     amarração que apaga a notificação junto se a tarefa for excluída).
+   - Backend: serviço de notificação ganhou a função de aviso de conclusão
+     (transacional); controllers de tarefas e prazos gravam a opção no criar/
+     editar e disparam o aviso na conclusão; as listagens passaram a devolver a
+     opção para a tela pré-marcar a caixinha.
+   - Frontend: as janelas de Nova Tarefa, Novo Prazo e Editar Prazo ganharam a
+     caixinha; o sino (topo da tela) exibe o aviso.
+
+   >>> BUG PRÉ-EXISTENTE CORRIGIDO DE BRINDE (você aprovou — "opção A"):
+   A listagem de tarefas NÃO devolvia o "responsável" (só o nome dele). Efeito:
+   ao EDITAR uma tarefa que era de um usuário, o campo "Atribuir para" abria como
+   "Escritório" e, se salvasse, a tarefa PERDIA o responsável. Corrigido: a
+   listagem passou a devolver o responsável, então o editar agora pré-seleciona
+   certo (e o guard da caixinha 🔔 funciona no editar). O Prazo NÃO tinha esse bug.
+
+2) SINO DE NOTIFICAÇÕES — melhorias
+   - A DATA/HORA de cada notificação estava num cinza muito claro (quase apagada);
+     ficou na mesma cor escura da mensagem, bem legível.
+   - Novo link "Ver todas" no rodapé do sino: mostra o HISTÓRICO completo (as já
+     lidas e as novas). As já lidas aparecem em cinza claro; as novas em preto.
+     O link vira "← Ver só as novas" para voltar. "Ver todas" é SÓ LEITURA (não
+     marca nada como lido; o contador e o "Marcar todas como lidas" seguem iguais).
+   - Backend: novo endpoint que devolve as últimas notificações (lidas e não lidas).
+
+3) VALIDAÇÕES VIRAM UM PEQUENO MODAL (com foco no campo que faltou)
+   - Criei um componente reutilizável de aviso (pequeno pop-up amarelo, ícone de
+     atenção, um botão "Entendi").
+   - No NOVA TAREFA e no NOVO PRAZO, as validações OBRIGATÓRIAS (ex.: "Informe o
+     título", "Selecione o processo", tipo/subtipo/datas) deixaram de ser a faixa
+     e passaram a abrir esse pequeno modal.
+   - Ao clicar em "Entendi" (ou fechar), o CURSOR VAI DIRETO para o campo que
+     faltou.
+   - IMPORTANTE: só nessas 2 telas, por decisão sua. O ERRO DE SALVAMENTO (quando
+     o servidor recusa) CONTINUA na faixa interna — sua regra de "aviso na faixa,
+     nunca no toast do canto" segue valendo para erros.
+
+4) LOGIN DE USUÁRIO SÓ COM LETRAS
+   - No CADASTRO de usuário (Configurações → Usuários), o campo "Login" agora não
+     aceita número, espaço ou símbolo — some na hora que você tenta digitar. Só
+     letras A–Z (maiúsculas/minúsculas), sem acento.
+   - O backend também RECUSA login inválido (defesa real).
+   - Decisões suas: aplicar SÓ no cadastro (a tela de login NÃO foi tocada, para
+     não travar ninguém que já exista); sem acento.
+   - Observação: o login só é definido na criação (no editar ele já era travado),
+     então usuários atuais ficam intactos.
+
+-------------------------------------------------------------------------
+SQL QUE FOI RODADO HOJE (multi-instância: local -> testar -> as 2 AWS)
+Já rodado por você nos 3 locais. Registrado aqui só para histórico.
+-------------------------------------------------------------------------
+ALTER TABLE `tarefas`
+  ADD COLUMN `notificar_conclusao` tinyint(1) NOT NULL DEFAULT 0 AFTER `criado_por`;
+
+ALTER TABLE `prazos_processo`
+  ADD COLUMN `notificar_conclusao` tinyint(1) NOT NULL DEFAULT 0 AFTER `criado_por`;
+
+ALTER TABLE `notificacoes`
+  MODIFY COLUMN `prazo_id` int DEFAULT NULL,
+  ADD COLUMN `tarefa_id` int DEFAULT NULL AFTER `prazo_id`,
+  ADD KEY `idx_notif_tarefa` (`tarefa_id`),
+  ADD CONSTRAINT `fk_notif_tarefa` FOREIGN KEY (`tarefa_id`) REFERENCES `tarefas` (`id`) ON DELETE CASCADE;
+
+(Obs.: todos os nomes de tabela em MINÚSCULAS, no banco e no código — regra eterna.)
+
+-------------------------------------------------------------------------
+EFEITOS COLATERAIS CONFERIDOS (não quebrar nada)
+-------------------------------------------------------------------------
+- Colunas/props novas são opcionais e retrocompatíveis (o build passou a cada etapa).
+- O sino mostra só "mensagem + data" -> notificação de tarefa (sem prazo) não quebra a lista.
+- A consulta do sino usa junção "solta" (LEFT JOIN) -> prazo vazio para tarefa é ok.
+- Editar usuário não mexe no login -> a regra "só letras" vale só na criação.
+- A caixinha 🔔 só grava a opção quando há usuário responsável (front e back).
+
+-------------------------------------------------------------------------
+PENDÊNCIAS (para as próximas sessões) — LISTA ATUALIZADA
+-------------------------------------------------------------------------
+DESTA SESSÃO (decisões suas, ficaram de fora de propósito):
+  [ ] Regra "login só letras" TAMBÉM no setup do 1º admin (tela de setup /
+      registrarAdmin) — hoje NÃO passa por essa regra; ofereci, você deixou p/ depois.
+  [ ] Validação em "pequeno modal" nas OUTRAS telas (Prazo Editar, Compromisso,
+      Audiências, etc.) — hoje só Nova Tarefa e Novo Prazo; você quis só nelas.
+  [ ] Code-splitting do frontend (só front, FASEADO, uma área por vez, testando
+      cada uma) — quando você pedir. Frase-gatilho combinada:
+      "Vamos fazer o code-splitting do frontend (aquele que o build avisa por
+      passar de 500 kB). Faça em plano faseado, uma área por vez, testando cada
+      uma antes de seguir, sem quebrar nada — e me explique antes de codar."
+      (Você pediu para NÃO registrar isso na memória interna; fica só aqui no .txt.)
+
+DE SESSÕES ANTERIORES (ainda abertas):
+  [ ] Financeiro multi-banco (grande)
+  [ ] Config global de capitalização (grande e transversal)
+  [ ] Hardening do servidor AWS (infra) + rotacionar chaves AWS em texto puro
+  [ ] Renovar senha de app do Gmail no .env
+  [ ] Integração com a Agenda do Google
+  [ ] Agenda: ver todos os usuários, consultas, etc.
+  [ ] Tarefas: colocar horário e temporizador (?)
+  [ ] Andamento de cada processo
+  [ ] Audiências "Registrar Ata" — Fases 2 a 5 (Prazos+Tarefas na ata; Perícias;
+      Anotações de atendimento; Notificações por e-mail/WhatsApp)
+
+-------------------------------------------------------------------------
+SUAS REGRAS (reforçadas na memória eterna hoje — resumo)
+-------------------------------------------------------------------------
+1. NUNCA CODAR SEM AUTORIZAÇÃO — primeiro explico o que entendi + efeitos, e só
+   codo após o seu "pode codar". Pergunta de escopo não é autorização.
+2. NUNCA SUPOR — tudo baseado em fato verificado (front + back + banco), efeitos
+   colaterais antes; sem certeza, eu aviso e espero.
+3. CORRIGIR VOCÊ quando um pedido prejudica outra parte ou fere uma regra sua.
+4. TABELAS SEMPRE EM MINÚSCULAS — no banco E no código, sem exceção.
+5. NENHUMA exclusão pode deixar órfãos; amarração é tratada antes.
+6. Transações (BEGIN/COMMIT/ROLLBACK) em operação multi-passo; MySQL sem
+   middleware (SQL à mão).
+7. Banco só você atualiza no HeidiSQL; SQL é multi-instância (local -> testar ->
+   todas as AWS). Git só com sua autorização.
+8. "Build não é teste" — a responsabilidade de não quebrar o resto é minha; você
+   testa só a manutenção em foco.
+9. Não mandar trechos de código no chat (você é leigo); avisos em faixa/modal
+   amigável dentro da tela, nunca o toast do canto.
+
+=========================================================================
+FIM DO RESUMO — 05/08/2026
+=========================================================================
