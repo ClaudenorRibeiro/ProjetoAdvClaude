@@ -7,6 +7,7 @@ const { pool } = require('../config/database');
 const { sucesso, erroInterno } = require('../utils/response');
 const { hojeBrasilia } = require('../utils/helpers');
 const { buscarAniversariantes } = require('./pessoasController');
+const { contarProcessosParados } = require('./processosController');
 
 // GET /api/dashboard — Retorna todos os dados do dashboard
 async function buscarDados(req, res) {
@@ -28,6 +29,7 @@ async function buscarDados(req, res) {
       audienciasSemAta,
       audienciasSemAdvogado,
       processosSemMovimentacao,
+      totalProcessosParados,
     ] = await Promise.all([
 
       // Prazos que vencem hoje
@@ -190,6 +192,10 @@ async function buscarDados(req, res) {
          ORDER BY dias_sem_movimentacao DESC
          LIMIT 20`
       ),
+
+      // Contagem de processos PARADOS (risco de prescrição) — para o cartão do topo.
+      // Reaproveita a consulta central do processosController (sem duplicar SQL).
+      contarProcessosParados(),
     ]);
 
     // Clientes que fazem aniversário hoje (reaproveita a lógica do relatório de aniversariantes).
@@ -219,6 +225,7 @@ async function buscarDados(req, res) {
         pericias_hoje:     periciasHoje[0].length,
         sem_ata:              audienciasSemAta[0].length,
         audiencias_sem_adv:   audienciasSemAdvogado[0].length,
+        processos_parados:    totalProcessosParados,
         aniversariantes_hoje: aniversariantesHoje.length,
       },
     });

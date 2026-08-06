@@ -51,7 +51,7 @@ export default function Dashboard() {
         <CardContador titulo="Tarefas"          valor={contadores.tarefas_pendentes} cor="laranja"  link="/tarefas" />
         <CardContador titulo="Tarefas Atrasadas"valor={contadores.tarefas_atrasadas} cor="vermelho" link="/tarefas?atrasadas=1" />
         <CardContador titulo="Audiências Hoje"       valor={contadores.audiencias_hoje}    cor="verde"    link={`/audiencias?data_de=${new Date().toISOString().slice(0,10)}&data_ate=${new Date().toISOString().slice(0,10)}`} />
-        <CardContador titulo="Audiências Sem Adv."  valor={contadores.audiencias_sem_adv} cor="laranja"  link="/audiencias" />
+        <CardContador titulo="Processos Parados"    valor={contadores.processos_parados} cor="laranja"  link="/relatorios?rel=processos_parados" />
         <CardContador titulo="Perícias Hoje"         valor={contadores.pericias_hoje}      cor="roxo"     link="/pericias" />
       </div>
 
@@ -164,7 +164,9 @@ export default function Dashboard() {
           {dados.processos_sem_movimentacao.length > 0 && (
             <div className="card">
               <div className="card-titulo">⚠️ Processos sem movimentação</div>
-              <div className="tabela-wrapper">
+              {/* Altura limitada com rolagem: o card fica compacto como os outros
+                  mesmo quando há muitos processos (a lista pode ter até 20). */}
+              <div className="tabela-wrapper" style={{maxHeight: '260px', overflowY: 'auto'}}>
                 <table className="tabela">
                   <thead>
                     <tr><th>Pasta</th><th>Processo</th><th>Última mov.</th><th>Dias</th></tr>

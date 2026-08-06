@@ -543,6 +543,12 @@ function TabEscritorio() {
           onChange={e => set('dias_audiencia_sem_adv', e.target.value)} />
         <small style={{color:'#888'}}>Aparece no dashboard para todos os usuários</small>
       </div>
+      <div className="form-group" style={{maxWidth:'300px'}}>
+        <label className="form-label">Processo parado — alertar após (dias sem nenhuma ação)</label>
+        <input type="number" min="1" className="form-control" value={form.dias_processo_parado||365}
+          onChange={e => set('dias_processo_parado', e.target.value)} />
+        <small style={{color:'#888'}}>Risco de prescrição. Considera a última ação de qualquer módulo do processo (andamento, prazo, tarefa, audiência, perícia, financeiro). Aparece no cartão "Processos Parados" do dashboard e no relatório.</small>
+      </div>
 
       <h4 style={{margin:'20px 0 12px',fontSize:'13px',fontWeight:600,color:'#555'}}>Controle "Fazendo" em prazos</h4>
       <div className="form-group" style={{maxWidth:'300px'}}>

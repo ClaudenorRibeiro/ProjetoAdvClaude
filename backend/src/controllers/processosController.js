@@ -967,6 +967,86 @@ async function buscarProcessosPorNumero(req, res) {
   }
 }
 
+// ============================================================
+// PROCESSOS PARADOS (risco de prescrição)
+// "Última ação" = a data mais recente entre QUALQUER módulo ligado ao processo
+// (Andamento, Prazos, Tarefas, Audiências, Perícias, Financeiro/acordos). Uma
+// simples consulta NÃO conta, pois não gera registro em nenhuma dessas tabelas.
+// Se o processo nunca teve ação, cai para a data de cadastro do próprio processo.
+//
+// Performance: cada módulo entra com um MAX agrupado por processo_id (subconsulta
+// única, não correlacionada), usando os índices `processo_id` que já existem em
+// todas essas tabelas. Fragmento reutilizado pelo Dashboard (contagem) e pelo
+// Relatório (lista) — sem duplicar a lógica.
+// ============================================================
+const JOIN_ULTIMA_ACAO = `
+  LEFT JOIN (
+    SELECT processo_id, MAX(dt) AS ultima FROM (
+      SELECT processo_id, GREATEST(criado_em, COALESCE(editado_em, criado_em)) AS dt FROM andamento_processual
+      UNION ALL
+      SELECT processo_id, GREATEST(criado_em, COALESCE(status_alterado_em, criado_em), COALESCE(concluido_em, criado_em)) FROM prazos_processo
+      UNION ALL
+      SELECT processo_id, GREATEST(criado_em, COALESCE(concluida_em, criado_em)) FROM tarefas WHERE processo_id IS NOT NULL
+      UNION ALL
+      SELECT processo_id, GREATEST(criado_em, COALESCE(alterado_em, criado_em)) FROM audiencia
+      UNION ALL
+      SELECT processo_id, GREATEST(criado_em, COALESCE(alterado_em, criado_em)) FROM pericia
+      UNION ALL
+      SELECT processo_id, GREATEST(criado_em, COALESCE(alterado_em, criado_em)) FROM acordo
+    ) acoes
+    GROUP BY processo_id
+  ) ult ON ult.processo_id = pr.id`;
+
+// Contagem usada no cartão do Dashboard. Usa o limite configurado (padrão 365).
+// Blindado: se por acaso a coluna `dias_processo_parado` ainda não existir (SQL não
+// rodado), NÃO derruba o Dashboard — apenas devolve 0. O cartão volta ao normal
+// assim que o ALTER for aplicado.
+async function contarProcessosParados() {
+  try {
+    const [r] = await pool.execute(
+      `SELECT COUNT(*) AS total
+         FROM tblproc pr
+         ${JOIN_ULTIMA_ACAO}
+        WHERE pr.ativo = 1
+          AND DATEDIFF(CURDATE(), DATE(COALESCE(ult.ultima, pr.criado_em)))
+              >= (SELECT COALESCE(dias_processo_parado, 365) FROM configuracoes_escritorio LIMIT 1)`
+    );
+    return r[0]?.total || 0;
+  } catch (err) {
+    return 0;
+  }
+}
+
+// GET /api/processos/parados?dias=NNN — Relatório de processos parados.
+// Sem ?dias, usa o valor configurado (padrão 365).
+async function listarProcessosParados(req, res) {
+  try {
+    let dias = parseInt(req.query.dias, 10);
+    if (!Number.isFinite(dias) || dias < 0) {
+      const [cfg] = await pool.execute(
+        'SELECT COALESCE(dias_processo_parado, 365) AS d FROM configuracoes_escritorio LIMIT 1'
+      );
+      dias = cfg[0]?.d ?? 365;
+    }
+    const [rows] = await pool.execute(
+      `SELECT pr.id AS processo_id, pr.numProc AS numero, pr.NomeTituloProc AS pasta_titulo,
+              pa.id AS pasta_id, LPAD(pa.numPasta, 4, '0') AS pasta_numero_fmt,
+              DATE(COALESCE(ult.ultima, pr.criado_em)) AS ultima_acao,
+              DATEDIFF(CURDATE(), DATE(COALESCE(ult.ultima, pr.criado_em))) AS dias_parado
+         FROM tblproc pr
+         JOIN tblpasta pa ON pr.pasta_id = pa.id
+         ${JOIN_ULTIMA_ACAO}
+        WHERE pr.ativo = 1
+          AND DATEDIFF(CURDATE(), DATE(COALESCE(ult.ultima, pr.criado_em))) >= ?
+        ORDER BY dias_parado DESC`,
+      [dias]
+    );
+    return sucesso(res, { dias, processos: rows });
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
 module.exports = {
   buscarProcessosPorNumero,
   sugerirNumeroPasta,
@@ -988,4 +1068,6 @@ module.exports = {
   criarStatusProc, atualizarStatusProc, excluirStatusProc,
   // Instância
   criarInstancia, atualizarInstancia, excluirInstancia,
+  // Processos parados (risco de prescrição)
+  contarProcessosParados, listarProcessosParados,
 };

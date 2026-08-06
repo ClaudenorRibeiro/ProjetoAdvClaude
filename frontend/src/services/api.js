@@ -137,6 +137,8 @@ export const processosAPI = {
   excluirProcesso:   (id) => api.delete(`/processos/${id}`),
   // Auxiliares (leitura)
   auxiliares:        () => api.get('/processos/auxiliares'),
+  // Relatório: processos parados (risco de prescrição). Sem `dias`, usa o valor configurado.
+  processosParados:  (dias) => api.get('/processos/parados', { params: (dias != null && dias !== '') ? { dias } : {} }),
   // Auxiliares — CRUD completo (permissão por ação)
   criarForum:        (dados) => api.post('/processos/auxiliares/foruns', dados),
   atualizarForum:    (id, dados) => api.put(`/processos/auxiliares/foruns/${id}`, dados),

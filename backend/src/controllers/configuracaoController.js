@@ -120,6 +120,7 @@ async function atualizarEscritorio(req, res) {
       cor_principal, horario_alerta_prazos, horario_alerta_prazos_2,
       alerta_atrasado_ativo, alerta_emails,
       dias_alerta_audiencia, dias_alerta_pericia, dias_sem_movimentacao,
+      dias_processo_parado,
       prazo_fazendo_timeout, dias_audiencia_sem_adv,
       titulo_aba, mensagem_aniversario, tempo_inatividade_min
     } = req.body;
@@ -150,9 +151,9 @@ async function atualizarEscritorio(req, res) {
           cep, logradouro, numero, bairro, cidade, estado,
           cor_principal, horario_alerta_prazos, horario_alerta_prazos_2,
           alerta_atrasado_ativo, alerta_emails,
-          dias_alerta_audiencia, dias_alerta_pericia, dias_sem_movimentacao,
+          dias_alerta_audiencia, dias_alerta_pericia, dias_sem_movimentacao, dias_processo_parado,
           prazo_fazendo_timeout, dias_audiencia_sem_adv, titulo_aba, mensagem_aniversario, tempo_inatividade_min, setup_concluido)
-       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
        ON DUPLICATE KEY UPDATE
          nome=VALUES(nome), cnpj_cpf=VALUES(cnpj_cpf), email=VALUES(email), telefone=VALUES(telefone),
          cep=VALUES(cep), logradouro=VALUES(logradouro), numero=VALUES(numero),
@@ -161,7 +162,8 @@ async function atualizarEscritorio(req, res) {
          horario_alerta_prazos_2=VALUES(horario_alerta_prazos_2),
          alerta_atrasado_ativo=VALUES(alerta_atrasado_ativo), alerta_emails=VALUES(alerta_emails),
          dias_alerta_audiencia=VALUES(dias_alerta_audiencia), dias_alerta_pericia=VALUES(dias_alerta_pericia),
-         dias_sem_movimentacao=VALUES(dias_sem_movimentacao), prazo_fazendo_timeout=VALUES(prazo_fazendo_timeout),
+         dias_sem_movimentacao=VALUES(dias_sem_movimentacao), dias_processo_parado=VALUES(dias_processo_parado),
+         prazo_fazendo_timeout=VALUES(prazo_fazendo_timeout),
          dias_audiencia_sem_adv=VALUES(dias_audiencia_sem_adv), titulo_aba=VALUES(titulo_aba),
          mensagem_aniversario=VALUES(mensagem_aniversario),
          tempo_inatividade_min=VALUES(tempo_inatividade_min),
@@ -172,6 +174,7 @@ async function atualizarEscritorio(req, res) {
         cor_principal || '#1a56db', horario_alerta_prazos || '18:00:00', horario_alerta_prazos_2 || null,
         alerta_atrasado_ativo ? 1 : 0, alerta_emails || null,
         dias_alerta_audiencia || 3, dias_alerta_pericia || 2, dias_sem_movimentacao || 30,
+        parseInt(dias_processo_parado, 10) || 365,
         parseInt(prazo_fazendo_timeout) || 60, parseInt(dias_audiencia_sem_adv) || 7,
         titulo_aba || null, mensagem_aniversario || null, tempoInat
       ]

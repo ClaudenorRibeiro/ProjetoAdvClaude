@@ -111,6 +111,8 @@ router.get('/pessoas/:tipo/:id/processos', autenticar, verificarPermissao('pesso
 // ---- PROCESSOS E PASTAS ----
 // ATENÇÃO: rotas estáticas (sugerir-pasta, auxiliares, pastas) ANTES de /:id
 router.get('/processos/buscar',                     autenticar, processosCtrl.buscarProcessosPorNumero);
+// Relatório: processos parados (risco de prescrição) — estática ANTES de /:id
+router.get('/processos/parados',                    autenticar, verificarPermissao('relatorios','visualizar'), processosCtrl.listarProcessosParados);
 router.get('/processos/sugerir-pasta',              autenticar, processosCtrl.sugerirNumeroPasta);
 router.get('/processos/pastas/checar',              autenticar, processosCtrl.checarPasta);
 router.get('/processos/auxiliares',                 autenticar, processosCtrl.buscarAuxiliares);

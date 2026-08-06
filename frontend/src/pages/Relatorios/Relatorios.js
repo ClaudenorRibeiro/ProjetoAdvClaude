@@ -3,7 +3,8 @@
 // Pesquisa flexível por módulo com exportação
 // ============================================================
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { prazosAPI, tarefasAPI, audienciasAPI, processosAPI, financeiroAPI, pessoasAPI } from '../../services/api';
 import { formatarData, formatarNumeroPasta, formatarMoeda, labelStatusPrazo, labelPrioridade } from '../../utils/formatters';
 import { toast } from 'react-toastify';
@@ -15,6 +16,7 @@ const MODULOS = [
   { key: 'tarefas',         label: 'Tarefas' },
   { key: 'audiencias',      label: 'Audiências' },
   { key: 'pastas',          label: 'Processos / Pastas' },
+  { key: 'processos_parados', label: 'Processos parados (risco de prescrição)' },
   { key: 'aniversariantes', label: 'Aniversariantes (clientes)' },
   { key: 'financeiro',      label: 'Financeiro (admin)' },
 ];
@@ -23,13 +25,21 @@ const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Ag
 
 export default function Relatorios() {
   const { ehAdmin } = useAuth();
-  const [modulo, setModulo]   = useState('prazos');
+  const [searchParams] = useSearchParams();
+  const relInicial = searchParams.get('rel');
+  const [modulo, setModulo]   = useState(MODULOS.some(m => m.key === relInicial) ? relInicial : 'prazos');
   const [filtros, setFiltros] = useState({});
   const [resultado, setResultado] = useState(null);
   const [total, setTotal]     = useState(0);
   const [buscando, setBuscando] = useState(false);
 
   function setFiltro(k, v) { setFiltros(f => ({...f, [k]: v})); }
+
+  // Se veio do Dashboard com ?rel=processos_parados, já gera o relatório ao abrir.
+  useEffect(() => {
+    if (relInicial && MODULOS.some(m => m.key === relInicial)) buscar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function mudarModulo(m) {
     setModulo(m);
@@ -57,6 +67,10 @@ export default function Relatorios() {
         case 'pastas':
           ({ data } = await processosAPI.listarPastas({ ...filtros, limite: 200 }));
           if (data.ok) { setResultado({ tipo: 'pastas', registros: data.dados.registros }); setTotal(data.dados.total); }
+          break;
+        case 'processos_parados':
+          ({ data } = await processosAPI.processosParados(filtros.dias));
+          if (data.ok) { setResultado({ tipo: 'processos_parados', registros: data.dados.processos, dias: data.dados.dias }); setTotal(data.dados.processos.length); }
           break;
         case 'aniversariantes':
           ({ data } = await pessoasAPI.aniversariantes({ filtro: filtros.periodo || 'hoje', mes: filtros.mes }));
@@ -102,6 +116,11 @@ export default function Relatorios() {
       cabecalho = ['Nº Pasta','Título','Cliente','Área','Processos'];
       linhas = resultado.registros.map(r => [
         formatarNumeroPasta(r.numero), r.titulo, r.cliente_nome, r.area_direito, r.total_processos
+      ]);
+    } else if (resultado.tipo === 'processos_parados') {
+      cabecalho = ['Pasta','Processo','Última ação','Dias parado'];
+      linhas = resultado.registros.map(r => [
+        r.pasta_numero_fmt, r.numero, r.ultima_acao, r.dias_parado
       ]);
     } else if (resultado.tipo === 'aniversariantes') {
       cabecalho = ['Nome','Dia','Idade','Telefone','E-mail','Parabéns'];
@@ -212,6 +231,16 @@ export default function Relatorios() {
               <input className="form-control" style={{minWidth:'240px'}} placeholder="Título ou número..."
                 value={filtros.busca||''}
                 onChange={e => setFiltro('busca', e.target.value)} />
+            </div>
+          )}
+
+          {(modulo === 'processos_parados') && (
+            <div className="form-group" style={{margin:0}}>
+              <label className="form-label">Parado há mais de (dias)</label>
+              <input type="number" min="1" className="form-control" style={{maxWidth:'180px'}}
+                placeholder="usar configuração"
+                value={filtros.dias||''}
+                onChange={e => setFiltro('dias', e.target.value)} />
             </div>
           )}
 
@@ -426,6 +455,29 @@ function TabelaResultado({ resultado, onRecarregar }) {
           </tbody>
         </table>
         {registros.length === 0 && <p className="lista-vazia">Nenhum resultado</p>}
+      </div>
+    );
+  }
+
+  if (tipo === 'processos_parados') {
+    return (
+      <div className="tabela-wrapper">
+        <table className="tabela">
+          <thead>
+            <tr><th>Pasta</th><th>Processo</th><th>Última ação</th><th>Dias parado</th></tr>
+          </thead>
+          <tbody>
+            {registros.map(r => (
+              <tr key={r.processo_id}>
+                <td><Link to={`/processos/pasta/${r.pasta_id}`}>{r.pasta_numero_fmt}</Link></td>
+                <td>{r.numero || '—'}</td>
+                <td>{formatarData(r.ultima_acao)}</td>
+                <td><span className="badge badge-laranja">{r.dias_parado}d</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {registros.length === 0 && <p className="lista-vazia">Nenhum processo parado no período</p>}
       </div>
     );
   }
