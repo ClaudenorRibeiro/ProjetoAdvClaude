@@ -98,6 +98,7 @@ export default function PastaDetalhe() {
   // Modais — Audiências
   const [modalNovaAudiencia, setModalNovaAudiencia] = useState(false); // abrir modal de nova audiência
   const [audienciaEditando, setAudienciaEditando]   = useState(null);  // audiência sendo editada
+  const [audienciaEmLeitura, setAudienciaEmLeitura] = useState(false); // true = abrir "Detalhes da Audiência" (somente leitura)
   const [audienciaCancelando, setAudienciaCancelando] = useState(null); // audiência sendo cancelada
   const [audienciaRemarcando, setAudienciaRemarcando] = useState(null); // audiência sendo remarcada
   const [audienciaHistorico, setAudienciaHistorico]   = useState(null); // audiência com histórico aberto
@@ -915,8 +916,10 @@ export default function PastaDetalhe() {
           <ModalEditarAudiencia
             audiencia={audienciaEditando}
             tipos={tiposAudiencia}
+            somenteLeitura={audienciaEmLeitura}
+            podeEditar={podeEditarAud(audienciaEditando)}
             onTiposChange={setTiposAudiencia}
-            onFechar={(reload) => { setAudienciaEditando(null); if (reload) carregarAudiencias(); }}
+            onFechar={(reload) => { setAudienciaEditando(null); setAudienciaEmLeitura(false); if (reload) carregarAudiencias(); }}
           />
         )}
         {audienciaAta && (
@@ -1134,7 +1137,10 @@ export default function PastaDetalhe() {
                     const varaTexto = vara ? (forum ? `${vara} — ${forum}` : vara) : null;
                     // Edição bloqueada para audiências finalizadas (cancelada/remarcada = somente leitura)
                     return (
-                      <tr key={a.id}>
+                      <tr key={a.id}
+                        style={{ cursor: 'pointer' }}
+                        title="Ver detalhes da audiência"
+                        onClick={() => { setAudienciaEditando(a); setAudienciaEmLeitura(true); }}>
                         <td>
                           <span className={`badge ${STATUS_COR_AUD[a.status] || 'badge-cinza'}`}>
                             {STATUS_LABEL_AUD[a.status] || a.status}
@@ -1150,6 +1156,7 @@ export default function PastaDetalhe() {
                               {a.plataforma_virtual && <span>{a.plataforma_virtual}</span>}
                               {a.link_virtual && (
                                 <a href={a.link_virtual} target="_blank" rel="noreferrer"
+                                  onClick={e => e.stopPropagation()}
                                   style={{ marginLeft: a.plataforma_virtual ? 6 : 0, color: '#3b82f6' }}>
                                   🔗 Link
                                 </a>
@@ -1157,14 +1164,14 @@ export default function PastaDetalhe() {
                             </div>
                           )}
                         </td>
-                        <td style={{ whiteSpace: 'nowrap' }}>
+                        <td style={{ whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
                             <MenuAcoes itens={[
                               // Registrar ata — só audiências agendadas ou adiadas sem ata
                               { label: 'Registrar ata', icone: '📝', oculto: !(['agendada','adiada'].includes(a.status) && temPermissao('audiencias','alterar')), onClick: () => setAudienciaAta(a) },
                               { label: 'Gerar documento', icone: '📄', oculto: !temPermissao('documentos','cadastrar'), gerarDoc: { ancoraTipo: 'audiencia', ancoraId: a.id } },
                               { label: 'Cancelar', icone: '✖', oculto: !(['agendada','adiada'].includes(a.status) && temPermissao('audiencias','alterar')), onClick: () => setAudienciaCancelando(a) },
                               { label: 'Remarcar', icone: '🔁', oculto: !(['agendada','adiada'].includes(a.status) && temPermissao('audiencias','alterar')), onClick: () => setAudienciaRemarcando(a) },
-                              { label: 'Editar', icone: '✏️', oculto: !podeEditarAud(a), onClick: () => setAudienciaEditando(a) },
+                              { label: 'Editar', icone: '✏️', oculto: !podeEditarAud(a), onClick: () => { setAudienciaEditando(a); setAudienciaEmLeitura(false); } },
                               { label: 'Histórico', icone: '📋', onClick: () => setAudienciaHistorico(a) },
                               { label: 'Excluir', icone: '🗑️', perigo: true, oculto: !podeExcluirAud(a), onClick: () => excluirAudiencia(a) },
                             ]} />

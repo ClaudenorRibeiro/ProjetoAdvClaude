@@ -122,7 +122,8 @@ async function atualizarEscritorio(req, res) {
       dias_alerta_audiencia, dias_alerta_pericia, dias_sem_movimentacao,
       dias_processo_parado,
       prazo_fazendo_timeout, dias_audiencia_sem_adv,
-      titulo_aba, mensagem_aniversario, tempo_inatividade_min
+      titulo_aba, mensagem_aniversario, tempo_inatividade_min,
+      ata_advogado_obrigatorio
     } = req.body;
 
     if (!nome) return erro(res, 'Nome do escritório é obrigatório');
@@ -152,8 +153,8 @@ async function atualizarEscritorio(req, res) {
           cor_principal, horario_alerta_prazos, horario_alerta_prazos_2,
           alerta_atrasado_ativo, alerta_emails,
           dias_alerta_audiencia, dias_alerta_pericia, dias_sem_movimentacao, dias_processo_parado,
-          prazo_fazendo_timeout, dias_audiencia_sem_adv, titulo_aba, mensagem_aniversario, tempo_inatividade_min, setup_concluido)
-       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+          prazo_fazendo_timeout, dias_audiencia_sem_adv, titulo_aba, mensagem_aniversario, tempo_inatividade_min, ata_advogado_obrigatorio, setup_concluido)
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
        ON DUPLICATE KEY UPDATE
          nome=VALUES(nome), cnpj_cpf=VALUES(cnpj_cpf), email=VALUES(email), telefone=VALUES(telefone),
          cep=VALUES(cep), logradouro=VALUES(logradouro), numero=VALUES(numero),
@@ -167,6 +168,7 @@ async function atualizarEscritorio(req, res) {
          dias_audiencia_sem_adv=VALUES(dias_audiencia_sem_adv), titulo_aba=VALUES(titulo_aba),
          mensagem_aniversario=VALUES(mensagem_aniversario),
          tempo_inatividade_min=VALUES(tempo_inatividade_min),
+         ata_advogado_obrigatorio=VALUES(ata_advogado_obrigatorio),
          setup_concluido=1`,
       [
         nome, cnpj_cpf || null, email || null, telefone || null,
@@ -176,7 +178,8 @@ async function atualizarEscritorio(req, res) {
         dias_alerta_audiencia || 3, dias_alerta_pericia || 2, dias_sem_movimentacao || 30,
         parseInt(dias_processo_parado, 10) || 365,
         parseInt(prazo_fazendo_timeout) || 60, parseInt(dias_audiencia_sem_adv) || 7,
-        titulo_aba || null, mensagem_aniversario || null, tempoInat
+        titulo_aba || null, mensagem_aniversario || null, tempoInat,
+        ata_advogado_obrigatorio ? 1 : 0
       ]
     );
 

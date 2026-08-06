@@ -549,6 +549,14 @@ function TabEscritorio() {
           onChange={e => set('dias_processo_parado', e.target.value)} />
         <small style={{color:'#888'}}>Risco de prescrição. Considera a última ação de qualquer módulo do processo (andamento, prazo, tarefa, audiência, perícia, financeiro). Aparece no cartão "Processos Parados" do dashboard e no relatório.</small>
       </div>
+      <div className="form-group">
+        <label style={{display:'flex',alignItems:'center',gap:'10px',cursor:'pointer'}}>
+          <input type="checkbox" checked={!!form.ata_advogado_obrigatorio}
+            onChange={e => set('ata_advogado_obrigatorio', e.target.checked ? 1 : 0)} />
+          <span>Exigir advogado acompanhante ao registrar a ata</span>
+        </label>
+        <small style={{color:'#888'}}>Quando ligado, é obrigatório informar quem acompanhou a audiência (ou marcar "Ninguém") para registrar a ata.</small>
+      </div>
 
       <h4 style={{margin:'20px 0 12px',fontSize:'13px',fontWeight:600,color:'#555'}}>Controle "Fazendo" em prazos</h4>
       <div className="form-group" style={{maxWidth:'300px'}}>

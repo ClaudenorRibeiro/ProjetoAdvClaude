@@ -24,11 +24,11 @@ async function temPermissaoBackend(usuarioId, nivel, modulo, acao) {
 async function listarAdvogados(req, res) {
   try {
     const [usuarios] = await pool.execute(
-      `SELECT id, nome, 'usuario' AS origem FROM usuarios
+      `SELECT id, nome, oab, 'usuario' AS origem FROM usuarios
        WHERE tipo = 'advogado' AND ativo = 1 ORDER BY nome`
     );
     const [freelas] = await pool.execute(
-      `SELECT id, nome, 'freela' AS origem FROM advogados_freela ORDER BY nome`
+      `SELECT id, nome, oab, 'freela' AS origem FROM advogados_freela ORDER BY nome`
     );
     return sucesso(res, [...usuarios, ...freelas]);
   } catch (err) {
@@ -545,6 +545,8 @@ async function registrarAta(req, res) {
   const { id } = req.params;
   const { houve_acordo, valor_acordo, parcelas, valor_parcela,
           data_primeiro_pagamento, nova_audiencia, observacoes,
+          teve_prazo, teve_pericia, teve_alvara, teve_desistencia, teve_retorno_autos,
+          advogado_acompanhante,
           prazos = [], tarefas = [] } = req.body;
 
   try {
@@ -556,6 +558,26 @@ async function registrarAta(req, res) {
     }
   } catch (err) {
     return erroInterno(res, err);
+  }
+
+  // Preferência do escritório: exigir advogado acompanhante na ata? (blindado: se a coluna ainda
+  // não existir, não bloqueia). "ninguem" é uma escolha válida (a parte compareceu sozinha).
+  try {
+    const [cfg] = await pool.execute('SELECT ata_advogado_obrigatorio FROM configuracoes_escritorio LIMIT 1');
+    const obrig = cfg.length ? (cfg[0].ata_advogado_obrigatorio || 0) : 0;
+    if (obrig && !advogado_acompanhante) {
+      return erro(res, 'Informe o advogado que acompanhou a audiência (ou selecione "Ninguém").');
+    }
+  } catch { /* coluna ainda não existe — não bloqueia */ }
+
+  // Advogado acompanhante: "usuario:X" | "freela:X" | "ninguem" | vazio (não informado).
+  let advogado_id = null, advogado_freela_id = null, sem_advogado = 0;
+  if (advogado_acompanhante === 'ninguem') {
+    sem_advogado = 1;
+  } else if (advogado_acompanhante) {
+    const r = parsarResponsavel(advogado_acompanhante);
+    advogado_id = r.responsavel_id;
+    advogado_freela_id = r.responsavel_freela_id;
   }
 
   const conn = await pool.getConnection();
@@ -571,14 +593,20 @@ async function registrarAta(req, res) {
     const [result] = await conn.execute(
       `INSERT INTO ata_audiencia
          (audiencia_id, resultado, houve_acordo, valor_acordo, parcelas,
-          valor_parcela, data_primeiro_pagamento, nova_audiencia, observacoes, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          valor_parcela, data_primeiro_pagamento, nova_audiencia, observacoes,
+          teve_prazo, teve_pericia, teve_alvara, teve_desistencia, teve_retorno_autos,
+          advogado_id, advogado_freela_id, sem_advogado, criado_por)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id, statusFinal,
         houve_acordo ? 1 : 0,
         valor_acordo || null, parcelas || null, valor_parcela || null,
         data_primeiro_pagamento || null, nova_audiencia ? 1 : 0,
-        observacoes || null, req.usuario.id
+        observacoes || null,
+        teve_prazo ? 1 : 0, teve_pericia ? 1 : 0, teve_alvara ? 1 : 0,
+        teve_desistencia ? 1 : 0, teve_retorno_autos ? 1 : 0,
+        advogado_id, advogado_freela_id, sem_advogado,
+        req.usuario.id
       ]
     );
 

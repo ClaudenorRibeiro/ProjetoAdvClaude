@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { audienciasAPI, processosAPI, pessoasAPI, authAPI, calendarioAPI } from '../../services/api';
+import { audienciasAPI, processosAPI, pessoasAPI, authAPI, calendarioAPI, configuracaoAPI } from '../../services/api';
 import { formatarData, toTitleCase, validarCPF, mascaraCPF } from '../../utils/formatters';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
@@ -35,6 +35,30 @@ const STATUS_LABEL = {
 // os tenham, mas NÃO são oferecidos no filtro (não nascem mais). "adiada" e "acordo" foram
 // aposentados como status da audiência (o acordo agora é registrado no Financeiro).
 const STATUS_APOSENTADOS = ['adiada', 'acordo'];
+
+// Alerta de data/hora no passado, respeitando o HORÁRIO e o fuso de Brasília.
+// data: 'YYYY-MM-DD', hora: 'HH:MM'. Retorna null quando está ok (futuro/agora) ou
+// { alerta, obs } quando o momento já passou. Diferencia data retroativa (dia anterior)
+// de horário já vencido no próprio dia de hoje. Usado pelos modais de Criar e Editar.
+function alertaMomentoPassado(data, hora, sufixoObs = '') {
+  if (!data) return null;
+  const hojeBr     = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });                 // YYYY-MM-DD
+  const agoraHoraBr= new Date().toLocaleTimeString('en-GB', { timeZone: 'America/Sao_Paulo', hour12: false }).slice(0, 5); // HH:MM
+  const dataFmt = data.split('-').reverse().join('/');
+  if (data < hojeBr) {
+    return {
+      alerta: `• Data retroativa: ${dataFmt}`,
+      obs:    `data retroativa confirmada pelo usuário${sufixoObs} (${dataFmt})`,
+    };
+  }
+  if (data === hojeBr && hora && hora.slice(0, 5) < agoraHoraBr) {
+    return {
+      alerta: `• Horário já passou: ${dataFmt} às ${hora.slice(0, 5)}`,
+      obs:    `horário já passado confirmado pelo usuário${sufixoObs} (${dataFmt} às ${hora.slice(0, 5)})`,
+    };
+  }
+  return null;
+}
 
 export default function Audiencias() {
   const { temPermissao, ehAdmin }  = useAuth();
@@ -1086,13 +1110,8 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
 
   // Valida data no blur — exibe aviso inline abaixo do campo
   function validarDataBlur() {
-    if (!form.data) { setAvisos(a => ({ ...a, data: '' })); return; }
-    const hoje = new Date().toISOString().split('T')[0];
-    if (form.data < hoje) {
-      setAvisos(a => ({ ...a, data: `Data anterior a hoje (${form.data.split('-').reverse().join('/')})` }));
-    } else {
-      setAvisos(a => ({ ...a, data: '' }));
-    }
+    const passou = alertaMomentoPassado(form.data, form.hora);
+    setAvisos(a => ({ ...a, data: passou ? passou.alerta.replace('• ', '') : '' }));
   }
 
   // Valida hora no blur — exibe aviso inline abaixo do campo
@@ -1137,17 +1156,13 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
       return;
     }
 
-    const hoje = new Date().toISOString().split('T')[0];
-    const h    = parseInt(form.hora.split(':')[0], 10);
+    const h = parseInt(form.hora.split(':')[0], 10);
 
     const alertas = [];
     const obs     = [];
 
-    if (form.data < hoje) {
-      const dataFmt = form.data.split('-').reverse().join('/');
-      alertas.push(`• Data retroativa: ${dataFmt}`);
-      obs.push(`data retroativa confirmada pelo usuário (${dataFmt})`);
-    }
+    const passou = alertaMomentoPassado(form.data, form.hora);
+    if (passou) { alertas.push(passou.alerta); obs.push(passou.obs); }
     if (h < 8 || h >= 18) {
       alertas.push(`• Horário incomum: ${form.hora} (fóruns geralmente atendem das 08h às 18h)`);
       obs.push(`horário incomum confirmado pelo usuário (${form.hora})`);
@@ -1493,13 +1508,8 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
 
   // ---- Validações de blur (iguais ao modal de criação) ----
   function validarDataBlur() {
-    if (!form.data) { setAvisos(a => ({ ...a, data: '' })); return; }
-    const hoje = new Date().toISOString().split('T')[0];
-    if (form.data < hoje) {
-      setAvisos(a => ({ ...a, data: `Data anterior a hoje (${form.data.split('-').reverse().join('/')})` }));
-    } else {
-      setAvisos(a => ({ ...a, data: '' }));
-    }
+    const passou = alertaMomentoPassado(form.data, form.hora);
+    setAvisos(a => ({ ...a, data: passou ? passou.alerta.replace('• ', '') : '' }));
   }
 
   function validarHoraBlur() {
@@ -1542,17 +1552,13 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
       return;
     }
 
-    const hoje = new Date().toISOString().split('T')[0];
-    const h    = parseInt(form.hora.split(':')[0], 10);
+    const h = parseInt(form.hora.split(':')[0], 10);
 
     const alertas = [];
     const obs     = [];
 
-    if (form.data < hoje) {
-      const dataFmt = form.data.split('-').reverse().join('/');
-      alertas.push(`• Data retroativa: ${dataFmt}`);
-      obs.push(`data retroativa confirmada pelo usuário na edição (${dataFmt})`);
-    }
+    const passou = alertaMomentoPassado(form.data, form.hora, ' na edição');
+    if (passou) { alertas.push(passou.alerta); obs.push(passou.obs); }
     if (h < 8 || h >= 18) {
       alertas.push(`• Horário incomum: ${form.hora} (fóruns geralmente atendem das 08h às 18h)`);
       obs.push(`horário incomum confirmado pelo usuário na edição (${form.hora})`);
@@ -2054,6 +2060,16 @@ function ModalGerenciarTipos({ onFechar, onAtualizar }) {
   );
 }
 
+// Faixa amigável para os recursos da ata ainda em implementação (revelados pelo checkbox,
+// codados um a um). Não é o toast do canto — é a faixa interna do sistema.
+function FaixaEmBreve({ rotulo }) {
+  return (
+    <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:6, padding:'8px 12px', fontSize:'13px', color:'#1e40af', marginBottom:'6px' }}>
+      🔧 <strong>{rotulo}</strong> — recurso em implementação, será liberado em breve.
+    </div>
+  );
+}
+
 // Modal para registrar ata da audiência
 export function ModalRegistrarAta({ audiencia, onFechar, tipos, onTiposChange }) {
   // "Registrar Ata" pressupõe que a audiência ACONTECEU → status Realizada. Cancelar/Remarcar são
@@ -2066,6 +2082,42 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos, onTiposChange })
   const [abrindoAcordo, setAbrindoAcordo] = useState(false);
   const [acordoRegistrado, setAcordoRegistrado] = useState(false); // marca que houve acordo (registro na ata)
   const [novaAudRegistrada, setNovaAudRegistrada] = useState(false); // marca que uma nova audiência foi designada
+  // "O que teve nessa audiência?" — cada checkbox revela um recurso (antes oculto) e é gravado na ata.
+  const [itens, setItens] = useState({
+    prazo: false, pericia: false, acordo: false, nova_audiencia: false,
+    alvara: false, desistencia: false, retorno_autos: false,
+  });
+  function toggleItem(k) { setItens(i => ({ ...i, [k]: !i[k] })); }
+
+  // Advogado(a) que acompanhou a audiência — reusa a fonte unificada (usuários advogados + freelas, com OAB).
+  const [advogados, setAdvogados]         = useState([]);
+  const [advogadoSel, setAdvogadoSel]     = useState(''); // '' | 'ninguem' | 'usuario:X' | 'freela:X'
+  const [advObrigatorio, setAdvObrigatorio] = useState(false); // preferência do escritório
+  const [modalNovoFreela, setModalNovoFreela] = useState(false);
+  const [aviso, setAviso]                 = useState(''); // faixa interna de validação
+
+  // Carrega advogados + preferência do escritório + pré-preenche com o Responsável pela condução.
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const [av, aud, cfg] = await Promise.all([
+          audienciasAPI.advogados(),
+          audienciasAPI.buscar(audiencia.id),
+          configuracaoAPI.buscarEscritorio(),
+        ]);
+        if (!vivo) return;
+        if (av.data.ok)  setAdvogados(av.data.dados || []);
+        if (cfg.data.ok) setAdvObrigatorio(!!(cfg.data.dados && cfg.data.dados.ata_advogado_obrigatorio));
+        if (aud.data.ok) {
+          const d = aud.data.dados;
+          if (d.responsavel_id)             setAdvogadoSel(`usuario:${d.responsavel_id}`);
+          else if (d.responsavel_freela_id) setAdvogadoSel(`freela:${d.responsavel_freela_id}`);
+        }
+      } catch { /* silencioso: se falhar, o campo apenas começa vazio */ }
+    })();
+    return () => { vivo = false; };
+  }, [audiencia.id]);
 
   function set(k, v) { setForm(f => ({...f, [k]: v})); }
 
@@ -2117,10 +2169,26 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos, onTiposChange })
   }
 
   async function salvar() {
+    setAviso('');
+    // Preferência do escritório: advogado acompanhante obrigatório? ("Ninguém" já é uma escolha válida.)
+    if (advObrigatorio && !advogadoSel) {
+      setAviso('Informe o advogado que acompanhou a audiência (ou selecione "Ninguém").');
+      return;
+    }
     setSalvando(true);
     // O acordo (se houve) já foi criado no Financeiro pelo modal próprio; aqui só marcamos na ata
     // que esta audiência teve acordo. O status da audiência é sempre "Realizada".
-    const payload = { ...form, houve_acordo: acordoRegistrado };
+    const payload = {
+      ...form,
+      advogado_acompanhante: advogadoSel || '',
+      houve_acordo:       itens.acordo ? 1 : 0,
+      nova_audiencia:     itens.nova_audiencia ? 1 : 0,
+      teve_prazo:         itens.prazo ? 1 : 0,
+      teve_pericia:       itens.pericia ? 1 : 0,
+      teve_alvara:        itens.alvara ? 1 : 0,
+      teve_desistencia:   itens.desistencia ? 1 : 0,
+      teve_retorno_autos: itens.retorno_autos ? 1 : 0,
+    };
     try {
       await audienciasAPI.registrarAta(audiencia.id, payload);
       toast.success('Ata registrada com sucesso!');
@@ -2137,6 +2205,41 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos, onTiposChange })
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
         </div>
         <div className="modal-body">
+          {aviso && (
+            <div style={{ background:'#fff4e5', border:'1px solid #ffcf99', color:'#8a5300', padding:'8px 12px', borderRadius:6, fontSize:13, marginBottom:12 }}>
+              {aviso}
+            </div>
+          )}
+
+          {/* Advogado(a) que acompanhou a audiência — usuários advogados + freelas (com OAB); "(…)" cadastra novo */}
+          <div className="form-group">
+            <label className="form-label">Advogado(a) que acompanhou a audiência{advObrigatorio ? ' *' : ''}:</label>
+            <div style={{display:'flex', gap:'6px'}}>
+              <select className="form-control" value={advogadoSel}
+                onChange={e => { setAdvogadoSel(e.target.value); setAviso(''); }}>
+                <option value="">— Selecione —</option>
+                <option value="ninguem">Ninguém (a parte compareceu sozinha)</option>
+                {advogados.filter(a => a.origem === 'usuario').length > 0 && (
+                  <optgroup label="Advogados do escritório">
+                    {advogados.filter(a => a.origem === 'usuario').map(a =>
+                      <option key={`u-${a.id}`} value={`usuario:${a.id}`}>{a.nome}{a.oab ? ` — ${a.oab}` : ''}</option>
+                    )}
+                  </optgroup>
+                )}
+                {advogados.filter(a => a.origem === 'freela').length > 0 && (
+                  <optgroup label="Freelancers">
+                    {advogados.filter(a => a.origem === 'freela').map(a =>
+                      <option key={`f-${a.id}`} value={`freela:${a.id}`}>{a.nome}{a.oab ? ` — ${a.oab}` : ''}</option>
+                    )}
+                  </optgroup>
+                )}
+              </select>
+              <button type="button" title="Cadastrar novo advogado"
+                style={{padding:'0 10px',border:'1px solid #ddd',borderRadius:'6px',background:'#f8fafc',cursor:'pointer',fontSize:'16px',whiteSpace:'nowrap'}}
+                onClick={() => setModalNovoFreela(true)}>…</button>
+            </div>
+          </div>
+
           <div className="form-group">
             <label className="form-label">Resumo / Termos</label>
             <textarea className="form-control" rows={4} value={form.resultado_texto||''}
@@ -2145,25 +2248,57 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos, onTiposChange })
               placeholder="Descreva os principais pontos da audiência..." />
           </div>
 
-          {/* Registrar acordo: abre o modal completo do Financeiro (parcelas/honorário/parceria) */}
-          <div className="form-group" style={{marginTop:'12px', display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap'}}>
-            <button type="button" className="btn btn-outline" onClick={abrirAcordo} disabled={abrindoAcordo}>
-              {abrindoAcordo ? 'Abrindo...' : '💰 Registrar acordo'}
-            </button>
-            {acordoRegistrado && (
-              <span style={{color:'#16a34a', fontSize:'13px', fontWeight:600}}>✓ Acordo registrado no Financeiro</span>
-            )}
+          {/* "O que teve nessa audiência?" — cada checkbox revela um recurso antes oculto e é gravado na ata */}
+          <div className="form-group" style={{marginTop:'12px'}}>
+            <label className="form-label">O que teve nessa audiência?</label>
+            <div style={{display:'flex', flexWrap:'wrap', gap:'10px 18px', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:6, background:'#f8fafc'}}>
+              {[
+                ['prazo','Prazo'], ['pericia','Perícia'], ['acordo','Acordo'],
+                ['nova_audiencia','Nova audiência'], ['alvara','Alvará'],
+                ['desistencia','Desistência da Ação'], ['retorno_autos','Retornem aos autos'],
+              ].map(([k, rotulo]) => (
+                <label key={k} style={{display:'flex', alignItems:'center', gap:'6px', fontSize:'14px', cursor:'pointer'}}>
+                  <input type="checkbox" checked={itens[k]} onChange={() => toggleItem(k)} />
+                  {rotulo}
+                </label>
+              ))}
+            </div>
           </div>
 
-          {/* Designar nova audiência: abre o modal completo de Nova Audiência já pré-preenchido */}
-          <div className="form-group" style={{marginTop:'4px', display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap'}}>
-            <button type="button" className="btn btn-outline" onClick={abrirNovaAudiencia} disabled={abrindoNova}>
-              {abrindoNova ? 'Abrindo...' : '📅 Designar nova audiência'}
-            </button>
-            {novaAudRegistrada && (
-              <span style={{color:'#16a34a', fontSize:'13px', fontWeight:600}}>✓ Nova audiência designada</span>
-            )}
-          </div>
+          {/* Acordo — botão revelado ao marcar o checkbox (abre o modal completo do Financeiro) */}
+          {itens.acordo && (
+            <div className="form-group" style={{marginTop:'8px', display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap'}}>
+              <button type="button" className="btn btn-outline" onClick={abrirAcordo} disabled={abrindoAcordo}>
+                {abrindoAcordo ? 'Abrindo...' : '💰 Registrar acordo'}
+              </button>
+              {acordoRegistrado && (
+                <span style={{color:'#16a34a', fontSize:'13px', fontWeight:600}}>✓ Acordo registrado no Financeiro</span>
+              )}
+            </div>
+          )}
+
+          {/* Nova audiência — botão revelado ao marcar o checkbox (Nova Audiência pré-preenchida) */}
+          {itens.nova_audiencia && (
+            <div className="form-group" style={{marginTop:'4px', display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap'}}>
+              <button type="button" className="btn btn-outline" onClick={abrirNovaAudiencia} disabled={abrindoNova}>
+                {abrindoNova ? 'Abrindo...' : '📅 Designar nova audiência'}
+              </button>
+              {novaAudRegistrada && (
+                <span style={{color:'#16a34a', fontSize:'13px', fontWeight:600}}>✓ Nova audiência designada</span>
+              )}
+            </div>
+          )}
+
+          {/* Recursos ainda em implementação — revelados pelo checkbox, codados um a um */}
+          {(itens.prazo || itens.pericia || itens.alvara || itens.desistencia || itens.retorno_autos) && (
+            <div className="form-group" style={{marginTop:'8px'}}>
+              {itens.prazo         && <FaixaEmBreve rotulo="Prazo" />}
+              {itens.pericia       && <FaixaEmBreve rotulo="Perícia" />}
+              {itens.alvara        && <FaixaEmBreve rotulo="Alvará" />}
+              {itens.desistencia   && <FaixaEmBreve rotulo="Desistência da Ação" />}
+              {itens.retorno_autos && <FaixaEmBreve rotulo="Retornem aos autos" />}
+            </div>
+          )}
 
           <div className="form-group">
             <label className="form-label">Observações</label>
@@ -2199,6 +2334,19 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos, onTiposChange })
           tipo="acordo"
           descricaoInicial={modalAcordo.descricaoInicial}
           onFechar={(reload) => { setModalAcordo(null); if (reload) { setAcordoRegistrado(true); toast.success('Acordo registrado no Financeiro.'); } }}
+        />
+      )}
+
+      {/* Cadastro de novo advogado (freela) aberto pelo "(…)" do campo de advogado acompanhante */}
+      {modalNovoFreela && (
+        <ModalNovoFreela
+          onFechar={() => setModalNovoFreela(false)}
+          onSalvo={async (novoId) => {
+            const { data } = await audienciasAPI.advogados();
+            if (data.ok) setAdvogados(data.dados || []);
+            setAdvogadoSel(`freela:${novoId}`);
+            setModalNovoFreela(false);
+          }}
         />
       )}
     </div>
