@@ -496,7 +496,7 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
     titulo:          tarefa?.titulo || '',
     descricao:       tarefa?.descricao || '',
     prioridade:      tarefa?.prioridade || 'normal',
-    data_vencimento: tarefa?.data_vencimento ? tarefa.data_vencimento.split('T')[0] : (dataInicial || ''),
+    data_vencimento: tarefa?.data_vencimento ? tarefa.data_vencimento.split('T')[0] : (dataInicial || dataMaisDias(7)),
     atribuida_para:  tarefa?.atribuida_para ? String(tarefa.atribuida_para) : '',
     processo_id:     tarefa?.processo_id || preSelecao?.processo_id || null,
   });
@@ -514,7 +514,7 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
   const { ehAdmin } = useAuth();
 
   // Busca de processo (CNJ) — inicializa com pré-seleção se vier do PastaDetalhe
-  const [buscaProc, setBuscaProc]             = useState(preSelecao?.processo_numero || '');
+  const [buscaProc, setBuscaProc]             = useState(tarefa?.processo_numero || preSelecao?.processo_numero || '');
   const [sugestoesProc, setSugestoesProc]     = useState([]);
   const [processosDaPasta, setProcessosDaPasta] = useState([]);
   const [pastaSelecionada, setPastaSelecionada] = useState(null);
@@ -645,7 +645,8 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
     // Ao fechar o aviso, o foco vai para o campo que faltou (focar).
     if (!form.titulo?.trim())                     return setInfo({ titulo: 'Título obrigatório', mensagem: 'Informe o título da tarefa.', focar: () => tituloRef.current?.focus() });
     if (tipo === 'processo' && !form.processo_id) return setInfo({ titulo: 'Processo obrigatório', mensagem: 'Selecione o processo: pesquise pelo número e escolha a pasta na lista.', focar: () => buscaProcRef.current?.focus() });
-    // Vencimento anterior a hoje: usuário comum é bloqueado; admin confirma. (Tarefa sem data não entra aqui.)
+    if (!form.data_vencimento)                    return setInfo({ titulo: 'Vencimento obrigatório', mensagem: 'Informe a data de vencimento da tarefa.', focar: () => dataVencRef.current?.focus() });
+    // Vencimento anterior a hoje: usuário comum é bloqueado; admin confirma.
     const h = new Date();
     const hojeStr = `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}-${String(h.getDate()).padStart(2, '0')}`;
     if (form.data_vencimento && form.data_vencimento < hojeStr) {

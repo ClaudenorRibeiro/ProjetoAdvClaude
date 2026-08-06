@@ -526,6 +526,8 @@ function EventoDetalhe({ evento }) {
     if (dados.assistente_nome) linhas.push(['Assistente', dados.assistente_nome]);
   } else if (tipo === 'tarefa') {
     linhas.push(['Título', dados.titulo]);
+    if (dados.processo_numero)       linhas.push(['Processo', dados.processo_numero]);
+    if (dados.pasta_do_processo_fmt) linhas.push(['Pasta', dados.pasta_do_processo_fmt]);
     if (dados.descricao)       linhas.push(['Descrição', dados.descricao]);
     linhas.push(['Prioridade', dados.prioridade]);
     if (dados.data_vencimento) linhas.push(['Vencimento', formatarData(dados.data_vencimento)]);
