@@ -107,19 +107,191 @@ function ModalAcaoDaPublicacao({ acao, usuariosAgenda, usuarioLogadoId, ehAdmin,
 
 // Barra com os mesmos botões de ação do menu ⋮, para usar DENTRO da janela de leitura
 // da publicação. Só aparece para quem pode alterar. Compartilhada pelas duas abas.
-function BarraAcoesPublicacao({ pub, podeAlterar, onCriar, onTratar }) {
+function BarraAcoesPublicacao({ pub, podeAlterar, onCriar, onTratar, onEmail }) {
   if (!podeAlterar) return null;
   return (
     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
       <button className="btn btn-outline" onClick={() => onCriar('prazo', pub)}>📌 Criar prazo</button>
       <button className="btn btn-outline" onClick={() => onCriar('tarefa', pub)}>✓ Criar tarefa</button>
       <button className="btn btn-outline" onClick={() => onCriar('compromisso', pub)}>📅 Criar compromisso</button>
-      {/* Só pode marcar tratada com o processo cadastrado; Reabrir é sempre permitido. */}
-      {(pub.tratada || pub.processo_cadastrado) && (
-        <button className="btn btn-outline" onClick={() => onTratar(pub)}>
-          {pub.tratada ? '↩️ Reabrir' : '✔️ Tratada / sem ação'}
-        </button>
-      )}
+      <button className="btn btn-outline" onClick={() => onEmail(pub)}>📧 Enviar por e-mail</button>
+      {/* Só pode marcar tratada com o processo cadastrado; Reabrir é sempre permitido.
+          Quando não pode, o botão fica VISÍVEL porém desabilitado, com aviso no hover.
+          (o <span> em volta garante o tooltip mesmo com o botão desabilitado) */}
+      {(() => {
+        const podeTratar = !!(pub.tratada || pub.processo_cadastrado);
+        return (
+          <span style={{ display: 'inline-flex' }}
+            title={podeTratar ? undefined : 'Processo não está cadastrado !'}>
+            <button className="btn btn-outline" disabled={!podeTratar}
+              onClick={() => onTratar(pub)}>
+              {pub.tratada ? '↩️ Reabrir' : '✔️ Tratada / sem ação'}
+            </button>
+          </span>
+        );
+      })()}
+    </div>
+  );
+}
+
+// Mini-modal: justificar a marcação MANUAL "Tratada / sem ação". O motivo é obrigatório
+// (validação em faixa interna, nunca toast). Compartilhado pelas duas abas.
+function ModalJustificarSemAcao({ pub, onFechar, onSucesso }) {
+  const [motivo, setMotivo]     = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const [aviso, setAviso]       = useState('');
+
+  async function confirmar() {
+    if (!motivo.trim()) {
+      setAviso('Escreva o motivo para marcar esta publicação como tratada sem ação.');
+      return;
+    }
+    setSalvando(true);
+    try {
+      await publicacoesAPI.tratar(pub.id, { tratada: true, sem_acao: true, motivo: motivo.trim() });
+      onSucesso();
+    } catch (err) {
+      setAviso(err.response?.data?.mensagem || 'Não foi possível marcar como tratada. Tente novamente.');
+    } finally { setSalvando(false); }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box">
+        <div className="modal-header">
+          <h3>Tratar sem ação</h3>
+          <button className="modal-fechar" onClick={onFechar}>✕</button>
+        </div>
+        <div className="modal-body">
+          {aviso && (
+            <div style={{ background:'#fff4e5', border:'1px solid #ffcf99', color:'#8a5300',
+              padding:'8px 12px', borderRadius:'6px', fontSize:'13px', marginBottom:'12px' }}>
+              {aviso}
+            </div>
+          )}
+          <p style={{ fontSize:'13px', color:'#555', marginTop:0 }}>
+            Explique por que esta publicação está sendo marcada como tratada sem gerar prazo,
+            tarefa ou compromisso.
+          </p>
+          <div className="form-group">
+            <label className="form-label">Motivo *</label>
+            <textarea className="form-control" rows={4} value={motivo} maxLength={500}
+              onChange={e => setMotivo(e.target.value)}
+              placeholder="Ex.: publicação meramente informativa, sem providência a tomar." />
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onFechar}>Cancelar</button>
+          <button className="btn btn-primary" onClick={confirmar} disabled={salvando}>
+            {salvando ? 'Salvando...' : 'Marcar como tratada'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Modal: enviar a publicação por e-mail para usuários do sistema e/ou advogados
+// freelancers (vários de uma vez). Quem não tem e-mail cadastrado fica desabilitado.
+// Compartilhado pelas duas abas.
+function ModalEnviarPublicacaoEmail({ pub, onFechar, onSucesso }) {
+  const [dados, setDados]           = useState(null);   // { usuarios, freelancers }
+  const [sel, setSel]               = useState(new Set());
+  const [mensagem, setMensagem]     = useState('');
+  const [carregando, setCarregando] = useState(true);
+  const [enviando, setEnviando]     = useState(false);
+  const [aviso, setAviso]           = useState('');
+
+  useEffect(() => {
+    publicacoesAPI.destinatariosEmail()
+      .then(({ data }) => { if (data.ok) setDados(data.dados); else setAviso('Não foi possível carregar os destinatários.'); })
+      .catch(() => setAviso('Não foi possível carregar os destinatários.'))
+      .finally(() => setCarregando(false));
+  }, []);
+
+  function toggle(chave) {
+    setSel(prev => { const n = new Set(prev); n.has(chave) ? n.delete(chave) : n.add(chave); return n; });
+  }
+
+  async function enviar() {
+    if (!sel.size) { setAviso('Selecione ao menos um destinatário.'); return; }
+    setEnviando(true); setAviso('');
+    const destinatarios = [...sel].map(k => { const [tipo, id] = k.split(':'); return { tipo, id: Number(id) }; });
+    try {
+      const { data } = await publicacoesAPI.enviarEmail(pub.id, { destinatarios, mensagem: mensagem.trim() });
+      const falhas = data.dados?.falhas || [];
+      if (falhas.length) {
+        setAviso(`Enviado para ${data.dados.enviados}. Não enviado para: ${falhas.map(f => f.nome).join(', ')}.`);
+        setEnviando(false);
+        return;
+      }
+      toast.success(`${data.dados.enviados} e-mail(s) enviado(s).`);
+      onSucesso();
+    } catch (err) {
+      setAviso(err.response?.data?.mensagem || 'Não foi possível enviar. Tente novamente.');
+      setEnviando(false);
+    }
+  }
+
+  function Linha({ tipo, p }) {
+    const chave = `${tipo}:${p.id}`;
+    const semEmail = !p.email;
+    return (
+      <label style={{ display:'flex', alignItems:'center', gap:'8px', padding:'6px 4px',
+        opacity: semEmail ? 0.55 : 1, cursor: semEmail ? 'not-allowed' : 'pointer' }}>
+        <input type="checkbox" disabled={semEmail} checked={sel.has(chave)} onChange={() => toggle(chave)} />
+        <span style={{ fontSize:'13px' }}>
+          {p.nome}{p.oab ? ` — OAB ${p.oab}` : ''}
+          <span style={{ color: semEmail ? '#b45309' : '#888', fontSize:'12px' }}>
+            {semEmail ? '  (sem e-mail cadastrado)' : `  ·  ${p.email}`}
+          </span>
+        </span>
+      </label>
+    );
+  }
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 1100 }}>
+      <div className="modal-box" style={{ maxWidth: '560px' }}>
+        <div className="modal-header">
+          <h3>Enviar publicação por e-mail</h3>
+          <button className="modal-fechar" onClick={onFechar}>✕</button>
+        </div>
+        <div className="modal-body">
+          {aviso && (
+            <div style={{ background:'#fff4e5', border:'1px solid #ffcf99', color:'#8a5300',
+              padding:'8px 12px', borderRadius:'6px', fontSize:'13px', marginBottom:'12px' }}>
+              {aviso}
+            </div>
+          )}
+          {carregando ? <div className="loading">Carregando destinatários...</div> : dados && (
+            <>
+              <p style={{ fontSize:'13px', color:'#555', marginTop:0 }}>
+                Marque para quem enviar o <strong>conteúdo completo</strong> desta publicação.
+              </p>
+              <div className="form-group">
+                <label className="form-label">Mensagem (opcional)</label>
+                <textarea className="form-control" rows={4} value={mensagem}
+                  onChange={e => setMensagem(e.target.value)}
+                  placeholder="Ex.: Boa tarde, segue a publicação que ficou para você resolver..." />
+                <small style={{ color:'#888' }}>Aparece no topo do e-mail e fica registrada no histórico.</small>
+              </div>
+              <div style={{ fontWeight:600, fontSize:'13px', margin:'8px 0 2px' }}>Usuários do sistema</div>
+              {dados.usuarios.length ? dados.usuarios.map(u => <Linha key={`u${u.id}`} tipo="usuario" p={u} />)
+                : <div style={{ fontSize:'12px', color:'#888' }}>Nenhum usuário.</div>}
+              <div style={{ fontWeight:600, fontSize:'13px', margin:'14px 0 2px' }}>Advogados freelancers</div>
+              {dados.freelancers.length ? dados.freelancers.map(f => <Linha key={`f${f.id}`} tipo="freela" p={f} />)
+                : <div style={{ fontSize:'12px', color:'#888' }}>Nenhum freelancer cadastrado.</div>}
+            </>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onFechar}>Cancelar</button>
+          <button className="btn btn-primary" onClick={enviar} disabled={enviando || carregando}>
+            {enviando ? 'Enviando...' : 'Enviar'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -172,6 +344,17 @@ function PublicacoesAASP() {
   const [acaoAberta, setAcaoAberta]           = useState(null); // { tipo:'prazo'|'tarefa'|'compromisso', pub }
   const [usuariosAgenda, setUsuariosAgenda]   = useState([]);   // p/ "Delegar para" do compromisso
   const [historicoAberto, setHistoricoAberto]   = useState(null);
+  const [justificando, setJustificando]         = useState(null); // publicação aguardando justificativa de "sem ação"
+  const [enviandoEmailPub, setEnviandoEmailPub] = useState(null); // publicação a enviar por e-mail
+
+  // Fecha a janela de leitura da publicação com a tecla Esc — só quando não há outro
+  // modal por cima (Criar prazo/tarefa/compromisso ou a justificativa de "sem ação").
+  useEffect(() => {
+    if (!textoAberto || acaoAberta || justificando) return;
+    function handleKey(e) { if (e.key === 'Escape') setTextoAberto(null); }
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [textoAberto, acaoAberta, justificando]);
   const [confirmar, setConfirmar]             = useState(null);
 
   // Verifica se a AASP está configurada (para mostrar o aviso, sem quebrar a tela).
@@ -322,9 +505,12 @@ function PublicacoesAASP() {
   }
 
   async function alternarTratada(p) {
+    // Marcar "sem ação" (manual) exige justificativa -> abre o mini-modal.
+    if (!p.tratada) { setJustificando(p); return; }
+    // Reabrir é direto (e o backend limpa o motivo).
     try {
-      await publicacoesAPI.tratar(p.id, { tratada: !p.tratada });
-      toast.success(p.tratada ? 'Publicação reaberta' : 'Publicação marcada como tratada');
+      await publicacoesAPI.tratar(p.id, { tratada: false });
+      toast.success('Publicação reaberta');
       carregar();
     } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao atualizar'); }
   }
@@ -363,7 +549,7 @@ function PublicacoesAASP() {
           {podeImportar && (
             <>
               <div className="form-group" style={{ margin: 0 }}>
-                <label className="form-label">Dia da publicação (AASP)</label>
+                <label className="form-label">Dia da Disponibilização (AASP)</label>
                 <input type="date" className="form-control" value={dataImport}
                   onChange={e => setDataImport(e.target.value)} />
               </div>
@@ -482,7 +668,8 @@ function PublicacoesAASP() {
                     </td>
                     <td>
                       {p.tratada
-                        ? <span className="badge badge-verde">Tratada</span>
+                        ? <span className="badge badge-verde"
+                            title={p.motivo_sem_acao ? `Sem ação — motivo: ${p.motivo_sem_acao}` : undefined}>Tratada</span>
                         : <span className="badge badge-laranja">Pendente</span>}
                     </td>
                     <td>
@@ -496,6 +683,9 @@ function PublicacoesAASP() {
                         { label: 'Criar compromisso', icone: '📅',
                           oculto: !podeAlterar,
                           onClick: () => setAcaoAberta({ tipo: 'compromisso', pub: p }) },
+                        { label: 'Enviar por e-mail', icone: '📧',
+                          oculto: !podeAlterar,
+                          onClick: () => setEnviandoEmailPub(p) },
                         { label: p.tratada ? 'Reabrir' : 'Tratada / sem ação',
                           icone: p.tratada ? '↩️' : '✔️',
                           // Só pode marcar tratada com o processo cadastrado; Reabrir é sempre permitido.
@@ -573,7 +763,8 @@ function PublicacoesAASP() {
               <div className="modal-footer">
                 <BarraAcoesPublicacao pub={textoAberto} podeAlterar={podeAlterar}
                   onCriar={(tipo, p) => setAcaoAberta({ tipo, pub: p })}
-                  onTratar={(p) => alternarTratada(p)} />
+                  onTratar={(p) => alternarTratada(p)}
+                  onEmail={(p) => setEnviandoEmailPub(p)} />
                 <button className="btn btn-secondary" style={{ marginLeft: 'auto' }}
                   onClick={() => setTextoAberto(null)}>Fechar</button>
               </div>
@@ -605,6 +796,16 @@ function PublicacoesAASP() {
       {/* Modal: histórico */}
       {historicoAberto && (
         <ModalHistorico publicacao={historicoAberto} onFechar={() => setHistoricoAberto(null)} />
+      )}
+      {justificando && (
+        <ModalJustificarSemAcao pub={justificando}
+          onFechar={() => setJustificando(null)}
+          onSucesso={() => { setJustificando(null); toast.success('Publicação marcada como tratada'); carregar(); }} />
+      )}
+      {enviandoEmailPub && (
+        <ModalEnviarPublicacaoEmail pub={enviandoEmailPub}
+          onFechar={() => setEnviandoEmailPub(null)}
+          onSucesso={() => setEnviandoEmailPub(null)} />
       )}
 
       {confirmar && <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(null)} />}
@@ -647,6 +848,17 @@ function PublicacoesCNJ() {
   const [acaoAberta, setAcaoAberta]           = useState(null); // { tipo:'prazo'|'tarefa'|'compromisso', pub }
   const [usuariosAgenda, setUsuariosAgenda]   = useState([]);   // p/ "Delegar para" do compromisso
   const [historicoAberto, setHistoricoAberto]   = useState(null);
+  const [justificando, setJustificando]         = useState(null); // publicação aguardando justificativa de "sem ação"
+  const [enviandoEmailPub, setEnviandoEmailPub] = useState(null); // publicação a enviar por e-mail
+
+  // Fecha a janela de leitura da publicação com a tecla Esc — só quando não há outro
+  // modal por cima (Criar prazo/tarefa/compromisso ou a justificativa de "sem ação").
+  useEffect(() => {
+    if (!textoAberto || acaoAberta || justificando) return;
+    function handleKey(e) { if (e.key === 'Escape') setTextoAberto(null); }
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [textoAberto, acaoAberta, justificando]);
   const [confirmar, setConfirmar]               = useState(null);
 
   // Verifica se o CNJ está configurado (para mostrar o aviso, sem quebrar a tela).
@@ -783,9 +995,12 @@ function PublicacoesCNJ() {
   }
 
   async function alternarTratada(p) {
+    // Marcar "sem ação" (manual) exige justificativa -> abre o mini-modal.
+    if (!p.tratada) { setJustificando(p); return; }
+    // Reabrir é direto (e o backend limpa o motivo).
     try {
-      await publicacoesAPI.tratar(p.id, { tratada: !p.tratada });
-      toast.success(p.tratada ? 'Publicação reaberta' : 'Publicação marcada como tratada');
+      await publicacoesAPI.tratar(p.id, { tratada: false });
+      toast.success('Publicação reaberta');
       carregar();
     } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao atualizar'); }
   }
@@ -947,7 +1162,8 @@ function PublicacoesCNJ() {
                     </td>
                     <td>
                       {p.tratada
-                        ? <span className="badge badge-verde">Tratada</span>
+                        ? <span className="badge badge-verde"
+                            title={p.motivo_sem_acao ? `Sem ação — motivo: ${p.motivo_sem_acao}` : undefined}>Tratada</span>
                         : <span className="badge badge-laranja">Pendente</span>}
                     </td>
                     <td>
@@ -961,6 +1177,9 @@ function PublicacoesCNJ() {
                         { label: 'Criar compromisso', icone: '📅',
                           oculto: !podeAlterar,
                           onClick: () => setAcaoAberta({ tipo: 'compromisso', pub: p }) },
+                        { label: 'Enviar por e-mail', icone: '📧',
+                          oculto: !podeAlterar,
+                          onClick: () => setEnviandoEmailPub(p) },
                         { label: p.tratada ? 'Reabrir' : 'Tratada / sem ação',
                           icone: p.tratada ? '↩️' : '✔️',
                           // Só pode marcar tratada com o processo cadastrado; Reabrir é sempre permitido.
@@ -1047,7 +1266,8 @@ function PublicacoesCNJ() {
               <div className="modal-footer">
                 <BarraAcoesPublicacao pub={textoAberto} podeAlterar={podeAlterar}
                   onCriar={(tipo, p) => setAcaoAberta({ tipo, pub: p })}
-                  onTratar={(p) => alternarTratada(p)} />
+                  onTratar={(p) => alternarTratada(p)}
+                  onEmail={(p) => setEnviandoEmailPub(p)} />
                 <button className="btn btn-secondary" style={{ marginLeft: 'auto' }}
                   onClick={() => setTextoAberto(null)}>Fechar</button>
               </div>
@@ -1079,6 +1299,16 @@ function PublicacoesCNJ() {
       {/* Modal: histórico (compartilhado com a AASP) */}
       {historicoAberto && (
         <ModalHistorico publicacao={historicoAberto} onFechar={() => setHistoricoAberto(null)} />
+      )}
+      {justificando && (
+        <ModalJustificarSemAcao pub={justificando}
+          onFechar={() => setJustificando(null)}
+          onSucesso={() => { setJustificando(null); toast.success('Publicação marcada como tratada'); carregar(); }} />
+      )}
+      {enviandoEmailPub && (
+        <ModalEnviarPublicacaoEmail pub={enviandoEmailPub}
+          onFechar={() => setEnviandoEmailPub(null)}
+          onSucesso={() => setEnviandoEmailPub(null)} />
       )}
 
       {confirmar && <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(null)} />}
@@ -1211,6 +1441,11 @@ function ModalHistorico({ publicacao, onFechar }) {
                 {dados.tratada
                   ? <>por {dados.tratada_por_nome || '—'} <span style={{ color: '#888' }}>· {dataHora(dados.tratada_em)}</span></>
                   : 'Ainda não tratada'}
+                {dados.tratada && dados.motivo_sem_acao && (
+                  <div style={{ color: '#8a5300', marginTop: '2px' }}>
+                    ✔️ Sem ação — motivo: {dados.motivo_sem_acao}
+                  </div>
+                )}
               </li>
               {dados.acoes && (() => {
                 const { prazos = [], tarefas = [], compromissos = [] } = dados.acoes;
@@ -1242,6 +1477,20 @@ function ModalHistorico({ publicacao, onFechar }) {
                   </li>
                 );
               })()}
+              {Array.isArray(dados.emails) && dados.emails.length > 0 && (
+                <li style={{ marginTop: '10px', borderTop: '1px solid #eef2f7', paddingTop: '8px' }}>
+                  <strong>E-mails enviados desta publicação:</strong>
+                  <ul style={{ margin: '6px 0 0', paddingLeft: '18px', lineHeight: '1.7' }}>
+                    {dados.emails.map((e, i) => (
+                      <li key={i}>📧 {e.destinatario_nome || e.para}
+                        <span style={{ color: '#888' }}> · {dataHora(e.enviado_em)}</span>
+                        {e.status !== 'sucesso' && <span style={{ color: '#b91c1c' }}> · falhou</span>}
+                        {e.mensagem && <div style={{ color: '#555', fontSize: '12px' }}>💬 {e.mensagem}</div>}
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              )}
             </ul>
           )}
         </div>

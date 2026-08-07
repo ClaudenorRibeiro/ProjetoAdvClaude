@@ -243,6 +243,8 @@ router.delete('/financeiro/formas-pagamento/:id', autenticar, verificarPermissao
 // ---- ANDAMENTO PROCESSUAL ----
 // Usa sub-módulo 'andamentos' — permissão granular independente do módulo 'processos'
 router.get('/andamento/:processoId',    autenticar, verificarPermissao('processos','andamentos','visualizar'), andamentoCtrl.listar);
+// Sincroniza com o DataJud ao abrir a tela (trava de 1x/dia no backend). Só precisa de 'visualizar'.
+router.post('/andamento/:processoId/sincronizar', autenticar, verificarPermissao('processos','andamentos','visualizar'), andamentoCtrl.sincronizar);
 router.post('/andamento/:processoId',   autenticar, verificarPermissao('processos','andamentos','cadastrar'),  andamentoCtrl.criar);
 router.put('/andamento/:id',            autenticar, verificarPermissao('processos','andamentos','alterar'),    andamentoCtrl.editar);
 router.delete('/andamento/:id',         autenticar, verificarPermissao('processos','andamentos','excluir'),    andamentoCtrl.excluir);
@@ -301,12 +303,14 @@ router.get('/publicacoes/aasp/status',    autenticar, verificarPermissao('public
 router.get('/publicacoes/cnj/status',     autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.statusCnj);
 router.post('/publicacoes/cnj/importar',  autenticar, verificarPermissao('publicacoes','cadastrar'),  publicacoesCtrl.importarCnj);
 router.get('/publicacoes/usuarios',       autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.usuariosParaDirecionar);
+router.get('/publicacoes/destinatarios-email', autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.destinatariosEmail);
 router.get('/publicacoes',                autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.listar);
 router.get('/publicacoes/:id/historico',  autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.historico);
 router.get('/publicacoes/:id',            autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.obter);
 router.post('/publicacoes/importar',      autenticar, verificarPermissao('publicacoes','cadastrar'),  publicacoesCtrl.importar);
 router.put('/publicacoes/:id/direcionar', autenticar, verificarPermissao('publicacoes','alterar'),    publicacoesCtrl.direcionar);
 router.put('/publicacoes/:id/tratar',     autenticar, verificarPermissao('publicacoes','alterar'),    publicacoesCtrl.tratar);
+router.post('/publicacoes/:id/enviar-email', autenticar, verificarPermissao('publicacoes','alterar'), publicacoesCtrl.enviarEmailPublicacao);
 router.post('/publicacoes/excluir-lote',  autenticar, verificarPermissao('publicacoes','excluir'),    publicacoesCtrl.excluirLote);
 router.delete('/publicacoes/:id',         autenticar, verificarPermissao('publicacoes','excluir'),    publicacoesCtrl.excluir);
 

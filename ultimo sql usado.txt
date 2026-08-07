@@ -1,0 +1,33 @@
+-- 1) Andamentos: suportar movimentos automáticos do DataJud, sem duplicar
+ALTER TABLE `andamento_processual`
+  ADD COLUMN `fonte` varchar(10) NOT NULL DEFAULT 'manual' AFTER `descricao`,
+  ADD COLUMN `data_hora` datetime NULL DEFAULT NULL AFTER `data`,
+  ADD COLUMN `codigo_movimento` int NULL DEFAULT NULL AFTER `fonte`,
+  ADD COLUMN `hash_movimento` char(40) NULL DEFAULT NULL AFTER `codigo_movimento`,
+  MODIFY COLUMN `criado_por` int NULL DEFAULT NULL,
+  ADD UNIQUE KEY `uq_andamento_hash` (`hash_movimento`);
+
+-- 2) Controle do "1x por dia por processo"
+ALTER TABLE `tblproc`
+  ADD COLUMN `datajud_sincronizado_em` datetime NULL DEFAULT NULL AFTER `protocolo`;
+
+-- 3) Controle do "tratada sem acao"
+ALTER TABLE `publicacoes`
+  ADD COLUMN `motivo_sem_acao` varchar(500) DEFAULT NULL AFTER `tratada_em`;
+
+-- 5) "é para fazer"
+ALTER TABLE `advogados_freela`
+  ADD COLUMN `email` varchar(150) DEFAULT NULL AFTER `oab`;
+
+ALTER TABLE `log_emails`
+  ADD COLUMN `publicacao_id` int DEFAULT NULL AFTER `id`,
+  ADD COLUMN `destinatario_nome` varchar(200) DEFAULT NULL AFTER `para`,
+  ADD KEY `idx_log_emails_publicacao` (`publicacao_id`),
+  ADD CONSTRAINT `fk_log_emails_pub` FOREIGN KEY (`publicacao_id`)
+      REFERENCES `publicacoes` (`id`) ON DELETE SET NULL;
+
+-- 6) "é para fazer"
+ALTER TABLE `log_emails`
+  ADD COLUMN `mensagem` text DEFAULT NULL AFTER `destinatario_nome`;
+
+

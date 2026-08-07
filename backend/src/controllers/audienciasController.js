@@ -961,13 +961,15 @@ async function listarFreelas(req, res) {
 // POST /api/audiencias/freelas
 async function criarFreela(req, res) {
   try {
-    const { nome, oab, telefone, cep, logradouro, numero, complemento, bairro, cidade, estado } = req.body;
-    if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
+    const { nome, oab, email, telefone, cep, logradouro, numero, complemento, bairro, cidade, estado } = req.body;
+    if (!nome?.trim())  return erro(res, 'Nome é obrigatório');
+    if (!email?.trim()) return erro(res, 'E-mail é obrigatório');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return erro(res, 'Informe um e-mail válido');
     const [r] = await pool.execute(
       `INSERT INTO advogados_freela
-         (nome, oab, telefone, cep, logradouro, numero, complemento, bairro, cidade, estado, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [nome.trim(), oab||null, telefone||null, cep||null, logradouro||null,
+         (nome, oab, email, telefone, cep, logradouro, numero, complemento, bairro, cidade, estado, criado_por)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [nome.trim(), oab||null, email.trim().toLowerCase(), telefone||null, cep||null, logradouro||null,
        numero||null, complemento||null, bairro||null, cidade||null, estado||null, req.usuario.id]
     );
     return sucesso(res, { id: r.insertId }, 'Freelancer cadastrado', 201);
@@ -980,13 +982,15 @@ async function criarFreela(req, res) {
 async function atualizarFreela(req, res) {
   try {
     const { id } = req.params;
-    const { nome, oab, telefone, cep, logradouro, numero, complemento, bairro, cidade, estado } = req.body;
-    if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
+    const { nome, oab, email, telefone, cep, logradouro, numero, complemento, bairro, cidade, estado } = req.body;
+    if (!nome?.trim())  return erro(res, 'Nome é obrigatório');
+    if (!email?.trim()) return erro(res, 'E-mail é obrigatório');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return erro(res, 'Informe um e-mail válido');
     await pool.execute(
       `UPDATE advogados_freela
-       SET nome=?, oab=?, telefone=?, cep=?, logradouro=?, numero=?, complemento=?, bairro=?, cidade=?, estado=?
+       SET nome=?, oab=?, email=?, telefone=?, cep=?, logradouro=?, numero=?, complemento=?, bairro=?, cidade=?, estado=?
        WHERE id=?`,
-      [nome.trim(), oab||null, telefone||null, cep||null, logradouro||null,
+      [nome.trim(), oab||null, email.trim().toLowerCase(), telefone||null, cep||null, logradouro||null,
        numero||null, complemento||null, bairro||null, cidade||null, estado||null, id]
     );
     return sucesso(res, null, 'Freelancer atualizado');

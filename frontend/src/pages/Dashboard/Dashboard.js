@@ -240,7 +240,8 @@ function TabelaPrazos({ prazos, mostrarAtraso }) {
 function TabelaTarefas({ tarefas }) {
   const PRIORIDADE_BADGE = { urgente: 'badge-vermelho', normal: 'badge-laranja', baixa: 'badge-verde' };
   return (
-    <div className="tabela-wrapper">
+    // Mesma altura limitada do quadro "Processos sem movimentação" (rolagem interna).
+    <div className="tabela-wrapper" style={{maxHeight: '260px', overflowY: 'auto'}}>
       <table className="tabela">
         <thead>
           <tr><th>Tarefa</th><th>Prioridade</th><th>Vencimento</th><th>Para</th></tr>

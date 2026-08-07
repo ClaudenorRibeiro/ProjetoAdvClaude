@@ -4,10 +4,10 @@
 // processos, andamentos, prazos, tarefas, audiências, financeiro
 // ============================================================
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { processosAPI, andamentoAPI, prazosAPI, tarefasAPI, audienciasAPI, periciasAPI, financeiroAPI, pessoasAPI } from '../../services/api';
-import { formatarData, formatarNumeroPasta, formatarMoeda, labelStatusPrazo, corPrazo, toTitleCase } from '../../utils/formatters';
+import { formatarData, formatarNumeroPasta, formatarMoeda, labelStatusPrazo, corPrazo, toTitleCase, hojeLocal } from '../../utils/formatters';
 // Janelas de contato/ficha reutilizadas da tela de Pessoas (painel "Partes do processo")
 import { ModalPessoa, ModalEnviarEmail, ModalEnviarSMS, ModalEscolherWhatsapp, ModalCopiarTelefone, ModalCopiarEmail, ModalAnotacoes, soNumeroLocal, copiarParaAreaTransferencia } from '../Pessoas/Pessoas';
 import { linkWhatsApp } from '../../utils/whatsapp';
@@ -59,6 +59,11 @@ export default function PastaDetalhe() {
 
   // Dados por aba
   const [andamentos, setAndamentos]       = useState([]);
+  const [avisoAndamentos, setAvisoAndamentos] = useState(''); // faixa amigável (falha do DataJud)
+  const [statusDataJud, setStatusDataJud]     = useState(''); // linha fixa: resultado da última consulta
+  const [consultandoDataJud, setConsultandoDataJud] = useState(false); // overlay "Consultando o DataJud…"
+  const consultaAbortRef = useRef(null);   // permite "Parar consulta" (cancela a requisição)
+  const interrompidoRef  = useRef(false);  // marca que o usuário parou a consulta
   const [prazos, setPrazos]               = useState([]);
   const [tarefas, setTarefas]             = useState([]);
   // Filtros da aba Tarefas (dentro da pasta) — espelham a tela de Tarefas, MENOS "Número do Processo".
@@ -183,16 +188,62 @@ export default function PastaDetalhe() {
 
   async function carregarAndamentos() {
     const ids = idsParaBuscar();
+    // Prepara o cancelamento e o overlay. O overlay só aparece se a consulta demorar
+    // (>300ms): quando o backend responde na hora (guarda de 1x/dia), não pisca nada.
+    const controller = new AbortController();
+    consultaAbortRef.current = controller;
+    interrompidoRef.current = false;
+    let revelado = false;
+    const timer = setTimeout(() => { revelado = true; setConsultandoDataJud(true); }, 300);
     try {
-      const resultados = await Promise.all(ids.map(pid => andamentoAPI.listar(pid)));
-      // Combina todos os andamentos marcando o processo de origem
-      const todos = resultados.flatMap((r, i) =>
-        (r.data.ok ? r.data.dados : []).map(a => ({ ...a, _procId: ids[i] }))
-      );
-      // Ordena por data decrescente
-      todos.sort((a, b) => new Date(b.data || b.criado_em) - new Date(a.data || a.criado_em));
+      // Ao abrir, dispara a sincronização com o DataJud (o backend faz no máximo 1x/dia
+      // por processo). Se a sincronização falhar/for cancelada, cai na listagem simples
+      // (sem o signal, para ainda mostrar o que já existe) — a tela nunca quebra.
+      const resultados = await Promise.all(ids.map(pid =>
+        andamentoAPI.sincronizar(pid, { signal: controller.signal })
+          .catch(() => andamentoAPI.listar(pid).catch(() => null))
+      ));
+      let avisoErro = '';
+      let statusMsg = '';
+      const umProcesso = ids.length === 1; // a linha de status do DataJud só faz sentido p/ 1 processo
+      const todos = resultados.flatMap((r, i) => {
+        if (!r || !r.data.ok) return [];
+        const d = r.data.dados;
+        // sincronizar → { andamentos, aviso, datajud, novos }; listar (fallback) → array puro
+        const lista = Array.isArray(d) ? d : (Array.isArray(d?.andamentos) ? d.andamentos : []);
+        const dj = d && d.datajud;
+        // Erro de comunicação vai para a faixa laranja; os demais status, para a linha fixa.
+        if (dj && dj.tipo === 'erro' && !avisoErro) avisoErro = dj.mensagem;
+        else if (d && d.aviso && !avisoErro) avisoErro = d.aviso;
+        if (umProcesso && dj && dj.tipo !== 'erro' && dj.mensagem) statusMsg = dj.mensagem;
+        return lista.map(a => ({ ...a, _procId: ids[i] }));
+      });
+      // Ordena por data/hora decrescente (usa data_hora quando o automático traz)
+      todos.sort((a, b) =>
+        new Date(b.data_hora || b.data || b.criado_em) - new Date(a.data_hora || a.data || a.criado_em));
       setAndamentos(todos);
-    } catch { toast.error('Erro ao carregar andamentos'); }
+
+      if (interrompidoRef.current) {
+        setAvisoAndamentos('Consulta ao DataJud interrompida. Mostrando os andamentos já registrados.');
+        setStatusDataJud('');
+      } else {
+        setAvisoAndamentos(avisoErro);
+        setStatusDataJud(statusMsg);
+      }
+    } catch {
+      setAvisoAndamentos('Não foi possível carregar os andamentos agora. Tente novamente em instantes.');
+      setStatusDataJud('');
+    } finally {
+      clearTimeout(timer);
+      setConsultandoDataJud(false);
+      consultaAbortRef.current = null;
+    }
+  }
+
+  // Botão "Parar consulta": cancela a espera do DataJud e mostra o que já existe.
+  function pararConsulta() {
+    interrompidoRef.current = true;
+    if (consultaAbortRef.current) consultaAbortRef.current.abort();
   }
 
   async function carregarPrazos() {
@@ -690,14 +741,24 @@ export default function PastaDetalhe() {
                 </button>
               )}
             </div>
+            {avisoAndamentos && (
+              <div style={{ background:'#fff4e5', border:'1px solid #ffcf99', color:'#8a5300',
+                padding:'8px 12px', borderRadius:'6px', fontSize:'13px', marginBottom:'12px' }}>
+                {avisoAndamentos}
+              </div>
+            )}
+            {statusDataJud && (
+              <div style={{ fontSize:'12px', color:'#555', marginBottom:'10px',
+                display:'flex', alignItems:'center', gap:'6px' }}>
+                <span>ℹ️</span><span>{statusDataJud}</span>
+              </div>
+            )}
             <div className="tabela-wrapper">
               <table className="tabela">
                 <thead>
                   <tr>
                     <th>Data</th>
                     <th>Descrição</th>
-                    {/* Coluna extra de processo só quando "Todos" está ativo */}
-                    {processoFiltro === 'todos' && <th>Processo</th>}
                     <th>Registrado por</th>
                     <th>Ações</th>
                   </tr>
@@ -707,24 +768,27 @@ export default function PastaDetalhe() {
                     <tr key={a.id}>
                       <td style={{ whiteSpace: 'nowrap' }}>{formatarData(a.data)}</td>
                       <td style={{ maxWidth: '400px' }}>{a.descricao}</td>
-                      {processoFiltro === 'todos' && (
-                        <td style={{ fontFamily: 'monospace', fontSize: '11px', whiteSpace: 'nowrap', color: '#555' }}>
-                          {processos.find(p => p.id === a._procId)?.numProc || `#${a._procId}`}
-                        </td>
-                      )}
-                      <td>{a.criado_por_nome}</td>
                       <td>
-                        <MenuAcoes itens={[
-                          { label: 'Editar', icone: '✏️',
-                            onClick: () => {
-                              setAndamentoEditando(a);
-                              // Garante que o processo correto esteja selecionado ao editar
-                              if (processoFiltro === 'todos') setProcessoFiltro(String(a._procId));
-                              setModalAndamento(true);
-                            } },
-                          { label: 'Excluir', icone: '🗑️', perigo: true,
-                            onClick: () => excluirAndamento(a.id) },
-                        ]} />
+                        {/* Andamentos do DataJud ficam sem "Registrado por"; só os manuais mostram o autor */}
+                        {a.fonte === 'datajud' ? '' : (a.criado_por_nome || '—')}
+                      </td>
+                      <td>
+                        {/* Automáticos do DataJud são somente leitura; só os manuais têm ações */}
+                        {a.fonte === 'datajud'
+                          ? <span style={{ color:'#aaa', fontSize:'12px' }}>—</span>
+                          : (
+                            <MenuAcoes itens={[
+                              { label: 'Editar', icone: '✏️',
+                                onClick: () => {
+                                  setAndamentoEditando(a);
+                                  // Garante que o processo correto esteja selecionado ao editar
+                                  if (processoFiltro === 'todos') setProcessoFiltro(String(a._procId));
+                                  setModalAndamento(true);
+                                } },
+                              { label: 'Excluir', icone: '🗑️', perigo: true,
+                                onClick: () => excluirAndamento(a.id) },
+                            ]} />
+                          )}
                       </td>
                     </tr>
                   ))}
@@ -1355,6 +1419,24 @@ export default function PastaDetalhe() {
         />
       )}
 
+      {/* Overlay de tela cheia enquanto consulta o DataJud: bloqueia tudo, só deixa "Parar consulta". */}
+      {consultandoDataJud && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', zIndex: 3000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', borderRadius: '10px', padding: '24px 28px', textAlign: 'center',
+            maxWidth: '340px', boxShadow: '0 10px 30px rgba(0,0,0,0.25)' }}>
+            <span className="spinner-mini" style={{ width: '26px', height: '26px', borderWidth: '3px' }} />
+            <div style={{ fontSize: '15px', color: '#1e2a3a', fontWeight: 600, margin: '14px 0 4px' }}>
+              Consultando o DataJud…
+            </div>
+            <div style={{ fontSize: '13px', color: '#666', marginBottom: '18px' }}>
+              Buscando a movimentação do processo no CNJ.
+            </div>
+            <button className="btn btn-outline" onClick={pararConsulta}>Parar consulta</button>
+          </div>
+        </div>
+      )}
+
       {/* Modal: Andamento — só abre quando há um processo específico selecionado */}
       {modalAndamento && processoSelecionado && (
         <ModalAndamento
@@ -1395,25 +1477,36 @@ export default function PastaDetalhe() {
 // Modal de andamento (criar / editar)
 // ============================================================
 function ModalAndamento({ processoId, andamento, onFechar }) {
-  const [form, setForm]         = useState(andamento || { data_andamento: new Date().toISOString().split('T')[0] });
+  // Ao editar, herda a data real do andamento (YYYY-MM-DD). Ao criar, começa em HOJE
+  // (fuso de Brasília via hojeLocal — nunca toISOString, que dá o dia errado após as 21h).
+  const [form, setForm]         = useState(
+    andamento ? { ...andamento, data: (andamento.data || '').slice(0, 10) }
+              : { data: hojeLocal() });
   const [salvando, setSalvando] = useState(false);
+  const [aviso, setAviso]       = useState('');
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
   async function salvar() {
-    if (!form.descricao) return toast.error('Descrição é obrigatória');
+    if (!form.descricao || !form.descricao.trim()) {
+      setAviso('Descreva o andamento para poder salvar.');
+      return;
+    }
     setSalvando(true);
     try {
+      // Envia só o que o backend usa: a data escolhida e a descrição.
+      const dados = { data: form.data, descricao: form.descricao };
       if (andamento?.id) {
-        await andamentoAPI.editar(andamento.id, form);
+        await andamentoAPI.editar(andamento.id, dados);
         toast.success('Andamento atualizado!');
       } else {
-        await andamentoAPI.criar(processoId, form);
+        await andamentoAPI.criar(processoId, dados);
         toast.success('Andamento registrado!');
       }
       onFechar(true);
-    } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao salvar'); }
-    finally { setSalvando(false); }
+    } catch (err) {
+      setAviso(err.response?.data?.mensagem || 'Não foi possível salvar o andamento. Tente novamente.');
+    } finally { setSalvando(false); }
   }
 
   return (
@@ -1424,10 +1517,16 @@ function ModalAndamento({ processoId, andamento, onFechar }) {
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
         </div>
         <div className="modal-body">
+          {aviso && (
+            <div style={{ background:'#fff4e5', border:'1px solid #ffcf99', color:'#8a5300',
+              padding:'8px 12px', borderRadius:'6px', fontSize:'13px', marginBottom:'12px' }}>
+              {aviso}
+            </div>
+          )}
           <div className="form-group">
             <label className="form-label">Data *</label>
-            <input type="date" className="form-control" value={form.data_andamento || ''}
-              onChange={e => set('data_andamento', e.target.value)} />
+            <input type="date" className="form-control" value={form.data || ''}
+              onChange={e => set('data', e.target.value)} />
           </div>
           <div className="form-group">
             <label className="form-label">Descrição *</label>

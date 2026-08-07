@@ -285,6 +285,7 @@ export const financeiroAPI = {
 // ============================================================
 export const andamentoAPI = {
   listar:  (processoId) => api.get(`/andamento/${processoId}`),
+  sincronizar: (processoId, config) => api.post(`/andamento/${processoId}/sincronizar`, {}, config),
   criar:   (processoId, dados) => api.post(`/andamento/${processoId}`, dados),
   editar:  (id, dados) => api.put(`/andamento/${id}`, dados),
   excluir: (id) => api.delete(`/andamento/${id}`),
@@ -339,6 +340,8 @@ export const publicacoesAPI = {
   statusAasp:   () => api.get('/publicacoes/aasp/status'),
   statusCnj:    () => api.get('/publicacoes/cnj/status'),
   usuarios:     () => api.get('/publicacoes/usuarios'),
+  destinatariosEmail: () => api.get('/publicacoes/destinatarios-email'),
+  enviarEmail:  (id, dados) => api.post(`/publicacoes/${id}/enviar-email`, dados),
   listar:       (params) => api.get('/publicacoes', { params }),
   importar:     (dados) => api.post('/publicacoes/importar', dados),
   importarCnj:  (dados) => api.post('/publicacoes/cnj/importar', dados),

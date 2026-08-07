@@ -1824,10 +1824,11 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
 
 // Modal para cadastrar freelancer rapidamente
 function ModalNovoFreela({ onFechar, onSalvo }) {
-  const [form, setForm]         = useState({ nome: '', oab: '', telefone: '', cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '' });
+  const [form, setForm]         = useState({ nome: '', oab: '', email: '', telefone: '', cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '' });
   const [salvando, setSalvando] = useState(false);
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [erroCep, setErroCep]   = useState('');
+  const [aviso, setAviso]       = useState('');
 
   function set(k, v) { setForm(f => ({...f, [k]: v})); }
 
@@ -1857,13 +1858,15 @@ function ModalNovoFreela({ onFechar, onSalvo }) {
   }
 
   async function salvar() {
-    if (!form.nome.trim()) return toast.error('Nome é obrigatório');
+    if (!form.nome.trim())  { setAviso('Informe o nome do freelancer.'); return; }
+    if (!form.email.trim()) { setAviso('Informe o e-mail do freelancer.'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) { setAviso('Informe um e-mail válido.'); return; }
     setSalvando(true);
     try {
       const { data } = await audienciasAPI.criarFreela(form);
       toast.success('Freelancer cadastrado');
       onSalvo(data.dados.id);
-    } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao cadastrar'); }
+    } catch (err) { setAviso(err.response?.data?.mensagem || 'Não foi possível cadastrar. Tente novamente.'); }
     finally { setSalvando(false); }
   }
 
@@ -1875,10 +1878,21 @@ function ModalNovoFreela({ onFechar, onSalvo }) {
           <button className="modal-fechar" onClick={onFechar}>✕</button>
         </div>
         <div className="modal-body">
+          {aviso && (
+            <div style={{ background:'#fff4e5', border:'1px solid #ffcf99', color:'#8a5300',
+              padding:'8px 12px', borderRadius:'6px', fontSize:'13px', marginBottom:'12px' }}>
+              {aviso}
+            </div>
+          )}
           <div className="form-group">
             <label className="form-label">Nome *</label>
             <input className="form-control" value={form.nome}
               onChange={e => set('nome', e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">E-mail *</label>
+            <input className="form-control" type="email" placeholder="nome@exemplo.com"
+              value={form.email} onChange={e => set('email', e.target.value)} />
           </div>
           <div className="grid-2">
             <div className="form-group">

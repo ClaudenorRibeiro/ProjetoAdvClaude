@@ -1330,6 +1330,9 @@ function TabFeriados() {
 // (a URL efetiva é sempre a que estiver salva na configuração; nada fica fixo no backend).
 const URL_PADRAO_AASP = 'https://intimacaoapi.aasp.org.br/api/Associado/intimacao/json';
 const URL_PADRAO_CNJ  = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
+// DataJud (API Pública do CNJ) — base e chave pública oficiais, usadas só como PADRÃO.
+const URL_PADRAO_DATAJUD    = 'https://api-publica.datajud.cnj.jus.br';
+const APIKEY_PADRAO_DATAJUD = 'cDZHYzlZa0JadVREZDJCendQbXY6SkJlTzNjLV9TRENyQk1RdnFKZGRQdw==';
 
 function TabIntegracoes() {
   const [integracoes, setIntegracoes] = useState({});
@@ -1346,6 +1349,12 @@ function TabIntegracoes() {
         // CNJ: garante a URL padrão preenchida (a consulta é pública, sem chave).
         if (!dados.cnj) dados.cnj = { ativo: false, url: URL_PADRAO_CNJ, oabs: [] };
         else if (!dados.cnj.url) dados.cnj = { ...dados.cnj, url: URL_PADRAO_CNJ };
+        // DataJud: garante URL e chave padrão preenchidas (editáveis; o CNJ pode trocar a chave).
+        if (!dados.datajud) dados.datajud = { ativo: false, url: URL_PADRAO_DATAJUD, apikey: APIKEY_PADRAO_DATAJUD };
+        else {
+          if (!dados.datajud.url)    dados.datajud = { ...dados.datajud, url: URL_PADRAO_DATAJUD };
+          if (!dados.datajud.apikey) dados.datajud = { ...dados.datajud, apikey: APIKEY_PADRAO_DATAJUD };
+        }
         setIntegracoes(dados);
       }
     }).finally(() => setCarregando(false));
@@ -1380,6 +1389,7 @@ function TabIntegracoes() {
 
   const aasp      = integracoes.aasp      || {};
   const cnj       = integracoes.cnj       || {};
+  const datajud   = integracoes.datajud   || {};
   const email     = integracoes.email     || {};
   const comtele   = integracoes.comtele   || {};
 
@@ -1529,6 +1539,52 @@ function TabIntegracoes() {
         <button className="btn btn-primary" onClick={() => salvarModulo('cnj')}
           disabled={salvando === 'cnj'}>
           {salvando === 'cnj' ? 'Salvando...' : 'Salvar configurações CNJ'}
+        </button>
+      </div>
+
+      {/* DataJud (Andamentos automáticos — API Pública do CNJ) */}
+      <div className="card">
+        <div style={{display:'flex',alignItems:'center',gap:'12px',marginBottom:'16px'}}>
+          <h3 style={{margin:0,fontSize:'15px',color:'#1e2a3a'}}>Andamentos automáticos (DataJud)</h3>
+          <label style={{display:'flex',alignItems:'center',gap:'6px',cursor:'pointer',marginLeft:'auto'}}>
+            <input type="checkbox" checked={!!datajud.ativo}
+              onChange={e => setModulo('datajud','ativo', e.target.checked)} />
+            <span style={{fontSize:'13px'}}>Integração ativa</span>
+          </label>
+        </div>
+        {datajud.ativo && (
+          <>
+            <div className="form-group">
+              <label className="form-label">URL da API do DataJud</label>
+              <input className="form-control" value={datajud.url||''}
+                onChange={e => setModulo('datajud','url', e.target.value)}
+                placeholder={URL_PADRAO_DATAJUD} />
+              <small style={{ color: '#888' }}>
+                Endereço-base da API Pública do DataJud. Já vem com o padrão oficial —
+                o índice do tribunal é descoberto pelo próprio número do processo.
+              </small>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Chave pública (APIKey)</label>
+              <input className="form-control" value={datajud.apikey||''}
+                onChange={e => setModulo('datajud','apikey', e.target.value)}
+                placeholder={APIKEY_PADRAO_DATAJUD} />
+              <small style={{ color: '#888' }}>
+                Chave pública fornecida pelo CNJ (a mesma para todos). Já vem preenchida —
+                só troque se o CNJ divulgar uma chave nova.
+              </small>
+            </div>
+            <div style={{ background:'#eef2ff', border:'1px solid #c7d2fe', color:'#3730a3',
+              padding:'8px 12px', borderRadius:'6px', fontSize:'13px' }}>
+              Com a integração ativa, ao abrir os Andamentos de um processo o sistema busca a
+              tramitação no CNJ (no máximo uma vez por dia, por processo). Os andamentos vindos
+              do DataJud entram como <b>somente leitura</b>; os manuais continuam normais.
+            </div>
+          </>
+        )}
+        <button className="btn btn-primary" onClick={() => salvarModulo('datajud')}
+          disabled={salvando === 'datajud'} style={{ marginTop: '16px' }}>
+          {salvando === 'datajud' ? 'Salvando...' : 'Salvar configurações DataJud'}
         </button>
       </div>
 

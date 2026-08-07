@@ -38,12 +38,14 @@ function criarTransporte(extra = {}) {
   });
 }
 
-// Grava o resultado do envio na tabela log_emails (nunca lança exceção)
-async function registrarLog(para, assunto, status, erro) {
+// Grava o resultado do envio na tabela log_emails (nunca lança exceção).
+// publicacaoId/destinatarioNome são opcionais — usados quando o e-mail é o envio
+// de uma publicação (para o histórico da publicação ler daqui, sem tabela nova).
+async function registrarLog(para, assunto, status, erro, publicacaoId = null, destinatarioNome = null, mensagem = null) {
   try {
     await pool.execute(
-      'INSERT INTO log_emails (para, assunto, status, erro) VALUES (?, ?, ?, ?)',
-      [para, assunto, status, erro || null]
+      'INSERT INTO log_emails (para, destinatario_nome, mensagem, assunto, status, erro, publicacao_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [para, destinatarioNome || null, mensagem || null, assunto, status, erro || null, publicacaoId || null]
     );
   } catch (e) {
     console.error('Erro ao gravar log_emails:', e.message);
@@ -51,14 +53,15 @@ async function registrarLog(para, assunto, status, erro) {
 }
 
 // Envia um e-mail genérico.
-// Parâmetros: { para, assunto, html, linkDev?, anexos? }
+// Parâmetros: { para, assunto, html, linkDev?, anexos?, publicacaoId?, destinatarioNome? }
 //   anexos: array opcional no formato do Nodemailer [{ filename, content(Buffer), contentType }]
+//   publicacaoId/destinatarioNome: opcionais, só quando o e-mail é o envio de uma publicação.
 // Em desenvolvimento sem SMTP, imprime o link no console e retorna sem erro.
-async function enviarEmail({ para, assunto, html, linkDev, anexos }) {
+async function enviarEmail({ para, assunto, html, linkDev, anexos, publicacaoId, destinatarioNome, mensagem }) {
   if (!smtpConfigurado()) {
     if (process.env.NODE_ENV === 'production') {
       const msg = 'Servidor de e-mail não configurado. Configure SMTP_HOST no arquivo .env';
-      await registrarLog(para, assunto, 'falha', msg);
+      await registrarLog(para, assunto, 'falha', msg, publicacaoId, destinatarioNome, mensagem);
       throw new Error(msg);
     }
     // Modo desenvolvimento: exibe o link no console para teste
@@ -81,9 +84,9 @@ async function enviarEmail({ para, assunto, html, linkDev, anexos }) {
     // Anexos (opcional): só entram quando vierem — mantém 100% compatível com quem chama sem anexo.
     if (Array.isArray(anexos) && anexos.length) opcoes.attachments = anexos;
     await transporte.sendMail(opcoes);
-    await registrarLog(para, assunto, 'sucesso', null);
+    await registrarLog(para, assunto, 'sucesso', null, publicacaoId, destinatarioNome, mensagem);
   } catch (err) {
-    await registrarLog(para, assunto, 'falha', err.message);
+    await registrarLog(para, assunto, 'falha', err.message, publicacaoId, destinatarioNome, mensagem);
     throw err; // repropaga para o chamador tratar normalmente
   }
 }

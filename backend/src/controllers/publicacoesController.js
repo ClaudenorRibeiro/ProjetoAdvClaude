@@ -18,6 +18,7 @@ const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const aaspService = require('../services/aaspService');
 const cnjService = require('../services/cnjService');
+const { enviarEmail } = require('../utils/email');
 
 // "Impressão digital" (SHA-256) do texto EXATO da publicação — base da dedup fiel.
 function hashTexto(texto) {
@@ -283,6 +284,7 @@ async function listar(req, res) {
       `SELECT p.id, p.fonte, p.data_publicacao, p.numero_processo, p.numero_publicacao,
               p.tribunal, p.oab, p.hash_cnj,
               p.titulo, p.cabecalho, p.texto, p.escritorio, p.tratada, p.tratada_em,
+              p.motivo_sem_acao,
               ut.nome AS tratada_por_nome,
               (SELECT GROUP_CONCAT(u.nome SEPARATOR ', ')
                  FROM publicacao_usuario pu JOIN usuarios u ON pu.usuario_id = u.id
@@ -479,11 +481,21 @@ async function direcionar(req, res) {
   }
 }
 
-// PUT /api/publicacoes/:id/tratar — marca/desmarca como tratada. Body: { tratada: bool }
+// PUT /api/publicacoes/:id/tratar — marca/desmarca como tratada.
+// Body: { tratada: bool, sem_acao?: bool, motivo?: string }
+//   - sem_acao=true  => marcação MANUAL "Tratada / sem ação": exige o motivo (justificativa).
+//   - sem_acao ausente => tratar AUTOMÁTICO (ao criar prazo/tarefa/compromisso): não pede motivo.
 async function tratar(req, res) {
   try {
     const { id } = req.params;
     const tratada = !!req.body.tratada;
+    const semAcao = !!req.body.sem_acao;
+    const motivo  = (req.body.motivo || '').toString().trim();
+
+    // Marcar como tratada SEM AÇÃO exige justificativa (defesa no servidor, além da tela).
+    if (tratada && semAcao && !motivo) {
+      return erro(res, 'Informe o motivo para marcar a publicação como tratada sem ação.');
+    }
     // Junto com a existência, calcula se o PROCESSO da publicação está cadastrado (tblproc),
     // comparando só os dígitos (ignora a pontuação da máscara nos dois lados).
     const [rows] = await pool.execute(
@@ -503,13 +515,15 @@ async function tratar(req, res) {
     }
 
     if (tratada) {
+      // Guarda o motivo só no caso manual "sem ação"; no automático fica NULL.
       await pool.execute(
-        'UPDATE publicacoes SET tratada = 1, tratada_por = ?, tratada_em = NOW() WHERE id = ?',
-        [req.usuario.id, id]
+        'UPDATE publicacoes SET tratada = 1, tratada_por = ?, tratada_em = NOW(), motivo_sem_acao = ? WHERE id = ?',
+        [req.usuario.id, semAcao ? motivo : null, id]
       );
     } else {
+      // Reabrir limpa o motivo junto.
       await pool.execute(
-        'UPDATE publicacoes SET tratada = 0, tratada_por = NULL, tratada_em = NULL WHERE id = ?', [id]
+        'UPDATE publicacoes SET tratada = 0, tratada_por = NULL, tratada_em = NULL, motivo_sem_acao = NULL WHERE id = ?', [id]
       );
     }
     return sucesso(res, null, tratada ? 'Publicação marcada como tratada' : 'Publicação reaberta');
@@ -537,6 +551,7 @@ async function historico(req, res) {
     const { id } = req.params;
     const [rows] = await pool.execute(
       `SELECT p.id, p.criado_em, p.escritorio, p.direcionada_em, p.tratada, p.tratada_em,
+              p.motivo_sem_acao,
               ui.nome AS importada_por_nome,
               ud.nome AS direcionada_por_nome,
               ut.nome AS tratada_por_nome
@@ -585,10 +600,17 @@ async function historico(req, res) {
         WHERE c.publicacao_id = ? ORDER BY c.data ASC, c.id ASC`, [id]
     );
 
+    // E-mails enviados desta publicação (lidos da própria log_emails, sem tabela extra).
+    const [emails] = await pool.execute(
+      `SELECT destinatario_nome, para, mensagem, status, enviado_em
+         FROM log_emails WHERE publicacao_id = ? ORDER BY enviado_em DESC`, [id]
+    );
+
     return sucesso(res, {
       ...rows[0],
       direcionada_usuarios: usuarios.map(u => u.nome),
       acoes: { prazos, tarefas, compromissos },
+      emails,
     });
   } catch (err) {
     return erroInterno(res, err);
@@ -710,7 +732,125 @@ async function obter(req, res) {
   }
 }
 
+// ============================================================
+// ENVIO DA PUBLICAÇÃO POR E-MAIL (a usuários do sistema e advogados freelancers)
+// ============================================================
+
+// Escapa HTML para embutir o texto da publicação com segurança no corpo do e-mail.
+function escaparHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function dataBrPub(d) {
+  const s = String(d || '').slice(0, 10);
+  const [a, m, dia] = s.split('-');
+  return (a && m && dia) ? `${dia}/${m}/${a}` : s;
+}
+function montarHtmlPublicacao(pub, mensagem) {
+  const dataBR = dataBrPub(pub.data_publicacao);
+  // Mensagem pessoal (opcional) escrita por quem enviou — aparece no topo do corpo.
+  // Converte as quebras de linha em <br> (o Outlook ignora white-space:pre-wrap).
+  const msgHtml = escaparHtml(mensagem || '').replace(/\r\n|\r|\n/g, '<br>');
+  const blocoMsg = mensagem
+    ? `<div style="background:#f0f6ff;border:1px solid #cfe0fb;border-radius:6px;padding:12px 14px;margin:0 0 16px;font-size:15px;line-height:1.6;color:#1e3a5f;">${msgHtml}</div>`
+    : '';
+  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head>
+  <body style="font-family:Arial,sans-serif;background:#f4f4f4;margin:0;padding:20px;">
+    <div style="max-width:700px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+      <div style="background:#2d6be4;padding:20px 24px;">
+        <h1 style="color:#fff;margin:0;font-size:18px;">Publicação — ${escaparHtml(dataBR)}</h1>
+      </div>
+      <div style="padding:20px 24px;color:#333;font-size:14px;line-height:1.6;">
+        ${blocoMsg}
+        <p style="margin:0 0 4px;"><strong>Tribunal:</strong> ${escaparHtml(pub.tribunal || '—')}</p>
+        <p style="margin:0 0 4px;"><strong>Processo:</strong> ${escaparHtml(pub.numero_processo || '—')}</p>
+        ${pub.numero_publicacao ? `<p style="margin:0 0 4px;"><strong>Nº da publicação:</strong> ${escaparHtml(pub.numero_publicacao)}</p>` : ''}
+        <hr style="border:none;border-top:1px solid #eee;margin:16px 0;">
+        <div style="white-space:pre-wrap;font-size:13px;line-height:1.7;color:#222;">${escaparHtml(pub.texto)}</div>
+      </div>
+      <div style="padding:12px 24px;background:#fafafa;color:#999;font-size:11px;">Enviado pelo sistema de advocacia.</div>
+    </div>
+  </body></html>`;
+}
+
+// GET /api/publicacoes/destinatarios-email — usuários ativos + advogados freelancers,
+// com nome/OAB/e-mail (o front desabilita quem não tem e-mail).
+async function destinatariosEmail(req, res) {
+  try {
+    const [usuarios] = await pool.execute(
+      `SELECT id, nome, oab, email FROM usuarios WHERE ativo = 1 AND nivel > 0 ORDER BY nome`
+    );
+    const [freelancers] = await pool.execute(
+      `SELECT id, nome, oab, email FROM advogados_freela ORDER BY nome`
+    );
+    return sucesso(res, { usuarios, freelancers });
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// POST /api/publicacoes/:id/enviar-email — envia o conteúdo completo da publicação
+// aos destinatários escolhidos. Body: { destinatarios: [{ tipo:'usuario'|'freela', id }] }
+// Cada envio é registrado em log_emails com publicacao_id (aparece no histórico).
+async function enviarEmailPublicacao(req, res) {
+  try {
+    const { id } = req.params;
+    const destinatarios = Array.isArray(req.body?.destinatarios) ? req.body.destinatarios : [];
+    if (!destinatarios.length) return erro(res, 'Selecione ao menos um destinatário.');
+
+    const [pubRows] = await pool.execute(
+      `SELECT id, tribunal, numero_processo, numero_publicacao, data_publicacao, texto
+         FROM publicacoes WHERE id = ?`, [id]
+    );
+    if (!pubRows.length) return naoEncontrado(res, 'Publicação não encontrada');
+    const pub = pubRows[0];
+    if (!pub.texto || !String(pub.texto).trim()) return erro(res, 'Esta publicação não tem conteúdo para enviar.');
+
+    // Resolve nome + e-mail de cada destinatário selecionado.
+    const idsUsuario = [...new Set(destinatarios.filter(d => d.tipo === 'usuario').map(d => Number(d.id)).filter(Boolean))];
+    const idsFreela  = [...new Set(destinatarios.filter(d => d.tipo === 'freela').map(d => Number(d.id)).filter(Boolean))];
+    const mapa = new Map();
+    if (idsUsuario.length) {
+      const ph = idsUsuario.map(() => '?').join(',');
+      const [us] = await pool.execute(`SELECT id, nome, email FROM usuarios WHERE id IN (${ph})`, idsUsuario);
+      us.forEach(u => mapa.set('usuario:' + u.id, { nome: u.nome, email: u.email }));
+    }
+    if (idsFreela.length) {
+      const ph = idsFreela.map(() => '?').join(',');
+      const [fr] = await pool.execute(`SELECT id, nome, email FROM advogados_freela WHERE id IN (${ph})`, idsFreela);
+      fr.forEach(f => mapa.set('freela:' + f.id, { nome: `${f.nome} (freelancer)`, email: f.email }));
+    }
+
+    // No máximo 3 linhas em branco seguidas: colapsa 4+ quebras de linha em 4
+    // (4 quebras = 3 linhas em branco). Vale para o e-mail E para o histórico.
+    const mensagem = (req.body?.mensagem || '').toString().trim().replace(/\n{4,}/g, '\n\n\n\n');
+    const html = montarHtmlPublicacao(pub, mensagem);
+    const assunto = `Publicação — processo ${pub.numero_processo || ''} (${dataBrPub(pub.data_publicacao)})`.trim();
+
+    let enviados = 0;
+    const falhas = [];
+    for (const d of destinatarios) {
+      const info = mapa.get(`${d.tipo}:${Number(d.id)}`);
+      if (!info)                              { falhas.push({ nome: `#${d.id}`, motivo: 'não encontrado' }); continue; }
+      if (!info.email || !info.email.trim())  { falhas.push({ nome: info.nome, motivo: 'sem e-mail' });     continue; }
+      try {
+        await enviarEmail({ para: info.email.trim(), assunto, html, publicacaoId: pub.id, destinatarioNome: info.nome, mensagem });
+        enviados++;
+      } catch (e) {
+        falhas.push({ nome: info.nome, motivo: 'falha no envio' });
+      }
+    }
+
+    if (!enviados) {
+      return erro(res, 'Nenhum e-mail foi enviado. Verifique os destinatários e a configuração de e-mail.');
+    }
+    return sucesso(res, { enviados, falhas }, `${enviados} e-mail(s) enviado(s).`);
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
 module.exports = {
   statusAasp, listar, importar, direcionar, tratar, historico, excluir, excluirLote, usuariosParaDirecionar,
-  statusCnj, importarCnj, obter,
+  statusCnj, importarCnj, obter, destinatariosEmail, enviarEmailPublicacao,
 };
