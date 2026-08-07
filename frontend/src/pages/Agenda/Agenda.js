@@ -47,7 +47,7 @@ const mensagens = {
 
 // Cor por tipo de evento
 const COR_EVENTO = {
-  prazo:       '#dc2626', // vermelho
+  prazo:       '#e2d3a8', // bege (texto escuro — ver eventPropGetter)
   audiencia:   '#1a56db', // azul
   pericia:     '#7c3aed', // roxo
   tarefa:      '#d97706', // laranja
@@ -266,7 +266,8 @@ export default function Agenda() {
         backgroundColor: COR_EVENTO[evento.tipo] || '#6b7280',
         borderRadius: '4px',
         border: 'none',
-        color: '#fff',
+        // Prazo usa fundo bege (claro) → texto escuro; os demais tipos seguem com texto branco.
+        color: evento.tipo === 'prazo' ? '#5c4a2a' : '#fff',
         fontSize: '11px',
         padding: '1px 4px',
         ...(concluido ? { opacity: 0.55, textDecoration: 'line-through' } : {}),

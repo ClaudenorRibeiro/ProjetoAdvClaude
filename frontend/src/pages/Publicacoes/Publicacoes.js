@@ -197,6 +197,8 @@ function ModalJustificarSemAcao({ pub, onFechar, onSucesso }) {
 function ModalEnviarPublicacaoEmail({ pub, onFechar, onSucesso }) {
   const [dados, setDados]           = useState(null);   // { usuarios, freelancers }
   const [sel, setSel]               = useState(new Set());
+  const [incluirOutro, setIncluirOutro] = useState(false); // checkbox "Outro"
+  const [emailOutro, setEmailOutro]     = useState('');    // e-mail avulso
   const [mensagem, setMensagem]     = useState('');
   const [carregando, setCarregando] = useState(true);
   const [enviando, setEnviando]     = useState(false);
@@ -214,9 +216,15 @@ function ModalEnviarPublicacaoEmail({ pub, onFechar, onSucesso }) {
   }
 
   async function enviar() {
-    if (!sel.size) { setAviso('Selecione ao menos um destinatário.'); return; }
-    setEnviando(true); setAviso('');
     const destinatarios = [...sel].map(k => { const [tipo, id] = k.split(':'); return { tipo, id: Number(id) }; });
+    // Inclui o e-mail avulso do "Outro", se marcado (validando o formato).
+    if (incluirOutro) {
+      const em = emailOutro.trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) { setAviso('Informe um e-mail válido no campo "Outro".'); return; }
+      destinatarios.push({ tipo: 'outro', email: em });
+    }
+    if (!destinatarios.length) { setAviso('Selecione ao menos um destinatário.'); return; }
+    setEnviando(true); setAviso('');
     try {
       const { data } = await publicacoesAPI.enviarEmail(pub.id, { destinatarios, mensagem: mensagem.trim() });
       const falhas = data.dados?.falhas || [];
@@ -282,6 +290,17 @@ function ModalEnviarPublicacaoEmail({ pub, onFechar, onSucesso }) {
               <div style={{ fontWeight:600, fontSize:'13px', margin:'14px 0 2px' }}>Advogados freelancers</div>
               {dados.freelancers.length ? dados.freelancers.map(f => <Linha key={`f${f.id}`} tipo="freela" p={f} />)
                 : <div style={{ fontSize:'12px', color:'#888' }}>Nenhum freelancer cadastrado.</div>}
+              <div style={{ marginTop:'14px', borderTop:'1px solid #eef2f7', paddingTop:'10px' }}>
+                <label style={{ display:'flex', alignItems:'center', gap:'8px', padding:'6px 4px', cursor:'pointer' }}>
+                  <input type="checkbox" checked={incluirOutro} onChange={e => setIncluirOutro(e.target.checked)} />
+                  <span style={{ fontSize:'13px' }}>Outro (digitar 1 e-mail avulso)</span>
+                </label>
+                {incluirOutro && (
+                  <input className="form-control" type="email" style={{ marginTop:'6px' }}
+                    placeholder="nome@exemplo.com" value={emailOutro}
+                    onChange={e => setEmailOutro(e.target.value)} />
+                )}
+              </div>
             </>
           )}
         </div>

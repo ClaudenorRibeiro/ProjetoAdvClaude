@@ -830,7 +830,15 @@ async function enviarEmailPublicacao(req, res) {
     let enviados = 0;
     const falhas = [];
     for (const d of destinatarios) {
-      const info = mapa.get(`${d.tipo}:${Number(d.id)}`);
+      let info;
+      if (d.tipo === 'outro') {
+        // E-mail avulso digitado à mão (não é usuário nem freelancer).
+        const email = String(d.email || '').trim();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { falhas.push({ nome: email || 'Outro', motivo: 'e-mail inválido' }); continue; }
+        info = { nome: email, email };
+      } else {
+        info = mapa.get(`${d.tipo}:${Number(d.id)}`);
+      }
       if (!info)                              { falhas.push({ nome: `#${d.id}`, motivo: 'não encontrado' }); continue; }
       if (!info.email || !info.email.trim())  { falhas.push({ nome: info.nome, motivo: 'sem e-mail' });     continue; }
       try {
