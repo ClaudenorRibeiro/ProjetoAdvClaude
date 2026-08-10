@@ -350,8 +350,13 @@ export default function PastaDetalhe() {
         tiposAudiencia.length ? Promise.resolve(null) : audienciasAPI.tipos(),
       ]);
       const todos = resultados.flatMap(r => r.data.ok ? r.data.dados.registros : []);
-      // Ordena por data DESC para mostrar a mais recente primeiro
-      todos.sort((a, b) => new Date(b.data + 'T' + b.hora) - new Date(a.data + 'T' + a.hora));
+      // "Agendada" sempre no topo; dentro de cada grupo, por data/hora crescente (igual à tela principal de Audiências)
+      todos.sort((a, b) => {
+        const pa = a.status === 'agendada' ? 0 : 1;
+        const pb = b.status === 'agendada' ? 0 : 1;
+        if (pa !== pb) return pa - pb;
+        return new Date(a.data + 'T' + a.hora) - new Date(b.data + 'T' + b.hora);
+      });
       setAudiencias(todos);
       if (tiposResp?.data?.ok) setTiposAudiencia(tiposResp.data.dados);
     } catch {}

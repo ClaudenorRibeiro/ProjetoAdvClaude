@@ -38,7 +38,16 @@ async function listar(req, res) {
     if (req.query.escritorio === '1') {
       cond.push('c.escritorio = 1');                          // compartilhados de qualquer usuário
     } else {
-      const podeVerTodos = Number(req.usuario.nivel) <= 1;    // admin/super
+      // Pode ver a agenda de todos: admin/super (nível <= 1) OU usuário comum com a
+      // permissão explícita 'agenda.ver_todos > visualizar' (mesma lógica de Tarefas/Prazos).
+      let podeVerTodos = Number(req.usuario.nivel) <= 1;
+      if (!podeVerTodos) {
+        const [verTodosPerm] = await pool.execute(
+          "SELECT permitido FROM permissoes WHERE usuario_id = ? AND modulo = 'agenda' AND submodulo = 'ver_todos' AND acao = 'visualizar'",
+          [req.usuario.id]
+        );
+        podeVerTodos = Number(verTodosPerm[0]?.permitido) === 1;
+      }
       if (!podeVerTodos) {
         // Comum: só os compromissos de que ele é o responsável (ignora usuario_id recebido → não burla)
         cond.push('COALESCE(c.delegado_para, c.usuario_id) = ?'); params.push(req.usuario.id);

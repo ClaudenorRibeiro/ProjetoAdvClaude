@@ -83,7 +83,7 @@ async function listar(req, res) {
        JOIN tblproc pr ON a.processo_id = pr.id
        JOIN tblpasta pa ON pr.pasta_id = pa.id
        ${where}
-       ORDER BY a.data ASC, a.hora ASC
+       ORDER BY (a.status = 'agendada') DESC, a.data ASC, a.hora ASC
        LIMIT ${limitInt} OFFSET ${offsetInt}`,
       params
     );

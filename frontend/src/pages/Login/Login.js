@@ -12,11 +12,18 @@ export default function Login() {
   const [login, setLogin]     = useState('');
   const [senha, setSenha]     = useState('');
   const [erro, setErro]       = useState('');
+  const [aviso, setAviso]     = useState(''); // aviso amigável (ex.: sessão aberta em outro dispositivo)
   const [carregando, setCarregando] = useState(false);
   const [nomeEscritorio, setNomeEscritorio] = useState('Sistema de Advocacia');
   const [logoEscritorio, setLogoEscritorio] = useState(null);
   const { logar }   = useAuth();
   const navigate    = useNavigate();
+
+  // Aviso guardado pelo interceptor quando a sessão foi encerrada por login em outro dispositivo.
+  useEffect(() => {
+    const a = sessionStorage.getItem('avisoSessao');
+    if (a) { setAviso(a); sessionStorage.removeItem('avisoSessao'); }
+  }, []);
 
   useEffect(() => {
     api.get('/public/info')
@@ -87,6 +94,12 @@ export default function Login() {
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">
+          {aviso && (
+            <div style={{ background:'#fff4e5', border:'1px solid #ffcf99', color:'#8a5300',
+              padding:'10px 12px', borderRadius:'6px', fontSize:'13px', marginBottom:'12px' }}>
+              {aviso}
+            </div>
+          )}
           {erro && <div className="login-erro">{erro}</div>}
 
           <div className="form-group">

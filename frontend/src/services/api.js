@@ -38,6 +38,12 @@ api.interceptors.response.use(
   response => response,
   error => {
     if (error.response?.status === 401) {
+      // Sessão encerrada porque o usuário entrou em outro dispositivo: guarda o aviso para
+      // a tela de Login exibir (sobrevive ao reload, pois fica no sessionStorage da própria aba).
+      if (error.response?.data?.codigo === 'SESSAO_ENCERRADA') {
+        sessionStorage.setItem('avisoSessao',
+          error.response.data.mensagem || 'Sua sessão foi aberta em outro dispositivo. Faça login novamente.');
+      }
       // Token inválido ou expirado — redireciona para login
       sessionStorage.removeItem('token');
       sessionStorage.removeItem('usuario');

@@ -44,8 +44,12 @@ export function AuthProvider({ children }) {
 
   // Realiza o login e salva os dados na memória e no sessionStorage
   async function logar(login, senha) {
-    const { data } = await authAPI.login({ login, senha });
+    // Identidade do navegador (localStorage: compartilhada por todas as abas, sobrevive ao fechar).
+    // Enviamos a atual para o servidor decidir se mantém a sessão (mesmo navegador) ou troca (outro).
+    const dispositivo = localStorage.getItem('deviceSessao') || null;
+    const { data } = await authAPI.login({ login, senha, sessao: dispositivo });
     if (data.ok) {
+      if (data.dados.sessao) localStorage.setItem('deviceSessao', data.dados.sessao);
       sessionStorage.setItem('token', data.dados.token);
       sessionStorage.setItem('usuario', JSON.stringify(data.dados.usuario));
       setUsuario(data.dados.usuario);

@@ -9,6 +9,7 @@
 import React, { useState, useEffect } from 'react';
 import { publicacoesAPI } from '../services/api';
 import { formatarData, textoLimpo } from '../utils/formatters';
+import useEscFechar from '../hooks/useEscFechar';
 
 export default function ModalLerPublicacao({ publicacaoId, onFechar }) {
   const [pub, setPub]   = useState(null);
@@ -20,15 +21,11 @@ export default function ModalLerPublicacao({ publicacaoId, onFechar }) {
       .catch((e) => setAviso(e.response?.data?.mensagem || 'Não foi possível carregar a publicação de origem.'));
   }, [publicacaoId]);
 
-  // Fecha com Escape
-  useEffect(() => {
-    function handleKey(e) { if (e.key === 'Escape') onFechar(); }
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [onFechar]);
+  // Fecha com Escape — só quando esta janela é a mais acima (não fecha junto com outra empilhada).
+  const overlayRef = useEscFechar(onFechar);
 
   return (
-    <div className="modal-overlay" style={{ zIndex: 2100 }}>
+    <div className="modal-overlay" style={{ zIndex: 2100 }} ref={overlayRef}>
       <div className="modal-box modal-largo">
         <div className="modal-header">
           <h3>Publicação de origem{pub ? ` — ${formatarData(pub.data_publicacao)}` : ''}</h3>

@@ -10,6 +10,7 @@ import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import ModalInfo from '../../components/ui/ModalInfo';
+import useEscFechar from '../../hooks/useEscFechar';
 import MenuAcoes from '../../components/MenuAcoes';
 import ModalLerPublicacao from '../../components/ModalLerPublicacao';
 
@@ -505,6 +506,8 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
   const [confirmarData, setConfirmarData] = useState(false); // confirmação do admin p/ data passada
   const [aviso, setAviso] = useState(''); // faixa de aviso DENTRO do modal (erros de salvamento)
   const [info, setInfo]   = useState(null); // pequeno modal informativo p/ validações obrigatórias
+  // Esc fecha o formulário — só quando ele é a janela mais acima (confirmação/aviso por cima fecham primeiro).
+  const overlayRef = useEscFechar(() => onFechar(false));
   // Refs dos campos obrigatórios — ao fechar o aviso, o foco vai para o campo que faltou
   const tituloRef    = useRef(null);
   const buscaProcRef = useRef(null);
@@ -659,7 +662,7 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
 
   return (
     <>
-    <div className="modal-overlay">
+    <div className="modal-overlay" ref={overlayRef}>
       <div className="modal-box modal-grande">
         <div className="modal-header">
           <h3>{tarefa ? 'Editar Tarefa' : 'Nova Tarefa'}</h3>

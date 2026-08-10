@@ -31,6 +31,9 @@ const MODULOS_PERM = [
   { chave: 'tarefas', label: 'Tarefas (menu)', submodulos: [
     { chave: 'tarefas.ver_todos', label: 'Ver tarefas de todos os usuários' },
   ]},
+  { chave: 'agenda', label: 'Agenda (menu)', submodulos: [
+    { chave: 'agenda.ver_todos', label: 'Ver agenda de todos os usuários' },
+  ]},
   { chave: 'audiencias', label: 'Audiências (menu)', submodulos: [
     { chave: 'audiencias.tipos', label: 'Tipos de audiência' },
   ]},

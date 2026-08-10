@@ -20,8 +20,11 @@ function erro(res, mensagem = 'Erro inesperado', status = 400, detalhes = null) 
 }
 
 // Resposta de não autorizado — 401 (sem token ou token inválido)
-function naoAutorizado(res, mensagem = 'Acesso não autorizado') {
-  return res.status(401).json({ ok: false, mensagem });
+// `codigo` (opcional) permite o frontend distinguir casos especiais (ex.: 'SESSAO_ENCERRADA').
+function naoAutorizado(res, mensagem = 'Acesso não autorizado', codigo = null) {
+  const resposta = { ok: false, mensagem };
+  if (codigo) resposta.codigo = codigo;
+  return res.status(401).json(resposta);
 }
 
 // Resposta de proibido — 403 (tem token mas sem permissão)

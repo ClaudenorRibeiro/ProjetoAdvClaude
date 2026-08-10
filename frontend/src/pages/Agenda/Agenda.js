@@ -6,7 +6,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
-import { format, parse, startOfWeek, getDay, startOfMonth, endOfMonth } from 'date-fns';
+import { format, parse, startOfWeek, getDay, startOfMonth, endOfMonth, isSameDay } from 'date-fns';
 import ptBR from 'date-fns/locale/pt-BR';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
@@ -14,6 +14,7 @@ import { prazosAPI, audienciasAPI, tarefasAPI, periciasAPI, agendaAPI, configura
 import { formatarData } from '../../utils/formatters';
 import { useAuth } from '../../context/AuthContext';
 import { ModalTarefa } from '../Tarefas/Tarefas';
+import useEscFechar from '../../hooks/useEscFechar';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import ModalLerPublicacao from '../../components/ModalLerPublicacao';
@@ -55,6 +56,45 @@ const COR_EVENTO = {
   feriado:     '#059669', // verde — feriados (iguais para todos; só leitura na agenda)
 };
 
+// Nome do responsável/delegado do item, conforme o tipo. Vazio quando não há (ex.: feriado, ou
+// tarefa "do escritório" sem atribuição). Usado no calendário E na janela do dia — sem duplicar.
+function responsavelDoEvento(ev) {
+  const d = ev.dados || {};
+  switch (ev.tipo) {
+    case 'prazo':
+    case 'audiencia':
+    case 'pericia':
+      return d.responsavel_nome || '';
+    case 'tarefa':
+      return d.atribuida_para_nome || '';
+    case 'compromisso':
+      return d.delegado_nome || d.usuario_nome || '';
+    default:
+      return ''; // feriado etc.
+  }
+}
+
+// Item do calendário (react-big-calendar): título à esquerda + responsável/delegado à direita.
+// A cor de fundo vem do eventPropGetter; aqui só definimos o conteúdo interno.
+function EventoCalendario({ event }) {
+  const resp = responsavelDoEvento(event);
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+      <span style={{ flex: '1 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {event.title}
+      </span>
+      {resp && (
+        <span style={{ flex: '0 1 auto', maxWidth: '50%', overflow: 'hidden', textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap', opacity: 0.85, fontStyle: 'italic' }}>
+          {resp}
+        </span>
+      )}
+    </div>
+  );
+}
+// Objeto estável (fora do componente) para o Calendar não remontar os itens a cada render.
+const COMPONENTES_CALENDARIO = { event: EventoCalendario };
+
 // Formata 'YYYY-MM-DD HH:MM:SS' (ou ISO) em 'dd/MM/yyyy HH:MM'
 function fmtDataHora(v) {
   if (!v) return '';
@@ -74,23 +114,26 @@ export default function Agenda() {
   const [modalTarefa, setModalTarefa] = useState(null);           // null | {dataInicial} — nova tarefa aberta DENTRO da Agenda
   const [confirmarExcluir, setConfirmarExcluir] = useState(null); // compromisso aguardando confirmação de exclusão
   const [diaSelecionado, setDiaSelecionado] = useState(null);     // dia clicado no calendário (para adicionar)
+  const [diaLista, setDiaLista] = useState(null);                 // dia cujos itens são listados na janela central ("+N mais")
   const [filtros, setFiltros]   = useState({
     prazos: true, audiencias: true, pericias: true, tarefas: true, compromissos: true, feriados: true, escritorio: false
   });
 
-  // Admin/super (nível <= 1, via ehAdmin do contexto) vê a agenda de todos e pode filtrar por usuário.
+  // Pode ver a agenda de todos: admin/super (nível <= 1) OU usuário com a permissão
+  // 'agenda.ver_todos > visualizar' (mesma lógica de Prazos/Tarefas). Só quem pode vê o seletor.
+  const podeVerAgendaDeTodos = ehAdmin || temPermissao('agenda.ver_todos', 'visualizar');
   const [usuarios, setUsuarios]     = useState([]);                       // usuários ativos (delegar + filtro admin)
-  const [verAgendaDe, setVerAgendaDe] = useState(String(usuario?.id || '')); // admin: '' = Todos; senão um id
+  const [verAgendaDe, setVerAgendaDe] = useState(String(usuario?.id || '')); // '' = Todos; senão um id
 
-  // ID do usuário cuja agenda mostrar — null quando modo escritório OU quando admin escolhe "Todos".
+  // ID do usuário cuja agenda mostrar — null quando modo escritório OU quando escolhe "Todos".
   const usuarioId = filtros.escritorio
     ? null
-    : (ehAdmin ? (verAgendaDe || null) : usuario?.id);
+    : (podeVerAgendaDeTodos ? (verAgendaDe || null) : usuario?.id);
 
   // Título dinâmico
   const titulo = filtros.escritorio
     ? 'Escritório'
-    : (ehAdmin
+    : (podeVerAgendaDeTodos
         ? (verAgendaDe
             ? (usuarios.find(u => String(u.id) === String(verAgendaDe))?.nome || usuario?.nome || '')
             : 'Todos os usuários')
@@ -233,21 +276,6 @@ export default function Agenda() {
       .catch(() => { /* silencioso: a agenda funciona mesmo sem a lista */ });
   }, []);
 
-  // Fecha o popup "+N mais" (nativo do react-big-calendar) com a tecla Esc. A biblioteca
-  // não expõe um "fechar"; então, ao apertar Esc COM o popup aberto, disparamos o mesmo
-  // "clique fora" que ela já usa para fechá-lo (APIs padrão — funciona em todos os navegadores
-  // atuais). Só age quando o popup existe, para não interferir em nada da tela.
-  useEffect(() => {
-    function onEsc(e) {
-      if (e.key !== 'Escape') return;
-      if (!document.querySelector('.rbc-overlay')) return;
-      document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-      document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    }
-    document.addEventListener('keydown', onEsc);
-    return () => document.removeEventListener('keydown', onEsc);
-  }, []);
-
   // Esc fecha o modal "Adicionar em dd/mm/aaaa" (o que abre ao clicar num dia),
   // além do botão Cancelar e do clique fora. Só ativo enquanto o modal existe.
   useEffect(() => {
@@ -256,6 +284,17 @@ export default function Agenda() {
     document.addEventListener('keydown', onEscDia);
     return () => document.removeEventListener('keydown', onEscDia);
   }, [diaSelecionado]);
+
+  // Esc fecha a janelinha de detalhe do evento — só quando ela é a janela mais acima
+  // (se a "leitura da publicação" estiver por cima, o Esc fecha a de cima primeiro).
+  const detalheEventoRef = useEscFechar(() => setEventoSelecionado(null), !!eventoSelecionado);
+
+  // Janela central com TODOS os itens de um dia (aberta pelo "+N mais"). Monto a lista aqui,
+  // filtrando os eventos daquele dia — assim é impossível faltar item, e ordeno por horário.
+  const diaListaRef = useEscFechar(() => setDiaLista(null), !!diaLista);
+  const itensDoDia = diaLista
+    ? eventos.filter(ev => isSameDay(ev.start, diaLista)).sort((a, b) => a.start - b.start)
+    : [];
 
   // Estilo customizado por tipo de evento
   function eventPropGetter(evento) {
@@ -317,8 +356,8 @@ export default function Agenda() {
             🏢 Escritório
           </label>
 
-          {/* Admin: escolhe de qual usuário ver a agenda (ou Todos). Não aparece no modo Escritório. */}
-          {ehAdmin && !filtros.escritorio && (
+          {/* Quem pode ver a agenda de todos escolhe de qual usuário ver (ou Todos). Não aparece no modo Escritório. */}
+          {podeVerAgendaDeTodos && !filtros.escritorio && (
             <label style={{display:'flex',alignItems:'center',gap:'6px',fontSize:'14px',color:'#555'}}>
               👤 Ver agenda de:
               <select className="form-control" style={{width:'auto',fontSize:'13px',padding:'4px 8px'}}
@@ -355,19 +394,63 @@ export default function Agenda() {
             onNavigate={setDataAtual}
             culture="pt-BR"
             messages={mensagens}
+            components={COMPONENTES_CALENDARIO}
             eventPropGetter={eventPropGetter}
             selectable
             onSelectSlot={({ start }) => setDiaSelecionado(start)}
             onSelectEvent={ev => setEventoSelecionado(ev)}
-            popup
+            onShowMore={(evts, date) => setDiaLista(date)}
+            doShowMoreDrillDown={false}
             style={{height:'100%'}}
           />
         </div>
       </div>
 
       {/* Modal: detalhe do evento clicado */}
+      {/* Janela central: todos os itens de um dia (aberta pelo "+N mais"). Rola sozinha quando há muitos. */}
+      {diaLista && (
+        <div className="modal-overlay" ref={diaListaRef}
+          onMouseDown={e => { if (e.target === e.currentTarget) setDiaLista(null); }}>
+          <div className="modal-box" style={{ maxWidth: '540px' }}>
+            <div className="modal-header">
+              <h3>Itens de {format(diaLista, 'dd/MM/yyyy')}</h3>
+              <button className="modal-fechar" onClick={() => setDiaLista(null)}>✕</button>
+            </div>
+            <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+              {itensDoDia.length === 0 ? (
+                <p style={{ color: '#6b7280', margin: 0 }}>Nenhum item neste dia.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {itensDoDia.map((ev, i) => {
+                    const st = eventPropGetter(ev).style;
+                    const resp = responsavelDoEvento(ev);
+                    return (
+                      <button key={i} type="button" onClick={() => setEventoSelecionado(ev)}
+                        style={{
+                          cursor: 'pointer', border: 'none', width: '100%',
+                          borderRadius: '6px', padding: '9px 12px', fontSize: '14px',
+                          backgroundColor: st.backgroundColor, color: st.color,
+                          opacity: st.opacity, textDecoration: st.textDecoration,
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px',
+                        }}>
+                        <span style={{ textAlign: 'left', whiteSpace: 'normal', wordBreak: 'break-word' }}>{ev.title}</span>
+                        {resp && (
+                          <span style={{ flexShrink: 0, fontStyle: 'italic', opacity: 0.9, fontSize: '13px', whiteSpace: 'nowrap' }}>
+                            {resp}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {eventoSelecionado && (
-        <div className="modal-overlay">
+        <div className="modal-overlay" ref={detalheEventoRef}>
           <div className="modal-box modal-pequeno">
             <div className="modal-header">
               <h3 style={{textTransform:'capitalize'}}>{eventoSelecionado.tipo}</h3>
@@ -591,6 +674,9 @@ export function ModalCompromisso({ compromisso, dataInicial, usuarios = [], usua
   const [confirmarData, setConfirmarData] = useState(false); // confirmação do admin p/ data passada
   const [aviso, setAviso] = useState(''); // faixa de aviso DENTRO do modal (nunca toast do canto)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  // Esc fecha o formulário — só quando ele é a janela mais acima (com a confirmação de
+  // data passada aberta por cima, o Esc fecha a confirmação primeiro, não o formulário).
+  const overlayRef = useEscFechar(() => onFechar(false));
 
   // Grava de fato (chamado direto ou após a confirmação da data passada)
   async function executarSalvar() {
@@ -621,7 +707,7 @@ export function ModalCompromisso({ compromisso, dataInicial, usuarios = [], usua
 
   return (
     <>
-    <div className="modal-overlay" style={{ zIndex: 1100 }}>
+    <div className="modal-overlay" style={{ zIndex: 1100 }} ref={overlayRef}>
       <div className="modal-box" style={{ maxWidth: '460px' }}>
         <div className="modal-header">
           <h3>{editando ? 'Editar compromisso' : 'Novo compromisso'}</h3>

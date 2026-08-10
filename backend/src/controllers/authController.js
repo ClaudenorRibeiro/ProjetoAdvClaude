@@ -38,7 +38,7 @@ async function lerTempoInatividade() {
 // Autentica o usuário e retorna o token JWT
 async function login(req, res) {
   try {
-    const { login: loginUsuario, senha } = req.body;
+    const { login: loginUsuario, senha, sessao: sessaoEnviada } = req.body;
 
     if (!loginUsuario || !senha) {
       return erro(res, 'Login e senha são obrigatórios');
@@ -72,10 +72,19 @@ async function login(req, res) {
       }
     }
 
-    // Atualiza o último acesso
+    // Sessão única por usuário. "Chave da sessão ativa" = identidade do NAVEGADOR:
+    // - se o navegador se apresenta com a MESMA chave já ativa (abas do mesmo navegador
+    //   logando de novo), mantém a chave → não derruba as abas irmãs;
+    // - caso contrário (outro navegador/máquina, ou 1º login), gera uma chave NOVA e
+    //   sobrescreve a ativa → o dispositivo antigo cai na próxima requisição.
+    const novaSessao = (sessaoEnviada && sessaoEnviada === usuario.sessao_atual)
+      ? usuario.sessao_atual
+      : crypto.randomBytes(24).toString('hex');
+
+    // Atualiza o último acesso e grava a chave da sessão ativa (mesmo UPDATE — sem custo extra)
     await pool.execute(
-      'UPDATE usuarios SET ultimo_acesso = NOW() WHERE id = ?',
-      [usuario.id]
+      'UPDATE usuarios SET ultimo_acesso = NOW(), sessao_atual = ? WHERE id = ?',
+      [novaSessao, usuario.id]
     );
 
     // Registra o LOGIN no histórico de auditoria (aparece no "Histórico do usuário").
@@ -99,6 +108,7 @@ async function login(req, res) {
         nivel: usuario.nivel,
         tipo:  usuario.tipo,
         ver_todos_processos: usuario.ver_todos_processos,
+        sessao: novaSessao, // chave da sessão ativa (validada no middleware a cada requisição)
       },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '8h' }
@@ -106,6 +116,7 @@ async function login(req, res) {
 
     return sucesso(res, {
       token,
+      sessao: novaSessao, // o frontend guarda no localStorage como identidade do navegador
       usuario: {
         id:    usuario.id,
         nome:  usuario.nome,

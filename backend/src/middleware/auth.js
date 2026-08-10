@@ -31,12 +31,21 @@ async function autenticar(req, res, next) {
   // 2) Reconfere o cadastro ATUAL no banco (o token guarda os dados do momento do login)
   try {
     const [rows] = await pool.execute(
-      'SELECT nivel, tipo, ver_todos_processos FROM usuarios WHERE id = ? AND ativo = 1',
+      'SELECT nivel, tipo, ver_todos_processos, sessao_atual FROM usuarios WHERE id = ? AND ativo = 1',
       [dados.id]
     );
     // Sem linha = usuário desativado, excluído ou inexistente → desloga (precisa entrar de novo)
     if (!rows.length) {
       return naoAutorizado(res, 'Sua sessão não é mais válida. Faça login novamente.');
+    }
+    // Sessão única por usuário: o token guarda a "chave da sessão ativa" (dados.sessao).
+    // Token sem chave = anterior a esta funcionalidade → trata como sessão inválida genérica.
+    if (!dados.sessao) {
+      return naoAutorizado(res, 'Sua sessão não é mais válida. Faça login novamente.');
+    }
+    // Chave diferente da ativa no banco = o usuário entrou em OUTRO dispositivo → derruba esta.
+    if (dados.sessao !== rows[0].sessao_atual) {
+      return naoAutorizado(res, 'Sua sessão foi aberta em outro dispositivo. Faça login novamente.', 'SESSAO_ENCERRADA');
     }
     // Sincroniza os dados de acesso com o valor ATUAL do banco (sobrepõe os do token)
     req.usuario = {
