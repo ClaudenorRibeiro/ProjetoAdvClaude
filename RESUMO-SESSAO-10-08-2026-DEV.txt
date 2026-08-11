@@ -1,0 +1,194 @@
+========================================================================
+RESUMO DA SESSÃO — 10/08/2026 — Sistema de Advocacia (NovoJud)
+========================================================================
+Situação: TUDO testado no LOCAL e JÁ EM PRODUÇÃO.
+- O usuário subiu no git (commit 744aec1 - "100826-14.55") e atualizou as 2 AWS manualmente.
+- Rodou o ÚNICO SQL do dia (usuarios.sessao_atual) nas instâncias.
+- Claude NÃO subiu nada no git (foi o usuário).
+Foram 9 entregas: 8 SEM banco, 1 COM SQL (sessão única).
+
+------------------------------------------------------------------------
+1) AUDIÊNCIAS (tela geral) — "Agendada" sempre no topo   [só backend, SEM SQL]
+------------------------------------------------------------------------
+A lista de Audiências agora mostra as audiências com status "Agendada" no
+topo; dentro de cada grupo, continua por data/hora crescente (a ordem de
+data já estava boa). Não afeta o filtro por status nem a paginação.
+
+------------------------------------------------------------------------
+2) AUDIÊNCIAS (aba dentro da Pasta) — "Agendada" no topo   [só frontend, SEM SQL]
+------------------------------------------------------------------------
+A mesma regra na aba "Audiências" de dentro da Pasta. Antes essa lista vinha
+por data decrescente; agora fica "Agendada" no topo + data crescente (igual
+à tela geral, conforme o usuário pediu).
+
+------------------------------------------------------------------------
+3) PERMISSÃO "Ver agenda de todos os usuários"   [front + back, SEM SQL]
+------------------------------------------------------------------------
+Antes, "ver a agenda de todos" era automático só para admin/super. Agora é
+uma permissão que se liga por usuário em Configurações > Permissões
+(igual já existe em Prazos e Tarefas).
+- NÃO precisou de SQL: a tabela de permissões já é genérica.
+- O backend valida de verdade (usuário sem a permissão continua vendo só a
+  própria agenda; e o sistema ignora tentativa de burlar).
+- O menu Agenda continua liberado para todos (ninguém perdeu acesso).
+COMO USAR: Configurações > Permissões > escolher o usuário > marcar
+"Agenda > Ver agenda de todos os usuários" > Salvar.
+
+------------------------------------------------------------------------
+4) FECHAR AS JANELINHAS COM "ESC"   [só frontend, SEM SQL]
+------------------------------------------------------------------------
+As janelas da Agenda (detalhe do evento, Novo/Editar compromisso, Nova
+tarefa) passaram a fechar com a tecla ESC. Como algumas dessas janelas são
+compartilhadas, o ESC também passou a valer nas mesmas janelas em
+Publicações e na Pasta (de forma consistente).
+- Criado um "ajudante único" que fecha SEMPRE só a janela que está por
+  cima, para nunca fechar duas janelas empilhadas ao mesmo tempo.
+
+------------------------------------------------------------------------
+5) POPUP "+N mais" DA AGENDA VIROU UMA JANELA CENTRAL DO DIA   [só frontend, SEM SQL]
+------------------------------------------------------------------------
+O balãozinho "+N mais" do calendário cortava itens em dias cheios. Agora,
+ao clicar em "+N mais", abre uma JANELA NO MEIO DA TELA com TODOS os itens
+daquele dia, com rolagem própria (nunca corta item) e cores por tipo.
+Clicar num item abre o detalhe. Fecha com ESC, com o X e clicando fora.
+
+------------------------------------------------------------------------
+6) "+N mais" NÃO PULA MAIS PARA A VISÃO "DIA"   [só frontend, SEM SQL]
+------------------------------------------------------------------------
+Efeito colateral do item 5: ao trocar o popup, o calendário passou a
+"pular" para a visão Dia ao clicar em "+N mais". Corrigido com um ajuste
+que impede essa troca de visão. Clicar no NÚMERO do dia continua indo ao
+Dia (isso é outro caminho, de propósito).
+
+------------------------------------------------------------------------
+7) NOME DO RESPONSÁVEL/DELEGADO EM CADA ITEM   [só frontend, SEM SQL]
+------------------------------------------------------------------------
+Em cada item — nos quadrinhos do calendário e na janela do dia — aparece à
+direita o nome de quem é responsável/delegado:
+- Prazo / Audiência / Perícia  -> responsável do item
+- Tarefa                       -> quem está atribuída
+- Compromisso                  -> quem foi delegado (ou o criador)
+- Feriado / tarefa sem dono    -> em branco (decisão do usuário)
+Obs.: na visão Mês (quadrinhos estreitos) o nome pode aparecer cortado
+("...") por falta de espaço; nas outras visões e na janela do dia há espaço.
+
+------------------------------------------------------------------------
+8) SESSÃO ÚNICA POR USUÁRIO — 1 LOGIN ATIVO   [front + back + BANCO]  ***A FEATURE GRANDE***
+------------------------------------------------------------------------
+O mesmo usuário não fica mais logado em 2 lugares ao mesmo tempo:
+- Se logar em outra máquina/navegador, o NOVO login entra normalmente
+  (sem pergunta) e o ANTIGO é desconectado.
+- No dispositivo antigo aparece o aviso: "Sua sessão foi aberta em outro
+  dispositivo. Faça login novamente." (faixa amigável, na tela).
+- ABAS/JANELAS DO MESMO NAVEGADOR continuam todas logadas (não se derrubam).
+- MANTIDO o "deslogar ao fechar o navegador".
+
+COMO FUNCIONA (resumo): cada navegador tem uma "identidade" fixa; o servidor
+guarda qual é a sessão ativa do usuário e coloca essa chave dentro do login.
+A cada acesso, o sistema confere se a sessão do dispositivo ainda é a ativa;
+se outro dispositivo entrou, o antigo cai. Isso NÃO adicionou peso: a
+conferência foi encaixada em consultas que já existiam.
+
+*** SQL DESTE ITEM (ÚNICO SQL DO DIA — rodar em CADA instância) ***
+   ALTER TABLE usuarios ADD COLUMN sessao_atual varchar(64) DEFAULT NULL;
+   ORDEM: rodar o SQL ANTES de subir o código.
+   OBS.: no deploy, todos os usuários logam 1 vez (normal).
+   >>> JÁ FOI RODADO NAS AWS NESTA SESSÃO. <<<
+
+------------------------------------------------------------------------
+9) (ANÁLISE, sem alteração) Aviso "limite de capacidade momentaneamente"
+------------------------------------------------------------------------
+O usuário viu esse aviso no Dashboard e perguntou. Explicação:
+- É um monitoramento ANTIGO (não é de hoje). O sistema usa até 15 conexões
+  simultâneas com o banco; quando todas ficam ocupadas por um instante, o
+  aviso acende por 3 minutos para o admin. É "momentâneo", não é erro.
+- NÃO há risco de perder dado digitado: as consultas ESPERAM e executam
+  (não são descartadas); gravações em várias etapas usam transação
+  (tudo-ou-nada); se algo falhasse, o formulário mostra erro (nunca perda
+  silenciosa).
+- Só vale ação se aparecer COM FREQUÊNCIA em produção: aí aumentar o limite
+  de conexões (ex.: 15->25) e/ou a máquina do servidor.
+
+------------------------------------------------------------------------
+10) APARÊNCIA -> CORES DA AGENDA (Fase 1)   [front + back + BANCO]  *** SÓ LOCAL ***
+------------------------------------------------------------------------
+(Feita DEPOIS do 1º fechamento — o dia reabriu.)
+Origem: usuário reclamando da cor LARANJA de Tarefas. Em vez de trocar por
+outra cor fixa (que só moveria a reclamação), fizemos uma PALETA POR USUÁRIO.
+- Novo item no menu do seu nome: "🎨 Aparência" -> seção "Cores da agenda":
+  os 6 tipos (Prazos, Audiências, Perícias, Tarefas, Compromissos, Feriados),
+  cada um com seletor de cor LIVRE + "Restaurar padrão" + Salvar.
+- Aplica NA HORA (calendário, legenda e janela do dia).
+- O TEXTO de cada item fica claro ou escuro sozinho, conforme a cor (nunca
+  ilegível).
+- É POR USUÁRIO (não afeta os outros).
+
+*** STATUS: testado no LOCAL e OK. AINDA NÃO está em produção. ***
+FALTA para produção: subir no git + deploy nas 2 AWS + rodar o SQL abaixo em
+cada instância (SQL antes do código).
+   SQL (rodado só no LOCAL até agora):
+   ALTER TABLE usuarios ADD COLUMN cores_agenda varchar(255) DEFAULT NULL;
+
+Obs.: isto é a FASE 1 de um recurso maior de personalização. Falta:
+- FASE 2: cores do MENU LATERAL (amanhã) — exige criar uma "camada de tema".
+- FASE 3: cor de DESTAQUE da linha (onde o mouse passa) — exige padronizar
+  ~18 pontos espalhados antes.
+
+------------------------------------------------------------------------
+(Esclarecimento) "Sumiu o logo na tela de login" — NÃO era bug
+------------------------------------------------------------------------
+Durante o teste da Fase 1, o logo do escritório sumiu na tela de login e
+voltou. Investiguei ao vivo: o backend estava no ar e devolvia o logo normal.
+Causa: a tela mostra um padrão e TROCA pelo logo quando o servidor responde;
+no instante do REINÍCIO do Node (para carregar a Fase 1) o servidor não
+respondeu por 1 segundo -> apareceu o padrão e caiu no login; ao subir, voltou.
+Não é bug e não tem relação com o código de hoje.
+
+========================================================================
+SQL DO DIA (multi-instância) — RESUMO
+========================================================================
+Foram 2 SQLs (os dois em usuarios; tabela minúscula):
+  1) usuarios.sessao_atual  -> sessão única.  JÁ RODADO NAS 2 AWS.
+     ALTER TABLE usuarios ADD COLUMN sessao_atual varchar(64) DEFAULT NULL;
+  2) usuarios.cores_agenda  -> cores da agenda (Fase 1).  RODADO SÓ NO LOCAL;
+     FALTA rodar nas AWS quando for subir a Fase 1.
+     ALTER TABLE usuarios ADD COLUMN cores_agenda varchar(255) DEFAULT NULL;
+(As demais entregas NÃO mexeram no banco.)
+
+========================================================================
+PENDÊNCIAS (continuam abertas)
+========================================================================
+- >>> SUBIR A FASE 1 (Cores da agenda) PARA PRODUÇÃO: git + deploy nas 2 AWS +
+  rodar o SQL usuarios.cores_agenda em cada instância (SQL antes do código).
+  Hoje está só no LOCAL (testado).
+- APARÊNCIA - FASE 2 (cores do menu lateral): amanhã (11/08). Explicar plano
+  antes de codar. Exige criar a "camada de tema".
+- APARÊNCIA - FASE 3 (cor de destaque/hover da linha): centralizar ~18 pontos
+  espalhados antes.
+- (Opcional) Deixar o /auth/verificar tolerante à falta da coluna cores_agenda
+  (rede de segurança se o código subir antes do SQL numa instância).
+- Ajustar "Processos Parados" para usar a DATA REAL do movimento (não a data
+  de importação) por causa dos andamentos automáticos do DataJud.
+- Codar cada checkbox da Ata de audiência, um a um (Prazo é o próximo;
+  Perícia/Alvará/Desistência/Retornem aos autos a definir) + tela "ver ata".
+- Login só letras no setup do 1º admin. ModalInfo nas outras telas.
+- Financeiro multi-banco. Configuração global de capitalização.
+- Hardening da AWS + rotacionar as chaves da AWS em texto puro.
+- Integração com a Agenda do Google. Tarefas com horário/temporizador.
+- (Só monitorar) Se o aviso de capacidade/pool aparecer com frequência em
+  produção: aumentar connectionLimit (15->25) e/ou a máquina.
+
+========================================================================
+REGRAS PERMANENTES (reforçadas hoje pelo usuário — "memória eterna")
+========================================================================
+- NUNCA codar sem autorização (primeiro explico o que entendi + efeitos,
+  depois espero o "pode codar").
+- Nunca supor: verificar front + back + banco, ter certeza, não quebrar nada.
+- TABELAS DO BANCO SEMPRE EM MINÚSCULAS (no banco E no código).
+- Nenhuma exclusão pode deixar órfãos; tratar amarrações antes.
+- Corrigir o usuário quando um pedido prejudicar outra parte do sistema.
+- SQL é multi-instância: rodar no local, testar, depois em TODAS as AWS.
+- Só o usuário sobe no git. "Build não é teste" (a análise de não quebrar é
+  responsabilidade do Claude; o usuário testa só a manutenção em foco).
+- Não mandar trechos de código no chat (usuário leigo).
+========================================================================

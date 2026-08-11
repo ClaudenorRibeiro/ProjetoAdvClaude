@@ -277,9 +277,11 @@ async function listar(req, res) {
       : 'ORDER BY p.data_publicacao DESC, p.id DESC';
 
     // direcionada_nomes: lista (resolvida na leitura) dos usuários direcionados.
-    // duplicada: 1 quando existe OUTRA publicação de TEXTO idêntico no MESMO dia com id menor.
-    //   Assim, num grupo de iguais, todas as cópias ficam marcadas (=pintadas na tela) menos a
-    //   mais antiga (a "original"), ajudando o usuário a identificar quais excluir manualmente.
+    // duplicada: 1 quando existe OUTRA publicação do MESMO número de processo, no MESMO dia e na
+    //   MESMA fonte (AASP só compara com AASP; CNJ só com CNJ). TODAS as linhas do grupo ficam
+    //   marcadas (não só as cópias). Recalculada a cada carregamento: ao excluir as repetidas e
+    //   sobrar só uma, ela deixa de ser marcada automaticamente. Número comparado sem pontuação.
+    // lida: 1 quando o USUÁRIO LOGADO já abriu esta publicação (individual, via publicacoes_lidas).
     const [rows] = await pool.execute(
       `SELECT p.id, p.fonte, p.data_publicacao, p.numero_processo, p.numero_publicacao,
               p.tribunal, p.oab, p.hash_cnj,
@@ -291,9 +293,13 @@ async function listar(req, res) {
                 WHERE pu.publicacao_id = p.id) AS direcionada_nomes,
               EXISTS (SELECT 1 FROM publicacoes p2
                        WHERE p2.data_publicacao = p.data_publicacao
-                         AND p2.texto_hash = p.texto_hash
                          AND p2.fonte = p.fonte
-                         AND p2.id < p.id) AS duplicada,
+                         AND p2.id <> p.id
+                         AND p.numero_processo IS NOT NULL AND p.numero_processo <> ''
+                         AND REPLACE(REPLACE(REPLACE(p2.numero_processo,'.',''),'-',''),' ','')
+                             = REPLACE(REPLACE(REPLACE(p.numero_processo,'.',''),'-',''),' ','')) AS duplicada,
+              EXISTS (SELECT 1 FROM publicacoes_lidas pl
+                       WHERE pl.publicacao_id = p.id AND pl.usuario_id = ?) AS lida,
               EXISTS (SELECT 1 FROM tblproc t
                        WHERE p.numero_processo IS NOT NULL AND p.numero_processo <> ''
                          AND REPLACE(REPLACE(REPLACE(t.numProc,'.',''),'-',''),' ','')
@@ -303,7 +309,7 @@ async function listar(req, res) {
        ${where}
        ${orderBy}
        LIMIT ${limitInt} OFFSET ${offsetInt}`,
-      params
+      [req.usuario.id, ...params]
     );
 
     const [totalRows] = await pool.execute(
@@ -362,26 +368,32 @@ async function importar(req, res) {
         'Nenhuma publicação encontrada nesta data.');
     }
 
-    // Dedup de IMPORTAÇÃO por numeroPublicacao (que a AASP garante ÚNICO por dia).
-    // Assim TODAS as publicações do dia entram — inclusive textos iguais com numeroPublicacao
-    // diferente — e o usuário exclui manualmente as que considerar repetidas. Re-rodar o dia
-    // só traz numeroPublicacao que ainda não existem (não duplica nem apaga nada).
-    // Quando a AASP NÃO manda numeroPublicacao, caímos no texto (hash) para não reinserir à toa.
-    // Chave: 'np:<dia>|<numeroPublicacao>'  ou  'hx:<hash>' (fallback sem numeroPublicacao).
+    // Dedup de IMPORTAÇÃO por NÚMERO DE PROCESSO no dia: só entram publicações cujo número de
+    // processo AINDA não existe no banco naquele dia (comparado SEM pontuação). Assim, re-rodar o
+    // dia não traz processo já salvo, e dentro do mesmo lote entra 1 publicação por processo/dia.
+    // Publicações SEM número de processo caem na regra ANTIGA (numeroPublicacao, ou hash no
+    // fallback), para não perder nem duplicar. Só afeta a AASP — o CNJ tem sua própria importação.
+    // Chave: 'pr:<dia>|<processo sem pontuação>'  |  'np:<dia>|<numeroPublicacao>'  |  'hx:<hash>'.
+    const normProc = (v) => (v == null ? '' : String(v).replace(/[.\-\/\s]/g, ''));
     const chaveDedup = (c) =>
-      (c.numero_publicacao != null && c.numero_publicacao !== '')
-        ? `np:${c.data_publicacao}|${c.numero_publicacao}`
-        : `hx:${c.hash}`;
+      normProc(c.numero_processo)
+        ? `pr:${c.data_publicacao}|${normProc(c.numero_processo)}`
+        : ((c.numero_publicacao != null && c.numero_publicacao !== '')
+            ? `np:${c.data_publicacao}|${c.numero_publicacao}`
+            : `hx:${c.hash}`);
 
-    // O que já existe no banco PARA OS DIAS deste lote (numeroPublicacao e hash).
+    // O que já existe no banco PARA OS DIAS deste lote (processo, numeroPublicacao e hash).
     const dias = [...new Set(candidatos.map(c => c.data_publicacao))];
     const phDias = dias.map(() => '?').join(',');
     const [exist] = await pool.execute(
-      `SELECT DATE_FORMAT(data_publicacao,'%Y-%m-%d') AS dia, numero_publicacao, texto_hash
+      `SELECT DATE_FORMAT(data_publicacao,'%Y-%m-%d') AS dia, numero_processo, numero_publicacao, texto_hash
          FROM publicacoes WHERE data_publicacao IN (${phDias})`, dias
     );
     const jaExistem = new Set();
     for (const r of exist) {
+      // Chave por PROCESSO (quando houver) — é a que barra reimportar processo já salvo no dia.
+      if (normProc(r.numero_processo)) jaExistem.add(`pr:${r.dia}|${normProc(r.numero_processo)}`);
+      // Chave antiga (numeroPublicacao/hash) — usada pelas publicações SEM número de processo.
       jaExistem.add(
         (r.numero_publicacao != null && r.numero_publicacao !== '')
           ? `np:${r.dia}|${r.numero_publicacao}`
@@ -858,7 +870,21 @@ async function enviarEmailPublicacao(req, res) {
   }
 }
 
+// POST /api/publicacoes/:id/marcar-lida — registra que o usuário logado abriu/leu a publicação.
+// Individual (por usuário) e idempotente: a PK composta impede duplicar; abrir de novo não muda nada.
+async function marcarLida(req, res) {
+  try {
+    await pool.execute(
+      'INSERT IGNORE INTO publicacoes_lidas (publicacao_id, usuario_id) VALUES (?, ?)',
+      [req.params.id, req.usuario.id]
+    );
+    return sucesso(res, null, 'Publicação marcada como lida');
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
 module.exports = {
   statusAasp, listar, importar, direcionar, tratar, historico, excluir, excluirLote, usuariosParaDirecionar,
-  statusCnj, importarCnj, obter, destinatariosEmail, enviarEmailPublicacao,
+  statusCnj, importarCnj, obter, destinatariosEmail, enviarEmailPublicacao, marcarLida,
 };

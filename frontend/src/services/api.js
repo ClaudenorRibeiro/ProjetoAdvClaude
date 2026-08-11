@@ -70,6 +70,10 @@ export const authAPI = {
   redefinirSenha: (dados) => api.post('/auth/redefinir-senha', dados),
   trocarSenha:    (dados) => api.put('/auth/trocar-senha', dados),
   verificarSenha: (dados) => api.post('/auth/verificar-senha', dados),
+  salvarCoresAgenda: (cores) => api.put('/auth/cores-agenda', { cores }), // cores=null restaura o padrão
+  salvarCoresMenu:   (cores) => api.put('/auth/cores-menu',   { cores }), // cores=null restaura o padrão
+  salvarCorLinha:     (cor)  => api.put('/auth/cor-linha',      { cor }),  // cor=null restaura o padrão
+  salvarCorLinhaLida: (cor)  => api.put('/auth/cor-linha-lida', { cor }),  // cor=null restaura o padrão
 };
 
 // ============================================================
@@ -349,6 +353,7 @@ export const publicacoesAPI = {
   destinatariosEmail: () => api.get('/publicacoes/destinatarios-email'),
   enviarEmail:  (id, dados) => api.post(`/publicacoes/${id}/enviar-email`, dados),
   listar:       (params) => api.get('/publicacoes', { params }),
+  marcarLida:   (id) => api.post(`/publicacoes/${id}/marcar-lida`),
   importar:     (dados) => api.post('/publicacoes/importar', dados),
   importarCnj:  (dados) => api.post('/publicacoes/cnj/importar', dados),
   direcionar:   (id, dados) => api.put(`/publicacoes/${id}/direcionar`, dados),

@@ -11,6 +11,49 @@ const { sucesso, erro, erroInterno, naoAutorizado } = require('../utils/response
 const { buscarPermissoesUsuario } = require('../middleware/permissoes');
 const { enviarEmail, templateResetSenha } = require('../utils/email');
 
+// Cores da agenda por usuário (guardadas como JSON em usuarios.cores_agenda).
+// Lê/valida com tolerância: só as 6 chaves conhecidas + hex válido; vazio/ inválido → null (padrão).
+const CHAVES_CORES = ['prazo', 'audiencia', 'pericia', 'tarefa', 'compromisso', 'feriado'];
+function parseCoresAgenda(valor) {
+  if (!valor) return null;
+  try {
+    const obj = typeof valor === 'string' ? JSON.parse(valor) : valor;
+    if (!obj || typeof obj !== 'object') return null;
+    const limpo = {};
+    for (const k of CHAVES_CORES) {
+      if (typeof obj[k] === 'string' && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(obj[k])) limpo[k] = obj[k];
+    }
+    return Object.keys(limpo).length ? limpo : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Cor de destaque da linha (hover das tabelas) por usuário — guardada em usuarios.cor_linha.
+// É uma única cor: hex válido → devolve a cor; vazio/inválido → null (padrão do sistema).
+function parseCorLinha(valor) {
+  if (!valor || typeof valor !== 'string') return null;
+  return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(valor) ? valor : null;
+}
+
+// Cores do menu lateral por usuário (guardadas como JSON em usuarios.cores_menu).
+// Mesma lógica tolerante: só as chaves conhecidas + hex válido; vazio/inválido → null (padrão).
+const CHAVES_CORES_MENU = ['fundo', 'destaque'];
+function parseCoresMenu(valor) {
+  if (!valor) return null;
+  try {
+    const obj = typeof valor === 'string' ? JSON.parse(valor) : valor;
+    if (!obj || typeof obj !== 'object') return null;
+    const limpo = {};
+    for (const k of CHAVES_CORES_MENU) {
+      if (typeof obj[k] === 'string' && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(obj[k])) limpo[k] = obj[k];
+    }
+    return Object.keys(limpo).length ? limpo : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 function validarSenha(senha) {
   if (!senha || senha.length < 8)   return 'A senha deve ter no mínimo 8 caracteres';
   if (senha.length > 20)            return 'A senha deve ter no máximo 20 caracteres';
@@ -125,6 +168,10 @@ async function login(req, res) {
         tipo:  usuario.tipo,
         oab:   usuario.oab,
         ver_todos_processos: usuario.ver_todos_processos,
+        cores_agenda: parseCoresAgenda(usuario.cores_agenda), // cores personalizadas da Agenda (null = padrão)
+        cores_menu:   parseCoresMenu(usuario.cores_menu),     // cores personalizadas do menu lateral (null = padrão)
+        cor_linha:    parseCorLinha(usuario.cor_linha),       // cor de destaque da linha/hover (null = padrão)
+        cor_linha_lida: parseCorLinha(usuario.cor_linha_lida), // cor da linha de publicação já lida (null = padrão)
       },
       permissoes,
       // Tempo de inatividade (min) do escritório — o frontend usa para o logout automático.
@@ -187,7 +234,74 @@ async function verificarToken(req, res) {
     const permissoes = await buscarPermissoesUsuario(req.usuario.id);
     // Tempo de inatividade (min) do escritório — para o frontend rearmar o logout automático ao recarregar.
     const tempo_inatividade_min = await lerTempoInatividade();
-    return sucesso(res, { usuario: req.usuario, permissoes, tempo_inatividade_min });
+    // Cores personalizadas da Agenda (1 SELECT leve, só ao recarregar o app — não é por requisição).
+    const [cfgCores] = await pool.execute('SELECT cores_agenda, cores_menu, cor_linha, cor_linha_lida FROM usuarios WHERE id = ?', [req.usuario.id]);
+    const usuario = { ...req.usuario,
+      cores_agenda: parseCoresAgenda(cfgCores[0]?.cores_agenda),
+      cores_menu:   parseCoresMenu(cfgCores[0]?.cores_menu),
+      cor_linha:    parseCorLinha(cfgCores[0]?.cor_linha),
+      cor_linha_lida: parseCorLinha(cfgCores[0]?.cor_linha_lida) };
+    return sucesso(res, { usuario, permissoes, tempo_inatividade_min });
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// PUT /api/auth/cores-agenda — salva as cores da Agenda do usuário logado.
+// Body: { cores: {prazo:'#..', ...} }. Envie null/vazio para RESTAURAR O PADRÃO (limpa a coluna).
+async function salvarCoresAgenda(req, res) {
+  try {
+    const cores = parseCoresAgenda(req.body?.cores);
+    await pool.execute(
+      'UPDATE usuarios SET cores_agenda = ? WHERE id = ?',
+      [cores ? JSON.stringify(cores) : null, req.usuario.id]
+    );
+    return sucesso(res, { cores_agenda: cores }, cores ? 'Cores salvas' : 'Cores restauradas para o padrão');
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// PUT /api/auth/cores-menu — salva as cores do menu lateral do usuário logado.
+// Body: { cores: {fundo:'#..', destaque:'#..'} }. Envie null/vazio para RESTAURAR O PADRÃO (limpa a coluna).
+async function salvarCoresMenu(req, res) {
+  try {
+    const cores = parseCoresMenu(req.body?.cores);
+    await pool.execute(
+      'UPDATE usuarios SET cores_menu = ? WHERE id = ?',
+      [cores ? JSON.stringify(cores) : null, req.usuario.id]
+    );
+    return sucesso(res, { cores_menu: cores }, cores ? 'Cores salvas' : 'Cores restauradas para o padrão');
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// PUT /api/auth/cor-linha — salva a cor de destaque da linha (hover) do usuário logado.
+// Body: { cor: '#..' }. Envie null/vazio para RESTAURAR O PADRÃO (limpa a coluna).
+async function salvarCorLinha(req, res) {
+  try {
+    const cor = parseCorLinha(req.body?.cor);
+    await pool.execute(
+      'UPDATE usuarios SET cor_linha = ? WHERE id = ?',
+      [cor, req.usuario.id]
+    );
+    return sucesso(res, { cor_linha: cor }, cor ? 'Cor salva' : 'Cor restaurada para o padrão');
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// PUT /api/auth/cor-linha-lida — salva a cor da linha de "publicação já lida" do usuário logado.
+// Body: { cor: '#..' }. Envie null/vazio para RESTAURAR O PADRÃO (limpa a coluna).
+async function salvarCorLinhaLida(req, res) {
+  try {
+    const cor = parseCorLinha(req.body?.cor);
+    await pool.execute(
+      'UPDATE usuarios SET cor_linha_lida = ? WHERE id = ?',
+      [cor, req.usuario.id]
+    );
+    return sucesso(res, { cor_linha_lida: cor }, cor ? 'Cor salva' : 'Cor restaurada para o padrão');
   } catch (err) {
     return erroInterno(res, err);
   }
@@ -370,4 +484,4 @@ async function logout(req, res) {
   return sucesso(res, null, 'Logout registrado');
 }
 
-module.exports = { login, logout, criarPrimeiroAdmin, verificarToken, esqueciSenha, validarToken, redefinirSenha, trocarSenha, verificarSenha };
+module.exports = { login, logout, criarPrimeiroAdmin, verificarToken, esqueciSenha, validarToken, redefinirSenha, trocarSenha, verificarSenha, salvarCoresAgenda, salvarCoresMenu, salvarCorLinha, salvarCorLinhaLida };

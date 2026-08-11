@@ -12,6 +12,7 @@ import 'react-big-calendar/lib/css/react-big-calendar.css';
 
 import { prazosAPI, audienciasAPI, tarefasAPI, periciasAPI, agendaAPI, configuracaoAPI } from '../../services/api';
 import { formatarData } from '../../utils/formatters';
+import { coresEfetivas, corTextoPara } from '../../utils/coresAgenda';
 import { useAuth } from '../../context/AuthContext';
 import { ModalTarefa } from '../Tarefas/Tarefas';
 import useEscFechar from '../../hooks/useEscFechar';
@@ -46,15 +47,9 @@ const mensagens = {
   showMore: (n) => `+${n} mais`,
 };
 
-// Cor por tipo de evento
-const COR_EVENTO = {
-  prazo:       '#e2d3a8', // bege (texto escuro — ver eventPropGetter)
-  audiencia:   '#1a56db', // azul
-  pericia:     '#7c3aed', // roxo
-  tarefa:      '#d97706', // laranja
-  compromisso: '#0891b2', // ciano — compromissos pessoais da agenda
-  feriado:     '#059669', // verde — feriados (iguais para todos; só leitura na agenda)
-};
+// Cores por tipo de evento: os PADRÕES e o contraste automático de texto ficam no util
+// compartilhado `utils/coresAgenda`. Cada usuário pode sobrescrever (usuarios.cores_agenda);
+// dentro do componente, `cores` = padrão + escolhas do usuário. Ver [[ModalAparencia]].
 
 // Nome do responsável/delegado do item, conforme o tipo. Vazio quando não há (ex.: feriado, ou
 // tarefa "do escritório" sem atribuição). Usado no calendário E na janela do dia — sem duplicar.
@@ -104,6 +99,8 @@ function fmtDataHora(v) {
 
 export default function Agenda() {
   const { usuario, temPermissao, ehAdmin } = useAuth();
+  // Cores efetivas dos eventos: padrão do sistema + o que o usuário personalizou em "Aparência".
+  const cores = coresEfetivas(usuario?.cores_agenda);
   const [eventos, setEventos]   = useState([]);
   const [dataAtual, setDataAtual] = useState(new Date());
   const [visao, setVisao]       = useState('month');
@@ -302,11 +299,11 @@ export default function Agenda() {
     const concluido = evento.tipo === 'compromisso' && evento.dados?.concluido;
     return {
       style: {
-        backgroundColor: COR_EVENTO[evento.tipo] || '#6b7280',
+        backgroundColor: cores[evento.tipo] || '#6b7280',
         borderRadius: '4px',
         border: 'none',
-        // Prazo usa fundo bege (claro) → texto escuro; os demais tipos seguem com texto branco.
-        color: evento.tipo === 'prazo' ? '#5c4a2a' : '#fff',
+        // Texto claro/escuro escolhido automaticamente pela cor de fundo (sempre legível).
+        color: corTextoPara(cores[evento.tipo] || '#6b7280'),
         fontSize: '11px',
         padding: '1px 4px',
         ...(concluido ? { opacity: 0.55, textDecoration: 'line-through' } : {}),
@@ -330,12 +327,12 @@ export default function Agenda() {
         <div style={{display:'flex',gap:'16px',flexWrap:'wrap',alignItems:'center'}}>
           <span style={{fontSize:'15px',color:'#555',fontWeight:500}}>Mostrar:</span>
           {[
-            { key:'prazos',    label:'Prazos',    cor: COR_EVENTO.prazo },
-            { key:'audiencias',label:'Audiências',cor: COR_EVENTO.audiencia },
-            { key:'pericias',  label:'Perícias',  cor: COR_EVENTO.pericia },
-            { key:'tarefas',   label:'Tarefas',   cor: COR_EVENTO.tarefa },
-            { key:'compromissos', label:'Compromissos', cor: COR_EVENTO.compromisso },
-            { key:'feriados',  label:'Feriados',  cor: COR_EVENTO.feriado },
+            { key:'prazos',    label:'Prazos',    cor: cores.prazo },
+            { key:'audiencias',label:'Audiências',cor: cores.audiencia },
+            { key:'pericias',  label:'Perícias',  cor: cores.pericia },
+            { key:'tarefas',   label:'Tarefas',   cor: cores.tarefa },
+            { key:'compromissos', label:'Compromissos', cor: cores.compromisso },
+            { key:'feriados',  label:'Feriados',  cor: cores.feriado },
           ].map(({ key, label, cor }) => (
             <label key={key} style={{display:'flex',alignItems:'center',gap:'6px',cursor:'pointer',fontSize:'15px'}}>
               <input type="checkbox" checked={filtros[key]} onChange={() => toggleFiltro(key)} />

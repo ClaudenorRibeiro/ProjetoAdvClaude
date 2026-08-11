@@ -98,6 +98,50 @@ export function AuthProvider({ children }) {
     };
   }, [usuario, tempoInatividade]);
 
+  // Atualiza as cores da Agenda do usuário logado (após salvar no "Aparência"),
+  // refletindo na hora sem recarregar. Mantém o sessionStorage sincronizado.
+  function atualizarCoresAgenda(cores) {
+    setUsuario(u => {
+      if (!u) return u;
+      const novo = { ...u, cores_agenda: cores || null };
+      sessionStorage.setItem('usuario', JSON.stringify(novo));
+      return novo;
+    });
+  }
+
+  // Atualiza as cores do menu lateral do usuário logado (após salvar no "Aparência"),
+  // refletindo na hora sem recarregar. Mantém o sessionStorage sincronizado.
+  function atualizarCoresMenu(cores) {
+    setUsuario(u => {
+      if (!u) return u;
+      const novo = { ...u, cores_menu: cores || null };
+      sessionStorage.setItem('usuario', JSON.stringify(novo));
+      return novo;
+    });
+  }
+
+  // Atualiza a cor de destaque da linha (hover) do usuário logado (após salvar no
+  // "Aparência"), refletindo na hora sem recarregar. Mantém o sessionStorage sincronizado.
+  function atualizarCorLinha(cor) {
+    setUsuario(u => {
+      if (!u) return u;
+      const novo = { ...u, cor_linha: cor || null };
+      sessionStorage.setItem('usuario', JSON.stringify(novo));
+      return novo;
+    });
+  }
+
+  // Atualiza a cor da linha de "publicação já lida" do usuário logado (após salvar no
+  // "Aparência"), refletindo na hora sem recarregar. Mantém o sessionStorage sincronizado.
+  function atualizarCorLinhaLida(cor) {
+    setUsuario(u => {
+      if (!u) return u;
+      const novo = { ...u, cor_linha_lida: cor || null };
+      sessionStorage.setItem('usuario', JSON.stringify(novo));
+      return novo;
+    });
+  }
+
   // Verifica se o usuário tem permissão para uma ação em um módulo
   // Admins (nível 1) e superusuários (nível 0) têm acesso total
   function temPermissao(modulo, acao) {
@@ -113,7 +157,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       usuario, permissoes, carregando,
-      logar, deslogar, temPermissao, ehAdmin, ehSuper,
+      logar, deslogar, temPermissao, ehAdmin, ehSuper, atualizarCoresAgenda, atualizarCoresMenu, atualizarCorLinha, atualizarCorLinhaLida,
     }}>
       {children}
     </AuthContext.Provider>

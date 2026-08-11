@@ -1696,7 +1696,7 @@ function ItemParteContato({ parte, smsAtivo, onReload }) {
 
   return (
     <div
-      onMouseEnter={e => (e.currentTarget.style.background = '#aec6e4')}
+      onMouseEnter={e => (e.currentTarget.style.background = 'var(--linha-hover, #aec6e4)')}
       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
       style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 8px',
         borderBottom: '1px solid #f1f5f9', borderRadius: '6px',

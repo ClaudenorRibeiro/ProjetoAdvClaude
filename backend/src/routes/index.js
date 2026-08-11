@@ -57,6 +57,10 @@ router.get('/auth/validar-token/:token',authCtrl.validarToken);
 router.post('/auth/redefinir-senha',    authCtrl.redefinirSenha);
 router.put('/auth/trocar-senha',        autenticar, authCtrl.trocarSenha);
 router.post('/auth/verificar-senha',   autenticar, authCtrl.verificarSenha);
+router.put('/auth/cores-agenda',       autenticar, authCtrl.salvarCoresAgenda);
+router.put('/auth/cores-menu',         autenticar, authCtrl.salvarCoresMenu);
+router.put('/auth/cor-linha',          autenticar, authCtrl.salvarCorLinha);
+router.put('/auth/cor-linha-lida',     autenticar, authCtrl.salvarCorLinhaLida);
 router.get('/calendario/dia-util',     autenticar, configuracaoCtrl.verificarDiaUtil);
 
 // --- AGENDA: compromissos pessoais/avulsos (cada usuário gerencia os seus) ---
@@ -306,6 +310,7 @@ router.get('/publicacoes/usuarios',       autenticar, verificarPermissao('public
 router.get('/publicacoes/destinatarios-email', autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.destinatariosEmail);
 router.get('/publicacoes',                autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.listar);
 router.get('/publicacoes/:id/historico',  autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.historico);
+router.post('/publicacoes/:id/marcar-lida', autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.marcarLida);
 router.get('/publicacoes/:id',            autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.obter);
 router.post('/publicacoes/importar',      autenticar, verificarPermissao('publicacoes','cadastrar'),  publicacoesCtrl.importar);
 router.put('/publicacoes/:id/direcionar', autenticar, verificarPermissao('publicacoes','alterar'),    publicacoesCtrl.direcionar);

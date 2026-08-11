@@ -14,6 +14,7 @@ import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import MenuAcoes from '../../components/MenuAcoes';
+import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
 // Reuso dos modais de criação já existentes (sem duplicar código): a partir de uma
 // publicação o usuário cria Prazo, Tarefa ou Compromisso, já com o vínculo de origem.
 import { ModalNovoPrazo } from '../Prazos/Prazos';
@@ -480,27 +481,9 @@ function PublicacoesAASP() {
     });
   }
 
-  // Clique no botão "Buscar publicações do dia": se o dia já foi importado, confirma antes
-  // (re-rodar traz só as que faltam — não duplica nem apaga). Senão, importa direto.
-  async function buscarDia() {
-    if (!dataImport) return toast.error('Escolha a data');
-    try {
-      // Checagem leve: o dia já tem publicações no sistema? (não mexe na lista visível)
-      const { data } = await publicacoesAPI.listar({ dataInicio: dataImport, dataFim: dataImport, tratada: '', limite: 1, pagina: 1 });
-      if (data.ok && data.dados.total > 0) {
-        setConfirmar({
-          titulo: 'Dia já importado',
-          mensagem: 'Este dia já foi importado. Buscar novamente trará apenas as publicações que ' +
-            'ainda não estão no sistema (as já salvas não são reimportadas). Deseja continuar?',
-          textoBotao: 'Buscar novamente',
-          acao: importarDia,
-        });
-        return;
-      }
-    } catch { /* se a checagem falhar, segue para importar normalmente */ }
-    importarDia();
-  }
-
+  // "Buscar publicações do dia": importa direto (sem confirmação). A importação só traz as
+  // publicações cujo número de processo ainda não existe no banco naquele dia (dedup no backend),
+  // então re-rodar o dia não duplica nem apaga nada.
   async function importarDia() {
     if (!dataImport) return toast.error('Escolha a data');
     setImportando(true);
@@ -573,7 +556,7 @@ function PublicacoesAASP() {
                   onChange={e => setDataImport(e.target.value)} />
               </div>
               <button className="btn btn-primary" style={{ marginBottom: '1px' }}
-                onClick={buscarDia} disabled={importando}>
+                onClick={importarDia} disabled={importando}>
                 {importando ? 'Buscando...' : '↓ Buscar publicações do dia'}
               </button>
               <span style={{ width: '1px', alignSelf: 'stretch', background: '#e2e8f0', margin: '0 4px' }} />
@@ -638,7 +621,7 @@ function PublicacoesAASP() {
         <p style={{ margin: '0 0 10px', fontSize: '12px', color: '#888' }}>
           <span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#fde8e8',
             border: '1px solid #f0c0c0', borderRadius: '2px', verticalAlign: 'middle', marginRight: '6px' }} />
-          Linha em vermelho claro = publicação repetida (texto idêntico a outra do mesmo dia). Exclua manualmente as que não quiser.
+          Número do processo em vermelho-claro = o mesmo processo aparece mais de uma vez no mesmo dia. Exclua manualmente as que não quiser.
         </p>
         {carregando ? <div className="loading">Carregando...</div> : (
           <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
@@ -664,8 +647,7 @@ function PublicacoesAASP() {
                   // Linha pintada (vermelho claro) = publicação repetida: existe outra de texto
                   // idêntico no mesmo dia. Fica pintada uma cópia; a mais antiga não é pintada.
                   <tr key={p.id}
-                    style={p.duplicada ? { background: '#fde8e8' } : undefined}
-                    title={p.duplicada ? 'Publicação repetida (texto idêntico a outra do mesmo dia)' : undefined}>
+                    style={p.lida ? { background: 'var(--linha-lida, #cdebd6)' } : undefined}>
                     {podeExcluir && (
                       <td style={{ textAlign: 'center' }}>
                         <input type="checkbox" checked={selecionados.includes(p.id)}
@@ -674,14 +656,21 @@ function PublicacoesAASP() {
                       </td>
                     )}
                     <td style={{ whiteSpace: 'nowrap' }}>{formatarData(p.data_publicacao)}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{p.numero_processo || '—'}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {p.duplicada
+                        ? <span style={{ background: '#fde8e8', padding: '1px 5px', borderRadius: '3px' }}
+                            title="O mesmo processo aparece mais de uma vez neste dia (repetida)">
+                            <NumeroProcessoCopiavel numero={p.numero_processo} />
+                          </span>
+                        : <NumeroProcessoCopiavel numero={p.numero_processo} />}
+                    </td>
                     <td style={{ whiteSpace: 'nowrap' }}>{p.numero_publicacao || '—'}</td>
                     <td style={{ maxWidth: '360px' }}>
                       <div style={{
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         fontSize: '13px', cursor: 'pointer', color: '#1a56db',
                       }}
-                        onClick={() => setTextoAberto(p)} title="Clique para ler o texto completo">
+                        onClick={() => { setTextoAberto(p); if (!p.lida) { publicacoesAPI.marcarLida(p.id).catch(() => {}); setLista(ls => ls.map(x => x.id === p.id ? { ...x, lida: 1 } : x)); } }} title="Clique para ler o texto completo">
                         {textoLimpo(p.texto)}
                       </div>
                     </td>
@@ -1132,7 +1121,7 @@ function PublicacoesCNJ() {
         <p style={{ margin: '0 0 10px', fontSize: '12px', color: '#888' }}>
           <span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#fde8e8',
             border: '1px solid #f0c0c0', borderRadius: '2px', verticalAlign: 'middle', marginRight: '6px' }} />
-          Linha em vermelho claro = publicação repetida (texto idêntico a outra do mesmo dia). Exclua manualmente as que não quiser.
+          Número do processo em vermelho-claro = o mesmo processo aparece mais de uma vez no mesmo dia. Exclua manualmente as que não quiser.
         </p>
         {carregando ? <div className="loading">Carregando...</div> : (
           <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
@@ -1157,8 +1146,7 @@ function PublicacoesCNJ() {
               <tbody>
                 {lista.map(p => (
                   <tr key={p.id}
-                    style={p.duplicada ? { background: '#fde8e8' } : undefined}
-                    title={p.duplicada ? 'Publicação repetida (texto idêntico a outra do mesmo dia)' : undefined}>
+                    style={p.lida ? { background: 'var(--linha-lida, #cdebd6)' } : undefined}>
                     {podeExcluir && (
                       <td style={{ textAlign: 'center' }}>
                         <input type="checkbox" checked={selecionados.includes(p.id)}
@@ -1169,13 +1157,20 @@ function PublicacoesCNJ() {
                     <td style={{ whiteSpace: 'nowrap' }}>{formatarData(p.data_publicacao)}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>{p.tribunal || '—'}</td>
                     {qtdOabs > 1 && <td style={{ whiteSpace: 'nowrap' }}>{p.oab || '—'}</td>}
-                    <td style={{ whiteSpace: 'nowrap' }}>{p.numero_processo || '—'}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {p.duplicada
+                        ? <span style={{ background: '#fde8e8', padding: '1px 5px', borderRadius: '3px' }}
+                            title="O mesmo processo aparece mais de uma vez neste dia (repetida)">
+                            <NumeroProcessoCopiavel numero={p.numero_processo} />
+                          </span>
+                        : <NumeroProcessoCopiavel numero={p.numero_processo} />}
+                    </td>
                     <td style={{ maxWidth: '360px' }}>
                       <div style={{
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         fontSize: '13px', cursor: 'pointer', color: '#1a56db',
                       }}
-                        onClick={() => setTextoAberto(p)} title="Clique para ler o texto completo">
+                        onClick={() => { setTextoAberto(p); if (!p.lida) { publicacoesAPI.marcarLida(p.id).catch(() => {}); setLista(ls => ls.map(x => x.id === p.id ? { ...x, lida: 1 } : x)); } }} title="Clique para ler o texto completo">
                         {textoLimpo(p.texto)}
                       </div>
                     </td>

@@ -9,6 +9,9 @@ import { useAuth } from '../../context/AuthContext';
 import { notificacoesAPI, authAPI } from '../../services/api';
 import { toast } from 'react-toastify';
 import './Layout.css';
+import ModalAparencia from '../ModalAparencia';
+import { variaveisMenu } from '../../utils/coresMenu';
+import { variaveisLinha, variaveisLinhaLida } from '../../utils/coresLinha';
 
 // Itens do menu lateral.
 // tipo: 'grupo' → item expansível com sub-itens (filhos[])
@@ -72,6 +75,7 @@ export default function Layout({ children }) {
   const [sinoAberto, setSinoAberto]       = useState(false);
   const [menuUsuario, setMenuUsuario]     = useState(false);
   const [modalSenha, setModalSenha]       = useState(false);
+  const [modalAparencia, setModalAparencia] = useState(false);
   const [escritorio, setEscritorio]       = useState({ nome: '', logo_base64: null }); // logo + nome (do banco desta instância)
   const sinoRef    = useRef(null);
   const usuarioRef = useRef(null);
@@ -197,8 +201,13 @@ export default function Layout({ children }) {
     setSidebarMobile(true);
   }
 
+  // Cores personalizadas pelo usuário (Aparência): menu lateral + destaque da linha.
+  // {} quando não personalizou → o Layout.css usa os padrões (visual idêntico ao atual).
+  const estiloAparencia = { ...variaveisMenu(usuario?.cores_menu), ...variaveisLinha(usuario?.cor_linha), ...variaveisLinhaLida(usuario?.cor_linha_lida) };
+
   return (
-    <div className={`layout ${sidebarAberta ? 'sidebar-aberta' : 'sidebar-fechada'} ${sidebarMobile ? 'sidebar-mobile-aberta' : ''}`}>
+    <div className={`layout ${sidebarAberta ? 'sidebar-aberta' : 'sidebar-fechada'} ${sidebarMobile ? 'sidebar-mobile-aberta' : ''}`}
+         style={estiloAparencia}>
 
       {/* Fundo escurecido atrás do menu no celular — clicar fora fecha */}
       <div className="sidebar-backdrop" onClick={() => setSidebarMobile(false)} />
@@ -383,6 +392,15 @@ export default function Layout({ children }) {
                     onMouseLeave={e => e.currentTarget.style.background='none'}>
                     🔑 Trocar senha
                   </button>
+                  <button onClick={() => { setMenuUsuario(false); setModalAparencia(true); }}
+                    style={{width:'100%',display:'flex',alignItems:'center',gap:'10px',
+                            padding:'11px 16px',background:'none',border:'none',cursor:'pointer',
+                            fontSize:'13px',color:'#374151',textAlign:'left',
+                            borderBottom:'1px solid #f1f5f9'}}
+                    onMouseEnter={e => e.currentTarget.style.background='#f8fafc'}
+                    onMouseLeave={e => e.currentTarget.style.background='none'}>
+                    🎨 Aparência
+                  </button>
                   <button onClick={() => { setMenuUsuario(false); handleLogout(); }}
                     style={{width:'100%',display:'flex',alignItems:'center',gap:'10px',
                             padding:'11px 16px',background:'none',border:'none',cursor:'pointer',
@@ -395,6 +413,7 @@ export default function Layout({ children }) {
               )}
             </div>
             {modalSenha && <ModalTrocarSenha onFechar={() => setModalSenha(false)} />}
+            {modalAparencia && <ModalAparencia onFechar={() => setModalAparencia(false)} />}
           </div>
         </header>
 
