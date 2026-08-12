@@ -12,6 +12,25 @@ const { registrarComunicacao } = require('../utils/logComunicacao');
 const smsService = require('../services/smsService');
 const multer = require('multer');
 
+// ---- Rede de segurança: sem telefone/e-mail repetido no MESMO cadastro ----
+// O front já bloqueia e avisa; aqui é a proteção do servidor (qualquer caminho).
+// Mantém a 1ª ocorrência; telefone compara só os dígitos, e-mail em minúsculas.
+// Itens vazios passam direto (os laços de INSERT já ignoram vazio).
+function semRepetidos(lista, chaveFn) {
+  const vistos = new Set();
+  const saida = [];
+  for (const item of (lista || [])) {
+    const chave = chaveFn(item);
+    if (!chave) { saida.push(item); continue; }
+    if (vistos.has(chave)) continue;
+    vistos.add(chave);
+    saida.push(item);
+  }
+  return saida;
+}
+const chaveTelefone = (t) => String(t?.numero || '').replace(/\D/g, '');
+const chaveEmail    = (e) => String(e?.email  || '').trim().toLowerCase();
+
 // ---- Anexos do "Enviar e-mail" avulso (Pessoas) ----
 // Upload em memória: os arquivos são anexados ao e-mail e DESCARTADOS (nada vai para
 // disco, S3 ou banco). O total é limitado a 20 MB para respeitar o teto do Gmail (25 MB
@@ -107,6 +126,13 @@ async function listarFisicas(req, res) {
       params.push(...f.params);
     }
 
+    // Filtro pela etiqueta DO ESCRITÓRIO (compartilhada).
+    const etqEscSlot = parseInt(req.query.etiquetaEscritorio);
+    if (etqEscSlot >= 1 && etqEscSlot <= 5) {
+      where += ' AND EXISTS (SELECT 1 FROM pessoas_fisicas_etiquetas_escritorio ee WHERE ee.pessoa_id = pf.id AND ee.slot = ?)';
+      params.push(etqEscSlot);
+    }
+
     // Nota: LIMIT e OFFSET são inseridos diretamente na query (já sanitizados com parseInt)
     // pois o MySQL 8 tem incompatibilidade com parâmetros ? em LIMIT/OFFSET via prepared statements
     const [rows] = await pool.execute(
@@ -125,7 +151,10 @@ async function listarFisicas(req, res) {
                 SELECT proc_id FROM tbltituloprocautor WHERE tipo_pessoa = 'fisica' AND pessoa_id = pf.id
                 UNION
                 SELECT proc_id FROM tbltituloprocreu   WHERE tipo_pessoa = 'fisica' AND pessoa_id = pf.id
-              ) AS t) AS qtde_proc
+              ) AS t) AS qtde_proc,
+              -- Etiqueta DO ESCRITÓRIO (compartilhada) desta pessoa
+              (SELECT ee.slot FROM pessoas_fisicas_etiquetas_escritorio ee
+                WHERE ee.pessoa_id = pf.id) AS etiqueta_escritorio
        FROM pessoas_fisicas pf
        LEFT JOIN estado_civil ec ON pf.estado_civil_id = ec.id
        LEFT JOIN genero g ON pf.genero_id = g.id
@@ -245,7 +274,7 @@ async function criarFisica(req, res) {
     const pessoaId = result.insertId;
 
     // Insere telefones vinculados à pessoa
-    for (const tel of telefones) {
+    for (const tel of semRepetidos(telefones, chaveTelefone)) {
       if (tel.numero) {
         await conn.execute(
           'INSERT INTO telefones_pf (pessoa_id, numero, tipo, principal) VALUES (?, ?, ?, ?)',
@@ -255,7 +284,7 @@ async function criarFisica(req, res) {
     }
 
     // Insere e-mails vinculados à pessoa
-    for (const em of emails) {
+    for (const em of semRepetidos(emails, chaveEmail)) {
       const emailNorm = em.email ? em.email.trim().toLowerCase() : '';
       if (emailNorm) {
         await conn.execute(
@@ -327,7 +356,7 @@ async function atualizarFisica(req, res) {
     // Telefones e e-mails: a tela de edição carrega a lista COMPLETA (via buscarFisica),
     // então regrava exatamente o que está no formulário — o que o usuário vê é o que fica salvo.
     await conn.execute('DELETE FROM telefones_pf WHERE pessoa_id = ?', [id]);
-    for (const tel of telefones) {
+    for (const tel of semRepetidos(telefones, chaveTelefone)) {
       if (tel.numero) {
         await conn.execute(
           'INSERT INTO telefones_pf (pessoa_id, numero, tipo, principal) VALUES (?, ?, ?, ?)',
@@ -336,7 +365,7 @@ async function atualizarFisica(req, res) {
       }
     }
     await conn.execute('DELETE FROM emails_pf WHERE pessoa_id = ?', [id]);
-    for (const em of emails) {
+    for (const em of semRepetidos(emails, chaveEmail)) {
       const emailNorm = em.email ? em.email.trim().toLowerCase() : '';
       if (emailNorm) {
         await conn.execute(
@@ -805,6 +834,13 @@ async function listarJuridicas(req, res) {
       params.push(...f.params);
     }
 
+    // Filtro pela etiqueta DO ESCRITÓRIO (compartilhada).
+    const etqEscSlot = parseInt(req.query.etiquetaEscritorio);
+    if (etqEscSlot >= 1 && etqEscSlot <= 5) {
+      where += ' AND EXISTS (SELECT 1 FROM pessoas_juridicas_etiquetas_escritorio ee WHERE ee.pessoa_id = pj.id AND ee.slot = ?)';
+      params.push(etqEscSlot);
+    }
+
     // Nota: LIMIT e OFFSET inseridos diretamente (sanitizados com parseInt — MySQL 8 não aceita ? em LIMIT/OFFSET)
     const [rows] = await pool.execute(
       `SELECT pj.id, pj.razao_social, pj.nome_fantasia, pj.cnpj,
@@ -817,7 +853,9 @@ async function listarJuridicas(req, res) {
                 SELECT proc_id FROM tbltituloprocautor WHERE tipo_pessoa = 'juridica' AND pessoa_id = pj.id
                 UNION
                 SELECT proc_id FROM tbltituloprocreu   WHERE tipo_pessoa = 'juridica' AND pessoa_id = pj.id
-              ) AS t) AS qtde_proc
+              ) AS t) AS qtde_proc,
+              (SELECT ee.slot FROM pessoas_juridicas_etiquetas_escritorio ee
+                WHERE ee.pessoa_id = pj.id) AS etiqueta_escritorio
        FROM pessoas_juridicas pj ${where}
        ORDER BY pj.razao_social ASC
        LIMIT ${limitInt} OFFSET ${offsetInt}`,
@@ -866,7 +904,7 @@ async function criarJuridica(req, res) {
     const pessoaId = result.insertId;
 
     // Insere telefones vinculados à empresa
-    for (const tel of telefones) {
+    for (const tel of semRepetidos(telefones, chaveTelefone)) {
       if (tel.numero) {
         await conn.execute(
           'INSERT INTO telefones_pj (pessoa_id, numero, tipo, principal) VALUES (?, ?, ?, ?)',
@@ -876,7 +914,7 @@ async function criarJuridica(req, res) {
     }
 
     // Insere e-mails vinculados à empresa
-    for (const em of emails) {
+    for (const em of semRepetidos(emails, chaveEmail)) {
       const emailNorm = em.email ? em.email.trim().toLowerCase() : '';
       if (emailNorm) {
         await conn.execute(
@@ -972,7 +1010,7 @@ async function atualizarJuridica(req, res) {
 
     // Regrava telefones e e-mails conforme o formulário (que carregou a lista completa)
     await conn.execute('DELETE FROM telefones_pj WHERE pessoa_id = ?', [id]);
-    for (const tel of telefones) {
+    for (const tel of semRepetidos(telefones, chaveTelefone)) {
       if (tel.numero) {
         await conn.execute(
           'INSERT INTO telefones_pj (pessoa_id, numero, tipo, principal) VALUES (?, ?, ?, ?)',
@@ -981,7 +1019,7 @@ async function atualizarJuridica(req, res) {
       }
     }
     await conn.execute('DELETE FROM emails_pj WHERE pessoa_id = ?', [id]);
-    for (const em of emails) {
+    for (const em of semRepetidos(emails, chaveEmail)) {
       const emailNorm = em.email ? em.email.trim().toLowerCase() : '';
       if (emailNorm) {
         await conn.execute(

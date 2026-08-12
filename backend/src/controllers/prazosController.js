@@ -100,6 +100,13 @@ async function listar(req, res) {
     }
     // Pode ver todos e não escolheu ninguém (usuario_id vazio = "Todos"): sem filtro por usuário.
 
+    // Filtro por etiqueta PESSOAL do usuário logado.
+    const etqSlot = parseInt(req.query.etiqueta);
+    if (etqSlot >= 1 && etqSlot <= 5) {
+      where += ' AND EXISTS (SELECT 1 FROM prazos_etiquetas pe WHERE pe.prazo_id = pp.id AND pe.usuario_id = ? AND pe.slot = ?)';
+      params.push(req.usuario.id, etqSlot);
+    }
+
     const limitInt  = parseInt(limite) || 30;
     const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
 
@@ -122,7 +129,9 @@ async function listar(req, res) {
                 WHEN pp.data_vencimento < CURDATE() THEN 'atrasado'
                 WHEN pp.data_vencimento = CURDATE() THEN 'pendente'
                 ELSE 'agendado'
-              END AS status
+              END AS status,
+              (SELECT pe.slot FROM prazos_etiquetas pe
+                WHERE pe.prazo_id = pp.id AND pe.usuario_id = ?) AS etiqueta_pessoal
        FROM prazos_processo pp
        LEFT JOIN prazo_subtipo ps ON pp.subtipo_id = ps.id
        LEFT JOIN tipo_prazo tp    ON ps.tipo_prazo_id = tp.id
@@ -143,7 +152,7 @@ async function listar(req, res) {
            ELSE 6
          END ASC
        LIMIT ${limitInt} OFFSET ${offsetInt}`,
-      params
+      [req.usuario.id, ...params]
     );
 
     // O COUNT usa o MESMO `where` da listagem. Como o filtro de número referencia pr.numProc,

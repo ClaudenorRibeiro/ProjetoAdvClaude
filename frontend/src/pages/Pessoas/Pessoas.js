@@ -11,6 +11,8 @@ import MenuAcoes from '../../components/MenuAcoes';
 import { useAuth } from '../../context/AuthContext';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
+import { LinhaFone, LinhaEmail } from '../../components/LinhasContato';
+import { EtiquetaCelula, LegendaEtiquetasPessoais, itensMenuEtiqueta, useEtiquetasEscritorio } from '../../components/Etiquetas';
 import { linkWhatsApp } from '../../utils/whatsapp';
 
 // Campos disponíveis para exportar em Excel (mesmas chaves do backend; sem campos de auditoria)
@@ -37,9 +39,14 @@ const CAMPOS_EXPORT_JURIDICA = [
 ];
 
 export default function Pessoas() {
-  const { ehAdmin } = useAuth(); // admin e superadmin (nível <= 1) — controla o botão de unificar
+  const { ehAdmin, temPermissao } = useAuth(); // admin e superadmin (nível <= 1) — controla o botão de unificar
   const [aba, setAba]             = useState('fisicas'); // 'fisicas' | 'juridicas'
   const [lista, setLista]         = useState([]);
+  // Etiqueta DO ESCRITÓRIO em Pessoas (catálogo único "pessoas"; PF e PJ gravam em tabelas próprias).
+  const moduloMarcarPessoa = aba === 'fisicas' ? 'pessoas_fisicas' : 'pessoas_juridicas';
+  const { catalogo: catEscritorio, marcar: marcarEtqEsc } = useEtiquetasEscritorio('pessoas', moduloMarcarPessoa, lista, setLista);
+  const podeEtiquetarPessoa = temPermissao('pessoas.etiqueta_escritorio', 'alterar');
+  const [filtroEsc, setFiltroEsc] = useState(null); // filtro pela etiqueta do escritório (slot)
   const [total, setTotal]         = useState(0);
   const [busca, setBusca]         = useState('');       // termo já aplicado (usado na consulta)
   const [buscaInput, setBuscaInput] = useState('');     // texto digitado na caixa (instantâneo)
@@ -141,14 +148,14 @@ export default function Pessoas() {
     setCarregando(true);
     try {
       const fn = aba === 'fisicas' ? pessoasAPI.listarFisicas : pessoasAPI.listarJuridicas;
-      const { data } = await fn({ busca, pagina, limite: LIMITE });
+      const { data } = await fn({ busca, pagina, limite: LIMITE, etiquetaEscritorio: filtroEsc || undefined });
       if (data.ok) {
         setLista(data.dados.registros);
         setTotal(data.dados.total);
       }
     } catch { toast.error('Erro ao carregar pessoas'); }
     finally { setCarregando(false); }
-  }, [aba, busca, pagina]);
+  }, [aba, busca, pagina, filtroEsc]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -298,6 +305,8 @@ export default function Pessoas() {
         </div>
 
         {/* Tabela */}
+        <LegendaEtiquetasPessoais definicoes={catEscritorio} titulo="Etiquetas do escritório"
+          filtroAtivo={filtroEsc} onFiltrar={(slot) => { setFiltroEsc(slot); setPagina(1); }} />
         {carregando ? <div className="loading">Carregando...</div> : (
           <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
             {aba === 'fisicas' ? (
@@ -305,11 +314,13 @@ export default function Pessoas() {
                 onVerProcessos={abrirProcessos} onAnotacoes={abrirAnotacoes}
                 onEnviarEmail={abrirEnviarEmail} onEnviarZap={abrirEnviarZap} onEnviarSMS={abrirEnviarSMS} smsAtivo={smsAtivo}
                 onCopiarMultiplos={abrirCopiarMultiplos} onCopiarEmailMultiplos={abrirCopiarEmailMultiplos}
+                catEscritorio={catEscritorio} podeEtiquetar={podeEtiquetarPessoa} onEtiquetar={marcarEtqEsc}
                 modoUnificar={modoUnificar} selecionados={selUnificar} onToggleSel={toggleSelUnificar} />
             ) : (
               <TabelaJuridicas lista={lista} onEditar={abrirEdicao} onVerDetalhes={abrirDetalhes} onExcluir={pedirConfirmacaoExclusao}
                 onVerProcessos={abrirProcessos} onAnotacoes={abrirAnotacoes}
                 onEnviarEmail={abrirEnviarEmail} onEnviarZap={abrirEnviarZap} onCopiarMultiplos={abrirCopiarMultiplos} onCopiarEmailMultiplos={abrirCopiarEmailMultiplos}
+                catEscritorio={catEscritorio} podeEtiquetar={podeEtiquetarPessoa} onEtiquetar={marcarEtqEsc}
                 modoUnificar={modoUnificar} selecionados={selUnificar} onToggleSel={toggleSelUnificar} />
             )}
             {lista.length === 0 && <p className="lista-vazia">Nenhum registro encontrado</p>}
@@ -1375,7 +1386,7 @@ function CelulaQtdeProc({ qtde, onClick }) {
   );
 }
 
-function TabelaFisicas({ lista, onEditar, onVerDetalhes, onExcluir, onVerProcessos, onAnotacoes, onEnviarEmail, onEnviarZap, onEnviarSMS, smsAtivo, onCopiarMultiplos, onCopiarEmailMultiplos, modoUnificar, selecionados = [], onToggleSel }) {
+function TabelaFisicas({ lista, onEditar, onVerDetalhes, onExcluir, onVerProcessos, onAnotacoes, onEnviarEmail, onEnviarZap, onEnviarSMS, smsAtivo, onCopiarMultiplos, onCopiarEmailMultiplos, catEscritorio = [], podeEtiquetar = false, onEtiquetar, modoUnificar, selecionados = [], onToggleSel }) {
   const { temPermissao } = useAuth();
   const estaSel = (id) => selecionados.some(x => x.id === id);
   return (
@@ -1383,7 +1394,7 @@ function TabelaFisicas({ lista, onEditar, onVerDetalhes, onExcluir, onVerProcess
       <thead>
         <tr>
           {modoUnificar && <th style={{width:'34px'}}></th>}
-          <th>Nome</th><th>CPF</th><th>Telefone</th><th>E-mail</th><th style={{textAlign:'center'}}>Qtde Proc</th><th>Ações</th>
+          <th>Nome</th><th>CPF</th><th>Telefone</th><th>E-mail</th><th style={{textAlign:'center'}}>Qtde Proc</th><th style={{textAlign:'center'}}>Etiq. Escrit.</th><th>Ações</th>
         </tr>
       </thead>
       <tbody>
@@ -1401,9 +1412,14 @@ function TabelaFisicas({ lista, onEditar, onVerDetalhes, onExcluir, onVerProcess
             <td><TelefoneCopiavel telefone={p.telefone} pessoaId={p.id} tipo="fisicas" onMultiplos={(nums) => onCopiarMultiplos(p, nums)} /></td>
             <td><EmailCopiavel email={p.email} pessoaId={p.id} tipo="fisicas" onMultiplos={(ems) => onCopiarEmailMultiplos(p, ems)} /></td>
             <CelulaQtdeProc qtde={p.qtde_proc} onClick={() => onVerProcessos(p)} />
+            <td style={{ textAlign: 'center' }}>
+              <EtiquetaCelula slot={p.etiqueta_escritorio} definicoes={catEscritorio} />
+            </td>
             <td>
               {/* Gerar documento — o modal lista os modelos desta origem (ou avisa se não houver). */}
               <MenuAcoes itens={[
+                ...(podeEtiquetar ? itensMenuEtiqueta({ definicoes: catEscritorio, slotAtual: p.etiqueta_escritorio,
+                  onMarcar: (slot) => onEtiquetar(p.id, slot) }) : []),
                 { label: 'Gerar documento', icone: '📄',
                   oculto: !temPermissao('documentos','cadastrar'),
                   gerarDoc: { ancoraTipo: 'pessoa_fisica', ancoraId: p.id } },
@@ -1425,7 +1441,7 @@ function TabelaFisicas({ lista, onEditar, onVerDetalhes, onExcluir, onVerProcess
 }
 
 // Tabela de pessoas jurídicas
-function TabelaJuridicas({ lista, onEditar, onVerDetalhes, onExcluir, onVerProcessos, onAnotacoes, onEnviarEmail, onEnviarZap, onCopiarMultiplos, onCopiarEmailMultiplos, modoUnificar, selecionados = [], onToggleSel }) {
+function TabelaJuridicas({ lista, onEditar, onVerDetalhes, onExcluir, onVerProcessos, onAnotacoes, onEnviarEmail, onEnviarZap, onCopiarMultiplos, onCopiarEmailMultiplos, catEscritorio = [], podeEtiquetar = false, onEtiquetar, modoUnificar, selecionados = [], onToggleSel }) {
   const { temPermissao } = useAuth();
   const estaSel = (id) => selecionados.some(x => x.id === id);
   return (
@@ -1433,7 +1449,7 @@ function TabelaJuridicas({ lista, onEditar, onVerDetalhes, onExcluir, onVerProce
       <thead>
         <tr>
           {modoUnificar && <th style={{width:'34px'}}></th>}
-          <th>Razão Social</th><th>Nome Fantasia</th><th>CNPJ</th><th>Telefone</th><th style={{textAlign:'center'}}>Qtde Proc</th><th>Ações</th>
+          <th>Razão Social</th><th>Nome Fantasia</th><th>CNPJ</th><th>Telefone</th><th style={{textAlign:'center'}}>Qtde Proc</th><th style={{textAlign:'center'}}>Etiq. Escrit.</th><th>Ações</th>
         </tr>
       </thead>
       <tbody>
@@ -1451,9 +1467,14 @@ function TabelaJuridicas({ lista, onEditar, onVerDetalhes, onExcluir, onVerProce
             <td>{formatarCNPJ(p.cnpj)}</td>
             <td><TelefoneCopiavel telefone={p.telefone} pessoaId={p.id} tipo="juridicas" onMultiplos={(nums) => onCopiarMultiplos(p, nums)} /></td>
             <CelulaQtdeProc qtde={p.qtde_proc} onClick={() => onVerProcessos(p)} />
+            <td style={{ textAlign: 'center' }}>
+              <EtiquetaCelula slot={p.etiqueta_escritorio} definicoes={catEscritorio} />
+            </td>
             <td>
               {/* Gerar documento — o modal lista os modelos desta origem (ou avisa se não houver). */}
               <MenuAcoes itens={[
+                ...(podeEtiquetar ? itensMenuEtiqueta({ definicoes: catEscritorio, slotAtual: p.etiqueta_escritorio,
+                  onMarcar: (slot) => onEtiquetar(p.id, slot) }) : []),
                 { label: 'Gerar documento', icone: '📄',
                   oculto: !temPermissao('documentos','cadastrar'),
                   gerarDoc: { ancoraTipo: 'pessoa_juridica', ancoraId: p.id } },
@@ -1573,6 +1594,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
   const [auxiliares, setAux]    = useState({ estados_civis: [], generos: [], profissoes: [], nacionalidades: [] });
   const [salvando, setSalvando] = useState(false);
   const [confirmar, setConfirmar] = useState(null); // modal de aviso "campos sem informação"
+  const [avisoDup, setAvisoDup]   = useState('');   // faixa interna: telefone/e-mail repetido no próprio cadastro
   const [telefones, setTelefones] = useState(pessoa?.telefones || [{ numero: '', tipo: '', principal: true }]);
   const [emails, setEmails]       = useState(pessoa?.emails || [{ email: '', principal: true }]);
   // Ref do campo Número — recebe o foco automaticamente após o CEP ser preenchido
@@ -1652,6 +1674,22 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
   }
 
   async function salvar() {
+    // ── Bloqueio: mesmo telefone ou mesmo e-mail repetido no MESMO cadastro (PF e PJ) ──
+    // Telefone compara só os dígitos (ignora máscara); e-mail compara em minúsculas. Linhas em branco não contam.
+    setAvisoDup('');
+    const telsDigitos = telefones.map(t => (t.numero || '').replace(/\D/g, '')).filter(Boolean);
+    const telRepetido = telsDigitos.find((n, i) => telsDigitos.indexOf(n) !== i);
+    if (telRepetido) {
+      setAvisoDup(`O telefone ${formatarTelefone(telRepetido)} está repetido. Cada telefone só pode aparecer uma vez neste cadastro — remova o duplicado.`);
+      return;
+    }
+    const emailsNorm = emails.map(e => (e.email || '').trim().toLowerCase()).filter(Boolean);
+    const emailRepetido = emailsNorm.find((e, i) => emailsNorm.indexOf(e) !== i);
+    if (emailRepetido) {
+      setAvisoDup(`O e-mail ${emailRepetido} está repetido. Cada e-mail só pode aparecer uma vez neste cadastro — remova o duplicado.`);
+      return;
+    }
+
     if (tipo === 'fisicas') {
       // ── Únicos OBRIGATÓRIOS de Pessoa Física: nome completo + CPF ──────
       if (!form.nome?.trim()) return toast.error('Nome é obrigatório');
@@ -1708,6 +1746,18 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
         </div>
 
         <div className="modal-body">
+          {/* Faixa de aviso do próprio sistema (no lugar da notificação do canto) */}
+          {avisoDup && (
+            <div style={{ background:'#fef2f2', border:'1px solid #fecaca', color:'#b91c1c',
+              borderRadius:'6px', padding:'8px 10px', marginBottom:'12px', fontSize:'13px',
+              display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'8px',
+              position:'sticky', top:0, zIndex:5, boxShadow:'0 2px 6px rgba(0,0,0,0.12)' }}>
+              <span>⚠️ {avisoDup}</span>
+              <button type="button" onClick={() => setAvisoDup('')}
+                style={{ background:'none', border:'none', color:'#b91c1c', cursor:'pointer', fontSize:'15px', lineHeight:1 }}
+                title="Fechar">✕</button>
+            </div>
+          )}
           {tipo === 'fisicas' ? (
             <>
               <div className="grid-2">
@@ -2193,96 +2243,6 @@ function CampoNomeCompleto({ value, onChange, somenteLeitura = false }) {
         placeholder="Nome e Sobrenome"
       />
       {erroNome && <small style={{ color: '#e74c3c', fontSize: '12px' }}>⚠️ {erroNome}</small>}
-    </div>
-  );
-}
-
-// ============================================================
-// LINHA FONE — número com máscara + campo de texto livre para descrição
-// O usuário digita o que quiser: "Celular", "esposa Edna", "WhatsApp trabalho", etc.
-// ============================================================
-function LinhaFone({ tel, index, onChange, onRemove, somenteLeitura = false }) {
-  // Máscara adaptativa: fixo (xx) xxxx-xxxx ou celular (xx) xxxxx-xxxx
-  function mascaraTelefone(value) {
-    const limpo = value.replace(/\D/g, '').slice(0, 11);
-    if (!limpo) return '';
-    if (limpo.length <= 2)  return `(${limpo}`;
-    if (limpo.length <= 6)  return `(${limpo.slice(0,2)}) ${limpo.slice(2)}`;
-    if (limpo.length <= 10) return `(${limpo.slice(0,2)}) ${limpo.slice(2,6)}-${limpo.slice(6)}`;
-    return                         `(${limpo.slice(0,2)}) ${limpo.slice(2,7)}-${limpo.slice(7)}`;
-  }
-
-  return (
-    <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
-      {/* Número com máscara automática */}
-      <input
-        className="form-control"
-        style={{ flex: 2 }}
-        placeholder="(11) 99999-9999"
-        value={tel.numero}
-        maxLength={15}
-        disabled={somenteLeitura}
-        onChange={e => onChange({ ...tel, numero: mascaraTelefone(e.target.value) })}
-      />
-      {/* Descrição livre: Celular, Comercial, esposa Edna, recado... */}
-      <input
-        className="form-control"
-        style={{ flex: 1 }}
-        placeholder="Descrição do Telefone"
-        value={tel.tipo || ''}
-        disabled={somenteLeitura}
-        onChange={e => onChange({ ...tel, tipo: e.target.value })}
-      />
-      {/* Botão remover — só aparece a partir da segunda linha */}
-      {index > 0 && !somenteLeitura && (
-        <button
-          type="button"
-          className="btn btn-danger"
-          style={{ padding: '6px 10px', flexShrink: 0 }}
-          onClick={onRemove}
-        >✕</button>
-      )}
-    </div>
-  );
-}
-
-// ============================================================
-// LINHA EMAIL — campo de e-mail com validação de formato no blur
-// ============================================================
-function LinhaEmail({ email, index, onChange, onRemove, somenteLeitura = false }) {
-  const [erroEmail, setErroEmail] = useState('');
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-  function handleBlur() {
-    if (email && !emailRegex.test(email.trim())) {
-      setErroEmail('E-mail inválido');
-    } else {
-      setErroEmail('');
-    }
-  }
-
-  return (
-    <div style={{ marginBottom: erroEmail ? '4px' : '8px' }}>
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-        <input
-          className={`form-control ${erroEmail ? 'is-invalid' : ''}`}
-          style={{ flex: 1 }}
-          placeholder="email@exemplo.com"
-          value={email}
-          disabled={somenteLeitura}
-          onChange={e => { setErroEmail(''); onChange(e.target.value.toLowerCase()); }}
-          onBlur={handleBlur}
-        />
-        {index > 0 && !somenteLeitura && (
-          <button
-            type="button"
-            className="btn btn-danger"
-            style={{ padding: '6px 10px', flexShrink: 0 }}
-            onClick={onRemove}
-          >✕</button>
-        )}
-      </div>
-      {erroEmail && <small style={{ color: '#e74c3c', fontSize: '12px' }}>⚠️ {erroEmail}</small>}
     </div>
   );
 }

@@ -5,7 +5,8 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { configuracaoAPI, manutencaoAPI } from '../../services/api';
+import { configuracaoAPI, manutencaoAPI, etiquetasAPI } from '../../services/api';
+import { EditorEtiquetasCinco, cincoLinhasEtiqueta, MODULOS_ETIQUETA_ESCRITORIO } from '../../components/Etiquetas';
 import { formatarData, toTitleCase } from '../../utils/formatters';
 import { UFS } from '../../utils/ufs';
 import { toast } from 'react-toastify';
@@ -16,13 +17,16 @@ import { useAuth } from '../../context/AuthContext';
 // Estrutura de módulos para a matriz de permissões
 // Sub-módulos usam chave composta: 'processos.andamentos'
 const MODULOS_PERM = [
-  { chave: 'pessoas',      label: 'Pessoas' },
+  { chave: 'pessoas',      label: 'Pessoas', submodulos: [
+    { chave: 'pessoas.etiqueta_escritorio', label: 'Etiqueta do escritório (aplicar) — marque Alterar' },
+  ]},
   { chave: 'processos',    label: 'Processos', submodulos: [
     { chave: 'processos.andamentos', label: 'Andamentos' },
     { chave: 'processos.prazos',     label: 'Prazos' },
     { chave: 'processos.tarefas',    label: 'Tarefas' },
     { chave: 'processos.audiencias', label: 'Audiências' },
     { chave: 'processos.pericias',   label: 'Perícias' },
+    { chave: 'processos.etiqueta_escritorio', label: 'Etiqueta do escritório (aplicar) — marque Alterar' },
   ]},
   { chave: 'pastas',       label: 'Pastas' },
   { chave: 'prazos', label: 'Prazos (menu)', submodulos: [
@@ -36,6 +40,7 @@ const MODULOS_PERM = [
   ]},
   { chave: 'audiencias', label: 'Audiências (menu)', submodulos: [
     { chave: 'audiencias.tipos', label: 'Tipos de audiência' },
+    { chave: 'audiencias.ata',   label: 'Ata (registrar / marcar impressa) — marque Visualizar' },
   ]},
   { chave: 'pericias', label: 'Perícias (menu)', submodulos: [
     { chave: 'pericias.tipos', label: 'Tipos de perícia' },
@@ -105,6 +110,7 @@ export default function Configuracoes() {
             { key:'permissoes',  label:'Permissões' },
             { key:'feriados',    label:'Feriados' },
             { key:'integracoes', label:'Integrações' },
+            { key:'etiquetas',   label:'Etiquetas do escritório' },
             // Aba de manutenção visível APENAS para o superusuário (nivel 0)
             ...(ehSuper ? [{ key:'manutencao', label:'Manutenção' }] : []),
           ].map(({ key, label }) => (
@@ -121,6 +127,7 @@ export default function Configuracoes() {
       {abaAtiva === 'permissoes'  && <TabPermissoes />}
       {abaAtiva === 'feriados'    && <TabFeriados />}
       {abaAtiva === 'integracoes' && <TabIntegracoes />}
+      {abaAtiva === 'etiquetas'   && <TabEtiquetasEscritorio />}
       {abaAtiva === 'manutencao' && ehSuper && <TabManutencao />}
     </div>
   );
@@ -1336,6 +1343,67 @@ const URL_PADRAO_CNJ  = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
 // DataJud (API Pública do CNJ) — base e chave pública oficiais, usadas só como PADRÃO.
 const URL_PADRAO_DATAJUD    = 'https://api-publica.datajud.cnj.jus.br';
 const APIKEY_PADRAO_DATAJUD = 'cDZHYzlZa0JadVREZDJCendQbXY6SkJlTzNjLV9TRENyQk1RdnFKZGRQdw==';
+
+// ============================================================
+// ABA: ETIQUETAS DO ESCRITÓRIO — catálogo compartilhado (só admin edita).
+// Reusa o mesmo editor de 5 cores/significados da 🎨 Aparência.
+// ============================================================
+function TabEtiquetasEscritorio() {
+  const [modulo, setModulo]     = useState(MODULOS_ETIQUETA_ESCRITORIO[0]?.chave || 'processos');
+  const [rows, setRows]         = useState(() => cincoLinhasEtiqueta());
+  const [salvando, setSalvando] = useState(false);
+  const [aviso, setAviso]       = useState('');
+
+  useEffect(() => {
+    etiquetasAPI.catalogo(modulo)
+      .then(r => setRows(cincoLinhasEtiqueta(r.data?.dados)))
+      .catch(() => {});
+  }, [modulo]);
+
+  const setRow = (i, campo, valor) => setRows(rs => rs.map((r, j) => (j === i ? { ...r, [campo]: valor } : r)));
+
+  async function salvar() {
+    setSalvando(true); setAviso('');
+    try {
+      const { data } = await etiquetasAPI.salvarCatalogo(modulo, rows);
+      if (data.ok) toast.success('Etiquetas do escritório salvas!');
+      else setAviso(data.mensagem || 'Não foi possível salvar as etiquetas.');
+    } catch (err) {
+      setAviso(err.response?.data?.mensagem || 'Não foi possível salvar as etiquetas.');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <h3 style={{ margin: '0 0 6px' }}>Etiquetas do escritório</h3>
+      <p style={{ color: '#6b7280', fontSize: 13, margin: '0 0 14px' }}>
+        Compartilhadas: <strong>todos os usuários veem</strong>. Defina até 5 cores e o significado de cada
+        (ex.: "Arquivado", "Em recurso"). Cor sem significado fica desativada. Quem pode <em>aplicar</em> a
+        etiqueta é definido na aba <strong>Permissões</strong>.
+      </p>
+      {aviso && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c',
+          padding: '8px 12px', borderRadius: 6, fontSize: 13, marginBottom: 12 }}>
+          ⚠️ {aviso}
+        </div>
+      )}
+      <div className="form-group" style={{ maxWidth: 280 }}>
+        <label className="form-label">Módulo</label>
+        <select className="form-control" value={modulo} onChange={e => setModulo(e.target.value)}>
+          {MODULOS_ETIQUETA_ESCRITORIO.map(m => <option key={m.chave} value={m.chave}>{m.label}</option>)}
+        </select>
+      </div>
+      <EditorEtiquetasCinco rows={rows} onChange={setRow} />
+      <div style={{ marginTop: 16 }}>
+        <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+          {salvando ? 'Salvando...' : 'Salvar'}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function TabIntegracoes() {
   const [integracoes, setIntegracoes] = useState({});

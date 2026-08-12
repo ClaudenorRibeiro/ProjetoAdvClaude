@@ -14,14 +14,50 @@ export function AuthProvider({ children }) {
   const [carregando, setCarregando] = useState(true); // Verificando token inicial
   const [tempoInatividade, setTempoInatividade] = useState(15); // minutos até o logout automático (mín. 15)
 
-  // Ao montar a aplicação, verifica se há token salvo e ainda é válido
+  // Ao montar a aplicação:
+  // 1) Se ESTA guia já tem token no sessionStorage, valida no backend (como sempre foi).
+  // 2) Se NÃO tem, antes de cair no login ela PERGUNTA às guias vizinhas do mesmo navegador
+  //    (via BroadcastChannel) se alguma está logada e adota o login na hora — assim uma guia
+  //    aberta a partir de uma tela logada não pede senha de novo.
+  // Como o token continua no sessionStorage (por guia), o "deslogar ao fechar o navegador"
+  // segue valendo: fechou tudo → nenhuma vizinha responde → a próxima abertura pede login.
   useEffect(() => {
+    const canal = 'BroadcastChannel' in window ? new BroadcastChannel('auth-sessao') : null;
+    let respondido = false;   // esta guia já adotou um login vindo de vizinha?
+    let prazo;                // timer da espera pela resposta
+
+    if (canal) {
+      canal.onmessage = (ev) => {
+        const msg = ev.data || {};
+        // Uma vizinha pediu o login e ESTA guia tem → envia (mesma origem, mesmo navegador).
+        if (msg.tipo === 'PEDIR_TOKEN') {
+          const token = sessionStorage.getItem('token');
+          if (token) canal.postMessage({ tipo: 'TOKEN', token, usuario: sessionStorage.getItem('usuario') });
+          return;
+        }
+        // Recebeu o login de uma vizinha — só interessa se esta guia ainda não tinha.
+        if (msg.tipo === 'TOKEN' && msg.token && !respondido && !sessionStorage.getItem('token')) {
+          respondido = true;
+          clearTimeout(prazo);
+          sessionStorage.setItem('token', msg.token);
+          if (msg.usuario) sessionStorage.setItem('usuario', msg.usuario);
+          verificarToken();
+        }
+      };
+    }
+
     const tokenSalvo = sessionStorage.getItem('token');
     if (tokenSalvo) {
       verificarToken();
+    } else if (canal) {
+      // Sem login nesta guia: pergunta às vizinhas antes de decidir mostrar o login.
+      canal.postMessage({ tipo: 'PEDIR_TOKEN' });
+      prazo = setTimeout(() => { if (!respondido) setCarregando(false); }, 400);
     } else {
       setCarregando(false);
     }
+
+    return () => { clearTimeout(prazo); canal?.close(); };
   }, []);
 
   // Verifica se o token ainda é válido no backend

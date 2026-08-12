@@ -12,6 +12,7 @@ import ModalLerPublicacao from '../../components/ModalLerPublicacao';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import ModalInfo from '../../components/ui/ModalInfo';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
+import { EtiquetaCelula, LegendaEtiquetasPessoais, itensMenuEtiqueta, useEtiquetasPessoais } from '../../components/Etiquetas';
 
 // Status calculados pela data — concluido/cancelado são os únicos armazenados no banco
 // 'fazendo' é filtro auxiliar que mostra prazos ativos com alguém fazendo
@@ -48,6 +49,7 @@ export default function Prazos() {
   // Só esses veem o dropdown "Responsável"; os demais ficam restritos aos próprios + escritório.
   const podeVerTodos = ehAdmin || temPermissao('prazos.ver_todos', 'visualizar');
   const [lista, setLista]                   = useState([]);
+  const { defs: etqDefs, marcar: marcarEtq } = useEtiquetasPessoais('prazos', lista, setLista);
   const [total, setTotal]                   = useState(0);
   // Padrão do filtro "Responsável" = usuário logado (vê os prazos dele + os do escritório).
   // usuario_id vazio ('') significa "Todos" — só disponível para quem pode ver todos.
@@ -204,13 +206,16 @@ export default function Prazos() {
       </div>
 
       <div className="card">
+        <LegendaEtiquetasPessoais definicoes={etqDefs} filtroAtivo={filtros.etiqueta}
+          onFiltrar={(slot) => setFiltros(f => ({ ...f, etiqueta: slot, pagina: 1 }))} />
         {carregando ? <div className="loading">Carregando...</div> : (
           <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
             <table className="tabela tabela-sticky">
               <thead>
                 <tr>
                   <th>Processo</th><th>Pasta</th><th>Prazo</th><th>Vencimento</th>
-                  <th>Dias</th><th>Responsável</th><th>Quem faz</th><th>Status</th><th>Ações</th>
+                  <th>Dias</th><th>Responsável</th><th>Quem faz</th><th>Status</th>
+                  <th style={{ textAlign: 'center' }}>Etiq. Pessoal</th><th>Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -256,11 +261,16 @@ export default function Prazos() {
                       {!p.fazendo_por && '—'}
                     </td>
                     <td><span className={`badge ${STATUS_COR[p.status]}`}>{labelStatusPrazo(p.status)}</span></td>
+                    <td style={{ textAlign: 'center' }}>
+                      <EtiquetaCelula slot={p.etiqueta_pessoal} definicoes={etqDefs} />
+                    </td>
                     <td>
                       {/* Todas as ações no menu "⋮". Fazer/Liberar/Concluir seguem as MESMAS regras
                           de antes: ninguém fazendo → Fazer; eu fazendo (ou outro fazendo e eu admin)
                           → Liberar; Concluir em qualquer um desses três casos. */}
                       <MenuAcoes itens={[
+                        ...itensMenuEtiqueta({ definicoes: etqDefs, slotAtual: p.etiqueta_pessoal,
+                          onMarcar: (slot) => marcarEtq(p.id, slot) }),
                         { label: 'Fazer', icone: '▶',
                           oculto: !(ativo && !p.fazendo_por),
                           onClick: () => fazerPrazo(p) },

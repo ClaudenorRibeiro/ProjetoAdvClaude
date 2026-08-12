@@ -5,12 +5,15 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { processosAPI, pessoasAPI } from '../../services/api';
-import { formatarNumeroPasta, mascaraCNJ, toTitleCase, mascaraCPF, validarCPF, mascaraCNPJ, validarCNPJ } from '../../utils/formatters';
+import { processosAPI, pessoasAPI, etiquetasAPI } from '../../services/api';
+import { EtiquetaCelula, LegendaEtiquetasPessoais, itensMenuEtiqueta } from '../../components/Etiquetas';
+import { formatarNumeroPasta, mascaraCNJ, toTitleCase, mascaraCPF, validarCPF, mascaraCNPJ, validarCNPJ, formatarTelefone } from '../../utils/formatters';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import MenuAcoes from '../../components/MenuAcoes';
+import { LinhaFone, LinhaEmail } from '../../components/LinhasContato';
+import useEscFechar from '../../hooks/useEscFechar';
 
 // ============================================================
 // MINI-MODAL DE CADASTRO RÁPIDO DE PARTE (Física ou Jurídica)
@@ -24,6 +27,10 @@ function ModalCadastroRapidoParte({ tipo, onFechar, onSalvo }) {
   const ehFisica = tipo === 'fisica';
   const [form, setForm]         = useState({});
   const [salvando, setSalvando] = useState(false);
+  const [telefones, setTelefones] = useState([{ numero: '', tipo: '', principal: true }]);
+  const [emails, setEmails]       = useState([{ email: '', principal: true }]);
+  const [avisoDup, setAvisoDup]   = useState(''); // faixa interna: telefone/e-mail repetido no próprio cadastro
+  const overlayRef = useEscFechar(onFechar); // ESC fecha esta janelinha (só quando é a de cima)
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
   async function salvar() {
@@ -37,16 +44,39 @@ function ModalCadastroRapidoParte({ tipo, onFechar, onSalvo }) {
       if (cnpjLimpo && !validarCNPJ(cnpjLimpo)) return toast.error('CNPJ inválido');
     }
 
+    // ── Formato do e-mail + bloqueio de telefone/e-mail repetido no MESMO cadastro ──
+    // Telefone compara só os dígitos; e-mail em minúsculas. Linhas em branco não contam.
+    setAvisoDup('');
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    for (const em of emails) {
+      if (em.email && !emailRegex.test(em.email.trim())) {
+        setAvisoDup(`E-mail inválido: "${em.email}". Corrija antes de cadastrar.`);
+        return;
+      }
+    }
+    const telsDigitos = telefones.map(t => (t.numero || '').replace(/\D/g, '')).filter(Boolean);
+    const telRepetido = telsDigitos.find((n, i) => telsDigitos.indexOf(n) !== i);
+    if (telRepetido) {
+      setAvisoDup(`O telefone ${formatarTelefone(telRepetido)} está repetido. Cada telefone só pode aparecer uma vez neste cadastro — remova o duplicado.`);
+      return;
+    }
+    const emailsNorm = emails.map(e => (e.email || '').trim().toLowerCase()).filter(Boolean);
+    const emailRepetido = emailsNorm.find((e, i) => emailsNorm.indexOf(e) !== i);
+    if (emailRepetido) {
+      setAvisoDup(`O e-mail ${emailRepetido} está repetido. Cada e-mail só pode aparecer uma vez neste cadastro — remova o duplicado.`);
+      return;
+    }
+
     setSalvando(true);
     try {
       if (ehFisica) {
-        const { data } = await pessoasAPI.criarFisica({ nome: form.nome.trim(), cpf: form.cpf || null });
+        const { data } = await pessoasAPI.criarFisica({ nome: form.nome.trim(), cpf: form.cpf || null, telefones, emails });
         if (data.ok) {
           toast.success('Pessoa física cadastrada!');
           onSalvo({ id: data.dados.id, nome: form.nome.trim() });
         }
       } else {
-        const { data } = await pessoasAPI.criarJuridica({ razao_social: form.razao_social.trim(), cnpj: form.cnpj || null });
+        const { data } = await pessoasAPI.criarJuridica({ razao_social: form.razao_social.trim(), cnpj: form.cnpj || null, telefones, emails });
         if (data.ok) {
           toast.success('Pessoa jurídica cadastrada!');
           onSalvo({ id: data.dados.id, razao_social: form.razao_social.trim() });
@@ -60,7 +90,7 @@ function ModalCadastroRapidoParte({ tipo, onFechar, onSalvo }) {
   }
 
   return (
-    <div className="modal-overlay" style={{ zIndex: 1100 }}>
+    <div className="modal-overlay" style={{ zIndex: 1100 }} ref={overlayRef}>
       <div className="modal-box" style={{ maxWidth: '460px' }}>
         <div className="modal-header">
           <h3>{ehFisica ? 'Cadastrar Pessoa Física' : 'Cadastrar Pessoa Jurídica'}</h3>
@@ -70,6 +100,18 @@ function ModalCadastroRapidoParte({ tipo, onFechar, onSalvo }) {
           <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '14px' }}>
             Cadastro rápido — os demais dados podem ser completados depois em <strong>Pessoas</strong>.
           </p>
+
+          {/* Faixa de aviso do próprio sistema (no lugar da notificação do canto) */}
+          {avisoDup && (
+            <div style={{ background:'#fef2f2', border:'1px solid #fecaca', color:'#b91c1c',
+              borderRadius:'6px', padding:'8px 10px', marginBottom:'12px', fontSize:'13px',
+              display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'8px' }}>
+              <span>⚠️ {avisoDup}</span>
+              <button type="button" onClick={() => setAvisoDup('')}
+                style={{ background:'none', border:'none', color:'#b91c1c', cursor:'pointer', fontSize:'15px', lineHeight:1 }}
+                title="Fechar">✕</button>
+            </div>
+          )}
 
           {ehFisica ? (
             <>
@@ -100,6 +142,36 @@ function ModalCadastroRapidoParte({ tipo, onFechar, onSalvo }) {
               </div>
             </>
           )}
+
+          {/* Telefones */}
+          <h4 style={{margin:'16px 0 8px',color:'#555',fontSize:'13px',fontWeight:600}}>Telefones</h4>
+          {telefones.map((tel, i) => (
+            <LinhaFone
+              key={i}
+              tel={tel}
+              index={i}
+              onChange={v => { setAvisoDup(''); setTelefones(t => t.map((x,j) => j===i ? v : x)); }}
+              onRemove={() => { setAvisoDup(''); setTelefones(t => t.filter((_,j) => j!==i)); }}
+            />
+          ))}
+          <button className="btn btn-outline" style={{fontSize:'12px'}} onClick={() => setTelefones(t=>[...t,{numero:'',tipo:'',principal:false}])}>
+            + Adicionar telefone
+          </button>
+
+          {/* E-mails */}
+          <h4 style={{margin:'16px 0 8px',color:'#555',fontSize:'13px',fontWeight:600}}>E-mails</h4>
+          {emails.map((em, i) => (
+            <LinhaEmail
+              key={i}
+              email={em.email}
+              index={i}
+              onChange={v => { setAvisoDup(''); setEmails(t => t.map((x,j) => j===i ? {...x, email: v} : x)); }}
+              onRemove={() => { setAvisoDup(''); setEmails(t => t.filter((_,j) => j!==i)); }}
+            />
+          ))}
+          <button className="btn btn-outline" style={{fontSize:'12px'}} onClick={() => setEmails(e=>[...e,{email:'',principal:false}])}>
+            + Adicionar e-mail
+          </button>
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onFechar} disabled={salvando}>Cancelar</button>
@@ -121,15 +193,38 @@ export default function Processos() {
   const [pagina, setPagina]         = useState(1);
   const [carregando, setCarregando] = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
+  const [etqDefs, setEtqDefs]       = useState([]); // etiquetas pessoais do usuário no módulo "pastas"
+  const [filtroEtiqueta, setFiltroEtiqueta] = useState(null); // slot ativo no filtro pessoal (ou null)
+  const [filtroEsc, setFiltroEsc]           = useState(null); // slot ativo no filtro do escritório (ou null)
+
+  const [catEscritorio, setCatEscritorio] = useState([]); // catálogo do escritório (para a pasta derivada)
+
+  // Carrega as definições de etiqueta pessoal do usuário e o catálogo do escritório (uma vez).
+  useEffect(() => {
+    etiquetasAPI.definicoes('pastas').then(r => { if (r.data?.ok) setEtqDefs(r.data.dados || []); }).catch(() => {});
+    etiquetasAPI.catalogo('processos').then(r => { if (r.data?.ok) setCatEscritorio(r.data.dados || []); }).catch(() => {});
+  }, []);
+
+  // Marca/desmarca a etiqueta pessoal de uma pasta e reflete na lista sem recarregar.
+  async function marcarEtiquetaPasta(pastaId, slot) {
+    try {
+      await etiquetasAPI.marcar({ modulo: 'pastas', registro_id: pastaId, slot });
+      setLista(ls => ls.map(x => (x.id === pastaId ? { ...x, etiqueta_pessoal: slot } : x)));
+    } catch { toast.error('Não foi possível salvar a etiqueta'); }
+  }
 
   const carregar = useCallback(async () => {
     setCarregando(true);
     try {
-      const { data } = await processosAPI.listarPastas({ busca, pagina, limite: 20 });
+      const { data } = await processosAPI.listarPastas({ busca, pagina, limite: 20, etiqueta: filtroEtiqueta || undefined, etiquetaEscritorio: filtroEsc || undefined });
       if (data.ok) { setLista(data.dados.registros); setTotal(data.dados.total); }
     } catch { toast.error('Erro ao carregar processos'); }
     finally { setCarregando(false); }
-  }, [busca, pagina]);
+  }, [busca, pagina, filtroEtiqueta, filtroEsc]);
+
+  // Liga/desliga os filtros por etiqueta e volta para a primeira página.
+  function aplicarFiltroEtiqueta(slot) { setFiltroEtiqueta(slot); setPagina(1); }
+  function aplicarFiltroEsc(slot)      { setFiltroEsc(slot); setPagina(1); }
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -177,6 +272,10 @@ export default function Processos() {
         {carregando ? (
           <div className="loading">Carregando...</div>
         ) : (
+          <>
+          <LegendaEtiquetasPessoais definicoes={etqDefs} filtroAtivo={filtroEtiqueta} onFiltrar={aplicarFiltroEtiqueta} />
+          <LegendaEtiquetasPessoais definicoes={catEscritorio} titulo="Etiquetas do escritório"
+            filtroAtivo={filtroEsc} onFiltrar={aplicarFiltroEsc} />
           <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
             <table className="tabela tabela-sticky">
               <thead>
@@ -186,6 +285,8 @@ export default function Processos() {
                   <th>Tipo</th>
                   <th>Status</th>
                   <th style={{ textAlign: 'center' }}>Processos</th>
+                  <th style={{ textAlign: 'center' }}>Etiq. Pessoal</th>
+                  <th style={{ textAlign: 'center' }}>Etiq. Escrit.</th>
                   <th>Ações</th>
                 </tr>
               </thead>
@@ -224,10 +325,18 @@ export default function Processos() {
                     <td style={{ textAlign: 'center' }}>
                       <span style={{ fontWeight: '600' }}>{p.total_processos}</span>
                     </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <EtiquetaCelula slot={p.etiqueta_pessoal} definicoes={etqDefs} />
+                    </td>
+                    <td style={{ textAlign: 'center' }} title="Derivada: todos os processos da pasta com a mesma etiqueta do escritório">
+                      <EtiquetaCelula slot={p.etiqueta_escritorio} definicoes={catEscritorio} />
+                    </td>
                     <td>
                       <MenuAcoes itens={[
                         { label: 'Abrir pasta', icone: '📂',
                           onClick: () => navigate(`/processos/pasta/${p.id}`) },
+                        ...itensMenuEtiqueta({ definicoes: etqDefs, slotAtual: p.etiqueta_pessoal,
+                          onMarcar: (slot) => marcarEtiquetaPasta(p.id, slot) }),
                       ]} />
                     </td>
                   </tr>
@@ -239,6 +348,7 @@ export default function Processos() {
               <p className="lista-vazia">Nenhuma pasta encontrada</p>
             )}
           </div>
+          </>
         )}
 
         {/* Paginação */}
@@ -283,6 +393,7 @@ export default function Processos() {
 // ============================================================
 export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
   const { temPermissao } = useAuth();
+  const overlayRef = useEscFechar(() => onFechar(false)); // ESC fecha este modal (só quando é o de cima)
   // Modal auxiliar: null = fechado, string = tipo aberto ('tipos','status','instancias','foruns','varas')
   const [modalAux, setModalAux] = useState(null);
   // Cadastro rápido de parte: null = fechado; 'autor' | 'reu' | 'perito' = campo que abriu
@@ -574,7 +685,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
   const partesEditaveis = novasPartes || !processoBase;
 
   return (
-    <div className="modal-overlay">
+    <div className="modal-overlay" ref={overlayRef}>
       <div className="modal-box" style={{ maxWidth: '700px' }}>
         <div className="modal-header">
           <h3>{pastaId ? 'Novo Processo (mesma pasta)' : 'Novo Processo'}</h3>
@@ -993,6 +1104,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
 // ============================================================
 export function ModalEditarProcesso({ processo, onFechar }) {
   const { temPermissao } = useAuth();
+  const overlayRef = useEscFechar(() => onFechar(false)); // ESC fecha este modal (só quando é o de cima)
   const [modalAux, setModalAux] = useState(null);
   // Cadastro rápido de parte: null = fechado; 'autor' | 'reu' | 'perito' = campo que abriu
   const [cadastroRapido, setCadastroRapido] = useState(null);
@@ -1146,7 +1258,7 @@ export function ModalEditarProcesso({ processo, onFechar }) {
   }
 
   return (
-    <div className="modal-overlay">
+    <div className="modal-overlay" ref={overlayRef}>
       <div className="modal-box" style={{ maxWidth: '700px' }}>
         <div className="modal-header">
           <h3>Editar Processo</h3>
@@ -1515,6 +1627,7 @@ const AUX_CONFIG = {
 
 export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtualizado }) {
   const { temPermissao } = useAuth();
+  const overlayRef = useEscFechar(onFechar); // ESC fecha esta janelinha (só quando é a de cima)
   const cfg = AUX_CONFIG[tipo];
 
   const podeCadastrar = temPermissao('processos', 'cadastrar');
@@ -1586,7 +1699,7 @@ export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtuali
   }
 
   return (
-    <div className="modal-overlay" style={{ zIndex: 1100 }}>
+    <div className="modal-overlay" style={{ zIndex: 1100 }} ref={overlayRef}>
       <div className="modal-box" style={{ maxWidth: '560px' }}>
         <div className="modal-header">
           <h3>{cfg.titulo}</h3>

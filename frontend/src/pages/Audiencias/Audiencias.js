@@ -12,6 +12,7 @@ import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import ModalGerarLote from '../../components/GerarLote';
 import MenuAcoes from '../../components/MenuAcoes';
 import { ModalAcordo } from '../Financeiro/Financeiro';
+import { EtiquetaCelula, LegendaEtiquetasPessoais, itensMenuEtiqueta, useEtiquetasPessoais } from '../../components/Etiquetas';
 
 const STATUS_COR = {
   agendada:  'badge-azul',
@@ -65,6 +66,7 @@ export default function Audiencias() {
   const navigate = useNavigate();
   const location = useLocation();
   const [lista, setLista]          = useState([]);
+  const { defs: etqDefs, marcar: marcarEtq } = useEtiquetasPessoais('audiencias', lista, setLista);
   const [total, setTotal]          = useState(0);
 
   // Inicializa filtros a partir de query params da URL (ex: vindo do dashboard)
@@ -146,9 +148,12 @@ export default function Audiencias() {
     return temPermissao('audiencias', 'alterar');
   }
 
-  // Excluir: cancelada e remarcada nunca; realizadas/acordo só admin
+  // Excluir: cancelada/remarcada só ADMIN e só quando NÃO tem amarração (ata/testemunha);
+  // realizadas/acordo só admin; demais exigem a permissão de excluir.
   function podeExcluir(a) {
-    if (['cancelada','remarcada'].includes(a.status)) return false;
+    if (['cancelada','remarcada'].includes(a.status)) {
+      return ehAdmin && !a.tem_ata && !a.tem_testemunha;
+    }
     if (['realizada','acordo'].includes(a.status) && !ehAdmin) return false;
     return temPermissao('audiencias', 'excluir');
   }
@@ -200,6 +205,8 @@ export default function Audiencias() {
       </div>
 
       <div className="card">
+        <LegendaEtiquetasPessoais definicoes={etqDefs} filtroAtivo={filtros.etiqueta}
+          onFiltrar={(slot) => setFiltro('etiqueta', slot)} />
         {carregando ? <div className="loading">Carregando...</div> : (
           <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
             <table className="tabela tabela-sticky">
@@ -214,7 +221,7 @@ export default function Audiencias() {
                     </th>
                   )}
                   <th>Processo</th><th>Pasta</th><th>Título do Processo</th><th>Tipo</th>
-                  <th>Data / Hora</th><th>Modalidade</th><th>Responsável</th><th>Status</th><th>Ações</th>
+                  <th>Data / Hora</th><th>Modalidade</th><th>Responsável</th><th>Status</th><th style={{ textAlign: 'center' }}>Etiq. Pessoal</th><th>Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -272,14 +279,19 @@ export default function Audiencias() {
                           </span>
                         )}
                       </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <EtiquetaCelula slot={a.etiqueta_pessoal} definicoes={etqDefs} />
+                      </td>
                       <td>
                           <MenuAcoes itens={[
-                            // Registrar ata — só agendadas/adiadas
-                            { label: 'Registrar ata', icone: '📝', oculto: !(a.status === 'agendada' || a.status === 'adiada'), onClick: () => setModalAta(a) },
+                            ...itensMenuEtiqueta({ definicoes: etqDefs, slotAtual: a.etiqueta_pessoal,
+                              onMarcar: (slot) => marcarEtq(a.id, slot) }),
+                            // Registrar ata — só agendadas/adiadas e só para quem tem a permissão de Ata (admin sempre)
+                            { label: 'Registrar ata', icone: '📝', oculto: !((a.status === 'agendada' || a.status === 'adiada') && temPermissao('audiencias.ata','visualizar')), onClick: () => setModalAta(a) },
                             { label: 'Gerar documento', icone: '📄', oculto: !temPermissao('documentos','cadastrar') || ['remarcada','cancelada'].includes(a.status), gerarDoc: { ancoraTipo: 'audiencia', ancoraId: a.id } },
                             { label: 'Cancelar', icone: '✖', oculto: !((a.status === 'agendada' || a.status === 'adiada') && temPermissao('audiencias','alterar')), onClick: () => setModalCancelar(a) },
                             { label: 'Remarcar', icone: '🔁', oculto: !((a.status === 'agendada' || a.status === 'adiada') && temPermissao('audiencias','alterar')), onClick: () => setModalRemarcar(a) },
-                            { label: 'Marcar impressa', icone: '🖨️', oculto: !(['realizada','adiada','acordo','cancelada'].includes(a.status) && !a.ata_impressa), onClick: () => marcarAtaImpressa(a.id) },
+                            { label: 'Marcar impressa', icone: '🖨️', oculto: !(['realizada','adiada','acordo','cancelada'].includes(a.status) && !a.ata_impressa && temPermissao('audiencias.ata','visualizar')), onClick: () => marcarAtaImpressa(a.id) },
                             { label: 'Reverter status', icone: '↩️', oculto: !(a.status === 'realizada' && ehAdmin), onClick: () => setModalReverter(a) },
                             { label: 'Editar', icone: '✏️', oculto: !podeEditar(a), onClick: () => { setModalEditar(a); setModalEditarLeitura(false); } },
                             { label: 'Histórico', icone: '📋', onClick: () => setModalHistorico(a) },

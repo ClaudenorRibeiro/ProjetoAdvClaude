@@ -5,9 +5,10 @@
 // Cada seção tem "Restaurar padrão"; vazio = padrão do sistema.
 // ============================================================
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { authAPI } from '../services/api';
+import { authAPI, etiquetasAPI } from '../services/api';
+import { EditorEtiquetasCinco, cincoLinhasEtiqueta, MODULOS_ETIQUETA_PESSOAL } from './Etiquetas';
 import { CORES_AGENDA_PADRAO, CORES_AGENDA_LABELS, coresEfetivas, corTextoPara } from '../utils/coresAgenda';
 import { CORES_MENU_PADRAO, CORES_MENU_LABELS, coresMenuEfetivas, hexParaRgba } from '../utils/coresMenu';
 import { COR_LINHA_PADRAO, COR_LINHA_LIDA_PADRAO } from '../utils/coresLinha';
@@ -22,6 +23,24 @@ export default function ModalAparencia({ onFechar }) {
   const [salvando, setSalvando]   = useState(false);
   const [aviso, setAviso]         = useState('');
   const overlayRef = useEscFechar(onFechar);
+
+  // Minhas etiquetas (piloto: módulo "pastas" / Processos). 5 slots; significado vazio = slot não usado.
+  const [etqModulo, setEtqModulo] = useState('pastas');   // módulo selecionado no seletor
+  const [etqMap, setEtqMap]       = useState({});          // { modulo: [5 linhas] } — carregado sob demanda
+  // Carrega as 5 cores do módulo selecionado (uma vez por módulo). etqMap fora das deps de propósito
+  // (senão recarregaria a cada edição); o guard evita recarregar e apagar o que já foi editado.
+  useEffect(() => {
+    if (etqMap[etqModulo]) return;
+    etiquetasAPI.definicoes(etqModulo)
+      .then(r => setEtqMap(m => ({ ...m, [etqModulo]: cincoLinhasEtiqueta(r.data?.dados) })))
+      .catch(() => setEtqMap(m => ({ ...m, [etqModulo]: cincoLinhasEtiqueta() })));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [etqModulo]);
+  const etqRows = etqMap[etqModulo] || cincoLinhasEtiqueta();
+  const setEtq = (i, campo, valor) => setEtqMap(m => ({
+    ...m,
+    [etqModulo]: (m[etqModulo] || cincoLinhasEtiqueta()).map((r, j) => (j === i ? { ...r, [campo]: valor } : r)),
+  }));
 
   // Cada seção está no padrão? (para desabilitar "Restaurar" e gravar null = padrão)
   const agendaEhPadrao = JSON.stringify(cores)     === JSON.stringify(CORES_AGENDA_PADRAO);
@@ -43,7 +62,11 @@ export default function ModalAparencia({ onFechar }) {
       const respMenu   = await authAPI.salvarCoresMenu(menuEhPadrao ? null : coresMenu);
       const respLinha  = await authAPI.salvarCorLinha(corLinha === COR_LINHA_PADRAO ? null : corLinha);
       const respLida   = await authAPI.salvarCorLinhaLida(corLinhaLida === COR_LINHA_LIDA_PADRAO ? null : corLinhaLida);
-      if (respAgenda.data.ok && respMenu.data.ok && respLinha.data.ok && respLida.data.ok) {
+      // Salva as etiquetas pessoais de CADA módulo que o usuário abriu (cada um guarda as suas).
+      const modulosEtq = Object.keys(etqMap);
+      const respsEtq   = await Promise.all(modulosEtq.map(m => etiquetasAPI.salvarDefinicoes(m, etqMap[m])));
+      const etqOk      = respsEtq.every(r => r.data.ok);
+      if (respAgenda.data.ok && respMenu.data.ok && respLinha.data.ok && respLida.data.ok && etqOk) {
         atualizarCoresAgenda(respAgenda.data.dados?.cores_agenda || null);
         atualizarCoresMenu(respMenu.data.dados?.cores_menu || null);
         atualizarCorLinha(respLinha.data.dados?.cor_linha || null);
@@ -173,6 +196,22 @@ export default function ModalAparencia({ onFechar }) {
               Publicação já lida
             </div>
           </div>
+
+          {/* ---- SEÇÃO: MINHAS ETIQUETAS (Processos / Pastas) ---- */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '22px 0 4px' }}>
+            <span style={{ fontWeight: 600, color: '#374151' }}>Minhas etiquetas</span>
+          </div>
+          <p style={{ color: '#6b7280', fontSize: 12, margin: '0 0 10px' }}>
+            Até 5 cores só suas (ninguém mais vê), <strong>separadas por módulo</strong>. Dê um significado a cada cor
+            para poder usá-la. Cor sem significado fica desativada.
+          </p>
+          <div className="form-group" style={{ marginBottom: 10 }}>
+            <label className="form-label">Módulo</label>
+            <select className="form-control" value={etqModulo} onChange={e => setEtqModulo(e.target.value)}>
+              {MODULOS_ETIQUETA_PESSOAL.map(m => <option key={m.chave} value={m.chave}>{m.label}</option>)}
+            </select>
+          </div>
+          <EditorEtiquetasCinco rows={etqRows} onChange={setEtq} />
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onFechar} disabled={salvando}>Cancelar</button>

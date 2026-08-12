@@ -15,6 +15,7 @@ import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import MenuAcoes from '../../components/MenuAcoes';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
+import { EtiquetaCelula, LegendaEtiquetasPessoais, itensMenuEtiqueta, useEtiquetasPessoais } from '../../components/Etiquetas';
 // Reuso dos modais de criação já existentes (sem duplicar código): a partir de uma
 // publicação o usuário cria Prazo, Tarefa ou Compromisso, já com o vínculo de origem.
 import { ModalNovoPrazo } from '../Prazos/Prazos';
@@ -349,6 +350,7 @@ function PublicacoesAASP() {
   const [importando, setImportando]   = useState(false);
 
   const [lista, setLista]       = useState([]);
+  const { defs: etqDefs, marcar: marcarEtq } = useEtiquetasPessoais('publicacoes', lista, setLista);
   const [total, setTotal]       = useState(0);
   // filtros: janela de datas (dataInicio/dataFim, máx. 3 meses) OU todasDatas=true (mostra tudo);
   // escopo 'todas'|'minhas'; tratada; busca; paginação; e ordenação (ordenar/direcao).
@@ -402,6 +404,7 @@ function PublicacoesAASP() {
         busca: filtros.busca, escopo: filtros.escopo, tratada: filtros.tratada,
         pagina: filtros.pagina, limite: POR_PAGINA,
         ordenar: filtros.ordenar || '', direcao: filtros.direcao || '',
+        etiqueta: filtros.etiqueta || undefined,
       };
       if (!filtros.todasDatas) { params.dataInicio = filtros.dataInicio; params.dataFim = filtros.dataFim; }
       const { data } = await publicacoesAPI.listar(params);
@@ -623,6 +626,7 @@ function PublicacoesAASP() {
             border: '1px solid #f0c0c0', borderRadius: '2px', verticalAlign: 'middle', marginRight: '6px' }} />
           Número do processo em vermelho-claro = o mesmo processo aparece mais de uma vez no mesmo dia. Exclua manualmente as que não quiser.
         </p>
+        <LegendaEtiquetasPessoais definicoes={etqDefs} filtroAtivo={filtros.etiqueta} onFiltrar={(slot) => setFiltro('etiqueta', slot)} />
         {carregando ? <div className="loading">Carregando...</div> : (
           <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
             <table className="tabela tabela-sticky">
@@ -639,6 +643,7 @@ function PublicacoesAASP() {
                   {thOrder('publicacao', 'Nº Publ.')}
                   {thOrder('conteudo', 'Conteúdo')}
                   {thOrder('status', 'Status')}
+                  <th style={{ textAlign: 'center' }}>Etiq. Pessoal</th>
                   <th>Ações</th>
                 </tr>
               </thead>
@@ -680,8 +685,13 @@ function PublicacoesAASP() {
                             title={p.motivo_sem_acao ? `Sem ação — motivo: ${p.motivo_sem_acao}` : undefined}>Tratada</span>
                         : <span className="badge badge-laranja">Pendente</span>}
                     </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <EtiquetaCelula slot={p.etiqueta_pessoal} definicoes={etqDefs} />
+                    </td>
                     <td>
                       <MenuAcoes itens={[
+                        ...itensMenuEtiqueta({ definicoes: etqDefs, slotAtual: p.etiqueta_pessoal,
+                          onMarcar: (slot) => marcarEtq(p.id, slot) }),
                         { label: 'Criar prazo', icone: '📌',
                           oculto: !podeAlterar,
                           onClick: () => setAcaoAberta({ tipo: 'prazo', pub: p }) },
@@ -843,6 +853,7 @@ function PublicacoesCNJ() {
   const [importando, setImportando]   = useState(false);
 
   const [lista, setLista]       = useState([]);
+  const { defs: etqDefs, marcar: marcarEtq } = useEtiquetasPessoais('publicacoes', lista, setLista);
   const [total, setTotal]       = useState(0);
   const [filtros, setFiltros]   = useState({
     dataInicio: '', dataFim: '', todasDatas: true,
@@ -900,6 +911,7 @@ function PublicacoesCNJ() {
         pagina: filtros.pagina, limite: POR_PAGINA,
         ordenar: filtros.ordenar || '', direcao: filtros.direcao || '',
         fonte: 'cnj', // lista SÓ as publicações desta fonte
+        etiqueta: filtros.etiqueta || undefined,
       };
       if (!filtros.todasDatas) { params.dataInicio = filtros.dataInicio; params.dataFim = filtros.dataFim; }
       const { data } = await publicacoesAPI.listar(params);
@@ -1123,6 +1135,7 @@ function PublicacoesCNJ() {
             border: '1px solid #f0c0c0', borderRadius: '2px', verticalAlign: 'middle', marginRight: '6px' }} />
           Número do processo em vermelho-claro = o mesmo processo aparece mais de uma vez no mesmo dia. Exclua manualmente as que não quiser.
         </p>
+        <LegendaEtiquetasPessoais definicoes={etqDefs} filtroAtivo={filtros.etiqueta} onFiltrar={(slot) => setFiltro('etiqueta', slot)} />
         {carregando ? <div className="loading">Carregando...</div> : (
           <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
             <table className="tabela tabela-sticky">
@@ -1140,6 +1153,7 @@ function PublicacoesCNJ() {
                   {thOrder('processo', 'Processo')}
                   {thOrder('conteudo', 'Conteúdo')}
                   {thOrder('status', 'Status')}
+                  <th style={{ textAlign: 'center' }}>Etiq. Pessoal</th>
                   <th>Ações</th>
                 </tr>
               </thead>
@@ -1180,8 +1194,13 @@ function PublicacoesCNJ() {
                             title={p.motivo_sem_acao ? `Sem ação — motivo: ${p.motivo_sem_acao}` : undefined}>Tratada</span>
                         : <span className="badge badge-laranja">Pendente</span>}
                     </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <EtiquetaCelula slot={p.etiqueta_pessoal} definicoes={etqDefs} />
+                    </td>
                     <td>
                       <MenuAcoes itens={[
+                        ...itensMenuEtiqueta({ definicoes: etqDefs, slotAtual: p.etiqueta_pessoal,
+                          onMarcar: (slot) => marcarEtq(p.id, slot) }),
                         { label: 'Criar prazo', icone: '📌',
                           oculto: !podeAlterar,
                           onClick: () => setAcaoAberta({ tipo: 'prazo', pub: p }) },

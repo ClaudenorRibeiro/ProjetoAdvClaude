@@ -13,6 +13,7 @@ import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import ModalGerarLote from '../../components/GerarLote';
 import MenuAcoes from '../../components/MenuAcoes';
 import { useAuth } from '../../context/AuthContext';
+import { EtiquetaCelula, LegendaEtiquetasPessoais, itensMenuEtiqueta, useEtiquetasPessoais } from '../../components/Etiquetas';
 
 // Cor/label do badge conforme o status
 function badgeStatus(status) {
@@ -27,6 +28,7 @@ function badgeStatus(status) {
 export default function Pericias() {
   const { temPermissao } = useAuth();
   const [lista, setLista]         = useState([]);
+  const { defs: etqDefs, marcar: marcarEtq } = useEtiquetasPessoais('pericias', lista, setLista);
   const [total, setTotal]         = useState(0);
   const [filtros, setFiltros]     = useState({ data_de: '', data_ate: '', pagina: 1 });
   const [tipos, setTipos]         = useState([]);
@@ -163,6 +165,8 @@ export default function Pericias() {
       </div>
 
       <div className="card">
+        <LegendaEtiquetasPessoais definicoes={etqDefs} filtroAtivo={filtros.etiqueta}
+          onFiltrar={(slot) => setFiltro('etiqueta', slot)} />
         {carregando ? <div className="loading">Carregando...</div> : (
           <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
             <table className="tabela tabela-sticky">
@@ -178,7 +182,7 @@ export default function Pericias() {
                   )}
                   <th>Processo</th><th>Pasta</th><th>Tipo</th>
                   <th>Data / Hora</th><th>Perito</th><th>Responsável</th>
-                  <th>Status</th><th>Ações</th>
+                  <th>Status</th><th style={{ textAlign: 'center' }}>Etiq. Pessoal</th><th>Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -212,8 +216,13 @@ export default function Pericias() {
                       <td>{p.perito_nome || '—'}</td>
                       <td>{p.responsavel_nome || '—'}</td>
                       <td><span className={`badge ${bg.cls}`}>{bg.txt}</span></td>
+                      <td style={{ textAlign: 'center' }}>
+                        <EtiquetaCelula slot={p.etiqueta_pessoal} definicoes={etqDefs} />
+                      </td>
                       <td>
                           <MenuAcoes itens={[
+                            ...itensMenuEtiqueta({ definicoes: etqDefs, slotAtual: p.etiqueta_pessoal,
+                              onMarcar: (slot) => marcarEtq(p.id, slot) }),
                             // Marcar realizada — só quando agendada
                             { label: 'Marcar realizada', icone: '✅', oculto: !agendada, onClick: () => pedirMarcarRealizada(p) },
                             { label: 'Gerar documento', icone: '📄', oculto: !temPermissao('documentos','cadastrar'), gerarDoc: { ancoraTipo: 'pericia', ancoraId: p.id } },

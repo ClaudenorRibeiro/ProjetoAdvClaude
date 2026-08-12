@@ -41,6 +41,7 @@ const dashboardCtrl     = require('../controllers/dashboardController');
 const periciasCtrl      = require('../controllers/periciasController');
 const agendaCompromissoCtrl = require('../controllers/agendaCompromissoController');
 const notificacoesCtrl  = require('../controllers/notificacoesController');
+const etiquetasCtrl     = require('../controllers/etiquetasController');
 const manutencaoCtrl    = require('../controllers/manutencaoController');
 
 // ---- PÚBLICO (sem autenticação) ----
@@ -201,8 +202,8 @@ router.put('/audiencias/:id',                autenticar, verificarPermissao('aud
 router.delete('/audiencias/:id',             autenticar, verificarPermissao('audiencias','excluir'),    audienciasCtrl.excluir);
 router.put('/audiencias/:id/cancelar',       autenticar, verificarPermissao('audiencias','alterar'),    audienciasCtrl.cancelar);
 router.put('/audiencias/:id/remarcar',       autenticar, verificarPermissao('audiencias','alterar'),    audienciasCtrl.remarcar);
-router.post('/audiencias/:id/ata',              autenticar, verificarPermissao('audiencias','alterar'),    audienciasCtrl.registrarAta);
-router.put('/audiencias/:id/ata-impressa',      autenticar, audienciasCtrl.marcarAtaImpressa);
+router.post('/audiencias/:id/ata',              autenticar, verificarPermissao('audiencias','ata','visualizar'), audienciasCtrl.registrarAta);
+router.put('/audiencias/:id/ata-impressa',      autenticar, verificarPermissao('audiencias','ata','visualizar'), audienciasCtrl.marcarAtaImpressa);
 // Reverter status (Realizada -> Agendada): SOMENTE admin. Apaga a ata; exige motivo.
 router.put('/audiencias/:id/reverter',          autenticar, apenasAdmin, audienciasCtrl.reverterStatus);
 // Testemunhas — CRUD individual
@@ -342,6 +343,16 @@ router.put('/configuracoes/permissoes/:usuarioId', autenticar, apenasAdmin, conf
 router.get('/configuracoes/integracoes',          autenticar, apenasAdmin, configuracaoCtrl.buscarIntegracoes);
 router.put('/configuracoes/integracoes/:modulo',  autenticar, apenasAdmin, configuracaoCtrl.salvarIntegracao);
 router.get('/configuracoes/servidor-hora',        autenticar, apenasAdmin, configuracaoCtrl.horaServidor);
+
+// ---- ETIQUETAS PESSOAIS (por usuário — cada um só mexe nas suas) ----
+router.get('/etiquetas/definicoes/:modulo', autenticar, etiquetasCtrl.listarDefinicoes);
+router.put('/etiquetas/definicoes/:modulo', autenticar, etiquetasCtrl.salvarDefinicoes);
+router.put('/etiquetas/marcar',             autenticar, etiquetasCtrl.marcar);
+
+// ---- ETIQUETAS DO ESCRITÓRIO (catálogo só admin; aplicar exige permissão) ----
+router.get('/etiquetas/escritorio/catalogo/:modulo', autenticar, etiquetasCtrl.listarCatalogo);
+router.put('/etiquetas/escritorio/catalogo/:modulo', autenticar, apenasAdmin, etiquetasCtrl.salvarCatalogo);
+router.put('/etiquetas/escritorio/marcar',           autenticar, etiquetasCtrl.marcarEscritorio);
 
 // ---- MANUTENÇÃO (somente SUPERUSUÁRIO, nivel 0) ----
 router.post('/manutencao/limpar-dados-teste',     autenticar, apenasSuper, manutencaoCtrl.limparDadosTeste);

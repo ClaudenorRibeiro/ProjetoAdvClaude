@@ -54,6 +54,13 @@ async function listar(req, res) {
       where += ' AND a.status = \'agendada\' AND a.data < CURDATE() AND a.ata_impressa = 0 AND NOT EXISTS (SELECT 1 FROM ata_audiencia aa WHERE aa.audiencia_id = a.id)';
     }
 
+    // Filtro por etiqueta PESSOAL do usuário logado.
+    const etqSlot = parseInt(req.query.etiqueta);
+    if (etqSlot >= 1 && etqSlot <= 5) {
+      where += ' AND EXISTS (SELECT 1 FROM audiencias_etiquetas pe WHERE pe.audiencia_id = a.id AND pe.usuario_id = ? AND pe.slot = ?)';
+      params.push(req.usuario.id, etqSlot);
+    }
+
     const limitInt  = parseInt(limite) || 30;
     const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
 
@@ -67,12 +74,15 @@ async function listar(req, res) {
               pa.id AS pasta_id,
               LPAD(pa.numPasta, 4, '0') AS pasta_numero_fmt,
               CASE WHEN aa.id IS NOT NULL THEN 1 ELSE 0 END AS tem_ata,
+              EXISTS (SELECT 1 FROM audiencia_testemunhas att WHERE att.audiencia_id = a.id) AS tem_testemunha,
               DATEDIFF(a.data, CURDATE()) AS dias_para_audiencia,
               -- Responsável: usuário do sistema ou advogado freelancer
               COALESCE(ur.nome, CONCAT(rf.nome, ' (freelancer)')) AS responsavel_nome,
               -- Vara e fórum do local da audiência
               vr.nome AS vara_nome, vr.abrev_nome AS vara_abrev_nome,
-              fr.nome AS vara_forum_nome
+              fr.nome AS vara_forum_nome,
+              (SELECT pe.slot FROM audiencias_etiquetas pe
+                WHERE pe.audiencia_id = a.id AND pe.usuario_id = ?) AS etiqueta_pessoal
        FROM audiencia a
        LEFT JOIN tipo_audiencia ta    ON a.tipo_audiencia_id    = ta.id
        LEFT JOIN ata_audiencia aa     ON aa.audiencia_id         = a.id
@@ -85,7 +95,7 @@ async function listar(req, res) {
        ${where}
        ORDER BY (a.status = 'agendada') DESC, a.data ASC, a.hora ASC
        LIMIT ${limitInt} OFFSET ${offsetInt}`,
-      params
+      [req.usuario.id, ...params]
     );
 
     const [total] = await pool.execute(
@@ -864,20 +874,31 @@ async function excluir(req, res) {
 
     const aud = rows[0];
 
-    // Cancelada e remarcada: registro histórico — ninguém exclui
-    if (aud.status === 'cancelada') return erro(res, 'Audiência cancelada não pode ser excluída — ela faz parte do histórico');
-    if (aud.status === 'remarcada') return erro(res, 'Audiência remarcada não pode ser excluída — ela faz parte do histórico');
-
-    // Verifica se existe ata registrada
+    // Amarrações que importam: ata registrada e testemunhas vinculadas.
+    // (A auditoria_audiencia é o histórico da PRÓPRIA audiência — sai junto, não conta como amarração.)
     const [ataRows] = await pool.execute(
-      'SELECT id FROM ata_audiencia WHERE audiencia_id = ? LIMIT 1',
-      [id]
+      'SELECT id FROM ata_audiencia WHERE audiencia_id = ? LIMIT 1', [id]
     );
     const temAta = ataRows.length > 0;
+    const [testRows] = await pool.execute(
+      'SELECT id FROM audiencia_testemunhas WHERE audiencia_id = ? LIMIT 1', [id]
+    );
+    const temTestemunha = testRows.length > 0;
 
-    // Audiência com ata: somente admin (nivel <= 1) ou superusuário (nivel === 0)
-    if (temAta && req.usuario.nivel > 1) {
-      return erro(res, 'Audiência com ata registrada só pode ser excluída por um administrador');
+    // Cancelada e remarcada fazem parte do histórico. Agora o ADMIN pode excluí-las,
+    // PORÉM só quando NÃO houver nenhuma amarração (nem ata, nem testemunha).
+    if (aud.status === 'cancelada' || aud.status === 'remarcada') {
+      if (req.usuario.nivel > 1) {
+        return erro(res, 'Audiência cancelada ou remarcada só pode ser excluída por um administrador');
+      }
+      if (temAta || temTestemunha) {
+        return erro(res, 'Esta audiência tem ata ou testemunha vinculada e não pode ser excluída (ela faz parte do histórico).');
+      }
+    } else {
+      // Demais status (regra de hoje): audiência com ata só pode ser excluída por admin.
+      if (temAta && req.usuario.nivel > 1) {
+        return erro(res, 'Audiência com ata registrada só pode ser excluída por um administrador');
+      }
     }
 
     await conn.beginTransaction();

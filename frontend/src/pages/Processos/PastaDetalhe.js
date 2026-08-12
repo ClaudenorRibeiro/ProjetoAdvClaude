@@ -6,7 +6,8 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { processosAPI, andamentoAPI, prazosAPI, tarefasAPI, audienciasAPI, periciasAPI, financeiroAPI, pessoasAPI } from '../../services/api';
+import { processosAPI, andamentoAPI, prazosAPI, tarefasAPI, audienciasAPI, periciasAPI, financeiroAPI, pessoasAPI, etiquetasAPI } from '../../services/api';
+import { EtiquetaCelula, LegendaEtiquetasPessoais, itensMenuEtiqueta } from '../../components/Etiquetas';
 import { formatarData, formatarNumeroPasta, formatarMoeda, labelStatusPrazo, corPrazo, toTitleCase, hojeLocal } from '../../utils/formatters';
 // Janelas de contato/ficha reutilizadas da tela de Pessoas (painel "Partes do processo")
 import { ModalPessoa, ModalEnviarEmail, ModalEnviarSMS, ModalEscolherWhatsapp, ModalCopiarTelefone, ModalCopiarEmail, ModalAnotacoes, soNumeroLocal, copiarParaAreaTransferencia } from '../Pessoas/Pessoas';
@@ -52,6 +53,19 @@ export default function PastaDetalhe() {
   const [pasta, setPasta]           = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [abaAtiva, setAbaAtiva]     = useState(abaInicial);
+
+  // Etiqueta DO ESCRITÓRIO nos processos (catálogo compartilhado + quem pode aplicar)
+  const [catEscritorio, setCatEscritorio] = useState([]);
+  const podeEtiquetarEscritorio = temPermissao('processos.etiqueta_escritorio', 'alterar');
+  useEffect(() => {
+    etiquetasAPI.catalogo('processos').then(r => { if (r.data?.ok) setCatEscritorio(r.data.dados || []); }).catch(() => {});
+  }, []);
+  async function marcarEscritorioProc(procId, slot) {
+    try {
+      await etiquetasAPI.marcarEscritorio({ modulo: 'processos', registro_id: procId, slot });
+      setPasta(p => (p ? { ...p, processos: (p.processos || []).map(pr => (pr.id === procId ? { ...pr, etiqueta_escritorio: slot } : pr)) } : p));
+    } catch { toast.error('Não foi possível salvar a etiqueta do escritório'); }
+  }
 
   // Filtro de processo compartilhado pelas abas — 'todos' ou id (string) do processo
   // Inicializado com o parâmetro ?processo= da URL quando vindo do Dashboard
@@ -369,9 +383,12 @@ export default function PastaDetalhe() {
     return temPermissao('audiencias', 'alterar');
   }
 
-  // Excluir: cancelada e remarcada nunca; com ata só admin
+  // Excluir: cancelada/remarcada só ADMIN e só quando NÃO tem amarração (ata/testemunha);
+  // com ata só admin; demais exigem a permissão de excluir.
   function podeExcluirAud(a) {
-    if (['cancelada','remarcada'].includes(a.status)) return false;
+    if (['cancelada','remarcada'].includes(a.status)) {
+      return ehAdmin && !a.tem_ata && !a.tem_testemunha;
+    }
     if (['realizada','acordo'].includes(a.status) && !ehAdmin) return false;
     return temPermissao('audiencias', 'excluir');
   }
@@ -677,6 +694,7 @@ export default function PastaDetalhe() {
                 + Novo Processo (mesma pasta)
               </button>
             </div>
+            <LegendaEtiquetasPessoais definicoes={catEscritorio} titulo="Etiquetas do escritório" />
             <div className="tabela-wrapper">
               <table className="tabela">
                 <thead>
@@ -687,6 +705,7 @@ export default function PastaDetalhe() {
                     <th>Status</th>
                     <th>Instância</th>
                     <th>Vara / Fórum</th>
+                    <th style={{ textAlign: 'center' }}>Etiq. Escrit.</th>
                     <th>Ações</th>
                   </tr>
                 </thead>
@@ -712,6 +731,9 @@ export default function PastaDetalhe() {
                         <div style={{ fontSize: '13px' }}>{pr.vara_abrev_nome || pr.vara_nome || '—'}</div>
                         {pr.forum_nome && <div style={{ fontSize: '11px', color: '#888' }}>{pr.forum_abrev_nome || pr.forum_nome}</div>}
                       </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <EtiquetaCelula slot={pr.etiqueta_escritorio} definicoes={catEscritorio} />
+                      </td>
                       <td>
                         <MenuAcoes itens={[
                           { label: 'Editar', icone: '✏️',
@@ -720,6 +742,10 @@ export default function PastaDetalhe() {
                           { label: 'Excluir', icone: '🗑️', perigo: true,
                             oculto: !temPermissao('processos','excluir'),
                             onClick: () => excluirProcesso(pr.id) },
+                          ...(podeEtiquetarEscritorio
+                            ? itensMenuEtiqueta({ definicoes: catEscritorio, slotAtual: pr.etiqueta_escritorio,
+                                onMarcar: (slot) => marcarEscritorioProc(pr.id, slot) })
+                            : []),
                         ]} />
                       </td>
                     </tr>
@@ -1235,8 +1261,8 @@ export default function PastaDetalhe() {
                         </td>
                         <td style={{ whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
                             <MenuAcoes itens={[
-                              // Registrar ata — só audiências agendadas ou adiadas sem ata
-                              { label: 'Registrar ata', icone: '📝', oculto: !(['agendada','adiada'].includes(a.status) && temPermissao('audiencias','alterar')), onClick: () => setAudienciaAta(a) },
+                              // Registrar ata — só audiências agendadas ou adiadas e só para quem tem a permissão de Ata (admin sempre)
+                              { label: 'Registrar ata', icone: '📝', oculto: !(['agendada','adiada'].includes(a.status) && temPermissao('audiencias.ata','visualizar')), onClick: () => setAudienciaAta(a) },
                               { label: 'Gerar documento', icone: '📄', oculto: !temPermissao('documentos','cadastrar'), gerarDoc: { ancoraTipo: 'audiencia', ancoraId: a.id } },
                               { label: 'Cancelar', icone: '✖', oculto: !(['agendada','adiada'].includes(a.status) && temPermissao('audiencias','alterar')), onClick: () => setAudienciaCancelando(a) },
                               { label: 'Remarcar', icone: '🔁', oculto: !(['agendada','adiada'].includes(a.status) && temPermissao('audiencias','alterar')), onClick: () => setAudienciaRemarcando(a) },

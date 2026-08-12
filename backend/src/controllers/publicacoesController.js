@@ -267,7 +267,15 @@ async function listar(req, res) {
       return erro(res, 'O período de pesquisa não pode passar de 3 meses.');
     }
 
-    const { where, params } = montarFiltroPublicacoes(req.query, req.usuario);
+    let { where, params } = montarFiltroPublicacoes(req.query, req.usuario);
+
+    // Filtro por etiqueta PESSOAL do usuário logado (só as que ELE marcou com aquela cor).
+    const etqSlot = parseInt(req.query.etiqueta);
+    if (etqSlot >= 1 && etqSlot <= 5) {
+      where += ` AND EXISTS (SELECT 1 FROM publicacoes_etiquetas pe
+                             WHERE pe.publicacao_id = p.id AND pe.usuario_id = ? AND pe.slot = ?)`;
+      params.push(req.usuario.id, etqSlot);
+    }
 
     // Ordenação: coluna vem da LISTA BRANCA; direção só 'asc'/'desc'. Padrão = Data mais recente.
     const col = COLUNAS_ORDENAR[req.query.ordenar];
@@ -300,6 +308,8 @@ async function listar(req, res) {
                              = REPLACE(REPLACE(REPLACE(p.numero_processo,'.',''),'-',''),' ','')) AS duplicada,
               EXISTS (SELECT 1 FROM publicacoes_lidas pl
                        WHERE pl.publicacao_id = p.id AND pl.usuario_id = ?) AS lida,
+              (SELECT pe.slot FROM publicacoes_etiquetas pe
+                WHERE pe.publicacao_id = p.id AND pe.usuario_id = ?) AS etiqueta_pessoal,
               EXISTS (SELECT 1 FROM tblproc t
                        WHERE p.numero_processo IS NOT NULL AND p.numero_processo <> ''
                          AND REPLACE(REPLACE(REPLACE(t.numProc,'.',''),'-',''),' ','')
@@ -309,7 +319,7 @@ async function listar(req, res) {
        ${where}
        ${orderBy}
        LIMIT ${limitInt} OFFSET ${offsetInt}`,
-      [req.usuario.id, ...params]
+      [req.usuario.id, req.usuario.id, ...params]
     );
 
     const [totalRows] = await pool.execute(

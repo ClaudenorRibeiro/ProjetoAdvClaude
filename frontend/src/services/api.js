@@ -77,6 +77,20 @@ export const authAPI = {
 };
 
 // ============================================================
+// ETIQUETAS (pessoais — por usuário, por módulo)
+// ============================================================
+export const etiquetasAPI = {
+  // Pessoais (por usuário)
+  definicoes:       (modulo) => api.get(`/etiquetas/definicoes/${modulo}`),
+  salvarDefinicoes: (modulo, definicoes) => api.put(`/etiquetas/definicoes/${modulo}`, { definicoes }),
+  marcar:           (dados) => api.put('/etiquetas/marcar', dados), // { modulo, registro_id, slot }
+  // Do escritório (compartilhadas)
+  catalogo:         (modulo) => api.get(`/etiquetas/escritorio/catalogo/${modulo}`),
+  salvarCatalogo:   (modulo, definicoes) => api.put(`/etiquetas/escritorio/catalogo/${modulo}`, { definicoes }),
+  marcarEscritorio: (dados) => api.put('/etiquetas/escritorio/marcar', dados), // { modulo, registro_id, slot }
+};
+
+// ============================================================
 // DASHBOARD
 // ============================================================
 export const dashboardAPI = {

@@ -81,6 +81,13 @@ async function listar(req, res) {
     }
     // Pode ver todos e não escolheu ninguém (usuario_id vazio = "Todos"): sem filtro por usuário.
 
+    // Filtro por etiqueta PESSOAL do usuário logado.
+    const etqSlot = parseInt(req.query.etiqueta);
+    if (etqSlot >= 1 && etqSlot <= 5) {
+      where += ' AND EXISTS (SELECT 1 FROM tarefas_etiquetas pe WHERE pe.tarefa_id = t.id AND pe.usuario_id = ? AND pe.slot = ?)';
+      params.push(req.usuario.id, etqSlot);
+    }
+
     const limitInt  = parseInt(limite) || 30;
     const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
 
@@ -97,7 +104,9 @@ async function listar(req, res) {
               pr.numProc  AS processo_numero,
               pa2.id      AS pasta_do_processo_id,
               LPAD(pa2.numPasta, 4, '0') AS pasta_do_processo_fmt,
-              DATEDIFF(t.data_vencimento, CURDATE()) AS dias_restantes
+              DATEDIFF(t.data_vencimento, CURDATE()) AS dias_restantes,
+              (SELECT pe.slot FROM tarefas_etiquetas pe
+                WHERE pe.tarefa_id = t.id AND pe.usuario_id = ?) AS etiqueta_pessoal
        FROM tarefas t
        LEFT JOIN usuarios u   ON t.atribuida_para = u.id
        LEFT JOIN usuarios uc  ON t.criado_por = uc.id
@@ -109,7 +118,7 @@ async function listar(req, res) {
                 FIELD(t.prioridade, 'urgente', 'normal', 'baixa'),
                 t.data_vencimento ASC
        LIMIT ${limitInt} OFFSET ${offsetInt}`,
-      params
+      [req.usuario.id, ...params]
     );
 
     // O COUNT usa o MESMO `where`. Como o filtro de número referencia pr.numProc, fazemos o mesmo

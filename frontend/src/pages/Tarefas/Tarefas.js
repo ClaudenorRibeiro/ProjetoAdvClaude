@@ -13,6 +13,7 @@ import ModalInfo from '../../components/ui/ModalInfo';
 import useEscFechar from '../../hooks/useEscFechar';
 import MenuAcoes from '../../components/MenuAcoes';
 import ModalLerPublicacao from '../../components/ModalLerPublicacao';
+import { EtiquetaCelula, LegendaEtiquetasPessoais, itensMenuEtiqueta, useEtiquetasPessoais } from '../../components/Etiquetas';
 
 const PRIORIDADE_COR = { urgente: 'badge-vermelho', normal: 'badge-laranja', baixa: 'badge-verde' };
 const LIMITE = 100;
@@ -55,6 +56,7 @@ export default function Tarefas() {
   // Os demais ficam sempre restritos às próprias tarefas + as do escritório (regra aplicada no backend).
   const podeVerTodos = ehAdmin || temPermissao('tarefas.ver_todos', 'visualizar');
   const [lista, setLista]             = useState([]);
+  const { defs: etqDefs, marcar: marcarEtq } = useEtiquetasPessoais('tarefas', lista, setLista);
   const [total, setTotal]             = useState(0);
   // concluida: '0' pendentes | '1' concluídas | '' todas.
   // atrasadas: '1' mostra só as pendentes já vencidas (atalho); quando ativo, concluida fica '' (o backend cuida).
@@ -273,6 +275,8 @@ export default function Tarefas() {
 
       {/* Tabela */}
       <div className="card">
+        <LegendaEtiquetasPessoais definicoes={etqDefs} filtroAtivo={filtros.etiqueta}
+          onFiltrar={(slot) => setFiltro('etiqueta', slot)} />
         {carregando ? <div className="loading">Carregando...</div> : (
           <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
             <table className="tabela tabela-sticky">
@@ -283,6 +287,7 @@ export default function Tarefas() {
                   <th>Vencimento</th>
                   <th>Para</th>
                   <th>Vínculo</th>
+                  <th style={{ textAlign: 'center' }}>Etiq. Pessoal</th>
                   <th>Ações</th>
                 </tr>
               </thead>
@@ -314,8 +319,13 @@ export default function Tarefas() {
                     </td>
                     <td>{t.atribuida_para_nome || 'Escritório'}</td>
                     <td>{renderVinculo(t)}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      <EtiquetaCelula slot={t.etiqueta_pessoal} definicoes={etqDefs} />
+                    </td>
                     <td>
                       <MenuAcoes itens={[
+                        ...itensMenuEtiqueta({ definicoes: etqDefs, slotAtual: t.etiqueta_pessoal,
+                          onMarcar: (slot) => marcarEtq(t.id, slot) }),
                         { label: t.concluida ? 'Reabrir' : 'Concluir', icone: t.concluida ? '↩️' : '✅',
                           onClick: () => toggleConcluir(t) },
                         { label: 'Editar', icone: '✏️',

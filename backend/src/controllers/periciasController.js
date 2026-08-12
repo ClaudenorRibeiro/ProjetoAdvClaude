@@ -43,6 +43,13 @@ async function listar(req, res) {
     if (data_ate)      { where += ' AND pe.data <= ?';                  params.push(data_ate); }
     if (assistente_id) { where += ' AND pe.assistente_tecnico_id = ?';  params.push(assistente_id); }
 
+    // Filtro por etiqueta PESSOAL do usuário logado.
+    const etqSlot = parseInt(req.query.etiqueta);
+    if (etqSlot >= 1 && etqSlot <= 5) {
+      where += ' AND EXISTS (SELECT 1 FROM pericias_etiquetas pet WHERE pet.pericia_id = pe.id AND pet.usuario_id = ? AND pet.slot = ?)';
+      params.push(req.usuario.id, etqSlot);
+    }
+
     const [registros] = await pool.execute(`
       SELECT
         pe.id, pe.processo_id, pe.data, pe.hora, pe.local, pe.status,
@@ -62,7 +69,9 @@ async function listar(req, res) {
         pr.numProc AS processo_numero,
         pr.NomeTituloProc AS pasta_titulo,
         pa.id     AS pasta_id,
-        pa.numPasta AS pasta_numero
+        pa.numPasta AS pasta_numero,
+        (SELECT pet.slot FROM pericias_etiquetas pet
+          WHERE pet.pericia_id = pe.id AND pet.usuario_id = ?) AS etiqueta_pessoal
       FROM pericia pe
       LEFT JOIN tipo_pericia      tp ON pe.tipo_pericia_id = tp.id
       LEFT JOIN pessoas_fisicas   pf ON pe.perito_tipo = 'fisica'   AND pe.perito_id = pf.id
@@ -76,7 +85,7 @@ async function listar(req, res) {
       ${where}
       ORDER BY pe.data DESC
       LIMIT ${limitInt} OFFSET ${offsetInt}
-    `, params);
+    `, [req.usuario.id, ...params]);
 
     const [[{ total }]] = await pool.execute(
       `SELECT COUNT(*) AS total FROM pericia pe ${where}`,

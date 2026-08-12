@@ -42,7 +42,7 @@ async function sugerirNumeroPasta(req, res) {
 // GET /api/processos/pastas — Lista pastas com resumo do processo mais recente
 async function listarPastas(req, res) {
   try {
-    const { busca, pagina = 1, limite = 20 } = req.query;
+    const { busca, pagina = 1, limite = 20, etiqueta, etiquetaEscritorio } = req.query;
     const limitInt  = parseInt(limite) || 20;
     const offsetInt = (parseInt(pagina) - 1) * limitInt;
     const params = [];
@@ -109,6 +109,24 @@ async function listarPastas(req, res) {
       );
     }
 
+    // Filtro por etiqueta PESSOAL do usuário logado (só pastas que ELE marcou com aquela cor).
+    const etiquetaSlot = parseInt(etiqueta);
+    if (etiquetaSlot >= 1 && etiquetaSlot <= 5) {
+      where += ` AND EXISTS (SELECT 1 FROM pastas_etiquetas pe
+                             WHERE pe.pasta_id = pa.id AND pe.usuario_id = ? AND pe.slot = ?)`;
+      params.push(req.usuario?.id || 0, etiquetaSlot);
+    }
+
+    // Filtro pela etiqueta DO ESCRITÓRIO DERIVADA (só pastas onde TODOS os processos ativos têm a mesma).
+    const etqEscSlot = parseInt(etiquetaEscritorio);
+    if (etqEscSlot >= 1 && etqEscSlot <= 5) {
+      where += ` AND (SELECT CASE WHEN COUNT(*) > 0 AND COUNT(*) = COUNT(pee.slot) AND COUNT(DISTINCT pee.slot) = 1
+                              THEN MIN(pee.slot) ELSE NULL END
+                       FROM tblproc pr2 LEFT JOIN processos_etiquetas_escritorio pee ON pee.processo_id = pr2.id
+                       WHERE pr2.pasta_id = pa.id AND pr2.ativo = 1) = ?`;
+      params.push(etqEscSlot);
+    }
+
     const [rows] = await pool.execute(
       `SELECT
          pa.id,
@@ -145,12 +163,25 @@ async function listarPastas(req, res) {
                  AND pr.status_id IS NOT NULL LIMIT 1)
            ELSE NULL
          END AS status_nome,
-         (SELECT COUNT(*) FROM tblproc pr WHERE pr.pasta_id = pa.id AND pr.ativo = 1) AS total_processos
+         (SELECT COUNT(*) FROM tblproc pr WHERE pr.pasta_id = pa.id AND pr.ativo = 1) AS total_processos,
+         -- Etiqueta PESSOAL do usuário logado nesta pasta (só ele vê a dele)
+         (SELECT pe.slot FROM pastas_etiquetas pe
+          WHERE pe.pasta_id = pa.id AND pe.usuario_id = ?) AS etiqueta_pessoal,
+         -- Etiqueta DO ESCRITÓRIO derivada: só quando TODOS os processos ativos da pasta
+         -- têm a MESMA etiqueta do escritório (ex.: todos "Arquivado" → pasta "Arquivada").
+         (SELECT CASE
+                   WHEN COUNT(*) > 0
+                    AND COUNT(*) = COUNT(pee.slot)
+                    AND COUNT(DISTINCT pee.slot) = 1
+                   THEN MIN(pee.slot) ELSE NULL END
+          FROM tblproc pr2
+          LEFT JOIN processos_etiquetas_escritorio pee ON pee.processo_id = pr2.id
+          WHERE pr2.pasta_id = pa.id AND pr2.ativo = 1) AS etiqueta_escritorio
        FROM tblpasta pa
        ${where}
        ORDER BY pa.numPasta DESC
        LIMIT ${limitInt} OFFSET ${offsetInt}`,
-      params
+      [req.usuario?.id || 0, ...params]
     );
 
     const [totalRows] = await pool.execute(
@@ -225,7 +256,9 @@ async function buscarPasta(req, res) {
          f.id AS forum_id, f.cidade AS forum_cidade, f.uf AS forum_uf,
          tp.nome AS tipo_nome,
          sp.nome AS status_nome,
-         inst.nome AS instancia_nome
+         inst.nome AS instancia_nome,
+         (SELECT pee.slot FROM processos_etiquetas_escritorio pee
+          WHERE pee.processo_id = pr.id) AS etiqueta_escritorio
        FROM tblproc pr
        LEFT JOIN tblvara v         ON pr.vara_id     = v.id
        LEFT JOIN tblforum f        ON v.forum_id     = f.id
