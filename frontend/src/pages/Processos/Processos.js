@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { processosAPI, pessoasAPI, etiquetasAPI } from '../../services/api';
-import { EtiquetaCelula, LegendaEtiquetasPessoais, itensMenuEtiqueta } from '../../components/Etiquetas';
+import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetasSubmenu } from '../../components/Etiquetas';
 import { formatarNumeroPasta, mascaraCNJ, toTitleCase, mascaraCPF, validarCPF, mascaraCNPJ, validarCNPJ, formatarTelefone } from '../../utils/formatters';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
@@ -335,7 +335,7 @@ export default function Processos() {
                       <MenuAcoes itens={[
                         { label: 'Abrir pasta', icone: '📂',
                           onClick: () => navigate(`/processos/pasta/${p.id}`) },
-                        ...itensMenuEtiqueta({ definicoes: etqDefs, slotAtual: p.etiqueta_pessoal,
+                        itemEtiquetasSubmenu({ definicoes: etqDefs, slotAtual: p.etiqueta_pessoal,
                           onMarcar: (slot) => marcarEtiquetaPasta(p.id, slot) }),
                       ]} />
                     </td>

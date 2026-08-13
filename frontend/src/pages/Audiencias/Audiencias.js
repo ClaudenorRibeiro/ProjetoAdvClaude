@@ -12,7 +12,7 @@ import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import ModalGerarLote from '../../components/GerarLote';
 import MenuAcoes from '../../components/MenuAcoes';
 import { ModalAcordo } from '../Financeiro/Financeiro';
-import { EtiquetaCelula, LegendaEtiquetasPessoais, itensMenuEtiqueta, useEtiquetasPessoais } from '../../components/Etiquetas';
+import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetasSubmenu, useEtiquetasPessoais } from '../../components/Etiquetas';
 
 const STATUS_COR = {
   agendada:  'badge-azul',
@@ -284,7 +284,7 @@ export default function Audiencias() {
                       </td>
                       <td>
                           <MenuAcoes itens={[
-                            ...itensMenuEtiqueta({ definicoes: etqDefs, slotAtual: a.etiqueta_pessoal,
+                            itemEtiquetasSubmenu({ definicoes: etqDefs, slotAtual: a.etiqueta_pessoal,
                               onMarcar: (slot) => marcarEtq(a.id, slot) }),
                             // Registrar ata — só agendadas/adiadas e só para quem tem a permissão de Ata (admin sempre)
                             { label: 'Registrar ata', icone: '📝', oculto: !((a.status === 'agendada' || a.status === 'adiada') && temPermissao('audiencias.ata','visualizar')), onClick: () => setModalAta(a) },

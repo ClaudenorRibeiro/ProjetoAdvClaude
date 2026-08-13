@@ -13,7 +13,7 @@ import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import ModalGerarLote from '../../components/GerarLote';
 import MenuAcoes from '../../components/MenuAcoes';
 import { useAuth } from '../../context/AuthContext';
-import { EtiquetaCelula, LegendaEtiquetasPessoais, itensMenuEtiqueta, useEtiquetasPessoais } from '../../components/Etiquetas';
+import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetasSubmenu, useEtiquetasPessoais } from '../../components/Etiquetas';
 
 // Cor/label do badge conforme o status
 function badgeStatus(status) {
@@ -221,7 +221,7 @@ export default function Pericias() {
                       </td>
                       <td>
                           <MenuAcoes itens={[
-                            ...itensMenuEtiqueta({ definicoes: etqDefs, slotAtual: p.etiqueta_pessoal,
+                            itemEtiquetasSubmenu({ definicoes: etqDefs, slotAtual: p.etiqueta_pessoal,
                               onMarcar: (slot) => marcarEtq(p.id, slot) }),
                             // Marcar realizada — só quando agendada
                             { label: 'Marcar realizada', icone: '✅', oculto: !agendada, onClick: () => pedirMarcarRealizada(p) },

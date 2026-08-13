@@ -9,6 +9,69 @@ const { calcularVencimento, calcularQuantidade } = require('../services/calendar
 const { criarNotificacao, notificarConclusao, emailPrazoDelegado } = require('../services/notificacaoService');
 const { hojeBrasilia } = require('../utils/helpers');
 const auditoria = require('../middleware/auditoria');
+const agendaGoogle = require('../services/agendaGoogleService');
+
+// ===== Integração com o Google Agenda (convite .ics) =====
+// O prazo vai para o Google do DELEGADO (responsável). Se não houver delegado
+// (prazo "do escritório"), não há dono pessoal → não envia. Evento de DIA INTEIRO
+// (data_vencimento). Título "Prazo: <nº do processo>". Tudo "melhor esforço":
+// roda em 2º plano e nunca derruba a operação (o serviço já engole erros).
+
+// Monta os dados do evento a partir do prazo. Retorna null se não existir.
+async function dadosPrazoParaGoogle(prazoId) {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT pp.delegado_para, pp.data_vencimento, pp.descricao,
+              ps.nome AS subtipo_nome, pr.numProc AS num_processo
+         FROM prazos_processo pp
+         LEFT JOIN prazo_subtipo ps ON pp.subtipo_id = ps.id
+         JOIN tblproc pr ON pp.processo_id = pr.id
+        WHERE pp.id = ?`, [prazoId]
+    );
+    const p = rows[0];
+    if (!p) return null;
+    const partes = [];
+    if (p.subtipo_nome) partes.push(`Tipo: ${p.subtipo_nome}`);
+    if (p.descricao)    partes.push(p.descricao);
+    return {
+      delegado_para: p.delegado_para,
+      resumo: `Prazo: ${p.num_processo || ''}`.trim(),
+      descricao: partes.join('\n'),
+      data: p.data_vencimento,
+    };
+  } catch (e) {
+    console.error('[prazo->google] falha ao montar dados:', e.message);
+    return null;
+  }
+}
+
+// Envia (ou cancela) o evento no Google do delegado informado. Ignora quando não há
+// delegado (prazo do escritório) ou quando o usuário não ativou o envio.
+async function enviarPrazoParaGoogle(usuarioId, prazoId, dados, cancelar = false, sequence = 0) {
+  try {
+    if (!usuarioId || !dados) return;
+    const [u] = await pool.execute(
+      'SELECT nome, google_agenda_ativo, google_agenda_email FROM usuarios WHERE id = ?', [usuarioId]
+    );
+    const dono = u[0];
+    if (!dono || Number(dono.google_agenda_ativo) !== 1 || !dono.google_agenda_email) return;
+    await agendaGoogle.enviarConviteEvento({
+      tipo: 'prazo', id: prazoId, cancelar, sequence,
+      resumo: dados.resumo, descricao: dados.descricao,
+      data: dados.data, diaTodo: true,
+      destinatarioEmail: dono.google_agenda_email, destinatarioNome: dono.nome,
+    });
+  } catch (e) {
+    console.error('[prazo->google] falha ao enviar:', e.message);
+  }
+}
+
+// Conveniência para os casos simples (usa o delegado ATUAL do prazo). 2º plano.
+function sincronizarPrazoGoogle(prazoId, { cancelar = false, sequence = 0 } = {}) {
+  dadosPrazoParaGoogle(prazoId).then(dados =>
+    enviarPrazoParaGoogle(dados && dados.delegado_para, prazoId, dados, cancelar, sequence)
+  );
+}
 
 // Libera prazos com "Fazendo" expirado pelo timeout configurado — exportada para uso no cron
 async function liberarFazendoExpirados() {
@@ -239,6 +302,8 @@ async function criar(req, res) {
       }
     }
 
+    // Novo prazo → entra na agenda do Google do delegado (se usuário com Google ativo).
+    sincronizarPrazoGoogle(result.insertId, {});
     return sucesso(res, { id: result.insertId, data_vencimento }, 'Prazo criado com sucesso', 201);
   } catch (err) {
     return erroInterno(res, err);
@@ -298,6 +363,13 @@ async function mudarStatus(req, res) {
       );
     }
 
+    // Concluído ou cancelado: limpa a etiqueta PESSOAL de quem finalizou (não deixa
+    // sujeira). Só a dele; etiquetas de outros usuários neste prazo permanecem.
+    await conn.execute(
+      'DELETE FROM prazos_etiquetas WHERE prazo_id = ? AND usuario_id = ?',
+      [id, req.usuario.id]
+    );
+
     // Registra na auditoria com quem fez, quando e qual era o status anterior
     await conn.execute(
       `INSERT INTO auditoria_prazo (prazo_id, status_anterior, status_novo, usuario_id, observacao)
@@ -317,6 +389,8 @@ async function mudarStatus(req, res) {
     }
 
     await conn.commit();
+    // Concluído OU cancelado → sai da agenda do Google do delegado.
+    sincronizarPrazoGoogle(id, { cancelar: true, sequence: Math.floor(Date.now() / 1000) });
     return sucesso(res, null, `Prazo marcado como "${status}"`);
   } catch (err) {
     await conn.rollback();
@@ -459,7 +533,7 @@ async function editar(req, res) {
 
     if (!data_inicio) return erro(res, 'Data de início é obrigatória');
 
-    const [existe] = await pool.execute('SELECT id, fazendo_por FROM prazos_processo WHERE id = ?', [id]);
+    const [existe] = await pool.execute('SELECT id, fazendo_por, delegado_para FROM prazos_processo WHERE id = ?', [id]);
     if (!existe.length) return naoEncontrado(res, 'Prazo não encontrado');
     if (existe[0].fazendo_por && existe[0].fazendo_por !== req.usuario.id && req.usuario.nivel > 1) {
       return erro(res, 'Este prazo está sendo feito por outro usuário. Apenas o administrador pode editá-lo.', 403);
@@ -485,6 +559,19 @@ async function editar(req, res) {
     );
 
     await auditoria.registrar(req.usuario.id, 'prazos_processo', 'editar', id);
+    // Reflete no Google. Se o delegado mudou, migra (cancela no antigo, cria no novo);
+    // vazio/escritório = id nulo e o envio é ignorado.
+    const seq = Math.floor(Date.now() / 1000);
+    const donoAntigo = existe[0].delegado_para || null;
+    const donoNovo   = delegado_para ? parseInt(delegado_para) : null;
+    dadosPrazoParaGoogle(id).then(dados => {
+      if (donoAntigo === donoNovo) {
+        enviarPrazoParaGoogle(donoNovo, id, dados, false, seq);
+      } else {
+        enviarPrazoParaGoogle(donoAntigo, id, dados, true,  seq); // some da agenda do antigo
+        enviarPrazoParaGoogle(donoNovo,   id, dados, false, seq); // entra na do novo
+      }
+    });
     return sucesso(res, { data_vencimento }, 'Prazo atualizado com sucesso');
   } catch (err) {
     return erroInterno(res, err);
@@ -504,6 +591,9 @@ async function excluir(req, res) {
   if (existe[0].fazendo_por && existe[0].fazendo_por !== req.usuario.id && req.usuario.nivel > 1) {
     return erro(res, 'Este prazo está sendo feito por outro usuário. Apenas o administrador pode excluí-lo.', 403);
   }
+
+  // Dados para o cancelamento no Google — capturados ANTES do DELETE (depois a linha some).
+  const dadosGoogleExcluir = await dadosPrazoParaGoogle(id);
 
   // Três tabelas apontam para prazos_processo (sem ON DELETE CASCADE no banco):
   // auditoria_prazo (histórico), notificacoes (alertas) e tarefas (vínculo).
@@ -525,6 +615,9 @@ async function excluir(req, res) {
     await auditoria.registrar(req.usuario.id, 'prazos_processo', 'excluir', id, null, null, conn);
 
     await conn.commit();
+    // Excluído → sai da agenda do Google do delegado (casa pelo mesmo UID).
+    enviarPrazoParaGoogle(dadosGoogleExcluir && dadosGoogleExcluir.delegado_para, id,
+      dadosGoogleExcluir, true, Math.floor(Date.now() / 1000));
     return sucesso(res, null, 'Prazo excluído com sucesso');
   } catch (err) {
     await conn.rollback();

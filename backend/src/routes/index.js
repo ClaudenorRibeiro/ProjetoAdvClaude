@@ -62,6 +62,7 @@ router.put('/auth/cores-agenda',       autenticar, authCtrl.salvarCoresAgenda);
 router.put('/auth/cores-menu',         autenticar, authCtrl.salvarCoresMenu);
 router.put('/auth/cor-linha',          autenticar, authCtrl.salvarCorLinha);
 router.put('/auth/cor-linha-lida',     autenticar, authCtrl.salvarCorLinhaLida);
+router.put('/auth/google-agenda',      autenticar, authCtrl.salvarGoogleAgenda);
 router.get('/calendario/dia-util',     autenticar, configuracaoCtrl.verificarDiaUtil);
 
 // --- AGENDA: compromissos pessoais/avulsos (cada usuário gerencia os seus) ---

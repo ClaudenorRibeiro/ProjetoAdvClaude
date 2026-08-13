@@ -15,7 +15,7 @@ import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import MenuAcoes from '../../components/MenuAcoes';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
-import { EtiquetaCelula, LegendaEtiquetasPessoais, itensMenuEtiqueta, useEtiquetasPessoais } from '../../components/Etiquetas';
+import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetasSubmenu, useEtiquetasPessoais } from '../../components/Etiquetas';
 // Reuso dos modais de criação já existentes (sem duplicar código): a partir de uma
 // publicação o usuário cria Prazo, Tarefa ou Compromisso, já com o vínculo de origem.
 import { ModalNovoPrazo } from '../Prazos/Prazos';
@@ -69,6 +69,24 @@ function realcarTexto(texto, termo) {
   return out;
 }
 
+// Célula "Resp": responsáveis das ações da publicação. Campo estreito → corta com "…".
+// Passar o mouse mostra o tooltip; clicar alterna entre cortado e completo.
+function CelulaResp({ texto }) {
+  const [aberto, setAberto] = useState(false);
+  const t = (texto || '').trim();
+  if (!t) return <td style={{ color: '#c9ccd1' }}>—</td>;
+  return (
+    <td style={{ fontSize: '13px', maxWidth: '160px', cursor: 'pointer' }}
+      title={t} onClick={() => setAberto(a => !a)}>
+      <span style={aberto
+        ? { whiteSpace: 'normal', wordBreak: 'break-word' }
+        : { display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {t}
+      </span>
+    </td>
+  );
+}
+
 // Trava de 3 meses da pesquisa: true se o período De→Até passar de 3 meses.
 function excede3Meses(dataInicio, dataFim) {
   if (!dataInicio || !dataFim) return false;
@@ -77,12 +95,6 @@ function excede3Meses(dataInicio, dataFim) {
   if (isNaN(ini.getTime()) || isNaN(fim.getTime())) return false;
   const limite = new Date(ini); limite.setMonth(limite.getMonth() + 3);
   return fim > limite;
-}
-
-// Devolve a data (YYYY-MM-DD, hora local) de N dias atrás — usado para sugerir a janela.
-function diasAtras(n) {
-  const d = new Date(); d.setDate(d.getDate() - n);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 // ------------------------------------------------------------
@@ -442,7 +454,7 @@ function PublicacoesAASP() {
       ? { ...f, todasDatas: true, pagina: 1 }
       // Ao ligar a janela, se estiver vazia, sugere os últimos 30 dias.
       : { ...f, todasDatas: false, pagina: 1,
-          dataInicio: f.dataInicio || diasAtras(30), dataFim: f.dataFim || hojeLocal() });
+          dataInicio: f.dataInicio || hojeLocal(), dataFim: f.dataFim || hojeLocal() });
   }
 
   // ---- Seleção e exclusão em lote (age só na fonte AASP) ----
@@ -461,23 +473,6 @@ function PublicacoesAASP() {
       textoBotao: 'Excluir selecionadas', tipo: 'perigo',
       acao: async () => {
         const { data } = await publicacoesAPI.excluirLote({ fonte: 'aasp', ids: selecionados });
-        toast.success(data.mensagem || 'Publicações excluídas');
-        carregar();
-      },
-    });
-  }
-  function excluirTodas() {
-    if (total === 0) return;
-    setConfirmar({
-      titulo: 'Excluir todas',
-      mensagem: `Isto vai excluir as publicação(ões) PENDENTES do resultado atual `
-        + '(com os filtros aplicados). As publicações já tratadas são preservadas (não são excluídas). '
-        + 'A exclusão é permanente e fica registrada no log. Deseja continuar?',
-      textoBotao: `Excluir todas (${total})`, tipo: 'perigo',
-      acao: async () => {
-        const payload = { todas: true, fonte: 'aasp', tratada: filtros.tratada, busca: filtros.busca, escopo: filtros.escopo };
-        if (!filtros.todasDatas) { payload.dataInicio = filtros.dataInicio; payload.dataFim = filtros.dataFim; }
-        const { data } = await publicacoesAPI.excluirLote(payload);
         toast.success(data.mensagem || 'Publicações excluídas');
         carregar();
       },
@@ -614,10 +609,6 @@ function PublicacoesAASP() {
               onClick={excluirSelecionadas}>
               🗑️ Excluir selecionadas{selecionados.length ? ` (${selecionados.length})` : ''}
             </button>
-            <button className="btn btn-outline" disabled={total === 0}
-              onClick={excluirTodas} style={{ color: '#b91c1c', borderColor: '#f0c0c0' }}>
-              🗑️ Excluir todas{total ? ` (${total})` : ''}
-            </button>
           </div>
         )}
         {/* Legenda da pintura de duplicadas */}
@@ -643,6 +634,7 @@ function PublicacoesAASP() {
                   {thOrder('publicacao', 'Nº Publ.')}
                   {thOrder('conteudo', 'Conteúdo')}
                   {thOrder('status', 'Status')}
+                  <th>Resp</th>
                   <th style={{ textAlign: 'center' }}>Etiq. Pessoal</th>
                   <th>Ações</th>
                 </tr>
@@ -652,7 +644,7 @@ function PublicacoesAASP() {
                   // Linha pintada (vermelho claro) = publicação repetida: existe outra de texto
                   // idêntico no mesmo dia. Fica pintada uma cópia; a mais antiga não é pintada.
                   <tr key={p.id}
-                    style={p.lida ? { background: 'var(--linha-lida, #cdebd6)' } : undefined}>
+                    style={{ background: p.lida ? 'var(--linha-lida, #cdebd6)' : '#fff8db' }}>
                     {podeExcluir && (
                       <td style={{ textAlign: 'center' }}>
                         <input type="checkbox" checked={selecionados.includes(p.id)}
@@ -685,12 +677,13 @@ function PublicacoesAASP() {
                             title={p.motivo_sem_acao ? `Sem ação — motivo: ${p.motivo_sem_acao}` : undefined}>Tratada</span>
                         : <span className="badge badge-laranja">Pendente</span>}
                     </td>
+                    <CelulaResp texto={p.resp_acoes} />
                     <td style={{ textAlign: 'center' }}>
                       <EtiquetaCelula slot={p.etiqueta_pessoal} definicoes={etqDefs} />
                     </td>
                     <td>
                       <MenuAcoes itens={[
-                        ...itensMenuEtiqueta({ definicoes: etqDefs, slotAtual: p.etiqueta_pessoal,
+                        itemEtiquetasSubmenu({ definicoes: etqDefs, slotAtual: p.etiqueta_pessoal,
                           onMarcar: (slot) => marcarEtq(p.id, slot) }),
                         { label: 'Criar prazo', icone: '📌',
                           oculto: !podeAlterar,
@@ -948,7 +941,7 @@ function PublicacoesCNJ() {
     setFiltros(f => marcado
       ? { ...f, todasDatas: true, pagina: 1 }
       : { ...f, todasDatas: false, pagina: 1,
-          dataInicio: f.dataInicio || diasAtras(30), dataFim: f.dataFim || hojeLocal() });
+          dataInicio: f.dataInicio || hojeLocal(), dataFim: f.dataFim || hojeLocal() });
   }
 
   // ---- Seleção e exclusão em lote (age só na fonte CNJ) ----
@@ -967,23 +960,6 @@ function PublicacoesCNJ() {
       textoBotao: 'Excluir selecionadas', tipo: 'perigo',
       acao: async () => {
         const { data } = await publicacoesAPI.excluirLote({ fonte: 'cnj', ids: selecionados });
-        toast.success(data.mensagem || 'Publicações excluídas');
-        carregar();
-      },
-    });
-  }
-  function excluirTodas() {
-    if (total === 0) return;
-    setConfirmar({
-      titulo: 'Excluir todas',
-      mensagem: `Isto vai excluir as publicação(ões) PENDENTES do resultado atual `
-        + '(com os filtros aplicados). As publicações já tratadas são preservadas (não são excluídas). '
-        + 'A exclusão é permanente e fica registrada no log. Deseja continuar?',
-      textoBotao: `Excluir todas (${total})`, tipo: 'perigo',
-      acao: async () => {
-        const payload = { todas: true, fonte: 'cnj', tratada: filtros.tratada, busca: filtros.busca, escopo: filtros.escopo };
-        if (!filtros.todasDatas) { payload.dataInicio = filtros.dataInicio; payload.dataFim = filtros.dataFim; }
-        const { data } = await publicacoesAPI.excluirLote(payload);
         toast.success(data.mensagem || 'Publicações excluídas');
         carregar();
       },
@@ -1124,10 +1100,6 @@ function PublicacoesCNJ() {
               onClick={excluirSelecionadas}>
               🗑️ Excluir selecionadas{selecionados.length ? ` (${selecionados.length})` : ''}
             </button>
-            <button className="btn btn-outline" disabled={total === 0}
-              onClick={excluirTodas} style={{ color: '#b91c1c', borderColor: '#f0c0c0' }}>
-              🗑️ Excluir todas{total ? ` (${total})` : ''}
-            </button>
           </div>
         )}
         <p style={{ margin: '0 0 10px', fontSize: '12px', color: '#888' }}>
@@ -1153,6 +1125,7 @@ function PublicacoesCNJ() {
                   {thOrder('processo', 'Processo')}
                   {thOrder('conteudo', 'Conteúdo')}
                   {thOrder('status', 'Status')}
+                  <th>Resp</th>
                   <th style={{ textAlign: 'center' }}>Etiq. Pessoal</th>
                   <th>Ações</th>
                 </tr>
@@ -1160,7 +1133,7 @@ function PublicacoesCNJ() {
               <tbody>
                 {lista.map(p => (
                   <tr key={p.id}
-                    style={p.lida ? { background: 'var(--linha-lida, #cdebd6)' } : undefined}>
+                    style={{ background: p.lida ? 'var(--linha-lida, #cdebd6)' : '#fff8db' }}>
                     {podeExcluir && (
                       <td style={{ textAlign: 'center' }}>
                         <input type="checkbox" checked={selecionados.includes(p.id)}
@@ -1194,12 +1167,13 @@ function PublicacoesCNJ() {
                             title={p.motivo_sem_acao ? `Sem ação — motivo: ${p.motivo_sem_acao}` : undefined}>Tratada</span>
                         : <span className="badge badge-laranja">Pendente</span>}
                     </td>
+                    <CelulaResp texto={p.resp_acoes} />
                     <td style={{ textAlign: 'center' }}>
                       <EtiquetaCelula slot={p.etiqueta_pessoal} definicoes={etqDefs} />
                     </td>
                     <td>
                       <MenuAcoes itens={[
-                        ...itensMenuEtiqueta({ definicoes: etqDefs, slotAtual: p.etiqueta_pessoal,
+                        itemEtiquetasSubmenu({ definicoes: etqDefs, slotAtual: p.etiqueta_pessoal,
                           onMarcar: (slot) => marcarEtq(p.id, slot) }),
                         { label: 'Criar prazo', icone: '📌',
                           oculto: !podeAlterar,

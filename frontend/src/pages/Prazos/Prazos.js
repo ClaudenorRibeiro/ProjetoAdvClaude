@@ -12,7 +12,7 @@ import ModalLerPublicacao from '../../components/ModalLerPublicacao';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import ModalInfo from '../../components/ui/ModalInfo';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
-import { EtiquetaCelula, LegendaEtiquetasPessoais, itensMenuEtiqueta, useEtiquetasPessoais } from '../../components/Etiquetas';
+import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetasSubmenu, useEtiquetasPessoais } from '../../components/Etiquetas';
 
 // Status calculados pela data — concluido/cancelado são os únicos armazenados no banco
 // 'fazendo' é filtro auxiliar que mostra prazos ativos com alguém fazendo
@@ -269,7 +269,7 @@ export default function Prazos() {
                           de antes: ninguém fazendo → Fazer; eu fazendo (ou outro fazendo e eu admin)
                           → Liberar; Concluir em qualquer um desses três casos. */}
                       <MenuAcoes itens={[
-                        ...itensMenuEtiqueta({ definicoes: etqDefs, slotAtual: p.etiqueta_pessoal,
+                        itemEtiquetasSubmenu({ definicoes: etqDefs, slotAtual: p.etiqueta_pessoal,
                           onMarcar: (slot) => marcarEtq(p.id, slot) }),
                         { label: 'Fazer', icone: '▶',
                           oculto: !(ativo && !p.fazendo_por),

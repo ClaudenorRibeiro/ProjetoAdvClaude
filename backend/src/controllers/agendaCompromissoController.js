@@ -13,6 +13,29 @@
 const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const { bloqueiaAgendarPassado } = require('../utils/helpers');
+const agendaGoogle = require('../services/agendaGoogleService');
+
+// Envia o compromisso para o Google Agenda do DONO (delegado, ou o criador se não
+// houver delegado), se ele ativou a opção no menu dele. "Melhor esforço": roda em
+// segundo plano e nunca derruba a operação principal (o serviço já engole erros).
+async function enviarCompromissoParaGoogle(donoId, compromissoId, d, cancelar = false, sequence = 0) {
+  try {
+    const [u] = await pool.execute(
+      'SELECT nome, google_agenda_ativo, google_agenda_email FROM usuarios WHERE id = ?', [donoId]
+    );
+    const dono = u[0];
+    if (!dono || Number(dono.google_agenda_ativo) !== 1 || !dono.google_agenda_email) return;
+    await agendaGoogle.enviarConviteEvento({
+      tipo: 'compromisso', id: compromissoId, cancelar, sequence,
+      resumo: d.titulo, descricao: d.descricao,
+      data: d.data, diaTodo: Number(d.dia_todo) === 1,
+      horaInicio: d.hora_inicio, horaFim: d.hora_fim,
+      destinatarioEmail: dono.google_agenda_email, destinatarioNome: dono.nome,
+    });
+  } catch (e) {
+    console.error('[compromisso->google] falha:', e.message);
+  }
+}
 
 // Quem pode editar/excluir/dar baixa: o criador, o delegado (quem recebeu)
 // ou o admin/super (nível <= 1). Recebe a linha (usuario_id, delegado_para).
@@ -113,6 +136,9 @@ async function criar(req, res) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [req.usuario.id, d.delegado_para, d.titulo, d.descricao, d.data, d.hora_inicio, d.hora_fim, d.dia_todo, d.escritorio, d.publicacao_id]
     );
+    // Empurra para o Google Agenda do dono (se ele ativou). Segundo plano, sem travar a resposta.
+    const donoId = d.delegado_para || req.usuario.id;
+    enviarCompromissoParaGoogle(donoId, r.insertId, d);
     return sucesso(res, { id: r.insertId }, 'Compromisso criado', 201);
   } catch (e) {
     return erroInterno(res, e);
@@ -139,6 +165,18 @@ async function atualizar(req, res) {
        WHERE id=?`,
       [d.titulo, d.descricao, d.data, d.hora_inicio, d.hora_fim, d.dia_todo, d.escritorio, d.delegado_para, id]
     );
+    // Reflete no Google (2º plano). O criador (usuario_id) não muda na edição; o dono é
+    // o delegado (ou o criador). Se o dono MUDOU, cancela no antigo e cria no novo — senão,
+    // atualiza o mesmo evento no dono atual. SEQUENCE = horário atual (sempre crescente).
+    const seq = Math.floor(Date.now() / 1000);
+    const donoAntigo = rows[0].delegado_para || rows[0].usuario_id;
+    const donoNovo   = d.delegado_para || rows[0].usuario_id;
+    if (donoAntigo === donoNovo) {
+      enviarCompromissoParaGoogle(donoNovo, id, d, false, seq);
+    } else {
+      enviarCompromissoParaGoogle(donoAntigo, id, d, true,  seq); // some da agenda do dono antigo
+      enviarCompromissoParaGoogle(donoNovo,   id, d, false, seq); // entra na agenda do novo dono
+    }
     return sucesso(res, null, 'Compromisso atualizado');
   } catch (e) {
     return erroInterno(res, e);
@@ -149,10 +187,16 @@ async function atualizar(req, res) {
 async function excluir(req, res) {
   try {
     const { id } = req.params;
-    const [rows] = await pool.execute('SELECT usuario_id, delegado_para FROM agenda_compromisso WHERE id = ?', [id]);
+    const [rows] = await pool.execute(
+      `SELECT usuario_id, delegado_para, titulo, descricao, data, hora_inicio, hora_fim, dia_todo
+         FROM agenda_compromisso WHERE id = ?`, [id]
+    );
     if (!rows.length) return naoEncontrado(res, 'Compromisso não encontrado');
     if (!podeMexer(rows[0], req.usuario)) return erro(res, 'Você não tem permissão para excluir este compromisso');
     await pool.execute('DELETE FROM agenda_compromisso WHERE id = ?', [id]);
+    // Remove da agenda do Google do dono (2º plano). Cancelamento casa pelo mesmo UID.
+    const donoId = rows[0].delegado_para || rows[0].usuario_id;
+    enviarCompromissoParaGoogle(donoId, id, rows[0], true, Math.floor(Date.now() / 1000));
     return sucesso(res, null, 'Compromisso excluído');
   } catch (e) {
     return erroInterno(res, e);

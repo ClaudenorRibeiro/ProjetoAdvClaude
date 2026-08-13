@@ -313,7 +313,18 @@ async function listar(req, res) {
               EXISTS (SELECT 1 FROM tblproc t
                        WHERE p.numero_processo IS NOT NULL AND p.numero_processo <> ''
                          AND REPLACE(REPLACE(REPLACE(t.numProc,'.',''),'-',''),' ','')
-                             = REPLACE(REPLACE(REPLACE(p.numero_processo,'.',''),'-',''),' ','')) AS processo_cadastrado
+                             = REPLACE(REPLACE(REPLACE(p.numero_processo,'.',''),'-',''),' ','')) AS processo_cadastrado,
+              -- Responsáveis das AÇÕES nascidas desta publicação (prazo/tarefa/compromisso).
+              -- Sem pessoa (delegado/atribuído em branco) = "Escritório". Juntados em JS (dedup).
+              (SELECT GROUP_CONCAT(DISTINCT COALESCE(ud.nome,'Escritório') SEPARATOR '§')
+                 FROM prazos_processo pp LEFT JOIN usuarios ud ON pp.delegado_para = ud.id
+                WHERE pp.publicacao_id = p.id) AS resp_prazos,
+              (SELECT GROUP_CONCAT(DISTINCT COALESCE(ua.nome,'Escritório') SEPARATOR '§')
+                 FROM tarefas t LEFT JOIN usuarios ua ON t.atribuida_para = ua.id
+                WHERE t.publicacao_id = p.id) AS resp_tarefas,
+              (SELECT GROUP_CONCAT(DISTINCT COALESCE(uc.nome,'Escritório') SEPARATOR '§')
+                 FROM agenda_compromisso ac LEFT JOIN usuarios uc ON ac.delegado_para = uc.id
+                WHERE ac.publicacao_id = p.id) AS resp_compromissos
        FROM publicacoes p
        LEFT JOIN usuarios ut ON p.tratada_por = ut.id
        ${where}
@@ -326,7 +337,15 @@ async function listar(req, res) {
       `SELECT COUNT(*) AS total FROM publicacoes p ${where}`, params
     );
 
-    return sucesso(res, { registros: rows, total: totalRows[0].total });
+    // Junta os responsáveis das 3 fontes de ação numa lista distinta por publicação.
+    const registros = rows.map(r => {
+      const nomes = [r.resp_prazos, r.resp_tarefas, r.resp_compromissos]
+        .filter(Boolean).join('§').split('§').map(s => s.trim()).filter(Boolean);
+      const { resp_prazos, resp_tarefas, resp_compromissos, ...resto } = r;
+      return { ...resto, resp_acoes: [...new Set(nomes)].join(', ') || null };
+    });
+
+    return sucesso(res, { registros, total: totalRows[0].total });
   } catch (err) {
     return erroInterno(res, err);
   }

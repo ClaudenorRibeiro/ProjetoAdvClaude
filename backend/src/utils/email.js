@@ -57,7 +57,7 @@ async function registrarLog(para, assunto, status, erro, publicacaoId = null, de
 //   anexos: array opcional no formato do Nodemailer [{ filename, content(Buffer), contentType }]
 //   publicacaoId/destinatarioNome: opcionais, só quando o e-mail é o envio de uma publicação.
 // Em desenvolvimento sem SMTP, imprime o link no console e retorna sem erro.
-async function enviarEmail({ para, assunto, html, linkDev, anexos, publicacaoId, destinatarioNome, mensagem }) {
+async function enviarEmail({ para, assunto, html, linkDev, anexos, icalEvent, publicacaoId, destinatarioNome, mensagem }) {
   if (!smtpConfigurado()) {
     if (process.env.NODE_ENV === 'production') {
       const msg = 'Servidor de e-mail não configurado. Configure SMTP_HOST no arquivo .env';
@@ -83,6 +83,9 @@ async function enviarEmail({ para, assunto, html, linkDev, anexos, publicacaoId,
     };
     // Anexos (opcional): só entram quando vierem — mantém 100% compatível com quem chama sem anexo.
     if (Array.isArray(anexos) && anexos.length) opcoes.attachments = anexos;
+    // Convite de calendário (opcional): { method, content } — o Nodemailer monta o
+    // multipart/alternative com text/calendar que o Gmail/Google Agenda reconhece.
+    if (icalEvent && icalEvent.content) opcoes.icalEvent = icalEvent;
     await transporte.sendMail(opcoes);
     await registrarLog(para, assunto, 'sucesso', null, publicacaoId, destinatarioNome, mensagem);
   } catch (err) {

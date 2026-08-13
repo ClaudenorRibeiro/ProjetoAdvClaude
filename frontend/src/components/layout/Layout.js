@@ -10,6 +10,7 @@ import { notificacoesAPI, authAPI } from '../../services/api';
 import { toast } from 'react-toastify';
 import './Layout.css';
 import ModalAparencia from '../ModalAparencia';
+import ModalGoogleAgenda from '../ModalGoogleAgenda';
 import { variaveisMenu } from '../../utils/coresMenu';
 import { variaveisLinha, variaveisLinhaLida } from '../../utils/coresLinha';
 
@@ -76,6 +77,7 @@ export default function Layout({ children }) {
   const [menuUsuario, setMenuUsuario]     = useState(false);
   const [modalSenha, setModalSenha]       = useState(false);
   const [modalAparencia, setModalAparencia] = useState(false);
+  const [modalGoogleAgenda, setModalGoogleAgenda] = useState(false);
   const [escritorio, setEscritorio]       = useState({ nome: '', logo_base64: null }); // logo + nome (do banco desta instância)
   const sinoRef    = useRef(null);
   const usuarioRef = useRef(null);
@@ -401,6 +403,15 @@ export default function Layout({ children }) {
                     onMouseLeave={e => e.currentTarget.style.background='none'}>
                     🎨 Aparência
                   </button>
+                  <button onClick={() => { setMenuUsuario(false); setModalGoogleAgenda(true); }}
+                    style={{width:'100%',display:'flex',alignItems:'center',gap:'10px',
+                            padding:'11px 16px',background:'none',border:'none',cursor:'pointer',
+                            fontSize:'13px',color:'#374151',textAlign:'left',
+                            borderBottom:'1px solid #f1f5f9'}}
+                    onMouseEnter={e => e.currentTarget.style.background='#f8fafc'}
+                    onMouseLeave={e => e.currentTarget.style.background='none'}>
+                    📅 Google Agenda
+                  </button>
                   <button onClick={() => { setMenuUsuario(false); handleLogout(); }}
                     style={{width:'100%',display:'flex',alignItems:'center',gap:'10px',
                             padding:'11px 16px',background:'none',border:'none',cursor:'pointer',
@@ -414,6 +425,7 @@ export default function Layout({ children }) {
             </div>
             {modalSenha && <ModalTrocarSenha onFechar={() => setModalSenha(false)} />}
             {modalAparencia && <ModalAparencia onFechar={() => setModalAparencia(false)} />}
+            {modalGoogleAgenda && <ModalGoogleAgenda onFechar={() => setModalGoogleAgenda(false)} />}
           </div>
         </header>
 

@@ -167,3 +167,13 @@ export function itensMenuEtiqueta({ definicoes, slotAtual, onMarcar }) {
   }
   return itens;
 }
+
+// Versão AGRUPADA para etiquetas PESSOAIS: em vez de jogar as cores soltas no menu ⋮,
+// devolve UM único item "Etiquetas" com um submenu lateral (as cores + "Remover etiqueta").
+// Reaproveita itensMenuEtiqueta. Retorna null quando não há nada a mostrar
+// (sem cores configuradas e sem etiqueta aplicada) — o MenuAcoes ignora itens null.
+export function itemEtiquetasSubmenu({ definicoes, slotAtual, onMarcar }) {
+  const sub = itensMenuEtiqueta({ definicoes, slotAtual, onMarcar });
+  if (sub.length === 0) return null;
+  return { label: 'Etiquetas', icone: '🏷️', submenu: sub };
+}

@@ -9,6 +9,73 @@ const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
 const { enviarComunicadoPericia } = require('../services/comunicadoService');
+const agendaGoogle = require('../services/agendaGoogleService');
+
+// ===== Integração com o Google Agenda (convite .ics) =====
+// Mesma lógica da audiência: o evento vai para o Google do RESPONSÁVEL, só quando
+// ele for USUÁRIO do sistema (freelancer não tem login/Google). Título
+// "Perícia: <nº do processo>". Data + hora (sem hora = dia inteiro). Melhor esforço:
+// 2º plano, nunca derruba a operação (o serviço já engole erros).
+
+// Monta os dados do evento a partir da perícia. Retorna null se não existir.
+async function dadosPericiaParaGoogle(periciaId) {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT pe.responsavel_id, pe.data, pe.hora, pe.local,
+              pr.numProc AS num_processo,
+              CASE WHEN pe.perito_tipo = 'fisica'   THEN pf.nome
+                   WHEN pe.perito_tipo = 'juridica' THEN pj.razao_social END AS perito_nome
+         FROM pericia pe
+         LEFT JOIN tblproc pr           ON pe.processo_id = pr.id
+         LEFT JOIN pessoas_fisicas pf   ON pe.perito_tipo = 'fisica'   AND pe.perito_id = pf.id
+         LEFT JOIN pessoas_juridicas pj ON pe.perito_tipo = 'juridica' AND pe.perito_id = pj.id
+        WHERE pe.id = ?`, [periciaId]
+    );
+    const p = rows[0];
+    if (!p) return null;
+    const partes = [];
+    if (p.local)       partes.push(`Local: ${p.local}`);
+    if (p.perito_nome) partes.push(`Perito: ${p.perito_nome}`);
+    return {
+      responsavel_id: p.responsavel_id,
+      resumo: `Perícia: ${p.num_processo || ''}`.trim(),
+      descricao: partes.join('\n'),
+      data: p.data,
+      hora: p.hora, // null = sem hora → evento de dia inteiro
+    };
+  } catch (e) {
+    console.error('[pericia->google] falha ao montar dados:', e.message);
+    return null;
+  }
+}
+
+// Envia (ou cancela) o evento no Google do usuário responsável informado. Ignora
+// quando não há usuário (freelancer/sem responsável) ou o usuário não ativou o envio.
+async function enviarPericiaParaGoogle(usuarioId, periciaId, dados, cancelar = false, sequence = 0) {
+  try {
+    if (!usuarioId || !dados) return;
+    const [u] = await pool.execute(
+      'SELECT nome, google_agenda_ativo, google_agenda_email FROM usuarios WHERE id = ?', [usuarioId]
+    );
+    const dono = u[0];
+    if (!dono || Number(dono.google_agenda_ativo) !== 1 || !dono.google_agenda_email) return;
+    await agendaGoogle.enviarConviteEvento({
+      tipo: 'pericia', id: periciaId, cancelar, sequence,
+      resumo: dados.resumo, descricao: dados.descricao,
+      data: dados.data, diaTodo: !dados.hora, horaInicio: dados.hora, horaFim: null,
+      destinatarioEmail: dono.google_agenda_email, destinatarioNome: dono.nome,
+    });
+  } catch (e) {
+    console.error('[pericia->google] falha ao enviar:', e.message);
+  }
+}
+
+// Conveniência para os casos simples (usa o responsável ATUAL da perícia). 2º plano.
+function sincronizarPericiaGoogle(periciaId, { cancelar = false, sequence = 0 } = {}) {
+  dadosPericiaParaGoogle(periciaId).then(dados =>
+    enviarPericiaParaGoogle(dados && dados.responsavel_id, periciaId, dados, cancelar, sequence)
+  );
+}
 
 // Verifica permissão granular na tabela `permissoes` (admin/super: acesso total)
 async function temPermissaoBackend(usuarioId, nivel, modulo, acao) {
@@ -222,6 +289,8 @@ async function criar(req, res) {
     try { await enviarComunicadoPericia(periciaId, 'agendada', req.usuario.id); }
     catch (err) { console.error('Falha ao enviar comunicado da perícia:', err.message); }
 
+    // Nova perícia (agendada) → entra na agenda do Google do responsável (se usuário).
+    sincronizarPericiaGoogle(periciaId, {});
     return sucesso(res, { id: periciaId }, 'Perícia criada com sucesso', 201);
   } catch (e) {
     await conn.rollback();
@@ -249,7 +318,7 @@ async function atualizar(req, res) {
   try {
     await conn.beginTransaction();
 
-    const [existe] = await conn.execute('SELECT id FROM pericia WHERE id = ?', [req.params.id]);
+    const [existe] = await conn.execute('SELECT id, responsavel_id FROM pericia WHERE id = ?', [req.params.id]);
     if (!existe.length) {
       await conn.rollback();
       return naoEncontrado(res, 'Perícia não encontrada');
@@ -276,6 +345,19 @@ async function atualizar(req, res) {
     await auditoria.registrar(req.usuario.id, 'pericia', 'atualizar', req.params.id, null, null, conn);
 
     await conn.commit();
+    // Reflete no Google. Se o responsável (usuário) mudou, migra: cancela no antigo e
+    // cria no novo. Freelancer/sem responsável = ids nulos e o envio é ignorado.
+    const seq = Math.floor(Date.now() / 1000);
+    const oldResp = existe[0].responsavel_id;
+    const newResp = responsavel_id;
+    dadosPericiaParaGoogle(req.params.id).then(dados => {
+      if (oldResp === newResp) {
+        enviarPericiaParaGoogle(newResp, req.params.id, dados, false, seq);
+      } else {
+        enviarPericiaParaGoogle(oldResp, req.params.id, dados, true,  seq); // some da agenda do antigo
+        enviarPericiaParaGoogle(newResp, req.params.id, dados, false, seq); // entra na do novo
+      }
+    });
     return sucesso(res, null, 'Perícia atualizada com sucesso');
   } catch (e) {
     await conn.rollback();
@@ -343,6 +425,8 @@ async function cancelar(req, res) {
     try { await enviarComunicadoPericia(id, 'cancelada', req.usuario.id); }
     catch (err) { console.error('Falha ao enviar comunicado de cancelamento:', err.message); }
 
+    // Cancelada → sai da agenda do Google do responsável.
+    sincronizarPericiaGoogle(id, { cancelar: true, sequence: Math.floor(Date.now() / 1000) });
     return sucesso(res, null, 'Perícia cancelada com sucesso');
   } catch (err) {
     return erroInterno(res, err);
@@ -414,6 +498,10 @@ async function remarcar(req, res) {
     try { await enviarComunicadoPericia(novaId, 'remarcada', req.usuario.id); }
     catch (err) { console.error('Falha ao enviar comunicado de remarcação:', err.message); }
 
+    // Remarcação: a antiga sai do Google e a nova (agendada) entra.
+    const seqRem = Math.floor(Date.now() / 1000);
+    sincronizarPericiaGoogle(id,     { cancelar: true, sequence: seqRem });
+    sincronizarPericiaGoogle(novaId, {});
     return sucesso(res, { nova_pericia_id: novaId }, 'Perícia remarcada e nova perícia criada com sucesso');
   } catch (err) {
     await conn.rollback();
@@ -437,10 +525,16 @@ async function excluir(req, res) {
     if (rows[0].status === 'cancelada') return erro(res, 'Perícia cancelada não pode ser excluída — ela faz parte do histórico');
     if (rows[0].status === 'remarcada') return erro(res, 'Perícia remarcada não pode ser excluída — ela faz parte do histórico');
 
+    // Dados para o cancelamento no Google — capturados ANTES do DELETE (depois a linha some).
+    const dadosGoogleExcluir = await dadosPericiaParaGoogle(id);
+
     await conn.beginTransaction();
     await conn.execute('DELETE FROM auditoria_pericia WHERE pericia_id = ?', [id]);
     await conn.execute('DELETE FROM pericia WHERE id = ?', [id]);
     await conn.commit();
+    // Excluída → sai da agenda do Google do responsável (casa pelo mesmo UID).
+    enviarPericiaParaGoogle(dadosGoogleExcluir && dadosGoogleExcluir.responsavel_id, id,
+      dadosGoogleExcluir, true, Math.floor(Date.now() / 1000));
     return sucesso(res, null, 'Perícia excluída com sucesso');
   } catch (err) {
     await conn.rollback();

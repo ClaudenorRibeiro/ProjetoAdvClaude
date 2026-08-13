@@ -178,6 +178,17 @@ export function AuthProvider({ children }) {
     });
   }
 
+  // Atualiza a config do Google Agenda do usuário logado (após salvar no modal),
+  // refletindo na hora sem recarregar. Mantém o sessionStorage sincronizado.
+  function atualizarGoogleAgenda({ ativo, email }) {
+    setUsuario(u => {
+      if (!u) return u;
+      const novo = { ...u, google_agenda_ativo: ativo ? 1 : 0, google_agenda_email: email || null };
+      sessionStorage.setItem('usuario', JSON.stringify(novo));
+      return novo;
+    });
+  }
+
   // Verifica se o usuário tem permissão para uma ação em um módulo
   // Admins (nível 1) e superusuários (nível 0) têm acesso total
   function temPermissao(modulo, acao) {
@@ -193,7 +204,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       usuario, permissoes, carregando,
-      logar, deslogar, temPermissao, ehAdmin, ehSuper, atualizarCoresAgenda, atualizarCoresMenu, atualizarCorLinha, atualizarCorLinhaLida,
+      logar, deslogar, temPermissao, ehAdmin, ehSuper, atualizarCoresAgenda, atualizarCoresMenu, atualizarCorLinha, atualizarCorLinhaLida, atualizarGoogleAgenda,
     }}>
       {children}
     </AuthContext.Provider>

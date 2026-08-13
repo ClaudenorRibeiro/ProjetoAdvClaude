@@ -172,6 +172,8 @@ async function login(req, res) {
         cores_menu:   parseCoresMenu(usuario.cores_menu),     // cores personalizadas do menu lateral (null = padrão)
         cor_linha:    parseCorLinha(usuario.cor_linha),       // cor de destaque da linha/hover (null = padrão)
         cor_linha_lida: parseCorLinha(usuario.cor_linha_lida), // cor da linha de publicação já lida (null = padrão)
+        google_agenda_ativo: Number(usuario.google_agenda_ativo) === 1 ? 1 : 0, // envia eventos ao Google Agenda?
+        google_agenda_email: usuario.google_agenda_email || null,               // e-mail do Google do usuário
       },
       permissoes,
       // Tempo de inatividade (min) do escritório — o frontend usa para o logout automático.
@@ -235,12 +237,14 @@ async function verificarToken(req, res) {
     // Tempo de inatividade (min) do escritório — para o frontend rearmar o logout automático ao recarregar.
     const tempo_inatividade_min = await lerTempoInatividade();
     // Cores personalizadas da Agenda (1 SELECT leve, só ao recarregar o app — não é por requisição).
-    const [cfgCores] = await pool.execute('SELECT cores_agenda, cores_menu, cor_linha, cor_linha_lida FROM usuarios WHERE id = ?', [req.usuario.id]);
+    const [cfgCores] = await pool.execute('SELECT cores_agenda, cores_menu, cor_linha, cor_linha_lida, google_agenda_ativo, google_agenda_email FROM usuarios WHERE id = ?', [req.usuario.id]);
     const usuario = { ...req.usuario,
       cores_agenda: parseCoresAgenda(cfgCores[0]?.cores_agenda),
       cores_menu:   parseCoresMenu(cfgCores[0]?.cores_menu),
       cor_linha:    parseCorLinha(cfgCores[0]?.cor_linha),
-      cor_linha_lida: parseCorLinha(cfgCores[0]?.cor_linha_lida) };
+      cor_linha_lida: parseCorLinha(cfgCores[0]?.cor_linha_lida),
+      google_agenda_ativo: Number(cfgCores[0]?.google_agenda_ativo) === 1 ? 1 : 0,
+      google_agenda_email: cfgCores[0]?.google_agenda_email || null };
     return sucesso(res, { usuario, permissoes, tempo_inatividade_min });
   } catch (err) {
     return erroInterno(res, err);
@@ -302,6 +306,31 @@ async function salvarCorLinhaLida(req, res) {
       [cor, req.usuario.id]
     );
     return sucesso(res, { cor_linha_lida: cor }, cor ? 'Cor salva' : 'Cor restaurada para o padrão');
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// PUT /api/auth/google-agenda — o usuário liga/desliga o envio dos seus eventos
+// para o Google Agenda e informa o e-mail do Google. Body: { ativo, email }.
+// Só o próprio usuário logado altera o seu (self-service). E-mail guardado em minúsculas.
+async function salvarGoogleAgenda(req, res) {
+  try {
+    const ativo = req.body?.ativo ? 1 : 0;
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    // Para ATIVAR é obrigatório um e-mail válido (senão não há para onde enviar).
+    if (ativo && !email) {
+      return erro(res, 'Informe o e-mail do seu Google para ativar o envio para a agenda.');
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return erro(res, 'E-mail do Google inválido. Confira o endereço digitado.');
+    }
+    await pool.execute(
+      'UPDATE usuarios SET google_agenda_ativo = ?, google_agenda_email = ? WHERE id = ?',
+      [ativo, email || null, req.usuario.id]
+    );
+    return sucesso(res, { google_agenda_ativo: ativo, google_agenda_email: email || null },
+      ativo ? 'Envio para o Google Agenda ativado' : 'Envio para o Google Agenda desativado');
   } catch (err) {
     return erroInterno(res, err);
   }
@@ -484,4 +513,4 @@ async function logout(req, res) {
   return sucesso(res, null, 'Logout registrado');
 }
 
-module.exports = { login, logout, criarPrimeiroAdmin, verificarToken, esqueciSenha, validarToken, redefinirSenha, trocarSenha, verificarSenha, salvarCoresAgenda, salvarCoresMenu, salvarCorLinha, salvarCorLinhaLida };
+module.exports = { login, logout, criarPrimeiroAdmin, verificarToken, esqueciSenha, validarToken, redefinirSenha, trocarSenha, verificarSenha, salvarCoresAgenda, salvarCoresMenu, salvarCorLinha, salvarCorLinhaLida, salvarGoogleAgenda };

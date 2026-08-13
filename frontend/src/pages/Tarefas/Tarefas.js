@@ -13,7 +13,7 @@ import ModalInfo from '../../components/ui/ModalInfo';
 import useEscFechar from '../../hooks/useEscFechar';
 import MenuAcoes from '../../components/MenuAcoes';
 import ModalLerPublicacao from '../../components/ModalLerPublicacao';
-import { EtiquetaCelula, LegendaEtiquetasPessoais, itensMenuEtiqueta, useEtiquetasPessoais } from '../../components/Etiquetas';
+import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetasSubmenu, useEtiquetasPessoais } from '../../components/Etiquetas';
 
 const PRIORIDADE_COR = { urgente: 'badge-vermelho', normal: 'badge-laranja', baixa: 'badge-verde' };
 const LIMITE = 100;
@@ -324,7 +324,7 @@ export default function Tarefas() {
                     </td>
                     <td>
                       <MenuAcoes itens={[
-                        ...itensMenuEtiqueta({ definicoes: etqDefs, slotAtual: t.etiqueta_pessoal,
+                        itemEtiquetasSubmenu({ definicoes: etqDefs, slotAtual: t.etiqueta_pessoal,
                           onMarcar: (slot) => marcarEtq(t.id, slot) }),
                         { label: t.concluida ? 'Reabrir' : 'Concluir', icone: t.concluida ? '↩️' : '✅',
                           onClick: () => toggleConcluir(t) },
@@ -507,7 +507,7 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
     titulo:          tarefa?.titulo || '',
     descricao:       tarefa?.descricao || '',
     prioridade:      tarefa?.prioridade || 'normal',
-    data_vencimento: tarefa?.data_vencimento ? tarefa.data_vencimento.split('T')[0] : (dataInicial || dataMaisDias(7)),
+    data_vencimento: tarefa?.data_vencimento ? tarefa.data_vencimento.split('T')[0] : (dataInicial || dataMaisDias(0)),
     atribuida_para:  tarefa?.atribuida_para ? String(tarefa.atribuida_para) : '',
     processo_id:     tarefa?.processo_id || preSelecao?.processo_id || null,
   });

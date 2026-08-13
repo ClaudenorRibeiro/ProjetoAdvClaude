@@ -7,6 +7,61 @@ const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response
 const auditoria = require('../middleware/auditoria');
 const { bloqueiaAgendarPassado } = require('../utils/helpers');
 const { notificarConclusao } = require('../services/notificacaoService');
+const agendaGoogle = require('../services/agendaGoogleService');
+
+// ===== Integração com o Google Agenda (convite .ics) =====
+// A tarefa vai para o Google de quem ela foi ATRIBUÍDA (atribuida_para). Sem
+// atribuição (tarefa do escritório) OU sem vencimento → não envia. Evento de DIA
+// INTEIRO (data_vencimento). Título = o próprio título da tarefa. Melhor esforço:
+// roda em 2º plano e nunca derruba a operação (o serviço já engole erros).
+
+// Monta os dados do evento a partir da tarefa. Retorna null se não existir.
+async function dadosTarefaParaGoogle(tarefaId) {
+  try {
+    const [rows] = await pool.execute(
+      'SELECT atribuida_para, titulo, descricao, data_vencimento FROM tarefas WHERE id = ?', [tarefaId]
+    );
+    const t = rows[0];
+    if (!t) return null;
+    return {
+      atribuida_para: t.atribuida_para,
+      resumo: `Tarefa: ${t.titulo || ''}`.trim(),
+      descricao: t.descricao || '',
+      data: t.data_vencimento, // null = tarefa sem vencimento → o serviço não envia
+    };
+  } catch (e) {
+    console.error('[tarefa->google] falha ao montar dados:', e.message);
+    return null;
+  }
+}
+
+// Envia (ou cancela) o evento no Google do usuário atribuído informado. Ignora
+// quando não há atribuído (tarefa do escritório) ou o usuário não ativou o envio.
+async function enviarTarefaParaGoogle(usuarioId, tarefaId, dados, cancelar = false, sequence = 0) {
+  try {
+    if (!usuarioId || !dados) return;
+    const [u] = await pool.execute(
+      'SELECT nome, google_agenda_ativo, google_agenda_email FROM usuarios WHERE id = ?', [usuarioId]
+    );
+    const dono = u[0];
+    if (!dono || Number(dono.google_agenda_ativo) !== 1 || !dono.google_agenda_email) return;
+    await agendaGoogle.enviarConviteEvento({
+      tipo: 'tarefa', id: tarefaId, cancelar, sequence,
+      resumo: dados.resumo, descricao: dados.descricao,
+      data: dados.data, diaTodo: true,
+      destinatarioEmail: dono.google_agenda_email, destinatarioNome: dono.nome,
+    });
+  } catch (e) {
+    console.error('[tarefa->google] falha ao enviar:', e.message);
+  }
+}
+
+// Conveniência para os casos simples (usa o atribuído ATUAL da tarefa). 2º plano.
+function sincronizarTarefaGoogle(tarefaId, { cancelar = false, sequence = 0 } = {}) {
+  dadosTarefaParaGoogle(tarefaId).then(dados =>
+    enviarTarefaParaGoogle(dados && dados.atribuida_para, tarefaId, dados, cancelar, sequence)
+  );
+}
 
 // GET /api/tarefas — Lista tarefas com filtros
 async function listar(req, res) {
@@ -169,6 +224,8 @@ async function criar(req, res) {
     await auditoria.registrar(req.usuario.id, 'tarefas', 'criar', result.insertId, null, null, conn);
 
     await conn.commit();
+    // Nova tarefa → entra na agenda do Google do atribuído (se usuário com Google e com vencimento).
+    sincronizarTarefaGoogle(result.insertId, {});
     return sucesso(res, { id: result.insertId }, 'Tarefa criada com sucesso', 201);
   } catch (err) {
     await conn.rollback();
@@ -196,6 +253,12 @@ async function concluir(req, res) {
       'UPDATE tarefas SET concluida = 1, concluida_por = ?, concluida_em = NOW() WHERE id = ?',
       [req.usuario.id, id]
     );
+    // Limpa a etiqueta PESSOAL de quem concluiu (não deixa sujeira). Só a dele;
+    // etiquetas de outros usuários nesta tarefa permanecem (cada um só vê a sua).
+    await conn.execute(
+      'DELETE FROM tarefas_etiquetas WHERE tarefa_id = ? AND usuario_id = ?',
+      [id, req.usuario.id]
+    );
     await auditoria.registrar(req.usuario.id, 'tarefas', 'concluir', id, null, null, conn);
 
     // Aviso no sino ao criador (só se ele pediu ao criar e não foi ele mesmo quem concluiu)
@@ -209,6 +272,8 @@ async function concluir(req, res) {
     }
 
     await conn.commit();
+    // Concluída → sai da agenda do Google do atribuído.
+    sincronizarTarefaGoogle(id, { cancelar: true, sequence: Math.floor(Date.now() / 1000) });
     return sucesso(res, null, 'Tarefa concluída');
   } catch (err) {
     await conn.rollback();
@@ -234,6 +299,8 @@ async function reabrir(req, res) {
     await auditoria.registrar(req.usuario.id, 'tarefas', 'reabrir', id, null, null, conn);
 
     await conn.commit();
+    // Reaberta → volta para a agenda do Google do atribuído.
+    sincronizarTarefaGoogle(id, { sequence: Math.floor(Date.now() / 1000) });
     return sucesso(res, null, 'Tarefa reaberta');
   } catch (err) {
     await conn.rollback();
@@ -315,6 +382,9 @@ async function excluir(req, res) {
   const [exists] = await pool.execute('SELECT id FROM tarefas WHERE id = ?', [id]);
   if (!exists.length) return naoEncontrado(res, 'Tarefa não encontrada');
 
+  // Dados para o cancelamento no Google — capturados ANTES do DELETE (depois a linha some).
+  const dadosGoogleExcluir = await dadosTarefaParaGoogle(id);
+
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -323,6 +393,9 @@ async function excluir(req, res) {
     await auditoria.registrar(req.usuario.id, 'tarefas', 'excluir', id, null, null, conn);
 
     await conn.commit();
+    // Excluída → sai da agenda do Google do atribuído (casa pelo mesmo UID).
+    enviarTarefaParaGoogle(dadosGoogleExcluir && dadosGoogleExcluir.atribuida_para, id,
+      dadosGoogleExcluir, true, Math.floor(Date.now() / 1000));
     return sucesso(res, null, 'Tarefa excluída');
   } catch (err) {
     await conn.rollback();
@@ -343,6 +416,9 @@ async function atualizar(req, res) {
     return erro(res, 'Apenas o administrador pode agendar tarefa com data anterior a hoje. Escolha uma data a partir de hoje.');
   }
 
+  // Atribuído ANTES da edição (para migrar de agenda se ele mudar).
+  const [antes] = await pool.execute('SELECT atribuida_para FROM tarefas WHERE id = ?', [id]);
+
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -359,6 +435,19 @@ async function atualizar(req, res) {
     await auditoria.registrar(req.usuario.id, 'tarefas', 'alterar', id, null, null, conn);
 
     await conn.commit();
+    // Reflete no Google. Se o atribuído mudou, migra (cancela no antigo, cria no novo);
+    // sem atribuído (escritório) = id nulo e o envio é ignorado.
+    const seq = Math.floor(Date.now() / 1000);
+    const donoAntigo = antes[0] ? antes[0].atribuida_para : null;
+    const donoNovo   = atribuida_para ? parseInt(atribuida_para) : null;
+    dadosTarefaParaGoogle(id).then(dados => {
+      if (donoAntigo === donoNovo) {
+        enviarTarefaParaGoogle(donoNovo, id, dados, false, seq);
+      } else {
+        enviarTarefaParaGoogle(donoAntigo, id, dados, true,  seq); // some da agenda do antigo
+        enviarTarefaParaGoogle(donoNovo,   id, dados, false, seq); // entra na do novo
+      }
+    });
     return sucesso(res, null, 'Tarefa atualizada');
   } catch (err) {
     await conn.rollback();

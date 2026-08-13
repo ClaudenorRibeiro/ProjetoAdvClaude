@@ -6,6 +6,80 @@
 const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
+const agendaGoogle = require('../services/agendaGoogleService');
+
+// ===== Integração com o Google Agenda (convite .ics) =====
+// O evento vai para o Google do RESPONSÁVEL, mas SÓ quando ele for um USUÁRIO do
+// sistema (freelancer não tem login/Google). Título "Audiência: <nº do processo>".
+// Tudo é "melhor esforço": roda em 2º plano e nunca derruba a operação.
+
+// Monta os dados do evento a partir da audiência (uma query com os nomes legíveis).
+// Retorna null se a audiência não existir. `responsavel_id` volta junto para o chamador.
+async function dadosAudienciaParaGoogle(audienciaId) {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT a.responsavel_id, a.data, a.hora, a.modalidade, a.link_virtual, a.plataforma_virtual,
+              pr.numProc AS num_processo,
+              ta.nome AS tipo_nome,
+              COALESCE(vr.abrev_nome, vr.nome) AS vara_nome, fr.nome AS forum_nome
+         FROM audiencia a
+         JOIN tblproc pr ON a.processo_id = pr.id
+         LEFT JOIN tipo_audiencia ta ON a.tipo_audiencia_id = ta.id
+         LEFT JOIN tblvara vr        ON a.vara_id            = vr.id
+         LEFT JOIN tblforum fr       ON vr.forum_id          = fr.id
+        WHERE a.id = ?`, [audienciaId]
+    );
+    const a = rows[0];
+    if (!a) return null;
+    const partes = [];
+    if (a.tipo_nome)   partes.push(`Tipo: ${a.tipo_nome}`);
+    if (a.vara_nome)   partes.push(`Vara: ${a.vara_nome}${a.forum_nome ? ` — ${a.forum_nome}` : ''}`);
+    if (a.modalidade)  partes.push(`Modalidade: ${a.modalidade}`);
+    if (a.modalidade === 'virtual' && (a.plataforma_virtual || a.link_virtual)) {
+      partes.push(`Link: ${a.plataforma_virtual ? a.plataforma_virtual + ' — ' : ''}${a.link_virtual || ''}`);
+    }
+    return {
+      responsavel_id: a.responsavel_id,
+      resumo: `Audiência: ${a.num_processo || ''}`.trim(),
+      descricao: partes.join('\n'),
+      data: a.data,
+      hora: a.hora,
+    };
+  } catch (e) {
+    console.error('[audiencia->google] falha ao montar dados:', e.message);
+    return null;
+  }
+}
+
+// Envia (ou cancela) o evento no Google do usuário responsável informado.
+// Ignora silenciosamente quando não há usuário (freelancer/sem responsável) ou
+// quando o usuário não ativou o envio. `dados` = retorno de dadosAudienciaParaGoogle.
+async function enviarAudienciaParaGoogle(usuarioId, audienciaId, dados, cancelar = false, sequence = 0) {
+  try {
+    if (!usuarioId || !dados) return;
+    const [u] = await pool.execute(
+      'SELECT nome, google_agenda_ativo, google_agenda_email FROM usuarios WHERE id = ?', [usuarioId]
+    );
+    const dono = u[0];
+    if (!dono || Number(dono.google_agenda_ativo) !== 1 || !dono.google_agenda_email) return;
+    await agendaGoogle.enviarConviteEvento({
+      tipo: 'audiencia', id: audienciaId, cancelar, sequence,
+      resumo: dados.resumo, descricao: dados.descricao,
+      data: dados.data, diaTodo: false, horaInicio: dados.hora, horaFim: null,
+      destinatarioEmail: dono.google_agenda_email, destinatarioNome: dono.nome,
+    });
+  } catch (e) {
+    console.error('[audiencia->google] falha ao enviar:', e.message);
+  }
+}
+
+// Conveniência para os casos simples (usa o responsável ATUAL da audiência).
+// 2º plano: não aguarda, não derruba a resposta.
+function sincronizarAudienciaGoogle(audienciaId, { cancelar = false, sequence = 0 } = {}) {
+  dadosAudienciaParaGoogle(audienciaId).then(dados =>
+    enviarAudienciaParaGoogle(dados && dados.responsavel_id, audienciaId, dados, cancelar, sequence)
+  );
+}
 
 // Verifica permissão granular na tabela `permissoes` para o usuário logado
 // Admin e super (nivel <= 1) têm acesso total sem consultar a tabela
@@ -284,6 +358,8 @@ async function criar(req, res) {
     // Auditoria na MESMA transação (tudo ou nada): antes do commit, com conn
     await auditoria.registrar(req.usuario.id, 'audiencia', 'criar', audienciaId, null, null, conn);
     await conn.commit();
+    // Nova audiência (agendada) → entra na agenda do Google do responsável (se usuário).
+    sincronizarAudienciaGoogle(audienciaId, {});
     return sucesso(res, { id: audienciaId }, 'Audiência cadastrada com sucesso', 201);
   } catch (err) {
     await conn.rollback();
@@ -427,6 +503,19 @@ async function atualizar(req, res) {
     }
 
     await conn.commit();
+    // Reflete no Google. Se o responsável (usuário) mudou, migra: cancela no antigo e
+    // cria no novo. Freelancer/sem responsável = ids nulos e o envio é ignorado.
+    const seq = Math.floor(Date.now() / 1000);
+    const oldResp = antes[0].responsavel_id;
+    const newResp = responsavel_id;
+    dadosAudienciaParaGoogle(id).then(dados => {
+      if (oldResp === newResp) {
+        enviarAudienciaParaGoogle(newResp, id, dados, false, seq);
+      } else {
+        enviarAudienciaParaGoogle(oldResp, id, dados, true,  seq); // some da agenda do antigo
+        enviarAudienciaParaGoogle(newResp, id, dados, false, seq); // entra na do novo
+      }
+    });
     return sucesso(res, null, 'Audiência atualizada com sucesso');
   } catch (err) {
     await conn.rollback();
@@ -467,6 +556,8 @@ async function cancelar(req, res) {
       [id, antes[0].status, req.usuario.id]
     );
 
+    // Cancelada → sai da agenda do Google do responsável.
+    sincronizarAudienciaGoogle(id, { cancelar: true, sequence: Math.floor(Date.now() / 1000) });
     return sucesso(res, null, 'Audiência cancelada com sucesso');
   } catch (err) {
     return erroInterno(res, err);
@@ -541,6 +632,10 @@ async function remarcar(req, res) {
     );
 
     await conn.commit();
+    // Remarcação: a antiga sai do Google e a nova (agendada) entra.
+    const seqRem = Math.floor(Date.now() / 1000);
+    sincronizarAudienciaGoogle(id,     { cancelar: true, sequence: seqRem });
+    sincronizarAudienciaGoogle(novaId, {});
     return sucesso(res, { nova_audiencia_id: novaId }, 'Audiência remarcada e nova audiência criada com sucesso');
   } catch (err) {
     await conn.rollback();
@@ -874,6 +969,9 @@ async function excluir(req, res) {
 
     const aud = rows[0];
 
+    // Dados para o cancelamento no Google — capturados ANTES do DELETE (depois a linha some).
+    const dadosGoogleExcluir = await dadosAudienciaParaGoogle(id);
+
     // Amarrações que importam: ata registrada e testemunhas vinculadas.
     // (A auditoria_audiencia é o histórico da PRÓPRIA audiência — sai junto, não conta como amarração.)
     const [ataRows] = await pool.execute(
@@ -916,6 +1014,9 @@ async function excluir(req, res) {
     await conn.execute('DELETE FROM audiencia WHERE id = ?', [id]);
 
     await conn.commit();
+    // Excluída → sai da agenda do Google do responsável (casa pelo mesmo UID).
+    enviarAudienciaParaGoogle(dadosGoogleExcluir && dadosGoogleExcluir.responsavel_id, id,
+      dadosGoogleExcluir, true, Math.floor(Date.now() / 1000));
     return sucesso(res, null, 'Audiência excluída com sucesso');
   } catch (err) {
     await conn.rollback();
@@ -1071,6 +1172,8 @@ async function reverterStatus(req, res) {
     );
 
     await conn.commit();
+    // Voltou para agendada → reenvia para a agenda do Google do responsável.
+    sincronizarAudienciaGoogle(id, { sequence: Math.floor(Date.now() / 1000) });
     return sucesso(res, null, 'Status revertido para Agendada. A ata foi removida.');
   } catch (err) {
     await conn.rollback();

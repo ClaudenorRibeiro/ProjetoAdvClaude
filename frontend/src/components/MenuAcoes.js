@@ -27,8 +27,27 @@ export default function MenuAcoes({ itens = [], titulo = 'Mais ações' }) {
   const [pos, setPos] = useState(null); // { top, left } quando aberto; null quando fechado
   const [docCtx, setDocCtx] = useState(null); // { ancoraTipo, ancoraId, beneficiario } ao gerar documento
   const [hover, setHover] = useState(false);
+  const [sub, setSub] = useState(null); // { idx, top, left } do submenu aberto (item com .submenu)
   const btnRef = useRef(null);
   const menuRef = useRef(null);
+
+  // Fecha o submenu sempre que o menu principal fecha.
+  useEffect(() => { if (!pos) setSub(null); }, [pos]);
+
+  // Abre o submenu de um item ao LADO do seu botão. Vira para a esquerda se não
+  // couber à direita (borda da tela) e sobe se estourar embaixo. Funciona no
+  // hover (PC) e no clique/toque (celular/tablet), pois é chamado por ambos.
+  function abrirSub(idx, el, qtd) {
+    const r = el.getBoundingClientRect();
+    const largura = 210;
+    let left = r.right - 2;
+    if (left + largura > window.innerWidth - 8) left = r.left - largura + 2;
+    if (left < 8) left = 8;
+    const estAltura = qtd * 36 + 12;
+    let top = Math.min(r.top, window.innerHeight - estAltura - 8);
+    top = Math.max(8, top);
+    setSub({ idx, top, left });
+  }
 
   useEffect(() => {
     if (!pos) return;
@@ -99,17 +118,58 @@ export default function MenuAcoes({ itens = [], titulo = 'Mais ações' }) {
           style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 1000, width: '200px',
             background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px',
             boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: '6px' }}>
-          {visiveis.map((it, i) => (
-            <button key={i} type="button"
-              onClick={() => { setPos(null); if (it.gerarDoc) { setDocCtx(it.gerarDoc); } else { it.onClick(); } }}
-              style={{ display: 'flex', gap: '8px', alignItems: 'center', width: '100%', textAlign: 'left',
-                background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', padding: '8px 10px',
-                borderRadius: '6px', color: it.perigo ? '#dc2626' : '#334155', whiteSpace: 'nowrap' }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#dbeafe')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-              {it.icone && <span aria-hidden="true">{it.icone}</span>}{it.label}
-            </button>
-          ))}
+          {visiveis.map((it, i) => {
+            // Item com SUBMENU (ex.: "Etiquetas"): abre um painel ao lado.
+            if (it.submenu) {
+              const subVis = it.submenu.filter(s => s && !s.oculto);
+              if (subVis.length === 0) return null;
+              const aberto = sub && sub.idx === i;
+              return (
+                <div key={i} onMouseLeave={() => setSub(null)}>
+                  <button type="button"
+                    onMouseEnter={e => abrirSub(i, e.currentTarget, subVis.length)}
+                    onClick={e => { e.stopPropagation(); abrirSub(i, e.currentTarget, subVis.length); }}
+                    style={{ display: 'flex', gap: '8px', alignItems: 'center', width: '100%', textAlign: 'left',
+                      background: aberto ? '#dbeafe' : 'none', border: 'none', cursor: 'pointer', fontSize: '13px',
+                      padding: '8px 10px', borderRadius: '6px', color: '#334155', whiteSpace: 'nowrap' }}>
+                    {it.icone && <span aria-hidden="true">{it.icone}</span>}
+                    <span style={{ flex: 1 }}>{it.label}</span>
+                    <span aria-hidden="true" style={{ color: '#94a3b8' }}>▸</span>
+                  </button>
+                  {aberto && (
+                    <div onMouseDown={e => e.stopPropagation()}
+                      style={{ position: 'fixed', top: sub.top, left: sub.left, zIndex: 1001, width: '210px',
+                        background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px',
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: '6px' }}>
+                      {subVis.map((s, j) => (
+                        <button key={j} type="button"
+                          onClick={() => { setPos(null); s.onClick(); }}
+                          style={{ display: 'flex', gap: '8px', alignItems: 'center', width: '100%', textAlign: 'left',
+                            background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', padding: '8px 10px',
+                            borderRadius: '6px', color: s.perigo ? '#dc2626' : '#334155', whiteSpace: 'nowrap' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = '#dbeafe')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                          {s.icone && <span aria-hidden="true">{s.icone}</span>}{s.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+            // Item normal (comportamento original).
+            return (
+              <button key={i} type="button"
+                onClick={() => { setPos(null); if (it.gerarDoc) { setDocCtx(it.gerarDoc); } else { it.onClick(); } }}
+                onMouseEnter={e => { setSub(null); e.currentTarget.style.background = '#dbeafe'; }}
+                style={{ display: 'flex', gap: '8px', alignItems: 'center', width: '100%', textAlign: 'left',
+                  background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', padding: '8px 10px',
+                  borderRadius: '6px', color: it.perigo ? '#dc2626' : '#334155', whiteSpace: 'nowrap' }}
+                onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                {it.icone && <span aria-hidden="true">{it.icone}</span>}{it.label}
+              </button>
+            );
+          })}
         </div>
       )}
       {docCtx && (

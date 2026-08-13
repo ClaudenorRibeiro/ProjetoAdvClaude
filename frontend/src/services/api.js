@@ -74,6 +74,7 @@ export const authAPI = {
   salvarCoresMenu:   (cores) => api.put('/auth/cores-menu',   { cores }), // cores=null restaura o padrão
   salvarCorLinha:     (cor)  => api.put('/auth/cor-linha',      { cor }),  // cor=null restaura o padrão
   salvarCorLinhaLida: (cor)  => api.put('/auth/cor-linha-lida', { cor }),  // cor=null restaura o padrão
+  salvarGoogleAgenda: (dados) => api.put('/auth/google-agenda', dados),    // { ativo, email }
 };
 
 // ============================================================
