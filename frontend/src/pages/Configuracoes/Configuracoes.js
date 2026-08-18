@@ -1351,12 +1351,16 @@ const APIKEY_PADRAO_DATAJUD = 'cDZHYzlZa0JadVREZDJCendQbXY6SkJlTzNjLV9TRENyQk1Rd
 function TabEtiquetasEscritorio() {
   const [modulo, setModulo]     = useState(MODULOS_ETIQUETA_ESCRITORIO[0]?.chave || 'processos');
   const [rows, setRows]         = useState(() => cincoLinhasEtiqueta());
+  const [emUso, setEmUso]       = useState([]);
   const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso]       = useState('');
 
   useEffect(() => {
-    etiquetasAPI.catalogo(modulo)
-      .then(r => setRows(cincoLinhasEtiqueta(r.data?.dados)))
+    Promise.all([etiquetasAPI.catalogo(modulo), etiquetasAPI.emUsoEscritorio(modulo)])
+      .then(([r, u]) => {
+        setRows(cincoLinhasEtiqueta(r.data?.dados));
+        setEmUso(u.data?.dados || []);
+      })
       .catch(() => {});
   }, [modulo]);
 
@@ -1366,8 +1370,19 @@ function TabEtiquetasEscritorio() {
     setSalvando(true); setAviso('');
     try {
       const { data } = await etiquetasAPI.salvarCatalogo(modulo, rows);
-      if (data.ok) toast.success('Etiquetas do escritório salvas!');
-      else setAviso(data.mensagem || 'Não foi possível salvar as etiquetas.');
+      if (data.ok) {
+        const protegidos = data.dados?.protegidos || [];
+        if (protegidos.length > 0) {
+          // Recarrega o que realmente ficou salvo (cor/exclusão de slot em uso foi protegida).
+          const r = await etiquetasAPI.catalogo(modulo);
+          setRows(cincoLinhasEtiqueta(r.data?.dados));
+          setAviso('Uma ou mais cores já estão em uso em registros existentes e por isso não podem mudar de cor nem ser removidas — só o nome. As demais alterações foram salvas normalmente.');
+        } else {
+          toast.success('Etiquetas do escritório salvas!');
+        }
+      } else {
+        setAviso(data.mensagem || 'Não foi possível salvar as etiquetas.');
+      }
     } catch (err) {
       setAviso(err.response?.data?.mensagem || 'Não foi possível salvar as etiquetas.');
     } finally {
@@ -1395,7 +1410,7 @@ function TabEtiquetasEscritorio() {
           {MODULOS_ETIQUETA_ESCRITORIO.map(m => <option key={m.chave} value={m.chave}>{m.label}</option>)}
         </select>
       </div>
-      <EditorEtiquetasCinco rows={rows} onChange={setRow} />
+      <EditorEtiquetasCinco rows={rows} onChange={setRow} emUso={emUso} />
       <div style={{ marginTop: 16 }}>
         <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
           {salvando ? 'Salvando...' : 'Salvar'}

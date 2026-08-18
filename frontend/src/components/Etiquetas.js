@@ -8,6 +8,7 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { etiquetasAPI } from '../services/api';
+import useEscFechar from '../hooks/useEscFechar';
 
 // Módulos com etiqueta PESSOAL. A CONFIGURAÇÃO (5 cores) vale para todos;
 // a EXIBIÇÃO na tela é ligada por rollout (hoje: só "pastas"/Processos).
@@ -40,19 +41,36 @@ export function cincoLinhasEtiqueta(salvas) {
 }
 
 // Editor das 5 cores + significados. `rows`=[{slot,cor,significado}]; onChange(i, campo, valor).
-export function EditorEtiquetasCinco({ rows, onChange }) {
+// `emUso`=[slots] que já estão marcados em algum registro — a cor fica travada e o slot não
+// pode ficar vazio (só o nome/significado continua editável). O backend também protege isso
+// mesmo se esta trava visual for contornada.
+export function EditorEtiquetasCinco({ rows, onChange, emUso = [] }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      {rows.map((row, i) => (
-        <div key={row.slot} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <input type="color" value={row.cor} onChange={e => onChange(i, 'cor', e.target.value)}
-            style={{ width: 40, height: 28, border: 'none', background: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }} />
-          <input className="form-control" maxLength={60}
-            placeholder={`Significado da cor ${i + 1} (ex.: aguardando retorno)`}
-            value={row.significado} onChange={e => onChange(i, 'significado', e.target.value)}
-            style={{ flex: 1 }} />
-        </div>
-      ))}
+      {rows.map((row, i) => {
+        const travada = emUso.includes(row.slot);
+        return (
+          <div key={row.slot} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <input type="color" value={row.cor} disabled={travada}
+              onChange={e => onChange(i, 'cor', e.target.value)}
+              title={travada ? 'Cor em uso — não pode ser trocada' : ''}
+              style={{
+                width: 40, height: 28, border: 'none', background: 'none', padding: 0, flexShrink: 0,
+                cursor: travada ? 'not-allowed' : 'pointer', opacity: travada ? 0.5 : 1,
+              }} />
+            <input className="form-control" maxLength={60}
+              placeholder={`Significado da cor ${i + 1} (ex.: aguardando retorno)`}
+              value={row.significado} onChange={e => onChange(i, 'significado', e.target.value)}
+              style={{ flex: 1 }} />
+            {travada && (
+              <span style={{ fontSize: '11px', color: '#888', whiteSpace: 'nowrap' }}
+                title="Essa cor já está em uso em registros existentes — não pode mudar de cor nem ser removida, só o nome">
+                🔒 em uso
+              </span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -176,4 +194,90 @@ export function itemEtiquetasSubmenu({ definicoes, slotAtual, onMarcar }) {
   const sub = itensMenuEtiqueta({ definicoes, slotAtual, onMarcar });
   if (sub.length === 0) return null;
   return { label: 'Etiquetas', icone: '🏷️', submenu: sub };
+}
+
+// Versão AGRUPADA para etiqueta DO ESCRITÓRIO: em vez de jogar as cores soltas no menu ⋮,
+// devolve UM único item "Etiqueta" com submenu lateral — as cores + "Remover etiqueta" (só
+// pra quem tem a permissão de aplicar) + "Histórico da etiqueta" (sempre; ver é livre pra
+// todos, igual à bolinha). `onAbrirHistorico` recebe { modulo, registroId }.
+export function itemEtiquetaEscritorioSubmenu({ definicoes, slotAtual, podeAplicar, onMarcar, modulo, registroId, onAbrirHistorico }) {
+  const sub = podeAplicar ? itensMenuEtiqueta({ definicoes, slotAtual, onMarcar }) : [];
+  sub.push({ label: 'Histórico da etiqueta', icone: '🕓', onClick: () => onAbrirHistorico({ modulo, registroId }) });
+  const def = defDoSlot(definicoes, slotAtual);
+  return { label: 'Etiqueta', icone: def ? bolinha(def.cor) : '🏷️', submenu: sub };
+}
+
+// Modal simples: lista quem aplicou/trocou/removeu a etiqueta do escritório desse
+// registro, e quando (mais recente primeiro). `catalogo`=[{slot,cor,significado}]
+// pra mostrar a cor/nome de cada lado da troca (sem ele, mostra só a cor crua).
+export function ModalHistoricoEtiquetaEscritorio({ modulo, registroId, catalogo, onFechar }) {
+  const [linhas, setLinhas]     = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro]         = useState('');
+  const overlayRef = useEscFechar(onFechar);
+
+  useEffect(() => {
+    let cancelado = false;
+    etiquetasAPI.historicoEscritorio(modulo, registroId)
+      .then(r => { if (!cancelado) setLinhas(r.data?.dados || []); })
+      .catch(e => { if (!cancelado) setErro(e.response?.data?.mensagem || 'Não foi possível carregar o histórico.'); })
+      .finally(() => { if (!cancelado) setCarregando(false); });
+    return () => { cancelado = true; };
+  }, [modulo, registroId]);
+
+  function ladoEtiqueta(slot) {
+    const def = defDoSlot(catalogo, slot);
+    if (!slot) return <span style={{ color: '#888' }}>Sem etiqueta</span>;
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ width: 11, height: 11, borderRadius: '50%', background: def?.cor || '#ccc', display: 'inline-block' }} />
+        {def?.significado || `Cor ${slot}`}
+      </span>
+    );
+  }
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 1200 }} ref={overlayRef}
+      onMouseDown={e => { if (e.target === e.currentTarget) onFechar(); }}>
+      <div className="modal-box" style={{ maxWidth: '480px' }}>
+        <div className="modal-header">
+          <h3>Histórico da etiqueta</h3>
+          <button className="modal-fechar" onClick={onFechar}>✕</button>
+        </div>
+        <div className="modal-body">
+          {carregando && <p className="lista-vazia">Carregando...</p>}
+          {!carregando && erro && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c',
+              padding: '8px 12px', borderRadius: 6, fontSize: 13 }}>
+              {erro}
+            </div>
+          )}
+          {!carregando && !erro && linhas.length === 0 && (
+            <p className="lista-vazia">Nenhuma alteração registrada ainda para este registro.</p>
+          )}
+          {!carregando && !erro && linhas.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {linhas.map((l, i) => (
+                <div key={i} style={{
+                  border: '1px solid #e8ecf0', borderRadius: '6px', padding: '10px 12px', fontSize: '13px',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    {ladoEtiqueta(l.slot_anterior)}
+                    <span style={{ color: '#aaa' }}>→</span>
+                    {ladoEtiqueta(l.slot_novo)}
+                  </div>
+                  <div style={{ color: '#888', fontSize: '11px', marginTop: '4px' }}>
+                    {l.usuario_nome} · {new Date(l.criado_em).toLocaleString('pt-BR')}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onFechar}>Fechar</button>
+        </div>
+      </div>
+    </div>
+  );
 }

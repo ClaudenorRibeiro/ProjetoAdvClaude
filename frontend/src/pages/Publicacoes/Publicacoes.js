@@ -643,8 +643,10 @@ function PublicacoesAASP() {
                 {lista.map(p => (
                   // Linha pintada (vermelho claro) = publicação repetida: existe outra de texto
                   // idêntico no mesmo dia. Fica pintada uma cópia; a mais antiga não é pintada.
+                  // Fundo (não lida): branco na 1ª busca do dia, amarelo-claro da 2ª busca em diante
+                  // (buscada_novamente, calculado no backend). Lida = sempre verde, não muda.
                   <tr key={p.id}
-                    style={{ background: p.lida ? 'var(--linha-lida, #cdebd6)' : '#fff8db' }}>
+                    style={{ background: p.lida ? 'var(--linha-lida, #cdebd6)' : (p.buscada_novamente ? '#fff8db' : '#fff') }}>
                     {podeExcluir && (
                       <td style={{ textAlign: 'center' }}>
                         <input type="checkbox" checked={selecionados.includes(p.id)}

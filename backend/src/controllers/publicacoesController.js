@@ -308,6 +308,15 @@ async function listar(req, res) {
                              = REPLACE(REPLACE(REPLACE(p.numero_processo,'.',''),'-',''),' ','')) AS duplicada,
               EXISTS (SELECT 1 FROM publicacoes_lidas pl
                        WHERE pl.publicacao_id = p.id AND pl.usuario_id = ?) AS lida,
+              -- Só AASP: 1 quando já existia OUTRA publicação (mais antiga) desse mesmo dia
+              -- ANTES desta ter sido salva — ou seja, esta veio de uma 2ª/3ª/4ª... busca do
+              -- dia, não da primeira. Usado para pintar amarelo-claro (1ª busca fica branca).
+              (p.fonte = 'aasp' AND EXISTS (
+                 SELECT 1 FROM publicacoes p3
+                  WHERE p3.data_publicacao = p.data_publicacao
+                    AND p3.fonte = 'aasp'
+                    AND p3.criado_em < p.criado_em
+               )) AS buscada_novamente,
               (SELECT pe.slot FROM publicacoes_etiquetas pe
                 WHERE pe.publicacao_id = p.id AND pe.usuario_id = ?) AS etiqueta_pessoal,
               EXISTS (SELECT 1 FROM tblproc t

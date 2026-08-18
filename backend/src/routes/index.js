@@ -347,13 +347,16 @@ router.get('/configuracoes/servidor-hora',        autenticar, apenasAdmin, confi
 
 // ---- ETIQUETAS PESSOAIS (por usuário — cada um só mexe nas suas) ----
 router.get('/etiquetas/definicoes/:modulo', autenticar, etiquetasCtrl.listarDefinicoes);
+router.get('/etiquetas/uso/:modulo',        autenticar, etiquetasCtrl.listarSlotsEmUso);
 router.put('/etiquetas/definicoes/:modulo', autenticar, etiquetasCtrl.salvarDefinicoes);
 router.put('/etiquetas/marcar',             autenticar, etiquetasCtrl.marcar);
 
 // ---- ETIQUETAS DO ESCRITÓRIO (catálogo só admin; aplicar exige permissão) ----
 router.get('/etiquetas/escritorio/catalogo/:modulo', autenticar, etiquetasCtrl.listarCatalogo);
+router.get('/etiquetas/escritorio/uso/:modulo',       autenticar, etiquetasCtrl.listarSlotsEmUsoEscritorio);
 router.put('/etiquetas/escritorio/catalogo/:modulo', autenticar, apenasAdmin, etiquetasCtrl.salvarCatalogo);
 router.put('/etiquetas/escritorio/marcar',           autenticar, etiquetasCtrl.marcarEscritorio);
+router.get('/etiquetas/escritorio/historico/:modulo/:registro_id', autenticar, etiquetasCtrl.historicoEscritorio);
 
 // ---- MANUTENÇÃO (somente SUPERUSUÁRIO, nivel 0) ----
 router.post('/manutencao/limpar-dados-teste',     autenticar, apenasSuper, manutencaoCtrl.limparDadosTeste);

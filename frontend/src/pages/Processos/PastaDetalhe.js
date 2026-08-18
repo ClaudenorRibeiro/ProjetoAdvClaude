@@ -7,7 +7,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { processosAPI, andamentoAPI, prazosAPI, tarefasAPI, audienciasAPI, periciasAPI, financeiroAPI, pessoasAPI, etiquetasAPI } from '../../services/api';
-import { EtiquetaCelula, LegendaEtiquetasPessoais, itensMenuEtiqueta } from '../../components/Etiquetas';
+import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetaEscritorioSubmenu, ModalHistoricoEtiquetaEscritorio } from '../../components/Etiquetas';
 import { formatarData, formatarNumeroPasta, formatarMoeda, labelStatusPrazo, corPrazo, toTitleCase, hojeLocal } from '../../utils/formatters';
 // Janelas de contato/ficha reutilizadas da tela de Pessoas (painel "Partes do processo")
 import { ModalPessoa, ModalEnviarEmail, ModalEnviarSMS, ModalEscolherWhatsapp, ModalCopiarTelefone, ModalCopiarEmail, ModalAnotacoes, soNumeroLocal, copiarParaAreaTransferencia } from '../Pessoas/Pessoas';
@@ -57,6 +57,7 @@ export default function PastaDetalhe() {
   // Etiqueta DO ESCRITÓRIO nos processos (catálogo compartilhado + quem pode aplicar)
   const [catEscritorio, setCatEscritorio] = useState([]);
   const podeEtiquetarEscritorio = temPermissao('processos.etiqueta_escritorio', 'alterar');
+  const [historicoEtiquetaAberto, setHistoricoEtiquetaAberto] = useState(null); // { modulo, registroId } | null
   useEffect(() => {
     etiquetasAPI.catalogo('processos').then(r => { if (r.data?.ok) setCatEscritorio(r.data.dados || []); }).catch(() => {});
   }, []);
@@ -742,10 +743,13 @@ export default function PastaDetalhe() {
                           { label: 'Excluir', icone: '🗑️', perigo: true,
                             oculto: !temPermissao('processos','excluir'),
                             onClick: () => excluirProcesso(pr.id) },
-                          ...(podeEtiquetarEscritorio
-                            ? itensMenuEtiqueta({ definicoes: catEscritorio, slotAtual: pr.etiqueta_escritorio,
-                                onMarcar: (slot) => marcarEscritorioProc(pr.id, slot) })
-                            : []),
+                          itemEtiquetaEscritorioSubmenu({
+                            definicoes: catEscritorio, slotAtual: pr.etiqueta_escritorio,
+                            podeAplicar: podeEtiquetarEscritorio,
+                            onMarcar: (slot) => marcarEscritorioProc(pr.id, slot),
+                            modulo: 'processos', registroId: pr.id,
+                            onAbrirHistorico: setHistoricoEtiquetaAberto,
+                          }),
                         ]} />
                       </td>
                     </tr>
@@ -757,6 +761,15 @@ export default function PastaDetalhe() {
               )}
             </div>
           </div>
+        )}
+
+        {historicoEtiquetaAberto && (
+          <ModalHistoricoEtiquetaEscritorio
+            modulo={historicoEtiquetaAberto.modulo}
+            registroId={historicoEtiquetaAberto.registroId}
+            catalogo={catEscritorio}
+            onFechar={() => setHistoricoEtiquetaAberto(null)}
+          />
         )}
 
         {/* === ABA: ANDAMENTOS === */}

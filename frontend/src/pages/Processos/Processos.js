@@ -14,6 +14,7 @@ import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import MenuAcoes from '../../components/MenuAcoes';
 import { LinhaFone, LinhaEmail } from '../../components/LinhasContato';
 import useEscFechar from '../../hooks/useEscFechar';
+import { buscarEnderecoPorCep } from '../../utils/cep';
 
 // ============================================================
 // MINI-MODAL DE CADASTRO RÁPIDO DE PARTE (Física ou Jurídica)
@@ -1641,31 +1642,72 @@ export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtuali
   const [forumId, setForumId]     = useState('');    // só usado para varas
   const [salvando, setSalvando]   = useState(false);
   const [confirmar, setConfirmar] = useState(null);
+  const [erro, setErro]           = useState('');    // aviso de validação/erro, exibido dentro do modal
+  const [buscandoCep, setBuscandoCep] = useState(false);
+  const [erroCep, setErroCep]     = useState('');
+  const [busca, setBusca]         = useState(''); // filtra a lista de itens já cadastrados
+  const camposRef = useRef({}); // refs dos inputs dinâmicos, por key — usado p/ focar "Número" após achar o CEP
+
+  // Busca sem acento/maiúscula (ex.: "aracatuba" acha "Araçatuba"). Filtra por nome/abreviação
+  // e, em Fóruns, também pela cidade — é o que mais ajuda quando a lista passa de 100 itens.
+  const semAcento = s => (s || '').normalize('NFD').replace(/[^\x00-\x7F]/g, '').toLowerCase();
+  const buscaNorm = semAcento(busca.trim());
+  const itensFiltrados = !buscaNorm ? itens : itens.filter(item => {
+    const alvo = [item.nome, item.abrev_nome, tipo === 'foruns' ? item.cidade : null, tipo === 'varas' ? item.forum_nome : null]
+      .filter(Boolean).join(' ');
+    return semAcento(alvo).includes(buscaNorm);
+  });
 
   function iniciarEdicao(item) {
     setEditando(item);
     const f = cfg.campos.reduce((acc, c) => ({ ...acc, [c.key]: item[c.key] || '' }), {});
     setForm(f);
     if (tipo === 'varas') setForumId(String(item.forum_id || ''));
+    setErro('');
+    setErroCep('');
   }
 
   function cancelarEdicao() {
     setEditando(null);
     setForm(formVazio);
     setForumId('');
+    setErro('');
+    setErroCep('');
+  }
+
+  // Ao sair do campo CEP (só existe no tipo Fóruns): busca o endereço via ViaCEP
+  // e preenche Logradouro/Bairro/Cidade/UF, jogando o foco no campo Número.
+  async function handleCepBlur() {
+    const limpo = (form.cep || '').replace(/\D/g, '');
+    if (!limpo) { setErroCep(''); return; }
+    if (limpo.length !== 8) { setErroCep('CEP incompleto'); return; }
+
+    setBuscandoCep(true);
+    setErroCep('');
+    const r = await buscarEnderecoPorCep(limpo);
+    setBuscandoCep(false);
+
+    if (!r.ok) {
+      setErroCep(r.motivo === 'nao_encontrado' ? 'CEP não encontrado' : 'Não foi possível buscar o CEP agora');
+      return;
+    }
+    setForm(f => ({ ...f, ...r.endereco }));
+    camposRef.current['num_end']?.focus();
   }
 
   async function salvar() {
     for (const c of cfg.campos) {
       if (c.required && !form[c.key]?.trim()) {
-        return toast.error(`${c.label} é obrigatório`);
+        setErro(`${c.label} é obrigatório`);
+        return;
       }
     }
-    if (tipo === 'varas' && !forumId) return toast.error('Fórum é obrigatório');
+    if (tipo === 'varas' && !forumId) { setErro('Fórum é obrigatório'); return; }
 
     const payload = { ...form };
     if (tipo === 'varas') payload.forum_id = forumId;
 
+    setErro('');
     setSalvando(true);
     try {
       if (editando) {
@@ -1676,9 +1718,10 @@ export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtuali
         toast.success('Criado com sucesso!');
       }
       cancelarEdicao();
+      setBusca(''); // limpa o filtro pra garantir que o item recém-salvo apareça na lista
       onAtualizado(); // recarrega auxiliares no modal pai
     } catch (err) {
-      toast.error(err.response?.data?.mensagem || 'Erro ao salvar');
+      setErro(err.response?.data?.mensagem || 'Erro ao salvar');
     } finally {
       setSalvando(false);
     }
@@ -1712,13 +1755,27 @@ export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtuali
             {itens.length === 0 ? (
               <p className="lista-vazia">Nenhum item cadastrado</p>
             ) : (
-              <div style={{ border: '1px solid #e8ecf0', borderRadius: '6px', overflow: 'hidden' }}>
-                {itens.map((item, idx) => (
+              <>
+                {/* Busca: some com listas curtas de propósito? Não — sempre visível, custa
+                    nada e ajuda até com poucos itens; quem mais precisa é Fóruns/Varas (150+). */}
+                <input
+                  className="form-control"
+                  style={{ fontSize: '13px', marginBottom: '8px' }}
+                  placeholder={`Buscar em ${itens.length} ${itens.length === 1 ? 'item' : 'itens'}...`}
+                  value={busca}
+                  onChange={e => setBusca(e.target.value)}
+                />
+                {itensFiltrados.length === 0 ? (
+                  <p className="lista-vazia">Nenhum item encontrado para "{busca}"</p>
+                ) : (
+                <div style={{ border: '1px solid #e8ecf0', borderRadius: '6px', overflow: 'hidden',
+                  maxHeight: '280px', overflowY: 'auto' }}>
+                {itensFiltrados.map((item, idx) => (
                   <div key={item.id} style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     padding: '8px 12px', fontSize: '13px',
                     background: idx % 2 === 0 ? '#fff' : '#f9fafb',
-                    borderBottom: idx < itens.length - 1 ? '1px solid #f0f0f0' : 'none',
+                    borderBottom: idx < itensFiltrados.length - 1 ? '1px solid #f0f0f0' : 'none',
                   }}>
                     <span>
                       {/* Nome principal: abreviação quando disponível, senão nome completo */}
@@ -1760,7 +1817,9 @@ export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtuali
                     </div>
                   </div>
                 ))}
-              </div>
+                </div>
+                )}
+              </>
             )}
           </div>
 
@@ -1785,6 +1844,7 @@ export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtuali
                       {c.hint && <span style={{ color: '#aaa', fontWeight: '400', marginLeft: '4px' }}>({c.hint})</span>}
                     </label>
                     <input
+                      ref={el => (camposRef.current[c.key] = el)}
                       className="form-control"
                       style={{ fontSize: '13px', ...(c.style || {}) }}
                       maxLength={c.maxLength}
@@ -1793,8 +1853,15 @@ export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtuali
                       onBlur={() => {
                         if (c.key === 'nome') setForm(f => ({ ...f, nome: toTitleCase(f.nome) }));
                         if (c.key === 'uf')   setForm(f => ({ ...f, uf: f.uf.toUpperCase().slice(0, 2) }));
+                        if (c.key === 'cep')  handleCepBlur();
                       }}
                     />
+                    {c.key === 'cep' && buscandoCep && (
+                      <small style={{ color: '#888', fontSize: '11px' }}>Buscando endereço...</small>
+                    )}
+                    {c.key === 'cep' && erroCep && !buscandoCep && (
+                      <small style={{ color: '#d97706', fontSize: '11px' }}>{erroCep}</small>
+                    )}
                   </div>
                 ))}
 
@@ -1810,20 +1877,18 @@ export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtuali
                   </div>
                 )}
 
-                {/* Botões de ação */}
-                <div style={{ display: 'flex', gap: '6px', paddingBottom: '1px' }}>
-                  <button className="btn btn-primary" style={{ fontSize: '12px', padding: '7px 14px' }}
-                    onClick={salvar} disabled={salvando}>
-                    {salvando ? '...' : editando ? 'Salvar' : 'Adicionar'}
-                  </button>
-                  {editando && (
-                    <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '7px 10px' }}
-                      onClick={cancelarEdicao}>
-                      Cancelar
-                    </button>
-                  )}
-                </div>
               </div>
+
+              {/* Aviso de validação/erro — dentro do próprio modal, nunca toast */}
+              {erro && (
+                <div style={{
+                  marginTop: '10px', padding: '8px 10px', borderRadius: '6px',
+                  background: '#fffbeb', border: '1px solid #fde68a',
+                  color: '#92400e', fontSize: '12px',
+                }}>
+                  {erro}
+                </div>
+              )}
             </div>
           )}
 
@@ -1836,6 +1901,18 @@ export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtuali
 
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onFechar}>Fechar</button>
+          {(podeCadastrar || (podeAlterar && editando)) && (
+            <>
+              {editando && (
+                <button className="btn btn-secondary" onClick={cancelarEdicao} disabled={salvando}>
+                  Cancelar
+                </button>
+              )}
+              <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+                {salvando ? 'Salvando...' : editando ? 'Salvar' : 'Adicionar'}
+              </button>
+            </>
+          )}
         </div>
       </div>
       {confirmar && <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(null)} />}

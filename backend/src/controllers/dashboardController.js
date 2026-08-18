@@ -60,7 +60,8 @@ async function buscarDados(req, res) {
         [hoje, userId]
       ),
 
-      // Tarefas pendentes (sem data ou com data futura)
+      // Tarefas pendentes: sem data OU com data de hoje até no MÁXIMO 3 MESES à frente.
+      // (O Dashboard não deve poluir com tarefas de 1-2 anos à frente; as sem data ficam.)
       // Traz o nome do responsável (mesma lógica da tela de Tarefas) para o Dashboard mostrar
       // "Para" corretamente; sem esse JOIN a coluna caía sempre em "Escritório".
       pool.execute(
@@ -69,10 +70,11 @@ async function buscarDados(req, res) {
          FROM tarefas t
          LEFT JOIN usuarios u ON t.atribuida_para = u.id
          WHERE t.concluida = 0
-           AND (t.data_vencimento IS NULL OR t.data_vencimento >= ?)
+           AND (t.data_vencimento IS NULL
+                OR (t.data_vencimento >= ? AND t.data_vencimento <= DATE_ADD(?, INTERVAL 3 MONTH)))
            AND (t.atribuida_para = ? OR t.atribuida_para IS NULL)
          ORDER BY FIELD(t.prioridade,'urgente','normal','baixa'), t.data_vencimento ASC`,
-        [hoje, userId]
+        [hoje, hoje, userId]
       ),
 
       // Tarefas atrasadas

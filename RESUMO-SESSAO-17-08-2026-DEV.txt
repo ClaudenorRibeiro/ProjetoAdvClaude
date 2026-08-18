@@ -1,0 +1,140 @@
+========================================================================
+RESUMO DA SESSÃO — 17/08/2026 — Sistema de Advocacia (NovoJud)
+========================================================================
+Este arquivo resume TUDO que foi feito nesta sessão, para o Claude de outro
+computador continuar de onde paramos.
+
+>>> ESTADO NO FIM DO DIA <<<
+- Git ao ABRIR a sessão: HEAD = origin/main = af642ed (13/08, 14:54). Confirmado
+  via "git show --stat" que TODO o trabalho de 13/08 (integração Google Agenda
+  completa nos 5 tipos + pacote de UI de Publicações) JÁ ESTAVA commitado pelo
+  usuário, exatamente como planejado no fechamento daquela sessão.
+- Hoje (17/08) só o arquivo backend/src/controllers/dashboardController.js foi
+  alterado — AINDA NÃO COMMITADO. SEM SQL nenhum hoje.
+- Observação (NÃO é ação do Claude): os arquivos RESUMO-SESSAO-10-08-2026-DEV.txt
+  e RESUMO-SESSAO-11-08-2026-DEV.txt aparecem como DELETADOS no "git status" —
+  é uma ação do próprio usuário (limpeza local), só ficou registrado aqui como fato.
+
+========================================================================
+PARTE 1 — DASHBOARD: "Tarefas pendentes" limitado a 3 meses (CODADO)
+========================================================================
+PEDIDO: o cartão "TAREFAS" (topo do Dashboard) e a lista "Tarefas pendentes"
+estavam mostrando tarefas com vencimento MUITO distante (ex.: 30/07/2027,
+01/11/2028), poluindo o painel. O usuário pediu para mostrar eventos de, no
+máximo, 3 meses.
+
+INVESTIGAÇÃO: o backend/src/controllers/dashboardController.js foi lido por
+inteiro. Só o cartão "Tarefas pendentes" não tinha um teto de data (mostrava
+tudo com vencimento a partir de hoje, sem limite); os demais cartões (Prazos,
+Audiências, Perícias, Processos sem movimentação, etc.) já eram estreitos
+(hoje/amanhã/configuração do escritório) e não precisavam de ajuste.
+
+DECISÕES CONFIRMADAS PELO USUÁRIO:
+  1) Tarefas SEM data de vencimento continuam aparecendo (não há como "passar
+     de 3 meses" quando não tem data).
+  2) O ajuste é SÓ no cartão de Tarefas pendentes — os demais já estavam certos.
+
+O QUE FOI FEITO: a consulta de "Tarefas pendentes" do Dashboard passou a trazer
+apenas: tarefas sem data (mantidas) OU com vencimento entre hoje e daqui a
+3 meses. O contador do cartão "TAREFAS" no topo cai automaticamente, pois é o
+tamanho dessa mesma lista. A tela "Tarefas" do menu lateral usa outro filtro
+(o dela própria) e NÃO foi alterada — continua exatamente como estava.
+
+STATUS: CODADO e verificado (node --check sem erros). SEM SQL, SEM mudança no
+frontend. FALTA: o usuário TESTAR (a sessão foi encerrada logo após a explicação,
+sem uma confirmação explícita de teste) e, depois de aprovado, subir no git
+(não precisa de deploy de banco, é só código).
+
+Para testar: no Dashboard, conferir que tarefas com vencimento além de 3 meses
+não aparecem mais no cartão "Tarefas pendentes" nem contam no número do topo;
+tarefas sem data continuam aparecendo; tarefas dentro de 3 meses continuam
+aparecendo normalmente.
+
+========================================================================
+PARTE 2 — ESCLARECIMENTO (sem código): por que uma tarefa não aparecia na
+tela "Tarefas" mas aparecia no Dashboard
+========================================================================
+O usuário perguntou por que uma tarefa ("Verificar, Prescrição Intercorrete",
+vencimento 30/07/2027) aparecia no cartão do Dashboard mas sumia da lista da
+tela "Tarefas". Verificado no código: a tela Tarefas usa uma JANELA de datas
+escolhida no filtro "Vencimento de/até" (o padrão dela mostra só um período
+limitado); a tarefa vencia muito além dessa janela, por isso ficava de fora —
+NÃO era um bug, bastava ampliar o filtro "Até" ou usar "Limpar filtros" para
+vê-la lá também. Essa conversa foi o que motivou o pedido da Parte 1.
+
+========================================================================
+PARTE 3 — PENDENTE (NADA CODADO): modal rápido de Fóruns
+========================================================================
+PEDIDO DO USUÁRIO (feito por print, dentro do fluxo "Novo Processo" → botão
+"..." ao lado do campo Fórum, que abre um modal "Fóruns" com um mini-formulário
+"Novo item"): quer que, ao digitar o CEP e sair do campo, o sistema já preencha
+Logradouro/Número.../Bairro/Cidade automaticamente (igual já acontece na tela
+Controle → Fóruns, que usa a API ViaCEP) e jogue o foco no campo Número; e quer
+que o botão "Adicionar" fique no rodapé do modal, ao lado do botão "Fechar" (hoje
+ele fica dentro do formulário, ao lado dos campos).
+
+INVESTIGAÇÃO FEITA: identificado que esse modal ("Novo item") é o componente
+ModalGerenciarAux, dentro de frontend/src/pages/Processos/Processos.js — é
+DIFERENTE da tela Controle → Fóruns (que já tem a busca de CEP funcionando).
+Esse modal é GENÉRICO: o mesmo componente é usado para 5 tipos de cadastro
+rápido (Tipos de Processo, Status de Processo, Instâncias, Fóruns e Varas), cada
+um com seu próprio conjunto de campos. Hoje ele NÃO tem busca de CEP nenhuma, e
+os botões "Adicionar"/"Salvar"/"Cancelar" ficam dentro do formulário — o rodapé
+só tem o botão "Fechar".
+
+DUAS PERGUNTAS FEITAS AO USUÁRIO, AINDA SEM RESPOSTA (a conversa mudou de
+assunto — foi para a Parte 1/2 acima — antes de eu receber a resposta):
+  1) Mover o botão para o rodapé deve valer para TODOS os 5 tipos desse modal
+     (já que é um componente compartilhado, ficaria mais consistente mudar
+     todos), ou o usuário quer a mudança SÓ no Fórum (deixando os outros 4
+     tipos como estão hoje)?
+  2) O usuário escreveu "Tentar novamente" no fim da mensagem original do
+     pedido — não ficou claro se era um pedido separado ou texto que entrou
+     sem querer. Não foi investigado.
+
+>>> AÇÃO PARA A PRÓXIMA SESSÃO: retomar essas 2 perguntas ANTES de codar
+    qualquer coisa nesse modal. Nada foi alterado em Processos.js. <<<
+
+========================================================================
+PENDÊNCIAS / BACKLOG (atualizado 17/08 — nada novo além do já existente)
+========================================================================
+[ ] Dashboard: usuário TESTAR o ajuste de 3 meses (Parte 1) + subir no git.
+[ ] Modal rápido de Fóruns: responder as 2 perguntas da Parte 3 antes de codar.
+[ ] "Processos Parados" usar a DATA REAL do movimento (DataJud), não o criado_em.
+[ ] Audiências: codar cada checkbox da Ata (um a um) + tela "ver ata".
+[ ] Login só letras no setup do 1º admin.
+[ ] ModalInfo nas demais telas (padronizar avisos).
+[ ] Financeiro multi-banco (grande).
+[ ] Configuração global de capitalização (grande e transversal).
+[ ] Hardening do servidor AWS + rotacionar chaves em texto puro.
+[ ] Tarefas com horário/temporizador (ainda só têm data).
+[ ] Google Agenda: avaliar se "dar baixa" do COMPROMISSO também deve sincronizar
+    (hoje só criar/editar/excluir sincronizam).
+[ ] Google Agenda: edge conhecido — tarefa que tinha vencimento e passa a NÃO
+    ter pode deixar o evento antigo "solto" no Google (raro, não tratado ainda).
+[ ] Publicações: se quiser, bloquear também no BACKEND o modo "excluir todas"
+    (o botão já saiu da tela em sessão anterior).
+[ ] Renovar senha de app do Gmail quando expirar (já aconteceu uma vez).
+
+========================================================================
+REGRAS PERMANENTES (o Claude de qualquer computador DEVE seguir — resumo)
+========================================================================
+- NUNCA CODAR SEM AUTORIZAÇÃO. Primeiro EXPLICAR o que entendeu do pedido +
+  efeitos colaterais, e SÓ codar após o "pode codar" explícito do usuário.
+  (Responder pergunta de escopo NÃO é autorização. Prova de hoje: o pedido do
+  modal de Fóruns ficou 100% parado, sem nenhuma linha de código, porque as
+  perguntas de escopo não foram respondidas ainda.)
+- NUNCA SUPOR. Verificar front + back + banco antes de afirmar/sugerir. Se não
+  tiver certeza, dizer "preciso confirmar" e esperar.
+- CORRIGIR o usuário quando o pedido prejudica outra rotina (ele pode ter
+  esquecido algo).
+- TODAS AS TABELAS DO BANCO EM LETRAS MINÚSCULAS — no banco E no código. Sempre.
+- Nenhuma exclusão pode deixar órfãos; tratar amarrações (FK/polimórficas) antes.
+- Transações BEGIN/COMMIT/ROLLBACK em operação multi-passo. MySQL sem middleware.
+- Banco: só o usuário roda, no HeidiSQL. Claude ENTREGA o SQL (multi-instância:
+  local → testar → todas as AWS). GIT: só o usuário sobe.
+- "Build não é teste": a responsabilidade de não quebrar o resto é do Claude.
+- Não mandar trechos de código no chat (usuário é leigo). Exceção: SQL para colar.
+- Avisos ao usuário sempre em faixa interna da tela (nunca o toast do canto).
+- Manter o padrão de code-splitting do frontend. Sem gambiarra, sem redundância.
+========================================================================

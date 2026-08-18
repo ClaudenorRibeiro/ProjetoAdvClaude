@@ -12,7 +12,7 @@ import { useAuth } from '../../context/AuthContext';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import { LinhaFone, LinhaEmail } from '../../components/LinhasContato';
-import { EtiquetaCelula, LegendaEtiquetasPessoais, itensMenuEtiqueta, useEtiquetasEscritorio } from '../../components/Etiquetas';
+import { EtiquetaCelula, LegendaEtiquetasPessoais, useEtiquetasEscritorio, itemEtiquetaEscritorioSubmenu, ModalHistoricoEtiquetaEscritorio } from '../../components/Etiquetas';
 import { linkWhatsApp } from '../../utils/whatsapp';
 
 // Campos disponíveis para exportar em Excel (mesmas chaves do backend; sem campos de auditoria)
@@ -46,6 +46,7 @@ export default function Pessoas() {
   const moduloMarcarPessoa = aba === 'fisicas' ? 'pessoas_fisicas' : 'pessoas_juridicas';
   const { catalogo: catEscritorio, marcar: marcarEtqEsc } = useEtiquetasEscritorio('pessoas', moduloMarcarPessoa, lista, setLista);
   const podeEtiquetarPessoa = temPermissao('pessoas.etiqueta_escritorio', 'alterar');
+  const [historicoEtiquetaAberto, setHistoricoEtiquetaAberto] = useState(null); // { modulo, registroId } | null
   const [filtroEsc, setFiltroEsc] = useState(null); // filtro pela etiqueta do escritório (slot)
   const [total, setTotal]         = useState(0);
   const [busca, setBusca]         = useState('');       // termo já aplicado (usado na consulta)
@@ -315,16 +316,27 @@ export default function Pessoas() {
                 onEnviarEmail={abrirEnviarEmail} onEnviarZap={abrirEnviarZap} onEnviarSMS={abrirEnviarSMS} smsAtivo={smsAtivo}
                 onCopiarMultiplos={abrirCopiarMultiplos} onCopiarEmailMultiplos={abrirCopiarEmailMultiplos}
                 catEscritorio={catEscritorio} podeEtiquetar={podeEtiquetarPessoa} onEtiquetar={marcarEtqEsc}
+                modulo={moduloMarcarPessoa} onAbrirHistorico={setHistoricoEtiquetaAberto}
                 modoUnificar={modoUnificar} selecionados={selUnificar} onToggleSel={toggleSelUnificar} />
             ) : (
               <TabelaJuridicas lista={lista} onEditar={abrirEdicao} onVerDetalhes={abrirDetalhes} onExcluir={pedirConfirmacaoExclusao}
                 onVerProcessos={abrirProcessos} onAnotacoes={abrirAnotacoes}
                 onEnviarEmail={abrirEnviarEmail} onEnviarZap={abrirEnviarZap} onCopiarMultiplos={abrirCopiarMultiplos} onCopiarEmailMultiplos={abrirCopiarEmailMultiplos}
                 catEscritorio={catEscritorio} podeEtiquetar={podeEtiquetarPessoa} onEtiquetar={marcarEtqEsc}
+                modulo={moduloMarcarPessoa} onAbrirHistorico={setHistoricoEtiquetaAberto}
                 modoUnificar={modoUnificar} selecionados={selUnificar} onToggleSel={toggleSelUnificar} />
             )}
             {lista.length === 0 && <p className="lista-vazia">Nenhum registro encontrado</p>}
           </div>
+        )}
+
+        {historicoEtiquetaAberto && (
+          <ModalHistoricoEtiquetaEscritorio
+            modulo={historicoEtiquetaAberto.modulo}
+            registroId={historicoEtiquetaAberto.registroId}
+            catalogo={catEscritorio}
+            onFechar={() => setHistoricoEtiquetaAberto(null)}
+          />
         )}
 
         {/* Paginação */}
@@ -1386,7 +1398,7 @@ function CelulaQtdeProc({ qtde, onClick }) {
   );
 }
 
-function TabelaFisicas({ lista, onEditar, onVerDetalhes, onExcluir, onVerProcessos, onAnotacoes, onEnviarEmail, onEnviarZap, onEnviarSMS, smsAtivo, onCopiarMultiplos, onCopiarEmailMultiplos, catEscritorio = [], podeEtiquetar = false, onEtiquetar, modoUnificar, selecionados = [], onToggleSel }) {
+function TabelaFisicas({ lista, onEditar, onVerDetalhes, onExcluir, onVerProcessos, onAnotacoes, onEnviarEmail, onEnviarZap, onEnviarSMS, smsAtivo, onCopiarMultiplos, onCopiarEmailMultiplos, catEscritorio = [], podeEtiquetar = false, onEtiquetar, modulo = 'pessoas_fisicas', onAbrirHistorico, modoUnificar, selecionados = [], onToggleSel }) {
   const { temPermissao } = useAuth();
   const estaSel = (id) => selecionados.some(x => x.id === id);
   return (
@@ -1418,8 +1430,13 @@ function TabelaFisicas({ lista, onEditar, onVerDetalhes, onExcluir, onVerProcess
             <td>
               {/* Gerar documento — o modal lista os modelos desta origem (ou avisa se não houver). */}
               <MenuAcoes itens={[
-                ...(podeEtiquetar ? itensMenuEtiqueta({ definicoes: catEscritorio, slotAtual: p.etiqueta_escritorio,
-                  onMarcar: (slot) => onEtiquetar(p.id, slot) }) : []),
+                itemEtiquetaEscritorioSubmenu({
+                  definicoes: catEscritorio, slotAtual: p.etiqueta_escritorio,
+                  podeAplicar: podeEtiquetar,
+                  onMarcar: (slot) => onEtiquetar(p.id, slot),
+                  modulo, registroId: p.id,
+                  onAbrirHistorico,
+                }),
                 { label: 'Gerar documento', icone: '📄',
                   oculto: !temPermissao('documentos','cadastrar'),
                   gerarDoc: { ancoraTipo: 'pessoa_fisica', ancoraId: p.id } },
@@ -1441,7 +1458,7 @@ function TabelaFisicas({ lista, onEditar, onVerDetalhes, onExcluir, onVerProcess
 }
 
 // Tabela de pessoas jurídicas
-function TabelaJuridicas({ lista, onEditar, onVerDetalhes, onExcluir, onVerProcessos, onAnotacoes, onEnviarEmail, onEnviarZap, onCopiarMultiplos, onCopiarEmailMultiplos, catEscritorio = [], podeEtiquetar = false, onEtiquetar, modoUnificar, selecionados = [], onToggleSel }) {
+function TabelaJuridicas({ lista, onEditar, onVerDetalhes, onExcluir, onVerProcessos, onAnotacoes, onEnviarEmail, onEnviarZap, onCopiarMultiplos, onCopiarEmailMultiplos, catEscritorio = [], podeEtiquetar = false, onEtiquetar, modulo = 'pessoas_juridicas', onAbrirHistorico, modoUnificar, selecionados = [], onToggleSel }) {
   const { temPermissao } = useAuth();
   const estaSel = (id) => selecionados.some(x => x.id === id);
   return (
@@ -1473,8 +1490,13 @@ function TabelaJuridicas({ lista, onEditar, onVerDetalhes, onExcluir, onVerProce
             <td>
               {/* Gerar documento — o modal lista os modelos desta origem (ou avisa se não houver). */}
               <MenuAcoes itens={[
-                ...(podeEtiquetar ? itensMenuEtiqueta({ definicoes: catEscritorio, slotAtual: p.etiqueta_escritorio,
-                  onMarcar: (slot) => onEtiquetar(p.id, slot) }) : []),
+                itemEtiquetaEscritorioSubmenu({
+                  definicoes: catEscritorio, slotAtual: p.etiqueta_escritorio,
+                  podeAplicar: podeEtiquetar,
+                  onMarcar: (slot) => onEtiquetar(p.id, slot),
+                  modulo, registroId: p.id,
+                  onAbrirHistorico,
+                }),
                 { label: 'Gerar documento', icone: '📄',
                   oculto: !temPermissao('documentos','cadastrar'),
                   gerarDoc: { ancoraTipo: 'pessoa_juridica', ancoraId: p.id } },

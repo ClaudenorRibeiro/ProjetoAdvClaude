@@ -27,16 +27,25 @@ export default function ModalAparencia({ onFechar }) {
   // Minhas etiquetas (piloto: módulo "pastas" / Processos). 5 slots; significado vazio = slot não usado.
   const [etqModulo, setEtqModulo] = useState('pastas');   // módulo selecionado no seletor
   const [etqMap, setEtqMap]       = useState({});          // { modulo: [5 linhas] } — carregado sob demanda
-  // Carrega as 5 cores do módulo selecionado (uma vez por módulo). etqMap fora das deps de propósito
-  // (senão recarregaria a cada edição); o guard evita recarregar e apagar o que já foi editado.
+  const [etqEmUsoMap, setEtqEmUsoMap] = useState({});       // { modulo: [slots já em uso] }
+  // Carrega as 5 cores + quais slots já estão em uso do módulo selecionado (uma vez por módulo).
+  // etqMap fora das deps de propósito (senão recarregaria a cada edição); o guard evita recarregar
+  // e apagar o que já foi editado.
   useEffect(() => {
     if (etqMap[etqModulo]) return;
-    etiquetasAPI.definicoes(etqModulo)
-      .then(r => setEtqMap(m => ({ ...m, [etqModulo]: cincoLinhasEtiqueta(r.data?.dados) })))
-      .catch(() => setEtqMap(m => ({ ...m, [etqModulo]: cincoLinhasEtiqueta() })));
+    Promise.all([etiquetasAPI.definicoes(etqModulo), etiquetasAPI.emUso(etqModulo)])
+      .then(([r, u]) => {
+        setEtqMap(m => ({ ...m, [etqModulo]: cincoLinhasEtiqueta(r.data?.dados) }));
+        setEtqEmUsoMap(m => ({ ...m, [etqModulo]: u.data?.dados || [] }));
+      })
+      .catch(() => {
+        setEtqMap(m => ({ ...m, [etqModulo]: cincoLinhasEtiqueta() }));
+        setEtqEmUsoMap(m => ({ ...m, [etqModulo]: [] }));
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [etqModulo]);
-  const etqRows = etqMap[etqModulo] || cincoLinhasEtiqueta();
+  const etqRows  = etqMap[etqModulo] || cincoLinhasEtiqueta();
+  const etqEmUso = etqEmUsoMap[etqModulo] || [];
   const setEtq = (i, campo, valor) => setEtqMap(m => ({
     ...m,
     [etqModulo]: (m[etqModulo] || cincoLinhasEtiqueta()).map((r, j) => (j === i ? { ...r, [campo]: valor } : r)),
@@ -71,6 +80,26 @@ export default function ModalAparencia({ onFechar }) {
         atualizarCoresMenu(respMenu.data.dados?.cores_menu || null);
         atualizarCorLinha(respLinha.data.dados?.cor_linha || null);
         atualizarCorLinhaLida(respLida.data.dados?.cor_linha_lida || null);
+
+        // Algum slot em uso foi protegido (cor/exclusão ignorada)? Recarrega esses módulos
+        // com o que realmente ficou salvo e avisa dentro do próprio modal, sem fechar.
+        const comProtegidos = modulosEtq
+          .map((m, i) => ({ m, protegidos: respsEtq[i].data?.dados?.protegidos || [] }))
+          .filter(x => x.protegidos.length > 0);
+        if (comProtegidos.length > 0) {
+          const atualizados = await Promise.all(comProtegidos.map(x => etiquetasAPI.definicoes(x.m)));
+          setEtqMap(m => {
+            const novo = { ...m };
+            comProtegidos.forEach((x, i) => { novo[x.m] = cincoLinhasEtiqueta(atualizados[i].data?.dados); });
+            return novo;
+          });
+          const nomes = comProtegidos
+            .map(x => MODULOS_ETIQUETA_PESSOAL.find(mm => mm.chave === x.m)?.label || x.m)
+            .join(', ');
+          setAviso(`Algumas cores já estão em uso em registros existentes (${nomes}) e por isso não podem mudar de cor nem ser removidas — só o nome. As demais alterações foram salvas normalmente.`);
+          setSalvando(false);
+          return;
+        }
         onFechar();
       } else {
         setAviso(respAgenda.data.mensagem || respMenu.data.mensagem || respLinha.data.mensagem || respLida.data.mensagem || 'Não foi possível salvar as cores.');
@@ -211,7 +240,7 @@ export default function ModalAparencia({ onFechar }) {
               {MODULOS_ETIQUETA_PESSOAL.map(m => <option key={m.chave} value={m.chave}>{m.label}</option>)}
             </select>
           </div>
-          <EditorEtiquetasCinco rows={etqRows} onChange={setEtq} />
+          <EditorEtiquetasCinco rows={etqRows} onChange={setEtq} emUso={etqEmUso} />
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onFechar} disabled={salvando}>Cancelar</button>
