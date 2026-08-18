@@ -12,6 +12,12 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// Canal p/ avisar as OUTRAS abas do mesmo navegador quando a sessão morre aqui — sem isso,
+// uma aba vizinha que ainda não tinha percebido continuava "emprestando" o token morto pra
+// quem estava recarregando, e isso entrava num vai-e-volta de recarregamentos (tela piscando).
+// Mesmo nome de canal usado no AuthContext (que também escuta esta mensagem).
+const authChannel = 'BroadcastChannel' in window ? new BroadcastChannel('auth-sessao') : null;
+
 // Interceptor de REQUEST — adiciona token JWT em toda requisição automaticamente
 api.interceptors.request.use(
   config => {
@@ -47,7 +53,12 @@ api.interceptors.response.use(
       // Token inválido ou expirado — redireciona para login
       sessionStorage.removeItem('token');
       sessionStorage.removeItem('usuario');
-      window.location.href = '/login';
+      // Avisa as abas vizinhas pra descartarem o login morto também (evita o vai-e-volta).
+      authChannel?.postMessage({ tipo: 'SESSAO_INVALIDA' });
+      // Só recarrega se ainda não estiver na tela de login (evita recarregar à toa).
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

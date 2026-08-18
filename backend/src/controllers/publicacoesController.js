@@ -323,6 +323,17 @@ async function listar(req, res) {
                        WHERE p.numero_processo IS NOT NULL AND p.numero_processo <> ''
                          AND REPLACE(REPLACE(REPLACE(t.numProc,'.',''),'-',''),' ','')
                              = REPLACE(REPLACE(REPLACE(p.numero_processo,'.',''),'-',''),' ','')) AS processo_cadastrado,
+              -- cliente_polo: qual polo é o cliente do escritório ('autor' ou 'reu') no processo
+              -- casado pelo NÚMERO — exatamente a mesma regra do processo_cadastrado acima
+              -- (ignora ponto, traço e espaço). Fica NULL quando o processo não está cadastrado
+              -- OU está cadastrado sem o campo preenchido; nesses casos a tela não escreve nada.
+              -- LIMIT 1 por segurança: hoje não há número repetido em tblproc, mas também não há
+              -- índice único, então isto garante que a consulta nunca quebre se um dia houver.
+              (SELECT t2.cliente_polo FROM tblproc t2
+                WHERE p.numero_processo IS NOT NULL AND p.numero_processo <> ''
+                  AND REPLACE(REPLACE(REPLACE(t2.numProc,'.',''),'-',''),' ','')
+                      = REPLACE(REPLACE(REPLACE(p.numero_processo,'.',''),'-',''),' ','')
+                LIMIT 1) AS cliente_polo,
               -- Responsáveis das AÇÕES nascidas desta publicação (prazo/tarefa/compromisso).
               -- Sem pessoa (delegado/atribuído em branco) = "Escritório". Juntados em JS (dedup).
               (SELECT GROUP_CONCAT(DISTINCT COALESCE(ud.nome,'Escritório') SEPARATOR '§')

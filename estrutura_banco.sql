@@ -1,28 +1,54 @@
--- --------------------------------------------------------
--- Servidor:                     127.0.0.1
--- Versão do servidor:           8.0.46-0ubuntu0.24.04.3 - (Ubuntu)
--- OS do Servidor:               Linux
--- HeidiSQL Versão:              12.5.0.6677
--- --------------------------------------------------------
+-- =====================================================================
+-- ESTRUTURA DO BANCO — Sistema de Advocacia (NovoJud)
+-- ---------------------------------------------------------------------
+-- Gerado em 18/08/2026 a partir do banco LOCAL (sistema_advocacia).
+-- Contém 74 tabelas — SOMENTE A ESTRUTURA, sem nenhum dado.
+-- Os dados de partida (feriados, varas, tipos etc.) ficam em scripts/.
+--
+-- ATENÇÃO: este arquivo COMEÇA APAGANDO o banco inteiro
+-- (DROP DATABASE IF EXISTS). Use apenas para montar uma INSTÂNCIA NOVA,
+-- do zero. NUNCA rode em uma instância que já esteja em uso.
+--
+-- Versão anterior deste arquivo era de 05/08/2026 e estava com 61 tabelas:
+-- faltavam as 11 de etiquetas, a publicacoes_lidas e as colunas do
+-- Google Agenda em usuarios — uma instância criada por ela nasceria quebrada.
+-- =====================================================================
+
+-- MySQL dump 10.13  Distrib 8.0.46, for Win64 (x86_64)
+--
+-- Host: localhost    Database: sistema_advocacia
+-- ------------------------------------------------------
+-- Server version	8.0.46
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
-/*!40101 SET NAMES utf8 */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
 /*!50503 SET NAMES utf8mb4 */;
 /*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
 /*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
 /*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
 /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
+--
+-- Current Database: `sistema_advocacia`
+--
 
--- Copiando estrutura do banco de dados para sistema_advocacia
-DROP DATABASE IF EXISTS `sistema_advocacia`;
-CREATE DATABASE IF NOT EXISTS `sistema_advocacia` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
+/*!40000 DROP DATABASE IF EXISTS `sistema_advocacia`*/;
+
+CREATE DATABASE /*!32312 IF NOT EXISTS*/ `sistema_advocacia` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
+
 USE `sistema_advocacia`;
 
--- Copiando estrutura para tabela sistema_advocacia.acordo
+--
+-- Table structure for table `acordo`
+--
+
 DROP TABLE IF EXISTS `acordo`;
-CREATE TABLE IF NOT EXISTS `acordo` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `acordo` (
   `id` int NOT NULL AUTO_INCREMENT,
   `processo_id` int NOT NULL,
   `tipo` varchar(10) NOT NULL DEFAULT 'acordo',
@@ -42,13 +68,17 @@ CREATE TABLE IF NOT EXISTS `acordo` (
   CONSTRAINT `fk_acordo_alterado` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_acordo_criado` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_acordo_proc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `acordo_parcela`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.acordo_parcela
 DROP TABLE IF EXISTS `acordo_parcela`;
-CREATE TABLE IF NOT EXISTS `acordo_parcela` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `acordo_parcela` (
   `id` int NOT NULL AUTO_INCREMENT,
   `acordo_id` int NOT NULL,
   `numero` int NOT NULL,
@@ -88,16 +118,21 @@ CREATE TABLE IF NOT EXISTS `acordo_parcela` (
   CONSTRAINT `fk_parcela_repcli_por` FOREIGN KEY (`repasse_cliente_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_parcela_reppar_forma` FOREIGN KEY (`repasse_parceiro_forma_id`) REFERENCES `forma_pagamento` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_parcela_reppar_por` FOREIGN KEY (`repasse_parceiro_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=162 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=184 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `advogados_freela`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.advogados_freela
 DROP TABLE IF EXISTS `advogados_freela`;
-CREATE TABLE IF NOT EXISTS `advogados_freela` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `advogados_freela` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(200) NOT NULL,
   `oab` varchar(30) DEFAULT NULL,
+  `email` varchar(150) DEFAULT NULL,
   `telefone` varchar(20) DEFAULT NULL,
   `cep` varchar(9) DEFAULT NULL,
   `logradouro` varchar(200) DEFAULT NULL,
@@ -112,12 +147,16 @@ CREATE TABLE IF NOT EXISTS `advogados_freela` (
   KEY `criado_por` (`criado_por`),
   CONSTRAINT `freela_ibfk_1` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `agenda_compromisso`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.agenda_compromisso
 DROP TABLE IF EXISTS `agenda_compromisso`;
-CREATE TABLE IF NOT EXISTS `agenda_compromisso` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `agenda_compromisso` (
   `id` int NOT NULL AUTO_INCREMENT,
   `usuario_id` int NOT NULL,
   `delegado_para` int DEFAULT NULL,
@@ -140,39 +179,52 @@ CREATE TABLE IF NOT EXISTS `agenda_compromisso` (
   KEY `idx_agcomp_delegado` (`delegado_para`),
   KEY `idx_agcomp_concluido_por` (`concluido_por`),
   KEY `idx_agcomp_publicacao` (`publicacao_id`),
-  CONSTRAINT `fk_agcomp_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_agcomp_delegado` FOREIGN KEY (`delegado_para`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_agcomp_concluido_por` FOREIGN KEY (`concluido_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `fk_agcomp_publicacao` FOREIGN KEY (`publicacao_id`) REFERENCES `publicacoes` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  CONSTRAINT `fk_agcomp_delegado` FOREIGN KEY (`delegado_para`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_agcomp_publicacao` FOREIGN KEY (`publicacao_id`) REFERENCES `publicacoes` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_agcomp_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=24 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `andamento_processual`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.andamento_processual
 DROP TABLE IF EXISTS `andamento_processual`;
-CREATE TABLE IF NOT EXISTS `andamento_processual` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `andamento_processual` (
   `id` int NOT NULL AUTO_INCREMENT,
   `processo_id` int NOT NULL,
   `data` date NOT NULL,
+  `data_hora` datetime DEFAULT NULL,
   `descricao` text NOT NULL,
-  `criado_por` int NOT NULL,
+  `fonte` varchar(10) NOT NULL DEFAULT 'manual',
+  `codigo_movimento` int DEFAULT NULL,
+  `hash_movimento` char(40) DEFAULT NULL,
+  `criado_por` int DEFAULT NULL,
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   `editado_por` int DEFAULT NULL,
   `editado_em` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_andamento_hash` (`hash_movimento`),
   KEY `processo_id` (`processo_id`),
   KEY `criado_por` (`criado_por`),
   KEY `editado_por` (`editado_por`),
   CONSTRAINT `andamento_processual_ibfk_2` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `andamento_processual_ibfk_3` FOREIGN KEY (`editado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `fk_andamento_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=23 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `ata_audiencia`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.ata_audiencia
 DROP TABLE IF EXISTS `ata_audiencia`;
-CREATE TABLE IF NOT EXISTS `ata_audiencia` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `ata_audiencia` (
   `id` int NOT NULL AUTO_INCREMENT,
   `audiencia_id` int NOT NULL,
   `resultado` text,
@@ -182,21 +234,37 @@ CREATE TABLE IF NOT EXISTS `ata_audiencia` (
   `valor_parcela` decimal(15,2) DEFAULT NULL,
   `data_primeiro_pagamento` date DEFAULT NULL,
   `nova_audiencia` tinyint(1) DEFAULT '0',
+  `teve_prazo` tinyint DEFAULT '0',
+  `teve_pericia` tinyint DEFAULT '0',
+  `teve_alvara` tinyint DEFAULT '0',
+  `teve_desistencia` tinyint DEFAULT '0',
+  `teve_retorno_autos` tinyint DEFAULT '0',
   `observacoes` text,
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   `criado_por` int NOT NULL,
+  `advogado_id` int DEFAULT NULL,
+  `advogado_freela_id` int DEFAULT NULL,
+  `sem_advogado` tinyint DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `criado_por` (`criado_por`),
   KEY `idx_audiencia_id` (`audiencia_id`),
+  KEY `fk_ata_advogado` (`advogado_id`),
+  KEY `fk_ata_advogado_freela` (`advogado_freela_id`),
   CONSTRAINT `ata_audiencia_ibfk_1` FOREIGN KEY (`audiencia_id`) REFERENCES `audiencia` (`id`),
-  CONSTRAINT `ata_audiencia_ibfk_2` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
+  CONSTRAINT `ata_audiencia_ibfk_2` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `fk_ata_advogado` FOREIGN KEY (`advogado_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_ata_advogado_freela` FOREIGN KEY (`advogado_freela_id`) REFERENCES `advogados_freela` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `audiencia`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.audiencia
 DROP TABLE IF EXISTS `audiencia`;
-CREATE TABLE IF NOT EXISTS `audiencia` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `audiencia` (
   `id` int NOT NULL AUTO_INCREMENT,
   `processo_id` int NOT NULL,
   `tipo_audiencia_id` int DEFAULT NULL,
@@ -231,13 +299,17 @@ CREATE TABLE IF NOT EXISTS `audiencia` (
   CONSTRAINT `audiencia_ibfk_2` FOREIGN KEY (`tipo_audiencia_id`) REFERENCES `tipo_audiencia` (`id`),
   CONSTRAINT `audiencia_ibfk_3` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `fk_audiencia_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=21 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `audiencia_testemunhas`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.audiencia_testemunhas
 DROP TABLE IF EXISTS `audiencia_testemunhas`;
-CREATE TABLE IF NOT EXISTS `audiencia_testemunhas` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `audiencia_testemunhas` (
   `id` int NOT NULL AUTO_INCREMENT,
   `audiencia_id` int NOT NULL,
   `pessoa_id` int NOT NULL,
@@ -250,12 +322,34 @@ CREATE TABLE IF NOT EXISTS `audiencia_testemunhas` (
   CONSTRAINT `aut_ibfk_1` FOREIGN KEY (`audiencia_id`) REFERENCES `audiencia` (`id`) ON DELETE CASCADE,
   CONSTRAINT `aut_ibfk_2` FOREIGN KEY (`pessoa_id`) REFERENCES `pessoas_fisicas` (`id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `audiencias_etiquetas`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.auditoria_audiencia
+DROP TABLE IF EXISTS `audiencias_etiquetas`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `audiencias_etiquetas` (
+  `audiencia_id` int NOT NULL,
+  `usuario_id` int NOT NULL,
+  `slot` tinyint NOT NULL,
+  PRIMARY KEY (`audiencia_id`,`usuario_id`),
+  KEY `idx_aude_usuario` (`usuario_id`),
+  CONSTRAINT `fk_aude_reg` FOREIGN KEY (`audiencia_id`) REFERENCES `audiencia` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_aude_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `auditoria_audiencia`
+--
+
 DROP TABLE IF EXISTS `auditoria_audiencia`;
-CREATE TABLE IF NOT EXISTS `auditoria_audiencia` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `auditoria_audiencia` (
   `id` int NOT NULL AUTO_INCREMENT,
   `audiencia_id` int NOT NULL,
   `campo_alterado` varchar(100) DEFAULT NULL,
@@ -268,13 +362,17 @@ CREATE TABLE IF NOT EXISTS `auditoria_audiencia` (
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `audaud_ibfk_1` FOREIGN KEY (`audiencia_id`) REFERENCES `audiencia` (`id`) ON DELETE CASCADE,
   CONSTRAINT `audaud_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=39 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=44 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `auditoria_conta_corrente`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.auditoria_conta_corrente
 DROP TABLE IF EXISTS `auditoria_conta_corrente`;
-CREATE TABLE IF NOT EXISTS `auditoria_conta_corrente` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `auditoria_conta_corrente` (
   `id` int NOT NULL AUTO_INCREMENT,
   `lancamento_id` int NOT NULL,
   `acao` varchar(30) NOT NULL,
@@ -288,13 +386,40 @@ CREATE TABLE IF NOT EXISTS `auditoria_conta_corrente` (
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `fk_audcc_lanc` FOREIGN KEY (`lancamento_id`) REFERENCES `conta_corrente` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_audcc_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `auditoria_etiqueta_escritorio`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.auditoria_parcela
+DROP TABLE IF EXISTS `auditoria_etiqueta_escritorio`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `auditoria_etiqueta_escritorio` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `modulo` varchar(20) NOT NULL COMMENT 'processos | pessoas_fisicas | pessoas_juridicas',
+  `registro_id` int NOT NULL COMMENT 'id do processo (tblproc) ou da pessoa, conforme o modulo',
+  `slot_anterior` tinyint DEFAULT NULL COMMENT 'cor/etiqueta antes da acao (nulo = nao tinha nenhuma)',
+  `slot_novo` tinyint DEFAULT NULL COMMENT 'cor/etiqueta depois da acao (nulo = foi removida)',
+  `usuario_id` int NOT NULL,
+  `criado_em` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_aee_modulo_registro` (`modulo`,`registro_id`),
+  KEY `idx_aee_usuario` (`usuario_id`),
+  KEY `idx_aee_data` (`criado_em`),
+  CONSTRAINT `fk_aee_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `auditoria_parcela`
+--
+
 DROP TABLE IF EXISTS `auditoria_parcela`;
-CREATE TABLE IF NOT EXISTS `auditoria_parcela` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `auditoria_parcela` (
   `id` int NOT NULL AUTO_INCREMENT,
   `parcela_id` int NOT NULL,
   `acao` varchar(30) NOT NULL,
@@ -308,13 +433,17 @@ CREATE TABLE IF NOT EXISTS `auditoria_parcela` (
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `fk_audparcela_parcela` FOREIGN KEY (`parcela_id`) REFERENCES `acordo_parcela` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_audparcela_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=148 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=172 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `auditoria_pericia`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.auditoria_pericia
 DROP TABLE IF EXISTS `auditoria_pericia`;
-CREATE TABLE IF NOT EXISTS `auditoria_pericia` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `auditoria_pericia` (
   `id` int NOT NULL AUTO_INCREMENT,
   `pericia_id` int NOT NULL,
   `campo_alterado` varchar(100) DEFAULT NULL,
@@ -328,12 +457,16 @@ CREATE TABLE IF NOT EXISTS `auditoria_pericia` (
   CONSTRAINT `audper_ibfk_1` FOREIGN KEY (`pericia_id`) REFERENCES `pericia` (`id`) ON DELETE CASCADE,
   CONSTRAINT `audper_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `auditoria_prazo`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.auditoria_prazo
 DROP TABLE IF EXISTS `auditoria_prazo`;
-CREATE TABLE IF NOT EXISTS `auditoria_prazo` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `auditoria_prazo` (
   `id` int NOT NULL AUTO_INCREMENT,
   `prazo_id` int NOT NULL,
   `status_anterior` varchar(20) DEFAULT NULL,
@@ -346,23 +479,31 @@ CREATE TABLE IF NOT EXISTS `auditoria_prazo` (
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `auditoria_prazo_ibfk_1` FOREIGN KEY (`prazo_id`) REFERENCES `prazos_processo` (`id`),
   CONSTRAINT `auditoria_prazo_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=54 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=178 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `calendario`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.calendario
 DROP TABLE IF EXISTS `calendario`;
-CREATE TABLE IF NOT EXISTS `calendario` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `calendario` (
   `data` date NOT NULL,
   `dia_util` tinyint(1) NOT NULL DEFAULT '1',
   PRIMARY KEY (`data`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `configuracoes_escritorio`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.configuracoes_escritorio
 DROP TABLE IF EXISTS `configuracoes_escritorio`;
-CREATE TABLE IF NOT EXISTS `configuracoes_escritorio` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `configuracoes_escritorio` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(200) NOT NULL,
   `cnpj_cpf` varchar(20) DEFAULT NULL,
@@ -381,6 +522,7 @@ CREATE TABLE IF NOT EXISTS `configuracoes_escritorio` (
   `dias_alerta_audiencia` int DEFAULT '3',
   `dias_alerta_pericia` int DEFAULT '2',
   `dias_sem_movimentacao` int DEFAULT '30',
+  `dias_processo_parado` int DEFAULT '365',
   `dias_audiencia_sem_adv` int DEFAULT '7',
   `setup_concluido` tinyint(1) DEFAULT '0',
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
@@ -389,16 +531,21 @@ CREATE TABLE IF NOT EXISTS `configuracoes_escritorio` (
   `prazo_fazendo_timeout` int NOT NULL DEFAULT '60',
   `titulo_aba` varchar(100) DEFAULT NULL COMMENT 'Título exibido na aba do navegador',
   `mensagem_aniversario` text,
-  `documentos_maiusculas` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Se 1, o nome do autor/réu sai em CAIXA ALTA nos documentos',
+  `documentos_maiusculas` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Se 1, o nome do autor/reu sai em CAIXA ALTA nos documentos',
   `tempo_inatividade_min` int NOT NULL DEFAULT '15' COMMENT 'Minutos de inatividade ate o logout automatico (minimo 15)',
+  `ata_advogado_obrigatorio` tinyint DEFAULT '0',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `configuracoes_integracoes`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.configuracoes_integracoes
 DROP TABLE IF EXISTS `configuracoes_integracoes`;
-CREATE TABLE IF NOT EXISTS `configuracoes_integracoes` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `configuracoes_integracoes` (
   `id` int NOT NULL AUTO_INCREMENT,
   `modulo` varchar(50) NOT NULL,
   `ativo` tinyint(1) DEFAULT '0',
@@ -406,12 +553,16 @@ CREATE TABLE IF NOT EXISTS `configuracoes_integracoes` (
   `atualizado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `conta_corrente`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.conta_corrente
 DROP TABLE IF EXISTS `conta_corrente`;
-CREATE TABLE IF NOT EXISTS `conta_corrente` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `conta_corrente` (
   `id` int NOT NULL AUTO_INCREMENT,
   `processo_id` int NOT NULL,
   `parcela_id` int DEFAULT NULL,
@@ -429,25 +580,33 @@ CREATE TABLE IF NOT EXISTS `conta_corrente` (
   CONSTRAINT `fk_cc_parcela` FOREIGN KEY (`parcela_id`) REFERENCES `acordo_parcela` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_cc_processo` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_cc_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=38 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=43 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `controle_versao_banco`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.controle_versao_banco
 DROP TABLE IF EXISTS `controle_versao_banco`;
-CREATE TABLE IF NOT EXISTS `controle_versao_banco` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `controle_versao_banco` (
   `numero` int NOT NULL,
   `descricao` varchar(300) NOT NULL,
   `sql_aplicado` mediumtext,
   `aplicado_em` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`numero`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `emails_pf`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.emails_pf
 DROP TABLE IF EXISTS `emails_pf`;
-CREATE TABLE IF NOT EXISTS `emails_pf` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `emails_pf` (
   `id` int NOT NULL AUTO_INCREMENT,
   `pessoa_id` int NOT NULL,
   `email` varchar(150) NOT NULL,
@@ -457,13 +616,17 @@ CREATE TABLE IF NOT EXISTS `emails_pf` (
   PRIMARY KEY (`id`),
   KEY `pessoa_id` (`pessoa_id`),
   CONSTRAINT `emails_pf_ibfk_1` FOREIGN KEY (`pessoa_id`) REFERENCES `pessoas_fisicas` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=1700 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1752 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `emails_pj`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.emails_pj
 DROP TABLE IF EXISTS `emails_pj`;
-CREATE TABLE IF NOT EXISTS `emails_pj` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `emails_pj` (
   `id` int NOT NULL AUTO_INCREMENT,
   `pessoa_id` int NOT NULL,
   `email` varchar(150) NOT NULL,
@@ -474,22 +637,64 @@ CREATE TABLE IF NOT EXISTS `emails_pj` (
   KEY `pessoa_id` (`pessoa_id`),
   CONSTRAINT `emails_pj_ibfk_1` FOREIGN KEY (`pessoa_id`) REFERENCES `pessoas_juridicas` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `estado_civil`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.estado_civil
 DROP TABLE IF EXISTS `estado_civil`;
-CREATE TABLE IF NOT EXISTS `estado_civil` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `estado_civil` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(50) NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `etiquetas_definicoes`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.feriados
+DROP TABLE IF EXISTS `etiquetas_definicoes`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `etiquetas_definicoes` (
+  `usuario_id` int NOT NULL,
+  `modulo` varchar(20) NOT NULL,
+  `slot` tinyint NOT NULL,
+  `cor` varchar(20) NOT NULL,
+  `significado` varchar(60) DEFAULT NULL,
+  PRIMARY KEY (`usuario_id`,`modulo`,`slot`),
+  CONSTRAINT `fk_etqdef_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `etiquetas_escritorio_catalogo`
+--
+
+DROP TABLE IF EXISTS `etiquetas_escritorio_catalogo`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `etiquetas_escritorio_catalogo` (
+  `modulo` varchar(20) NOT NULL,
+  `slot` tinyint NOT NULL,
+  `cor` varchar(20) NOT NULL,
+  `significado` varchar(60) DEFAULT NULL,
+  PRIMARY KEY (`modulo`,`slot`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `feriados`
+--
+
 DROP TABLE IF EXISTS `feriados`;
-CREATE TABLE IF NOT EXISTS `feriados` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `feriados` (
   `id` int NOT NULL AUTO_INCREMENT,
   `data` date NOT NULL,
   `descricao` varchar(200) NOT NULL,
@@ -499,34 +704,46 @@ CREATE TABLE IF NOT EXISTS `feriados` (
   PRIMARY KEY (`id`),
   KEY `fk_feriados_criado_por` (`criado_por`),
   CONSTRAINT `fk_feriados_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=544 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `forma_pagamento`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.forma_pagamento
 DROP TABLE IF EXISTS `forma_pagamento`;
-CREATE TABLE IF NOT EXISTS `forma_pagamento` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `forma_pagamento` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(60) NOT NULL,
   `ativo` tinyint(1) NOT NULL DEFAULT '1',
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `genero`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.genero
 DROP TABLE IF EXISTS `genero`;
-CREATE TABLE IF NOT EXISTS `genero` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `genero` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(50) NOT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `historico_atendimento`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.historico_atendimento
 DROP TABLE IF EXISTS `historico_atendimento`;
-CREATE TABLE IF NOT EXISTS `historico_atendimento` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `historico_atendimento` (
   `id` int NOT NULL AUTO_INCREMENT,
   `tipo_pessoa` varchar(20) DEFAULT 'fisica',
   `pessoa_id` int NOT NULL,
@@ -536,34 +753,17 @@ CREATE TABLE IF NOT EXISTS `historico_atendimento` (
   PRIMARY KEY (`id`),
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `historico_atendimento_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=39 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `log_comunicacoes`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.logs_auditoria
-DROP TABLE IF EXISTS `logs_auditoria`;
-CREATE TABLE IF NOT EXISTS `logs_auditoria` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `usuario_id` int DEFAULT NULL,
-  `tabela` varchar(50) NOT NULL,
-  `acao` varchar(30) NOT NULL,
-  `registro_id` int DEFAULT NULL,
-  `descricao` varchar(255) DEFAULT NULL,
-  `dados_antigos` json DEFAULT NULL,
-  `dados_novos` json DEFAULT NULL,
-  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `idx_tabela` (`tabela`),
-  KEY `idx_usuario` (`usuario_id`),
-  KEY `idx_data` (`criado_em`),
-  KEY `idx_usuario_data` (`usuario_id`,`criado_em`)
-) ENGINE=InnoDB AUTO_INCREMENT=355 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
--- Exportação de dados foi desmarcado.
-
--- Copiando estrutura para tabela sistema_advocacia.log_comunicacoes
 DROP TABLE IF EXISTS `log_comunicacoes`;
-CREATE TABLE IF NOT EXISTS `log_comunicacoes` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `log_comunicacoes` (
   `id` int NOT NULL AUTO_INCREMENT,
   `canal` varchar(20) DEFAULT NULL,
   `destinatario` varchar(200) NOT NULL,
@@ -581,13 +781,17 @@ CREATE TABLE IF NOT EXISTS `log_comunicacoes` (
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `fk_logcomun_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`),
   CONSTRAINT `log_comunicacoes_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `log_documentos_gerados`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.log_documentos_gerados
 DROP TABLE IF EXISTS `log_documentos_gerados`;
-CREATE TABLE IF NOT EXISTS `log_documentos_gerados` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `log_documentos_gerados` (
   `id` int NOT NULL AUTO_INCREMENT,
   `modelo_id` int DEFAULT NULL,
   `modelo_nome` varchar(150) NOT NULL,
@@ -605,29 +809,42 @@ CREATE TABLE IF NOT EXISTS `log_documentos_gerados` (
   KEY `gerado_em` (`gerado_em`),
   CONSTRAINT `fk_logdoc_modelo` FOREIGN KEY (`modelo_id`) REFERENCES `modelo_documento` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_logdoc_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=25 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=48 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `log_emails`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.log_emails
 DROP TABLE IF EXISTS `log_emails`;
-CREATE TABLE IF NOT EXISTS `log_emails` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `log_emails` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `publicacao_id` int DEFAULT NULL,
   `enviado_em` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `para` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+  `destinatario_nome` varchar(200) DEFAULT NULL,
+  `mensagem` text,
   `assunto` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
   `status` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
   `erro` text CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci,
   PRIMARY KEY (`id`),
   KEY `idx_log_emails_enviado_em` (`enviado_em`),
-  KEY `idx_log_emails_status` (`status`)
-) ENGINE=InnoDB AUTO_INCREMENT=44 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  KEY `idx_log_emails_status` (`status`),
+  KEY `idx_log_emails_publicacao` (`publicacao_id`),
+  CONSTRAINT `fk_log_emails_pub` FOREIGN KEY (`publicacao_id`) REFERENCES `publicacoes` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=212 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `log_publicacoes`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.log_publicacoes
 DROP TABLE IF EXISTS `log_publicacoes`;
-CREATE TABLE IF NOT EXISTS `log_publicacoes` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `log_publicacoes` (
   `id` int NOT NULL AUTO_INCREMENT,
   `usuario_id` int NOT NULL,
   `quantidade` int NOT NULL,
@@ -636,13 +853,42 @@ CREATE TABLE IF NOT EXISTS `log_publicacoes` (
   PRIMARY KEY (`id`),
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `log_publicacoes_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=32 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=93 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `logs_auditoria`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.modelo_documento
+DROP TABLE IF EXISTS `logs_auditoria`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `logs_auditoria` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `usuario_id` int DEFAULT NULL,
+  `tabela` varchar(50) NOT NULL,
+  `acao` varchar(30) NOT NULL,
+  `registro_id` int DEFAULT NULL,
+  `descricao` varchar(255) DEFAULT NULL,
+  `dados_antigos` json DEFAULT NULL,
+  `dados_novos` json DEFAULT NULL,
+  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_tabela` (`tabela`),
+  KEY `idx_usuario` (`usuario_id`),
+  KEY `idx_data` (`criado_em`),
+  KEY `idx_usuario_data` (`usuario_id`,`criado_em`)
+) ENGINE=InnoDB AUTO_INCREMENT=1232 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `modelo_documento`
+--
+
 DROP TABLE IF EXISTS `modelo_documento`;
-CREATE TABLE IF NOT EXISTS `modelo_documento` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `modelo_documento` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(150) NOT NULL,
   `descricao` varchar(300) DEFAULT NULL,
@@ -671,23 +917,31 @@ CREATE TABLE IF NOT EXISTS `modelo_documento` (
   CONSTRAINT `fk_modelo_subtipo_prazo` FOREIGN KEY (`subtipo_prazo_id`) REFERENCES `prazo_subtipo` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_modelo_tipo_aud` FOREIGN KEY (`tipo_audiencia_id`) REFERENCES `tipo_audiencia` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_modelo_tipo_per` FOREIGN KEY (`tipo_pericia_id`) REFERENCES `tipo_pericia` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=23 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=25 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `nacionalidade`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.nacionalidade
 DROP TABLE IF EXISTS `nacionalidade`;
-CREATE TABLE IF NOT EXISTS `nacionalidade` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `nacionalidade` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(50) NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `notificacoes`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.notificacoes
 DROP TABLE IF EXISTS `notificacoes`;
-CREATE TABLE IF NOT EXISTS `notificacoes` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `notificacoes` (
   `id` int NOT NULL AUTO_INCREMENT,
   `usuario_id` int NOT NULL,
   `prazo_id` int DEFAULT NULL,
@@ -702,13 +956,17 @@ CREATE TABLE IF NOT EXISTS `notificacoes` (
   CONSTRAINT `fk_notif_prazo` FOREIGN KEY (`prazo_id`) REFERENCES `prazos_processo` (`id`),
   CONSTRAINT `fk_notif_tarefa` FOREIGN KEY (`tarefa_id`) REFERENCES `tarefas` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_notif_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=42 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `parabens_enviados`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.parabens_enviados
 DROP TABLE IF EXISTS `parabens_enviados`;
-CREATE TABLE IF NOT EXISTS `parabens_enviados` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `parabens_enviados` (
   `id` int NOT NULL AUTO_INCREMENT,
   `pessoa_id` int NOT NULL,
   `ano` smallint NOT NULL,
@@ -719,12 +977,34 @@ CREATE TABLE IF NOT EXISTS `parabens_enviados` (
   KEY `idx_pessoa_ano` (`pessoa_id`,`ano`),
   CONSTRAINT `fk_parabens_pessoa` FOREIGN KEY (`pessoa_id`) REFERENCES `pessoas_fisicas` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `pastas_etiquetas`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.pericia
+DROP TABLE IF EXISTS `pastas_etiquetas`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `pastas_etiquetas` (
+  `pasta_id` int NOT NULL,
+  `usuario_id` int NOT NULL,
+  `slot` tinyint NOT NULL,
+  PRIMARY KEY (`pasta_id`,`usuario_id`),
+  KEY `idx_paset_usuario` (`usuario_id`),
+  CONSTRAINT `fk_paset_pasta` FOREIGN KEY (`pasta_id`) REFERENCES `tblpasta` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_paset_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `pericia`
+--
+
 DROP TABLE IF EXISTS `pericia`;
-CREATE TABLE IF NOT EXISTS `pericia` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `pericia` (
   `id` int NOT NULL AUTO_INCREMENT,
   `processo_id` int NOT NULL,
   `tipo_pericia_id` int DEFAULT NULL,
@@ -768,12 +1048,34 @@ CREATE TABLE IF NOT EXISTS `pericia` (
   CONSTRAINT `pericia_ibfk_3` FOREIGN KEY (`assistente_tecnico_id`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `pericia_ibfk_4` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `pericias_etiquetas`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.permissoes
+DROP TABLE IF EXISTS `pericias_etiquetas`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `pericias_etiquetas` (
+  `pericia_id` int NOT NULL,
+  `usuario_id` int NOT NULL,
+  `slot` tinyint NOT NULL,
+  PRIMARY KEY (`pericia_id`,`usuario_id`),
+  KEY `idx_perie_usuario` (`usuario_id`),
+  CONSTRAINT `fk_perie_reg` FOREIGN KEY (`pericia_id`) REFERENCES `pericia` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_perie_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `permissoes`
+--
+
 DROP TABLE IF EXISTS `permissoes`;
-CREATE TABLE IF NOT EXISTS `permissoes` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `permissoes` (
   `id` int NOT NULL AUTO_INCREMENT,
   `usuario_id` int NOT NULL,
   `modulo` varchar(50) NOT NULL,
@@ -783,13 +1085,17 @@ CREATE TABLE IF NOT EXISTS `permissoes` (
   PRIMARY KEY (`id`),
   KEY `idx_usuario_modulo` (`usuario_id`,`modulo`,`submodulo`,`acao`),
   CONSTRAINT `permissoes_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=6563 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=7678 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `pessoas_fisicas`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.pessoas_fisicas
 DROP TABLE IF EXISTS `pessoas_fisicas`;
-CREATE TABLE IF NOT EXISTS `pessoas_fisicas` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `pessoas_fisicas` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(200) NOT NULL,
   `cpf` varchar(14) DEFAULT NULL,
@@ -834,13 +1140,36 @@ CREATE TABLE IF NOT EXISTS `pessoas_fisicas` (
   CONSTRAINT `pessoas_fisicas_ibfk_2` FOREIGN KEY (`profissao_id`) REFERENCES `profissao` (`id`),
   CONSTRAINT `pessoas_fisicas_ibfk_3` FOREIGN KEY (`genero_id`) REFERENCES `genero` (`id`),
   CONSTRAINT `pessoas_fisicas_ibfk_4` FOREIGN KEY (`nacionalidade_id`) REFERENCES `nacionalidade` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=4947 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5007 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `pessoas_fisicas_etiquetas_escritorio`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.pessoas_juridicas
+DROP TABLE IF EXISTS `pessoas_fisicas_etiquetas_escritorio`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `pessoas_fisicas_etiquetas_escritorio` (
+  `pessoa_id` int NOT NULL,
+  `slot` tinyint NOT NULL,
+  `marcado_por` int DEFAULT NULL,
+  `marcado_em` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`pessoa_id`),
+  KEY `idx_pfee_marcado_por` (`marcado_por`),
+  CONSTRAINT `fk_pfee_reg` FOREIGN KEY (`pessoa_id`) REFERENCES `pessoas_fisicas` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_pfee_usuario` FOREIGN KEY (`marcado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `pessoas_juridicas`
+--
+
 DROP TABLE IF EXISTS `pessoas_juridicas`;
-CREATE TABLE IF NOT EXISTS `pessoas_juridicas` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `pessoas_juridicas` (
   `id` int NOT NULL AUTO_INCREMENT,
   `razao_social` varchar(200) NOT NULL,
   `nome_fantasia` varchar(200) DEFAULT NULL,
@@ -866,18 +1195,77 @@ CREATE TABLE IF NOT EXISTS `pessoas_juridicas` (
   KEY `idx_pj_ativo_razao` (`ativo`,`razao_social`),
   CONSTRAINT `fk_pj_alterado_por` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `fk_pj_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2879 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2943 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `pessoas_juridicas_etiquetas_escritorio`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.prazos_processo
+DROP TABLE IF EXISTS `pessoas_juridicas_etiquetas_escritorio`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `pessoas_juridicas_etiquetas_escritorio` (
+  `pessoa_id` int NOT NULL,
+  `slot` tinyint NOT NULL,
+  `marcado_por` int DEFAULT NULL,
+  `marcado_em` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`pessoa_id`),
+  KEY `idx_pjee_marcado_por` (`marcado_por`),
+  CONSTRAINT `fk_pjee_reg` FOREIGN KEY (`pessoa_id`) REFERENCES `pessoas_juridicas` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_pjee_usuario` FOREIGN KEY (`marcado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `prazo_subtipo`
+--
+
+DROP TABLE IF EXISTS `prazo_subtipo`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `prazo_subtipo` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `tipo_prazo_id` int NOT NULL,
+  `nome` varchar(150) NOT NULL,
+  `ativo` tinyint(1) DEFAULT '1',
+  PRIMARY KEY (`id`),
+  KEY `tipo_prazo_id` (`tipo_prazo_id`),
+  CONSTRAINT `prazo_subtipo_ibfk_1` FOREIGN KEY (`tipo_prazo_id`) REFERENCES `tipo_prazo` (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=57 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `prazos_etiquetas`
+--
+
+DROP TABLE IF EXISTS `prazos_etiquetas`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `prazos_etiquetas` (
+  `prazo_id` int NOT NULL,
+  `usuario_id` int NOT NULL,
+  `slot` tinyint NOT NULL,
+  PRIMARY KEY (`prazo_id`,`usuario_id`),
+  KEY `idx_praze_usuario` (`usuario_id`),
+  CONSTRAINT `fk_praze_reg` FOREIGN KEY (`prazo_id`) REFERENCES `prazos_processo` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_praze_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `prazos_processo`
+--
+
 DROP TABLE IF EXISTS `prazos_processo`;
-CREATE TABLE IF NOT EXISTS `prazos_processo` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `prazos_processo` (
   `id` int NOT NULL AUTO_INCREMENT,
   `processo_id` int NOT NULL,
   `publicacao_id` int DEFAULT NULL,
   `subtipo_id` int DEFAULT NULL,
-  `descricao` varchar(300) DEFAULT NULL,
+  `descricao` varchar(1000) DEFAULT NULL,
   `data_inicio` date NOT NULL,
   `quantidade` int DEFAULT NULL,
   `tipo_dias` varchar(20) DEFAULT 'uteis',
@@ -913,27 +1301,17 @@ CREATE TABLE IF NOT EXISTS `prazos_processo` (
   CONSTRAINT `prazos_processo_ibfk_4` FOREIGN KEY (`concluido_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `prazos_processo_ibfk_5` FOREIGN KEY (`status_alterado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `prazos_processo_ibfk_6` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=23 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=141 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `processo_perito`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.prazo_subtipo
-DROP TABLE IF EXISTS `prazo_subtipo`;
-CREATE TABLE IF NOT EXISTS `prazo_subtipo` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `tipo_prazo_id` int NOT NULL,
-  `nome` varchar(150) NOT NULL,
-  `ativo` tinyint(1) DEFAULT '1',
-  PRIMARY KEY (`id`),
-  KEY `tipo_prazo_id` (`tipo_prazo_id`),
-  CONSTRAINT `prazo_subtipo_ibfk_1` FOREIGN KEY (`tipo_prazo_id`) REFERENCES `tipo_prazo` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=35 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
--- Exportação de dados foi desmarcado.
-
--- Copiando estrutura para tabela sistema_advocacia.processo_perito
 DROP TABLE IF EXISTS `processo_perito`;
-CREATE TABLE IF NOT EXISTS `processo_perito` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `processo_perito` (
   `id` int NOT NULL AUTO_INCREMENT,
   `proc_id` int NOT NULL,
   `tipo_pessoa` varchar(20) NOT NULL,
@@ -946,22 +1324,49 @@ CREATE TABLE IF NOT EXISTS `processo_perito` (
   CONSTRAINT `fk_procperito_proc` FOREIGN KEY (`proc_id`) REFERENCES `tblproc` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_procperito_usuario` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `processos_etiquetas_escritorio`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.profissao
+DROP TABLE IF EXISTS `processos_etiquetas_escritorio`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `processos_etiquetas_escritorio` (
+  `processo_id` int NOT NULL,
+  `slot` tinyint NOT NULL,
+  `marcado_por` int DEFAULT NULL,
+  `marcado_em` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`processo_id`),
+  KEY `idx_pee_marcado_por` (`marcado_por`),
+  CONSTRAINT `fk_pee_proc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_pee_usuario` FOREIGN KEY (`marcado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `profissao`
+--
+
 DROP TABLE IF EXISTS `profissao`;
-CREATE TABLE IF NOT EXISTS `profissao` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `profissao` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(100) NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=28 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=61 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `publicacao_usuario`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.publicacao_usuario
 DROP TABLE IF EXISTS `publicacao_usuario`;
-CREATE TABLE IF NOT EXISTS `publicacao_usuario` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `publicacao_usuario` (
   `id` int NOT NULL AUTO_INCREMENT,
   `publicacao_id` int NOT NULL,
   `usuario_id` int NOT NULL,
@@ -971,12 +1376,16 @@ CREATE TABLE IF NOT EXISTS `publicacao_usuario` (
   CONSTRAINT `fk_pu_pub` FOREIGN KEY (`publicacao_id`) REFERENCES `publicacoes` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_pu_user` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `publicacoes`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.publicacoes
 DROP TABLE IF EXISTS `publicacoes`;
-CREATE TABLE IF NOT EXISTS `publicacoes` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `publicacoes` (
   `id` int NOT NULL AUTO_INCREMENT,
   `fonte` varchar(20) NOT NULL DEFAULT 'aasp',
   `id_cnj` bigint DEFAULT NULL,
@@ -999,6 +1408,7 @@ CREATE TABLE IF NOT EXISTS `publicacoes` (
   `tratada` tinyint(1) NOT NULL DEFAULT '0',
   `tratada_por` int DEFAULT NULL,
   `tratada_em` datetime DEFAULT NULL,
+  `motivo_sem_acao` varchar(500) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_pub_cnj` (`fonte`,`id_cnj`),
   KEY `idx_pub_data` (`data_publicacao`),
@@ -1011,13 +1421,53 @@ CREATE TABLE IF NOT EXISTS `publicacoes` (
   CONSTRAINT `fk_pub_direcionada` FOREIGN KEY (`direcionada_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_pub_importada` FOREIGN KEY (`importada_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_pub_tratada` FOREIGN KEY (`tratada_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=924 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2126 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `publicacoes_etiquetas`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.reset_tokens
+DROP TABLE IF EXISTS `publicacoes_etiquetas`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `publicacoes_etiquetas` (
+  `publicacao_id` int NOT NULL,
+  `usuario_id` int NOT NULL,
+  `slot` tinyint NOT NULL,
+  PRIMARY KEY (`publicacao_id`,`usuario_id`),
+  KEY `idx_pube_usuario` (`usuario_id`),
+  CONSTRAINT `fk_pube_reg` FOREIGN KEY (`publicacao_id`) REFERENCES `publicacoes` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_pube_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `publicacoes_lidas`
+--
+
+DROP TABLE IF EXISTS `publicacoes_lidas`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `publicacoes_lidas` (
+  `publicacao_id` int NOT NULL,
+  `usuario_id` int NOT NULL,
+  `lida_em` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`publicacao_id`,`usuario_id`),
+  KEY `idx_pl_usuario` (`usuario_id`),
+  CONSTRAINT `fk_pl_pub` FOREIGN KEY (`publicacao_id`) REFERENCES `publicacoes` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_pl_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `reset_tokens`
+--
+
 DROP TABLE IF EXISTS `reset_tokens`;
-CREATE TABLE IF NOT EXISTS `reset_tokens` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `reset_tokens` (
   `id` int NOT NULL AUTO_INCREMENT,
   `usuario_id` int NOT NULL,
   `token` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
@@ -1028,13 +1478,17 @@ CREATE TABLE IF NOT EXISTS `reset_tokens` (
   UNIQUE KEY `token` (`token`),
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `reset_tokens_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=20 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=25 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `tarefas`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.tarefas
 DROP TABLE IF EXISTS `tarefas`;
-CREATE TABLE IF NOT EXISTS `tarefas` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tarefas` (
   `id` int NOT NULL AUTO_INCREMENT,
   `titulo` varchar(300) NOT NULL,
   `descricao` text,
@@ -1060,20 +1514,42 @@ CREATE TABLE IF NOT EXISTS `tarefas` (
   KEY `criado_por` (`criado_por`),
   KEY `idx_concluida_vencimento` (`concluida`,`data_vencimento`),
   KEY `idx_tarefas_publicacao` (`publicacao_id`),
+  CONSTRAINT `fk_tarefas_publicacao` FOREIGN KEY (`publicacao_id`) REFERENCES `publicacoes` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_tarefas_tblpasta` FOREIGN KEY (`pasta_id`) REFERENCES `tblpasta` (`id`),
   CONSTRAINT `fk_tarefas_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`),
-  CONSTRAINT `fk_tarefas_publicacao` FOREIGN KEY (`publicacao_id`) REFERENCES `publicacoes` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tarefas_ibfk_3` FOREIGN KEY (`prazo_id`) REFERENCES `prazos_processo` (`id`),
   CONSTRAINT `tarefas_ibfk_4` FOREIGN KEY (`atribuida_para`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `tarefas_ibfk_5` FOREIGN KEY (`concluida_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `tarefas_ibfk_6` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=85 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `tarefas_etiquetas`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.tblforum
+DROP TABLE IF EXISTS `tarefas_etiquetas`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tarefas_etiquetas` (
+  `tarefa_id` int NOT NULL,
+  `usuario_id` int NOT NULL,
+  `slot` tinyint NOT NULL,
+  PRIMARY KEY (`tarefa_id`,`usuario_id`),
+  KEY `idx_tare_usuario` (`usuario_id`),
+  CONSTRAINT `fk_tare_reg` FOREIGN KEY (`tarefa_id`) REFERENCES `tarefas` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_tare_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `tblforum`
+--
+
 DROP TABLE IF EXISTS `tblforum`;
-CREATE TABLE IF NOT EXISTS `tblforum` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tblforum` (
   `id` int NOT NULL AUTO_INCREMENT,
   `abrev_nome` varchar(50) DEFAULT NULL COMMENT 'Abreviação para dropdowns/mensagens — ex: VT/B.Funda',
   `nome` varchar(150) NOT NULL,
@@ -1094,13 +1570,17 @@ CREATE TABLE IF NOT EXISTS `tblforum` (
   KEY `alterado_por` (`alterado_por`),
   CONSTRAINT `tblforum_ibfk_1` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblforum_ibfk_2` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=39 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=141 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `tblinstanciaproc`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.tblinstanciaproc
 DROP TABLE IF EXISTS `tblinstanciaproc`;
-CREATE TABLE IF NOT EXISTS `tblinstanciaproc` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tblinstanciaproc` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(100) NOT NULL,
   `ativo` tinyint(1) DEFAULT '1',
@@ -1114,12 +1594,16 @@ CREATE TABLE IF NOT EXISTS `tblinstanciaproc` (
   CONSTRAINT `tblinstanciaproc_ibfk_1` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblinstanciaproc_ibfk_2` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `tblpasta`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.tblpasta
 DROP TABLE IF EXISTS `tblpasta`;
-CREATE TABLE IF NOT EXISTS `tblpasta` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tblpasta` (
   `id` int NOT NULL AUTO_INCREMENT,
   `numPasta` int NOT NULL,
   `area_direito` varchar(50) DEFAULT NULL COMMENT 'Ex: Trabalhista, Previdenciária, Família',
@@ -1133,17 +1617,22 @@ CREATE TABLE IF NOT EXISTS `tblpasta` (
   KEY `alterado_por` (`alterado_por`),
   CONSTRAINT `tblpasta_ibfk_1` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblpasta_ibfk_2` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=8822 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=8865 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `tblproc`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.tblproc
 DROP TABLE IF EXISTS `tblproc`;
-CREATE TABLE IF NOT EXISTS `tblproc` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tblproc` (
   `id` int NOT NULL AUTO_INCREMENT,
   `pasta_id` int NOT NULL,
   `numProc` varchar(45) DEFAULT NULL,
   `protocolo` varchar(60) DEFAULT NULL,
+  `datajud_sincronizado_em` datetime DEFAULT NULL,
   `cliente_polo` varchar(10) DEFAULT NULL,
   `NomeTituloProc` varchar(300) DEFAULT NULL,
   `vara_id` int DEFAULT NULL,
@@ -1166,8 +1655,8 @@ CREATE TABLE IF NOT EXISTS `tblproc` (
   KEY `criado_por` (`criado_por`),
   KEY `alterado_por` (`alterado_por`),
   KEY `idx_proc_numproc` (`numProc`),
-  KEY `idx_proc_protocolo` (`protocolo`),
   KEY `idx_proc_pasta_ativo` (`pasta_id`,`ativo`),
+  KEY `idx_proc_protocolo` (`protocolo`),
   CONSTRAINT `tblproc_ibfk_1` FOREIGN KEY (`pasta_id`) REFERENCES `tblpasta` (`id`),
   CONSTRAINT `tblproc_ibfk_2` FOREIGN KEY (`vara_id`) REFERENCES `tblvara` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblproc_ibfk_3` FOREIGN KEY (`tipo_id`) REFERENCES `tbltipoproc` (`id`) ON DELETE SET NULL,
@@ -1175,13 +1664,17 @@ CREATE TABLE IF NOT EXISTS `tblproc` (
   CONSTRAINT `tblproc_ibfk_5` FOREIGN KEY (`instancia_id`) REFERENCES `tblinstanciaproc` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblproc_ibfk_6` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblproc_ibfk_7` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=6012 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6083 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `tblstatusproc`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.tblstatusproc
 DROP TABLE IF EXISTS `tblstatusproc`;
-CREATE TABLE IF NOT EXISTS `tblstatusproc` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tblstatusproc` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(100) NOT NULL,
   `ativo` tinyint(1) DEFAULT '1',
@@ -1194,13 +1687,17 @@ CREATE TABLE IF NOT EXISTS `tblstatusproc` (
   KEY `alterado_por` (`alterado_por`),
   CONSTRAINT `tblstatusproc_ibfk_1` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblstatusproc_ibfk_2` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `tbltipoproc`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.tbltipoproc
 DROP TABLE IF EXISTS `tbltipoproc`;
-CREATE TABLE IF NOT EXISTS `tbltipoproc` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tbltipoproc` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(100) NOT NULL,
   `codTipoProc` varchar(1) DEFAULT NULL,
@@ -1214,13 +1711,17 @@ CREATE TABLE IF NOT EXISTS `tbltipoproc` (
   KEY `alterado_por` (`alterado_por`),
   CONSTRAINT `tbltipoproc_ibfk_1` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tbltipoproc_ibfk_2` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `tbltituloprocautor`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.tbltituloprocautor
 DROP TABLE IF EXISTS `tbltituloprocautor`;
-CREATE TABLE IF NOT EXISTS `tbltituloprocautor` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tbltituloprocautor` (
   `id` int NOT NULL AUTO_INCREMENT,
   `proc_id` int NOT NULL,
   `tipo_pessoa` enum('fisica','juridica') NOT NULL,
@@ -1233,13 +1734,17 @@ CREATE TABLE IF NOT EXISTS `tbltituloprocautor` (
   KEY `idx_titautor_pessoa` (`pessoa_id`,`tipo_pessoa`,`proc_id`),
   CONSTRAINT `tbltituloprocautor_ibfk_1` FOREIGN KEY (`proc_id`) REFERENCES `tblproc` (`id`) ON DELETE CASCADE,
   CONSTRAINT `tbltituloprocautor_ibfk_2` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=6012 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6089 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `tbltituloprocreu`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.tbltituloprocreu
 DROP TABLE IF EXISTS `tbltituloprocreu`;
-CREATE TABLE IF NOT EXISTS `tbltituloprocreu` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tbltituloprocreu` (
   `id` int NOT NULL AUTO_INCREMENT,
   `proc_id` int NOT NULL,
   `tipo_pessoa` enum('fisica','juridica') NOT NULL,
@@ -1252,13 +1757,17 @@ CREATE TABLE IF NOT EXISTS `tbltituloprocreu` (
   KEY `idx_titreu_pessoa` (`pessoa_id`,`tipo_pessoa`,`proc_id`),
   CONSTRAINT `tbltituloprocreu_ibfk_1` FOREIGN KEY (`proc_id`) REFERENCES `tblproc` (`id`) ON DELETE CASCADE,
   CONSTRAINT `tbltituloprocreu_ibfk_2` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=6015 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6103 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `tblvara`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.tblvara
 DROP TABLE IF EXISTS `tblvara`;
-CREATE TABLE IF NOT EXISTS `tblvara` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tblvara` (
   `id` int NOT NULL AUTO_INCREMENT,
   `abrev_nome` varchar(50) DEFAULT NULL COMMENT 'Abreviação para dropdowns/mensagens — ex: 04ªVT/SP-ZL',
   `forum_id` int NOT NULL,
@@ -1279,13 +1788,17 @@ CREATE TABLE IF NOT EXISTS `tblvara` (
   CONSTRAINT `tblvara_ibfk_1` FOREIGN KEY (`forum_id`) REFERENCES `tblforum` (`id`),
   CONSTRAINT `tblvara_ibfk_2` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblvara_ibfk_3` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=489 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=645 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `telefones_pf`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.telefones_pf
 DROP TABLE IF EXISTS `telefones_pf`;
-CREATE TABLE IF NOT EXISTS `telefones_pf` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `telefones_pf` (
   `id` int NOT NULL AUTO_INCREMENT,
   `pessoa_id` int NOT NULL,
   `numero` varchar(20) NOT NULL,
@@ -1296,13 +1809,17 @@ CREATE TABLE IF NOT EXISTS `telefones_pf` (
   PRIMARY KEY (`id`),
   KEY `pessoa_id` (`pessoa_id`),
   CONSTRAINT `telefones_pf_ibfk_1` FOREIGN KEY (`pessoa_id`) REFERENCES `pessoas_fisicas` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=22252 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=22352 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `telefones_pj`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.telefones_pj
 DROP TABLE IF EXISTS `telefones_pj`;
-CREATE TABLE IF NOT EXISTS `telefones_pj` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `telefones_pj` (
   `id` int NOT NULL AUTO_INCREMENT,
   `pessoa_id` int NOT NULL,
   `numero` varchar(20) NOT NULL,
@@ -1314,45 +1831,61 @@ CREATE TABLE IF NOT EXISTS `telefones_pj` (
   KEY `pessoa_id` (`pessoa_id`),
   CONSTRAINT `telefones_pj_ibfk_1` FOREIGN KEY (`pessoa_id`) REFERENCES `pessoas_juridicas` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `tipo_audiencia`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.tipo_audiencia
 DROP TABLE IF EXISTS `tipo_audiencia`;
-CREATE TABLE IF NOT EXISTS `tipo_audiencia` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tipo_audiencia` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(100) NOT NULL,
   `ativo` tinyint(1) DEFAULT '1',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `tipo_pericia`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.tipo_pericia
 DROP TABLE IF EXISTS `tipo_pericia`;
-CREATE TABLE IF NOT EXISTS `tipo_pericia` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tipo_pericia` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(100) NOT NULL,
   `ativo` tinyint(1) DEFAULT '1',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `tipo_prazo`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.tipo_prazo
 DROP TABLE IF EXISTS `tipo_prazo`;
-CREATE TABLE IF NOT EXISTS `tipo_prazo` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tipo_prazo` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(100) NOT NULL,
   `ativo` tinyint(1) DEFAULT '1',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Table structure for table `usuarios`
+--
 
--- Copiando estrutura para tabela sistema_advocacia.usuarios
 DROP TABLE IF EXISTS `usuarios`;
-CREATE TABLE IF NOT EXISTS `usuarios` (
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `usuarios` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(150) NOT NULL,
   `login` varchar(80) NOT NULL,
@@ -1368,16 +1901,35 @@ CREATE TABLE IF NOT EXISTS `usuarios` (
   `ultimo_acesso` datetime DEFAULT NULL,
   `notif_email` tinyint(1) DEFAULT '1',
   `notif_tela` tinyint(1) DEFAULT '1',
+  `sessao_atual` varchar(64) DEFAULT NULL,
+  `cores_agenda` varchar(255) DEFAULT NULL,
+  `cores_menu` varchar(255) DEFAULT NULL,
+  `cor_linha` varchar(20) DEFAULT NULL,
+  `cor_linha_lida` varchar(20) DEFAULT NULL,
+  `google_agenda_ativo` tinyint(1) NOT NULL DEFAULT '0',
+  `google_agenda_email` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_login` (`login`),
   KEY `fk_usuarios_criado_por` (`criado_por`),
   CONSTRAINT `fk_usuarios_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=26 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=28 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- Exportação de dados foi desmarcado.
+--
+-- Dumping events for database 'sistema_advocacia'
+--
 
-/*!40103 SET TIME_ZONE=IFNULL(@OLD_TIME_ZONE, 'system') */;
-/*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;
-/*!40014 SET FOREIGN_KEY_CHECKS=IFNULL(@OLD_FOREIGN_KEY_CHECKS, 1) */;
+--
+-- Dumping routines for database 'sistema_advocacia'
+--
+/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
+
+/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
+/*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
+/*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
-/*!40111 SET SQL_NOTES=IFNULL(@OLD_SQL_NOTES, 1) */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
+
+-- Dump completed

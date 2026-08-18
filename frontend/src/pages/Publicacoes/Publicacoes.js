@@ -752,6 +752,18 @@ function PublicacoesAASP() {
                 <h3>
                   Publicação — {formatarData(textoAberto.data_publicacao)}
                   {idx >= 0 && <span style={{ color: '#888', fontWeight: 'normal', fontSize: '13px' }}> ({idx + 1} de {lista.length})</span>}
+                  {/* Polo do cliente do escritório no processo desta publicação (vem do cadastro
+                      do processo, campo "Cliente do escritório"). Processo não cadastrado ou sem
+                      o campo preenchido → não mostra nada. */}
+                  {['autor', 'reu'].includes(textoAberto.cliente_polo) && (
+                    <span style={{
+                      marginLeft: '10px', padding: '2px 10px', borderRadius: '12px',
+                      background: '#e0e7ff', border: '1px solid #a5b4fc', color: '#3730a3',
+                      fontSize: '12px', fontWeight: 700, letterSpacing: '0.5px', verticalAlign: 'middle',
+                    }}>
+                      {textoAberto.cliente_polo === 'autor' ? 'AUTOR' : 'RÉU'}
+                    </span>
+                  )}
                 </h3>
                 <button className="modal-fechar" onClick={() => setTextoAberto(null)}>✕</button>
               </div>
@@ -1241,6 +1253,18 @@ function PublicacoesCNJ() {
                 <h3>
                   Publicação — {formatarData(textoAberto.data_publicacao)}
                   {idx >= 0 && <span style={{ color: '#888', fontWeight: 'normal', fontSize: '13px' }}> ({idx + 1} de {lista.length})</span>}
+                  {/* Polo do cliente do escritório no processo desta publicação (vem do cadastro
+                      do processo, campo "Cliente do escritório"). Processo não cadastrado ou sem
+                      o campo preenchido → não mostra nada. */}
+                  {['autor', 'reu'].includes(textoAberto.cliente_polo) && (
+                    <span style={{
+                      marginLeft: '10px', padding: '2px 10px', borderRadius: '12px',
+                      background: '#e0e7ff', border: '1px solid #a5b4fc', color: '#3730a3',
+                      fontSize: '12px', fontWeight: 700, letterSpacing: '0.5px', verticalAlign: 'middle',
+                    }}>
+                      {textoAberto.cliente_polo === 'autor' ? 'AUTOR' : 'RÉU'}
+                    </span>
+                  )}
                 </h3>
                 <button className="modal-fechar" onClick={() => setTextoAberto(null)}>✕</button>
               </div>

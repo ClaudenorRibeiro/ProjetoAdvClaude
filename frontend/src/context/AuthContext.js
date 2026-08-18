@@ -29,6 +29,17 @@ export function AuthProvider({ children }) {
     if (canal) {
       canal.onmessage = (ev) => {
         const msg = ev.data || {};
+        // Uma vizinha descobriu que a sessão morreu (login em outro dispositivo, token
+        // expirado etc.) — descarta nosso login guardado também, SEM interromper o que o
+        // usuário está fazendo nesta aba agora. Isso só evita que ESTA aba continue
+        // oferecendo um token morto pra outras que estiverem recarregando (o vai-e-volta que
+        // fazia a tela de login piscar). Na próxima ação real desta aba, o fluxo normal de
+        // sessão expirada mostra o aviso e leva pro login, como sempre.
+        if (msg.tipo === 'SESSAO_INVALIDA') {
+          sessionStorage.removeItem('token');
+          sessionStorage.removeItem('usuario');
+          return;
+        }
         // Uma vizinha pediu o login e ESTA guia tem → envia (mesma origem, mesmo navegador).
         if (msg.tipo === 'PEDIR_TOKEN') {
           const token = sessionStorage.getItem('token');

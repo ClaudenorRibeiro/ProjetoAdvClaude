@@ -721,8 +721,10 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
           </div>
           <div className="form-group">
             <label className="form-label">Descrição</label>
-            <input className="form-control" value={form.descricao||''} onChange={e=>set('descricao',e.target.value)}
-              onBlur={()=>set('descricao', toTitleCase(form.descricao))} placeholder="Descrição adicional..." />
+            <textarea className="form-control" rows={3} maxLength={1000} value={form.descricao||''}
+              onChange={e=>set('descricao',e.target.value)}
+              onBlur={()=>set('descricao', toTitleCase(form.descricao))}
+              placeholder="Descrição adicional..." style={{ resize: 'vertical' }} />
           </div>
           <div className="grid-4">
             <div className="form-group">
@@ -806,6 +808,10 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
   const [modo, setModo] = useState(null);
   // Cópia local de tipos/subtipos: começa com a prop e é recarregada ao cadastrar um item novo
   const [tiposLocal, setTiposLocal] = useState(tipos);
+  // Avisos DENTRO do modal (padrão do sistema — nunca o toast do canto):
+  // faixa laranja para erro vindo do servidor, ModalInfo para campo obrigatório em branco.
+  const [aviso, setAviso] = useState('');
+  const [info, setInfo]   = useState(null);
 
   const recarregarTipos = useCallback(async () => {
     const r = await prazosAPI.tipos();
@@ -860,16 +866,17 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
   function set(k, v) { setForm(f => ({...f, [k]: v})); }
 
   async function salvar() {
-    if (!form.data_inicio)   return toast.error('Data de início é obrigatória');
-    if (!form.tipo_prazo_id) return toast.error('Tipo de prazo é obrigatório');
-    if (!form.subtipo_id)    return toast.error('Subtipo é obrigatório');
-    if (!form.data_final)    return toast.error('A data final é obrigatória. Informe a data final ou a quantidade de dias.');
+    if (!form.data_inicio)   return setInfo({ titulo: 'Data de início obrigatória', mensagem: 'Informe a data de início.' });
+    if (!form.tipo_prazo_id) return setInfo({ titulo: 'Tipo de prazo obrigatório', mensagem: 'Selecione o tipo de prazo.' });
+    if (!form.subtipo_id)    return setInfo({ titulo: 'Subtipo obrigatório', mensagem: 'Selecione o subtipo.' });
+    if (!form.data_final)    return setInfo({ titulo: 'Data final obrigatória', mensagem: 'Informe a data final (ou a quantidade de dias).' });
+    setAviso('');
     setSalvando(true);
     try {
       await prazosAPI.editar(prazo.id, { ...form, notificar_conclusao: (notificarConclusao && form.delegado_para) ? 1 : 0 });
       toast.success('Prazo atualizado!');
       onFechar(true);
-    } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao salvar'); }
+    } catch (err) { setAviso(err.response?.data?.mensagem || 'Não foi possível salvar as alterações do prazo.'); }
     finally { setSalvando(false); }
   }
 
@@ -878,6 +885,7 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
     : tiposLocal.subtipos;
 
   return (
+    <>
     <div className="modal-overlay">
       <div className="modal-box modal-grande">
         <div className="modal-header">
@@ -885,6 +893,12 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
         </div>
         <div className="modal-body">
+          {aviso && (
+            <div style={{ background:'#fff4e5', border:'1px solid #ffcf99', color:'#8a5300',
+              padding:'8px 12px', borderRadius:'6px', fontSize:'13px', marginBottom:'12px' }}>
+              {aviso}
+            </div>
+          )}
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Processo</label>
@@ -929,8 +943,10 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
           </div>
           <div className="form-group">
             <label className="form-label">Descrição</label>
-            <input className="form-control" value={form.descricao} onChange={e=>set('descricao',e.target.value)}
-              onBlur={() => set('descricao', toTitleCase(form.descricao))} placeholder="Descrição adicional..." />
+            <textarea className="form-control" rows={3} maxLength={1000} value={form.descricao}
+              onChange={e=>set('descricao',e.target.value)}
+              onBlur={() => set('descricao', toTitleCase(form.descricao))}
+              placeholder="Descrição adicional..." style={{ resize: 'vertical' }} />
           </div>
           <div className="grid-4">
             <div className="form-group">
@@ -982,6 +998,12 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
         </div>
       </div>
     </div>
+    {info && (
+      <div style={{ position: 'relative', zIndex: 2000 }}>
+        <ModalInfo {...info} onFechar={() => setInfo(null)} />
+      </div>
+    )}
+    </>
   );
 }
 
