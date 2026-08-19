@@ -216,13 +216,35 @@ export function labelStatusPrazo(status) {
   return map[status] || status;
 }
 
+// Limpa os espaços sobrando de um texto digitado: tira os do início e do fim
+// e deixa UM só entre as palavras.
+// As QUEBRAS DE LINHA são preservadas de propósito — campos de várias linhas
+// (Observações, Descrição do prazo/tarefa, resultado da audiência) passam por aqui.
+// Ex: "  Frederico   Carvalho  " → "Frederico Carvalho"
+export function limparEspacos(str) {
+  if (!str) return str;
+  return String(str)
+    .replace(/[^\S\r\n]+/g, ' ')  // espaços/tabs repetidos viram um só (não toca na quebra de linha)
+    .replace(/ *\r?\n */g, '\n')   // tira o espaço colado antes/depois da quebra de linha
+    .trim();                          // tira do começo e do fim
+}
+
+// Limpa um e-mail digitado: apaga TODOS os espaços (e-mail não pode ter espaço
+// em lugar nenhum) e deixa tudo em letra minúscula.
+// Ex: " EDNA @Provedor.COM " → "edna@provedor.com"
+export function limparEmail(str) {
+  if (!str) return str;
+  return String(str).replace(/\s+/g, '').toLowerCase();
+}
+
 // Converte texto para Primeira Letra Maiúscula Em Cada Palavra
 // Ex: "EDNA SILVA" → "Edna Silva" | "edna silva" → "Edna Silva"
 // Preposições comuns em português permanecem minúsculas (de, da, do, das, dos, e)
+// Também limpa os espaços sobrando (início, fim e repetidos do meio).
 export function toTitleCase(str) {
   if (!str) return str;
   const minusculas = ['de', 'da', 'do', 'das', 'dos', 'e', 'em', 'na', 'no', 'nas', 'nos', 'a', 'o', 'as', 'os'];
-  return str
+  return limparEspacos(str)
     .toLowerCase()
     .split(' ')
     .map((palavra, index) => {

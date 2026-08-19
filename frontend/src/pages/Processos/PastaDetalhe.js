@@ -1613,7 +1613,10 @@ function partesUnicasDaPasta(processos) {
     const chave = `${p.tipo_pessoa}:${p.pessoa_id}`;
     if (vistos[papel].has(chave)) return;
     vistos[papel].add(chave);
-    out[papel].push({ pessoa_id: p.pessoa_id, tipo_pessoa: p.tipo_pessoa, nome: p.nome });
+    out[papel].push({
+      pessoa_id: p.pessoa_id, tipo_pessoa: p.tipo_pessoa, nome: p.nome,
+      responsavel_nome: p.responsavel_nome || null, parentesco_nome: p.parentesco_nome || null,
+    });
   });
   (processos || []).forEach(pr => {
     juntar(pr.autores, 'autor');
@@ -1741,7 +1744,15 @@ function ItemParteContato({ parte, smsAtivo, onReload }) {
         borderBottom: '1px solid #f1f5f9', borderRadius: '6px',
         background: 'transparent', transition: 'background-color 0.15s' }}>
       <span className={`badge ${info.cls}`} style={{ minWidth: '58px', textAlign: 'center' }}>{info.label}</span>
-      <span style={{ flex: 1, fontSize: '14px', color: '#1e2a3a' }}>{parte.nome}</span>
+      <span style={{ flex: 1, fontSize: '14px', color: '#1e2a3a' }}>
+        {parte.nome}
+        {parte.responsavel_nome && (
+          <span style={{ display: 'block', fontSize: '12px', color: '#6b7280' }}>
+            representado(a) por {parte.responsavel_nome}
+            {parte.parentesco_nome ? ` — ${parte.parentesco_nome}` : ''}
+          </span>
+        )}
+      </span>
       <MenuAcoes itens={[
         { label: 'Ver cadastro',    icone: '👁️', onClick: () => setVerCadastro(true) },
         { label: 'Anotações de atendimento', icone: '📝', onClick: () => setAnotacoes(true) },

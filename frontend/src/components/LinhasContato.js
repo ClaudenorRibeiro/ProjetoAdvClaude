@@ -5,11 +5,12 @@
 // Ficam aqui para NÃO duplicar máscara/validação entre telas.
 // ============================================================
 import React, { useState } from 'react';
+import { limparEspacos, limparEmail } from '../utils/formatters';
 
 // ------------------------------------------------------------
 // LINHA TELEFONE — número com máscara adaptativa + descrição livre
 // ------------------------------------------------------------
-export function LinhaFone({ tel, index, onChange, onRemove, somenteLeitura = false }) {
+export function LinhaFone({ tel, index, onChange, onRemove, somenteLeitura = false, refNumero }) {
   // Máscara adaptativa: fixo (xx) xxxx-xxxx ou celular (xx) xxxxx-xxxx
   function mascaraTelefone(value) {
     const limpo = value.replace(/\D/g, '').slice(0, 11);
@@ -24,6 +25,7 @@ export function LinhaFone({ tel, index, onChange, onRemove, somenteLeitura = fal
     <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
       {/* Número com máscara automática */}
       <input
+        ref={refNumero}
         className="form-control"
         style={{ flex: 2 }}
         placeholder="(11) 99999-9999"
@@ -40,6 +42,7 @@ export function LinhaFone({ tel, index, onChange, onRemove, somenteLeitura = fal
         value={tel.tipo || ''}
         disabled={somenteLeitura}
         onChange={e => onChange({ ...tel, tipo: e.target.value })}
+        onBlur={() => onChange({ ...tel, tipo: limparEspacos(tel.tipo || '') })}
       />
       {/* Botão remover — só aparece a partir da segunda linha */}
       {index > 0 && !somenteLeitura && (
@@ -57,12 +60,16 @@ export function LinhaFone({ tel, index, onChange, onRemove, somenteLeitura = fal
 // ------------------------------------------------------------
 // LINHA EMAIL — campo de e-mail com validação de formato no blur
 // ------------------------------------------------------------
-export function LinhaEmail({ email, index, onChange, onRemove, somenteLeitura = false }) {
+export function LinhaEmail({ email, index, onChange, onRemove, somenteLeitura = false, refEmail }) {
   const [erroEmail, setErroEmail] = useState('');
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+  // Ao perder o foco: apaga TODOS os espaços e deixa tudo minúsculo — e SÓ DEPOIS
+  // confere o formato, para não acusar erro por causa de um espaço que já foi limpo.
   function handleBlur() {
-    if (email && !emailRegex.test(email.trim())) {
+    const limpo = limparEmail(email || '');
+    if (limpo !== (email || '')) onChange(limpo);
+    if (limpo && !emailRegex.test(limpo)) {
       setErroEmail('E-mail inválido');
     } else {
       setErroEmail('');
@@ -73,6 +80,7 @@ export function LinhaEmail({ email, index, onChange, onRemove, somenteLeitura = 
     <div style={{ marginBottom: erroEmail ? '4px' : '8px' }}>
       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
         <input
+          ref={refEmail}
           className={`form-control ${erroEmail ? 'is-invalid' : ''}`}
           style={{ flex: 1 }}
           placeholder="email@exemplo.com"

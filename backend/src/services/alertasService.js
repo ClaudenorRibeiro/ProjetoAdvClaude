@@ -41,6 +41,12 @@ async function iniciarAlertas() {
     await verificarAlertasPericias();
   }, OPCOES_CRON);
 
+  // Avisos de idade dos representados (todo dia às 8h10)
+  cron.schedule('10 8 * * *', async () => {
+    console.log('⏰ Cron: verificando avisos de idade...');
+    await verificarAvisosIdade();
+  }, OPCOES_CRON);
+
   // Limpeza diária: remove tokens de redefinição de senha já usados ou expirados (3h)
   // Sem isso a tabela reset_tokens cresce indefinidamente
   cron.schedule('0 3 * * *', async () => {
@@ -213,4 +219,65 @@ async function verificarAlertasPericias() {
   } catch (err) { console.error('Erro alertas perícias:', err.message); }
 }
 
-module.exports = { iniciarAlertas, reagendarCronPrazos };
+// ── AVISOS DE IDADE ───────────────────────────────────────────────────────
+// "Me avise quando fulano completar X anos" (configurado no cadastro da pessoa).
+// Roda 1x por dia e avisa os ADMINISTRADORES no sino. Só AVISA e registra que
+// avisou — não altera nem apaga nada, por decisão do escritório.
+//
+// Usa >= em vez de = de propósito: se o sistema estiver fora do ar no dia exato,
+// o aviso sai no primeiro dia em que voltar, em vez de se perder para sempre.
+// O "avisado_em" garante que cada idade avisa UMA única vez.
+async function verificarAvisosIdade() {
+  try {
+    const [pendentes] = await pool.execute(
+      `SELECT a.id, a.idade, p.id AS pessoa_id, p.nome
+         FROM pessoas_avisos_idade a
+         JOIN pessoas_fisicas p ON a.pessoa_id = p.id
+        WHERE a.avisado_em IS NULL
+          AND p.ativo = 1
+          AND p.data_nascimento IS NOT NULL
+          AND TIMESTAMPDIFF(YEAR, p.data_nascimento, CURDATE()) >= a.idade
+        ORDER BY p.nome`
+    );
+    if (!pendentes.length) return;
+
+    // Administradores: nível 0 (super) e 1 (admin)
+    const [admins] = await pool.execute(
+      'SELECT id FROM usuarios WHERE ativo = 1 AND nivel <= 1'
+    );
+    if (!admins.length) {
+      console.log('⚠️ Avisos de idade: nenhum administrador ativo para receber');
+      return;
+    }
+
+    for (const av of pendentes) {
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+        const mensagem = `${av.nome} completou ${av.idade} anos — confira a representação legal nos processos.`.slice(0, 300);
+        for (const adm of admins) {
+          await conn.execute(
+            'INSERT INTO notificacoes (usuario_id, pessoa_id, mensagem) VALUES (?, ?, ?)',
+            [adm.id, av.pessoa_id, mensagem]
+          );
+        }
+        // Marca DENTRO da mesma transação: ou o aviso sai para todos e fica
+        // registrado, ou não sai para ninguém e tenta de novo amanhã
+        await conn.execute(
+          'UPDATE pessoas_avisos_idade SET avisado_em = NOW() WHERE id = ?', [av.id]
+        );
+        await conn.commit();
+        console.log(`🔔 Aviso de idade: ${av.nome} (${av.idade} anos) enviado a ${admins.length} administrador(es)`);
+      } catch (err) {
+        await conn.rollback();
+        console.error('Erro no aviso de idade de', av.nome + ':', err.message);
+      } finally {
+        conn.release();
+      }
+    }
+  } catch (err) {
+    console.error('Erro ao verificar avisos de idade:', err.message);
+  }
+}
+
+module.exports = { iniciarAlertas, reagendarCronPrazos, verificarAvisosIdade };

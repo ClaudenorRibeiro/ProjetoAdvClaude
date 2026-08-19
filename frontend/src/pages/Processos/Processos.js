@@ -7,183 +7,14 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { processosAPI, pessoasAPI, etiquetasAPI } from '../../services/api';
 import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetasSubmenu } from '../../components/Etiquetas';
-import { formatarNumeroPasta, mascaraCNJ, toTitleCase, mascaraCPF, validarCPF, mascaraCNPJ, validarCNPJ, formatarTelefone } from '../../utils/formatters';
+import { formatarNumeroPasta, mascaraCNJ, toTitleCase } from '../../utils/formatters';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import MenuAcoes from '../../components/MenuAcoes';
-import { LinhaFone, LinhaEmail } from '../../components/LinhasContato';
 import useEscFechar from '../../hooks/useEscFechar';
 import { buscarEnderecoPorCep } from '../../utils/cep';
-
-// ============================================================
-// MINI-MODAL DE CADASTRO RÁPIDO DE PARTE (Física ou Jurídica)
-// Usado pelo botão "…" ao lado dos campos Autor/Réu/Perito nos modais de
-// Novo/Editar Processo. Grava só o essencial (Física: nome + CPF; Jurídica:
-// razão social + CNPJ) pela MESMA rota/transação do cadastro normal; o restante
-// dos dados pode ser completado depois em Pessoas. Devolve a pessoa criada
-// ({ id, nome } ou { id, razao_social }) no formato que `adicionarParte` espera.
-// ============================================================
-function ModalCadastroRapidoParte({ tipo, onFechar, onSalvo }) {
-  const ehFisica = tipo === 'fisica';
-  const [form, setForm]         = useState({});
-  const [salvando, setSalvando] = useState(false);
-  const [telefones, setTelefones] = useState([{ numero: '', tipo: '', principal: true }]);
-  const [emails, setEmails]       = useState([{ email: '', principal: true }]);
-  const [avisoDup, setAvisoDup]   = useState(''); // faixa interna: telefone/e-mail repetido no próprio cadastro
-  const overlayRef = useEscFechar(onFechar); // ESC fecha esta janelinha (só quando é a de cima)
-  function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
-
-  async function salvar() {
-    if (ehFisica) {
-      if (!form.nome?.trim()) return toast.error('O nome é obrigatório');
-      const cpfLimpo = form.cpf?.replace(/\D/g, '') || '';
-      if (cpfLimpo && !validarCPF(cpfLimpo)) return toast.error('CPF inválido');
-    } else {
-      if (!form.razao_social?.trim()) return toast.error('A razão social é obrigatória');
-      const cnpjLimpo = form.cnpj?.replace(/\D/g, '') || '';
-      if (cnpjLimpo && !validarCNPJ(cnpjLimpo)) return toast.error('CNPJ inválido');
-    }
-
-    // ── Formato do e-mail + bloqueio de telefone/e-mail repetido no MESMO cadastro ──
-    // Telefone compara só os dígitos; e-mail em minúsculas. Linhas em branco não contam.
-    setAvisoDup('');
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    for (const em of emails) {
-      if (em.email && !emailRegex.test(em.email.trim())) {
-        setAvisoDup(`E-mail inválido: "${em.email}". Corrija antes de cadastrar.`);
-        return;
-      }
-    }
-    const telsDigitos = telefones.map(t => (t.numero || '').replace(/\D/g, '')).filter(Boolean);
-    const telRepetido = telsDigitos.find((n, i) => telsDigitos.indexOf(n) !== i);
-    if (telRepetido) {
-      setAvisoDup(`O telefone ${formatarTelefone(telRepetido)} está repetido. Cada telefone só pode aparecer uma vez neste cadastro — remova o duplicado.`);
-      return;
-    }
-    const emailsNorm = emails.map(e => (e.email || '').trim().toLowerCase()).filter(Boolean);
-    const emailRepetido = emailsNorm.find((e, i) => emailsNorm.indexOf(e) !== i);
-    if (emailRepetido) {
-      setAvisoDup(`O e-mail ${emailRepetido} está repetido. Cada e-mail só pode aparecer uma vez neste cadastro — remova o duplicado.`);
-      return;
-    }
-
-    setSalvando(true);
-    try {
-      if (ehFisica) {
-        const { data } = await pessoasAPI.criarFisica({ nome: form.nome.trim(), cpf: form.cpf || null, telefones, emails });
-        if (data.ok) {
-          toast.success('Pessoa física cadastrada!');
-          onSalvo({ id: data.dados.id, nome: form.nome.trim() });
-        }
-      } else {
-        const { data } = await pessoasAPI.criarJuridica({ razao_social: form.razao_social.trim(), cnpj: form.cnpj || null, telefones, emails });
-        if (data.ok) {
-          toast.success('Pessoa jurídica cadastrada!');
-          onSalvo({ id: data.dados.id, razao_social: form.razao_social.trim() });
-        }
-      }
-    } catch (err) {
-      toast.error(err.response?.data?.mensagem || 'Erro ao cadastrar');
-    } finally {
-      setSalvando(false);
-    }
-  }
-
-  return (
-    <div className="modal-overlay" style={{ zIndex: 1100 }} ref={overlayRef}>
-      <div className="modal-box" style={{ maxWidth: '460px' }}>
-        <div className="modal-header">
-          <h3>{ehFisica ? 'Cadastrar Pessoa Física' : 'Cadastrar Pessoa Jurídica'}</h3>
-          <button className="modal-fechar" onClick={onFechar}>✕</button>
-        </div>
-        <div className="modal-body">
-          <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '14px' }}>
-            Cadastro rápido — os demais dados podem ser completados depois em <strong>Pessoas</strong>.
-          </p>
-
-          {/* Faixa de aviso do próprio sistema (no lugar da notificação do canto) */}
-          {avisoDup && (
-            <div style={{ background:'#fef2f2', border:'1px solid #fecaca', color:'#b91c1c',
-              borderRadius:'6px', padding:'8px 10px', marginBottom:'12px', fontSize:'13px',
-              display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'8px' }}>
-              <span>⚠️ {avisoDup}</span>
-              <button type="button" onClick={() => setAvisoDup('')}
-                style={{ background:'none', border:'none', color:'#b91c1c', cursor:'pointer', fontSize:'15px', lineHeight:1 }}
-                title="Fechar">✕</button>
-            </div>
-          )}
-
-          {ehFisica ? (
-            <>
-              <div className="form-group">
-                <label className="form-label">Nome completo *</label>
-                <input className="form-control" autoFocus
-                  value={form.nome || ''} onChange={e => set('nome', e.target.value)}
-                  onBlur={() => set('nome', toTitleCase(form.nome))} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">CPF</label>
-                <input className="form-control" placeholder="000.000.000-00"
-                  value={form.cpf || ''} onChange={e => set('cpf', mascaraCPF(e.target.value))} />
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="form-group">
-                <label className="form-label">Razão social *</label>
-                <input className="form-control" autoFocus
-                  value={form.razao_social || ''} onChange={e => set('razao_social', e.target.value)}
-                  onBlur={() => set('razao_social', toTitleCase(form.razao_social))} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">CNPJ</label>
-                <input className="form-control" placeholder="00.000.000/0000-00"
-                  value={form.cnpj || ''} onChange={e => set('cnpj', mascaraCNPJ(e.target.value))} />
-              </div>
-            </>
-          )}
-
-          {/* Telefones */}
-          <h4 style={{margin:'16px 0 8px',color:'#555',fontSize:'13px',fontWeight:600}}>Telefones</h4>
-          {telefones.map((tel, i) => (
-            <LinhaFone
-              key={i}
-              tel={tel}
-              index={i}
-              onChange={v => { setAvisoDup(''); setTelefones(t => t.map((x,j) => j===i ? v : x)); }}
-              onRemove={() => { setAvisoDup(''); setTelefones(t => t.filter((_,j) => j!==i)); }}
-            />
-          ))}
-          <button className="btn btn-outline" style={{fontSize:'12px'}} onClick={() => setTelefones(t=>[...t,{numero:'',tipo:'',principal:false}])}>
-            + Adicionar telefone
-          </button>
-
-          {/* E-mails */}
-          <h4 style={{margin:'16px 0 8px',color:'#555',fontSize:'13px',fontWeight:600}}>E-mails</h4>
-          {emails.map((em, i) => (
-            <LinhaEmail
-              key={i}
-              email={em.email}
-              index={i}
-              onChange={v => { setAvisoDup(''); setEmails(t => t.map((x,j) => j===i ? {...x, email: v} : x)); }}
-              onRemove={() => { setAvisoDup(''); setEmails(t => t.filter((_,j) => j!==i)); }}
-            />
-          ))}
-          <button className="btn btn-outline" style={{fontSize:'12px'}} onClick={() => setEmails(e=>[...e,{email:'',principal:false}])}>
-            + Adicionar e-mail
-          </button>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onFechar} disabled={salvando}>Cancelar</button>
-          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
-            {salvando ? 'Salvando...' : 'Cadastrar'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+import ModalCadastroRapidoParte from '../../components/ModalCadastroRapidoParte';
 
 export default function Processos() {
   const navigate = useNavigate();
@@ -458,11 +289,15 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
         pessoa_id:   a.pessoa_id,
         tipo_pessoa: a.tipo_pessoa || 'fisica',
         nome:        a.nome,
+        responsavel_nome: a.responsavel_nome || null,
+        parentesco_nome:  a.parentesco_nome  || null,
       })),
       reus: (proc?.reus || []).map(r => ({
         pessoa_id:   r.pessoa_id,
         tipo_pessoa: r.tipo_pessoa || 'fisica',
         nome:        r.nome,
+        responsavel_nome: r.responsavel_nome || null,
+        parentesco_nome:  r.parentesco_nome  || null,
       })),
       peritos: (proc?.peritos || []).map(p => ({
         pessoa_id:   p.pessoa_id,
@@ -639,6 +474,8 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
       pessoa_id:   pessoa.id,
       tipo_pessoa: tipo,
       nome,
+      responsavel_nome: pessoa.responsavel_nome || null,
+      parentesco_nome:  pessoa.parentesco_nome  || null,
     }]);
     setBusca('');
     setResultados([]);
@@ -808,7 +645,14 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '28px' }}>
               {autores.map((a, i) => (
                 <span key={i} style={{ background: '#dbeafe', color: '#1e40af', borderRadius: '20px', padding: '4px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {a.nome}
+                  <span>
+                    {a.nome}
+                    {a.responsavel_nome && (
+                      <span style={{ display: 'block', fontSize: '11px', opacity: 0.85 }}>
+                        repr. por {a.responsavel_nome}{a.parentesco_nome ? ` — ${a.parentesco_nome}` : ''}
+                      </span>
+                    )}
+                  </span>
                   {/* Botão de remoção só quando partes estão desbloqueadas */}
                   {partesEditaveis && (
                     <button
@@ -868,7 +712,14 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '28px' }}>
               {reus.map((r, i) => (
                 <span key={i} style={{ background: '#fee2e2', color: '#991b1b', borderRadius: '20px', padding: '4px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {r.nome}
+                  <span>
+                    {r.nome}
+                    {r.responsavel_nome && (
+                      <span style={{ display: 'block', fontSize: '11px', opacity: 0.85 }}>
+                        repr. por {r.responsavel_nome}{r.parentesco_nome ? ` — ${r.parentesco_nome}` : ''}
+                      </span>
+                    )}
+                  </span>
                   {/* Botão de remoção só quando partes estão desbloqueadas */}
                   {partesEditaveis && (
                     <button
@@ -1220,7 +1071,9 @@ export function ModalEditarProcesso({ processo, onFechar }) {
       toast.error(`${nome} já está no polo oposto — a mesma pessoa não pode ser autor e réu ao mesmo tempo`);
       setBusca(''); setResultados([]); return;
     }
-    setLista([...lista, { pessoa_id: pessoa.id, tipo_pessoa: tipo, nome }]);
+    setLista([...lista, { pessoa_id: pessoa.id, tipo_pessoa: tipo, nome,
+      responsavel_nome: pessoa.responsavel_nome || null,
+      parentesco_nome:  pessoa.parentesco_nome  || null }]);
     setBusca('');
     setResultados([]);
   }
@@ -1314,7 +1167,14 @@ export function ModalEditarProcesso({ processo, onFechar }) {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '28px' }}>
               {autores.map((a, i) => (
                 <span key={i} style={{ background: '#dbeafe', color: '#1e40af', borderRadius: '20px', padding: '4px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {a.nome}
+                  <span>
+                    {a.nome}
+                    {a.responsavel_nome && (
+                      <span style={{ display: 'block', fontSize: '11px', opacity: 0.85 }}>
+                        repr. por {a.responsavel_nome}{a.parentesco_nome ? ` — ${a.parentesco_nome}` : ''}
+                      </span>
+                    )}
+                  </span>
                   <button onClick={() => removerParte(i, autores, setAutores)}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1e40af', fontWeight: 'bold', padding: '0', lineHeight: '1', fontSize: '14px' }}>×</button>
                 </span>
@@ -1355,7 +1215,14 @@ export function ModalEditarProcesso({ processo, onFechar }) {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '28px' }}>
               {reus.map((r, i) => (
                 <span key={i} style={{ background: '#fee2e2', color: '#991b1b', borderRadius: '20px', padding: '4px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {r.nome}
+                  <span>
+                    {r.nome}
+                    {r.responsavel_nome && (
+                      <span style={{ display: 'block', fontSize: '11px', opacity: 0.85 }}>
+                        repr. por {r.responsavel_nome}{r.parentesco_nome ? ` — ${r.parentesco_nome}` : ''}
+                      </span>
+                    )}
+                  </span>
                   <button onClick={() => removerParte(i, reus, setReus)}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#991b1b', fontWeight: 'bold', padding: '0', lineHeight: '1', fontSize: '14px' }}>×</button>
                 </span>

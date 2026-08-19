@@ -14,6 +14,7 @@ import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import { LinhaFone, LinhaEmail } from '../../components/LinhasContato';
 import { EtiquetaCelula, LegendaEtiquetasPessoais, useEtiquetasEscritorio, itemEtiquetaEscritorioSubmenu, ModalHistoricoEtiquetaEscritorio } from '../../components/Etiquetas';
 import { linkWhatsApp } from '../../utils/whatsapp';
+import ModalCadastroRapidoParte from '../../components/ModalCadastroRapidoParte';
 
 // Campos disponíveis para exportar em Excel (mesmas chaves do backend; sem campos de auditoria)
 const CAMPOS_EXPORT_FISICA = [
@@ -1527,12 +1528,14 @@ function ModalUnificarPessoas({ tipo, selecionados, onFechar }) {
   const sugerido = [...selecionados].sort((a, b) => (b.qtde_proc ?? 0) - (a.qtde_proc ?? 0))[0];
   const [principalId, setPrincipalId] = useState(sugerido?.id);
   const [salvando, setSalvando]       = useState(false);
+  const [aviso, setAviso]             = useState(''); // faixa interna — nunca a notificação do canto
 
   const duplicados = selecionados.filter(p => p.id !== principalId);
 
   async function confirmar() {
-    if (!principalId)            return toast.error('Escolha o cadastro principal');
-    if (duplicados.length === 0) return toast.error('Selecione ao menos um duplicado além do principal');
+    setAviso('');
+    if (!principalId)            { setAviso('Escolha o cadastro principal.'); return; }
+    if (duplicados.length === 0) { setAviso('Selecione ao menos um duplicado além do principal.'); return; }
     setSalvando(true);
     try {
       const fn = ehFisica ? pessoasAPI.unificarFisicas : pessoasAPI.unificarJuridicas;
@@ -1540,7 +1543,9 @@ function ModalUnificarPessoas({ tipo, selecionados, onFechar }) {
       toast.success(ehFisica ? 'Pessoas unificadas com sucesso!' : 'Empresas unificadas com sucesso!');
       onFechar(true);
     } catch (err) {
-      toast.error(err.response?.data?.mensagem || 'Erro ao unificar');
+      // Aqui caem também as travas do servidor (CPFs diferentes, responsável legal),
+      // que são mensagens longas — por isso ficam na faixa, não na notificação do canto
+      setAviso(err.response?.data?.mensagem || 'Não foi possível unificar os cadastros.');
       setSalvando(false);
     }
   }
@@ -1553,6 +1558,16 @@ function ModalUnificarPessoas({ tipo, selecionados, onFechar }) {
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
         </div>
         <div className="modal-body">
+          {aviso && (
+            <div style={{ background:'#fef2f2', border:'1px solid #fecaca', color:'#b91c1c',
+              borderRadius:'6px', padding:'8px 10px', marginBottom:'12px', fontSize:'13px',
+              display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'8px' }}>
+              <span>⚠️ {aviso}</span>
+              <button type="button" onClick={() => setAviso('')}
+                style={{ background:'none', border:'none', color:'#b91c1c', cursor:'pointer', fontSize:'15px', lineHeight:1 }}
+                title="Fechar">✕</button>
+            </div>
+          )}
           <p style={{fontSize:'13px',color:'#555',marginBottom:'12px'}}>
             Escolha o cadastro <strong>principal</strong> (o que vai ficar). Todos os processos e
             vínculos dos outros serão movidos para ele, e os demais serão <strong>excluídos do banco</strong>.
@@ -1560,7 +1575,9 @@ function ModalUnificarPessoas({ tipo, selecionados, onFechar }) {
           {ehFisica && (
             <p style={{fontSize:'12px',color:'#b45309',marginBottom:'12px'}}>
               Observação: cadastros com <strong>CPFs diferentes</strong> não podem ser unificados
-              (o sistema bloqueia — CPFs diferentes indicam pessoas diferentes).
+              (o sistema bloqueia — CPFs diferentes indicam pessoas diferentes). Cadastros com
+              <strong> responsável legal</strong> — de qualquer um dos dois lados — também são
+              bloqueados: desfaça o vínculo, unifique e refaça o vínculo.
             </p>
           )}
           <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
@@ -1613,14 +1630,28 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
   // Ao clicar em "Editar", destrava para o modo de edição normal.
   const [leitura, setLeitura]   = useState(somenteLeitura);
   const [form, setForm]         = useState(pessoa || {});
-  const [auxiliares, setAux]    = useState({ estados_civis: [], generos: [], profissoes: [], nacionalidades: [] });
+  const [auxiliares, setAux]    = useState({ estados_civis: [], generos: [], profissoes: [], nacionalidades: [], parentescos: [] });
   const [salvando, setSalvando] = useState(false);
   const [confirmar, setConfirmar] = useState(null); // modal de aviso "campos sem informação"
   const [avisoDup, setAvisoDup]   = useState('');   // faixa interna: telefone/e-mail repetido no próprio cadastro
   const [telefones, setTelefones] = useState(pessoa?.telefones || [{ numero: '', tipo: '', principal: true }]);
   const [emails, setEmails]       = useState(pessoa?.emails || [{ email: '', principal: true }]);
+  const [avisosIdade, setAvisosIdade] = useState(pessoa?.avisos_idade || []); // "avise aos X anos"
   // Ref do campo Número — recebe o foco automaticamente após o CEP ser preenchido
   const refNumero = useRef(null);
+  // Refs dos campos obrigatórios: o aviso devolve o foco a quem causou o erro
+  const refNome     = useRef(null);
+  const refCpf      = useRef(null);
+  const refDataNasc = useRef(null);
+  const refRazao    = useRef(null);
+  const refsEmail   = useRef([]);
+
+  // Todo alerta/erro deste modal aparece na FAIXA interna (nunca na notificação
+  // do canto) e o cursor volta para o campo que originou o problema.
+  function avisar(mensagem, campo) {
+    setAvisoDup(mensagem);
+    setTimeout(() => { if (campo) campo.focus(); }, 0);
+  }
 
   useEffect(() => {
     pessoasAPI.auxiliares().then(r => setAux(r.data.dados));
@@ -1634,6 +1665,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
           setTelefones(tels.length ? tels : [{ numero: '', tipo: '', principal: true }]);
           const mails = r.data.dados.emails || [];
           setEmails(mails.length ? mails : [{ email: '', principal: true }]);
+          setAvisosIdade(r.data.dados.avisos_idade || []);
         }
       });
     }
@@ -1649,6 +1681,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
       estados_civis: 'estado_civil_id',
       profissoes:    'profissao_id',
       nacionalidades:'nacionalidade_id',
+      parentescos:   'parentesco_id',
     };
     // Insere na lista do tipo correto, mantendo ordem alfabética
     setAux(a => ({
@@ -1678,7 +1711,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
   async function executarSalvar() {
     setSalvando(true);
     try {
-      const payload = { ...form, telefones, emails };
+      const payload = { ...form, telefones, emails, avisos_idade: avisosIdade };
       if (pessoa?.id) {
         // Edição: usa a atualização correta conforme o tipo (antes chamava sempre a de física — bug)
         const fnAtualizar = tipo === 'fisicas' ? pessoasAPI.atualizarFisica : pessoasAPI.atualizarJuridica;
@@ -1691,7 +1724,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
       }
       onFechar(true);
     } catch (err) {
-      toast.error(err.response?.data?.mensagem || 'Erro ao salvar');
+      avisar(err.response?.data?.mensagem || 'Não foi possível salvar o cadastro. Tente novamente.', null);
     } finally { setSalvando(false); }
   }
 
@@ -1714,22 +1747,30 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
 
     if (tipo === 'fisicas') {
       // ── Únicos OBRIGATÓRIOS de Pessoa Física: nome completo + CPF ──────
-      if (!form.nome?.trim()) return toast.error('Nome é obrigatório');
+      // O CPF é DISPENSADO quando a pessoa tem responsável legal: menor e incapaz
+      // muitas vezes não têm CPF, e é justamente esse o caso que o vínculo cobre.
+      if (!form.nome?.trim()) { avisar('Nome é obrigatório.', refNome.current); return; }
       const partes = form.nome.trim().split(/\s+/).filter(Boolean);
-      if (partes.length < 2)  return toast.error('Informe o nome completo (nome e sobrenome)');
-      if (!form.cpf?.replace(/\D/g, ''))
-        return toast.error('CPF é obrigatório');
+      if (partes.length < 2)  { avisar('Informe o nome completo (nome e sobrenome).', refNome.current); return; }
+      if (!form.cpf?.replace(/\D/g, '') && !form.responsavel_id) {
+        avisar('CPF é obrigatório. Se for menor ou incapaz sem CPF, informe o responsável legal.', refCpf.current);
+        return;
+      }
 
       // ── Validações de FORMATO (mantidas — só disparam se o campo estiver preenchido) ──
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      for (const em of emails) {
-        if (em.email && !emailRegex.test(em.email.trim())) {
-          return toast.error(`E-mail inválido: "${em.email}"`);
+      for (let i = 0; i < emails.length; i++) {
+        const valor = (emails[i].email || '').trim();
+        if (valor && !emailRegex.test(valor)) {
+          avisar(`E-mail inválido: "${valor}". Corrija antes de salvar.`, refsEmail.current[i]);
+          return;
         }
       }
       const hoje = new Date().toISOString().split('T')[0];
-      if (form.data_nascimento && form.data_nascimento > hoje)
-        return toast.error('Data de nascimento não pode ser uma data futura');
+      if (form.data_nascimento && form.data_nascimento > hoje) {
+        avisar('Data de nascimento não pode ser uma data futura.', refDataNasc.current);
+        return;
+      }
 
       // ── Campos que agora são OPCIONAIS: avisa antes de salvar se ficarem vazios ──
       const vazios = [];
@@ -1739,6 +1780,9 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
       if (!form.profissao_id)                          vazios.push('Profissão');
       if (!form.nacionalidade_id)                      vazios.push('Nacionalidade');
       if (!telefones[0]?.numero?.replace(/\D/g, ''))   vazios.push('Telefone');
+      // Menor de 18 sem responsável legal: só lembra, não impede de salvar
+      if (!form.responsavel_id && idadeEmAnos(form.data_nascimento) !== null && idadeEmAnos(form.data_nascimento) < 18)
+        vazios.push('Responsável legal (esta pessoa tem menos de 18 anos)');
 
       if (vazios.length) {
         setConfirmar({
@@ -1754,7 +1798,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
     }
 
     // Jurídica
-    if (!form.razao_social) return toast.error('Razão social é obrigatória');
+    if (!form.razao_social) { avisar('Razão social é obrigatória.', refRazao.current); return; }
     return executarSalvar();
   }
 
@@ -1784,7 +1828,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
             <>
               <div className="grid-2">
                 {/* CampoNome exige ao menos duas palavras ao sair do campo */}
-                <CampoNomeCompleto value={form.nome||''} onChange={v=>set('nome',v)} somenteLeitura={leitura} />
+                <CampoNomeCompleto value={form.nome||''} onChange={v=>set('nome',v)} somenteLeitura={leitura} refCampo={refNome} />
                 {/* CampoCPF aplica máscara, valida algoritmo e verifica duplicata no banco */}
                 <CampoCPF
                   value={form.cpf||''}
@@ -1792,6 +1836,8 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
                   pessoaIdAtual={pessoa?.id || null}
                   onAbrirEdicao={onAbrirEdicao}
                   somenteLeitura={leitura}
+                  refCampo={refCpf}
+                  dispensado={!!form.responsavel_id}
                 />
               </div>
               <div className="grid-4">
@@ -1799,7 +1845,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
                 {/* Órgão expedidor: SSP/SP, DETRAN/RJ, etc. */}
                 <Campo label="Órgão Expedidor" value={form.rg_orgao||''} onChange={v=>set('rg_orgao',v)} placeholder="SSP/SP" somenteLeitura={leitura} />
                 {/* CampoData bloqueia datas futuras — ninguém nasce amanhã */}
-                <CampoDataNascimento value={form.data_nascimento?.split('T')[0]||''} onChange={v=>set('data_nascimento',v)} somenteLeitura={leitura} />
+                <CampoDataNascimento value={form.data_nascimento?.split('T')[0]||''} onChange={v=>set('data_nascimento',v)} somenteLeitura={leitura} refCampo={refDataNasc} />
                 <SelectComAdicao
                   label="Gênero" value={form.genero_id||''} onChange={v=>set('genero_id',v)}
                   opcoes={auxiliares.generos} tipo="generos"
@@ -1851,11 +1897,29 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
                 <Campo label="Pai" value={form.nome_pai||''} onChange={v=>set('nome_pai',v)} onBlur={()=>set('nome_pai', toTitleCase(form.nome_pai))} somenteLeitura={leitura} />
                 <Campo label="Mãe" value={form.nome_mae||''} onChange={v=>set('nome_mae',v)} onBlur={()=>set('nome_mae', toTitleCase(form.nome_mae))} somenteLeitura={leitura} />
               </div>
+
+              {/* Responsável legal — vínculo com quem representa o menor/incapaz */}
+              <CampoResponsavelLegal
+                form={form}
+                set={set}
+                opcoesParentesco={auxiliares.parentescos}
+                onNovoParentesco={item => handleNovoAuxiliar('parentescos', item)}
+                somenteLeitura={leitura}
+                pessoaIdAtual={pessoa?.id || null}
+              />
+
+              {/* Avisos de idade — 16 anos (vira assistido), 18 (cessa a representação), etc. */}
+              <CampoAvisosIdade
+                avisos={avisosIdade}
+                setAvisos={setAvisosIdade}
+                dataNascimento={form.data_nascimento}
+                somenteLeitura={leitura}
+              />
             </>
           ) : (
             <>
               <div className="grid-2">
-                <Campo label="Razão Social *" value={form.razao_social||''} onChange={v=>set('razao_social',v)} onBlur={()=>set('razao_social', toTitleCase(form.razao_social))} somenteLeitura={leitura} />
+                <Campo label="Razão Social *" value={form.razao_social||''} onChange={v=>set('razao_social',v)} onBlur={()=>set('razao_social', toTitleCase(form.razao_social))} somenteLeitura={leitura} ref={refRazao} />
                 <Campo label="Nome Fantasia" value={form.nome_fantasia||''} onChange={v=>set('nome_fantasia',v)} onBlur={()=>set('nome_fantasia', toTitleCase(form.nome_fantasia))} somenteLeitura={leitura} />
               </div>
               <div className="grid-2">
@@ -1909,6 +1973,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
               email={em.email}
               index={i}
               somenteLeitura={leitura}
+              refEmail={el => { refsEmail.current[i] = el; }}
               onChange={v => setEmails(t => t.map((x,j) => j===i ? {...x, email: v} : x))}
               onRemove={() => setEmails(t => t.filter((_,j) => j!==i))}
             />
@@ -1951,7 +2016,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
 // pessoaIdAtual: id da pessoa em edição (evita alertar sobre ela mesma)
 // onAbrirEdicao: callback chamado com { id, nome, cpf } quando usuário quer editar a duplicata
 // ============================================================
-function CampoCPF({ value, onChange, pessoaIdAtual = null, onAbrirEdicao = null, somenteLeitura = false }) {
+function CampoCPF({ value, onChange, pessoaIdAtual = null, onAbrirEdicao = null, somenteLeitura = false, refCampo, dispensado = false }) {
   const [erroCpf, setErroCpf]       = useState('');
   const [verificando, setVerificando] = useState(false);
   const [duplicata, setDuplicata]   = useState(null); // { id, nome, cpf } se já existe no banco
@@ -1997,8 +2062,9 @@ function CampoCPF({ value, onChange, pessoaIdAtual = null, onAbrirEdicao = null,
 
   return (
     <div className="form-group">
-      <label className="form-label">CPF</label>
+      <label className="form-label">{dispensado ? 'CPF (não obrigatório — pessoa com responsável legal)' : 'CPF *'}</label>
       <input
+        ref={refCampo}
         type="text"
         className={`form-control ${erroCpf ? 'is-invalid' : ''}`}
         value={mascaraCPF(value || '')}
@@ -2098,7 +2164,7 @@ function CampoCNPJ({ value, onChange, somenteLeitura = false }) {
 // ============================================================
 // CAMPO DATA NASCIMENTO — impede datas futuras
 // ============================================================
-function CampoDataNascimento({ value, onChange, somenteLeitura = false }) {
+function CampoDataNascimento({ value, onChange, somenteLeitura = false, refCampo }) {
   const [erroData, setErroData] = useState('');
   // Calcula "hoje" no formato YYYY-MM-DD para o atributo max
   const hoje = new Date().toISOString().split('T')[0];
@@ -2116,6 +2182,7 @@ function CampoDataNascimento({ value, onChange, somenteLeitura = false }) {
     <div className="form-group">
       <label className="form-label">Data de nascimento</label>
       <input
+        ref={refCampo}
         type="date"
         className={`form-control ${erroData ? 'is-invalid' : ''}`}
         value={value}
@@ -2138,15 +2205,18 @@ function SelectComAdicao({ label, value, onChange, opcoes = [], tipo, onNovoItem
   const [miniFormAberto, setMiniFormAberto] = useState(false);
   const [novoNome, setNovoNome]             = useState('');
   const [salvando, setSalvando]             = useState(false);
+  const [erroMini, setErroMini]             = useState(''); // aviso DENTRO do mini formulário
 
   // Fecha o mini form e limpa o estado — sem sujeira
   function fecharMiniForm() {
     setMiniFormAberto(false);
     setNovoNome('');
+    setErroMini('');
   }
 
   async function salvarNovo() {
-    if (!novoNome.trim()) return toast.error('Digite um nome para cadastrar');
+    setErroMini('');
+    if (!novoNome.trim()) { setErroMini('Digite um nome para cadastrar.'); return; }
     setSalvando(true);
     try {
       const { data } = await pessoasAPI.criarAuxiliar(tipo, { nome: novoNome.trim() });
@@ -2156,7 +2226,7 @@ function SelectComAdicao({ label, value, onChange, opcoes = [], tipo, onNovoItem
         fecharMiniForm();
       }
     } catch (err) {
-      toast.error(err.response?.data?.mensagem || 'Erro ao cadastrar');
+      setErroMini(err.response?.data?.mensagem || 'Não foi possível cadastrar.');
     } finally {
       setSalvando(false);
     }
@@ -2206,7 +2276,7 @@ function SelectComAdicao({ label, value, onChange, opcoes = [], tipo, onNovoItem
               className="form-control"
               placeholder={`Ex.: ${label === 'Profissão' ? 'Pedreiro' : label === 'Gênero' ? 'Não binário' : 'Viúvo(a)'}`}
               value={novoNome}
-              onChange={e => setNovoNome(e.target.value)}
+              onChange={e => { setErroMini(''); setNovoNome(e.target.value); }}
               onKeyDown={e => { if (e.key === 'Enter') salvarNovo(); if (e.key === 'Escape') fecharMiniForm(); }}
               style={{ flex: 1 }}
             />
@@ -2228,9 +2298,253 @@ function SelectComAdicao({ label, value, onChange, opcoes = [], tipo, onNovoItem
               ✕
             </button>
           </div>
+          {erroMini && (
+            <div style={{ marginTop: '6px', color: '#b91c1c', fontSize: '12px' }}>⚠️ {erroMini}</div>
+          )}
         </div>
       )}
     </div>
+  );
+}
+
+// Idade em anos completos a partir da data de nascimento (aceita "1990-05-10"
+// ou o ISO com horário que o backend às vezes devolve). Devolve null sem data.
+function idadeEmAnos(dataISO) {
+  if (!dataISO) return null;
+  const d = new Date(String(dataISO).slice(0, 10) + 'T00:00:00');
+  if (isNaN(d.getTime())) return null;
+  const hoje = new Date();
+  let anos = hoje.getFullYear() - d.getFullYear();
+  const meses = hoje.getMonth() - d.getMonth();
+  if (meses < 0 || (meses === 0 && hoje.getDate() < d.getDate())) anos--;
+  return anos;
+}
+
+// ============================================================
+// AVISOS DE IDADE — "me avise quando esta pessoa completar X anos"
+// Pode ter mais de um por pessoa: aos 16 o menor deixa de ser representado e
+// passa a ser assistido; aos 18 a representação cessa. Quem avisa é o cron
+// diário, no sino dos administradores — o sistema SÓ avisa, não altera nada.
+// ============================================================
+function CampoAvisosIdade({ avisos, setAvisos, dataNascimento, somenteLeitura = false }) {
+  const [novaIdade, setNovaIdade] = useState('');
+  const [erro, setErro]           = useState('');
+
+  function adicionar() {
+    const n = parseInt(novaIdade, 10);
+    if (!Number.isInteger(n) || n < 0 || n > 120) { setErro('Informe uma idade de 0 a 120.'); return; }
+    if (avisos.some(a => Number(a.idade) === n)) { setErro(`Já existe um aviso para ${n} anos.`); return; }
+    setAvisos([...avisos, { idade: n, avisado_em: null }].sort((a, b) => a.idade - b.idade));
+    setNovaIdade('');
+    setErro('');
+  }
+
+  function remover(idade) {
+    setAvisos(avisos.filter(a => Number(a.idade) !== Number(idade)));
+    setErro('');
+  }
+
+  return (
+    <div style={{ marginTop: '4px', marginBottom: '8px' }}>
+      <h4 style={{ margin: '12px 0 6px', color: '#555', fontSize: '13px', fontWeight: 600 }}>
+        Avisos de idade <span style={{ fontWeight: 400, color: '#888' }}>— opcional</span>
+      </h4>
+      <p style={{ fontSize: '12px', color: '#6b7280', margin: '0 0 8px' }}>
+        No dia em que a pessoa completar a idade marcada, os administradores recebem um aviso no sino.
+        O sistema apenas avisa — não muda nada no cadastro nem nos processos.
+      </p>
+
+      {!dataNascimento && (
+        <div style={{ padding: '8px 10px', background: '#fffbeb', border: '1px solid #fde68a',
+          borderRadius: '6px', fontSize: '12px', color: '#92400e', marginBottom: '8px' }}>
+        ⚠️ Sem a data de nascimento preenchida o sistema não tem como calcular a idade, e o aviso nunca vai disparar.
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+        {avisos.map(a => (
+          <span key={a.idade} style={{
+            background: a.avisado_em ? '#e2e8f0' : '#dcfce7',
+            color:      a.avisado_em ? '#475569' : '#166534',
+            borderRadius: '20px', padding: '4px 12px', fontSize: '13px',
+            display: 'flex', alignItems: 'center', gap: '6px' }}>
+            {a.idade} anos
+            {a.avisado_em && (
+              <span style={{ fontSize: '11px', opacity: 0.9 }}>
+                ✓ avisado em {formatarData(a.avisado_em)}
+              </span>
+            )}
+            {!somenteLeitura && (
+              <button type="button" onClick={() => remover(a.idade)} title="Remover este aviso"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit',
+                  fontWeight: 'bold', padding: 0, lineHeight: 1, fontSize: '14px' }}>×</button>
+            )}
+          </span>
+        ))}
+        {avisos.length === 0 && (
+          <span style={{ color: '#9ca3af', fontSize: '13px' }}>Nenhum aviso configurado</span>
+        )}
+      </div>
+
+      {!somenteLeitura && (
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+          <input className="form-control" type="number" min="0" max="120" placeholder="Idade"
+            style={{ width: '110px' }} value={novaIdade}
+            onChange={e => { setErro(''); setNovaIdade(e.target.value); }}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); adicionar(); } }} />
+          <button type="button" className="btn btn-outline" style={{ fontSize: '12px' }} onClick={adicionar}>
+            + Adicionar aviso
+          </button>
+        </div>
+      )}
+      {erro && <div style={{ marginTop: '6px', color: '#b91c1c', fontSize: '12px' }}>⚠️ {erro}</div>}
+    </div>
+  );
+}
+
+// ============================================================
+// RESPONSÁVEL LEGAL — quem representa o menor/incapaz nos atos do processo
+// Regra do escritório: SEMPRE UM responsável. Por isso o vínculo mora no
+// cadastro do REPRESENTADO (um campo, nunca uma lista) — assim o próprio
+// banco impede dois responsáveis, sem depender de ninguém lembrar da regra.
+// A lista "Representa" do outro lado é montada a partir deste mesmo vínculo,
+// então as duas pontas nunca podem discordar.
+// ============================================================
+function CampoResponsavelLegal({ form, set, opcoesParentesco, onNovoParentesco, somenteLeitura = false, pessoaIdAtual = null }) {
+  const [busca, setBusca]         = useState('');
+  const [resultados, setResult]   = useState([]);
+  const [buscando, setBuscando]   = useState(false);
+  const [cadastroAberto, setCadastroAberto] = useState(false);
+
+  const temResponsavel = !!form.responsavel_id;
+  const ehResponsavel  = (form.representados?.length || 0) > 0;
+
+  async function buscar(termo) {
+    setBusca(termo);
+    if (termo.trim().length < 2) { setResult([]); return; }
+    setBuscando(true);
+    try {
+      const { data } = await pessoasAPI.listarFisicas({ busca: termo.trim(), limite: 8 });
+      // Ninguém é responsável por si mesmo — o próprio cadastro sai da lista
+      if (data.ok) setResult((data.dados.registros || []).filter(p => p.id !== pessoaIdAtual));
+    } catch {
+      // Busca é auxiliar: se falhar, não trava o cadastro
+    } finally {
+      setBuscando(false);
+    }
+  }
+
+  function escolher(p) {
+    set('responsavel_id', p.id);
+    set('responsavel_nome', p.nome);
+    setBusca('');
+    setResult([]);
+  }
+
+  function limpar() {
+    set('responsavel_id', null);
+    set('responsavel_nome', '');
+    set('parentesco_id', '');
+  }
+
+  return (
+    <>
+      <h4 style={{margin:'16px 0 8px',color:'#555',fontSize:'13px',fontWeight:600}}>
+        Responsável legal <span style={{fontWeight:400,color:'#888'}}>— para menor ou incapaz</span>
+      </h4>
+
+      <div className="grid-2">
+        <div className="form-group">
+          <label className="form-label">Responsável</label>
+
+          {temResponsavel ? (
+            <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
+              <div style={{ flex:1, padding:'8px 12px', background:'#eef2ff', border:'1px solid #c7d2fe',
+                borderRadius:'6px', fontSize:'13px' }}>
+                {form.responsavel_nome || 'Pessoa selecionada'}
+              </div>
+              {!somenteLeitura && (
+                <button type="button" className="btn btn-outline" title="Remover o responsável legal"
+                  style={{ padding:'6px 10px', flexShrink:0 }} onClick={limpar}>✕</button>
+              )}
+            </div>
+          ) : ehResponsavel ? (
+            <div style={{ padding:'8px 12px', background:'#f8fafc', border:'1px solid #e2e8f0',
+              borderRadius:'6px', fontSize:'12px', color:'#475569' }}>
+              Esta pessoa já é responsável legal de outra(s) — por isso ela mesma não pode ter um responsável.
+            </div>
+          ) : somenteLeitura ? (
+            <div style={{ padding:'8px 12px', color:'#6b7280', fontSize:'13px' }}>—</div>
+          ) : (
+            <div style={{ display:'flex', gap:'6px' }}>
+              <div style={{ flex:1, position:'relative' }}>
+                <input className="form-control" placeholder="Buscar pessoa já cadastrada..."
+                  value={busca} onChange={e => buscar(e.target.value)} />
+                {resultados.length > 0 && (
+                  <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'#fff',
+                    border:'1px solid #ddd', borderRadius:'6px', zIndex:20, maxHeight:'160px',
+                    overflowY:'auto', boxShadow:'0 4px 12px rgba(0,0,0,0.1)' }}>
+                    {resultados.map(p => (
+                      <div key={p.id}
+                        style={{ padding:'8px 12px', cursor:'pointer', borderBottom:'1px solid #f0f0f0', fontSize:'13px' }}
+                        onClick={() => escolher(p)}>
+                        {p.nome}{p.cpf ? ` — ${mascaraCPF(p.cpf)}` : ''}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {busca.trim().length >= 2 && !buscando && resultados.length === 0 && (
+                  <small style={{ color:'#6b7280', fontSize:'12px' }}>
+                    Ninguém encontrado com esse nome. Use o … para cadastrar agora.
+                  </small>
+                )}
+              </div>
+              <button type="button" className="btn btn-outline"
+                title="Cadastrar uma pessoa que ainda não está no sistema"
+                style={{ padding:'0 12px', fontSize:'16px', flexShrink:0 }}
+                onClick={() => setCadastroAberto(true)}>…</button>
+            </div>
+          )}
+        </div>
+
+        {/* Parentesco só faz sentido depois de escolher o responsável */}
+        <SelectComAdicao
+          label="Parentesco"
+          value={form.parentesco_id || ''}
+          onChange={v => set('parentesco_id', v)}
+          opcoes={opcoesParentesco}
+          tipo="parentescos"
+          onNovoItem={onNovoParentesco}
+          somenteLeitura={somenteLeitura || !temResponsavel}
+        />
+      </div>
+
+      {/* Quem esta pessoa representa — vem do vínculo, não é digitado aqui */}
+      {ehResponsavel && (
+        <div style={{ marginTop:'4px', marginBottom:'8px', padding:'10px 12px', background:'#f8fafc',
+          border:'1px solid #e2e8f0', borderRadius:'6px' }}>
+          <div style={{ fontSize:'12px', fontWeight:600, color:'#475569', marginBottom:'6px' }}>
+            Representa
+          </div>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
+            {form.representados.map(r => (
+              <span key={r.id} style={{ background:'#e0e7ff', color:'#3730a3', borderRadius:'20px',
+                padding:'4px 12px', fontSize:'13px' }}>
+                {r.nome}{r.parentesco_nome ? ` — ${r.parentesco_nome}` : ''}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {cadastroAberto && (
+        <ModalCadastroRapidoParte
+          tipo="fisica"
+          onFechar={() => setCadastroAberto(false)}
+          onSalvo={p => { escolher({ id: p.id, nome: p.nome }); setCadastroAberto(false); }}
+        />
+      )}
+    </>
   );
 }
 
@@ -2238,7 +2552,7 @@ function SelectComAdicao({ label, value, onChange, opcoes = [], tipo, onNovoItem
 // CAMPO NOME COMPLETO — exige pelo menos duas palavras (nome + sobrenome)
 // Avisa ao sair do campo, bloqueia no Salvar também
 // ============================================================
-function CampoNomeCompleto({ value, onChange, somenteLeitura = false }) {
+function CampoNomeCompleto({ value, onChange, somenteLeitura = false, refCampo }) {
   const [erroNome, setErroNome] = useState('');
 
   function handleBlur() {
@@ -2256,6 +2570,7 @@ function CampoNomeCompleto({ value, onChange, somenteLeitura = false }) {
     <div className="form-group">
       <label className="form-label">Nome completo *</label>
       <input
+        ref={refCampo}
         type="text"
         className={`form-control ${erroNome ? 'is-invalid' : ''}`}
         value={value}

@@ -108,6 +108,67 @@ async function blocoEscritorio(usuario) {
   };
 }
 
+// ---- RESPONSÁVEL LEGAL (menor/incapaz) -----------------------------------------
+// Carregado à parte, numa consulta só e SÓ quando a pessoa tem responsável — assim
+// as consultas de pessoa que já existiam ficam intactas.
+async function carregarResponsavel(responsavelId, parentescoId) {
+  if (!responsavelId) return null;
+  const [r] = await pool.execute(
+    `SELECT resp.nome, resp.cpf, resp.rg, resp.rg_orgao,
+            resp.logradouro, resp.numero, resp.complemento,
+            resp.bairro, resp.cidade, resp.estado, resp.cep,
+            ec.nome AS estado_civil_nome, prof.nome AS profissao_nome, nac.nome AS nacionalidade_nome,
+            (SELECT pc.nome FROM parentesco pc WHERE pc.id = ?) AS parentesco_nome
+       FROM pessoas_fisicas resp
+       LEFT JOIN estado_civil  ec   ON resp.estado_civil_id  = ec.id
+       LEFT JOIN profissao     prof ON resp.profissao_id     = prof.id
+       LEFT JOIN nacionalidade nac  ON resp.nacionalidade_id = nac.id
+      WHERE resp.id = ?`,
+    [parentescoId || null, responsavelId]
+  );
+  return r[0] || null;
+}
+
+// Campos do responsável + frase pronta da representação, a partir do que
+// carregarResponsavel guardou em d._resp. Sem responsável, TODOS voltam vazios —
+// assim o modelo pode usar {{representacao}} sempre, sem sobrar texto para quem é maior.
+function blocoResponsavel(d) {
+  const r = d && d._resp;
+  if (!r) {
+    return {
+      responsavel: '', responsavel_cpf: '', responsavel_rg: '', responsavel_rg_orgao: '',
+      responsavel_nacionalidade: '', responsavel_estado_civil: '', responsavel_profissao: '',
+      responsavel_endereco: '', parentesco: '', representacao: '',
+    };
+  }
+
+  const endereco = montarEndereco(r.logradouro, r.numero, r.complemento, r.bairro, r.cidade, r.estado, r.cep);
+  const cpf = fmtCPF(r.cpf);
+  const qualificacao = [
+    r.nacionalidade_nome || '',
+    r.estado_civil_nome  || '',
+    r.profissao_nome     || '',
+    r.rg ? `portador(a) do RG nº ${r.rg}${r.rg_orgao ? ' ' + r.rg_orgao : ''}` : '',
+    cpf ? `inscrito(a) no CPF sob o nº ${cpf}` : '',
+    endereco ? `residente e domiciliado(a) em ${endereco}` : '',
+  ].filter(Boolean).join(', ');
+
+  const papel = r.parentesco_nome ? `, na qualidade de ${String(r.parentesco_nome).toLowerCase()}` : '';
+
+  return {
+    responsavel:               r.nome || '',
+    responsavel_cpf:           cpf,
+    responsavel_rg:            r.rg || '',
+    responsavel_rg_orgao:      r.rg_orgao || '',
+    responsavel_nacionalidade: r.nacionalidade_nome || '',
+    responsavel_estado_civil:  r.estado_civil_nome || '',
+    responsavel_profissao:     r.profissao_nome || '',
+    responsavel_endereco:      endereco,
+    parentesco:                r.parentesco_nome || '',
+    representacao:             `neste ato representado(a) por ${r.nome}${papel}${qualificacao ? ', ' + qualificacao : ''}`,
+  };
+}
+
 // ---- Busca as partes (autor OU réu) de um processo, já com os dados da pessoa ----
 async function buscarPartes(processoId, tabela) {
   // tabela é valor interno controlado ('tbltituloprocautor'/'tbltituloprocreu') — sem injeção
@@ -126,7 +187,10 @@ async function buscarPartes(processoId, tabela) {
          LEFT JOIN nacionalidade nac ON pf.nacionalidade_id = nac.id
          WHERE pf.id = ?`, [v.pessoa_id]
       );
-      if (pf.length) partes.push({ tipo: 'fisica', d: pf[0], nome: pf[0].nome, documento: fmtCPF(pf[0].cpf) });
+      if (pf.length) {
+        pf[0]._resp = await carregarResponsavel(pf[0].responsavel_id, pf[0].parentesco_id);
+        partes.push({ tipo: 'fisica', d: pf[0], nome: pf[0].nome, documento: fmtCPF(pf[0].cpf) });
+      }
     } else {
       const [pj] = await pool.execute('SELECT * FROM pessoas_juridicas WHERE id = ?', [v.pessoa_id]);
       if (pj.length) partes.push({ tipo: 'juridica', d: pj[0], nome: pj[0].razao_social, documento: fmtCNPJ(pj[0].cnpj) });
@@ -178,6 +242,7 @@ function blocoClienteDeParte(parte) {
       profissao: d.profissao_nome || '',
       genero: d.genero_nome || '',
       nacionalidade_cliente: d.nacionalidade_nome || '',
+      ...blocoResponsavel(d),
     };
   }
   return {
@@ -187,6 +252,7 @@ function blocoClienteDeParte(parte) {
     documento_cliente: fmtCNPJ(d.cnpj),
     cnpj_cliente: fmtCNPJ(d.cnpj),
     inscricao_estadual: d.inscricao_estadual || '',
+    ...blocoResponsavel(null),   // pessoa jurídica não tem responsável legal
   };
 }
 
@@ -402,7 +468,10 @@ async function resolverPessoa(tipo, pessoaId, usuario) {
        LEFT JOIN nacionalidade nac ON pf.nacionalidade_id = nac.id
        WHERE pf.id = ?`, [pessoaId]
     );
-    if (pf.length) parte = { tipo: 'fisica', d: pf[0], nome: pf[0].nome };
+    if (pf.length) {
+      pf[0]._resp = await carregarResponsavel(pf[0].responsavel_id, pf[0].parentesco_id);
+      parte = { tipo: 'fisica', d: pf[0], nome: pf[0].nome };
+    }
   } else {
     const [pj] = await pool.execute('SELECT * FROM pessoas_juridicas WHERE id = ?', [pessoaId]);
     if (pj.length) parte = { tipo: 'juridica', d: pj[0], nome: pj[0].razao_social };
@@ -510,6 +579,7 @@ async function carregarParte(tipo, pessoaId) {
     );
     if (!pf.length) return null;
     const d = pf[0];
+    d._resp = await carregarResponsavel(d.responsavel_id, d.parentesco_id);
     base = {
       nome: d.nome || '',
       nome_fantasia: '',
@@ -524,6 +594,7 @@ async function carregarParte(tipo, pessoaId) {
       data_nascimento: dataBR(d.data_nascimento),
       nome_mae: d.nome_mae || '', nome_pai: d.nome_pai || '',
       inscricao_estadual: '',
+      ...blocoResponsavel(d),
       endereco: montarEndereco(d.logradouro, d.numero, d.complemento, d.bairro, d.cidade, d.estado, d.cep),
       cep: d.cep || '', logradouro: d.logradouro || '', numero: d.numero || '',
       complemento: d.complemento || '', bairro: d.bairro || '', cidade: d.cidade || '', estado: d.estado || '',
@@ -540,6 +611,7 @@ async function carregarParte(tipo, pessoaId) {
       rg: '', rg_orgao: '', pis: '', ctps: '', nacionalidade: '',
       estado_civil: '', profissao: '', genero: '', data_nascimento: '',
       nome_mae: '', nome_pai: '',
+      ...blocoResponsavel(null),   // pessoa jurídica não tem responsável legal
       inscricao_estadual: d.inscricao_estadual || '',
       endereco: montarEndereco(d.logradouro, d.numero, d.complemento, d.bairro, d.cidade, d.estado, d.cep),
       cep: d.cep || '', logradouro: d.logradouro || '', numero: d.numero || '',

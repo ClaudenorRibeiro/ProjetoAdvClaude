@@ -154,10 +154,15 @@ async function listarFisicas(req, res) {
               ) AS t) AS qtde_proc,
               -- Etiqueta DO ESCRITÓRIO (compartilhada) desta pessoa
               (SELECT ee.slot FROM pessoas_fisicas_etiquetas_escritorio ee
-                WHERE ee.pessoa_id = pf.id) AS etiqueta_escritorio
+                WHERE ee.pessoa_id = pf.id) AS etiqueta_escritorio,
+              -- Responsável legal (menor/incapaz), para a tela mostrar "representado(a) por"
+              resp.nome AS responsavel_nome,
+              pc.nome   AS parentesco_nome
        FROM pessoas_fisicas pf
        LEFT JOIN estado_civil ec ON pf.estado_civil_id = ec.id
        LEFT JOIN genero g ON pf.genero_id = g.id
+       LEFT JOIN pessoas_fisicas resp ON pf.responsavel_id = resp.id
+       LEFT JOIN parentesco       pc  ON pf.parentesco_id  = pc.id
        ${where}
        ORDER BY pf.nome ASC
        LIMIT ${limitInt} OFFSET ${offsetInt}`,
@@ -182,11 +187,14 @@ async function buscarFisica(req, res) {
     const { id } = req.params;
 
     const [rows] = await pool.execute(
-      `SELECT pf.*, ec.nome AS estado_civil_nome, g.nome AS genero_nome, pr.nome AS profissao_nome
+      `SELECT pf.*, ec.nome AS estado_civil_nome, g.nome AS genero_nome, pr.nome AS profissao_nome,
+              resp.nome AS responsavel_nome, resp.cpf AS responsavel_cpf, pc.nome AS parentesco_nome
        FROM pessoas_fisicas pf
        LEFT JOIN estado_civil ec ON pf.estado_civil_id = ec.id
        LEFT JOIN genero g ON pf.genero_id = g.id
        LEFT JOIN profissao pr ON pf.profissao_id = pr.id
+       LEFT JOIN pessoas_fisicas resp ON pf.responsavel_id = resp.id
+       LEFT JOIN parentesco pc ON pf.parentesco_id = pc.id
        WHERE pf.id = ?`,
       [id]
     );
@@ -217,23 +225,151 @@ async function buscarFisica(req, res) {
       [id]
     );
 
-    return sucesso(res, { ...pessoa, telefones, emails, historico });
+    // Quem esta pessoa representa (a lista de "dependentes" da tela) — sai do próprio
+    // vínculo guardado no representado, por isso as duas pontas nunca discordam
+    const [representados] = await pool.execute(
+      `SELECT r.id, r.nome, r.data_nascimento, pc.nome AS parentesco_nome
+         FROM pessoas_fisicas r
+         LEFT JOIN parentesco pc ON r.parentesco_id = pc.id
+        WHERE r.responsavel_id = ?
+        ORDER BY r.nome`,
+      [id]
+    );
+
+    // Avisos de idade configurados para esta pessoa.
+    // TOLERANTE: se a tabela ainda não existe nesta instância (código novo, banco
+    // sem o script), devolve lista vazia em vez de quebrar a tela de Pessoas.
+    let avisos_idade = [];
+    try {
+      const [rowsAvisos] = await pool.execute(
+        'SELECT id, idade, avisado_em FROM pessoas_avisos_idade WHERE pessoa_id = ? ORDER BY idade',
+        [id]
+      );
+      avisos_idade = rowsAvisos;
+    } catch (e) {
+      console.error('Avisos de idade indisponíveis (banco sem o script?):', e.message);
+    }
+
+    return sucesso(res, { ...pessoa, telefones, emails, historico, representados, avisos_idade });
   } catch (err) {
     return erroInterno(res, err);
   }
 }
 
 // POST /api/pessoas/fisicas — Cadastra nova pessoa física
+// ============================================================
+// AVISOS DE IDADE — "me avise quando esta pessoa completar X anos"
+// Vários por pessoa (16 e 18 têm efeitos jurídicos diferentes). Guardados em
+// pessoas_avisos_idade, com UNIQUE (pessoa_id, idade) para não duplicar.
+// Devolve a mensagem de erro (texto) ou null quando está tudo certo.
+// ============================================================
+function validarAvisosIdade(avisos) {
+  if (!Array.isArray(avisos)) return null;
+  const vistos = new Set();
+  for (const a of avisos) {
+    const idade = Number(a?.idade ?? a);
+    if (!Number.isInteger(idade) || idade < 0 || idade > 120)
+      return 'Idade de aviso inválida — informe um número inteiro de 0 a 120';
+    if (vistos.has(idade)) return `A idade ${idade} está repetida nos avisos`;
+    vistos.add(idade);
+  }
+  return null;
+}
+
+// Regrava a lista de avisos da pessoa DENTRO da transação. Mantém o "já avisei"
+// das idades que continuam na lista — senão editar o cadastro faria o sistema
+// avisar tudo de novo.
+async function gravarAvisosIdade(conn, pessoaId, avisos, usuarioId) {
+  if (!Array.isArray(avisos)) return;
+  // TOLERANTE: numa instância cujo banco ainda não recebeu o script, gravar o
+  // cadastro da pessoa não pode falhar por causa dos avisos.
+  try {
+    await conn.execute('SELECT 1 FROM pessoas_avisos_idade LIMIT 1');
+  } catch (e) {
+    console.error('Avisos de idade não gravados (banco sem o script?):', e.message);
+    return;
+  }
+  const idades = [...new Set(avisos.map(a => Number(a?.idade ?? a)).filter(n => Number.isInteger(n)))];
+
+  if (idades.length === 0) {
+    await conn.execute('DELETE FROM pessoas_avisos_idade WHERE pessoa_id = ?', [pessoaId]);
+    return;
+  }
+
+  const ph = idades.map(() => '?').join(',');
+  await conn.execute(
+    `DELETE FROM pessoas_avisos_idade WHERE pessoa_id = ? AND idade NOT IN (${ph})`,
+    [pessoaId, ...idades]
+  );
+  for (const idade of idades) {
+    // Se a idade já existe, não mexe (preserva o avisado_em)
+    await conn.execute(
+      `INSERT INTO pessoas_avisos_idade (pessoa_id, idade, criado_por)
+         SELECT ?, ?, ? FROM DUAL
+          WHERE NOT EXISTS (SELECT 1 FROM pessoas_avisos_idade x WHERE x.pessoa_id = ? AND x.idade = ?)`,
+      [pessoaId, idade, usuarioId, pessoaId, idade]
+    );
+  }
+}
+
+// ============================================================
+// RESPONSÁVEL LEGAL (quem representa o menor/incapaz no processo)
+// Regra fechada com o usuário: SEMPRE UM responsável, guardado no cadastro
+// do REPRESENTADO (colunas responsavel_id + parentesco_id). Guardar aqui, e
+// não numa lista, faz o próprio banco impedir dois responsáveis.
+// Devolve a mensagem de erro (texto) ou null quando está tudo certo.
+// ============================================================
+async function validarResponsavel(db, { pessoaId, responsavel_id, parentesco_id }) {
+  if (!responsavel_id) return null;                    // sem responsável: nada a validar
+  if (!parentesco_id)  return 'Informe o parentesco do responsável legal';
+  if (pessoaId && Number(responsavel_id) === Number(pessoaId))
+    return 'Uma pessoa não pode ser responsável legal por ela mesma';
+
+  const [resp] = await db.execute(
+    'SELECT id, nome, ativo, responsavel_id FROM pessoas_fisicas WHERE id = ?', [responsavel_id]
+  );
+  if (!resp.length)   return 'Responsável legal não encontrado no cadastro';
+  if (!resp[0].ativo) return 'O responsável legal escolhido está inativo';
+  // Quem é representado não representa ninguém: corta corrente (A→B→C) e ciclo (A→B→A)
+  if (resp[0].responsavel_id)
+    return `${resp[0].nome} é representado(a) por outra pessoa e por isso não pode ser responsável legal`;
+
+  // O caminho inverso: quem já representa alguém não pode passar a ser representado
+  if (pessoaId) {
+    const [dep] = await db.execute(
+      'SELECT COUNT(*) AS total FROM pessoas_fisicas WHERE responsavel_id = ?', [pessoaId]
+    );
+    if (dep[0].total > 0)
+      return 'Esta pessoa é responsável legal de outra(s) e por isso não pode ter um responsável legal';
+  }
+
+  const [pc] = await db.execute('SELECT id FROM parentesco WHERE id = ?', [parentesco_id]);
+  if (!pc.length) return 'Parentesco do responsável legal inválido';
+  return null;
+}
+
 async function criarFisica(req, res) {
   const {
     nome, cpf, rg, rg_orgao, pis, ctps_numero, ctps_serie,
     data_nascimento, estado_civil_id, profissao_id,
     genero_id, nacionalidade_id, nome_pai, nome_mae,
     cep, logradouro, numero, complemento, bairro, cidade, estado,
-    observacoes, telefones = [], emails = []
+    observacoes, telefones = [], emails = [],
+    responsavel_id, parentesco_id, avisos_idade = []
   } = req.body;
 
   if (!nome) return erro(res, 'O nome é obrigatório');
+
+  const erroAvisos = validarAvisosIdade(avisos_idade);
+  if (erroAvisos) return erro(res, erroAvisos);
+
+  // Responsável legal: confere ANTES de abrir a transação (só leitura)
+  try {
+    const erroResp = await validarResponsavel(pool, { pessoaId: null, responsavel_id, parentesco_id });
+    if (erroResp) return erro(res, erroResp);
+  } catch (err) {
+    return erroInterno(res, err);
+  }
 
   // Verifica CPF duplicado antes de iniciar a transação (leitura simples, sem lock)
   if (cpf) {
@@ -258,8 +394,9 @@ async function criarFisica(req, res) {
          (nome, cpf, rg, rg_orgao, pis, ctps_numero, ctps_serie,
           data_nascimento, estado_civil_id, profissao_id, genero_id, nacionalidade_id,
           nome_pai, nome_mae,
-          cep, logradouro, numero, complemento, bairro, cidade, estado, observacoes, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          cep, logradouro, numero, complemento, bairro, cidade, estado, observacoes,
+          responsavel_id, parentesco_id, criado_por)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         nome.trim(), cpf?.replace(/\D/g, '') || null, rg || null, rg_orgao || null,
         pis || null, ctps_numero || null, ctps_serie || null,
@@ -267,7 +404,9 @@ async function criarFisica(req, res) {
         genero_id || null, nacionalidade_id || null, nome_pai || null, nome_mae || null,
         cep || null, logradouro || null, numero || null,
         complemento || null, bairro || null, cidade || null, estado || null,
-        observacoes || null, req.usuario.id
+        observacoes || null,
+        responsavel_id || null, parentesco_id || null,
+        req.usuario.id
       ]
     );
 
@@ -294,6 +433,9 @@ async function criarFisica(req, res) {
       }
     }
 
+    // Avisos de idade ("me avise quando completar X anos")
+    await gravarAvisosIdade(conn, pessoaId, avisos_idade, req.usuario.id);
+
     // Auditoria participa da MESMA transação (tudo ou nada): grava antes do commit, com conn
     await auditoria.registrar(req.usuario.id, 'pessoas_fisicas', 'criar', pessoaId, null, null, conn);
     await conn.commit();         // Grava tudo de uma vez — pessoa + telefones + e-mails + auditoria
@@ -317,8 +459,12 @@ async function atualizarFisica(req, res) {
     data_nascimento, estado_civil_id, profissao_id,
     genero_id, nacionalidade_id, nome_pai, nome_mae,
     cep, logradouro, numero, complemento, bairro, cidade, estado, observacoes,
-    telefones = [], emails = []
+    telefones = [], emails = [],
+    responsavel_id, parentesco_id, avisos_idade
   } = req.body;
+
+  const erroAvisos = validarAvisosIdade(avisos_idade);
+  if (erroAvisos) return erro(res, erroAvisos);
 
   // Transação: dados principais + telefones + e-mails + auditoria gravam juntos ou nada
   const conn = await pool.getConnection();
@@ -329,6 +475,10 @@ async function atualizarFisica(req, res) {
     const [antes] = await conn.execute('SELECT * FROM pessoas_fisicas WHERE id = ?', [id]);
     if (!antes.length) { await conn.rollback(); return naoEncontrado(res, 'Pessoa não encontrada'); }
 
+    // Responsável legal: mesma validação da criação, agora sabendo quem é a pessoa editada
+    const erroResp = await validarResponsavel(conn, { pessoaId: id, responsavel_id, parentesco_id });
+    if (erroResp) { await conn.rollback(); return erro(res, erroResp); }
+
     await conn.execute(
       `UPDATE pessoas_fisicas SET
          nome=?, cpf=?, rg=?, rg_orgao=?, pis=?, ctps_numero=?, ctps_serie=?,
@@ -336,6 +486,7 @@ async function atualizarFisica(req, res) {
          genero_id=?, nacionalidade_id=?, nome_pai=?, nome_mae=?,
          cep=?, logradouro=?, numero=?, complemento=?, bairro=?,
          cidade=?, estado=?, observacoes=?,
+         responsavel_id=?, parentesco_id=?,
          alterado_por=?, alterado_em=NOW()
        WHERE id = ?`,
       [
@@ -348,6 +499,7 @@ async function atualizarFisica(req, res) {
         cep || null, logradouro || null, numero || null,
         complemento || null, bairro || null, cidade || null, estado || null,
         observacoes || null,
+        responsavel_id || null, parentesco_id || null,
         req.usuario.id,   // alterado_por — id de quem fez o update
         id
       ]
@@ -375,6 +527,9 @@ async function atualizarFisica(req, res) {
       }
     }
 
+    // Avisos de idade — só mexe se a tela mandou a lista (undefined = não alterar)
+    await gravarAvisosIdade(conn, id, avisos_idade, req.usuario.id);
+
     await auditoria.registrar(req.usuario.id, 'pessoas_fisicas', 'editar', id, antes[0], null, conn);
     await conn.commit();
     return sucesso(res, null, 'Pessoa atualizada com sucesso');
@@ -401,7 +556,7 @@ async function excluirFisica(req, res) {
     if (!rows.length) return naoEncontrado(res, 'Pessoa não encontrada');
 
     // Verifica todos os vínculos em paralelo antes de permitir exclusão
-    const [[autoresTbl], [reusTbl], [historico], [comunicacoes], [testemunhas], [peritos]] = await Promise.all([
+    const [[autoresTbl], [reusTbl], [historico], [comunicacoes], [testemunhas], [peritos], [representados]] = await Promise.all([
       pool.execute('SELECT COUNT(*) AS total FROM tbltituloprocautor WHERE tipo_pessoa = ? AND pessoa_id = ?',      ['fisica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM tbltituloprocreu WHERE tipo_pessoa = ? AND pessoa_id = ?',        ['fisica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM historico_atendimento WHERE tipo_pessoa = ? AND pessoa_id = ?',   ['fisica', id]),
@@ -412,6 +567,9 @@ async function excluirFisica(req, res) {
       // Perito do processo (processo_perito) é ligação polimórfica SEM chave estrangeira em pessoa_id.
       // Sem esta checagem, apagar uma pessoa que é perito deixaria um registro órfão em processo_perito.
       pool.execute('SELECT COUNT(*) AS total FROM processo_perito WHERE tipo_pessoa = ? AND pessoa_id = ?',         ['fisica', id]),
+      // Responsável legal: apagar quem representa alguém deixaria o representado apontando
+      // para o vazio (o banco também barraria pela chave estrangeira, com erro feio)
+      pool.execute('SELECT COUNT(*) AS total FROM pessoas_fisicas WHERE responsavel_id = ?',                        [id]),
     ]);
 
     // Monta lista de vínculos encontrados para informar o usuário
@@ -422,6 +580,7 @@ async function excluirFisica(req, res) {
     if (comunicacoes[0].total > 0) vinculos.push(`${comunicacoes[0].total} comunicação(ões)`);
     if (testemunhas[0].total > 0)  vinculos.push(`${testemunhas[0].total} audiência(s) como testemunha`);
     if (peritos[0].total > 0)      vinculos.push(`${peritos[0].total} perícia(s) como perito`);
+    if (representados[0].total > 0) vinculos.push(`${representados[0].total} pessoa(s) que representa como responsável legal`);
 
     if (vinculos.length > 0) {
       return erro(res, `Pessoa não pode ser excluída pois possui: ${vinculos.join(', ')}`);
@@ -630,6 +789,41 @@ async function unificarFisicas(req, res) {
   if (cpfsDistintos.length > 1) {
     return erro(res, 'Estes cadastros têm CPFs diferentes e não podem ser unificados — CPFs diferentes indicam pessoas diferentes.');
   }
+  // RESPONSÁVEL LEGAL: a unificação NÃO mexe nesse vínculo — bloqueia e avisa (decisão do usuário).
+  // Vale nas DUAS pontas: quem representa alguém e quem é representado. Sem isso, unificar
+  // apagaria o vínculo em silêncio (ou esbarraria na chave estrangeira, com erro de banco).
+  try {
+    const [[repDe], [temResp]] = await Promise.all([
+      pool.execute(
+        `SELECT COUNT(*) AS total FROM pessoas_fisicas WHERE responsavel_id IN (${phTodos})`, idsTodos
+      ),
+      pool.execute(
+        `SELECT COUNT(*) AS total FROM pessoas_fisicas WHERE id IN (${phTodos}) AND responsavel_id IS NOT NULL`, idsTodos
+      ),
+    ]);
+    if (repDe[0].total > 0) {
+      return erro(res, 'Não é possível unificar: um dos cadastros selecionados é responsável legal de outra(s) pessoa(s). Desfaça o vínculo de responsável legal, unifique e depois refaça o vínculo.');
+    }
+    if (temResp[0].total > 0) {
+      return erro(res, 'Não é possível unificar: um dos cadastros selecionados tem responsável legal. Desfaça o vínculo de responsável legal, unifique e depois refaça o vínculo.');
+    }
+    // Mesma decisão: a unificação NÃO migra avisos de idade — bloqueia para não
+    // apagá-los em silêncio junto com o cadastro duplicado.
+    // TOLERANTE ao banco sem o script: sem a tabela, não há avisos a proteger.
+    try {
+      const [avisos] = await pool.execute(
+        `SELECT COUNT(*) AS total FROM pessoas_avisos_idade WHERE pessoa_id IN (${phTodos})`, idsTodos
+      );
+      if (avisos[0].total > 0) {
+        return erro(res, 'Não é possível unificar: um dos cadastros selecionados tem aviso de idade configurado. Remova os avisos, unifique e configure de novo.');
+      }
+    } catch (e) {
+      console.error('Checagem de avisos de idade indisponível:', e.message);
+    }
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+
   const cpfGrupo     = cpfsDistintos[0] || null;                                       // único CPF do grupo (se houver)
   const cpfPrincipal = (regs.find(r => r.id === principalId)?.cpf || '').trim() || null; // CPF atual do principal
 
@@ -1057,10 +1251,11 @@ async function criarAuxiliar(req, res) {
       estados_civis:  'estado_civil',
       profissoes:     'profissao',
       nacionalidades: 'nacionalidade',
+      parentescos:    'parentesco',
     };
 
     const tabela = tabelas[tipo];
-    if (!tabela) return erro(res, 'Tipo inválido. Use: generos, estados_civis, profissoes ou nacionalidades');
+    if (!tabela) return erro(res, 'Tipo inválido. Use: generos, estados_civis, profissoes, nacionalidades ou parentescos');
 
     // Normaliza: primeira letra maiúscula, demais minúsculas
     const nomeTrimmed = nome.trim();
@@ -1109,8 +1304,9 @@ async function buscarAuxiliares(req, res) {
     const [generos]        = await pool.execute('SELECT * FROM genero ORDER BY nome');
     const [profissoes]     = await pool.execute('SELECT * FROM profissao ORDER BY nome');
     const [nacionalidades] = await pool.execute('SELECT * FROM nacionalidade ORDER BY nome');
+    const [parentescos]    = await pool.execute('SELECT * FROM parentesco ORDER BY nome');
 
-    return sucesso(res, { estados_civis, generos, profissoes, nacionalidades });
+    return sucesso(res, { estados_civis, generos, profissoes, nacionalidades, parentescos });
   } catch (err) {
     return erroInterno(res, err);
   }

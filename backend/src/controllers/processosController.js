@@ -278,7 +278,15 @@ async function buscarPasta(req, res) {
                   CASE ta.tipo_pessoa
                     WHEN 'fisica'   THEN (SELECT pf.nome FROM pessoas_fisicas pf WHERE pf.id = ta.pessoa_id)
                     WHEN 'juridica' THEN (SELECT pj.razao_social FROM pessoas_juridicas pj WHERE pj.id = ta.pessoa_id)
-                  END AS nome
+                  END AS nome,
+                  CASE WHEN ta.tipo_pessoa = 'fisica' THEN
+                    (SELECT resp.nome FROM pessoas_fisicas pfr
+                       JOIN pessoas_fisicas resp ON pfr.responsavel_id = resp.id
+                      WHERE pfr.id = ta.pessoa_id) END AS responsavel_nome,
+                  CASE WHEN ta.tipo_pessoa = 'fisica' THEN
+                    (SELECT pc.nome FROM pessoas_fisicas pfp
+                       JOIN parentesco pc ON pfp.parentesco_id = pc.id
+                      WHERE pfp.id = ta.pessoa_id) END AS parentesco_nome
            FROM tbltituloprocautor ta WHERE ta.proc_id = ?`,
           [proc.id]
         ),
@@ -287,7 +295,15 @@ async function buscarPasta(req, res) {
                   CASE tr.tipo_pessoa
                     WHEN 'fisica'   THEN (SELECT pf.nome FROM pessoas_fisicas pf WHERE pf.id = tr.pessoa_id)
                     WHEN 'juridica' THEN (SELECT pj.razao_social FROM pessoas_juridicas pj WHERE pj.id = tr.pessoa_id)
-                  END AS nome
+                  END AS nome,
+                  CASE WHEN tr.tipo_pessoa = 'fisica' THEN
+                    (SELECT resp.nome FROM pessoas_fisicas pfr
+                       JOIN pessoas_fisicas resp ON pfr.responsavel_id = resp.id
+                      WHERE pfr.id = tr.pessoa_id) END AS responsavel_nome,
+                  CASE WHEN tr.tipo_pessoa = 'fisica' THEN
+                    (SELECT pc.nome FROM pessoas_fisicas pfp
+                       JOIN parentesco pc ON pfp.parentesco_id = pc.id
+                      WHERE pfp.id = tr.pessoa_id) END AS parentesco_nome
            FROM tbltituloprocreu tr WHERE tr.proc_id = ?`,
           [proc.id]
         ),
