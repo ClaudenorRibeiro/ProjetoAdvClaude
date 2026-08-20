@@ -11,6 +11,7 @@ import './Login.css';
 export default function Login() {
   const [login, setLogin]     = useState('');
   const [senha, setSenha]     = useState('');
+  const [verSenha, setVerSenha] = useState(false); // olhinho: mostra/esconde o que está digitado
   const [erro, setErro]       = useState('');
   const [aviso, setAviso]     = useState(''); // aviso amigável (ex.: sessão aberta em outro dispositivo)
   const [carregando, setCarregando] = useState(false);
@@ -117,14 +118,38 @@ export default function Login() {
 
           <div className="form-group">
             <label className="form-label">Senha</label>
-            <input
-              type="password"
-              className="form-control"
-              value={senha}
-              onChange={e => setSenha(e.target.value)}
-              placeholder="Sua senha"
-              autoComplete="current-password"
-            />
+            {/* Olhinho: troca SÓ o tipo do campo (password <-> text). Não altera o
+                valor digitado, não guarda nada e sempre nasce escondido. */}
+            <div style={{ position: 'relative' }}>
+              <input
+                type={verSenha ? 'text' : 'password'}
+                className="form-control"
+                value={senha}
+                onChange={e => setSenha(e.target.value)}
+                placeholder="Sua senha"
+                autoComplete="current-password"
+                style={{ paddingRight: '42px' }}
+              />
+              <button
+                type="button"
+                onClick={() => setVerSenha(v => !v)}
+                title={verSenha ? 'Ocultar senha' : 'Mostrar senha'}
+                aria-label={verSenha ? 'Ocultar senha' : 'Mostrar senha'}
+                style={{
+                  position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'none', border: 'none', padding: '2px', cursor: 'pointer',
+                  color: '#6b7280',
+                }}
+              >
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                  {verSenha && <line x1="3" y1="21" x2="21" y2="3" />}
+                </svg>
+              </button>
+            </div>
           </div>
 
           <button

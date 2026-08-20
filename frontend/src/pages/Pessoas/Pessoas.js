@@ -1924,6 +1924,24 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
               </div>
               <div className="grid-2">
                 <CampoCNPJ value={form.cnpj||''} onChange={v=>set('cnpj',v)} somenteLeitura={leitura} />
+                {/* Marca da EMPRESA: uma vez marcada, o aviso vermelho aparece sozinho na
+                    pasta de TODO processo em que ela é parte (autor ou réu). Não muda nada
+                    no processo — é só informação. Respeita o modo "só leitura" dos Detalhes. */}
+                <div style={{ display:'flex', alignItems:'center', gap:'8px', paddingTop:'22px' }}>
+                  <input
+                    type="checkbox"
+                    id="pj-em-rj"
+                    checked={!!form.em_recuperacao_judicial}
+                    disabled={leitura}
+                    onChange={e => set('em_recuperacao_judicial', e.target.checked ? 1 : 0)}
+                    style={{ width:'16px', height:'16px', cursor: leitura ? 'default' : 'pointer' }}
+                  />
+                  <label htmlFor="pj-em-rj"
+                    style={{ fontSize:'13px', color: leitura ? '#777' : '#333',
+                             cursor: leitura ? 'default' : 'pointer', userSelect:'none' }}>
+                    Em Recuperação Judicial
+                  </label>
+                </div>
               </div>
             </>
           )}

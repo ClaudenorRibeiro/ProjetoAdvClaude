@@ -16,6 +16,8 @@ export default function ResetSenha() {
   const [nomeUsuario, setNomeUsuario] = useState('');
   const [senha, setSenha]     = useState('');
   const [confirma, setConfirma] = useState('');
+  const [verSenha, setVerSenha]     = useState(false); // olhinho da "Nova senha"
+  const [verConfirma, setVerConfirma] = useState(false); // olhinho da "Confirmar nova senha"
   const [erro, setErro]       = useState('');
   const [salvando, setSalvando] = useState(false);
 
@@ -96,24 +98,70 @@ export default function ResetSenha() {
               </div>
             )}
 
+            {/* Olhinho: troca SÓ o tipo do campo (password <-> text). Cada campo tem o
+                seu, independente do outro; nada é guardado e ambos nascem escondidos. */}
             <div className="form-group">
               <label className="form-label">Nova senha</label>
-              <input
-                type="password" className="form-control"
-                value={senha} onChange={e => setSenha(e.target.value)}
-                placeholder="Mínimo 6 caracteres" autoFocus
-                autoComplete="new-password"
-              />
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={verSenha ? 'text' : 'password'} className="form-control"
+                  value={senha} onChange={e => setSenha(e.target.value)}
+                  placeholder="Mínimo 6 caracteres" autoFocus
+                  autoComplete="new-password"
+                  style={{ paddingRight: '42px' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setVerSenha(v => !v)}
+                  title={verSenha ? 'Ocultar senha' : 'Mostrar senha'}
+                  aria-label={verSenha ? 'Ocultar senha' : 'Mostrar senha'}
+                  style={{
+                    position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'none', border: 'none', padding: '2px', cursor: 'pointer',
+                    color: '#6b7280',
+                  }}
+                >
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                    {verSenha && <line x1="3" y1="21" x2="21" y2="3" />}
+                  </svg>
+                </button>
+              </div>
             </div>
 
             <div className="form-group">
               <label className="form-label">Confirmar nova senha</label>
-              <input
-                type="password" className="form-control"
-                value={confirma} onChange={e => setConfirma(e.target.value)}
-                placeholder="Repita a nova senha"
-                autoComplete="new-password"
-              />
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={verConfirma ? 'text' : 'password'} className="form-control"
+                  value={confirma} onChange={e => setConfirma(e.target.value)}
+                  placeholder="Repita a nova senha"
+                  autoComplete="new-password"
+                  style={{ paddingRight: '42px' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setVerConfirma(v => !v)}
+                  title={verConfirma ? 'Ocultar senha' : 'Mostrar senha'}
+                  aria-label={verConfirma ? 'Ocultar senha' : 'Mostrar senha'}
+                  style={{
+                    position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'none', border: 'none', padding: '2px', cursor: 'pointer',
+                    color: '#6b7280',
+                  }}
+                >
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                    {verConfirma && <line x1="3" y1="21" x2="21" y2="3" />}
+                  </svg>
+                </button>
+              </div>
             </div>
 
             <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '8px' }} disabled={salvando}>

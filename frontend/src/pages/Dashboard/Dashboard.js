@@ -174,7 +174,7 @@ export default function Dashboard() {
                   <tbody>
                     {dados.processos_sem_movimentacao.map(p => (
                       <tr key={p.id}>
-                        <td><Link to={`/processos/pastas/${p.pasta_numero_fmt}`}>{p.pasta_numero_fmt}</Link></td>
+                        <td><Link to={`/processos/pasta/${p.pasta_id}`}>{p.pasta_numero_fmt}</Link></td>
                         <td>{p.numero || '—'}</td>
                         <td>{formatarData(p.ultima_movimentacao)}</td>
                         <td><span className="badge badge-laranja">{p.dias_sem_movimentacao}d</span></td>

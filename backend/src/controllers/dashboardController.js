@@ -7,7 +7,7 @@ const { pool } = require('../config/database');
 const { sucesso, erroInterno } = require('../utils/response');
 const { hojeBrasilia } = require('../utils/helpers');
 const { buscarAniversariantes } = require('./pessoasController');
-const { contarProcessosParados } = require('./processosController');
+const { contarProcessosParados, JOIN_ULTIMA_ACAO } = require('./processosController');
 
 // GET /api/dashboard — Retorna todos os dados do dashboard
 async function buscarDados(req, res) {
@@ -172,25 +172,25 @@ async function buscarDados(req, res) {
          ORDER BY a.data ASC`
       ),
 
-      // Processos sem movimentação há X dias (configurável)
-      // A "última movimentação" de cada processo é calculada UMA vez (subconsulta agrupada com
-      // JOIN), em vez de uma subconsulta correlacionada repetida 3x por linha. Bem mais leve
-      // quando há muitos processos — alivia o painel, que é a tela mais acessada.
+      // Processos sem movimentação — MESMO critério do cartão "Processos Parados":
+      // o processo está parado quando fica N dias sem NENHUMA movimentação de qualquer
+      // módulo (andamento, prazo, tarefa, audiência, perícia, financeiro). O limite N é o
+      // configurável "Processo parado — alertar após" (`dias_processo_parado`, padrão 365).
+      // O fragmento da última ação vem do processosController, então o número do cartão e
+      // esta lista NUNCA divergem — a regra existe em um lugar só.
+      // Processo sem nenhuma ação registrada cai na data de cadastro dele.
       pool.execute(
         `SELECT pr.id, pr.numProc AS numero, pr.NomeTituloProc AS pasta_titulo,
+                pa.id AS pasta_id,
                 LPAD(pa.numPasta, 4, '0') AS pasta_numero_fmt,
-                COALESCE(ult.ultima, DATE(pr.criado_em)) AS ultima_movimentacao,
-                DATEDIFF(CURDATE(), COALESCE(ult.ultima, DATE(pr.criado_em))) AS dias_sem_movimentacao
+                DATE(COALESCE(ult.ultima, pr.criado_em)) AS ultima_movimentacao,
+                DATEDIFF(CURDATE(), DATE(COALESCE(ult.ultima, pr.criado_em))) AS dias_sem_movimentacao
          FROM tblproc pr
          JOIN tblpasta pa ON pr.pasta_id = pa.id
-         LEFT JOIN (
-           SELECT processo_id, MAX(data) AS ultima
-           FROM andamento_processual
-           GROUP BY processo_id
-         ) ult ON ult.processo_id = pr.id
+         ${JOIN_ULTIMA_ACAO}
          WHERE pr.ativo = 1
-           AND DATEDIFF(CURDATE(), COALESCE(ult.ultima, DATE(pr.criado_em)))
-               >= (SELECT COALESCE(dias_sem_movimentacao, 30) FROM configuracoes_escritorio LIMIT 1)
+           AND DATEDIFF(CURDATE(), DATE(COALESCE(ult.ultima, pr.criado_em)))
+               >= (SELECT COALESCE(dias_processo_parado, 365) FROM configuracoes_escritorio LIMIT 1)
          ORDER BY dias_sem_movimentacao DESC
          LIMIT 20`
       ),

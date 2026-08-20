@@ -736,6 +736,18 @@ async function unificarJuridicas(req, res) {
       );
     }
 
+    // 5.1) Marca "Em Recuperação Judicial": se QUALQUER um dos cadastros unidos estiver
+    //      marcado, o principal fica marcado. Sem isto a informação sumiria calada quando
+    //      a marca estivesse só no duplicado (a unificação preserva os dados do principal).
+    await conn.execute(
+      `UPDATE pessoas_juridicas SET em_recuperacao_judicial = 1
+        WHERE id = ? AND EXISTS (SELECT 1 FROM (
+                SELECT 1 FROM pessoas_juridicas d
+                 WHERE d.id IN (${dupPh}) AND d.em_recuperacao_judicial = 1
+              ) AS m)`,
+      [principalId, ...duplicados]
+    );
+
     // 6) Apaga os cadastros duplicados (agora sem nenhum vínculo)
     await conn.execute(`DELETE FROM pessoas_juridicas WHERE id IN (${dupPh})`, duplicados);
 
@@ -1071,7 +1083,10 @@ async function criarJuridica(req, res) {
   const {
     razao_social, nome_fantasia, cnpj, inscricao_estadual,
     cep, logradouro, numero, complemento, bairro, cidade, estado,
-    observacoes, telefones = [], emails = []
+    observacoes, telefones = [], emails = [],
+    // Marca "Em Recuperação Judicial": fica no cadastro da EMPRESA. É dela que nasce
+    // o aviso vermelho na pasta de todo processo em que ela é parte.
+    em_recuperacao_judicial
   } = req.body;
 
   if (!razao_social) return erro(res, 'A razão social é obrigatória');
@@ -1084,14 +1099,16 @@ async function criarJuridica(req, res) {
     const [result] = await conn.execute(
       `INSERT INTO pessoas_juridicas
          (razao_social, nome_fantasia, cnpj, inscricao_estadual,
-          cep, logradouro, numero, complemento, bairro, cidade, estado, observacoes, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          cep, logradouro, numero, complemento, bairro, cidade, estado, observacoes,
+          em_recuperacao_judicial, criado_por)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         razao_social.trim(), nome_fantasia || null,
         cnpj?.replace(/\D/g, '') || null, inscricao_estadual || null,
         cep || null, logradouro || null,
         numero || null, complemento || null, bairro || null,
-        cidade || null, estado || null, observacoes || null, req.usuario.id
+        cidade || null, estado || null, observacoes || null,
+        em_recuperacao_judicial ? 1 : 0, req.usuario.id
       ]
     );
 
@@ -1174,7 +1191,8 @@ async function atualizarJuridica(req, res) {
   const {
     razao_social, nome_fantasia, cnpj,
     cep, logradouro, numero, complemento, bairro, cidade, estado, observacoes,
-    telefones = [], emails = []
+    telefones = [], emails = [],
+    em_recuperacao_judicial   // ver comentário em criarJuridica
   } = req.body;
 
   if (!razao_social) return erro(res, 'A razão social é obrigatória');
@@ -1191,13 +1209,14 @@ async function atualizarJuridica(req, res) {
       `UPDATE pessoas_juridicas SET
          razao_social=?, nome_fantasia=?, cnpj=?,
          cep=?, logradouro=?, numero=?, complemento=?, bairro=?,
-         cidade=?, estado=?, observacoes=?,
+         cidade=?, estado=?, observacoes=?, em_recuperacao_judicial=?,
          alterado_por=?, alterado_em=NOW()
        WHERE id = ?`,
       [
         razao_social.trim(), nome_fantasia || null, cnpj?.replace(/\D/g, '') || null,
         cep || null, logradouro || null, numero || null, complemento || null, bairro || null,
         cidade || null, estado || null, observacoes || null,
+        em_recuperacao_judicial ? 1 : 0,
         req.usuario.id, id
       ]
     );

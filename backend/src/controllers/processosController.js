@@ -286,7 +286,10 @@ async function buscarPasta(req, res) {
                   CASE WHEN ta.tipo_pessoa = 'fisica' THEN
                     (SELECT pc.nome FROM pessoas_fisicas pfp
                        JOIN parentesco pc ON pfp.parentesco_id = pc.id
-                      WHERE pfp.id = ta.pessoa_id) END AS parentesco_nome
+                      WHERE pfp.id = ta.pessoa_id) END AS parentesco_nome,
+                  CASE WHEN ta.tipo_pessoa = 'juridica' THEN
+                    (SELECT pjr.em_recuperacao_judicial FROM pessoas_juridicas pjr
+                      WHERE pjr.id = ta.pessoa_id) END AS em_recuperacao_judicial
            FROM tbltituloprocautor ta WHERE ta.proc_id = ?`,
           [proc.id]
         ),
@@ -303,7 +306,10 @@ async function buscarPasta(req, res) {
                   CASE WHEN tr.tipo_pessoa = 'fisica' THEN
                     (SELECT pc.nome FROM pessoas_fisicas pfp
                        JOIN parentesco pc ON pfp.parentesco_id = pc.id
-                      WHERE pfp.id = tr.pessoa_id) END AS parentesco_nome
+                      WHERE pfp.id = tr.pessoa_id) END AS parentesco_nome,
+                  CASE WHEN tr.tipo_pessoa = 'juridica' THEN
+                    (SELECT pjr.em_recuperacao_judicial FROM pessoas_juridicas pjr
+                      WHERE pjr.id = tr.pessoa_id) END AS em_recuperacao_judicial
            FROM tbltituloprocreu tr WHERE tr.proc_id = ?`,
           [proc.id]
         ),
@@ -1119,4 +1125,7 @@ module.exports = {
   criarInstancia, atualizarInstancia, excluirInstancia,
   // Processos parados (risco de prescrição)
   contarProcessosParados, listarProcessosParados,
+  // Fragmento SQL da "última ação" — o Dashboard reusa no quadro
+  // "Processos sem movimentação" para não duplicar a regra.
+  JOIN_ULTIMA_ACAO,
 };

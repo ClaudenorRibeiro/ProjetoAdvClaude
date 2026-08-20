@@ -579,6 +579,18 @@ export default function PastaDetalhe() {
   const processos        = pasta.processos || [];
   const processoSelecionado = getProcessoSelecionado(processos);
 
+  // Empresas EM RECUPERAÇÃO JUDICIAL entre as partes desta pasta (autor ou réu, de
+  // qualquer processo dela). A marca é do cadastro da empresa (Pessoas → Jurídica),
+  // então marcar a empresa uma vez faz o aviso aparecer em todas as pastas em que ela
+  // é parte. Cada empresa aparece pelo NOME: com dois réus e só um em recuperação,
+  // apenas o nome dele sai. Sem repetir, se estiver em mais de um processo da pasta.
+  const empresasEmRecuperacao = [...new Set(
+    processos
+      .flatMap(pr => [...(pr.autores || []), ...(pr.reus || [])])
+      .filter(p => p.tipo_pessoa === 'juridica' && p.em_recuperacao_judicial && p.nome)
+      .map(p => p.nome)
+  )];
+
   // Seletor de processo — reutilizado em todas as abas como elemento JSX
   const selectProcesso = (
     <select
@@ -653,6 +665,11 @@ export default function PastaDetalhe() {
             <h2 style={{ margin: 0, fontSize: '18px', color: '#1e2a3a' }}>
               {processos[0]?.NomeTituloProc || `Pasta ${formatarNumeroPasta(pasta.numPasta)}`}
             </h2>
+            {empresasEmRecuperacao.map(nome => (
+              <div key={nome} style={{ marginTop: '4px', fontSize: '13px', color: '#c0392b' }}>
+                ({nome} em recuperação judicial)
+              </div>
+            ))}
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
             {processos[0]?.tipo_nome && (

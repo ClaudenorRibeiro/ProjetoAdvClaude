@@ -1,0 +1,474 @@
+========================================================================
+RESUMO DA SESSÃO — 19/08/2026 — Sistema de Advocacia (NovoJud)
+========================================================================
+Este arquivo resume TUDO que foi feito nesta sessão, para o Claude de outro
+computador entender e continuar exatamente de onde paramos.
+
+
+>>>>>>>>>>>>>>>>>>  A PRIMEIRA COISA A SABER  <<<<<<<<<<<<<<<<<<
+
+NÃO HÁ NADA PENDENTE PARA RODAR. Diferente dos outros dias, hoje o
+trabalho FECHOU COMPLETO:
+
+  - O usuário testou tudo.
+  - Os 2 scripts SQL do dia já foram rodados nas 3 instâncias
+    (local + as 2 AWS).
+  - O código já está deployado nas 2 AWS.
+  - O git está limpo e igual ao servidor.
+
+O SQL do dia está reproduzido mais abaixo APENAS PARA REGISTRO — não
+precisa rodar de novo (e não deve: os comandos ALTER dão erro se rodados
+duas vezes).
+
+
+========================================================================
+ESTADO DO GIT
+========================================================================
+AO ABRIR A SESSÃO: HEAD local e origin/main eram o mesmo commit — 78d5f81,
+de 18/08 às 15:38. Havia trabalho do dia anterior já subido, mas o dia de
+hoje começou com 10 arquivos modificados fora do git (o trabalho de hoje
+tinha começado antes desta janela de conversa).
+
+AO FECHAR: o usuário rodou o script salvar_pc_escrit_no_Git.bat e depois o
+"atualizar" no SSH de cada instância AWS.
+
+    Commit de hoje: dcfda3a  ("190826-14.58.34,65")
+    HEAD = origin/main
+    Working tree LIMPO (nada esperando para subir)
+
+Neste fechamento o usuário pediu para NÃO subir nada no git. Portanto, as
+memórias e este arquivo .txt foram gravados na pasta local e NÃO foram
+commitados. A pasta memory/ nunca vai para o git, por regra antiga.
+
+
+========================================================================
+O QUE FOI FEITO HOJE — VISÃO GERAL
+========================================================================
+Três frentes, todas concluídas:
+
+  1) LIMPEZA DE ESPAÇOS nos campos, feita na função central do sistema.
+  2) O MINI-MODAL de cadastro rápido de parte virou componente próprio,
+     e os avisos de erro passaram a dar FOCO no campo errado.
+  3) REPRESENTAÇÃO LEGAL de menores e incapazes — o assunto grande do
+     dia, entregue em 3 fases (banco/cadastro, exibição/documentos,
+     avisos de idade).
+
+Foram 12 arquivos alterados, 1 arquivo novo, 2 tabelas novas no banco.
+
+
+========================================================================
+FRENTE 1 — LIMPEZA DE ESPAÇOS (vale no sistema inteiro)
+========================================================================
+O PEDIDO: ao sair do campo (perder o foco):
+  - Nome completo e Descrição do telefone: tirar os espaços do começo e do
+    fim, e deixar apenas UM espaço entre as palavras.
+  - E-mail: tirar TODOS os espaços e deixar tudo em letra minúscula.
+
+O usuário pediu isso a partir do mini-modal "Cadastrar Pessoa Física" que
+abre dentro de Novo Processo, mas autorizou expressamente aplicar nos DOIS
+lugares (o cadastro rápido e o cadastro completo de Pessoas) e, mais
+importante, arrumar na FUNÇÃO CENTRAL para valer em todo o sistema.
+
+COMO FOI FEITO: foram criadas duas funções novas no arquivo central de
+formatação do frontend (utils/formatters.js) — uma que limpa espaços e
+outra que limpa e-mail. A função que já existia e que praticamente todos
+os campos de texto do sistema usam ao perder o foco (a que deixa o texto
+com as iniciais maiúsculas) passou a usar a nova limpeza por dentro.
+
+RESULTADO: todo campo do sistema que já usava essa função herdou a limpeza
+automaticamente, sem precisar mexer tela por tela.
+
+CUIDADO IMPORTANTE QUE FOI TOMADO: a limpeza NÃO destrói quebras de linha.
+Isso foi de propósito, porque essa mesma função também roda em caixas de
+texto grandes (Observações, Descrição do prazo, Descrição da tarefa,
+resultado da audiência). Se ela apagasse as quebras de linha, textos
+longos já cadastrados virariam um bloco só na primeira vez que alguém
+editasse o registro.
+
+OUTRO DETALHE: no campo de e-mail, a limpeza acontece ANTES da validação.
+Sem isso, digitar " fulano@teste.com " (com espaço) daria erro de e-mail
+inválido mesmo o e-mail estando certo.
+
+
+========================================================================
+FRENTE 2 — MINI-MODAL DE PARTE + AVISOS COM FOCO
+========================================================================
+O modal de cadastro rápido de parte (o botão "…" ao lado da busca de
+autor/réu em Novo Processo) morava DENTRO do arquivo da tela de Processos.
+Ele foi movido para um arquivo próprio, porque a tela de Pessoas passou a
+precisar dele também (no "…" do Responsável legal). O comportamento é
+exatamente o mesmo de antes; só mudou de lugar.
+
+Junto com isso, uma REGRA NOVA que o usuário definiu hoje:
+
+    "o erro precisa ser mostrado para o usuário, não pode ficar escondido,
+     e o campo que originou o erro precisa ganhar o foco"
+
+Isso foi aplicado em três lugares que ainda usavam o aviso do canto da
+tela (o toast, que some sozinho e passa despercebido):
+  - o mini-modal de cadastro rápido de parte;
+  - a janela de cadastro/edição de Pessoa (todos os avisos dela);
+  - a janela de "Unificar duplicadas", que além da faixa ganhou uma nota
+    explicativa fixa.
+
+Agora, quando um campo está errado, aparece uma faixa dentro da própria
+janela E o cursor vai direto para o campo com problema.
+
+
+========================================================================
+FRENTE 3 — REPRESENTAÇÃO LEGAL DE MENORES E INCAPAZES
+========================================================================
+
+O CASO REAL QUE ORIGINOU
+------------------------
+O processo do Pytro: ele é menor, NÃO TEM CPF, e é o autor do processo.
+Quem pratica os atos processuais por ele é a genitora, Alessandra. O
+sistema não tinha como registrar isso — e ainda por cima exigia CPF, o que
+impedia até de cadastrar o menor.
+
+
+AS DECISÕES QUE O USUÁRIO TOMOU (e que o sistema seguiu à risca)
+----------------------------------------------------------------
+1. A representação pertence à PESSOA, não ao processo. Ou seja: se o Pytro
+   é representado pela mãe, isso vale em todos os processos dele, sem
+   precisar repetir o cadastro caso a caso.
+
+2. SEMPRE EXATAMENTE UM responsável. Ou é o pai, ou é a mãe, ou é outra
+   pessoa maior — nunca dois ao mesmo tempo.
+
+3. O parentesco vem de uma TABELA EDITÁVEL pelo usuário (como já acontece
+   com nacionalidade, gênero e profissão), e não de texto livre. Nasce com
+   Mãe, Pai, Tutor e Curador; o usuário pode acrescentar outros pela tela.
+
+4. Os avisos de idade são configurados POR PESSOA e são OPCIONAIS. O
+   usuário rejeitou explicitamente a ideia de uma configuração global:
+   ele quer, por exemplo, avisar aos 16 num caso e aos 18 noutro, ou os
+   dois na mesma criança.
+
+5. O aviso sai NO DIA, vai só para os ADMINISTRADORES, e o sistema APENAS
+   AVISA e registra que avisou — não altera nada no cadastro nem nos
+   processos.
+
+6. "Unificar duplicadas" NÃO seria mexida. Se alguém tentar unificar um
+   cadastro que tenha responsável, que represente alguém, ou que tenha
+   aviso de idade configurado, o sistema simplesmente BLOQUEIA com uma
+   mensagem explicando o que fazer. Decisão dele, por segurança — e foi
+   respeitada.
+
+7. As informações do responsável precisam estar disponíveis nos
+   documentos (petições).
+
+
+POR QUE O BANCO FICOU DESSE JEITO (e não com "lista de dependentes")
+--------------------------------------------------------------------
+O usuário sugeriu uma tela de "dependentes" no cadastro do adulto. Foi
+explicado a ele — e ele concordou — que guardar a informação como uma
+lista de dependentes permitiria, no banco, que a mesma criança tivesse
+dois responsáveis (bastaria alguém cadastrar a criança na lista do pai E
+na lista da mãe). Ficaria dependendo da tela para não errar.
+
+Por isso a ligação foi guardada NO MENOR: o cadastro do menor aponta para
+o seu responsável. Assim é o próprio banco que garante "sempre um só".
+
+E a tela "Representa" que aparece no cadastro do adulto (mostrando quem
+ele representa) é MONTADA A PARTIR DESSA MESMA LIGAÇÃO — ou seja, os dois
+lados nunca podem discordar entre si.
+
+
+REGRAS CONFERIDAS NO SERVIDOR (não só na tela)
+-----------------------------------------------
+  - Ninguém pode ser responsável de si mesmo.
+  - O responsável tem que existir e estar ativo.
+  - Quem É REPRESENTADO não pode representar outra pessoa.
+  - Quem REPRESENTA alguém não pode passar a ser representado.
+    (Essas duas últimas fecham corrente — "A representa B que representa
+     C" — e ciclo — "A representa B e B representa A".)
+  - Se há responsável, o parentesco é obrigatório e tem que ser válido.
+
+Tudo isso é validado no servidor, não apenas na tela — então nem por erro
+de programação futura, nem por uma chamada direta à API, o banco fica
+inconsistente.
+
+
+O CPF FICOU OPCIONAL (só nesse caso)
+-------------------------------------
+Quando a pessoa tem responsável legal, o CPF deixa de ser obrigatório e o
+próprio rótulo do campo muda, avisando o motivo. Era exatamente o que
+travava o cadastro do Pytro. Para todo mundo que não tem responsável, o
+CPF continua obrigatório como sempre foi.
+
+
+EXCLUSÃO SEM DEIXAR ÓRFÃO
+--------------------------
+Tentar excluir uma pessoa que representa alguém é BLOQUEADO, com a
+mensagem dizendo quantas pessoas ela representa. É a mesma lógica que já
+existia para quem é perito, autor ou réu de processo.
+
+
+ONDE A REPRESENTAÇÃO APARECE NA TELA
+-------------------------------------
+  - Nos "chips" de autor e réu, nas DUAS janelas de processo (Novo e
+    Editar): abaixo do nome sai uma linha menor "repr. por Fulana — Mãe".
+  - Na tela da Pasta, na lista de partes do processo, do mesmo jeito.
+
+
+NOS DOCUMENTOS — 10 VARIÁVEIS NOVAS
+------------------------------------
+A principal é {{representacao}}, que já sai como frase pronta para a
+qualificação da parte. No teste com os dados reais, ela gerou:
+
+    "neste ato representado(a) por Alessandra Leitão, na qualidade de
+     mãe, inscrito(a) no CPF sob o nº 136.746.056-51"
+
+As outras nove trazem os dados soltos do responsável, para quem quiser
+montar a frase do seu jeito: {{responsavel}}, {{parentesco}},
+{{responsavel_cpf}}, {{responsavel_rg}}, {{responsavel_rg_orgao}},
+{{responsavel_nacionalidade}}, {{responsavel_estado_civil}},
+{{responsavel_profissao}} e {{responsavel_endereco}}.
+
+PONTO IMPORTANTE: para quem NÃO tem responsável, as 10 voltam VAZIAS. Isso
+significa que a tag pode ficar fixa no modelo de petição sem sujar o
+documento de quem é maior e capaz. Foi testado nos dois casos.
+
+Elas funcionam no documento comum, no documento de partes e também dentro
+das regiões que repetem vários autores ou réus.
+
+
+AVISOS DE IDADE
+---------------
+No cadastro da pessoa física existe agora um bloco "Avisos de idade", onde
+se adicionam as idades desejadas (16, 18, o que for). Elas aparecem como
+etiquetas: verde = ainda vai avisar; cinza com "✓ avisado em dd/mm" = já
+avisou.
+
+Se a pessoa não tem data de nascimento preenchida, a tela avisa que o
+aviso nunca vai disparar (sem a data não há como calcular a idade).
+
+Uma rotina automática roda todo dia às 8h10 e, no dia em que a pessoa
+completa a idade marcada, manda um aviso no sino de todos os
+administradores ativos, dizendo o nome e a idade e sugerindo conferir a
+representação legal nos processos.
+
+Três cuidados que foram tomados:
+  - A rotina usa "completou ou passou de" e não "completou exatamente
+    hoje". Se o sistema estiver fora do ar justamente no dia, o aviso sai
+    no primeiro dia em que voltar, em vez de se perder para sempre.
+  - Cada idade avisa UMA ÚNICA VEZ (fica registrada a data em que avisou),
+    e isso é gravado na mesma transação do envio: ou o aviso sai para
+    todos os admins e fica registrado, ou não sai para ninguém e tenta de
+    novo amanhã.
+  - Editar o cadastro da pessoa PRESERVA o "já avisei" das idades que
+    continuam na lista. Sem esse cuidado, qualquer edição no cadastro
+    faria o sistema avisar tudo de novo.
+
+
+========================================================================
+O SQL DO DIA — JÁ RODADO NAS 3 INSTÂNCIAS (registro apenas)
+========================================================================
+Foram dois scripts. Na AWS o usuário colou os dois de uma vez, e a ordem
+estava correta (a tabela parentesco é criada antes de ser referenciada, e
+pessoas_fisicas já existia antes das duas últimas partes).
+
+    CREATE TABLE IF NOT EXISTS parentesco (
+      id int NOT NULL AUTO_INCREMENT,
+      nome varchar(50) NOT NULL,
+      PRIMARY KEY (id)
+    );
+    -- + os INSERT de Mãe, Pai, Tutor e Curador, cada um com
+    --   "WHERE NOT EXISTS" (pode rodar de novo sem duplicar)
+
+    ALTER TABLE pessoas_fisicas
+      ADD COLUMN responsavel_id int DEFAULT NULL AFTER nome_mae,
+      ADD COLUMN parentesco_id int DEFAULT NULL AFTER responsavel_id,
+      ADD KEY idx_pf_responsavel (responsavel_id),
+      ADD CONSTRAINT fk_pf_responsavel FOREIGN KEY (responsavel_id)
+          REFERENCES pessoas_fisicas (id),
+      ADD CONSTRAINT fk_pf_parentesco FOREIGN KEY (parentesco_id)
+          REFERENCES parentesco (id);
+
+    CREATE TABLE IF NOT EXISTS pessoas_avisos_idade (...)
+      -- com UNIQUE (pessoa_id, idade), chave da pessoa em CASCADE
+      -- e "criado_por" em SET NULL
+
+    ALTER TABLE notificacoes
+      ADD COLUMN pessoa_id int DEFAULT NULL AFTER tarefa_id,
+      ADD KEY idx_notif_pessoa (pessoa_id),
+      ADD CONSTRAINT fk_notif_pessoa FOREIGN KEY (pessoa_id)
+          REFERENCES pessoas_fisicas (id) ON DELETE CASCADE;
+
+ATENÇÃO PARA O FUTURO: os comandos ALTER NÃO podem ser rodados duas vezes
+(dão erro de "coluna já existe"). Só os CREATE TABLE IF NOT EXISTS e os
+INSERT ... WHERE NOT EXISTS são seguros para repetir.
+
+DECISÕES DE BANCO E O PORQUÊ:
+  - A ligação do responsável NÃO tem "ON DELETE" — ou seja, é do tipo que
+    BLOQUEIA. É justamente isso que impede apagar do banco alguém que
+    representa outra pessoa (sem órfão).
+  - Os avisos de idade somem junto com a pessoa (CASCADE), porque não
+    fazem sentido sozinhos.
+  - O aviso no sino também some junto com a pessoa (CASCADE).
+  - Todos os nomes de tabela em letras minúsculas, como sempre.
+
+CONFERÊNCIA FEITA DEPOIS DE RODAR: o banco local passou de 74 para 76
+tabelas, e a tabela parentesco ficou com os 4 registros e com os acentos
+corretos ("Mãe" saiu certinho, sem problema de codificação).
+
+
+========================================================================
+ARQUIVOS ALTERADOS HOJE (commit dcfda3a)
+========================================================================
+BACKEND:
+  src/controllers/pessoasController.js    (o maior; responsável legal,
+                                           avisos de idade, exclusão,
+                                           unificação, auxiliares)
+  src/controllers/processosController.js  (autor/réu levam o responsável)
+  src/services/variaveisResolver.js       (as 10 variáveis do documento)
+  src/config/variaveisDocumento.js        (catálogo das variáveis)
+  src/services/alertasService.js          (rotina diária dos avisos)
+
+FRONTEND:
+  src/utils/formatters.js                 (as 2 funções centrais novas)
+  src/components/LinhasContato.js         (telefone e e-mail limpos)
+  src/components/ModalCadastroRapidoParte.js   (ARQUIVO NOVO)
+  src/pages/Pessoas/Pessoas.js            (o maior do front)
+  src/pages/Processos/Processos.js        (modal extraído + chips)
+  src/pages/Processos/PastaDetalhe.js     (partes com representação)
+
+
+========================================================================
+ARMADILHAS DO DIA (para o Claude do outro computador não repetir)
+========================================================================
+1. O heredoc do terminal COMEU AS BARRAS INVERTIDAS de uma expressão
+   regular e corrompeu o primeiro ajuste no arquivo de formatação. Foi
+   preciso desfazer com o git e refazer usando um script auxiliar. Lição:
+   neste ambiente, alterações com barra invertida não devem ir por
+   heredoc.
+
+2. CADA ARQUIVO DO PROJETO TEM SUA PRÓPRIA CONVENÇÃO DE FIM DE LINHA —
+   alguns são 100% CRLF (Windows) e outros 100% LF. Se isso não for
+   respeitado, o git mostra o arquivo inteiro como alterado. Foi usado um
+   script que normaliza, aplica a alteração e devolve a convenção
+   original. Conferido no fim: nenhum arquivo trocou de convenção.
+
+3. Várias "âncoras" de texto usadas para localizar onde alterar batiam em
+   DOIS lugares (o par pessoa física / pessoa jurídica no controller, e as
+   duas janelas quase idênticas de processo). Neste código, âncora curta
+   não serve.
+
+4. "O Pyetro não aparece na busca" NÃO era bug: o cadastro está escrito
+   "Pytro". Vale a pena conferir a grafia antes de investigar.
+
+
+========================================================================
+PENDÊNCIAS — LISTA ATUALIZADA
+========================================================================
+DEIXADAS POR HOJE:
+
+  [ ] 1. O arquivo estrutura_banco.sql ficou desatualizado de novo: ele
+         foi regenerado ontem com 74 tabelas e o banco já tem 76 (as duas
+         de hoje). Regenerar quando for conveniente.
+         Regra que continua valendo: conferir a estrutura NO BANCO antes
+         de sugerir qualquer SQL, nunca no arquivo.
+
+  [ ] 2. O nome do responsável legal NÃO entra em CAIXA ALTA nos
+         documentos quando a opção "documentos em maiúsculas" do
+         escritório está ligada — hoje ele sai exatamente como foi
+         cadastrado. Não foi pedido; fica registrado para o usuário
+         decidir se incomoda.
+
+  [ ] 3. A rotina de avisos de idade nunca foi disparada de verdade — só
+         foi simulada em leitura (a consulta roda, hoje há 0 avisos
+         configurados e 4 administradores ativos receberiam). Disparar de
+         verdade escreve notificação real no sino, então precisa de
+         autorização do usuário.
+
+HERDADAS DE SESSÕES ANTERIORES (continuam abertas):
+
+  [ ] 4. MODAL RÁPIDO DE FÓRUNS (vem de 17/08, nada codado ainda): dentro
+         de Novo/Editar Processo, no botão "…", o usuário pediu que o CEP
+         preencha o endereço sozinho (reaproveitando o que já existe no
+         sistema) e que o botão "Adicionar" vá para o rodapé. Ficaram DUAS
+         perguntas de escopo sem resposta: isso vale para todos os tipos
+         desse modal ou só para Fórum? E o que era o "Tentar novamente"
+         que ele mencionou? RETOMAR PERGUNTANDO, antes de codar.
+
+  [ ] 5. "PROCESSOS PARADOS" (vem de 07/08): o cálculo deveria usar a data
+         real do movimento processual, e não a data em que o registro foi
+         criado no sistema.
+
+  [ ] 6. SUBTIPO DE PRAZO (vem de 18/08): a tela exige, o servidor não.
+         O USUÁRIO DECIDIU DEIXAR ASSIM — não repropor.
+
+
+========================================================================
+REGRAS PERMANENTES DO USUÁRIO — REAFIRMADAS HOJE
+========================================================================
+O usuário repetiu todas no fechamento e pediu que ficassem na memória
+eterna e definitiva. Elas estão gravadas em memory/feedback_codigo.md.
+
+ 1. NUNCA CODAR SEM AUTORIZAÇÃO. Sempre em 2 passos: primeiro explicar em
+    português o que foi entendido do pedido e os efeitos colaterais, e
+    ESPERAR o "pode codar" explícito. Responder pergunta de escopo NÃO é
+    autorização. Vale também para pedidos pequenos e óbvios.
+
+ 2. NUNCA SUPOR NADA. Analisar o código inteiro — front, back e banco — e
+    ter certeza de tudo que for sugerido. Sem confirmação, dizer "não
+    tenho certeza, preciso confirmar" e esperar.
+
+ 3. CORRIGIR O USUÁRIO quando o pedido dele prejudicar outra rotina do
+    sistema. Ele pode estar esquecendo de alguma coisa; o Claude deve
+    avisar antes, não depois.
+
+ 4. TODOS OS NOMES DE TABELA EM LETRAS MINÚSCULAS — no banco E no código,
+    sem exceção, para sempre. (Já causou bug em produção no passado.)
+
+ 5. NENHUMA EXCLUSÃO PODE DEIXAR ÓRFÃO no banco. Nada que tenha amarração
+    com outra tabela pode ser apagado sem tratar as amarrações antes.
+
+ 6. Toda operação de vários passos no banco usa transação
+    (BEGIN / COMMIT / ROLLBACK). MySQL sem middleware — SQL escrito à mão.
+
+ 7. O BANCO É DO USUÁRIO: o Claude entrega o script SQL e ele roda no
+    HeidiSQL. Todo script é pensado para VÁRIAS INSTÂNCIAS — roda no
+    local, testa, e depois roda em todas as AWS. O GIT também é só ele
+    quem sobe.
+
+ 8. "BUILD NÃO É TESTE": é obrigação do Claude verificar, ANTES de
+    alterar, que nada quebra no front, no back e no banco. O usuário testa
+    APENAS a manutenção em foco — é impossível ele testar o sistema
+    inteiro a cada pedido.
+
+ 9. NADA DE TRECHOS DE CÓDIGO NO CHAT (ele é leigo e isso polui a
+    leitura). A única exceção é o script SQL, que ele precisa copiar.
+
+10. TODO AVISO, ERRO OU VALIDAÇÃO aparece DENTRO da própria tela ou
+    janela, como faixa amigável — NUNCA o aviso do canto que some sozinho.
+    E (regra nova de hoje) O CAMPO QUE CAUSOU O ERRO PRECISA GANHAR O
+    FOCO.
+
+11. Campo novo em cadastro tem que herdar a trava da tela "Detalhes"
+    (somente leitura). Manter o padrão de code-splitting do frontend
+    (tela nova entra sob demanda). Sem gambiarra e sem redundância.
+
+12. Anotar as pendências no arquivo .txt do dia — como está sendo feito
+    aqui.
+
+
+========================================================================
+ONDE ESTÁ O DETALHE TÉCNICO
+========================================================================
+Na pasta memory/ do projeto (que é idêntica à memória interna do Claude):
+
+  MEMORY.md ................. índice; o handoff de hoje está no topo
+  sessao_19082026.md ........ o dia de hoje em detalhe técnico
+  cadastro_pessoas.md ....... responsável legal e avisos de idade
+  processos_pastas.md ....... representação nos chips de autor/réu
+  documentos_modelos.md ..... as 10 variáveis novas
+  database_tables.md ........ as 2 tabelas e as 3 colunas novas
+  fonte_verdade_banco.md .... aviso de que o estrutura_banco.sql defasou
+  feedback_codigo.md ........ as regras permanentes, reafirmadas hoje
+  pendencias_proxima_sessao.md .. a lista de pendências
+
+========================================================================
+FIM DO RESUMO — 19/08/2026
+========================================================================
