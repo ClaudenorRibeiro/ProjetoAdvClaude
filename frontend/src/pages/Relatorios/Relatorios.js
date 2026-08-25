@@ -5,16 +5,18 @@
 
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { prazosAPI, tarefasAPI, audienciasAPI, processosAPI, financeiroAPI, pessoasAPI } from '../../services/api';
+import { prazosAPI, tarefasAPI, audienciasAPI, processosAPI, financeiroAPI, pessoasAPI, periciasAPI } from '../../services/api';
 import { formatarData, formatarNumeroPasta, formatarMoeda, labelStatusPrazo, labelPrioridade } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
 import AcoesAniversariante from '../../components/AcoesAniversariante';
+import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
 
 const MODULOS = [
   { key: 'prazos',          label: 'Prazos' },
   { key: 'tarefas',         label: 'Tarefas' },
   { key: 'audiencias',      label: 'Audiências' },
+  { key: 'pericias',        label: 'Perícias' },
   { key: 'pastas',          label: 'Processos / Pastas' },
   { key: 'processos_parados', label: 'Processos parados (risco de prescrição)' },
   { key: 'aniversariantes', label: 'Aniversariantes (clientes)' },
@@ -22,6 +24,21 @@ const MODULOS = [
 ];
 
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const PERIODOS_PERICIA = [
+  { chave: 'hoje', label: 'Hoje', dias: 0 },
+  { chave: '7', label: '7 dias', dias: 7 },
+  { chave: '30', label: '30 dias', dias: 30 },
+];
+
+function dataMaisDias(dias) {
+  const d = new Date();
+  d.setDate(d.getDate() + dias);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function dataHojeLocal() {
+  return dataMaisDias(0);
+}
 
 export default function Relatorios() {
   const { ehAdmin } = useAuth();
@@ -34,6 +51,19 @@ export default function Relatorios() {
   const [buscando, setBuscando] = useState(false);
 
   function setFiltro(k, v) { setFiltros(f => ({...f, [k]: v})); }
+  function aplicarPeriodoPericia(dias) {
+    const novosFiltros = { ...filtros, data_de: dataHojeLocal(), data_ate: dataMaisDias(dias) };
+    setFiltros(novosFiltros);
+    buscar(novosFiltros, 'pericias');
+  }
+  function limparFiltrosPericia() {
+    setFiltros({ busca: '', data_de: '', data_ate: '' });
+    setResultado(null);
+    setTotal(0);
+  }
+  const periodoPericiaAtivo = modulo === 'pericias' && filtros.data_de === dataHojeLocal()
+    ? (PERIODOS_PERICIA.find(p => filtros.data_ate === dataMaisDias(p.dias))?.chave || null)
+    : null;
 
   // Se veio do Dashboard com ?rel=processos_parados, já gera o relatório ao abrir.
   useEffect(() => {
@@ -47,38 +77,49 @@ export default function Relatorios() {
     setResultado(null);
   }
 
-  async function buscar() {
+  async function buscar(filtrosBusca = filtros, moduloBusca = modulo) {
     setBuscando(true);
     try {
       let data;
-      switch (modulo) {
+      switch (moduloBusca) {
         case 'prazos':
-          ({ data } = await prazosAPI.listar({ ...filtros, limite: 200 }));
+          ({ data } = await prazosAPI.listar({ ...filtrosBusca, limite: 200 }));
           if (data.ok) { setResultado({ tipo: 'prazos', registros: data.dados.registros }); setTotal(data.dados.total); }
           break;
         case 'tarefas':
-          ({ data } = await tarefasAPI.listar({ ...filtros, limite: 200 }));
+          ({ data } = await tarefasAPI.listar({ ...filtrosBusca, limite: 200 }));
           if (data.ok) { setResultado({ tipo: 'tarefas', registros: data.dados.registros }); setTotal(data.dados.total); }
           break;
         case 'audiencias':
-          ({ data } = await audienciasAPI.listar({ ...filtros, limite: 200 }));
+          ({ data } = await audienciasAPI.listar({ ...filtrosBusca, limite: 200 }));
           if (data.ok) { setResultado({ tipo: 'audiencias', registros: data.dados.registros }); setTotal(data.dados.total); }
           break;
+        case 'pericias':
+          ({ data } = await periciasAPI.relatorioPeritos({
+            busca: filtrosBusca.busca || '',
+            data_de: filtrosBusca.data_de || '',
+            data_ate: filtrosBusca.data_ate || '',
+          }));
+          if (data.ok) {
+            setResultado({ tipo: 'pericias', ...data.dados });
+            setTotal(data.dados.total_registros || 0);
+          }
+          break;
         case 'pastas':
-          ({ data } = await processosAPI.listarPastas({ ...filtros, limite: 200 }));
+          ({ data } = await processosAPI.listarPastas({ ...filtrosBusca, limite: 200 }));
           if (data.ok) { setResultado({ tipo: 'pastas', registros: data.dados.registros }); setTotal(data.dados.total); }
           break;
         case 'processos_parados':
-          ({ data } = await processosAPI.processosParados(filtros.dias));
+          ({ data } = await processosAPI.processosParados(filtrosBusca.dias));
           if (data.ok) { setResultado({ tipo: 'processos_parados', registros: data.dados.processos, dias: data.dados.dias }); setTotal(data.dados.processos.length); }
           break;
         case 'aniversariantes':
-          ({ data } = await pessoasAPI.aniversariantes({ filtro: filtros.periodo || 'hoje', mes: filtros.mes }));
+          ({ data } = await pessoasAPI.aniversariantes({ filtro: filtrosBusca.periodo || 'hoje', mes: filtrosBusca.mes }));
           if (data.ok) { setResultado({ tipo: 'aniversariantes', registros: data.dados.registros }); setTotal(data.dados.total); }
           break;
         case 'financeiro':
           if (!ehAdmin) { toast.error('Apenas administradores podem acessar o relatório financeiro'); return; }
-          ({ data } = await financeiroAPI.relatorio(filtros));
+          ({ data } = await financeiroAPI.relatorio(filtrosBusca));
           if (data.ok) {
             setResultado({ tipo: 'financeiro', ...data.dados });
             setTotal(data.dados.lancamentos?.length || 0);
@@ -111,6 +152,14 @@ export default function Relatorios() {
       cabecalho = ['Processo','Pasta','Tipo','Data','Hora','Modalidade','Status'];
       linhas = resultado.registros.map(r => [
         r.processo_numero, r.pasta_titulo, r.tipo_nome, r.data, r.hora?.slice(0,5), r.modalidade, r.ata_resultado||'agendada'
+      ]);
+    } else if (resultado.tipo === 'pericias') {
+      cabecalho = ['Perito(a)','Telefone','E-mail','Pasta','Processo','Tipo perícia','Data','Hora','Status','Origem'];
+      linhas = resultado.registros.map(r => [
+        r.perito_nome || '— não informado —', r.telefone || '', r.email || '',
+        r.pasta_numero ? String(r.pasta_numero).padStart(4, '0') : '',
+        r.processo_numero || '', r.tipo_pericia || '', r.data || '',
+        r.hora ? String(r.hora).slice(0,5) : '', r.status || '', r.origem || ''
       ]);
     } else if (resultado.tipo === 'pastas') {
       cabecalho = ['Nº Pasta','Título','Cliente','Área','Processos'];
@@ -225,6 +274,32 @@ export default function Relatorios() {
             </>
           )}
 
+          {(modulo === 'pericias') && (
+            <>
+              <div className="form-group" style={{margin:0}}>
+                <label className="form-label">Pesquisar</label>
+                <input className="form-control" style={{minWidth:'260px'}}
+                  placeholder="Digite perito, processo ou pasta..."
+                  value={filtros.busca || ''}
+                  onChange={e => setFiltro('busca', e.target.value)} />
+              </div>
+              <div className="form-group" style={{margin:0}}>
+                <label className="form-label">Data de</label>
+                <input type="date" className="form-control" value={filtros.data_de || ''}
+                  onChange={e => setFiltro('data_de', e.target.value)} />
+              </div>
+              <div className="form-group" style={{margin:0}}>
+                <label className="form-label">Até</label>
+                <input type="date" className="form-control" value={filtros.data_ate || ''}
+                  onChange={e => setFiltro('data_ate', e.target.value)} />
+              </div>
+              <button className="btn btn-secondary" style={{ marginBottom: '1px' }}
+                onClick={limparFiltrosPericia}>
+                ✕ Limpar filtros
+              </button>
+            </>
+          )}
+
           {(modulo === 'pastas') && (
             <div className="form-group" style={{margin:0}}>
               <label className="form-label">Buscar</label>
@@ -291,10 +366,24 @@ export default function Relatorios() {
             </>
           )}
 
-          <button className="btn btn-primary" style={{marginBottom:'1px'}} onClick={buscar} disabled={buscando}>
+          <button className="btn btn-primary" style={{marginBottom:'1px'}} onClick={() => buscar()} disabled={buscando}>
             {buscando ? 'Buscando...' : 'Gerar Relatório'}
           </button>
         </div>
+
+        {modulo === 'pericias' && (
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '12px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 500 }}>Período rápido:</span>
+            {PERIODOS_PERICIA.map(p => (
+              <button key={p.chave} type="button"
+                className={`btn ${periodoPericiaAtivo === p.chave ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ padding: '6px 16px', fontSize: '13px' }}
+                onClick={() => aplicarPeriodoPericia(p.dias)}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Resultado */}
@@ -327,6 +416,19 @@ export default function Relatorios() {
                 <strong style={{color:(resultado.saldo_periodo||0)>=0?'#059669':'#dc2626'}}>
                   {formatarMoeda(resultado.saldo_periodo||0)}
                 </strong>
+              </div>
+            </div>
+          )}
+
+          {resultado.tipo === 'pericias' && (
+            <div style={{display:'flex',gap:'24px',marginBottom:'16px',flexWrap:'wrap'}}>
+              <div>
+                <div style={{fontSize:'12px',color:'#888'}}>Peritos encontrados</div>
+                <strong>{resultado.total_peritos || 0}</strong>
+              </div>
+              <div>
+                <div style={{fontSize:'12px',color:'#888'}}>Processos encontrados</div>
+                <strong>{resultado.total_processos || 0}</strong>
               </div>
             </div>
           )}
@@ -455,6 +557,52 @@ function TabelaResultado({ resultado, onRecarregar }) {
           </tbody>
         </table>
         {registros.length === 0 && <p className="lista-vazia">Nenhum resultado</p>}
+      </div>
+    );
+  }
+
+  if (tipo === 'pericias') {
+    return (
+      <div className="tabela-wrapper">
+        <table className="tabela">
+          <thead>
+            <tr>
+              <th>Perito(a)</th>
+              <th>Contato</th>
+              <th>Pasta</th>
+              <th>Processo</th>
+              <th>Perícia</th>
+              <th>Data / Hora</th>
+              <th>Status</th>
+              <th>Origem</th>
+            </tr>
+          </thead>
+          <tbody>
+            {registros.map((r, idx) => (
+              <tr key={`${r.origem}-${r.perito_tipo}-${r.perito_id}-${r.processo_id}-${r.pericia_id || 'vinculo'}-${idx}`}>
+                <td><strong>{r.perito_nome || '— não informado —'}</strong></td>
+                <td>
+                  <div>{r.telefone || '—'}</div>
+                  <small style={{color:'#64748b'}}>{r.email || '—'}</small>
+                </td>
+                <td>
+                  {r.pasta_id
+                    ? <Link to={`/processos/pasta/${r.pasta_id}`}>{String(r.pasta_numero || '').padStart(4, '0')}</Link>
+                    : '—'}
+                </td>
+                <td><NumeroProcessoCopiavel numero={r.processo_numero} /></td>
+                <td>{r.tipo_pericia || '—'}</td>
+                <td>
+                  {r.data ? formatarData(r.data) : '—'}
+                  {r.hora ? ` às ${String(r.hora).slice(0,5)}` : ''}
+                </td>
+                <td>{r.status ? <span className="badge badge-cinza">{r.status}</span> : '—'}</td>
+                <td>{r.origem || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {registros.length === 0 && <p className="lista-vazia">Nenhum perito encontrado</p>}
       </div>
     );
   }

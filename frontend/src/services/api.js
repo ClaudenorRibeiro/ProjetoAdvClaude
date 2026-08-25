@@ -412,6 +412,7 @@ export const publicacoesAPI = {
 // ============================================================
 export const periciasAPI = {
   listar:            (params) => api.get('/pericias', { params }),
+  relatorioPeritos:  (params) => api.get('/pericias/relatorio-peritos', { params }),
   buscar:            (id) => api.get(`/pericias/${id}`),
   criar:             (dados) => api.post('/pericias', dados),
   atualizar:         (id, dados) => api.put(`/pericias/${id}`, dados),

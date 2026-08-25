@@ -353,6 +353,199 @@ async function peritosDoProcesso(req, res) {
   }
 }
 
+// GET /api/pericias/relatorio-peritos
+// Relatório usado em Relatórios → Perícias.
+// modo=perito: lista peritos e os processos/perícias em que atuam.
+// modo=processo: dado um processo/pasta, lista os peritos vinculados/atuantes.
+async function relatorioPeritos(req, res) {
+  try {
+    const busca = String(req.query.busca || '').trim();
+    const data_de = String(req.query.data_de || '').trim();
+    const data_ate = String(req.query.data_ate || '').trim();
+    const like = `%${busca}%`;
+    const params = [];
+    const filtraPeriodo = !!(data_de || data_ate);
+
+    let filtroBuscaProcesso = '';
+    let filtroBuscaPericia = '';
+    let filtroPeriodoProcesso = '';
+    let filtroPeriodoPericia = '';
+
+    if (busca) {
+      filtroBuscaProcesso = ` AND (
+        pr.numProc LIKE ? OR pr.NomeTituloProc LIKE ? OR CAST(pa.numPasta AS CHAR) LIKE ? OR
+        pf.nome LIKE ? OR pj.razao_social LIKE ? OR
+        EXISTS (
+          SELECT 1 FROM telefones_pf t
+           WHERE pp.tipo_pessoa = 'fisica' AND t.pessoa_id = pf.id AND t.ativo = 1 AND t.numero LIKE ?
+        ) OR
+        EXISTS (
+          SELECT 1 FROM emails_pf e
+           WHERE pp.tipo_pessoa = 'fisica' AND e.pessoa_id = pf.id AND e.ativo = 1 AND e.email LIKE ?
+        )
+      )`;
+      filtroBuscaPericia = ` AND (
+        pr.numProc LIKE ? OR pr.NomeTituloProc LIKE ? OR CAST(pa.numPasta AS CHAR) LIKE ? OR
+        pf.nome LIKE ? OR pj.razao_social LIKE ? OR
+        EXISTS (
+          SELECT 1 FROM telefones_pf t
+           WHERE pe.perito_tipo = 'fisica' AND t.pessoa_id = pf.id AND t.ativo = 1 AND t.numero LIKE ?
+        ) OR
+        EXISTS (
+          SELECT 1 FROM emails_pf e
+           WHERE pe.perito_tipo = 'fisica' AND e.pessoa_id = pf.id AND e.ativo = 1 AND e.email LIKE ?
+        )
+      )`;
+    }
+
+    if (filtraPeriodo) {
+      // Vínculo direto no processo não possui data de perícia; com período informado,
+      // o relatório mostra apenas registros de perícia agendada dentro do intervalo.
+      filtroPeriodoProcesso = ' AND 1 = 0';
+      if (data_de)  filtroPeriodoPericia += ' AND pe.data >= ?';
+      if (data_ate) filtroPeriodoPericia += ' AND pe.data <= ?';
+    }
+
+    const query = `
+      SELECT *
+      FROM (
+        SELECT
+          pp.tipo_pessoa AS perito_tipo,
+          pp.pessoa_id AS perito_id,
+          CASE pp.tipo_pessoa
+            WHEN 'fisica' THEN pf.nome
+            WHEN 'juridica' THEN pj.razao_social
+          END AS perito_nome,
+          prof.nome AS profissao_nome,
+          CASE WHEN pp.tipo_pessoa = 'fisica' THEN (
+            SELECT t.numero FROM telefones_pf t
+             WHERE t.pessoa_id = pf.id AND t.ativo = 1
+             ORDER BY t.principal DESC, t.id ASC LIMIT 1
+          ) ELSE (
+            SELECT t.numero FROM telefones_pj t
+             WHERE t.pessoa_id = pj.id AND t.ativo = 1
+             ORDER BY t.principal DESC, t.id ASC LIMIT 1
+          ) END AS telefone,
+          CASE WHEN pp.tipo_pessoa = 'fisica' THEN (
+            SELECT e.email FROM emails_pf e
+             WHERE e.pessoa_id = pf.id AND e.ativo = 1
+             ORDER BY e.principal DESC, e.id ASC LIMIT 1
+          ) ELSE (
+            SELECT e.email FROM emails_pj e
+             WHERE e.pessoa_id = pj.id AND e.ativo = 1
+             ORDER BY e.principal DESC, e.id ASC LIMIT 1
+          ) END AS email,
+          pr.id AS processo_id,
+          pr.numProc AS processo_numero,
+          pr.NomeTituloProc AS pasta_titulo,
+          pa.id AS pasta_id,
+          pa.numPasta AS pasta_numero,
+          NULL AS pericia_id,
+          NULL AS tipo_pericia,
+          NULL AS data,
+          NULL AS hora,
+          NULL AS status,
+          'Vínculo no processo' AS origem
+        FROM processo_perito pp
+        JOIN tblproc pr ON pr.id = pp.proc_id AND pr.ativo = 1
+        JOIN tblpasta pa ON pa.id = pr.pasta_id
+        LEFT JOIN pessoas_fisicas pf ON pp.tipo_pessoa = 'fisica' AND pp.pessoa_id = pf.id
+        LEFT JOIN pessoas_juridicas pj ON pp.tipo_pessoa = 'juridica' AND pp.pessoa_id = pj.id
+        LEFT JOIN profissao prof ON pf.profissao_id = prof.id
+        WHERE (
+          pp.tipo_pessoa = 'juridica'
+          OR prof.nome LIKE 'Perícia%'
+        )
+        ${filtroBuscaProcesso}
+        ${filtroPeriodoProcesso}
+
+        UNION ALL
+
+        SELECT
+          pe.perito_tipo AS perito_tipo,
+          pe.perito_id AS perito_id,
+          CASE pe.perito_tipo
+            WHEN 'fisica' THEN pf.nome
+            WHEN 'juridica' THEN pj.razao_social
+          END AS perito_nome,
+          prof.nome AS profissao_nome,
+          CASE WHEN pe.perito_tipo = 'fisica' THEN (
+            SELECT t.numero FROM telefones_pf t
+             WHERE t.pessoa_id = pf.id AND t.ativo = 1
+             ORDER BY t.principal DESC, t.id ASC LIMIT 1
+          ) ELSE (
+            SELECT t.numero FROM telefones_pj t
+             WHERE t.pessoa_id = pj.id AND t.ativo = 1
+             ORDER BY t.principal DESC, t.id ASC LIMIT 1
+          ) END AS telefone,
+          CASE WHEN pe.perito_tipo = 'fisica' THEN (
+            SELECT e.email FROM emails_pf e
+             WHERE e.pessoa_id = pf.id AND e.ativo = 1
+             ORDER BY e.principal DESC, e.id ASC LIMIT 1
+          ) ELSE (
+            SELECT e.email FROM emails_pj e
+             WHERE e.pessoa_id = pj.id AND e.ativo = 1
+             ORDER BY e.principal DESC, e.id ASC LIMIT 1
+          ) END AS email,
+          pr.id AS processo_id,
+          pr.numProc AS processo_numero,
+          pr.NomeTituloProc AS pasta_titulo,
+          pa.id AS pasta_id,
+          pa.numPasta AS pasta_numero,
+          pe.id AS pericia_id,
+          tp.nome AS tipo_pericia,
+          pe.data,
+          pe.hora,
+          pe.status,
+          'Perícia agendada' AS origem
+        FROM pericia pe
+        JOIN tblproc pr ON pr.id = pe.processo_id AND pr.ativo = 1
+        JOIN tblpasta pa ON pa.id = pr.pasta_id
+        LEFT JOIN tipo_pericia tp ON tp.id = pe.tipo_pericia_id
+        LEFT JOIN pessoas_fisicas pf ON pe.perito_tipo = 'fisica' AND pe.perito_id = pf.id
+        LEFT JOIN pessoas_juridicas pj ON pe.perito_tipo = 'juridica' AND pe.perito_id = pj.id
+        LEFT JOIN profissao prof ON pf.profissao_id = prof.id
+        WHERE 1 = 1
+        ${filtroBuscaPericia}
+        ${filtroPeriodoPericia}
+      ) x
+      ORDER BY x.data IS NULL, x.data, x.hora, x.perito_nome, x.pasta_numero, x.processo_numero
+      LIMIT 500
+    `;
+
+    if (busca) {
+      params.push(like, like, like, like, like, like, like);
+      params.push(like, like, like, like, like, like, like);
+    }
+    if (filtraPeriodo) {
+      if (data_de) params.push(data_de);
+      if (data_ate) params.push(data_ate);
+    }
+
+    const [rows] = await pool.execute(query, params);
+
+    const peritosMap = new Map();
+    const processosMap = new Map();
+    rows.forEach(r => {
+      const peritoKey = `${r.perito_tipo}:${r.perito_id}`;
+      if (r.perito_id && r.perito_nome && !peritosMap.has(peritoKey)) {
+        peritosMap.set(peritoKey, { tipo: r.perito_tipo, id: r.perito_id, nome: r.perito_nome });
+      }
+      if (r.processo_id) processosMap.set(String(r.processo_id), true);
+    });
+
+    return sucesso(res, {
+      modo: 'pericias',
+      registros: rows,
+      total_registros: rows.length,
+      total_peritos: peritosMap.size,
+      total_processos: processosMap.size,
+    });
+  } catch (e) {
+    return erroInterno(res, e);
+  }
+}
+
 // POST /api/pericias — Cria perícia
 // Transação: INSERT + auditoria_pericia + log geral (tudo ou nada)
 async function criar(req, res) {
@@ -817,6 +1010,6 @@ async function enviarComunicado(req, res) {
 module.exports = {
   listar, buscar, criar, atualizar, tipos,
   criarTipo, atualizarTipo, excluirTipo,
-  reusDoProcesso, peritosDoProcesso, marcarRealizada, cancelar, remarcar, excluir,
+  reusDoProcesso, peritosDoProcesso, relatorioPeritos, marcarRealizada, cancelar, remarcar, excluir,
   buscarHistorico, enviarComunicado,
 };

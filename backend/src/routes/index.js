@@ -300,6 +300,7 @@ router.get('/pericias/tipos',             autenticar, periciasCtrl.tipos);
 router.post('/pericias/tipos',            autenticar, verificarPermissao('pericias','tipos','cadastrar'), periciasCtrl.criarTipo);
 router.put('/pericias/tipos/:id',         autenticar, verificarPermissao('pericias','tipos','alterar'),   periciasCtrl.atualizarTipo);
 router.delete('/pericias/tipos/:id',      autenticar, verificarPermissao('pericias','tipos','excluir'),   periciasCtrl.excluirTipo);
+router.get('/pericias/relatorio-peritos', autenticar, verificarPermissao('relatorios','visualizar'), periciasCtrl.relatorioPeritos);
 router.get('/pericias/reus-processo',     autenticar, verificarPermissao('pericias','visualizar'), periciasCtrl.reusDoProcesso);
 router.get('/pericias/peritos-processo',  autenticar, verificarPermissao('pericias','visualizar'), periciasCtrl.peritosDoProcesso);
 router.get('/pericias',                   autenticar, verificarPermissao('pericias','visualizar'), periciasCtrl.listar);
