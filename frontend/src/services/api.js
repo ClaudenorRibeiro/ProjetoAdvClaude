@@ -160,6 +160,17 @@ export const pessoasAPI = {
 };
 
 // ============================================================
+// CONTROLE → AUXILIARES
+// ============================================================
+export const controleAuxiliaresAPI = {
+  listarProfissoes:    () => api.get('/controle/auxiliares/profissoes'),
+  pessoasPorProfissao: (id) => api.get(`/controle/auxiliares/profissoes/${id}/pessoas`),
+  criarProfissao:      (dados) => api.post('/controle/auxiliares/profissoes', dados),
+  atualizarProfissao:  (id, dados) => api.put(`/controle/auxiliares/profissoes/${id}`, dados),
+  excluirProfissao:    (id) => api.delete(`/controle/auxiliares/profissoes/${id}`),
+};
+
+// ============================================================
 // PROCESSOS E PASTAS — Novo modelo (tblPasta + tblProc)
 // ============================================================
 export const processosAPI = {

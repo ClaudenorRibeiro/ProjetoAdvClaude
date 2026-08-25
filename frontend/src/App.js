@@ -41,6 +41,7 @@ function lazyComRetry(importar) {
 const Relatorios      = lazyComRetry(() => import('./pages/Relatorios/Relatorios'));
 const Foruns          = lazyComRetry(() => import('./pages/Controle/Foruns'));
 const Varas           = lazyComRetry(() => import('./pages/Controle/Varas'));
+const Auxiliares      = lazyComRetry(() => import('./pages/Controle/Auxiliares'));
 const FormasPagamento = lazyComRetry(() => import('./pages/Controle/FormasPagamento'));
 // Fase 2: telas pesadas e independentes.
 const Audiencias      = lazyComRetry(() => import('./pages/Audiencias/Audiencias'));
@@ -166,6 +167,7 @@ function AppRoutes() {
       <Route path="/configuracoes/*"   element={<RotaProtegida apenasAdmin><Configuracoes /></RotaProtegida>} />
       <Route path="/controle/foruns"  element={<RotaProtegida apenasAdmin><Foruns /></RotaProtegida>} />
       <Route path="/controle/varas"   element={<RotaProtegida apenasAdmin><Varas /></RotaProtegida>} />
+      <Route path="/controle/auxiliares" element={<RotaProtegida apenasAdmin><Auxiliares /></RotaProtegida>} />
       <Route path="/controle/formas-pagamento" element={<RotaProtegida apenasAdmin><FormasPagamento /></RotaProtegida>} />
 
       {/* Redireciona raiz para dashboard */}

@@ -15,6 +15,7 @@ import MenuAcoes from '../../components/MenuAcoes';
 import { useAuth } from '../../context/AuthContext';
 import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetasSubmenu, useEtiquetasPessoais } from '../../components/Etiquetas';
 import { ModalPessoa } from '../Pessoas/Pessoas';
+import useEscFechar from '../../hooks/useEscFechar';
 
 // Cor/label do badge conforme o status
 function badgeStatus(status) {
@@ -818,7 +819,7 @@ export function ModalPericia({ tipos, pericia, processoInicial, onTiposChange, o
             </div>
           </div>
 
-          {/* Perito — pessoa física cuja profissão começa com "Perito" */}
+          {/* Perito — pessoa física cuja profissão começa com "Perícia" */}
           <div className="form-group">
             <label className="form-label">Perito</label>
             {peritosProc.length > 0 ? (
@@ -917,7 +918,8 @@ export function ModalPericia({ tipos, pericia, processoInicial, onTiposChange, o
 }
 
 function ModalCadastroPeritoRapido({ profissoes, onFechar, onSalvo }) {
-  const peritoProfissoes = (profissoes || []).filter(p => String(p.nome || '').toLowerCase().startsWith('perito'));
+  const overlayRef = useEscFechar(onFechar);
+  const peritoProfissoes = (profissoes || []).filter(p => String(p.nome || '').toLowerCase().startsWith('perícia'));
   const [form, setForm] = useState({
     nome: '',
     cpf: '',
@@ -939,7 +941,7 @@ function ModalCadastroPeritoRapido({ profissoes, onFechar, onSalvo }) {
       return;
     }
     if (!form.profissao_id) {
-      setAviso('Cadastre ou selecione uma profissão que comece com "Perito"');
+      setAviso('Cadastre ou selecione uma profissão que comece com "Perícia"');
       return;
     }
 
@@ -977,7 +979,7 @@ function ModalCadastroPeritoRapido({ profissoes, onFechar, onSalvo }) {
   }
 
   return (
-    <div className="modal-overlay">
+    <div className="modal-overlay" ref={overlayRef}>
       <div className="modal-box">
         <div className="modal-header">
           <h3>Cadastrar perito</h3>
@@ -1010,7 +1012,7 @@ function ModalCadastroPeritoRapido({ profissoes, onFechar, onSalvo }) {
                 {peritoProfissoes.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
               </select>
               {peritoProfissoes.length === 0 && (
-                <small style={{color:'#b45309'}}>Nenhuma profissão iniciando com "Perito" encontrada no cadastro.</small>
+                <small style={{color:'#b45309'}}>Nenhuma profissão iniciando com "Perícia" encontrada no cadastro.</small>
               )}
             </div>
           </div>

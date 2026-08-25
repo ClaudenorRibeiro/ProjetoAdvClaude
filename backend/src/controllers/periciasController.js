@@ -342,7 +342,7 @@ async function peritosDoProcesso(req, res) {
                ORDER BY e.principal DESC, e.id ASC LIMIT 1) AS email
        FROM processo_perito pp
        JOIN pessoas_fisicas pf ON pp.tipo_pessoa = 'fisica' AND pp.pessoa_id = pf.id
-       JOIN profissao pr ON pf.profissao_id = pr.id AND pr.nome LIKE 'Perito%'
+       JOIN profissao pr ON pf.profissao_id = pr.id AND pr.nome LIKE 'Perícia%'
        WHERE pp.proc_id = ?
        ORDER BY nome`,
       [processo_id]

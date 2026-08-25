@@ -87,6 +87,12 @@ router.post('/pessoas/enviar-sms',             autenticar, verificarPermissao('s
 router.get('/pessoas/auxiliares',              autenticar, pessoasCtrl.buscarAuxiliares);
 // Cadastra novo item em tabela auxiliar (generos, estados_civis, profissoes)
 router.post('/pessoas/auxiliares/:tipo',       autenticar, verificarPermissao('pessoas','cadastrar'), pessoasCtrl.criarAuxiliar);
+// Controle → Auxiliares → Profissões — área administrativa
+router.get('/controle/auxiliares/profissoes',        autenticar, apenasAdmin, pessoasCtrl.listarProfissoes);
+router.get('/controle/auxiliares/profissoes/:id/pessoas', autenticar, apenasAdmin, pessoasCtrl.listarPessoasPorProfissao);
+router.post('/controle/auxiliares/profissoes',       autenticar, apenasAdmin, pessoasCtrl.criarProfissao);
+router.put('/controle/auxiliares/profissoes/:id',    autenticar, apenasAdmin, pessoasCtrl.atualizarProfissao);
+router.delete('/controle/auxiliares/profissoes/:id', autenticar, apenasAdmin, pessoasCtrl.excluirProfissao);
 router.get('/pessoas/fisicas',            autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.listarFisicas);
 // IMPORTANTE: /exportar e /cpf/:cpf devem ficar ANTES de /:id para o Express não capturar a palavra como id
 router.get('/pessoas/fisicas/exportar',   autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.exportarFisicas);

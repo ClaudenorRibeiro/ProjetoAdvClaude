@@ -140,11 +140,11 @@ async function listarFisicas(req, res) {
       )`;
     }
 
-    // Filtra apenas pessoas físicas cuja profissão começa com "Perito" (para perícias)
+    // Filtra apenas pessoas físicas cuja profissão começa com "Perícia" (para perícias)
     if (somente_peritos) {
       where += ` AND EXISTS (
         SELECT 1 FROM profissao pr
-        WHERE pr.id = pf.profissao_id AND pr.nome LIKE 'Perito%'
+        WHERE pr.id = pf.profissao_id AND pr.nome LIKE 'Perícia%'
       )`;
     }
 
@@ -1338,6 +1338,120 @@ async function criarAuxiliar(req, res) {
   }
 }
 
+function normalizarNomeAuxiliar(nome) {
+  const nomeTrimmed = String(nome || '').trim();
+  return nomeTrimmed.charAt(0).toUpperCase() + nomeTrimmed.slice(1).toLowerCase();
+}
+
+async function listarProfissoes(req, res) {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT p.id, p.nome, COUNT(pf.id) AS total_pessoas
+       FROM profissao p
+       LEFT JOIN pessoas_fisicas pf ON pf.profissao_id = p.id
+       GROUP BY p.id, p.nome
+       ORDER BY p.nome`
+    );
+    return sucesso(res, rows);
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+async function listarPessoasPorProfissao(req, res) {
+  try {
+    const { id } = req.params;
+    const [prof] = await pool.execute('SELECT id, nome FROM profissao WHERE id = ?', [id]);
+    if (!prof.length) return erro(res, 'Profissão não encontrada', 404);
+
+    const [rows] = await pool.execute(
+      `SELECT pf.id, pf.nome, pf.cpf,
+              (SELECT t.numero FROM telefones_pf t
+               WHERE t.pessoa_id = pf.id AND t.ativo = 1
+               ORDER BY t.principal DESC, t.id ASC LIMIT 1) AS telefone,
+              (SELECT e.email FROM emails_pf e
+               WHERE e.pessoa_id = pf.id AND e.ativo = 1
+               ORDER BY e.principal DESC, e.id ASC LIMIT 1) AS email
+       FROM pessoas_fisicas pf
+       WHERE pf.ativo = 1 AND pf.profissao_id = ?
+       ORDER BY pf.nome`,
+      [id]
+    );
+
+    return sucesso(res, { profissao: prof[0], pessoas: rows });
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+async function criarProfissao(req, res) {
+  try {
+    const { nome } = req.body;
+    if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
+
+    const nomeNormalizado = normalizarNomeAuxiliar(nome);
+    const [dup] = await pool.execute(
+      'SELECT id FROM profissao WHERE LOWER(nome) = LOWER(?) LIMIT 1',
+      [nomeNormalizado]
+    );
+    if (dup.length > 0) return erro(res, `"${nomeNormalizado}" já está cadastrada na lista`);
+
+    const [result] = await pool.execute(
+      'INSERT INTO profissao (nome) VALUES (?)',
+      [nomeNormalizado]
+    );
+
+    return sucesso(res, { id: result.insertId, nome: nomeNormalizado }, 'Profissão cadastrada com sucesso', 201);
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+async function atualizarProfissao(req, res) {
+  try {
+    const { id } = req.params;
+    const { nome } = req.body;
+    if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
+
+    const nomeNormalizado = normalizarNomeAuxiliar(nome);
+    const [atual] = await pool.execute('SELECT id FROM profissao WHERE id = ?', [id]);
+    if (!atual.length) return erro(res, 'Profissão não encontrada', 404);
+
+    const [dup] = await pool.execute(
+      'SELECT id FROM profissao WHERE LOWER(nome) = LOWER(?) AND id <> ? LIMIT 1',
+      [nomeNormalizado, id]
+    );
+    if (dup.length > 0) return erro(res, `"${nomeNormalizado}" já está cadastrada na lista`);
+
+    await pool.execute('UPDATE profissao SET nome = ? WHERE id = ?', [nomeNormalizado, id]);
+    return sucesso(res, null, 'Profissão atualizada com sucesso');
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+async function excluirProfissao(req, res) {
+  try {
+    const { id } = req.params;
+    const [atual] = await pool.execute('SELECT id, nome FROM profissao WHERE id = ?', [id]);
+    if (!atual.length) return erro(res, 'Profissão não encontrada', 404);
+
+    const [uso] = await pool.execute(
+      'SELECT COUNT(*) AS total FROM pessoas_fisicas WHERE profissao_id = ?',
+      [id]
+    );
+    const total = Number(uso[0]?.total || 0);
+    if (total > 0) {
+      return erro(res, `Não é possível excluir "${atual[0].nome}" porque existem ${total} pessoa(s) usando esta profissão`);
+    }
+
+    await pool.execute('DELETE FROM profissao WHERE id = ?', [id]);
+    return sucesso(res, null, 'Profissão excluída com sucesso');
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
 // GET /api/pessoas/fisicas/cpf/:cpf — Verifica se CPF já existe no banco
 async function buscarPorCPF(req, res) {
   try {
@@ -1849,6 +1963,7 @@ async function smsAtivo(req, res) {
 module.exports = {
   listarFisicas, buscarFisica, criarFisica, atualizarFisica, excluirFisica, unificarFisicas, adicionarHistorico, editarHistorico, excluirHistorico,
   listarJuridicas, buscarJuridica, criarJuridica, atualizarJuridica, excluirJuridica, unificarJuridicas, buscarAuxiliares, buscarPorCPF, criarAuxiliar,
+  listarProfissoes, listarPessoasPorProfissao, criarProfissao, atualizarProfissao, excluirProfissao,
   processosDaPessoa, exportarFisicas, exportarJuridicas,
   listarAniversariantes, registrarParabens, buscarAniversariantes, uploadAnexosEmail, enviarEmailAvulso, registrarEnvioZap,
   enviarSMS, smsAtivo
