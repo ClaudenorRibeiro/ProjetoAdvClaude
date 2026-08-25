@@ -28,6 +28,8 @@ export default function Processos() {
   const [etqDefs, setEtqDefs]       = useState([]); // etiquetas pessoais do usuário no módulo "pastas"
   const [filtroEtiqueta, setFiltroEtiqueta] = useState(null); // slot ativo no filtro pessoal (ou null)
   const [filtroEsc, setFiltroEsc]           = useState(null); // slot ativo no filtro do escritório (ou null)
+  const [assuntos, setAssuntos]             = useState([]);
+  const [filtroAssuntos, setFiltroAssuntos] = useState([]);
 
   const [catEscritorio, setCatEscritorio] = useState([]); // catálogo do escritório (para a pasta derivada)
 
@@ -35,6 +37,7 @@ export default function Processos() {
   useEffect(() => {
     etiquetasAPI.definicoes('pastas').then(r => { if (r.data?.ok) setEtqDefs(r.data.dados || []); }).catch(() => {});
     etiquetasAPI.catalogo('processos').then(r => { if (r.data?.ok) setCatEscritorio(r.data.dados || []); }).catch(() => {});
+    processosAPI.auxiliares().then(r => { if (r.data?.ok) setAssuntos(r.data.dados?.assuntos || []); }).catch(() => {});
   }, []);
 
   // Marca/desmarca a etiqueta pessoal de uma pasta e reflete na lista sem recarregar.
@@ -48,15 +51,23 @@ export default function Processos() {
   const carregar = useCallback(async () => {
     setCarregando(true);
     try {
-      const { data } = await processosAPI.listarPastas({ busca, pagina, limite: 20, etiqueta: filtroEtiqueta || undefined, etiquetaEscritorio: filtroEsc || undefined });
+      const { data } = await processosAPI.listarPastas({
+        busca,
+        pagina,
+        limite: 20,
+        etiqueta: filtroEtiqueta || undefined,
+        etiquetaEscritorio: filtroEsc || undefined,
+        assuntos: filtroAssuntos.length ? filtroAssuntos.join(',') : undefined,
+      });
       if (data.ok) { setLista(data.dados.registros); setTotal(data.dados.total); }
     } catch { toast.error('Erro ao carregar processos'); }
     finally { setCarregando(false); }
-  }, [busca, pagina, filtroEtiqueta, filtroEsc]);
+  }, [busca, pagina, filtroEtiqueta, filtroEsc, filtroAssuntos]);
 
   // Liga/desliga os filtros por etiqueta e volta para a primeira página.
   function aplicarFiltroEtiqueta(slot) { setFiltroEtiqueta(slot); setPagina(1); }
   function aplicarFiltroEsc(slot)      { setFiltroEsc(slot); setPagina(1); }
+  function aplicarFiltroAssuntos(ids)  { setFiltroAssuntos(ids); setPagina(1); }
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -93,6 +104,26 @@ export default function Processos() {
           <button className="btn btn-primary" onClick={() => setModalAberto(true)}>
             + Novo Processo
           </button>
+          <div style={{ minWidth: '320px', flex: '0 1 420px' }}>
+            <label className="form-label" style={{ fontSize: '11px', marginBottom: '3px' }}>Assuntos</label>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+              <SeletorAssuntos
+                assuntos={assuntos}
+                selecionados={filtroAssuntos}
+                onChange={aplicarFiltroAssuntos}
+              />
+              {filtroAssuntos.length > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => aplicarFiltroAssuntos([])}
+                  style={{ minHeight: '40px', padding: '0 12px', flexShrink: 0 }}
+                >
+                  Limpar
+                </button>
+              )}
+            </div>
+          </div>
           <span style={{ marginLeft: 'auto', color: '#888', fontSize: '13px' }}>
             {total} pasta(s)
           </span>
@@ -211,6 +242,133 @@ export default function Processos() {
   );
 }
 
+function SeletorAssuntos({ assuntos = [], selecionados = [], onChange, podeGerenciar, onGerenciar }) {
+  const [aberto, setAberto] = useState(false);
+  const [busca, setBusca] = useState('');
+  const boxRef = useRef(null);
+
+  const selecionadosSet = new Set(selecionados);
+  const assuntosSelecionados = assuntos.filter(a => selecionadosSet.has(a.id));
+  const buscaNorm = busca.trim().normalize('NFD').replace(/[^\x00-\x7F]/g, '').toLowerCase();
+  const assuntosFiltrados = !buscaNorm ? assuntos : assuntos.filter(a =>
+    (a.nome || '').normalize('NFD').replace(/[^\x00-\x7F]/g, '').toLowerCase().includes(buscaNorm)
+  );
+
+  function alternar(id) {
+    onChange(selecionadosSet.has(id)
+      ? selecionados.filter(selId => selId !== id)
+      : [...selecionados, id]);
+  }
+
+  function remover(id) {
+    onChange(selecionados.filter(selId => selId !== id));
+  }
+
+  function fecharAoSair(e) {
+    if (!boxRef.current?.contains(e.relatedTarget)) setAberto(false);
+  }
+
+  return (
+    <div style={{ display: 'flex', gap: '4px', alignItems: 'flex-start' }}>
+      <div ref={boxRef} onBlur={fecharAoSair} style={{ flex: 1, position: 'relative' }}>
+        <button
+          type="button"
+          className="form-control"
+          onClick={() => setAberto(a => !a)}
+          style={{
+            minHeight: '40px',
+            height: 'auto',
+            display: 'grid',
+            gridTemplateColumns: '1fr auto',
+            alignItems: 'start',
+            columnGap: '8px',
+            rowGap: '6px',
+            textAlign: 'left',
+            cursor: 'pointer',
+            padding: '7px 10px',
+            borderColor: aberto ? '#2d6be4' : '#d9e1ec',
+            boxShadow: aberto ? '0 0 0 2px rgba(45,107,228,0.08)' : 'none',
+            background: '#fff',
+          }}
+        >
+          <span style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            flexWrap: 'wrap',
+            maxHeight: '78px',
+            overflowY: 'auto',
+            paddingRight: assuntosSelecionados.length > 6 ? '4px' : 0,
+          }}>
+            {assuntosSelecionados.length === 0 && (
+              <span style={{ color: '#94a3b8' }}>Selecionar assuntos...</span>
+            )}
+            {assuntosSelecionados.map(a => (
+              <span key={a.id} style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                background: '#eaf2ff', color: '#1d4ed8', border: '1px solid #bfdbfe',
+                borderRadius: '999px', padding: '3px 9px', fontSize: '12px', fontWeight: 500,
+              }}>
+                {a.nome}
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={e => { e.stopPropagation(); remover(a.id); }}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); remover(a.id); } }}
+                  style={{ fontWeight: 700, cursor: 'pointer', lineHeight: 1 }}
+                >×</span>
+              </span>
+            ))}
+          </span>
+          <span style={{ color: '#64748b', fontSize: '12px', paddingTop: '5px' }}>{aberto ? '▲' : '▼'}</span>
+        </button>
+
+        {aberto && (
+          <div style={{
+            position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+            background: '#fff', border: '1px solid #d9e1ec', borderRadius: '8px',
+            boxShadow: '0 12px 30px rgba(15, 23, 42, 0.14)', zIndex: 40,
+            padding: '8px',
+          }}>
+            <input
+              className="form-control"
+              autoFocus
+              placeholder="Buscar assunto..."
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+              style={{ fontSize: '13px', marginBottom: '8px' }}
+            />
+            <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid #edf2f7', borderRadius: '6px' }}>
+              {assuntosFiltrados.length ? assuntosFiltrados.map((a, idx) => (
+                <label key={a.id} style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  padding: '8px 10px', cursor: 'pointer', fontSize: '13px',
+                  borderBottom: idx < assuntosFiltrados.length - 1 ? '1px solid #f1f5f9' : 'none',
+                  background: selecionadosSet.has(a.id) ? '#f0f7ff' : '#fff',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={selecionadosSet.has(a.id)}
+                    onChange={() => alternar(a.id)}
+                    style={{ accentColor: '#2d6be4' }}
+                  />
+                  <span>{a.nome}</span>
+                </label>
+              )) : (
+                <div style={{ padding: '10px', color: '#94a3b8', fontSize: '13px' }}>Nenhum assunto encontrado</div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {podeGerenciar && (
+        <button type="button" className="btn btn-outline" style={{ minHeight: '40px', padding: '0 10px', fontSize: '13px', flexShrink: 0 }} onClick={onGerenciar}>…</button>
+      )}
+    </div>
+  );
+}
+
 // ============================================================
 // MODAL DE NOVO PROCESSO
 // Usado tanto em Processos.js (cria pasta + processo)
@@ -226,7 +384,7 @@ export default function Processos() {
 export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
   const { temPermissao } = useAuth();
   const overlayRef = useEscFechar(() => onFechar(false)); // ESC fecha este modal (só quando é o de cima)
-  // Modal auxiliar: null = fechado, string = tipo aberto ('tipos','status','instancias','foruns','varas')
+  // Modal auxiliar: null = fechado, string = tipo aberto ('tipos','status','instancias','foruns','varas','assuntos')
   const [modalAux, setModalAux] = useState(null);
   // Cadastro rápido de parte: null = fechado; 'autor' | 'reu' | 'perito' = campo que abriu
   const [cadastroRapido, setCadastroRapido] = useState(null);
@@ -269,8 +427,9 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
   const [resultPerito, setResultPerito]   = useState([]);
 
   // Dados auxiliares
-  const [aux, setAux]                       = useState({ foruns: [], varas: [], tipos: [], status: [], instancias: [] });
+  const [aux, setAux]                       = useState({ foruns: [], varas: [], tipos: [], status: [], instancias: [], assuntos: [] });
   const [varasFiltradas, setVarasFiltradas] = useState([]);
+  const [assuntosSelecionados, setAssuntosSelecionados] = useState([]);
 
   // Título gerado automaticamente
   const [nomeTitulo, setNomeTitulo] = useState('');
@@ -441,13 +600,17 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
   const podeGerenciarAux = temPermissao('processos','cadastrar')
     || temPermissao('processos','alterar')
     || temPermissao('processos','excluir');
+  const podeGerenciarAssuntos = temPermissao('processos.assuntos','cadastrar')
+    || temPermissao('processos.assuntos','alterar')
+    || temPermissao('processos.assuntos','excluir');
 
   // Busca pessoas físicas ou jurídicas conforme o tipo selecionado
   async function buscarPessoas(termo, tipo, setResultados) {
     if (termo.length < 2) { setResultados([]); return; }
     try {
       const fn = tipo === 'fisica' ? pessoasAPI.listarFisicas : pessoasAPI.listarJuridicas;
-      const { data } = await fn({ busca: termo, limite: 8 });
+      // selecao: 1 → só nome/CPF (ou razão social/CNPJ), quem começa pelo termo primeiro.
+      const { data } = await fn({ busca: termo, limite: 8, selecao: 1 });
       if (data.ok) setResultados(data.dados.registros);
     } catch {}
   }
@@ -507,6 +670,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
         autores,
         reus,
         peritos,
+        assuntos:          assuntosSelecionados,
         cliente_polo:      form.cliente_polo || null,
       };
       const { data } = await processosAPI.criarProcesso(payload);
@@ -872,6 +1036,18 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
             </div>
           </div>
 
+          {/* Assuntos do processo */}
+          <div className="form-group">
+            <label className="form-label">Assuntos</label>
+            <SeletorAssuntos
+              assuntos={aux.assuntos || []}
+              selecionados={assuntosSelecionados}
+              onChange={setAssuntosSelecionados}
+              podeGerenciar={podeGerenciarAssuntos}
+              onGerenciar={() => setModalAux('assuntos')}
+            />
+          </div>
+
           {/* Data de distribuição */}
           <div className="form-group">
             <label className="form-label">Data de Distribuição</label>
@@ -911,6 +1087,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
                  : modalAux === 'status' ? (aux.status || [])
                  : modalAux === 'instancias' ? (aux.instancias || [])
                  : modalAux === 'foruns' ? (aux.foruns || [])
+                 : modalAux === 'assuntos' ? (aux.assuntos || [])
                  : (aux.varas || [])}
             foruns={aux.foruns || []}
             onFechar={() => setModalAux(null)}
@@ -987,6 +1164,9 @@ export function ModalEditarProcesso({ processo, onFechar }) {
   const [peritos, setPeritos] = useState(
     (processo.peritos || []).map(p => ({ pessoa_id: p.pessoa_id, tipo_pessoa: p.tipo_pessoa, nome: p.nome }))
   );
+  const [assuntosSelecionados, setAssuntosSelecionados] = useState(
+    (processo.assuntos || []).map(a => a.assunto_id)
+  );
 
   // Busca de pessoas
   const [tipoAutor, setTipoAutor]     = useState('fisica');
@@ -1000,7 +1180,7 @@ export function ModalEditarProcesso({ processo, onFechar }) {
   const [resultPerito, setResultPerito] = useState([]);
 
   // Dados auxiliares
-  const [aux, setAux]                       = useState({ foruns: [], varas: [], tipos: [], status: [], instancias: [] });
+  const [aux, setAux]                       = useState({ foruns: [], varas: [], tipos: [], status: [], instancias: [], assuntos: [] });
   const [varasFiltradas, setVarasFiltradas] = useState([]);
 
   const [nomeTitulo, setNomeTitulo] = useState('');
@@ -1049,12 +1229,16 @@ export function ModalEditarProcesso({ processo, onFechar }) {
   const podeGerenciarAux = temPermissao('processos','cadastrar')
     || temPermissao('processos','alterar')
     || temPermissao('processos','excluir');
+  const podeGerenciarAssuntos = temPermissao('processos.assuntos','cadastrar')
+    || temPermissao('processos.assuntos','alterar')
+    || temPermissao('processos.assuntos','excluir');
 
   async function buscarPessoas(termo, tipo, setResultados) {
     if (termo.length < 2) { setResultados([]); return; }
     try {
       const fn = tipo === 'fisica' ? pessoasAPI.listarFisicas : pessoasAPI.listarJuridicas;
-      const { data } = await fn({ busca: termo, limite: 8 });
+      // selecao: 1 → só nome/CPF (ou razão social/CNPJ), quem começa pelo termo primeiro.
+      const { data } = await fn({ busca: termo, limite: 8, selecao: 1 });
       if (data.ok) setResultados(data.dados.registros);
     } catch {}
   }
@@ -1100,6 +1284,7 @@ export function ModalEditarProcesso({ processo, onFechar }) {
         autores,
         reus,
         peritos,
+        assuntos:          assuntosSelecionados,
         cliente_polo:      form.cliente_polo || null,
       });
       toast.success('Processo atualizado com sucesso!');
@@ -1367,6 +1552,18 @@ export function ModalEditarProcesso({ processo, onFechar }) {
             </div>
           </div>
 
+          {/* Assuntos do processo */}
+          <div className="form-group">
+            <label className="form-label">Assuntos</label>
+            <SeletorAssuntos
+              assuntos={aux.assuntos || []}
+              selecionados={assuntosSelecionados}
+              onChange={setAssuntosSelecionados}
+              podeGerenciar={podeGerenciarAssuntos}
+              onGerenciar={() => setModalAux('assuntos')}
+            />
+          </div>
+
           {/* Data de distribuição */}
           <div className="form-group">
             <label className="form-label">Data de Distribuição</label>
@@ -1401,6 +1598,7 @@ export function ModalEditarProcesso({ processo, onFechar }) {
                  : modalAux === 'status' ? (aux.status || [])
                  : modalAux === 'instancias' ? (aux.instancias || [])
                  : modalAux === 'foruns' ? (aux.foruns || [])
+                 : modalAux === 'assuntos' ? (aux.assuntos || [])
                  : (aux.varas || [])}
             foruns={aux.foruns || []}
             onFechar={() => setModalAux(null)}
@@ -1456,6 +1654,13 @@ const AUX_CONFIG = {
     atualizar:(id, d) => processosAPI.atualizarInstancia(id, d),
     excluir: (id) => processosAPI.excluirInstancia(id),
   },
+  assuntos: {
+    titulo:  'Assuntos dos Processos',
+    campos:  [{ key: 'nome', label: 'Nome', required: true, fullWidth: true }],
+    criar:   (d) => processosAPI.criarAssunto(d),
+    atualizar:(id, d) => processosAPI.atualizarAssunto(id, d),
+    excluir: (id) => processosAPI.excluirAssunto(id),
+  },
   foruns: {
     titulo:  'Fóruns',
     campos:  [
@@ -1498,9 +1703,10 @@ export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtuali
   const overlayRef = useEscFechar(onFechar); // ESC fecha esta janelinha (só quando é a de cima)
   const cfg = AUX_CONFIG[tipo];
 
-  const podeCadastrar = temPermissao('processos', 'cadastrar');
-  const podeAlterar   = temPermissao('processos', 'alterar');
-  const podeExcluir   = temPermissao('processos', 'excluir');
+  const moduloPermissao = tipo === 'assuntos' ? 'processos.assuntos' : 'processos';
+  const podeCadastrar = temPermissao(moduloPermissao, 'cadastrar');
+  const podeAlterar   = temPermissao(moduloPermissao, 'alterar');
+  const podeExcluir   = temPermissao(moduloPermissao, 'excluir');
 
   // Form de criação / edição
   const formVazio = cfg.campos.reduce((acc, c) => ({ ...acc, [c.key]: '' }), {});

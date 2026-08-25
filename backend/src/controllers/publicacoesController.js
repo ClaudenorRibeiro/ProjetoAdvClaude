@@ -319,6 +319,18 @@ async function listar(req, res) {
                )) AS buscada_novamente,
               (SELECT pe.slot FROM publicacoes_etiquetas pe
                 WHERE pe.publicacao_id = p.id AND pe.usuario_id = ?) AS etiqueta_pessoal,
+              -- Dados do processo cadastrado, quando a publicação casa com uma pasta.
+              -- Usados para abrir "Criar Perícia" já com o processo preenchido.
+              (SELECT t0.id FROM tblproc t0
+                WHERE p.numero_processo IS NOT NULL AND p.numero_processo <> ''
+                  AND REPLACE(REPLACE(REPLACE(t0.numProc,'.',''),'-',''),' ','')
+                      = REPLACE(REPLACE(REPLACE(p.numero_processo,'.',''),'-',''),' ','')
+                LIMIT 1) AS processo_id,
+              (SELECT t0.NomeTituloProc FROM tblproc t0
+                WHERE p.numero_processo IS NOT NULL AND p.numero_processo <> ''
+                  AND REPLACE(REPLACE(REPLACE(t0.numProc,'.',''),'-',''),' ','')
+                      = REPLACE(REPLACE(REPLACE(p.numero_processo,'.',''),'-',''),' ','')
+                LIMIT 1) AS pasta_titulo,
               EXISTS (SELECT 1 FROM tblproc t
                        WHERE p.numero_processo IS NOT NULL AND p.numero_processo <> ''
                          AND REPLACE(REPLACE(REPLACE(t.numProc,'.',''),'-',''),' ','')

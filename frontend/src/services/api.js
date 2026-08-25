@@ -194,6 +194,9 @@ export const processosAPI = {
   criarInstancia:    (dados) => api.post('/processos/auxiliares/instancias', dados),
   atualizarInstancia:(id, dados) => api.put(`/processos/auxiliares/instancias/${id}`, dados),
   excluirInstancia:  (id) => api.delete(`/processos/auxiliares/instancias/${id}`),
+  criarAssunto:      (dados) => api.post('/processos/auxiliares/assuntos', dados),
+  atualizarAssunto:  (id, dados) => api.put(`/processos/auxiliares/assuntos/${id}`, dados),
+  excluirAssunto:    (id) => api.delete(`/processos/auxiliares/assuntos/${id}`),
 };
 
 // ============================================================
@@ -405,6 +408,7 @@ export const periciasAPI = {
   criarTipo:         (dados) => api.post('/pericias/tipos', dados),
   atualizarTipo:     (id, dados) => api.put(`/pericias/tipos/${id}`, dados),
   excluirTipo:       (id) => api.delete(`/pericias/tipos/${id}`),
+  reusProcesso:      (processoId) => api.get('/pericias/reus-processo', { params: { processo_id: processoId } }),
   peritosProcesso:   (processoId) => api.get('/pericias/peritos-processo', { params: { processo_id: processoId } }),
   marcarRealizada:   (id) => api.put(`/pericias/${id}/realizada`),
   cancelar:          (id, motivo) => api.put(`/pericias/${id}/cancelar`, { motivo }),

@@ -341,7 +341,7 @@ function montaBlocoAudiencia(a, minutosAntes = 0) {
     cep_audiencia: a.forum_cep || '',
     logradouro_audiencia: a.forum_log || '',
     numero_audiencia: a.forum_num || '',
-    complemento_audiencia: a.forum_compl || '',
+    complemento_vara_audiencia: a.vara_compl || '',
     bairro_audiencia: a.forum_bairro || '',
     cidade_audiencia: a.forum_cidade || '',
     estado_audiencia: a.forum_uf || '',
@@ -355,7 +355,7 @@ async function resolverAudiencia(audienciaId, usuario, opcoes = {}) {
   const [aud] = await pool.execute(
     `SELECT a.id, a.data, a.hora, a.local, a.modalidade, a.link_virtual, a.plataforma_virtual, a.processo_id,
             ta.nome AS tipo_nome,
-            v.nome AS vara_nome,
+            v.nome AS vara_nome, v.compl_end AS vara_compl,
             f.nome AS forum_nome, f.cep AS forum_cep, f.logradouro AS forum_log, f.num_end AS forum_num,
             f.compl_end AS forum_compl, f.bairro AS forum_bairro, f.cidade AS forum_cidade, f.uf AS forum_uf
      FROM audiencia a
@@ -386,35 +386,117 @@ async function resolverAudiencia(audienciaId, usuario, opcoes = {}) {
 }
 
 // ---- Bloco Perícia ----
-function montaBlocoPericia(p, minutosAntes = 0) {
+function montarLocalPericia(p, locaisReus = []) {
+  const partes = [];
+
+  locaisReus.forEach(l => {
+    const endereco = montarEndereco(l.logradouro, l.numero, l.complemento, l.bairro, l.cidade, l.estado, l.cep);
+    if (l.nome && endereco) {
+      partes.push(`${l.nome}, situada na ${endereco}`);
+    } else if (l.nome) {
+      partes.push(l.nome);
+    }
+  });
+
+  const enderecoManual = montarEndereco(p.logradouro, p.numero, p.complemento, p.bairro, p.cidade, p.estado, p.cep);
+  if (p.local && enderecoManual) {
+    partes.push(`no local informado ${p.local}, situado na ${enderecoManual}`);
+  } else if (p.local) {
+    partes.push(p.local);
+  } else if (enderecoManual) {
+    partes.push(enderecoManual);
+  }
+
+  return partes.join('\n');
+}
+
+function montaBlocoPericia(p, minutosAntes = 0, locaisReus = []) {
   return {
     data_pericia: dataBR(p.data),
     hora_pericia: horaAjustada(p.hora, minutosAntes), // respeita "minutos antes" do modelo (0 = horário real)
     hora_pericia_real: hora(p.hora),                  // horário real, sempre disponível
-    local_pericia: p.local || '',
+    local_pericia: montarLocalPericia(p, locaisReus),
     tipo_pericia: p.tipo_nome || '',
     perito: p.perito_nome || '',
+    telefone_perito: p.telefone_perito || '',
   };
 }
 
 async function resolverPericia(periciaId, usuario, opcoes = {}) {
   const [per] = await pool.execute(
-    `SELECT pe.id, pe.data, pe.hora, pe.local, pe.processo_id,
+    `SELECT pe.id, pe.data, pe.hora, pe.local, pe.cep, pe.logradouro, pe.numero, pe.complemento, pe.bairro, pe.cidade, pe.estado, pe.processo_id,
             tp.nome AS tipo_nome,
-            CASE WHEN pe.perito_tipo = 'fisica'   THEN pf.nome
-                 WHEN pe.perito_tipo = 'juridica' THEN pj.razao_social ELSE NULL END AS perito_nome
+            CASE WHEN pe.perito_tipo = 'fisica' OR pe.perito_tipo IS NULL THEN pf.nome
+                 WHEN pe.perito_tipo = 'juridica' THEN pj.razao_social ELSE NULL END AS perito_nome,
+            CASE WHEN pe.perito_tipo = 'fisica' OR pe.perito_tipo IS NULL THEN (
+                   SELECT t.numero
+                   FROM telefones_pf t
+                   WHERE t.pessoa_id = pe.perito_id AND t.ativo = 1
+                   ORDER BY t.principal DESC, t.id ASC
+                   LIMIT 1
+                 )
+                 WHEN pe.perito_tipo = 'juridica' THEN (
+                   SELECT t.numero
+                   FROM telefones_pj t
+                   WHERE t.pessoa_id = pe.perito_id AND t.ativo = 1
+                   ORDER BY t.principal DESC, t.id ASC
+                   LIMIT 1
+                 )
+                 ELSE NULL END AS telefone_perito
      FROM pericia pe
      LEFT JOIN tipo_pericia tp ON pe.tipo_pericia_id = tp.id
-     LEFT JOIN pessoas_fisicas pf ON pe.perito_tipo = 'fisica' AND pe.perito_id = pf.id
+     LEFT JOIN pessoas_fisicas pf ON (pe.perito_tipo = 'fisica' OR pe.perito_tipo IS NULL) AND pe.perito_id = pf.id
      LEFT JOIN pessoas_juridicas pj ON pe.perito_tipo = 'juridica' AND pe.perito_id = pj.id
      WHERE pe.id = ? LIMIT 1`, [periciaId]
   );
   if (!per.length) return null;
   const p = per[0];
 
+  const [locaisReus] = await pool.execute(
+    `SELECT plr.tipo_pessoa, plr.pessoa_id,
+            CASE plr.tipo_pessoa
+              WHEN 'fisica'   THEN pf.nome
+              WHEN 'juridica' THEN pj.razao_social
+            END AS nome,
+            CASE plr.tipo_pessoa
+              WHEN 'fisica'   THEN pf.cep
+              WHEN 'juridica' THEN pj.cep
+            END AS cep,
+            CASE plr.tipo_pessoa
+              WHEN 'fisica'   THEN pf.logradouro
+              WHEN 'juridica' THEN pj.logradouro
+            END AS logradouro,
+            CASE plr.tipo_pessoa
+              WHEN 'fisica'   THEN pf.numero
+              WHEN 'juridica' THEN pj.numero
+            END AS numero,
+            CASE plr.tipo_pessoa
+              WHEN 'fisica'   THEN pf.complemento
+              WHEN 'juridica' THEN pj.complemento
+            END AS complemento,
+            CASE plr.tipo_pessoa
+              WHEN 'fisica'   THEN pf.bairro
+              WHEN 'juridica' THEN pj.bairro
+            END AS bairro,
+            CASE plr.tipo_pessoa
+              WHEN 'fisica'   THEN pf.cidade
+              WHEN 'juridica' THEN pj.cidade
+            END AS cidade,
+            CASE plr.tipo_pessoa
+              WHEN 'fisica'   THEN pf.estado
+              WHEN 'juridica' THEN pj.estado
+            END AS estado
+       FROM pericia_local_reu plr
+       LEFT JOIN pessoas_fisicas pf ON plr.tipo_pessoa = 'fisica' AND plr.pessoa_id = pf.id
+       LEFT JOIN pessoas_juridicas pj ON plr.tipo_pessoa = 'juridica' AND plr.pessoa_id = pj.id
+      WHERE plr.pericia_id = ?
+      ORDER BY nome`,
+    [periciaId]
+  );
+
   const proc = await blocoProcessoECliente(p.processo_id);
   const esc = await blocoEscritorio(usuario);
-  const dados = { ...(proc ? proc.dados : {}), ...montaBlocoPericia(p, opcoes.minutosAntes), ...esc };
+  const dados = { ...(proc ? proc.dados : {}), ...montaBlocoPericia(p, opcoes.minutosAntes, locaisReus), ...esc };
 
   const refPartes = [];
   if (proc?.numeroProcesso) refPartes.push(`Proc ${proc.numeroProcesso}`);

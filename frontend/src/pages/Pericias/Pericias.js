@@ -14,6 +14,7 @@ import ModalGerarLote from '../../components/GerarLote';
 import MenuAcoes from '../../components/MenuAcoes';
 import { useAuth } from '../../context/AuthContext';
 import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetasSubmenu, useEtiquetasPessoais } from '../../components/Etiquetas';
+import { ModalPessoa } from '../Pessoas/Pessoas';
 
 // Cor/label do badge conforme o status
 function badgeStatus(status) {
@@ -23,6 +24,21 @@ function badgeStatus(status) {
     case 'remarcada': return { cls: 'badge-amarelo',   txt: 'Remarcada' };
     default:          return { cls: 'badge-azul',      txt: 'Agendada' };
   }
+}
+
+function chavePessoaLocal(item) {
+  return `${item.tipo_pessoa}:${item.pessoa_id}`;
+}
+
+function enderecoResumo(item) {
+  const linha1 = [item.logradouro, item.numero].filter(Boolean).join(', ');
+  const cidadeUf = [item.cidade, item.estado].filter(Boolean).join('/');
+  return [linha1, item.complemento, item.bairro, cidadeUf, item.cep].filter(Boolean).join(' - ');
+}
+
+function temEnderecoManual(form) {
+  return ['local', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado']
+    .some(campo => form[campo] && String(form[campo]).trim());
 }
 
 export default function Pericias() {
@@ -300,6 +316,9 @@ export function ModalPericia({ tipos, pericia, processoInicial, onTiposChange, o
   );
   const [salvando, setSalvando] = useState(false);
   const [pastas, setPastas]   = useState([]);
+  const [reusProcesso, setReusProcesso] = useState([]);
+  const [locaisReus, setLocaisReus] = useState(pericia?.locais_reus || []);
+  const [localManualAtivo, setLocalManualAtivo] = useState(() => temEnderecoManual(pericia || {}));
   // Campo "Número do Processo" (CNJ) — mesmo padrão do Novo Prazo. Em edição/aba já vem preenchido.
   const [buscaProc, setBuscaProc] = useState(pericia?.processo_numero || processoInicial?.processo_numero || '');
   const [buscandoCep, setBuscandoCep] = useState(false);
@@ -310,6 +329,11 @@ export function ModalPericia({ tipos, pericia, processoInicial, onTiposChange, o
   // Selects de pessoas
   const [usuarios, setUsuarios] = useState([]);
   const [advogados, setAdvogados] = useState([]);
+  const [auxiliares, setAuxiliares] = useState({ profissoes: [] });
+  const [modalPeritoRapido, setModalPeritoRapido] = useState(false);
+  const [avisoPericia, setAvisoPericia] = useState('');
+  const [reuPendenteSelecionado, setReuPendenteSelecionado] = useState('');
+  const [modalCadastroReu, setModalCadastroReu] = useState(null);
   // Confirmação de dia não útil com senha
   const [senhaDiaUtil, setSenhaDiaUtil] = useState(null);
 
@@ -320,12 +344,49 @@ export function ModalPericia({ tipos, pericia, processoInicial, onTiposChange, o
     audienciasAPI.advogados().then(r => {
       if (r.data.ok) setAdvogados(r.data.dados || []);
     });
+    pessoasAPI.auxiliares().then(r => {
+      if (r.data.ok) setAuxiliares(r.data.dados || { profissoes: [] });
+    }).catch(() => {});
     // Na edição, já carrega os peritos do processo e o valor do responsável.
     // Quando aberto a partir de um processo (processoInicial), também já carrega os peritos.
-    if (pericia?.processo_id) carregarPeritosProcesso(pericia.processo_id);
-    else if (processoInicial?.processo_id) carregarPeritosProcesso(processoInicial.processo_id);
+    if (pericia?.processo_id) {
+      carregarPeritosProcesso(pericia.processo_id);
+      carregarReusProcesso(pericia.processo_id);
+    }
+    else if (processoInicial?.processo_id) {
+      carregarPeritosProcesso(processoInicial.processo_id);
+      carregarReusProcesso(processoInicial.processo_id);
+    }
     if (pericia?.responsavel_valor) setForm(f => ({ ...f, responsavel_id: pericia.responsavel_valor }));
   }, []); // eslint-disable-line
+
+  async function carregarReusProcesso(processoId) {
+    try {
+      const { data } = await periciasAPI.reusProcesso(processoId);
+      if (data.ok) {
+        const dados = data.dados || [];
+        setReusProcesso(dados);
+        return dados;
+      }
+    } catch { /* ignora */ }
+    return [];
+  }
+
+  const reusPendentesEndereco = reusProcesso.filter(r => r.endereco_incompleto);
+  const reuPendenteEscolhido =
+    reusPendentesEndereco.find(r => chavePessoaLocal(r) === reuPendenteSelecionado)
+    || reusPendentesEndereco[0]
+    || null;
+
+  useEffect(() => {
+    if (reusPendentesEndereco.length === 0) {
+      if (reuPendenteSelecionado) setReuPendenteSelecionado('');
+      return;
+    }
+    if (!reuPendenteSelecionado || !reusPendentesEndereco.some(r => chavePessoaLocal(r) === reuPendenteSelecionado)) {
+      setReuPendenteSelecionado(chavePessoaLocal(reusPendentesEndereco[0]));
+    }
+  }, [reusProcesso]); // eslint-disable-line
 
   async function carregarPeritosProcesso(processoId) {
     try {
@@ -349,6 +410,8 @@ export function ModalPericia({ tipos, pericia, processoInicial, onTiposChange, o
     set('titulo', `${numFmt} — ${pasta.titulo_proc || ''}`);
     set('processo_id', '');
     setPeritosProc([]);
+    setReusProcesso([]);
+    setLocaisReus([]);
     // num_proc = número do processo representativo da pasta (vem completo do backend)
     if (pasta.num_proc) setBuscaProc(pasta.num_proc);
     try {
@@ -365,6 +428,7 @@ export function ModalPericia({ tipos, pericia, processoInicial, onTiposChange, o
           set('processo_id', match.id);
           setBuscaProc(match.numProc || pasta.num_proc || '');   // garante o CNJ completo no campo
           carregarPeritosProcesso(match.id);                      // peritos do processo selecionado
+          carregarReusProcesso(match.id);                          // réus disponíveis como local da perícia
         }
       }
     } catch {}
@@ -372,9 +436,7 @@ export function ModalPericia({ tipos, pericia, processoInicial, onTiposChange, o
 
   async function buscarPeritos(termo) {
     if (termo.length < 2) { setPeritosBusca([]); return; }
-    const tipo = form.perito_tipo || 'fisica';
-    const fn = tipo === 'fisica' ? pessoasAPI.listarFisicas : pessoasAPI.listarJuridicas;
-    const { data } = await fn({ busca: termo, limite: 10 });
+    const { data } = await pessoasAPI.listarFisicas({ busca: termo, limite: 10, selecao: 1, somente_peritos: 1 });
     if (data.ok) setPeritosBusca(data.dados.registros);
   }
 
@@ -401,16 +463,72 @@ export function ModalPericia({ tipos, pericia, processoInicial, onTiposChange, o
 
   function set(k, v) { setForm(f => ({...f, [k]: v})); }
 
-  function selecionarPerito(tipo, id, nome) {
-    set('perito_tipo', tipo);
+  function selecionarPerito(id, nome) {
+    set('perito_tipo', 'fisica');
     set('perito_id', id);
     setBuscaPerito(nome);
     setPeritosBusca([]);
   }
 
+  function alternarLocalReu(reu) {
+    const chave = chavePessoaLocal(reu);
+    setLocaisReus(atual => {
+      if (atual.some(x => chavePessoaLocal(x) === chave)) {
+        return atual.filter(x => chavePessoaLocal(x) !== chave);
+      }
+      if (reu.endereco_incompleto) {
+        setAvisoPericia(`O réu "${reu.nome}" está sem endereço completo. Atualize o cadastro antes de usar como local.`);
+        return atual;
+      }
+      setAvisoPericia('');
+      return [...atual, { tipo_pessoa: reu.tipo_pessoa, pessoa_id: reu.pessoa_id, nome: reu.nome }];
+    });
+  }
+
+  function abrirCadastroReuPendente() {
+    if (!reuPendenteEscolhido) return;
+    setModalCadastroReu({
+      tipo: reuPendenteEscolhido.tipo_pessoa === 'juridica' ? 'juridicas' : 'fisicas',
+      pessoa: {
+        id: reuPendenteEscolhido.pessoa_id,
+        nome: reuPendenteEscolhido.nome,
+        razao_social: reuPendenteEscolhido.nome,
+      },
+    });
+  }
+
+  async function fecharCadastroReuPendente(recarregar) {
+    const editado = modalCadastroReu;
+    setModalCadastroReu(null);
+    if (!recarregar || !form.processo_id) return;
+
+    const atualizados = await carregarReusProcesso(form.processo_id);
+    const pendentes = atualizados.filter(r => r.endereco_incompleto);
+    const chaveEditado = editado?.pessoa
+      ? `${editado.tipo === 'juridicas' ? 'juridica' : 'fisica'}:${editado.pessoa.id}`
+      : '';
+    const proximo = pendentes.find(r => chavePessoaLocal(r) !== chaveEditado) || pendentes[0] || null;
+
+    setReuPendenteSelecionado(proximo ? chavePessoaLocal(proximo) : '');
+    setAvisoPericia(
+      proximo
+        ? 'Cadastro atualizado. Ainda existe réu com endereço pendente.'
+        : 'Cadastro atualizado. Todos os réus já estão com endereço completo.'
+    );
+  }
+
   async function salvar() {
     if (!form.processo_id) return toast.error('Número do processo é obrigatório');
     if (!form.data)        return toast.error('Data é obrigatória');
+    if (locaisReus.length === 0 && !temEnderecoManual(form)) {
+      setAvisoPericia('Informe pelo menos um local para a perícia');
+      return;
+    }
+    if (localManualAtivo && !temEnderecoManual(form)) {
+      setAvisoPericia('Preencha o local manual ou desmarque a opção "Adicionar outro local manual"');
+      return;
+    }
+    setAvisoPericia('');
 
     // Regra (15/06): agendar perícia com data retroativa, fim de semana, feriado ou fora do
     // horário de expediente (08:00–18:00) SÓ é permitido com confirmação por senha do usuário.
@@ -458,7 +576,17 @@ export function ModalPericia({ tipos, pericia, processoInicial, onTiposChange, o
   async function executarSalvar(obs_auditoria) {
     setSalvando(true);
     try {
-      const payload = { ...form, responsavel_id: form.responsavel_id || null, obs_auditoria };
+      const payload = {
+        ...form,
+        responsavel_id: form.responsavel_id || null,
+        locais_reus: locaisReus.map(r => ({ tipo_pessoa: r.tipo_pessoa, pessoa_id: r.pessoa_id })),
+        obs_auditoria
+      };
+      if (!localManualAtivo) {
+        ['local', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado'].forEach(campo => {
+          payload[campo] = null;
+        });
+      }
       if (pericia?.id) {
         await periciasAPI.atualizar(pericia.id, payload);
         toast.success('Perícia atualizada!');
@@ -511,6 +639,12 @@ export function ModalPericia({ tipos, pericia, processoInicial, onTiposChange, o
               style={{background:'#f8fafc', cursor:'default'}} />
           </div>
 
+          {avisoPericia && (
+            <div style={{background:'#fff7ed',border:'1px solid #fed7aa',borderRadius:8,padding:10,marginBottom:12,color:'#9a3412'}}>
+              {avisoPericia}
+            </div>
+          )}
+
           <div className="grid-3">
             <div className="form-group">
               <label className="form-label">Tipo de perícia</label>
@@ -539,65 +673,126 @@ export function ModalPericia({ tipos, pericia, processoInicial, onTiposChange, o
             </div>
           </div>
 
-          {/* Local — nome/referência opcional */}
+          {/* Locais da perícia — réus do processo + local manual opcional */}
           <div className="form-group">
-            <label className="form-label">Nome/Referência do local (opcional)</label>
-            <input className="form-control" value={form.local||''}
-              onChange={e => set('local', e.target.value)}
-              onBlur={() => set('local', toTitleCase(form.local))}
-              placeholder="Ex: IML Central, Consultório Dr. Fulano, Canteiro de obra..." />
+            <label className="form-label">Onde será realizada a perícia? *</label>
+            {reusPendentesEndereco.length > 0 && (
+              <div style={{background:'#fff7ed',border:'1px solid #fed7aa',borderRadius:8,padding:10,marginBottom:10,color:'#9a3412'}}>
+                <div style={{fontWeight:700,marginBottom:6}}>
+                  {reusPendentesEndereco.length === 1
+                    ? 'Existe 1 réu sem endereço completo.'
+                    : `Existem ${reusPendentesEndereco.length} réus sem endereço completo.`}
+                </div>
+                <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                  <select className="form-control" style={{maxWidth:420}}
+                    value={reuPendenteEscolhido ? chavePessoaLocal(reuPendenteEscolhido) : ''}
+                    onChange={e => setReuPendenteSelecionado(e.target.value)}>
+                    {reusPendentesEndereco.map(r => (
+                      <option key={chavePessoaLocal(r)} value={chavePessoaLocal(r)}>{r.nome}</option>
+                    ))}
+                  </select>
+                  <button type="button" className="btn btn-outline" onClick={abrirCadastroReuPendente}>
+                    Abrir cadastro do réu selecionado
+                  </button>
+                </div>
+                <small style={{display:'block',marginTop:6,color:'#b45309'}}>
+                  Complete o endereço no cadastro da pessoa. Depois de salvar, esta lista será atualizada aqui.
+                </small>
+              </div>
+            )}
+            {reusProcesso.length > 0 ? (
+              <div style={{border:'1px solid #e5e7eb',borderRadius:8,padding:10,background:'#fbfdff'}}>
+                {reusProcesso.map(r => {
+                  const marcado = locaisReus.some(x => chavePessoaLocal(x) === chavePessoaLocal(r));
+                  return (
+                    <label key={chavePessoaLocal(r)} style={{display:'block',padding:'8px 4px',borderBottom:'1px solid #eef2f7'}}>
+                      <input type="checkbox" checked={marcado} disabled={r.endereco_incompleto}
+                        onChange={() => alternarLocalReu(r)} style={{marginRight:8}} />
+                      <strong>{r.nome}</strong>
+                      <small style={{display:'block',marginLeft:24,color:r.endereco_incompleto ? '#b45309' : '#64748b'}}>
+                        {r.endereco_incompleto
+                          ? 'Endereço incompleto — edite o cadastro deste réu antes de usar como local.'
+                          : enderecoResumo(r)}
+                        {r.telefone ? ` · Tel: ${r.telefone}` : ''}
+                      </small>
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <small style={{color:'#888'}}>Nenhum réu carregado para este processo.</small>
+            )}
           </div>
 
-          {/* Endereço estruturado (CEP → ViaCEP).
-              autoComplete="off" em todos: impede o navegador de tratar como endereço pessoal
-              e oferecer "salvar endereço" (vale em qualquer micro/navegador, sem config local). */}
-          <div className="grid-3">
-            <div className="form-group">
-              <label className="form-label">CEP {buscandoCep && <small style={{color:'#3b82f6'}}>(buscando...)</small>}</label>
-              <input className="form-control" autoComplete="off" value={form.cep||''}
-                onChange={e => {
-                  const v = e.target.value.replace(/\D/g,'').slice(0,8);
-                  const fmt = v.length > 5 ? v.replace(/(\d{5})(\d)/,'$1-$2') : v;
-                  set('cep', fmt);
-                  if (v.length === 8) buscarCep(v);
-                }}
-                placeholder="00000-000" maxLength={9} />
-            </div>
-            <div className="form-group" style={{gridColumn:'span 2'}}>
-              <label className="form-label">Logradouro</label>
-              <input className="form-control" autoComplete="off" value={form.logradouro||''}
-                onChange={e => set('logradouro', e.target.value)} />
-            </div>
+          <div className="form-group">
+            <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+              <input type="checkbox" checked={localManualAtivo} onChange={e => setLocalManualAtivo(e.target.checked)} />
+              <span>Adicionar outro local manual</span>
+            </label>
           </div>
-          <div className="grid-3">
-            <div className="form-group">
-              <label className="form-label">Número</label>
-              <input className="form-control" autoComplete="off" value={form.numero||''}
-                onChange={e => set('numero', e.target.value)} />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Complemento</label>
-              <input className="form-control" autoComplete="off" value={form.complemento||''}
-                onChange={e => set('complemento', e.target.value)} />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Bairro</label>
-              <input className="form-control" autoComplete="off" value={form.bairro||''}
-                onChange={e => set('bairro', e.target.value)} />
-            </div>
-          </div>
-          <div className="grid-3">
-            <div className="form-group" style={{gridColumn:'span 2'}}>
-              <label className="form-label">Cidade</label>
-              <input className="form-control" autoComplete="off" value={form.cidade||''}
-                onChange={e => set('cidade', e.target.value)} />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Estado</label>
-              <input className="form-control" autoComplete="off" value={form.estado||''}
-                onChange={e => set('estado', e.target.value)} placeholder="SP" maxLength={2} />
-            </div>
-          </div>
+
+          {localManualAtivo && (
+            <>
+              <div className="form-group">
+                <label className="form-label">Nome/Referência do local</label>
+                <input className="form-control" value={form.local||''}
+                  onChange={e => set('local', e.target.value)}
+                  onBlur={() => set('local', toTitleCase(form.local))}
+                  placeholder="Ex: IML Central, Consultório Dr. Fulano, Canteiro de obra..." />
+              </div>
+
+              {/* Endereço estruturado (CEP → ViaCEP).
+                  autoComplete="off" em todos: impede o navegador de tratar como endereço pessoal
+                  e oferecer "salvar endereço" (vale em qualquer micro/navegador, sem config local). */}
+              <div className="grid-3">
+                <div className="form-group">
+                  <label className="form-label">CEP {buscandoCep && <small style={{color:'#3b82f6'}}>(buscando...)</small>}</label>
+                  <input className="form-control" autoComplete="off" value={form.cep||''}
+                    onChange={e => {
+                      const v = e.target.value.replace(/\D/g,'').slice(0,8);
+                      const fmt = v.length > 5 ? v.replace(/(\d{5})(\d)/,'$1-$2') : v;
+                      set('cep', fmt);
+                      if (v.length === 8) buscarCep(v);
+                    }}
+                    placeholder="00000-000" maxLength={9} />
+                </div>
+                <div className="form-group" style={{gridColumn:'span 2'}}>
+                  <label className="form-label">Logradouro</label>
+                  <input className="form-control" autoComplete="off" value={form.logradouro||''}
+                    onChange={e => set('logradouro', e.target.value)} />
+                </div>
+              </div>
+              <div className="grid-3">
+                <div className="form-group">
+                  <label className="form-label">Número</label>
+                  <input className="form-control" autoComplete="off" value={form.numero||''}
+                    onChange={e => set('numero', e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Complemento</label>
+                  <input className="form-control" autoComplete="off" value={form.complemento||''}
+                    onChange={e => set('complemento', e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Bairro</label>
+                  <input className="form-control" autoComplete="off" value={form.bairro||''}
+                    onChange={e => set('bairro', e.target.value)} />
+                </div>
+              </div>
+              <div className="grid-3">
+                <div className="form-group" style={{gridColumn:'span 2'}}>
+                  <label className="form-label">Cidade</label>
+                  <input className="form-control" autoComplete="off" value={form.cidade||''}
+                    onChange={e => set('cidade', e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Estado</label>
+                  <input className="form-control" autoComplete="off" value={form.estado||''}
+                    onChange={e => set('estado', e.target.value)} placeholder="SP" maxLength={2} />
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Responsável + Assistente técnico */}
           <div className="grid-2">
@@ -623,53 +818,54 @@ export function ModalPericia({ tipos, pericia, processoInicial, onTiposChange, o
             </div>
           </div>
 
-          {/* Perito — primeiro os peritos do processo, com busca avulsa de apoio */}
+          {/* Perito — pessoa física cuja profissão começa com "Perito" */}
           <div className="form-group">
             <label className="form-label">Perito</label>
             {peritosProc.length > 0 ? (
               <select className="form-control"
-                value={form.perito_id ? `${form.perito_tipo}:${form.perito_id}` : ''}
+                value={form.perito_id ? `fisica:${form.perito_id}` : ''}
                 onChange={e => {
-                  if (!e.target.value) { selecionarPerito('', '', ''); return; }
+                  if (!e.target.value) { selecionarPerito('', ''); return; }
                   const [tp, pid] = e.target.value.split(':');
                   const sel = peritosProc.find(x => x.tipo_pessoa === tp && String(x.pessoa_id) === pid);
-                  selecionarPerito(tp, pid, sel ? sel.nome : '');
+                  selecionarPerito(pid, sel ? sel.nome : '');
                 }}>
                 <option value="">— Selecione um perito do processo —</option>
                 {peritosProc.map(x => (
                   <option key={`${x.tipo_pessoa}:${x.pessoa_id}`} value={`${x.tipo_pessoa}:${x.pessoa_id}`}>
-                    {x.nome} ({x.tipo_pessoa === 'juridica' ? 'PJ' : 'PF'})
+                    {x.nome}{x.telefone ? ` · ${x.telefone}` : ''}{x.email ? ` · ${x.email}` : ''}
                   </option>
                 ))}
               </select>
             ) : (
               <small style={{color:'#888'}}>
-                Nenhum perito vinculado a este processo. Cadastre os peritos no processo, ou busque abaixo.
+                Nenhum perito vinculado a este processo. Busque abaixo ou cadastre pelo botão "...".
               </small>
             )}
             {/* Busca avulsa (caso o perito ainda não esteja no processo) */}
             <div style={{display:'flex',gap:'8px',marginTop:'8px'}}>
-              <select className="form-control" style={{maxWidth:'130px'}}
-                value={form.perito_tipo||'fisica'}
-                onChange={e => { set('perito_tipo', e.target.value); setPeritosBusca([]); }}>
-                <option value="fisica">Física</option>
-                <option value="juridica">Jurídica</option>
-              </select>
               <div style={{flex:1,position:'relative'}}>
-                <input className="form-control" placeholder="Buscar outra pessoa como perito..."
+                <input className="form-control" placeholder="Buscar perito por nome, telefone ou e-mail..."
                   value={buscaPerito}
                   onChange={e => { setBuscaPerito(e.target.value); buscarPeritos(e.target.value); }} />
                 {peritosBusca.length > 0 && (
                   <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:'1px solid #ddd',borderRadius:'6px',zIndex:20,maxHeight:'130px',overflowY:'auto',boxShadow:'0 4px 12px rgba(0,0,0,0.1)'}}>
                     {peritosBusca.map(p => (
                       <div key={p.id} style={{padding:'8px 12px',cursor:'pointer',borderBottom:'1px solid #f0f0f0'}}
-                        onClick={() => selecionarPerito(form.perito_tipo||'fisica', p.id, p.nome || p.razao_social)}>
-                        {p.nome || p.razao_social}
+                        onClick={() => selecionarPerito(p.id, p.nome)}>
+                        <strong>{p.nome}</strong>
+                        <small style={{display:'block',color:'#64748b'}}>
+                          {p.telefone ? `Tel: ${p.telefone}` : 'Sem telefone principal'}
+                          {p.email ? ` · ${p.email}` : ''}
+                        </small>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
+              <button type="button" title="Cadastrar perito"
+                style={{padding:'0 12px',border:'1px solid #ddd',borderRadius:'6px',background:'#f8fafc',cursor:'pointer',fontSize:'18px'}}
+                onClick={() => setModalPeritoRapido(true)}>…</button>
             </div>
           </div>
         </div>
@@ -680,6 +876,25 @@ export function ModalPericia({ tipos, pericia, processoInicial, onTiposChange, o
           </button>
         </div>
       </div>
+
+      {modalPeritoRapido && (
+        <ModalCadastroPeritoRapido
+          profissoes={auxiliares.profissoes || []}
+          onFechar={() => setModalPeritoRapido(false)}
+          onSalvo={(novo) => {
+            selecionarPerito(novo.id, novo.nome);
+            setModalPeritoRapido(false);
+          }}
+        />
+      )}
+
+      {modalCadastroReu && (
+        <ModalPessoa
+          tipo={modalCadastroReu.tipo}
+          pessoa={modalCadastroReu.pessoa}
+          onFechar={fecharCadastroReuPendente}
+        />
+      )}
 
       {/* Confirmação de dia não útil com senha */}
       {senhaDiaUtil && (
@@ -697,6 +912,142 @@ export function ModalPericia({ tipos, pericia, processoInicial, onTiposChange, o
           onAtualizar={onTiposChange}
         />
       )}
+    </div>
+  );
+}
+
+function ModalCadastroPeritoRapido({ profissoes, onFechar, onSalvo }) {
+  const peritoProfissoes = (profissoes || []).filter(p => String(p.nome || '').toLowerCase().startsWith('perito'));
+  const [form, setForm] = useState({
+    nome: '',
+    cpf: '',
+    profissao_id: peritoProfissoes[0]?.id || '',
+    telefone: '',
+    email: '',
+    observacoes: '',
+  });
+  const [salvando, setSalvando] = useState(false);
+  const [duplicados, setDuplicados] = useState([]);
+  const [confirmarDuplicado, setConfirmarDuplicado] = useState(false);
+  const [aviso, setAviso] = useState('');
+
+  function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
+
+  async function salvar() {
+    if (!form.nome.trim()) {
+      setAviso('Nome do perito é obrigatório');
+      return;
+    }
+    if (!form.profissao_id) {
+      setAviso('Cadastre ou selecione uma profissão que comece com "Perito"');
+      return;
+    }
+
+    if (!form.cpf && !confirmarDuplicado) {
+      try {
+        const { data } = await pessoasAPI.listarFisicas({ busca: form.nome.trim(), limite: 5, selecao: 1, somente_peritos: 1 });
+        const encontrados = data.ok ? (data.dados.registros || []) : [];
+        if (encontrados.length > 0) {
+          setDuplicados(encontrados);
+          setConfirmarDuplicado(true);
+          return;
+        }
+      } catch { /* se a checagem falhar, deixa seguir para o backend validar */ }
+    }
+
+    setSalvando(true);
+    try {
+      const payload = {
+        nome: toTitleCase(form.nome.trim()),
+        cpf: form.cpf || null,
+        profissao_id: form.profissao_id,
+        observacoes: form.observacoes || null,
+        telefones: form.telefone ? [{ numero: form.telefone, tipo: 'Celular', principal: true }] : [],
+        emails: form.email ? [{ email: form.email, principal: true }] : [],
+      };
+      const { data } = await pessoasAPI.criarFisica(payload);
+      if (data.ok) {
+        onSalvo({ id: data.dados.id, nome: payload.nome });
+      }
+    } catch (err) {
+      setAviso(err.response?.data?.mensagem || 'Erro ao cadastrar perito');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box">
+        <div className="modal-header">
+          <h3>Cadastrar perito</h3>
+          <button className="modal-fechar" onClick={onFechar}>✕</button>
+        </div>
+        <div className="modal-body">
+          {aviso && (
+            <div style={{background:'#fff7ed',border:'1px solid #fed7aa',borderRadius:8,padding:10,marginBottom:12,color:'#9a3412'}}>
+              {aviso}
+            </div>
+          )}
+          <div className="form-group">
+            <label className="form-label">Nome *</label>
+            <input className="form-control" value={form.nome}
+              onChange={e => { set('nome', e.target.value); setConfirmarDuplicado(false); setDuplicados([]); }}
+              onBlur={() => set('nome', toTitleCase(form.nome))}
+              autoFocus />
+          </div>
+          <div className="grid-2">
+            <div className="form-group">
+              <label className="form-label">CPF (opcional)</label>
+              <input className="form-control" value={form.cpf}
+                onChange={e => set('cpf', e.target.value)} placeholder="Pode ficar em branco" />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Profissão *</label>
+              <select className="form-control" value={form.profissao_id}
+                onChange={e => set('profissao_id', e.target.value)}>
+                <option value="">— Selecione —</option>
+                {peritoProfissoes.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+              </select>
+              {peritoProfissoes.length === 0 && (
+                <small style={{color:'#b45309'}}>Nenhuma profissão iniciando com "Perito" encontrada no cadastro.</small>
+              )}
+            </div>
+          </div>
+          <div className="grid-2">
+            <div className="form-group">
+              <label className="form-label">Telefone principal</label>
+              <input className="form-control" value={form.telefone}
+                onChange={e => set('telefone', e.target.value)} placeholder="(11) 99999-9999" />
+            </div>
+            <div className="form-group">
+              <label className="form-label">E-mail principal</label>
+              <input className="form-control" type="email" value={form.email}
+                onChange={e => set('email', e.target.value)} />
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Observações</label>
+            <textarea className="form-control" rows={3} value={form.observacoes}
+              onChange={e => set('observacoes', e.target.value)} />
+          </div>
+          {duplicados.length > 0 && (
+            <div style={{background:'#fff7ed',border:'1px solid #fed7aa',borderRadius:8,padding:10,fontSize:13,color:'#9a3412'}}>
+              Já existe perito parecido. Confira antes de cadastrar outro:
+              <ul style={{margin:'6px 0 0 18px'}}>
+                {duplicados.map(d => <li key={d.id}>{d.nome}{d.telefone ? ` — ${d.telefone}` : ''}</li>)}
+              </ul>
+              Se for outro perito mesmo, clique novamente em salvar.
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onFechar}>Cancelar</button>
+          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+            {salvando ? 'Salvando...' : (confirmarDuplicado ? 'Salvar mesmo assim' : 'Salvar')}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -63,6 +63,63 @@ async function emailPrazoDelegado({ para, nomePara, prazo, escritorio }) {
   }
 }
 
+// ── E-mail da TAREFA (pedido explícito no formulário) ─────────────────────
+
+// Escapa o que o usuário digitou antes de entrar no HTML do e-mail (título e
+// descrição são texto livre; um "&" ou "<" não pode quebrar o layout).
+function escaparHtml(txt) {
+  return String(txt == null ? '' : txt)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Enviado quando quem cria/edita a tarefa marca "Enviar e-mail para <pessoa>".
+// Diferente do prazo (que dispara sozinho ao delegar), aqui o envio é SEMPRE um
+// ato deliberado de quem salvou — por isso vale até quando a pessoa é o próprio
+// autor da tarefa ou tem o aviso por e-mail desligado no cadastro dela.
+// NUNCA lança: a tarefa já está gravada e não pode ser desfeita por causa do
+// e-mail. Devolve { ok: true } ou { ok: false, erro } para a tela avisar.
+async function emailTarefaAtribuida({ para, nomePara, tarefa, escritorio, edicao = false }) {
+  const titulo  = tarefa.titulo || 'Tarefa';
+  const assunto = edicao
+    ? `Tarefa atualizada — ${titulo}`
+    : `Nova tarefa atribuída a você — ${titulo}`;
+
+  const PRIORIDADE = { urgente: '🔴 Urgente', normal: '🟡 Normal', baixa: '🟢 Baixa' };
+  const linha = (rotulo, valor) => valor ? `
+        <tr><td style="padding:8px;background:#f3f4f6;font-weight:bold;width:35%">${rotulo}</td>
+            <td style="padding:8px;background:#f9fafb">${escaparHtml(valor)}</td></tr>` : '';
+
+  const html = `
+  <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
+    <div style="background:#2563eb;padding:20px;text-align:center">
+      <h2 style="color:#fff;margin:0">${escaparHtml(escritorio || 'Sistema de Advocacia')}</h2>
+    </div>
+    <div style="padding:24px">
+      <p>Olá, <strong>${escaparHtml(nomePara)}</strong>.</p>
+      <p>${edicao ? 'Uma tarefa sua foi atualizada:' : 'Uma nova tarefa foi atribuída a você:'}</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0">
+        ${linha('Tarefa', titulo)}
+        ${linha('Descrição', tarefa.descricao)}
+        ${linha('Prioridade', PRIORIDADE[tarefa.prioridade] || tarefa.prioridade)}
+        ${linha('Vencimento', tarefa.venc_fmt)}
+        ${linha('Processo', tarefa.processo_numero)}
+        ${linha('Pasta', tarefa.pasta_fmt)}
+        ${linha(edicao ? 'Alterada por' : 'Criada por', tarefa.autor_nome)}
+      </table>
+      <p style="color:#555;font-size:13px">Acesse o sistema para mais detalhes.</p>
+    </div>
+  </div>`;
+
+  try {
+    await enviarEmail({ para, assunto, html, destinatarioNome: nomePara });
+    return { ok: true };
+  } catch (err) {
+    console.error('Erro ao enviar e-mail da tarefa:', err.message);
+    return { ok: false, erro: err.message };
+  }
+}
+
 // ── E-mails coletivos (chamados pelo job diário) ──────────────────────────
 
 // E-mail "PRAZO PENDENTE HOJE" — lista de prazos que vencem hoje
@@ -151,6 +208,7 @@ module.exports = {
   criarNotificacao,
   notificarConclusao,
   emailPrazoDelegado,
+  emailTarefaAtribuida,
   emailPrazosPendentes,
   emailPrazosAtrasados,
 };

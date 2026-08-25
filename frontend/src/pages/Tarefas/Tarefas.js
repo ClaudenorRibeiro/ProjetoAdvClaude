@@ -524,6 +524,9 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
   const dataVencRef  = useRef(null);
   // Avisar o criador (você) no sino quando a tarefa for concluída (criar E editar).
   const [notificarConclusao, setNotificarConclusao] = useState(!!tarefa?.notificar_conclusao);
+  // Enviar e-mail ao responsável ao salvar. É uma AÇÃO, não um ajuste guardado: começa
+  // sempre desmarcado (inclusive na edição), e cada salvamento decide se manda ou não.
+  const [enviarEmailPara, setEnviarEmailPara] = useState(false);
   const { ehAdmin } = useAuth();
 
   // Busca de processo (CNJ) — inicializa com pré-seleção se vier do PastaDetalhe
@@ -637,14 +640,34 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
         processo_id: tipo === 'processo' ? form.processo_id : null,
       };
 
+      // Sem responsável (tarefa do "Escritório") não há para quem mandar — o back também confere.
+      const pedirEmail = (enviarEmailPara && form.atribuida_para) ? 1 : 0;
+      const extras = {
+        notificar_conclusao: (notificarConclusao && form.atribuida_para) ? 1 : 0,
+        enviar_email: pedirEmail,
+      };
+
+      let resp;
       if (tarefa?.id) {
-        await tarefasAPI.atualizar(tarefa.id, { ...payload, notificar_conclusao: (notificarConclusao && form.atribuida_para) ? 1 : 0 });
-        toast.success('Tarefa atualizada!');
+        resp = await tarefasAPI.atualizar(tarefa.id, { ...payload, ...extras });
       } else {
         // Vínculo de origem (quando a tarefa nasce de uma publicação) + aviso de conclusão. Só na criação.
-        await tarefasAPI.criar({ ...payload, publicacao_id: publicacaoId || null, notificar_conclusao: (notificarConclusao && form.atribuida_para) ? 1 : 0 });
-        toast.success('Tarefa criada!');
+        resp = await tarefasAPI.criar({ ...payload, publicacao_id: publicacaoId || null, ...extras });
       }
+
+      // A tarefa JÁ FOI GRAVADA aqui. Se o e-mail não saiu, avisa numa janela (nunca no
+      // canto da tela) e só depois fecha o formulário — o salvamento não se perde.
+      const email = resp?.data?.dados?.email;
+      if (email && !email.ok) {
+        return setInfo({
+          titulo: 'Tarefa salva — e-mail NÃO enviado',
+          tipo: 'aviso',
+          mensagem: `A tarefa foi gravada normalmente, mas o e-mail não pôde ser enviado. Motivo: ${email.erro || 'falha no envio'}`,
+          depois: () => onFechar(true),
+        });
+      }
+
+      toast.success((tarefa?.id ? 'Tarefa atualizada!' : 'Tarefa criada!') + (email?.ok ? ' E-mail enviado.' : ''));
       onFechar(true);
     } catch (err) {
       setAviso(err.response?.data?.mensagem || 'Não foi possível salvar a tarefa.');
@@ -669,6 +692,9 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
     setAviso('');
     executarSalvar();
   }
+
+  // Nome de quem está em "Atribuir para" — entra no rótulo do e-mail ("Enviar e-mail para Fulano").
+  const nomeAtribuido = usuarios.find(u => String(u.id) === String(form.atribuida_para))?.nome || '';
 
   return (
     <>
@@ -810,15 +836,17 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
             <div className="form-group">
               <label className="form-label">Atribuir para</label>
               <select className="form-control" value={form.atribuida_para}
-                onChange={e => { set('atribuida_para', e.target.value); if (!e.target.value) setNotificarConclusao(false); }}>
+                onChange={e => { set('atribuida_para', e.target.value); if (!e.target.value) { setNotificarConclusao(false); setEnviarEmailPara(false); } }}>
                 <option value="">Escritório</option>
                 {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
               </select>
             </div>
           </div>
 
-          {/* Aviso de conclusão (criar e editar) — só com um usuário responsável (não para "Escritório") */}
-          <div className="form-group" style={{ marginTop: 4 }}>
+          {/* Aviso de conclusão e envio de e-mail (criar e editar) — os dois só com um
+              usuário responsável (não para "Escritório", que não tem endereço nem sino). */}
+          <div className="form-group" style={{ marginTop: 4, display: 'flex', alignItems: 'center',
+                                               justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14,
                             cursor: form.atribuida_para ? 'pointer' : 'not-allowed',
                             color: form.atribuida_para ? '#111' : '#9ca3af' }}>
@@ -827,6 +855,16 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
                 onChange={e => setNotificarConclusao(e.target.checked)} />
               🔔 Avisar-me quando esta tarefa for concluída
               {!form.atribuida_para && <span style={{ fontSize: 12 }}>— disponível ao atribuir a um usuário</span>}
+            </label>
+
+            {/* Envio na hora do salvamento: não fica guardado, cada salvamento decide de novo. */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14,
+                            cursor: form.atribuida_para ? 'pointer' : 'not-allowed',
+                            color: form.atribuida_para ? '#111' : '#9ca3af' }}>
+              <input type="checkbox" disabled={!form.atribuida_para}
+                checked={enviarEmailPara && !!form.atribuida_para}
+                onChange={e => setEnviarEmailPara(e.target.checked)} />
+              📧 Enviar e-mail{nomeAtribuido ? ` para ${nomeAtribuido}` : ''}
             </label>
           </div>
 
@@ -855,7 +893,9 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
     {info && (
       // z-index acima do modal para o aviso ficar sempre à frente
       <div style={{ position: 'relative', zIndex: 2000 }}>
-        <ModalInfo {...info} onFechar={() => { const f = info.focar; setInfo(null); if (f) setTimeout(f, 50); }} />
+        {/* focar = volta o cursor para o campo que faltou; depois = ação ao fechar
+            (usado quando a tarefa foi salva mas o e-mail falhou: fecha o formulário). */}
+        <ModalInfo {...info} onFechar={() => { const f = info.focar, d = info.depois; setInfo(null); if (f) setTimeout(f, 50); if (d) d(); }} />
       </div>
     )}
     </>

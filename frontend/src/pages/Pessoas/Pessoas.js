@@ -2442,7 +2442,8 @@ function CampoResponsavelLegal({ form, set, opcoesParentesco, onNovoParentesco, 
     if (termo.trim().length < 2) { setResult([]); return; }
     setBuscando(true);
     try {
-      const { data } = await pessoasAPI.listarFisicas({ busca: termo.trim(), limite: 8 });
+      // selecao: 1 → só nome/CPF, quem começa pelo termo primeiro (ver pessoasController).
+      const { data } = await pessoasAPI.listarFisicas({ busca: termo.trim(), limite: 8, selecao: 1 });
       // Ninguém é responsável por si mesmo — o próprio cadastro sai da lista
       if (data.ok) setResult((data.dados.registros || []).filter(p => p.id !== pessoaIdAtual));
     } catch {

@@ -121,7 +121,7 @@ const CATALOGO = {
       { tag: 'cep_audiencia',         descricao: 'CEP do fórum' },
       { tag: 'logradouro_audiencia',  descricao: 'Logradouro do fórum' },
       { tag: 'numero_audiencia',      descricao: 'Número do endereço do fórum' },
-      { tag: 'complemento_audiencia', descricao: 'Complemento do endereço do fórum' },
+      { tag: 'complemento_vara_audiencia', descricao: 'Complemento do endereço da vara da audiência' },
       { tag: 'bairro_audiencia',      descricao: 'Bairro do fórum' },
       { tag: 'cidade_audiencia',      descricao: 'Cidade do fórum' },
       { tag: 'estado_audiencia',      descricao: 'UF do fórum' },
@@ -139,6 +139,7 @@ const CATALOGO = {
       { tag: 'local_pericia', descricao: 'Local da perícia' },
       { tag: 'tipo_pericia',  descricao: 'Tipo da perícia' },
       { tag: 'perito',        descricao: 'Perito' },
+      { tag: 'telefone_perito', descricao: 'Telefone principal do perito' },
     ],
   },
   escritorio: {

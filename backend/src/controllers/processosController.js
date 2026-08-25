@@ -42,7 +42,7 @@ async function sugerirNumeroPasta(req, res) {
 // GET /api/processos/pastas — Lista pastas com resumo do processo mais recente
 async function listarPastas(req, res) {
   try {
-    const { busca, pagina = 1, limite = 20, etiqueta, etiquetaEscritorio } = req.query;
+    const { busca, pagina = 1, limite = 20, etiqueta, etiquetaEscritorio, assuntos } = req.query;
     const limitInt  = parseInt(limite) || 20;
     const offsetInt = (parseInt(pagina) - 1) * limitInt;
     const params = [];
@@ -57,7 +57,7 @@ async function listarPastas(req, res) {
       const bL = `%${busca}%`;
       const bD = buscaDigitos.length >= 3 ? `%${buscaDigitos}%` : bL;
 
-      // Busca em: nº pasta, título, nº CNJ, e TODOS os polos (autores e réus, físicos e jurídicos)
+      // Busca em: nº pasta, título, nº CNJ, protocolo e TODOS os polos (autores e réus, físicos e jurídicos)
       where += ` AND (
         LPAD(pa.numPasta, 4, '0') LIKE ?
         OR EXISTS (
@@ -107,6 +107,23 @@ async function listarPastas(req, res) {
         bL, bD, bD,      // réu físico:     nome, cpf, telefone
         bL, bL, bD, bD   // réu jurídico:   razao_social, nome_fantasia, cnpj, telefone
       );
+    }
+
+    const assuntoIds = String(assuntos || '')
+      .split(',')
+      .map(v => parseInt(v, 10))
+      .filter(v => Number.isInteger(v) && v > 0);
+    if (assuntoIds.length > 0) {
+      where += ` AND EXISTS (
+        SELECT 1
+        FROM tblproc p_ass
+        JOIN processo_assunto pas ON pas.processo_id = p_ass.id
+        JOIN tblassuntoproc ap ON ap.id = pas.assunto_id AND ap.ativo = 1
+        WHERE p_ass.pasta_id = pa.id
+          AND p_ass.ativo = 1
+          AND pas.assunto_id IN (${assuntoIds.map(() => '?').join(',')})
+      )`;
+      params.push(...assuntoIds);
     }
 
     // Filtro por etiqueta PESSOAL do usuário logado (só pastas que ELE marcou com aquela cor).
@@ -272,7 +289,7 @@ async function buscarPasta(req, res) {
 
     // Para cada processo, busca autores e réus em paralelo
     for (const proc of processos) {
-      const [autores, reus, peritos] = await Promise.all([
+      const [autores, reus, peritos, assuntos] = await Promise.all([
         pool.execute(
           `SELECT ta.id, ta.tipo_pessoa, ta.pessoa_id,
                   CASE ta.tipo_pessoa
@@ -322,10 +339,19 @@ async function buscarPasta(req, res) {
            FROM processo_perito pp WHERE pp.proc_id = ?`,
           [proc.id]
         ),
+        pool.execute(
+          `SELECT pas.id, pas.assunto_id, ap.nome
+           FROM processo_assunto pas
+           JOIN tblassuntoproc ap ON ap.id = pas.assunto_id
+           WHERE pas.processo_id = ? AND ap.ativo = 1
+           ORDER BY ap.nome`,
+          [proc.id]
+        ),
       ]);
       proc.autores = autores[0];
       proc.reus    = reus[0];
       proc.peritos = peritos[0];
+      proc.assuntos = assuntos[0];
     }
 
     return sucesso(res, { ...pastas[0], processos });
@@ -396,6 +422,7 @@ async function criarProcesso(req, res) {
     autores = [],
     reus    = [],
     peritos = [],          // peritos vinculados ao processo (opcional)
+    assuntos = [],         // assuntos vinculados ao processo (opcional)
     cliente_polo,          // 'autor' ou 'reu' — qual polo é o cliente do escritório
   } = req.body;
 
@@ -509,6 +536,14 @@ async function criarProcesso(req, res) {
       );
     }
 
+    // Insere assuntos vinculados ao processo (opcional)
+    for (const assuntoId of assuntos) {
+      await conn.execute(
+        'INSERT INTO processo_assunto (processo_id, assunto_id, criado_por) VALUES (?, ?, ?)',
+        [procId, assuntoId, req.usuario.id]
+      );
+    }
+
     // Auditoria na MESMA transação (tudo ou nada): antes do commit, com conn
     await auditoria.registrar(req.usuario.id, 'tblproc', 'criar', procId, null, null, conn);
     await conn.commit();
@@ -578,6 +613,7 @@ async function excluirProcesso(req, res) {
     await conn.execute('DELETE FROM tbltituloprocautor WHERE proc_id = ?', [id]);
     await conn.execute('DELETE FROM tbltituloprocreu   WHERE proc_id = ?', [id]);
     await conn.execute('DELETE FROM processo_perito    WHERE proc_id = ?', [id]);
+    await conn.execute('DELETE FROM processo_assunto   WHERE processo_id = ?', [id]);
     await conn.execute('DELETE FROM tblproc WHERE id = ?', [id]);
 
     // Auditoria na MESMA transação. Guarda o NÚMERO do processo: depois da exclusão
@@ -604,7 +640,7 @@ async function atualizarProcesso(req, res) {
     numProc, protocolo, NomeTituloProc,
     vara_id, tipo_id, status_id, instancia_id,
     data_distribuicao, observacoes,
-    autores, reus, peritos, cliente_polo,
+    autores, reus, peritos, assuntos, cliente_polo,
   } = req.body;
 
   // cliente_polo é opcional; se vier preenchido precisa ser 'autor' ou 'reu'
@@ -703,6 +739,17 @@ async function atualizarProcesso(req, res) {
       }
     }
 
+    // Substitui os assuntos do processo se enviados
+    if (assuntos !== undefined) {
+      await conn.execute('DELETE FROM processo_assunto WHERE processo_id = ?', [id]);
+      for (const assuntoId of assuntos) {
+        await conn.execute(
+          'INSERT INTO processo_assunto (processo_id, assunto_id, criado_por) VALUES (?, ?, ?)',
+          [id, assuntoId, req.usuario.id]
+        );
+      }
+    }
+
     // Auditoria na MESMA transação (tudo ou nada): antes do commit, com conn
     await auditoria.registrar(req.usuario.id, 'tblproc', 'editar', id, antes[0], null, conn);
     await conn.commit();
@@ -722,7 +769,7 @@ async function atualizarProcesso(req, res) {
 // GET /api/processos/auxiliares — Dados para selects do formulário
 async function buscarAuxiliares(req, res) {
   try {
-    const [foruns, varas, tipos, status, instancias, usuarios] = await Promise.all([
+    const [foruns, varas, tipos, status, instancias, usuarios, assuntos] = await Promise.all([
       pool.execute('SELECT * FROM tblforum WHERE ativo=1 ORDER BY nome'),
       pool.execute(`SELECT v.*,
                            f.nome AS forum_nome, f.abrev_nome AS forum_abrev_nome,
@@ -735,6 +782,7 @@ async function buscarAuxiliares(req, res) {
       pool.execute('SELECT * FROM tblstatusproc WHERE ativo=1 ORDER BY nome'),
       pool.execute('SELECT * FROM tblinstanciaproc WHERE ativo=1 ORDER BY nome'),
       pool.execute('SELECT id, nome, tipo FROM usuarios WHERE ativo=1 AND nivel > 0 ORDER BY nome'),
+      pool.execute('SELECT * FROM tblassuntoproc WHERE ativo=1 ORDER BY nome'),
     ]);
 
     return sucesso(res, {
@@ -744,6 +792,7 @@ async function buscarAuxiliares(req, res) {
       status:    status[0],
       instancias: instancias[0],
       usuarios:  usuarios[0],
+      assuntos:  assuntos[0],
     });
   } catch (err) {
     return erroInterno(res, err);
@@ -887,6 +936,22 @@ async function criarInstancia(req, res) {
   }
 }
 
+// POST /api/processos/auxiliares/assuntos
+async function criarAssuntoProc(req, res) {
+  try {
+    const { nome } = req.body;
+    if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
+    const [r] = await pool.execute(
+      'INSERT INTO tblassuntoproc (nome, criado_por) VALUES (?, ?)',
+      [nome.trim(), req.usuario.id]
+    );
+    return sucesso(res, { id: r.insertId, nome: nome.trim() }, 'Assunto criado com sucesso', 201);
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') return erro(res, 'Já existe um assunto cadastrado com este nome');
+    return erroInterno(res, err);
+  }
+}
+
 // PUT/DELETE auxiliares — Fórum
 async function atualizarForum(req, res) {
   const { id } = req.params;
@@ -997,6 +1062,53 @@ async function atualizarStatusProc(req, res) { return _atualizarAuxSimples(req, 
 async function excluirStatusProc(req, res)   { return _excluirAuxSimples(req, res, 'tblstatusproc', 'status_id'); }
 async function atualizarInstancia(req, res)  { return _atualizarAuxSimples(req, res, 'tblinstanciaproc'); }
 async function excluirInstancia(req, res)    { return _excluirAuxSimples(req, res, 'tblinstanciaproc', 'instancia_id'); }
+
+async function atualizarAssuntoProc(req, res) {
+  const { id } = req.params;
+  const { nome } = req.body;
+  if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
+  try {
+    const [r] = await pool.execute(
+      'UPDATE tblassuntoproc SET nome=?, alterado_por=?, alterado_em=NOW() WHERE id=? AND ativo=1',
+      [nome.trim(), req.usuario.id, id]
+    );
+    if (!r.affectedRows) return naoEncontrado(res, 'Assunto não encontrado');
+    return sucesso(res, { id: parseInt(id), nome: nome.trim() }, 'Assunto atualizado');
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') return erro(res, 'Já existe um assunto cadastrado com este nome');
+    return erroInterno(res, err);
+  }
+}
+
+async function excluirAssuntoProc(req, res) {
+  const { id } = req.params;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [uso] = await conn.execute(
+      'SELECT COUNT(*) AS total FROM processo_assunto WHERE assunto_id=?',
+      [id]
+    );
+    if (uso[0].total > 0) {
+      await conn.rollback();
+      return erro(res, `Não é possível excluir — este assunto está vinculado a ${uso[0].total} processo(s)`);
+    }
+
+    await conn.execute(
+      'UPDATE tblassuntoproc SET ativo=0, alterado_por=?, alterado_em=NOW() WHERE id=?',
+      [req.usuario.id, id]
+    );
+    await auditoria.registrar(req.usuario.id, 'tblassuntoproc', 'excluir', id, null, null, conn);
+    await conn.commit();
+    return sucesso(res, null, 'Assunto excluído com sucesso');
+  } catch (err) {
+    await conn.rollback();
+    return erroInterno(res, err);
+  } finally {
+    conn.release();
+  }
+}
 
 // GET /api/processos/buscar?q=termo — Busca processos por numProc ou NomeTituloProc
 // Retorna lista de processos com numPasta para autocomplete
@@ -1123,6 +1235,8 @@ module.exports = {
   criarStatusProc, atualizarStatusProc, excluirStatusProc,
   // Instância
   criarInstancia, atualizarInstancia, excluirInstancia,
+  // Assunto
+  criarAssuntoProc, atualizarAssuntoProc, excluirAssuntoProc,
   // Processos parados (risco de prescrição)
   contarProcessosParados, listarProcessosParados,
   // Fragmento SQL da "última ação" — o Dashboard reusa no quadro

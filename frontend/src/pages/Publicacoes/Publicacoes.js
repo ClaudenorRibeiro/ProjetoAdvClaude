@@ -8,7 +8,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { publicacoesAPI, agendaAPI } from '../../services/api';
+import { publicacoesAPI, agendaAPI, periciasAPI } from '../../services/api';
 import { formatarData, hojeLocal, textoLimpo } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
@@ -21,6 +21,7 @@ import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetasSubmenu, useEtiq
 import { ModalNovoPrazo } from '../Prazos/Prazos';
 import { ModalTarefa } from '../Tarefas/Tarefas';
 import { ModalCompromisso } from '../Agenda/Agenda';
+import { ModalPericia } from '../Pericias/Pericias';
 
 const POR_PAGINA = 30;
 
@@ -98,7 +99,7 @@ function excede3Meses(dataInicio, dataFim) {
 }
 
 // ------------------------------------------------------------
-// A partir de uma publicação: cria Prazo, Tarefa ou Compromisso reusando os modais
+// A partir de uma publicação: cria Prazo, Tarefa, Compromisso ou Perícia reusando os modais
 // existentes, já injetando o vínculo de origem (publicacao_id). No Prazo, o número do
 // processo da publicação já dispara a busca da pasta (o usuário escolhe qual é).
 // Compartilhado pelas duas abas (AASP e CNJ).
@@ -106,6 +107,36 @@ function excede3Meses(dataInicio, dataFim) {
 function ModalAcaoDaPublicacao({ acao, usuariosAgenda, usuarioLogadoId, ehAdmin, onFechar }) {
   const { tipo, pub } = acao;
   const numero = pub.numero_processo || '';
+  const [tiposPericia, setTiposPericia] = useState([]);
+  const [carregandoTiposPericia, setCarregandoTiposPericia] = useState(false);
+  const [avisoPericia, setAvisoPericia] = useState('');
+
+  const processoInicialPericia = pub.processo_id
+    ? {
+        processo_id: pub.processo_id,
+        processo_numero: pub.processo_numero || numero,
+        pasta_titulo: pub.pasta_titulo || '',
+      }
+    : null;
+
+  const carregarTiposPericia = useCallback(async () => {
+    setCarregandoTiposPericia(true);
+    setAvisoPericia('');
+    try {
+      const { data } = await periciasAPI.tipos();
+      if (data.ok) setTiposPericia(data.dados || []);
+      else setAvisoPericia(data.mensagem || 'Não foi possível carregar os tipos de perícia.');
+    } catch (err) {
+      setAvisoPericia(err.response?.data?.mensagem || 'Não foi possível carregar os tipos de perícia.');
+    } finally {
+      setCarregandoTiposPericia(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tipo === 'pericia') carregarTiposPericia();
+  }, [tipo, carregarTiposPericia]);
+
   if (tipo === 'prazo') {
     return <ModalNovoPrazo tipos={{ tipos: [], subtipos: [] }}
       buscaInicial={numero} publicacaoId={pub.id} onFechar={onFechar} />;
@@ -115,24 +146,93 @@ function ModalAcaoDaPublicacao({ acao, usuariosAgenda, usuarioLogadoId, ehAdmin,
       preSelecao={numero ? { tipo: 'processo', processo_numero: numero } : undefined}
       publicacaoId={pub.id} onFechar={onFechar} />;
   }
+  if (tipo === 'pericia') {
+    if (!processoInicialPericia) {
+      return (
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <div className="modal-header">
+              <h3>Criar perícia</h3>
+              <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div className="alerta alerta-aviso">
+                Esta publicação ainda não está vinculada a um processo cadastrado. Cadastre ou vincule o processo antes de criar a perícia.
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => onFechar(false)}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    if (carregandoTiposPericia) {
+      return (
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <div className="modal-header">
+              <h3>Criar perícia</h3>
+              <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
+            </div>
+            <div className="modal-body">Carregando cadastro da perícia...</div>
+          </div>
+        </div>
+      );
+    }
+    if (avisoPericia) {
+      return (
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <div className="modal-header">
+              <h3>Criar perícia</h3>
+              <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div className="alerta alerta-erro">{avisoPericia}</div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => onFechar(false)}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return <ModalPericia
+      tipos={tiposPericia}
+      processoInicial={processoInicialPericia}
+      onTiposChange={carregarTiposPericia}
+      onFechar={onFechar} />;
+  }
   return <ModalCompromisso usuarios={usuariosAgenda} usuarioLogadoId={usuarioLogadoId}
     ehAdmin={ehAdmin} publicacaoId={pub.id} onFechar={onFechar} />;
 }
 
 // Barra com os mesmos botões de ação do menu ⋮, para usar DENTRO da janela de leitura
-// da publicação. Só aparece para quem pode alterar. Compartilhada pelas duas abas.
-function BarraAcoesPublicacao({ pub, podeAlterar, onCriar, onTratar, onEmail }) {
-  if (!podeAlterar) return null;
+// da publicação. Compartilhada pelas duas abas.
+function BarraAcoesPublicacao({ pub, podeAlterar, podeCriarPericia, onCriar, onTratar, onEmail }) {
+  if (!podeAlterar && !podeCriarPericia) return null;
   return (
     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-      <button className="btn btn-outline" onClick={() => onCriar('prazo', pub)}>📌 Criar prazo</button>
-      <button className="btn btn-outline" onClick={() => onCriar('tarefa', pub)}>✓ Criar tarefa</button>
-      <button className="btn btn-outline" onClick={() => onCriar('compromisso', pub)}>📅 Criar compromisso</button>
-      <button className="btn btn-outline" onClick={() => onEmail(pub)}>📧 Enviar por e-mail</button>
+      {podeAlterar && (
+        <>
+          <button className="btn btn-outline" onClick={() => onCriar('prazo', pub)}>📌 Criar prazo</button>
+          <button className="btn btn-outline" onClick={() => onCriar('tarefa', pub)}>✓ Criar tarefa</button>
+          <button className="btn btn-outline" onClick={() => onCriar('compromisso', pub)}>📅 Criar compromisso</button>
+          <button className="btn btn-outline" onClick={() => onEmail(pub)}>📧 Enviar por e-mail</button>
+        </>
+      )}
+      {podeCriarPericia && (
+        <span style={{ display: 'inline-flex' }}
+          title={pub.processo_cadastrado ? undefined : 'Processo não está cadastrado !'}>
+          <button className="btn btn-outline" disabled={!pub.processo_cadastrado}
+            onClick={() => onCriar('pericia', pub)}>🔬 Criar perícia</button>
+        </span>
+      )}
       {/* Só pode marcar tratada com o processo cadastrado; Reabrir é sempre permitido.
           Quando não pode, o botão fica VISÍVEL porém desabilitado, com aviso no hover.
           (o <span> em volta garante o tooltip mesmo com o botão desabilitado) */}
-      {(() => {
+      {podeAlterar && (() => {
         const podeTratar = !!(pub.tratada || pub.processo_cadastrado);
         return (
           <span style={{ display: 'inline-flex' }}
@@ -356,6 +456,7 @@ function PublicacoesAASP() {
   const podeImportar = temPermissao('publicacoes', 'cadastrar');
   const podeAlterar  = temPermissao('publicacoes', 'alterar');
   const podeExcluir  = temPermissao('publicacoes', 'excluir');
+  const podeCriarPericia = temPermissao('pericias', 'cadastrar');
 
   const [configurado, setConfigurado] = useState(null); // null = ainda verificando
   const [dataImport, setDataImport]   = useState(hojeLocal());
@@ -696,6 +797,9 @@ function PublicacoesAASP() {
                         { label: 'Criar compromisso', icone: '📅',
                           oculto: !podeAlterar,
                           onClick: () => setAcaoAberta({ tipo: 'compromisso', pub: p }) },
+                        { label: 'Criar perícia', icone: '🔬',
+                          oculto: !podeCriarPericia || !p.processo_cadastrado,
+                          onClick: () => setAcaoAberta({ tipo: 'pericia', pub: p }) },
                         { label: 'Enviar por e-mail', icone: '📧',
                           oculto: !podeAlterar,
                           onClick: () => setEnviandoEmailPub(p) },
@@ -787,6 +891,7 @@ function PublicacoesAASP() {
               </div>
               <div className="modal-footer">
                 <BarraAcoesPublicacao pub={textoAberto} podeAlterar={podeAlterar}
+                  podeCriarPericia={podeCriarPericia}
                   onCriar={(tipo, p) => setAcaoAberta({ tipo, pub: p })}
                   onTratar={(p) => alternarTratada(p)}
                   onEmail={(p) => setEnviandoEmailPub(p)} />
@@ -852,6 +957,7 @@ function PublicacoesCNJ() {
   const podeImportar = temPermissao('publicacoes', 'cadastrar');
   const podeAlterar  = temPermissao('publicacoes', 'alterar');
   const podeExcluir  = temPermissao('publicacoes', 'excluir');
+  const podeCriarPericia = temPermissao('pericias', 'cadastrar');
 
   const [configurado, setConfigurado] = useState(null); // null = ainda verificando
   const [qtdOabs, setQtdOabs]         = useState(0);     // nº de OABs cadastradas (col. OAB só aparece com >1)
@@ -1198,6 +1304,9 @@ function PublicacoesCNJ() {
                         { label: 'Criar compromisso', icone: '📅',
                           oculto: !podeAlterar,
                           onClick: () => setAcaoAberta({ tipo: 'compromisso', pub: p }) },
+                        { label: 'Criar perícia', icone: '🔬',
+                          oculto: !podeCriarPericia || !p.processo_cadastrado,
+                          onClick: () => setAcaoAberta({ tipo: 'pericia', pub: p }) },
                         { label: 'Enviar por e-mail', icone: '📧',
                           oculto: !podeAlterar,
                           onClick: () => setEnviandoEmailPub(p) },
@@ -1298,6 +1407,7 @@ function PublicacoesCNJ() {
               </div>
               <div className="modal-footer">
                 <BarraAcoesPublicacao pub={textoAberto} podeAlterar={podeAlterar}
+                  podeCriarPericia={podeCriarPericia}
                   onCriar={(tipo, p) => setAcaoAberta({ tipo, pub: p })}
                   onTratar={(p) => alternarTratada(p)}
                   onEmail={(p) => setEnviandoEmailPub(p)} />

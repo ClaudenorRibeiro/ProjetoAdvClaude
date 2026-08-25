@@ -6,7 +6,7 @@ const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
 const { bloqueiaAgendarPassado } = require('../utils/helpers');
-const { notificarConclusao } = require('../services/notificacaoService');
+const { notificarConclusao, emailTarefaAtribuida } = require('../services/notificacaoService');
 const agendaGoogle = require('../services/agendaGoogleService');
 
 // ===== Integração com o Google Agenda (convite .ics) =====
@@ -61,6 +61,48 @@ function sincronizarTarefaGoogle(tarefaId, { cancelar = false, sequence = 0 } = 
   dadosTarefaParaGoogle(tarefaId).then(dados =>
     enviarTarefaParaGoogle(dados && dados.atribuida_para, tarefaId, dados, cancelar, sequence)
   );
+}
+
+// ===== E-mail para o responsável (checkbox do formulário) =====
+// Só roda quando quem salvou MARCOU "Enviar e-mail para <pessoa>" e escolheu um
+// usuário (tarefa do "Escritório" não tem para quem mandar). Chamado SEMPRE depois
+// do commit: a tarefa já está gravada e o e-mail não pode desfazer isso. Nunca
+// lança — devolve { ok, erro } para a tela avisar quando o envio não sair.
+async function enviarEmailDaTarefa(tarefaId, atribuidaPara, autorNome, edicao) {
+  try {
+    const [[tarefaRows], [usuarioRows], [escritorioRows]] = await Promise.all([
+      pool.execute(
+        `SELECT t.titulo, t.descricao, t.prioridade,
+                DATE_FORMAT(t.data_vencimento, '%d/%m/%Y') AS venc_fmt,
+                pr.numProc AS processo_numero,
+                LPAD(pa.numPasta, 4, '0') AS pasta_fmt
+           FROM tarefas t
+           LEFT JOIN tblproc  pr ON t.processo_id = pr.id
+           LEFT JOIN tblpasta pa ON pr.pasta_id   = pa.id
+          WHERE t.id = ?`, [tarefaId]),
+      pool.execute('SELECT nome, email FROM usuarios WHERE id = ?', [atribuidaPara]),
+      pool.execute('SELECT nome FROM configuracoes_escritorio LIMIT 1'),
+    ]);
+
+    const tarefa  = tarefaRows[0];
+    const usuario = usuarioRows[0];
+    if (!tarefa)  return { ok: false, erro: 'Tarefa não encontrada para o envio.' };
+    if (!usuario) return { ok: false, erro: 'Usuário responsável não encontrado.' };
+    if (!usuario.email || !usuario.email.trim()) {
+      return { ok: false, erro: `${usuario.nome} não tem e-mail cadastrado.` };
+    }
+
+    return await emailTarefaAtribuida({
+      para:       usuario.email.trim(),
+      nomePara:   usuario.nome,
+      tarefa:     { ...tarefa, autor_nome: autorNome },
+      escritorio: escritorioRows[0] && escritorioRows[0].nome,
+      edicao,
+    });
+  } catch (err) {
+    console.error('[tarefa->email] falha:', err.message);
+    return { ok: false, erro: err.message };
+  }
 }
 
 // GET /api/tarefas — Lista tarefas com filtros
@@ -196,7 +238,10 @@ async function listar(req, res) {
 // Transação: INSERT da tarefa + registro de auditoria (tudo ou nada)
 async function criar(req, res) {
   const { titulo, descricao, prioridade, processo_id, pasta_id, prazo_id,
-          atribuida_para, data_vencimento, publicacao_id, notificar_conclusao } = req.body;
+          atribuida_para, data_vencimento, publicacao_id, notificar_conclusao,
+          // Checkbox "📧 Enviar e-mail para <pessoa>": NÃO é gravado em lugar nenhum,
+          // é só a ordem de disparar o e-mail agora (por isso não há coluna nova).
+          enviar_email } = req.body;
 
   if (!titulo) return erro(res, 'O título é obrigatório');
   if (bloqueiaAgendarPassado(req.usuario, data_vencimento)) {
@@ -226,7 +271,12 @@ async function criar(req, res) {
     await conn.commit();
     // Nova tarefa → entra na agenda do Google do atribuído (se usuário com Google e com vencimento).
     sincronizarTarefaGoogle(result.insertId, {});
-    return sucesso(res, { id: result.insertId }, 'Tarefa criada com sucesso', 201);
+    // E-mail ao responsável (só se marcado no formulário). Depois do commit e sem
+    // derrubar nada: se falhar, a tarefa continua salva e a tela mostra o motivo.
+    const email = (enviar_email && atribuida_para)
+      ? await enviarEmailDaTarefa(result.insertId, atribuida_para, req.usuario.nome, false)
+      : null;
+    return sucesso(res, { id: result.insertId, email }, 'Tarefa criada com sucesso', 201);
   } catch (err) {
     await conn.rollback();
     return erroInterno(res, err);
@@ -410,7 +460,8 @@ async function excluir(req, res) {
 async function atualizar(req, res) {
   const { id } = req.params;
   const { titulo, descricao, prioridade, atribuida_para, data_vencimento,
-          pasta_id, processo_id, notificar_conclusao } = req.body;
+          pasta_id, processo_id, notificar_conclusao,
+          enviar_email } = req.body;   // ver comentário em criar
 
   if (bloqueiaAgendarPassado(req.usuario, data_vencimento)) {
     return erro(res, 'Apenas o administrador pode agendar tarefa com data anterior a hoje. Escolha uma data a partir de hoje.');
@@ -448,7 +499,12 @@ async function atualizar(req, res) {
         enviarTarefaParaGoogle(donoNovo,   id, dados, false, seq); // entra na do novo
       }
     });
-    return sucesso(res, null, 'Tarefa atualizada');
+    // E-mail ao responsável (só se marcado no formulário). Trocou de responsável na
+    // edição? Vai para o NOVO, que é o que ficou gravado.
+    const email = (enviar_email && atribuida_para)
+      ? await enviarEmailDaTarefa(id, atribuida_para, req.usuario.nome, true)
+      : null;
+    return sucesso(res, { email }, 'Tarefa atualizada');
   } catch (err) {
     await conn.rollback();
     return erroInterno(res, err);

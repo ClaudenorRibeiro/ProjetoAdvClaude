@@ -26,6 +26,7 @@ const MODULOS_PERM = [
     { chave: 'processos.tarefas',    label: 'Tarefas' },
     { chave: 'processos.audiencias', label: 'Audiências' },
     { chave: 'processos.pericias',   label: 'Perícias' },
+    { chave: 'processos.assuntos',   label: 'Assuntos dos processos' },
     { chave: 'processos.etiqueta_escritorio', label: 'Etiqueta do escritório (aplicar) — marque Alterar' },
   ]},
   { chave: 'pastas',       label: 'Pastas' },

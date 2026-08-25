@@ -1029,11 +1029,15 @@ export default function PastaDetalhe() {
         )}
 
         {/* Modais de audiência — reutilizam os mesmos modais da tela de Audiências */}
+        {/* O número da pasta não fica no processo, e sim um nível acima (na pasta). Por isso
+            ele viaja junto no processoInicial — senão o modal mostra "Pasta: undefined".
+            Sem processo escolhido (filtro em "Todos"), continua indo null: o modal precisa
+            abrir com o campo de processo livre, como sempre foi. */}
         {modalNovaAudiencia && (
           <ModalNovaAudiencia
             tipos={tiposAudiencia}
             onTiposChange={setTiposAudiencia}
-            processoInicial={processoSelecionado}
+            processoInicial={processoSelecionado ? { ...processoSelecionado, numPasta: pasta.numPasta } : null}
             onFechar={(reload) => { setModalNovaAudiencia(false); if (reload) carregarAudiencias(); }}
           />
         )}
@@ -1253,7 +1257,7 @@ export default function PastaDetalhe() {
             <div className="tabela-wrapper">
               <table className="tabela">
                 <thead>
-                  <tr><th>Status</th><th>Tipo</th><th>Data / Hora</th><th>Modalidade</th><th>Local</th><th>Ações</th></tr>
+                  <tr><th>Tipo</th><th>Data / Hora</th><th>Modalidade</th><th>Local</th><th>Status</th><th>Ações</th></tr>
                 </thead>
                 <tbody>
                   {audiencias.map(a => {
@@ -1266,11 +1270,6 @@ export default function PastaDetalhe() {
                         style={{ cursor: 'pointer' }}
                         title="Ver detalhes da audiência"
                         onClick={() => { setAudienciaEditando(a); setAudienciaEmLeitura(true); }}>
-                        <td>
-                          <span className={`badge ${STATUS_COR_AUD[a.status] || 'badge-cinza'}`}>
-                            {STATUS_LABEL_AUD[a.status] || a.status}
-                          </span>
-                        </td>
                         <td>{a.tipo_nome || '—'}</td>
                         <td>{formatarData(a.data)} {a.hora?.slice(0, 5)}</td>
                         <td>{a.modalidade === 'virtual' ? 'Virtual' : 'Presencial'}</td>
@@ -1288,6 +1287,11 @@ export default function PastaDetalhe() {
                               )}
                             </div>
                           )}
+                        </td>
+                        <td>
+                          <span className={`badge ${STATUS_COR_AUD[a.status] || 'badge-cinza'}`}>
+                            {STATUS_LABEL_AUD[a.status] || a.status}
+                          </span>
                         </td>
                         <td style={{ whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
                             <MenuAcoes itens={[
@@ -1325,7 +1329,7 @@ export default function PastaDetalhe() {
             <div className="tabela-wrapper">
               <table className="tabela">
                 <thead>
-                  <tr><th>Status</th><th>Tipo</th><th>Data / Hora</th><th>Perito</th><th>Responsável</th><th>Local</th><th>Ações</th></tr>
+                  <tr><th>Tipo</th><th>Data / Hora</th><th>Perito</th><th>Responsável</th><th>Local</th><th>Status</th><th>Ações</th></tr>
                 </thead>
                 <tbody>
                   {pericias.map(p => {
@@ -1333,16 +1337,16 @@ export default function PastaDetalhe() {
                     const historico = p.status === 'cancelada' || p.status === 'remarcada'; // não pode excluir
                     return (
                       <tr key={p.id}>
-                        <td>
-                          <span className={`badge ${STATUS_COR_PER[p.status] || 'badge-azul'}`}>
-                            {STATUS_LABEL_PER[p.status] || 'Agendada'}
-                          </span>
-                        </td>
                         <td>{p.tipo_nome || '—'}</td>
                         <td>{formatarData(p.data)} {p.hora?.slice(0, 5)}</td>
                         <td>{p.perito_nome || '—'}</td>
                         <td>{p.responsavel_nome || '—'}</td>
                         <td>{p.local || '—'}</td>
+                        <td>
+                          <span className={`badge ${STATUS_COR_PER[p.status] || 'badge-azul'}`}>
+                            {STATUS_LABEL_PER[p.status] || 'Agendada'}
+                          </span>
+                        </td>
                         <td style={{ whiteSpace: 'nowrap' }}>
                             {/* Realizada / Editar / Remarcar / Cancelar / Comunicar — só quando agendada */}
                             <MenuAcoes itens={[

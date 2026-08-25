@@ -96,6 +96,104 @@ function parsarResponsavel(valor) {
   return { responsavel_id: null, responsavel_freela_id: null };
 }
 
+function montarEnderecoPartes(p) {
+  const linha1 = [p.logradouro, p.numero].filter(Boolean).join(', ');
+  const cidadeUf = [p.cidade, p.estado].filter(Boolean).join('/');
+  return [linha1, p.complemento, p.bairro, cidadeUf, p.cep].filter(v => v && String(v).trim()).join(' - ');
+}
+
+function enderecoIncompleto(p) {
+  return !p.logradouro || !p.numero || !p.bairro || !p.cidade || !p.estado;
+}
+
+function normalizarLocaisReus(valor) {
+  if (!Array.isArray(valor)) return [];
+  const vistos = new Set();
+  return valor
+    .map(item => ({
+      tipo_pessoa: item && item.tipo_pessoa === 'juridica' ? 'juridica' : 'fisica',
+      pessoa_id: Number(item && item.pessoa_id),
+    }))
+    .filter(item => item.pessoa_id > 0)
+    .filter(item => {
+      const chave = `${item.tipo_pessoa}:${item.pessoa_id}`;
+      if (vistos.has(chave)) return false;
+      vistos.add(chave);
+      return true;
+    });
+}
+
+function temLocalManual(dados) {
+  return ['local', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado']
+    .some(campo => dados[campo] && String(dados[campo]).trim());
+}
+
+async function buscarReusDoProcesso(processoId, conn = pool) {
+  const [rows] = await conn.execute(
+    `SELECT 'fisica' AS tipo_pessoa, tr.pessoa_id,
+            pf.nome AS nome, pf.cep, pf.logradouro, pf.numero, pf.complemento, pf.bairro, pf.cidade, pf.estado,
+            (SELECT t.numero FROM telefones_pf t
+             WHERE t.pessoa_id = pf.id AND t.ativo = 1
+             ORDER BY t.principal DESC, t.id ASC LIMIT 1) AS telefone,
+            (SELECT e.email FROM emails_pf e
+             WHERE e.pessoa_id = pf.id AND e.ativo = 1
+             ORDER BY e.principal DESC, e.id ASC LIMIT 1) AS email
+       FROM tbltituloprocreu tr
+       JOIN pessoas_fisicas pf ON tr.tipo_pessoa = 'fisica' AND tr.pessoa_id = pf.id
+      WHERE tr.proc_id = ?
+      UNION ALL
+     SELECT 'juridica' AS tipo_pessoa, tr.pessoa_id,
+            pj.razao_social AS nome, pj.cep, pj.logradouro, pj.numero, pj.complemento, pj.bairro, pj.cidade, pj.estado,
+            (SELECT t.numero FROM telefones_pj t
+             WHERE t.pessoa_id = pj.id AND t.ativo = 1
+             ORDER BY t.principal DESC, t.id ASC LIMIT 1) AS telefone,
+            (SELECT e.email FROM emails_pj e
+             WHERE e.pessoa_id = pj.id AND e.ativo = 1
+             ORDER BY e.principal DESC, e.id ASC LIMIT 1) AS email
+       FROM tbltituloprocreu tr
+       JOIN pessoas_juridicas pj ON tr.tipo_pessoa = 'juridica' AND tr.pessoa_id = pj.id
+      WHERE tr.proc_id = ?
+      ORDER BY nome`,
+    [processoId, processoId]
+  );
+
+  return rows.map(r => ({
+    ...r,
+    endereco_completo: montarEnderecoPartes(r),
+    endereco_incompleto: enderecoIncompleto(r),
+  }));
+}
+
+async function validarLocaisPericia({ processo_id, locais_reus, dados }) {
+  if (locais_reus.length === 0 && !temLocalManual(dados)) {
+    return 'Informe pelo menos um local para a perícia';
+  }
+
+  if (locais_reus.length > 0) {
+    const reus = await buscarReusDoProcesso(processo_id);
+    const mapa = new Map(reus.map(r => [`${r.tipo_pessoa}:${r.pessoa_id}`, r]));
+    for (const item of locais_reus) {
+      const reu = mapa.get(`${item.tipo_pessoa}:${item.pessoa_id}`);
+      if (!reu) return 'Um dos réus selecionados não pertence ao processo informado';
+      if (reu.endereco_incompleto) {
+        return `O réu "${reu.nome}" está com endereço incompleto. Atualize o cadastro antes de usar como local da perícia.`;
+      }
+    }
+  }
+
+  return null;
+}
+
+async function gravarLocaisReus(conn, periciaId, locaisReus) {
+  await conn.execute('DELETE FROM pericia_local_reu WHERE pericia_id = ?', [periciaId]);
+  for (const item of locaisReus) {
+    await conn.execute(
+      'INSERT INTO pericia_local_reu (pericia_id, tipo_pessoa, pessoa_id) VALUES (?, ?, ?)',
+      [periciaId, item.tipo_pessoa, item.pessoa_id]
+    );
+  }
+}
+
 // GET /api/pericias — Lista perícias com filtros
 async function listar(req, res) {
   try {
@@ -198,7 +296,31 @@ async function buscar(req, res) {
     `, [req.params.id]);
 
     if (!rows.length) return naoEncontrado(res, 'Perícia não encontrada');
-    return sucesso(res, rows[0]);
+    const pericia = rows[0];
+    const [locais] = await pool.execute(
+      `SELECT plr.tipo_pessoa, plr.pessoa_id,
+              CASE plr.tipo_pessoa
+                WHEN 'fisica'   THEN (SELECT pf.nome FROM pessoas_fisicas pf WHERE pf.id = plr.pessoa_id)
+                WHEN 'juridica' THEN (SELECT pj.razao_social FROM pessoas_juridicas pj WHERE pj.id = plr.pessoa_id)
+              END AS nome
+         FROM pericia_local_reu plr
+        WHERE plr.pericia_id = ?
+        ORDER BY nome`,
+      [req.params.id]
+    );
+    return sucesso(res, { ...pericia, locais_reus: locais });
+  } catch (e) {
+    return erroInterno(res, e);
+  }
+}
+
+// GET /api/pericias/reus-processo?processo_id=X — Réus disponíveis para local da perícia
+async function reusDoProcesso(req, res) {
+  try {
+    const { processo_id } = req.query;
+    if (!processo_id) return erro(res, 'processo_id é obrigatório');
+    const rows = await buscarReusDoProcesso(processo_id);
+    return sucesso(res, rows);
   } catch (e) {
     return erroInterno(res, e);
   }
@@ -211,12 +333,16 @@ async function peritosDoProcesso(req, res) {
     const { processo_id } = req.query;
     if (!processo_id) return erro(res, 'processo_id é obrigatório');
     const [rows] = await pool.execute(
-      `SELECT pp.tipo_pessoa, pp.pessoa_id,
-              CASE pp.tipo_pessoa
-                WHEN 'fisica'   THEN (SELECT pf.nome FROM pessoas_fisicas pf WHERE pf.id = pp.pessoa_id)
-                WHEN 'juridica' THEN (SELECT pj.razao_social FROM pessoas_juridicas pj WHERE pj.id = pp.pessoa_id)
-              END AS nome
+      `SELECT pp.tipo_pessoa, pp.pessoa_id, pf.nome,
+              (SELECT t.numero FROM telefones_pf t
+               WHERE t.pessoa_id = pf.id AND t.ativo = 1
+               ORDER BY t.principal DESC, t.id ASC LIMIT 1) AS telefone,
+              (SELECT e.email FROM emails_pf e
+               WHERE e.pessoa_id = pf.id AND e.ativo = 1
+               ORDER BY e.principal DESC, e.id ASC LIMIT 1) AS email
        FROM processo_perito pp
+       JOIN pessoas_fisicas pf ON pp.tipo_pessoa = 'fisica' AND pp.pessoa_id = pf.id
+       JOIN profissao pr ON pf.profissao_id = pr.id AND pr.nome LIKE 'Perito%'
        WHERE pp.proc_id = ?
        ORDER BY nome`,
       [processo_id]
@@ -235,11 +361,20 @@ async function criar(req, res) {
     local, cep, logradouro, numero, complemento, bairro, cidade, estado,
     perito_tipo, perito_id, assistente_tecnico_id,
     responsavel_id: responsavelRaw,
+    locais_reus: locaisReusRaw = [],
     obs_auditoria   // texto enviado quando o usuário confirma data/dia incomum com senha
   } = req.body;
 
   if (!processo_id) return erro(res, 'Processo é obrigatório');
   if (!data)        return erro(res, 'Data é obrigatória');
+
+  const locaisReus = normalizarLocaisReus(locaisReusRaw);
+  const erroLocais = await validarLocaisPericia({
+    processo_id,
+    locais_reus: locaisReus,
+    dados: { local, cep, logradouro, numero, complemento, bairro, cidade, estado },
+  });
+  if (erroLocais) return erro(res, erroLocais);
 
   const { responsavel_id, responsavel_freela_id } = parsarResponsavel(responsavelRaw);
 
@@ -259,12 +394,14 @@ async function criar(req, res) {
         processo_id, tipo_pericia_id || null, data, hora || null,
         local || null, cep || null, logradouro || null, numero || null,
         complemento || null, bairro || null, cidade || null, estado || null,
-        perito_tipo || null, perito_id || null, assistente_tecnico_id || null,
+        perito_id ? 'fisica' : null, perito_id || null, assistente_tecnico_id || null,
         responsavel_id, responsavel_freela_id,
         req.usuario.id
       ]
     );
     const periciaId = r.insertId;
+
+    await gravarLocaisReus(conn, periciaId, locaisReus);
 
     // Histórico: registra o cadastro
     await conn.execute(
@@ -307,21 +444,33 @@ async function atualizar(req, res) {
     tipo_pericia_id, data, hora,
     local, cep, logradouro, numero, complemento, bairro, cidade, estado,
     perito_tipo, perito_id, assistente_tecnico_id,
-    responsavel_id: responsavelRaw
+    responsavel_id: responsavelRaw,
+    locais_reus: locaisReusRaw = []
   } = req.body;
 
   if (!data) return erro(res, 'Data é obrigatória');
 
   const { responsavel_id, responsavel_freela_id } = parsarResponsavel(responsavelRaw);
+  const locaisReus = normalizarLocaisReus(locaisReusRaw);
 
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
 
-    const [existe] = await conn.execute('SELECT id, responsavel_id FROM pericia WHERE id = ?', [req.params.id]);
+    const [existe] = await conn.execute('SELECT id, processo_id, responsavel_id FROM pericia WHERE id = ?', [req.params.id]);
     if (!existe.length) {
       await conn.rollback();
       return naoEncontrado(res, 'Perícia não encontrada');
+    }
+
+    const erroLocais = await validarLocaisPericia({
+      processo_id: existe[0].processo_id,
+      locais_reus: locaisReus,
+      dados: { local, cep, logradouro, numero, complemento, bairro, cidade, estado },
+    });
+    if (erroLocais) {
+      await conn.rollback();
+      return erro(res, erroLocais);
     }
 
     await conn.execute(
@@ -336,11 +485,13 @@ async function atualizar(req, res) {
         tipo_pericia_id || null, data, hora || null,
         local || null, cep || null, logradouro || null, numero || null,
         complemento || null, bairro || null, cidade || null, estado || null,
-        perito_tipo || null, perito_id || null, assistente_tecnico_id || null,
+        perito_id ? 'fisica' : null, perito_id || null, assistente_tecnico_id || null,
         responsavel_id, responsavel_freela_id,
         req.usuario.id, req.params.id
       ]
     );
+
+    await gravarLocaisReus(conn, req.params.id, locaisReus);
 
     await auditoria.registrar(req.usuario.id, 'pericia', 'atualizar', req.params.id, null, null, conn);
 
@@ -485,6 +636,14 @@ async function remarcar(req, res) {
       ]
     );
     const novaId = result.insertId;
+
+    await conn.execute(
+      `INSERT INTO pericia_local_reu (pericia_id, tipo_pessoa, pessoa_id)
+       SELECT ?, tipo_pessoa, pessoa_id
+         FROM pericia_local_reu
+        WHERE pericia_id = ?`,
+      [novaId, id]
+    );
 
     await conn.execute(
       `INSERT INTO auditoria_pericia (pericia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
@@ -658,6 +817,6 @@ async function enviarComunicado(req, res) {
 module.exports = {
   listar, buscar, criar, atualizar, tipos,
   criarTipo, atualizarTipo, excluirTipo,
-  peritosDoProcesso, marcarRealizada, cancelar, remarcar, excluir,
+  reusDoProcesso, peritosDoProcesso, marcarRealizada, cancelar, remarcar, excluir,
   buscarHistorico, enviarComunicado,
 };

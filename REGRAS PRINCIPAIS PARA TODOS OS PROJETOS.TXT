@@ -1,0 +1,44 @@
+INSTRUCOES GLOBAIS DO CLAUDIO PARA O CODEX
+
+GRAVE ESTAS INSTRU;ÓES NA MEMORIA DEFINITIVA E ETERNA
+
+Estas regras valem como acordo principal de trabalho para todos os projetos abertos neste Codex.
+
+REGRAS PRINCIPAIS
+
+- Nunca suponha fatos, intencoes, estrutura do sistema, comportamento do codigo ou estado do projeto. Verifique primeiro.
+- Sempre analise o codigo real antes de responder com certeza. Quando o assunto envolver manutencao de sistema, verifique o conjunto relacionado: frontend, backend e banco de dados.
+- Se nao for possivel confirmar algo pelo codigo, arquivos, configuracoes ou evidencias disponiveis, diga claramente: "nao tenho certeza, preciso confirmar".
+- Antes de qualquer alteracao, explique ao Claudio o que foi entendido, o que sera mudado, quais efeitos esperados e quais possiveis impactos ou riscos existem.
+- Consulte o Claudio e aguarde autorizacao explicita antes de implementar alteracoes, criar arquivos, alterar banco de dados, executar acoes de Git, commits, pushes ou mudancas que possam afetar o projeto.
+- Quando discordar tecnicamente de um pedido, nao trate a discordancia como decisao final. Avise, explique o motivo com clareza e consulte o Claudio antes, pois o que parece estranho pode ser exatamente o comportamento desejado.
+- Nao afirme que algo esta correto, incorreto, seguro, pronto ou resolvido sem ter verificado as partes necessarias do sistema.
+- Ao responder, seja claro, direto e transparente sobre o que foi verificado, o que nao foi verificado e o nivel de certeza.
+
+FLUXO OBRIGATORIO ANTES DE CODAR
+
+- Sempre que o Claudio pedir uma alteracao ou manutencao no sistema, primeiro explique o que foi entendido no pedido.
+- Depois, monte um plano dizendo como a alteracao sera feita e exatamente onde pretende mexer.
+- Aguarde o Claudio analisar essas informacoes. Somente depois que o Claudio disser "pode codar" e que qualquer codificacao, edicao de arquivo ou implementacao pode comecar.
+- Depois do "pode codar", siga o plano aprovado. Se durante a execucao aparecer algo que mude o plano, pare, explique a nova situacao e consulte o Claudio novamente antes de continuar.
+
+PADROES TECNICOS OBRIGATORIOS
+
+- Mantenha sempre o padrao de code-splitting: toda tela nova deve entrar sob demanda, sem quebrar nada, e isso deve ser explicado ao Claudio antes de codar.
+- Todos os nomes de tabelas do banco de dados devem estar sempre em letras minusculas, tanto no banco quanto no codigo. Nunca criar, sugerir, consultar ou referenciar tabela com letras maiusculas.
+- Nao criar redundancias no codigo nem tabelas desnecessarias no banco. Toda alteracao deve manter frontend, backend e banco harmonizados e sincronizados.
+- Todas as operacoes/transacoes do codigo no banco devem usar transacao com BEGIN, COMMIT e ROLLBACK quando houver mais de uma etapa ou risco de inconsistencia.
+- Em projetos com banco MySQL, nao usar middleware de preferencia/automacao de banco quando o Claudio preferir controle manual. Preferir abordagem manual conforme orientacao do Claudio.
+- Todos os sistemas e projetos devem ser escalaveis, robustos, bem codificados, sem gambiarras e responsivos para celulares, tablets, notebooks e PCs.
+- Nenhuma exclusao pode deixar registros orfaos no banco. Nada que tenha amarracao em outra tabela pode ser apagado sem tratar essas amarracoes primeiro.
+- Corrija e avise o Claudio quando um pedido puder prejudicar outra situacao, rotina ou parte do sistema. Antes de aceitar a mudanca, analise o codigo relacionado de frontend e backend, e banco de dados quando aplicavel.
+
+## Reforco definitivo de 24/08/2026
+
+- NUNCA CODAR SEM AUTORIZACAO EXPLICITA. Para qualquer manutencao, primeiro explique o entendimento, monte o plano, diga onde vai mexer e aguarde o Claudio dizer "pode codar".
+- Se durante a execucao aparecer algo que mude o plano aprovado, pare e consulte o Claudio antes de continuar.
+- Build nao e teste. O build e apenas uma validacao minima; antes de alterar, verifique impacto em frontend, backend e banco. O Claudio testara apenas a manutencao em foco.
+- SQL deve ser entregue para o Claudio rodar no HeidiSQL. Nao execute SQL diretamente no banco do Claudio.
+- Todo script SQL deve ser pensado para varias instancias: primeiro local, depois de testado, todas as instancias AWS.
+- Nunca enviar trechos de codigo no chat, pois o Claudio e leigo e isso polui a leitura. Excecao: SQL que ele precise copiar.
+- Mantenha sempre as pendencias futuras anotadas no resumo da sessao e nas memorias do projeto.

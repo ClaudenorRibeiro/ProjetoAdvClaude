@@ -59,10 +59,20 @@ function uploadAnexosEmail(req, res, next) {
 // ---- Filtros de busca reutilizáveis (listagem E exportação) — evita duplicar a mesma condição ----
 
 // Condição de busca de PESSOA FÍSICA (nome, CPF, RG, PIS, endereço, telefone). Retorna { cond, params }.
-function condBuscaFisica(busca) {
+function condBuscaFisica(busca, selecao = false) {
   const buscaDigitos = busca.replace(/\D/g, '');
   const b  = `%${busca}%`;
   const bD = `%${buscaDigitos || busca}%`;
+
+  // MODO "ESCOLHER PESSOA" (autocompletar de testemunha, autor/réu/perito e responsável
+  // legal): procura SÓ em nome e CPF. Com a busca ampla, digitar "maria" trazia também
+  // quem mora na "Rua Antonio Maria Bessa" — e, como essas listas mostram poucas linhas
+  // em ordem alfabética, as Marias de verdade ficavam de fora. A tela de Pessoas continua
+  // usando a busca ampla (o campo dela promete endereço, RG e PIS).
+  if (selecao) {
+    return { cond: ' AND (pf.nome LIKE ? OR pf.cpf LIKE ?)', params: [b, bD] };
+  }
+
   const cond = ` AND (
         pf.nome       LIKE ? OR
         pf.cpf        LIKE ? OR
@@ -80,10 +90,19 @@ function condBuscaFisica(busca) {
 }
 
 // Condição de busca de PESSOA JURÍDICA (razão social, CNPJ, fantasia, endereço, telefone).
-function condBuscaJuridica(busca) {
+function condBuscaJuridica(busca, selecao = false) {
   const buscaDigitos = busca.replace(/\D/g, '');
   const b  = `%${busca}%`;
   const bD = `%${buscaDigitos || busca}%`;
+
+  // Modo "escolher empresa" — ver o comentário em condBuscaFisica.
+  if (selecao) {
+    return {
+      cond: ' AND (pj.razao_social LIKE ? OR pj.nome_fantasia LIKE ? OR pj.cnpj LIKE ?)',
+      params: [b, b, bD],
+    };
+  }
+
   const cond = ` AND (
         pj.razao_social        LIKE ? OR
         pj.cnpj                LIKE ? OR
@@ -104,7 +123,9 @@ function condBuscaJuridica(busca) {
 // GET /api/pessoas/fisicas — Lista todas as pessoas físicas
 async function listarFisicas(req, res) {
   try {
-    const { busca, pagina = 1, limite = 20, somente_advogados } = req.query;
+    const { busca, pagina = 1, limite = 20, somente_advogados, somente_peritos, selecao } = req.query;
+    // selecao=1: chamada de um campo de ESCOLHER pessoa, não da tela de Pessoas.
+    const modoSelecao = selecao === '1' || selecao === 'true' || selecao === true;
     // parseInt garante valores inteiros seguros para uso direto na query
     const limitInt  = parseInt(limite)  || 20;
     const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
@@ -119,9 +140,17 @@ async function listarFisicas(req, res) {
       )`;
     }
 
+    // Filtra apenas pessoas físicas cuja profissão começa com "Perito" (para perícias)
+    if (somente_peritos) {
+      where += ` AND EXISTS (
+        SELECT 1 FROM profissao pr
+        WHERE pr.id = pf.profissao_id AND pr.nome LIKE 'Perito%'
+      )`;
+    }
+
     // Filtro de busca abrangente (mesma condição reutilizada na exportação — ver condBuscaFisica)
     if (busca) {
-      const f = condBuscaFisica(busca);
+      const f = condBuscaFisica(busca, modoSelecao);
       where += f.cond;
       params.push(...f.params);
     }
@@ -132,6 +161,13 @@ async function listarFisicas(req, res) {
       where += ' AND EXISTS (SELECT 1 FROM pessoas_fisicas_etiquetas_escritorio ee WHERE ee.pessoa_id = pf.id AND ee.slot = ?)';
       params.push(etqEscSlot);
     }
+
+    // No modo "escolher pessoa", quem COMEÇA pelo que foi digitado vem primeiro: digitando
+    // "maria" as "Maria ..." aparecem antes de "Ana Maria ...". Fora desse modo, nada muda.
+    // O parâmetro extra entra SÓ nesta consulta (o COUNT abaixo não tem ORDER BY).
+    const ordem = (modoSelecao && busca) ? 'ORDER BY (pf.nome LIKE ?) DESC, pf.nome ASC'
+                                         : 'ORDER BY pf.nome ASC';
+    const paramsOrdem = (modoSelecao && busca) ? [`${busca}%`] : [];
 
     // Nota: LIMIT e OFFSET são inseridos diretamente na query (já sanitizados com parseInt)
     // pois o MySQL 8 tem incompatibilidade com parâmetros ? em LIMIT/OFFSET via prepared statements
@@ -164,9 +200,9 @@ async function listarFisicas(req, res) {
        LEFT JOIN pessoas_fisicas resp ON pf.responsavel_id = resp.id
        LEFT JOIN parentesco       pc  ON pf.parentesco_id  = pc.id
        ${where}
-       ORDER BY pf.nome ASC
+       ${ordem}
        LIMIT ${limitInt} OFFSET ${offsetInt}`,
-      params
+      [...params, ...paramsOrdem]
     );
 
     // Conta total para paginação
@@ -1026,7 +1062,8 @@ async function excluirHistorico(req, res) {
 // GET /api/pessoas/juridicas — Lista todas as pessoas jurídicas
 async function listarJuridicas(req, res) {
   try {
-    const { busca, pagina = 1, limite = 20 } = req.query;
+    const { busca, pagina = 1, limite = 20, selecao } = req.query;
+    const modoSelecao = selecao === '1' || selecao === 'true' || selecao === true; // ver listarFisicas
     // parseInt garante valores inteiros seguros para uso direto na query
     const limitInt  = parseInt(limite)  || 20;
     const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
@@ -1035,7 +1072,7 @@ async function listarJuridicas(req, res) {
 
     // Filtro de busca abrangente (mesma condição reutilizada na exportação — ver condBuscaJuridica)
     if (busca) {
-      const f = condBuscaJuridica(busca);
+      const f = condBuscaJuridica(busca, modoSelecao);
       where += f.cond;
       params.push(...f.params);
     }
@@ -1046,6 +1083,11 @@ async function listarJuridicas(req, res) {
       where += ' AND EXISTS (SELECT 1 FROM pessoas_juridicas_etiquetas_escritorio ee WHERE ee.pessoa_id = pj.id AND ee.slot = ?)';
       params.push(etqEscSlot);
     }
+
+    // Quem COMEÇA pelo termo primeiro, só no modo "escolher empresa" — ver listarFisicas.
+    const ordem = (modoSelecao && busca) ? 'ORDER BY (pj.razao_social LIKE ?) DESC, pj.razao_social ASC'
+                                         : 'ORDER BY pj.razao_social ASC';
+    const paramsOrdem = (modoSelecao && busca) ? [`${busca}%`] : [];
 
     // Nota: LIMIT e OFFSET inseridos diretamente (sanitizados com parseInt — MySQL 8 não aceita ? em LIMIT/OFFSET)
     const [rows] = await pool.execute(
@@ -1063,9 +1105,9 @@ async function listarJuridicas(req, res) {
               (SELECT ee.slot FROM pessoas_juridicas_etiquetas_escritorio ee
                 WHERE ee.pessoa_id = pj.id) AS etiqueta_escritorio
        FROM pessoas_juridicas pj ${where}
-       ORDER BY pj.razao_social ASC
+       ${ordem}
        LIMIT ${limitInt} OFFSET ${offsetInt}`,
-      params
+      [...params, ...paramsOrdem]
     );
 
     const [total] = await pool.execute(

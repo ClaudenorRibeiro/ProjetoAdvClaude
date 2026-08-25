@@ -138,6 +138,9 @@ router.delete('/processos/auxiliares/status/:id',    autenticar, verificarPermis
 router.post('/processos/auxiliares/instancias',      autenticar, verificarPermissao('processos','cadastrar'), processosCtrl.criarInstancia);
 router.put('/processos/auxiliares/instancias/:id',   autenticar, verificarPermissao('processos','alterar'),   processosCtrl.atualizarInstancia);
 router.delete('/processos/auxiliares/instancias/:id',autenticar, verificarPermissao('processos','excluir'),    processosCtrl.excluirInstancia);
+router.post('/processos/auxiliares/assuntos',        autenticar, verificarPermissao('processos','assuntos','cadastrar'), processosCtrl.criarAssuntoProc);
+router.put('/processos/auxiliares/assuntos/:id',     autenticar, verificarPermissao('processos','assuntos','alterar'),   processosCtrl.atualizarAssuntoProc);
+router.delete('/processos/auxiliares/assuntos/:id',  autenticar, verificarPermissao('processos','assuntos','excluir'),    processosCtrl.excluirAssuntoProc);
 router.get('/processos/pastas',                     autenticar, verificarPermissao('processos','visualizar'), processosCtrl.listarPastas);
 router.put('/processos/pastas/:id/renumerar',       autenticar, verificarPermissao('pastas','alterar'),      processosCtrl.renumerarPasta);
 router.get('/processos/pastas/:id',                 autenticar, verificarPermissao('processos','visualizar'), processosCtrl.buscarPasta);
@@ -291,6 +294,7 @@ router.get('/pericias/tipos',             autenticar, periciasCtrl.tipos);
 router.post('/pericias/tipos',            autenticar, verificarPermissao('pericias','tipos','cadastrar'), periciasCtrl.criarTipo);
 router.put('/pericias/tipos/:id',         autenticar, verificarPermissao('pericias','tipos','alterar'),   periciasCtrl.atualizarTipo);
 router.delete('/pericias/tipos/:id',      autenticar, verificarPermissao('pericias','tipos','excluir'),   periciasCtrl.excluirTipo);
+router.get('/pericias/reus-processo',     autenticar, verificarPermissao('pericias','visualizar'), periciasCtrl.reusDoProcesso);
 router.get('/pericias/peritos-processo',  autenticar, verificarPermissao('pericias','visualizar'), periciasCtrl.peritosDoProcesso);
 router.get('/pericias',                   autenticar, verificarPermissao('pericias','visualizar'), periciasCtrl.listar);
 router.get('/pericias/:id',               autenticar, verificarPermissao('pericias','visualizar'), periciasCtrl.buscar);

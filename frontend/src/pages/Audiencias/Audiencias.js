@@ -2,10 +2,10 @@
 // PÁGINA DE AUDIÊNCIAS
 // ============================================================
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { audienciasAPI, processosAPI, pessoasAPI, authAPI, calendarioAPI, configuracaoAPI } from '../../services/api';
-import { formatarData, toTitleCase, validarCPF, mascaraCPF } from '../../utils/formatters';
+import { formatarData, toTitleCase, validarCPF, mascaraCPF, formatarCPF } from '../../utils/formatters';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
@@ -839,6 +839,24 @@ function SecaoTestemunhas({ processoId, testemunhas, onChange, somenteLeitura = 
   const [partes, setPartes]         = useState([]); // IDs das partes do processo
   const [pendente, setPendente]     = useState(null); // pessoa selecionada aguardando polo
   const [modalCadastro, setModalCadastro] = useState(false);
+  const campoRef = useRef(null); // caixa do campo de busca
+  const listaRef = useRef(null); // lista de sugestões (para saber a altura real)
+
+  // As Testemunhas ficam no FIM do formulário, então a lista de sugestões nascia embaixo
+  // do rodapé do modal e o usuário não via os nomes. Assim que a lista abre, o modal rola
+  // só o necessário para ela caber. O espaçador (renderizado junto com a lista, logo
+  // abaixo) garante que exista espaço para rolar — sem ele não há para onde descer.
+  useEffect(() => {
+    if (!sugestoes.length) return;
+    const caixa = campoRef.current;
+    const corpo = caixa && caixa.closest('.modal-body'); // a área que rola dentro do modal
+    if (!caixa || !corpo) return;
+    const alturaLista = listaRef.current ? listaRef.current.offsetHeight : 150;
+    const folga = 12;
+    const excedente = (caixa.getBoundingClientRect().bottom + alturaLista + folga)
+                    - corpo.getBoundingClientRect().bottom;
+    if (excedente > 0) corpo.scrollBy({ top: excedente, behavior: 'smooth' });
+  }, [sugestoes]);
 
   // Avisa o modal quando há (ou deixou de haver) uma testemunha aguardando qualificação de polo,
   // para o "Salvar" poder bloquear e pedir que o usuário escolha Autor/Réu (ou cancele) antes.
@@ -863,7 +881,8 @@ function SecaoTestemunhas({ processoId, testemunhas, onChange, somenteLeitura = 
   async function buscarPessoas(termo) {
     if (termo.length < 2) { setSugestoes([]); return; }
     try {
-      const { data } = await pessoasAPI.listarFisicas({ busca: termo, limite: 15 });
+      // selecao: 1 → procura só por nome/CPF (sem endereço) e traz quem começa pelo termo primeiro.
+      const { data } = await pessoasAPI.listarFisicas({ busca: termo, limite: 15, selecao: 1 });
       if (data.ok) {
         const idsJaAdicionados = testemunhas.map(t => t.id);
         // Filtra: remove partes do processo e já adicionadas
@@ -902,21 +921,27 @@ function SecaoTestemunhas({ processoId, testemunhas, onChange, somenteLeitura = 
 
       {/* Busca + botão cadastrar nova pessoa (escondido no modo somente leitura) */}
       {!somenteLeitura && (
+      <>
       <div style={{ display: 'flex', gap: '6px' }}>
-        <div style={{ position: 'relative', flex: 1 }}>
+        <div style={{ position: 'relative', flex: 1 }} ref={campoRef}>
           <input className="form-control"
             placeholder="Buscar pessoa cadastrada para adicionar como testemunha..."
             value={busca}
             onChange={e => { setBusca(e.target.value); buscarPessoas(e.target.value); }} />
           {sugestoes.length > 0 && (
-            <div style={{ position:'absolute', zIndex:100, width:'100%', border:'1px solid #ddd', borderRadius:'6px', marginTop:'2px', maxHeight:'150px', overflowY:'auto', background:'#fff', boxShadow:'0 4px 12px rgba(0,0,0,0.1)' }}>
+            <div ref={listaRef} style={{ position:'absolute', zIndex:100, width:'100%', border:'1px solid #ddd', borderRadius:'6px', marginTop:'2px', maxHeight:'150px', overflowY:'auto', background:'#fff', boxShadow:'0 4px 12px rgba(0,0,0,0.1)' }}>
               {sugestoes.map(p => (
                 <div key={p.id}
                   style={{ padding:'8px 12px', cursor:'pointer', fontSize:'13px', borderBottom:'1px solid #f0f0f0' }}
                   onMouseEnter={e => e.currentTarget.style.background = '#f0f7ff'}
                   onMouseLeave={e => e.currentTarget.style.background = '#fff'}
                   onClick={() => selecionarPessoa(p)}>
-                  {p.nome}{p.cpf ? ` — CPF ${p.cpf}` : ''}
+                  {p.nome}
+                  {/* Sem CPF é comum na base — deixa claro que falta o dado, em vez de
+                      mostrar só o nome (que parece "o sistema não achou o CPF"). */}
+                  {p.cpf
+                    ? <span style={{ color:'#64748b' }}> — CPF {formatarCPF(p.cpf)}</span>
+                    : <span style={{ color:'#94a3b8', fontStyle:'italic' }}> — sem CPF</span>}
                 </div>
               ))}
             </div>
@@ -927,6 +952,10 @@ function SecaoTestemunhas({ processoId, testemunhas, onChange, somenteLeitura = 
           style={{ padding:'0 12px', border:'1px solid #ddd', borderRadius:'6px', background:'#f8fafc', cursor:'pointer', fontSize:'16px', whiteSpace:'nowrap' }}
           onClick={() => setModalCadastro(true)}>…</button>
       </div>
+      {/* Espaço temporário só enquanto a lista está aberta: dá ao modal o quanto rolar
+          para mostrar as sugestões. Some junto com a lista, sem deixar buraco na tela. */}
+      {sugestoes.length > 0 && <div style={{ height: '170px' }} aria-hidden="true" />}
+      </>
       )}
 
       {/* Sem testemunhas no modo leitura — deixa claro que não há */}
@@ -1224,7 +1253,7 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
 
           {/* Informativo da pasta */}
           {procSelecionado && (
-            <div style={{marginBottom:'10px',fontSize:'13px',color:'#475569',fontWeight:500}}>
+            <div style={{marginBottom:'10px',fontSize:'17px',color:'#1e2a3a',fontWeight:700}}>
               Pasta: {String(procSelecionado.numPasta).padStart(4, '0')}
             </div>
           )}
