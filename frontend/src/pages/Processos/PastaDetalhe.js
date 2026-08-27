@@ -67,6 +67,11 @@ export default function PastaDetalhe() {
       setPasta(p => (p ? { ...p, processos: (p.processos || []).map(pr => (pr.id === procId ? { ...pr, etiqueta_escritorio: slot } : pr)) } : p));
     } catch { toast.error('Não foi possível salvar a etiqueta do escritório'); }
   }
+  const slotsEscritorioEmUsoNaLista = new Set((pasta?.processos || [])
+    .map(pr => Number(pr.etiqueta_escritorio))
+    .filter(Boolean));
+  const catEscritorioEmUsoNaLista = catEscritorio
+    .filter(def => slotsEscritorioEmUsoNaLista.has(Number(def.slot)));
 
   // Filtro de processo compartilhado pelas abas — 'todos' ou id (string) do processo
   // Inicializado com o parâmetro ?processo= da URL quando vindo do Dashboard
@@ -712,7 +717,9 @@ export default function PastaDetalhe() {
                 + Novo Processo (mesma pasta)
               </button>
             </div>
-            <LegendaEtiquetasPessoais definicoes={catEscritorio} titulo="Etiquetas do escritório" />
+            {catEscritorioEmUsoNaLista.length > 0 && (
+              <LegendaEtiquetasPessoais definicoes={catEscritorioEmUsoNaLista} titulo="Etiquetas do escritório" />
+            )}
             <div className="tabela-wrapper">
               <table className="tabela">
                 <thead>

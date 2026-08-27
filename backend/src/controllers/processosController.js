@@ -641,6 +641,7 @@ async function atualizarProcesso(req, res) {
     vara_id, tipo_id, status_id, instancia_id,
     data_distribuicao, observacoes,
     autores, reus, peritos, assuntos, cliente_polo,
+    motivo_status,
   } = req.body;
 
   // cliente_polo é opcional; se vier preenchido precisa ser 'autor' ou 'reu'
@@ -660,6 +661,9 @@ async function atualizarProcesso(req, res) {
       await conn.rollback();
       return naoEncontrado(res, 'Processo não encontrado');
     }
+    const statusAnteriorId = antes[0].status_id ? Number(antes[0].status_id) : null;
+    const statusNovoId = status_id ? Number(status_id) : null;
+    const statusMudou = statusAnteriorId !== statusNovoId;
 
     // Verifica duplicidade de numProc (exclui o próprio processo da verificação)
     const numProcLimpo = numProc?.trim() || null;
@@ -751,6 +755,26 @@ async function atualizarProcesso(req, res) {
     }
 
     // Auditoria na MESMA transação (tudo ou nada): antes do commit, com conn
+    if (statusMudou) {
+      const idsStatus = [statusAnteriorId, statusNovoId].filter(Boolean);
+      let nomesStatus = {};
+      if (idsStatus.length) {
+        const placeholders = idsStatus.map(() => '?').join(',');
+        const [statusRows] = await conn.execute(
+          `SELECT id, nome FROM tblstatusproc WHERE id IN (${placeholders})`,
+          idsStatus
+        );
+        nomesStatus = Object.fromEntries(statusRows.map(s => [Number(s.id), s.nome]));
+      }
+      await auditoria.registrar(req.usuario.id, 'tblproc', 'status', id, null, {
+        campo: 'status_id',
+        status_anterior_id: statusAnteriorId,
+        status_anterior: statusAnteriorId ? (nomesStatus[statusAnteriorId] || null) : null,
+        status_novo_id: statusNovoId,
+        status_novo: statusNovoId ? (nomesStatus[statusNovoId] || null) : null,
+        motivo: motivo_status?.trim() || null,
+      }, conn);
+    }
     await auditoria.registrar(req.usuario.id, 'tblproc', 'editar', id, antes[0], null, conn);
     await conn.commit();
     return sucesso(res, null, 'Processo atualizado com sucesso');

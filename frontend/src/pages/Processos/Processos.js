@@ -16,6 +16,23 @@ import useEscFechar from '../../hooks/useEscFechar';
 import { buscarEnderecoPorCep } from '../../utils/cep';
 import ModalCadastroRapidoParte from '../../components/ModalCadastroRapidoParte';
 
+function formatarCpfCnpjSelecao(valor, tipo) {
+  const d = String(valor || '').replace(/\D/g, '');
+  if (tipo === 'fisica' && d.length === 11) {
+    return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+  }
+  if (tipo === 'juridica' && d.length === 14) {
+    return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+  }
+  return '';
+}
+
+function labelPessoaSelecao(pessoa, tipo) {
+  const nome = pessoa?.nome || pessoa?.razao_social || '';
+  const documento = formatarCpfCnpjSelecao(tipo === 'fisica' ? pessoa?.cpf : pessoa?.cnpj, tipo);
+  return documento ? `${documento} - ${nome}` : nome;
+}
+
 export default function Processos() {
   const navigate = useNavigate();
   const [lista, setLista]           = useState([]);
@@ -792,7 +809,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
                           style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', fontSize: '13px' }}
                           onClick={() => adicionarParte(p, tipoAutor, autores, setAutores, reus, setBuscaAutor, setResultAutor)}
                         >
-                          {p.nome || p.razao_social}
+                          {labelPessoaSelecao(p, tipoAutor)}
                         </div>
                       ))}
                     </div>
@@ -859,7 +876,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
                           style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', fontSize: '13px' }}
                           onClick={() => adicionarParte(p, tipoReu, reus, setReus, autores, setBuscaReu, setResultReu)}
                         >
-                          {p.nome || p.razao_social}
+                          {labelPessoaSelecao(p, tipoReu)}
                         </div>
                       ))}
                     </div>
@@ -930,7 +947,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
                       <div key={p.id}
                         style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', fontSize: '13px' }}
                         onClick={() => adicionarParte(p, tipoPerito, peritos, setPeritos, [], setBuscaPerito, setResultPerito)}>
-                        {p.nome || p.razao_social}
+                        {labelPessoaSelecao(p, tipoPerito)}
                       </div>
                     ))}
                   </div>
@@ -1185,6 +1202,7 @@ export function ModalEditarProcesso({ processo, onFechar }) {
 
   const [nomeTitulo, setNomeTitulo] = useState('');
   const [salvando, setSalvando]     = useState(false);
+  const [modalMotivoStatus, setModalMotivoStatus] = useState(null);
 
   // Carrega auxiliares e filtra varas do fórum já selecionado
   useEffect(() => {
@@ -1266,27 +1284,35 @@ export function ModalEditarProcesso({ processo, onFechar }) {
     setLista(lista.filter((_, i) => i !== index));
   }
 
-  async function salvar() {
-    if (!autores.length) return toast.error('Adicione ao menos um autor (polo ativo)');
-    if (!reus.length)    return toast.error('Adicione ao menos um réu (polo passivo)');
+  function nomeStatus(statusId) {
+    if (!statusId) return 'Sem status';
+    return aux.status?.find(s => String(s.id) === String(statusId))?.nome || 'Status selecionado';
+  }
+
+  function montarPayload(motivoStatus = null) {
+    return {
+      numProc:           form.numProc           || null,
+      protocolo:         form.protocolo?.trim()  || null,
+      NomeTituloProc:    nomeTitulo,
+      vara_id:           form.vara_id           || null,
+      tipo_id:           form.tipo_id           || null,
+      status_id:         form.status_id         || null,
+      instancia_id:      form.instancia_id      || null,
+      data_distribuicao: form.data_distribuicao || null,
+      observacoes:       form.observacoes       || null,
+      autores,
+      reus,
+      peritos,
+      assuntos:          assuntosSelecionados,
+      cliente_polo:      form.cliente_polo || null,
+      motivo_status:     motivoStatus?.trim() || null,
+    };
+  }
+
+  async function salvarComMotivoStatus(motivoStatus = null) {
     setSalvando(true);
     try {
-      await processosAPI.atualizarProcesso(processo.id, {
-        numProc:           form.numProc           || null,
-        protocolo:         form.protocolo?.trim()  || null,
-        NomeTituloProc:    nomeTitulo,
-        vara_id:           form.vara_id           || null,
-        tipo_id:           form.tipo_id           || null,
-        status_id:         form.status_id         || null,
-        instancia_id:      form.instancia_id      || null,
-        data_distribuicao: form.data_distribuicao || null,
-        observacoes:       form.observacoes       || null,
-        autores,
-        reus,
-        peritos,
-        assuntos:          assuntosSelecionados,
-        cliente_polo:      form.cliente_polo || null,
-      });
+      await processosAPI.atualizarProcesso(processo.id, montarPayload(motivoStatus));
       toast.success('Processo atualizado com sucesso!');
       onFechar(true);
     } catch (err) {
@@ -1294,6 +1320,21 @@ export function ModalEditarProcesso({ processo, onFechar }) {
     } finally {
       setSalvando(false);
     }
+  }
+
+  async function salvar() {
+    if (!autores.length) return toast.error('Adicione ao menos um autor (polo ativo)');
+    if (!reus.length)    return toast.error('Adicione ao menos um réu (polo passivo)');
+    const statusAnterior = processo.status_id ? String(processo.status_id) : '';
+    const statusNovo = form.status_id ? String(form.status_id) : '';
+    if (statusAnterior !== statusNovo) {
+      setModalMotivoStatus({
+        anterior: nomeStatus(statusAnterior),
+        novo: nomeStatus(statusNovo),
+      });
+      return;
+    }
+    await salvarComMotivoStatus();
   }
 
   return (
@@ -1338,7 +1379,7 @@ export function ModalEditarProcesso({ processo, onFechar }) {
                     {resultAutor.map(p => (
                       <div key={p.id} style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', fontSize: '13px' }}
                         onClick={() => adicionarParte(p, tipoAutor, autores, setAutores, reus, setBuscaAutor, setResultAutor)}>
-                        {p.nome || p.razao_social}
+                        {labelPessoaSelecao(p, tipoAutor)}
                       </div>
                     ))}
                   </div>
@@ -1386,7 +1427,7 @@ export function ModalEditarProcesso({ processo, onFechar }) {
                     {resultReu.map(p => (
                       <div key={p.id} style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', fontSize: '13px' }}
                         onClick={() => adicionarParte(p, tipoReu, reus, setReus, autores, setBuscaReu, setResultReu)}>
-                        {p.nome || p.razao_social}
+                        {labelPessoaSelecao(p, tipoReu)}
                       </div>
                     ))}
                   </div>
@@ -1449,7 +1490,7 @@ export function ModalEditarProcesso({ processo, onFechar }) {
                       <div key={p.id}
                         style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', fontSize: '13px' }}
                         onClick={() => adicionarParte(p, tipoPerito, peritos, setPeritos, [], setBuscaPerito, setResultPerito)}>
-                        {p.nome || p.razao_social}
+                        {labelPessoaSelecao(p, tipoPerito)}
                       </div>
                     ))}
                   </div>
@@ -1619,6 +1660,62 @@ export function ModalEditarProcesso({ processo, onFechar }) {
             }}
           />
         )}
+        {modalMotivoStatus && (
+          <ModalMotivoStatus
+            anterior={modalMotivoStatus.anterior}
+            novo={modalMotivoStatus.novo}
+            salvando={salvando}
+            onCancelar={() => setModalMotivoStatus(null)}
+            onSalvar={async (motivo) => {
+              setModalMotivoStatus(null);
+              await salvarComMotivoStatus(motivo);
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ModalMotivoStatus({ anterior, novo, salvando, onCancelar, onSalvar }) {
+  const [motivo, setMotivo] = useState('');
+  const overlayRef = useEscFechar(onCancelar);
+
+  return (
+    <div className="modal-overlay" ref={overlayRef}>
+      <div className="modal-box" style={{ maxWidth: '500px' }}>
+        <div className="modal-header">
+          <h3>Motivo da mudança de status</h3>
+          <button className="modal-fechar" onClick={onCancelar}>✕</button>
+        </div>
+        <div className="modal-body">
+          <p style={{ marginTop: 0, color: '#374151', lineHeight: 1.5 }}>
+            O status foi alterado de <strong>{anterior}</strong> para <strong>{novo}</strong>.
+            Deseja informar o motivo desta mudança?
+          </p>
+          <textarea
+            className="form-control"
+            rows={4}
+            value={motivo}
+            onChange={e => setMotivo(e.target.value)}
+            placeholder="Digite o motivo, se quiser..."
+            autoFocus
+          />
+          <small style={{ color: '#6b7280' }}>
+            O motivo ficará salvo no histórico/auditoria do processo.
+          </small>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onCancelar} disabled={salvando}>
+            Cancelar
+          </button>
+          <button className="btn btn-outline" onClick={() => onSalvar(null)} disabled={salvando}>
+            Salvar sem motivo
+          </button>
+          <button className="btn btn-primary" onClick={() => onSalvar(motivo)} disabled={salvando}>
+            {salvando ? 'Salvando...' : 'Salvar com motivo'}
+          </button>
+        </div>
       </div>
     </div>
   );
