@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { processosAPI, pessoasAPI, etiquetasAPI } from '../../services/api';
+import { processosAPI, pessoasAPI, etiquetasAPI, configuracaoAPI } from '../../services/api';
 import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetasSubmenu } from '../../components/Etiquetas';
 import { formatarNumeroPasta, mascaraCNJ, toTitleCase } from '../../utils/formatters';
 import { useAuth } from '../../context/AuthContext';
@@ -259,7 +259,7 @@ export default function Processos() {
   );
 }
 
-function SeletorAssuntos({ assuntos = [], selecionados = [], onChange, podeGerenciar, onGerenciar }) {
+function SeletorAssuntos({ assuntos = [], selecionados = [], onChange, podeGerenciar, onGerenciar, somenteLeitura = false }) {
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState('');
   const boxRef = useRef(null);
@@ -272,12 +272,14 @@ function SeletorAssuntos({ assuntos = [], selecionados = [], onChange, podeGeren
   );
 
   function alternar(id) {
+    if (somenteLeitura) return;
     onChange(selecionadosSet.has(id)
       ? selecionados.filter(selId => selId !== id)
       : [...selecionados, id]);
   }
 
   function remover(id) {
+    if (somenteLeitura) return;
     onChange(selecionados.filter(selId => selId !== id));
   }
 
@@ -291,7 +293,8 @@ function SeletorAssuntos({ assuntos = [], selecionados = [], onChange, podeGeren
         <button
           type="button"
           className="form-control"
-          onClick={() => setAberto(a => !a)}
+          disabled={somenteLeitura}
+          onClick={() => { if (!somenteLeitura) setAberto(a => !a); }}
           style={{
             minHeight: '40px',
             height: 'auto',
@@ -301,11 +304,11 @@ function SeletorAssuntos({ assuntos = [], selecionados = [], onChange, podeGeren
             columnGap: '8px',
             rowGap: '6px',
             textAlign: 'left',
-            cursor: 'pointer',
+            cursor: somenteLeitura ? 'default' : 'pointer',
             padding: '7px 10px',
             borderColor: aberto ? '#2d6be4' : '#d9e1ec',
             boxShadow: aberto ? '0 0 0 2px rgba(45,107,228,0.08)' : 'none',
-            background: '#fff',
+            background: somenteLeitura ? '#f8fafc' : '#fff',
           }}
         >
           <span style={{
@@ -327,20 +330,22 @@ function SeletorAssuntos({ assuntos = [], selecionados = [], onChange, podeGeren
                 borderRadius: '999px', padding: '3px 9px', fontSize: '12px', fontWeight: 500,
               }}>
                 {a.nome}
-                <span
-                  role="button"
-                  tabIndex={0}
-                  onClick={e => { e.stopPropagation(); remover(a.id); }}
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); remover(a.id); } }}
-                  style={{ fontWeight: 700, cursor: 'pointer', lineHeight: 1 }}
-                >×</span>
+                {!somenteLeitura && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={e => { e.stopPropagation(); remover(a.id); }}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); remover(a.id); } }}
+                    style={{ fontWeight: 700, cursor: 'pointer', lineHeight: 1 }}
+                  >×</span>
+                )}
               </span>
             ))}
           </span>
-          <span style={{ color: '#64748b', fontSize: '12px', paddingTop: '5px' }}>{aberto ? '▲' : '▼'}</span>
+          {!somenteLeitura && <span style={{ color: '#64748b', fontSize: '12px', paddingTop: '5px' }}>{aberto ? '▲' : '▼'}</span>}
         </button>
 
-        {aberto && (
+        {!somenteLeitura && aberto && (
           <div style={{
             position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
             background: '#fff', border: '1px solid #d9e1ec', borderRadius: '8px',
@@ -379,7 +384,7 @@ function SeletorAssuntos({ assuntos = [], selecionados = [], onChange, podeGeren
         )}
       </div>
 
-      {podeGerenciar && (
+      {!somenteLeitura && podeGerenciar && (
         <button type="button" className="btn btn-outline" style={{ minHeight: '40px', padding: '0 10px', fontSize: '13px', flexShrink: 0 }} onClick={onGerenciar}>…</button>
       )}
     </div>
@@ -421,6 +426,8 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
     // Padrão 'autor': é o caso da esmagadora maioria dos processos e alinha a tela
     // com a geração de documentos, que já assume o autor quando o polo não vem definido.
     cliente_polo: 'autor',
+    responsavel_id: '',
+    oab_processo: '',
   });
 
   // Partes do processo
@@ -485,9 +492,12 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
 
   // Carrega auxiliares + sugestão de pasta + pré-preenche partes do processoBase
   useEffect(() => {
-    processosAPI.auxiliares().then(r => {
-      if (r.data.ok) {
-        const dados = r.data.dados;
+    Promise.all([
+      processosAPI.auxiliares(),
+      configuracaoAPI.buscarEscritorio(),
+    ]).then(([auxResp, cfgResp]) => {
+      if (auxResp.data.ok) {
+        const dados = auxResp.data.dados;
         setAux(dados);
         setVarasFiltradas(dados.varas);
         // Pré-preenche Status = "Conhecimento" e Instância = "1ª Instância" para novo cadastro
@@ -495,6 +505,14 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
         if (statusPadrao) setForm(f => ({ ...f, status_id: String(statusPadrao.id) }));
         const instanciaPadrao = dados.instancias.find(i => i.nome.startsWith('1'));
         if (instanciaPadrao) setForm(f => ({ ...f, instancia_id: String(instanciaPadrao.id) }));
+      }
+      if (cfgResp.data.ok) {
+        const cfg = cfgResp.data.dados || {};
+        setForm(f => ({
+          ...f,
+          responsavel_id: cfg.advogado_principal_id ? String(cfg.advogado_principal_id) : '',
+          oab_processo: cfg.oab_principal || '',
+        }));
       }
     });
     if (!pastaId) {
@@ -689,6 +707,8 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
         peritos,
         assuntos:          assuntosSelecionados,
         cliente_polo:      form.cliente_polo || null,
+        responsavel_id:    form.responsavel_id || null,
+        oab_processo:      form.oab_processo || null,
       };
       const { data } = await processosAPI.criarProcesso(payload);
       toast.success('Processo criado com sucesso!');
@@ -927,6 +947,33 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
             <small style={{ color: '#888' }}>Define para quem vão os comunicados (perícia/audiência)</small>
           </div>
 
+          {/* === RESPONSABILIDADE DO PROCESSO === */}
+          <div className="grid-2">
+            <div className="form-group">
+              <label className="form-label">Responsável pelo processo</label>
+              <select className="form-control"
+                value={form.responsavel_id || ''}
+                onChange={e => set('responsavel_id', e.target.value)}>
+                <option value="">— Não definido —</option>
+                {aux.usuarios?.map(u => (
+                  <option key={u.id} value={u.id}>
+                    {u.nome}{u.tipo === 'advogado' ? ' — advogado' : ''}{u.oab ? ` — OAB ${u.oab}` : ''}
+                  </option>
+                ))}
+              </select>
+              <small style={{ color: '#888' }}>Advogado que cuida do processo no escritório.</small>
+            </div>
+            <div className="form-group">
+              <label className="form-label">OAB do processo</label>
+              <input className="form-control"
+                value={form.oab_processo || ''}
+                onChange={e => set('oab_processo', e.target.value)}
+                placeholder="Ex: 222418/SP"
+                maxLength={30} />
+              <small style={{ color: '#888' }}>OAB vinculada/pertencente ao processo.</small>
+            </div>
+          </div>
+
           {/* === PERITOS DO PROCESSO (opcional) === */}
           <div className="form-group">
             <label className="form-label">Peritos do processo (opcional)</label>
@@ -1148,9 +1195,11 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
 // Componente independente do ModalNovoProcesso para não afetar o fluxo de criação.
 // Recebe o objeto processo completo (com autores, reus, forum_id, etc.)
 // ============================================================
-export function ModalEditarProcesso({ processo, onFechar }) {
+export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false }) {
   const { temPermissao } = useAuth();
   const overlayRef = useEscFechar(() => onFechar(false)); // ESC fecha este modal (só quando é o de cima)
+  const podeAlterarProcesso = temPermissao('processos', 'alterar');
+  const [leitura, setLeitura] = useState(somenteLeitura);
   const [modalAux, setModalAux] = useState(null);
   // Cadastro rápido de parte: null = fechado; 'autor' | 'reu' | 'perito' = campo que abriu
   const [cadastroRapido, setCadastroRapido] = useState(null);
@@ -1169,6 +1218,8 @@ export function ModalEditarProcesso({ processo, onFechar }) {
       : '',
     observacoes: processo.observacoes || '',
     cliente_polo: processo.cliente_polo || '',   // 'autor' | 'reu' | '' — cliente do escritório
+    responsavel_id: processo.responsavel_id ? String(processo.responsavel_id) : '',
+    oab_processo: processo.oab_processo || '',
   });
 
   // Partes — pré-preenchidas do processo existente
@@ -1244,14 +1295,15 @@ export function ModalEditarProcesso({ processo, onFechar }) {
     }
   }
 
-  const podeGerenciarAux = temPermissao('processos','cadastrar')
+  const podeGerenciarAux = !leitura && (temPermissao('processos','cadastrar')
     || temPermissao('processos','alterar')
-    || temPermissao('processos','excluir');
-  const podeGerenciarAssuntos = temPermissao('processos.assuntos','cadastrar')
+    || temPermissao('processos','excluir'));
+  const podeGerenciarAssuntos = !leitura && (temPermissao('processos.assuntos','cadastrar')
     || temPermissao('processos.assuntos','alterar')
-    || temPermissao('processos.assuntos','excluir');
+    || temPermissao('processos.assuntos','excluir'));
 
   async function buscarPessoas(termo, tipo, setResultados) {
+    if (leitura) return;
     if (termo.length < 2) { setResultados([]); return; }
     try {
       const fn = tipo === 'fisica' ? pessoasAPI.listarFisicas : pessoasAPI.listarJuridicas;
@@ -1305,6 +1357,8 @@ export function ModalEditarProcesso({ processo, onFechar }) {
       peritos,
       assuntos:          assuntosSelecionados,
       cliente_polo:      form.cliente_polo || null,
+      responsavel_id:    form.responsavel_id || null,
+      oab_processo:      form.oab_processo || null,
       motivo_status:     motivoStatus?.trim() || null,
     };
   }
@@ -1323,6 +1377,7 @@ export function ModalEditarProcesso({ processo, onFechar }) {
   }
 
   async function salvar() {
+    if (leitura) return;
     if (!autores.length) return toast.error('Adicione ao menos um autor (polo ativo)');
     if (!reus.length)    return toast.error('Adicione ao menos um réu (polo passivo)');
     const statusAnterior = processo.status_id ? String(processo.status_id) : '';
@@ -1341,11 +1396,12 @@ export function ModalEditarProcesso({ processo, onFechar }) {
     <div className="modal-overlay" ref={overlayRef}>
       <div className="modal-box" style={{ maxWidth: '700px' }}>
         <div className="modal-header">
-          <h3>Editar Processo</h3>
+          <h3>{leitura ? 'Detalhes do Processo' : 'Editar Processo'}</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
         </div>
 
         <div className="modal-body">
+          <fieldset disabled={leitura} style={{ border: 0, padding: 0, margin: 0 }}>
 
           {/* Preview do título gerado */}
           <div className="form-group">
@@ -1366,6 +1422,7 @@ export function ModalEditarProcesso({ processo, onFechar }) {
             <label className="form-label">Autores — polo ativo *</label>
             <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
               <select className="form-control" style={{ maxWidth: '130px' }} value={tipoAutor}
+                disabled={leitura}
                 onChange={e => { setTipoAutor(e.target.value); setResultAutor([]); setBuscaAutor(''); }}>
                 <option value="fisica">Física</option>
                 <option value="juridica">Jurídica</option>
@@ -1373,8 +1430,9 @@ export function ModalEditarProcesso({ processo, onFechar }) {
               <div style={{ flex: 1, position: 'relative' }}>
                 <input className="form-control" placeholder="Buscar e adicionar autor..."
                   value={buscaAutor}
+                  disabled={leitura}
                   onChange={e => { setBuscaAutor(e.target.value); buscarPessoas(e.target.value, tipoAutor, setResultAutor); }} />
-                {resultAutor.length > 0 && (
+                {!leitura && resultAutor.length > 0 && (
                   <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #ddd', borderRadius: '6px', zIndex: 20, maxHeight: '160px', overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
                     {resultAutor.map(p => (
                       <div key={p.id} style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', fontSize: '13px' }}
@@ -1385,10 +1443,12 @@ export function ModalEditarProcesso({ processo, onFechar }) {
                   </div>
                 )}
               </div>
-              <button type="button" className="btn btn-outline"
-                title="Cadastrar nova pessoa (conforme o tipo selecionado)"
-                style={{ padding: '0 12px', fontSize: '16px', flexShrink: 0 }}
-                onClick={() => setCadastroRapido('autor')}>…</button>
+              {!leitura && (
+                <button type="button" className="btn btn-outline"
+                  title="Cadastrar nova pessoa (conforme o tipo selecionado)"
+                  style={{ padding: '0 12px', fontSize: '16px', flexShrink: 0 }}
+                  onClick={() => setCadastroRapido('autor')}>…</button>
+              )}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '28px' }}>
               {autores.map((a, i) => (
@@ -1401,8 +1461,10 @@ export function ModalEditarProcesso({ processo, onFechar }) {
                       </span>
                     )}
                   </span>
-                  <button onClick={() => removerParte(i, autores, setAutores)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1e40af', fontWeight: 'bold', padding: '0', lineHeight: '1', fontSize: '14px' }}>×</button>
+                  {!leitura && (
+                    <button onClick={() => removerParte(i, autores, setAutores)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1e40af', fontWeight: 'bold', padding: '0', lineHeight: '1', fontSize: '14px' }}>×</button>
+                  )}
                 </span>
               ))}
               {autores.length === 0 && <span style={{ color: '#ccc', fontSize: '13px' }}>Nenhum autor adicionado</span>}
@@ -1414,6 +1476,7 @@ export function ModalEditarProcesso({ processo, onFechar }) {
             <label className="form-label">Réus — polo passivo *</label>
             <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
               <select className="form-control" style={{ maxWidth: '130px' }} value={tipoReu}
+                disabled={leitura}
                 onChange={e => { setTipoReu(e.target.value); setResultReu([]); setBuscaReu(''); }}>
                 <option value="fisica">Física</option>
                 <option value="juridica">Jurídica</option>
@@ -1421,8 +1484,9 @@ export function ModalEditarProcesso({ processo, onFechar }) {
               <div style={{ flex: 1, position: 'relative' }}>
                 <input className="form-control" placeholder="Buscar e adicionar réu..."
                   value={buscaReu}
+                  disabled={leitura}
                   onChange={e => { setBuscaReu(e.target.value); buscarPessoas(e.target.value, tipoReu, setResultReu); }} />
-                {resultReu.length > 0 && (
+                {!leitura && resultReu.length > 0 && (
                   <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #ddd', borderRadius: '6px', zIndex: 20, maxHeight: '160px', overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
                     {resultReu.map(p => (
                       <div key={p.id} style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', fontSize: '13px' }}
@@ -1433,10 +1497,12 @@ export function ModalEditarProcesso({ processo, onFechar }) {
                   </div>
                 )}
               </div>
-              <button type="button" className="btn btn-outline"
-                title="Cadastrar nova pessoa (conforme o tipo selecionado)"
-                style={{ padding: '0 12px', fontSize: '16px', flexShrink: 0 }}
-                onClick={() => setCadastroRapido('reu')}>…</button>
+              {!leitura && (
+                <button type="button" className="btn btn-outline"
+                  title="Cadastrar nova pessoa (conforme o tipo selecionado)"
+                  style={{ padding: '0 12px', fontSize: '16px', flexShrink: 0 }}
+                  onClick={() => setCadastroRapido('reu')}>…</button>
+              )}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '28px' }}>
               {reus.map((r, i) => (
@@ -1449,8 +1515,10 @@ export function ModalEditarProcesso({ processo, onFechar }) {
                       </span>
                     )}
                   </span>
-                  <button onClick={() => removerParte(i, reus, setReus)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#991b1b', fontWeight: 'bold', padding: '0', lineHeight: '1', fontSize: '14px' }}>×</button>
+                  {!leitura && (
+                    <button onClick={() => removerParte(i, reus, setReus)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#991b1b', fontWeight: 'bold', padding: '0', lineHeight: '1', fontSize: '14px' }}>×</button>
+                  )}
                 </span>
               ))}
               {reus.length === 0 && <span style={{ color: '#ccc', fontSize: '13px' }}>Nenhum réu adicionado</span>}
@@ -1468,6 +1536,33 @@ export function ModalEditarProcesso({ processo, onFechar }) {
               <option value="reu">Réu (polo passivo)</option>
             </select>
             <small style={{ color: '#888' }}>Define para quem vão os comunicados (perícia/audiência)</small>
+          </div>
+
+          {/* === RESPONSABILIDADE DO PROCESSO === */}
+          <div className="grid-2">
+            <div className="form-group">
+              <label className="form-label">Responsável pelo processo</label>
+              <select className="form-control"
+                value={form.responsavel_id || ''}
+                onChange={e => set('responsavel_id', e.target.value)}>
+                <option value="">— Não definido —</option>
+                {aux.usuarios?.map(u => (
+                  <option key={u.id} value={u.id}>
+                    {u.nome}{u.tipo === 'advogado' ? ' — advogado' : ''}{u.oab ? ` — OAB ${u.oab}` : ''}
+                  </option>
+                ))}
+              </select>
+              <small style={{ color: '#888' }}>Advogado que cuida do processo no escritório.</small>
+            </div>
+            <div className="form-group">
+              <label className="form-label">OAB do processo</label>
+              <input className="form-control"
+                value={form.oab_processo || ''}
+                onChange={e => set('oab_processo', e.target.value)}
+                placeholder="Ex: 222418/SP"
+                maxLength={30} />
+              <small style={{ color: '#888' }}>OAB vinculada/pertencente ao processo.</small>
+            </div>
           </div>
 
           {/* === PERITOS DO PROCESSO (opcional) === */}
@@ -1505,8 +1600,10 @@ export function ModalEditarProcesso({ processo, onFechar }) {
               {peritos.map((pe, i) => (
                 <span key={i} style={{ background: '#ede9fe', color: '#5b21b6', borderRadius: '20px', padding: '4px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   {pe.nome}
-                  <button onClick={() => removerParte(i, peritos, setPeritos)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#5b21b6', fontWeight: 'bold', padding: '0', lineHeight: '1', fontSize: '14px' }}>×</button>
+                  {!leitura && (
+                    <button onClick={() => removerParte(i, peritos, setPeritos)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#5b21b6', fontWeight: 'bold', padding: '0', lineHeight: '1', fontSize: '14px' }}>×</button>
+                  )}
                 </span>
               ))}
               {peritos.length === 0 && <span style={{ color: '#ccc', fontSize: '13px' }}>Nenhum perito adicionado</span>}
@@ -1519,6 +1616,7 @@ export function ModalEditarProcesso({ processo, onFechar }) {
               <label className="form-label">Número do Processo (CNJ)</label>
               <input className="form-control"
                 value={form.numProc}
+                disabled={leitura}
                 onChange={e => set('numProc', mascaraCNJ(e.target.value))}
                 placeholder="0000000-00.0000.0.00.0000"
                 maxLength={25} />
@@ -1528,6 +1626,7 @@ export function ModalEditarProcesso({ processo, onFechar }) {
               <label className="form-label">Número de Protocolo</label>
               <input className="form-control"
                 value={form.protocolo}
+                disabled={leitura}
                 onChange={e => set('protocolo', e.target.value)}
                 placeholder="Protocolo (antes de existir o nº CNJ)"
                 maxLength={60} />
@@ -1584,7 +1683,7 @@ export function ModalEditarProcesso({ processo, onFechar }) {
               <label className="form-label">Vara</label>
               <div style={{ display: 'flex', gap: '4px' }}>
                 <select className="form-control" value={form.vara_id}
-                  onChange={e => set('vara_id', e.target.value)} disabled={!form.forum_id}>
+                  onChange={e => set('vara_id', e.target.value)} disabled={leitura || !form.forum_id}>
                   <option value="">{form.forum_id ? '— Selecione —' : '— Selecione o fórum primeiro —'}</option>
                   {varasFiltradas.map(v => <option key={v.id} value={v.id}>{v.abrev_nome || v.nome}</option>)}
                 </select>
@@ -1602,6 +1701,7 @@ export function ModalEditarProcesso({ processo, onFechar }) {
               onChange={setAssuntosSelecionados}
               podeGerenciar={podeGerenciarAssuntos}
               onGerenciar={() => setModalAux('assuntos')}
+              somenteLeitura={leitura}
             />
           </div>
 
@@ -1610,6 +1710,7 @@ export function ModalEditarProcesso({ processo, onFechar }) {
             <label className="form-label">Data de Distribuição</label>
             <input type="date" className="form-control" style={{ maxWidth: '180px' }}
               value={form.data_distribuicao}
+              disabled={leitura}
               onChange={e => set('data_distribuicao', e.target.value)} />
           </div>
 
@@ -1618,21 +1719,36 @@ export function ModalEditarProcesso({ processo, onFechar }) {
             <label className="form-label">Observações</label>
             <textarea className="form-control" rows={2}
               value={form.observacoes}
+              disabled={leitura}
               onChange={e => set('observacoes', e.target.value)}
               onBlur={() => set('observacoes', toTitleCase(form.observacoes))} />
           </div>
 
+          </fieldset>
         </div>
 
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
-            {salvando ? 'Salvando...' : 'Salvar Alterações'}
-          </button>
+          {leitura ? (
+            <>
+              <button className="btn btn-secondary" onClick={() => onFechar(false)}>Fechar</button>
+              {podeAlterarProcesso && (
+                <button className="btn btn-primary" onClick={() => setLeitura(false)}>
+                  Editar
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+                {salvando ? 'Salvando...' : 'Salvar Alterações'}
+              </button>
+            </>
+          )}
         </div>
 
         {/* Modal auxiliar */}
-        {modalAux && (
+        {!leitura && modalAux && (
           <ModalGerenciarAux
             tipo={modalAux}
             itens={modalAux === 'tipos' ? (aux.tipos || [])
@@ -1648,7 +1764,7 @@ export function ModalEditarProcesso({ processo, onFechar }) {
         )}
 
         {/* Cadastro rápido de nova parte (Física/Jurídica conforme o tipo do campo) */}
-        {cadastroRapido && (
+        {!leitura && cadastroRapido && (
           <ModalCadastroRapidoParte
             tipo={cadastroRapido === 'autor' ? tipoAutor : cadastroRapido === 'reu' ? tipoReu : tipoPerito}
             onFechar={() => setCadastroRapido(null)}
@@ -1660,7 +1776,7 @@ export function ModalEditarProcesso({ processo, onFechar }) {
             }}
           />
         )}
-        {modalMotivoStatus && (
+        {!leitura && modalMotivoStatus && (
           <ModalMotivoStatus
             anterior={modalMotivoStatus.anterior}
             novo={modalMotivoStatus.novo}

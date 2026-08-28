@@ -144,6 +144,7 @@ export default function PastaDetalhe() {
   const [modalProcesso, setModalProcesso]         = useState(false);
   const [modalEditar, setModalEditar]             = useState(false);
   const [processoEditando, setProcessoEditando]   = useState(null);
+  const [processoSomenteLeitura, setProcessoSomenteLeitura] = useState(false);
   const [modalAndamento, setModalAndamento]       = useState(false);
   const [andamentoEditando, setAndamentoEditando] = useState(null);
   const [modalLancamento, setModalLancamento]     = useState(false);
@@ -738,7 +739,27 @@ export default function PastaDetalhe() {
                   {processos.map(pr => (
                     <tr key={pr.id}>
                       <td>
-                        <div style={{ fontWeight: '500' }}>{pr.NomeTituloProc || '—'}</div>
+                        <button
+                          type="button"
+                          title="Ver cadastro do processo"
+                          onClick={() => {
+                            setProcessoEditando(pr);
+                            setProcessoSomenteLeitura(true);
+                            setModalEditar(true);
+                          }}
+                          style={{
+                            border: 'none',
+                            background: 'transparent',
+                            color: '#111827',
+                            fontWeight: '500',
+                            padding: 0,
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            font: 'inherit',
+                          }}
+                        >
+                          {pr.NomeTituloProc || '—'}
+                        </button>
                       </td>
                       <td>
                         {pr.numProc
@@ -763,7 +784,7 @@ export default function PastaDetalhe() {
                         <MenuAcoes itens={[
                           { label: 'Editar', icone: '✏️',
                             oculto: !temPermissao('processos','alterar'),
-                            onClick: () => { setProcessoEditando(pr); setModalEditar(true); } },
+                            onClick: () => { setProcessoEditando(pr); setProcessoSomenteLeitura(false); setModalEditar(true); } },
                           { label: 'Excluir', icone: '🗑️', perigo: true,
                             oculto: !temPermissao('processos','excluir'),
                             onClick: () => excluirProcesso(pr.id) },
@@ -1483,9 +1504,11 @@ export default function PastaDetalhe() {
       {modalEditar && processoEditando && (
         <ModalEditarProcesso
           processo={processoEditando}
+          somenteLeitura={processoSomenteLeitura}
           onFechar={(reload) => {
             setModalEditar(false);
             setProcessoEditando(null);
+            setProcessoSomenteLeitura(false);
             if (reload) carregarPasta();
           }}
         />

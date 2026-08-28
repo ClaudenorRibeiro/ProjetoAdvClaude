@@ -123,7 +123,8 @@ async function atualizarEscritorio(req, res) {
       dias_processo_parado,
       prazo_fazendo_timeout, dias_audiencia_sem_adv,
       titulo_aba, mensagem_aniversario, tempo_inatividade_min,
-      ata_advogado_obrigatorio
+      ata_advogado_obrigatorio,
+      advogado_principal_id, oab_principal
     } = req.body;
 
     if (!nome) return erro(res, 'Nome do escritório é obrigatório');
@@ -144,6 +145,15 @@ async function atualizarEscritorio(req, res) {
       }
     }
 
+    const advogadoPrincipalId = advogado_principal_id ? parseInt(advogado_principal_id, 10) : null;
+    if (advogadoPrincipalId) {
+      const [adv] = await pool.execute(
+        'SELECT id FROM usuarios WHERE id = ? AND ativo = 1 AND nivel > 0 LIMIT 1',
+        [advogadoPrincipalId]
+      );
+      if (!adv.length) return erro(res, 'Advogado principal do escritório não encontrado ou inativo');
+    }
+
     // INSERT se não existir registro, UPDATE se já existir (id=1 fixo)
     // Garante funcionamento mesmo em instalações novas sem registro inicial
     await pool.execute(
@@ -153,8 +163,9 @@ async function atualizarEscritorio(req, res) {
           cor_principal, horario_alerta_prazos, horario_alerta_prazos_2,
           alerta_atrasado_ativo, alerta_emails,
           dias_alerta_audiencia, dias_alerta_pericia, dias_sem_movimentacao, dias_processo_parado,
-          prazo_fazendo_timeout, dias_audiencia_sem_adv, titulo_aba, mensagem_aniversario, tempo_inatividade_min, ata_advogado_obrigatorio, setup_concluido)
-       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+          prazo_fazendo_timeout, dias_audiencia_sem_adv, titulo_aba, mensagem_aniversario, tempo_inatividade_min,
+          ata_advogado_obrigatorio, advogado_principal_id, oab_principal, setup_concluido)
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
        ON DUPLICATE KEY UPDATE
          nome=VALUES(nome), cnpj_cpf=VALUES(cnpj_cpf), email=VALUES(email), telefone=VALUES(telefone),
          cep=VALUES(cep), logradouro=VALUES(logradouro), numero=VALUES(numero),
@@ -169,6 +180,8 @@ async function atualizarEscritorio(req, res) {
          mensagem_aniversario=VALUES(mensagem_aniversario),
          tempo_inatividade_min=VALUES(tempo_inatividade_min),
          ata_advogado_obrigatorio=VALUES(ata_advogado_obrigatorio),
+         advogado_principal_id=VALUES(advogado_principal_id),
+         oab_principal=VALUES(oab_principal),
          setup_concluido=1`,
       [
         nome, cnpj_cpf || null, email || null, telefone || null,
@@ -179,7 +192,8 @@ async function atualizarEscritorio(req, res) {
         parseInt(dias_processo_parado, 10) || 365,
         parseInt(prazo_fazendo_timeout) || 60, parseInt(dias_audiencia_sem_adv) || 7,
         titulo_aba || null, mensagem_aniversario || null, tempoInat,
-        ata_advogado_obrigatorio ? 1 : 0
+        ata_advogado_obrigatorio ? 1 : 0,
+        advogadoPrincipalId, oab_principal || null
       ]
     );
 

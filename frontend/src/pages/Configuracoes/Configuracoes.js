@@ -275,6 +275,7 @@ function TabEscritorio() {
   const [carregando, setCarregando] = useState(true);
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [enviandoLogo, setEnviandoLogo] = useState(false);
+  const [usuarios, setUsuarios] = useState([]);
   const refNumero = React.useRef(null);
   const refLogo   = React.useRef(null);
 
@@ -330,8 +331,15 @@ function TabEscritorio() {
   }
 
   const carregar = useCallback(() => {
-    configuracaoAPI.buscarEscritorio().then(r => {
-      if (r.data.ok) setForm(r.data.dados);
+    Promise.all([
+      configuracaoAPI.buscarEscritorio(),
+      configuracaoAPI.listarUsuarios(),
+    ]).then(([cfg, us]) => {
+      if (cfg.data.ok) setForm(cfg.data.dados);
+      if (us.data.ok) {
+        const ativos = (us.data.dados || []).filter(u => u.ativo !== 0 && u.nivel > 0);
+        setUsuarios(ativos);
+      }
     }).finally(() => setCarregando(false));
   }, []);
 
@@ -372,6 +380,12 @@ function TabEscritorio() {
     form.horario_alerta_prazos && form.horario_alerta_prazos_2 &&
     Math.abs(minutosDoHorario(form.horario_alerta_prazos) - minutosDoHorario(form.horario_alerta_prazos_2)) < 60
   );
+  const usuariosOrdenados = [...usuarios].sort((a, b) => {
+    const advA = a.tipo === 'advogado' ? 0 : 1;
+    const advB = b.tipo === 'advogado' ? 0 : 1;
+    if (advA !== advB) return advA - advB;
+    return String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR');
+  });
 
   async function salvar() {
     if (!form.nome) return toast.error('Nome do escritório é obrigatório');
@@ -498,6 +512,33 @@ function TabEscritorio() {
           <label className="form-label">Estado</label>
           <input className="form-control" value={form.estado||''} onChange={e => set('estado', e.target.value)}
             placeholder="SP" maxLength={2} disabled={!ehSuper} />
+        </div>
+      </div>
+
+      <h4 style={{margin:'20px 0 12px',fontSize:'13px',fontWeight:600,color:'#555'}}>Padrão para novos processos</h4>
+      <div className="grid-2">
+        <div className="form-group">
+          <label className="form-label">Advogado principal do escritório</label>
+          <select className="form-control" value={form.advogado_principal_id || ''}
+            onChange={e => set('advogado_principal_id', e.target.value)}
+            disabled={!ehSuper}>
+            <option value="">— Não definido —</option>
+            {usuariosOrdenados.map(u => (
+              <option key={u.id} value={u.id}>
+                {u.nome}{u.tipo === 'advogado' ? ' — advogado' : ''}{u.oab ? ` — OAB ${u.oab}` : ''}
+              </option>
+            ))}
+          </select>
+          <small style={{color:'#888'}}>Será usado como responsável padrão ao criar processo novo.</small>
+        </div>
+        <div className="form-group">
+          <label className="form-label">OAB principal do escritório</label>
+          <input className="form-control" value={form.oab_principal || ''}
+            onChange={e => set('oab_principal', e.target.value)}
+            placeholder="Ex: 222418/SP"
+            maxLength={30}
+            disabled={!ehSuper} />
+          <small style={{color:'#888'}}>Será usada como OAB padrão do processo novo.</small>
         </div>
       </div>
 

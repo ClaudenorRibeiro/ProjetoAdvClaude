@@ -108,7 +108,7 @@ async function enviarEmailDaTarefa(tarefaId, atribuidaPara, autorNome, edicao) {
 // GET /api/tarefas — Lista tarefas com filtros
 async function listar(req, res) {
   try {
-    const { usuario_id, concluida, prioridade, processo_id, atrasadas, numero_processo, data_de, data_ate, incluir_sem_data, pagina = 1, limite = 30 } = req.query;
+    const { usuario_id, concluida, prioridade, processo_id, atrasadas, busca, numero_processo, data_de, data_ate, incluir_sem_data, pagina = 1, limite = 30 } = req.query;
     const params = [];
     let where = 'WHERE 1=1';
 
@@ -130,16 +130,31 @@ async function listar(req, res) {
     // lateral) mostra TODAS. Tarefas "Rotina Interna" (processo_id NULL) só aparecem no menu lateral.
     if (processo_id)             { where += ' AND t.processo_id = ?'; params.push(processo_id); }
 
-    // Filtro por TRECHO do número do processo (digitado na tela de Tarefas). Só a partir de 3 dígitos.
-    // Ignora a pontuação dos dois lados (numProc é gravado com máscara). Referencia pr.numProc —
-    // a query do COUNT também faz LEFT JOIN em tblproc (abaixo), então a contagem continua batendo.
-    // Tarefas "Rotina Interna" (processo_id NULL) naturalmente ficam de fora quando este filtro está ativo.
-    if (numero_processo) {
-      const digitos = String(numero_processo).replace(/\D/g, '');
-      if (digitos.length >= 3) {
-        where += " AND REPLACE(REPLACE(REPLACE(pr.numProc, '.', ''), '-', ''), ' ', '') LIKE ?";
-        params.push(`%${digitos}%`);
-      }
+    // Busca geral da tela de Tarefas: procura por "contém" no texto da tarefa e no vínculo
+    // (processo, pasta ou Rotina Interna). Mantém numero_processo como compatibilidade com chamadas antigas.
+    const termoBusca = String(busca ?? numero_processo ?? '').trim();
+    if (termoBusca) {
+      const likeBusca = `%${termoBusca}%`;
+      const digitosBusca = termoBusca.replace(/\D/g, '');
+      const likeDigitos = `%${digitosBusca}%`;
+      where += ` AND (
+        t.titulo LIKE ?
+        OR t.descricao LIKE ?
+        OR pr.numProc LIKE ?
+        OR REPLACE(REPLACE(REPLACE(pr.numProc, '.', ''), '-', ''), ' ', '') LIKE ?
+        OR LPAD(pa.numPasta, 4, '0') LIKE ?
+        OR CAST(pa.numPasta AS CHAR) LIKE ?
+        OR LPAD(pa2.numPasta, 4, '0') LIKE ?
+        OR CAST(pa2.numPasta AS CHAR) LIKE ?
+        OR ('rotina interna' LIKE CONCAT('%', LOWER(?), '%') AND t.processo_id IS NULL AND t.pasta_id IS NULL)
+      )`;
+      params.push(
+        likeBusca, likeBusca,
+        likeBusca, digitosBusca ? likeDigitos : likeBusca,
+        likeBusca, likeBusca,
+        likeBusca, likeBusca,
+        termoBusca.toLowerCase()
+      );
     }
 
     // Intervalo de vencimento (de / até).
@@ -218,13 +233,13 @@ async function listar(req, res) {
       [req.usuario.id, ...params]
     );
 
-    // O COUNT usa o MESMO `where`. Como o filtro de número referencia pr.numProc, fazemos o mesmo
-    // LEFT JOIN em tblproc aqui (LEFT preserva as tarefas de "Rotina Interna" sem processo, então a
-    // contagem continua idêntica à de antes quando esse filtro não está em uso).
+    // O COUNT usa o MESMO `where` e os mesmos vínculos da listagem, para o total não divergir.
     const [total] = await pool.execute(
       `SELECT COUNT(*) as total
          FROM tarefas t
+         LEFT JOIN tblpasta pa  ON t.pasta_id = pa.id
          LEFT JOIN tblproc pr ON t.processo_id = pr.id
+         LEFT JOIN tblpasta pa2 ON pr.pasta_id = pa2.id
          ${where}`, params
     );
 

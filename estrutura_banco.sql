@@ -534,7 +534,11 @@ CREATE TABLE `configuracoes_escritorio` (
   `documentos_maiusculas` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Se 1, o nome do autor/reu sai em CAIXA ALTA nos documentos',
   `tempo_inatividade_min` int NOT NULL DEFAULT '15' COMMENT 'Minutos de inatividade ate o logout automatico (minimo 15)',
   `ata_advogado_obrigatorio` tinyint DEFAULT '0',
-  PRIMARY KEY (`id`)
+  `advogado_principal_id` int DEFAULT NULL,
+  `oab_principal` varchar(30) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `fk_config_advogado_principal` (`advogado_principal_id`),
+  CONSTRAINT `fk_config_advogado_principal` FOREIGN KEY (`advogado_principal_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -1641,6 +1645,8 @@ CREATE TABLE `tblproc` (
   `instancia_id` int DEFAULT NULL,
   `data_distribuicao` date DEFAULT NULL,
   `observacoes` text,
+  `responsavel_id` int DEFAULT NULL,
+  `oab_processo` varchar(30) DEFAULT NULL,
   `ativo` tinyint(1) DEFAULT '1',
   `criado_por` int DEFAULT NULL,
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
@@ -1657,13 +1663,15 @@ CREATE TABLE `tblproc` (
   KEY `idx_proc_numproc` (`numProc`),
   KEY `idx_proc_pasta_ativo` (`pasta_id`,`ativo`),
   KEY `idx_proc_protocolo` (`protocolo`),
+  KEY `fk_tblproc_responsavel` (`responsavel_id`),
   CONSTRAINT `tblproc_ibfk_1` FOREIGN KEY (`pasta_id`) REFERENCES `tblpasta` (`id`),
   CONSTRAINT `tblproc_ibfk_2` FOREIGN KEY (`vara_id`) REFERENCES `tblvara` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblproc_ibfk_3` FOREIGN KEY (`tipo_id`) REFERENCES `tbltipoproc` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblproc_ibfk_4` FOREIGN KEY (`status_id`) REFERENCES `tblstatusproc` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblproc_ibfk_5` FOREIGN KEY (`instancia_id`) REFERENCES `tblinstanciaproc` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblproc_ibfk_6` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `tblproc_ibfk_7` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+  CONSTRAINT `tblproc_ibfk_7` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_tblproc_responsavel` FOREIGN KEY (`responsavel_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=6083 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 

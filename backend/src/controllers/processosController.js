@@ -274,6 +274,8 @@ async function buscarPasta(req, res) {
          tp.nome AS tipo_nome,
          sp.nome AS status_nome,
          inst.nome AS instancia_nome,
+         resp.nome AS responsavel_nome,
+         resp.oab AS responsavel_oab,
          (SELECT pee.slot FROM processos_etiquetas_escritorio pee
           WHERE pee.processo_id = pr.id) AS etiqueta_escritorio
        FROM tblproc pr
@@ -282,6 +284,7 @@ async function buscarPasta(req, res) {
        LEFT JOIN tbltipoproc tp    ON pr.tipo_id     = tp.id
        LEFT JOIN tblstatusproc sp  ON pr.status_id   = sp.id
        LEFT JOIN tblinstanciaproc inst ON pr.instancia_id = inst.id
+       LEFT JOIN usuarios resp     ON pr.responsavel_id = resp.id
        WHERE pr.pasta_id = ? AND pr.ativo = 1
        ORDER BY pr.id DESC`,
       [id]
@@ -424,6 +427,8 @@ async function criarProcesso(req, res) {
     peritos = [],          // peritos vinculados ao processo (opcional)
     assuntos = [],         // assuntos vinculados ao processo (opcional)
     cliente_polo,          // 'autor' ou 'reu' — qual polo é o cliente do escritório
+    responsavel_id,
+    oab_processo,
   } = req.body;
 
   if (!NomeTituloProc) return erro(res, 'Título do processo é obrigatório');
@@ -491,12 +496,24 @@ async function criarProcesso(req, res) {
       }
     }
 
+    const responsavelId = responsavel_id ? parseInt(responsavel_id, 10) : null;
+    if (responsavelId) {
+      const [responsavel] = await conn.execute(
+        'SELECT id FROM usuarios WHERE id = ? AND ativo = 1 AND nivel > 0 LIMIT 1',
+        [responsavelId]
+      );
+      if (!responsavel.length) {
+        await conn.rollback();
+        return erro(res, 'Responsável pelo processo não encontrado ou inativo');
+      }
+    }
+
     // Cria o processo
     const [procResult] = await conn.execute(
       `INSERT INTO tblproc
          (pasta_id, numProc, protocolo, NomeTituloProc, cliente_polo, vara_id, tipo_id, status_id, instancia_id,
-          data_distribuicao, observacoes, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          data_distribuicao, observacoes, responsavel_id, oab_processo, criado_por)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [pastaId,
        numProcLimpo,
        protocoloLimpo,
@@ -508,6 +525,8 @@ async function criarProcesso(req, res) {
        instancia_id     || null,
        data_distribuicao || null,
        observacoes      || null,
+       responsavelId,
+       oab_processo     || null,
        req.usuario.id]
     );
     const procId = procResult.insertId;
@@ -641,6 +660,7 @@ async function atualizarProcesso(req, res) {
     vara_id, tipo_id, status_id, instancia_id,
     data_distribuicao, observacoes,
     autores, reus, peritos, assuntos, cliente_polo,
+    responsavel_id, oab_processo,
     motivo_status,
   } = req.body;
 
@@ -691,11 +711,23 @@ async function atualizarProcesso(req, res) {
       }
     }
 
+    const responsavelId = responsavel_id ? parseInt(responsavel_id, 10) : null;
+    if (responsavelId) {
+      const [responsavel] = await conn.execute(
+        'SELECT id FROM usuarios WHERE id = ? AND ativo = 1 AND nivel > 0 LIMIT 1',
+        [responsavelId]
+      );
+      if (!responsavel.length) {
+        await conn.rollback();
+        return erro(res, 'Responsável pelo processo não encontrado ou inativo');
+      }
+    }
+
     await conn.execute(
       `UPDATE tblproc SET
          numProc=?, protocolo=?, NomeTituloProc=?, cliente_polo=?,
          vara_id=?, tipo_id=?, status_id=?, instancia_id=?,
-         data_distribuicao=?, observacoes=?,
+         data_distribuicao=?, observacoes=?, responsavel_id=?, oab_processo=?,
          alterado_por=?, alterado_em=NOW()
        WHERE id = ?`,
       [numProc          || null,
@@ -709,6 +741,8 @@ async function atualizarProcesso(req, res) {
        instancia_id     || null,
        data_distribuicao || null,
        observacoes      || null,
+       responsavelId,
+       oab_processo     || null,
        req.usuario.id,
        id]
     );
@@ -805,7 +839,7 @@ async function buscarAuxiliares(req, res) {
       pool.execute('SELECT * FROM tbltipoproc WHERE ativo=1 ORDER BY nome'),
       pool.execute('SELECT * FROM tblstatusproc WHERE ativo=1 ORDER BY nome'),
       pool.execute('SELECT * FROM tblinstanciaproc WHERE ativo=1 ORDER BY nome'),
-      pool.execute('SELECT id, nome, tipo FROM usuarios WHERE ativo=1 AND nivel > 0 ORDER BY nome'),
+      pool.execute("SELECT id, nome, tipo, oab FROM usuarios WHERE ativo=1 AND nivel > 0 ORDER BY tipo = 'advogado' DESC, nome"),
       pool.execute('SELECT * FROM tblassuntoproc WHERE ativo=1 ORDER BY nome'),
     ]);
 

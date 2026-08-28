@@ -44,7 +44,7 @@ function filtrosPadrao(usuarioId) {
   return {
     concluida: '0', prioridade: '', atrasadas: '',
     usuario_id: usuarioId || '',
-    numero_processo: '',
+    busca: '',
     data_de: '', data_ate: dataMaisDias(7), incluir_sem_data: '1',
     pagina: 1,
   };
@@ -61,9 +61,9 @@ export default function Tarefas() {
   // concluida: '0' pendentes | '1' concluídas | '' todas.
   // atrasadas: '1' mostra só as pendentes já vencidas (atalho); quando ativo, concluida fica '' (o backend cuida).
   // usuario_id: filtro "Para" — começa no usuário logado (vê as dele + as do escritório); '' = Todos.
-  // numero_processo: trecho do nº do processo (a partir de 3 dígitos). data_de / data_ate: intervalo de vencimento.
+  // busca: procura por trecho em tarefa/descrição/vínculo. data_de / data_ate: intervalo de vencimento.
   const [filtros, setFiltros]         = useState(() => filtrosPadrao(usuario?.id));
-  const [numeroInput, setNumeroInput] = useState(''); // valor cru do campo Número do Processo (debounced p/ filtros)
+  const [buscaInput, setBuscaInput]   = useState(''); // valor cru do campo de busca geral (debounced p/ filtros)
   const [usuarios, setUsuarios]       = useState([]); // lista para o dropdown "Para" (só carrega p/ quem vê todos)
   const [carregando, setCarregando]   = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
@@ -102,15 +102,13 @@ export default function Tarefas() {
     }
   }, [podeVerTodos]);
 
-  // Debounce do campo "Número do Processo": busca 350ms depois de parar de digitar (mesmo padrão de Prazos).
-  // Considera só os dígitos: com 3 ou mais aplica o filtro; com menos (ou vazio) limpa e mostra tudo.
+  // Debounce do campo de busca: procura por "contém" em tarefa/descrição/vínculo.
   useEffect(() => {
     const t = setTimeout(() => {
-      const dig = numeroInput.replace(/\D/g, '');
-      setFiltros(f => ({ ...f, numero_processo: dig.length >= 3 ? dig : '', pagina: 1 }));
+      setFiltros(f => ({ ...f, busca: buscaInput.trim(), pagina: 1 }));
     }, 350);
     return () => clearTimeout(t);
-  }, [numeroInput]);
+  }, [buscaInput]);
 
   async function toggleConcluir(tarefa) {
     try {
@@ -228,13 +226,12 @@ export default function Tarefas() {
             </div>
           )}
           <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label">Número do Processo</label>
-            {/* Filtra por trecho do número (a partir do 3º caractere), com debounce de 350ms.
-                Aceita com ou sem pontuação — o backend ignora pontos e traços na comparação. */}
-            <input className="form-control" placeholder="Parte do número..."
-              value={numeroInput} maxLength={25}
-              style={{ minWidth: '170px', fontFamily: 'monospace', letterSpacing: '0.5px' }}
-              onChange={e => setNumeroInput(e.target.value)} />
+            <label className="form-label">Pesquisar</label>
+            {/* Procura por trecho em Tarefa, descrição e Vínculo (processo, pasta ou rotina interna). */}
+            <input className="form-control" placeholder="Tarefa ou vínculo..."
+              value={buscaInput} maxLength={80}
+              style={{ minWidth: '220px' }}
+              onChange={e => setBuscaInput(e.target.value)} />
           </div>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Vencimento de</label>
@@ -245,7 +242,7 @@ export default function Tarefas() {
             <input type="date" className="form-control" value={filtros.data_ate} onChange={e => setDataManual('data_ate', e.target.value)} />
           </div>
           <button className="btn btn-secondary" style={{ marginBottom: '1px' }}
-            onClick={() => { setNumeroInput(''); setFiltros(filtrosPadrao(usuario?.id)); }}>
+            onClick={() => { setBuscaInput(''); setFiltros(filtrosPadrao(usuario?.id)); }}>
             ✕ Limpar filtros
           </button>
           {temPermissao('tarefas', 'cadastrar') && (
