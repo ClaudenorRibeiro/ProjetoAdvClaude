@@ -6,16 +6,20 @@
 //   - importar: baixa as publicações de UM dia da AASP e salva só as NOVAS
 //     (dedup pela "impressão digital"/hash do texto inteiro — fiel: 1 letra
 //     diferente já é outra publicação). Quem importa é registrado como leitor.
-//   - listar: lista/pesquisa as publicações salvas, respeitando a visibilidade
-//     (admin vê tudo; demais veem as do escritório + as direcionadas a eles).
-//   - direcionar: manda a publicação para o escritório (todos) ou para
-//     usuários específicos (um ou vários).
-//   - tratar/reabrir, excluir, histórico (lido das colunas — sem tabela extra).
+//   - listar: lista/pesquisa as publicações salvas, respeitando o PAPEL:
+//     BUSCADOR (admin/super ou permissão publicacoes/cadastrar) vê TODAS e enxerga
+//     o selo de status GLOBAL; quem NÃO é buscador vê SÓ as ATRIBUÍDAS a ele e cada
+//     um tem o próprio status "tratada/pendente" (em publicacao_usuario).
+//   - atribuir/desatribuir: o BUSCADOR entrega a publicação a 1+ pessoas. Ao
+//     atribuir, a publicação vira "tratada" na visão dos buscadores e "pendente"
+//     para cada pessoa. Só buscador atribui.
+//   - tratar/reabrir: buscador mexe no selo global; recebedor mexe só na linha dele.
+//   - excluir: EXCLUSIVO de buscador. histórico: lido das colunas + atribuições.
 // ============================================================
 
 const crypto = require('crypto');
 const { pool } = require('../config/database');
-const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
+const { sucesso, erro, naoEncontrado, erroInterno, proibido } = require('../utils/response');
 const aaspService = require('../services/aaspService');
 const cnjService = require('../services/cnjService');
 const { enviarEmail } = require('../utils/email');
@@ -23,6 +27,43 @@ const { enviarEmail } = require('../utils/email');
 // "Impressão digital" (SHA-256) do texto EXATO da publicação — base da dedup fiel.
 function hashTexto(texto) {
   return crypto.createHash('sha256').update(String(texto), 'utf8').digest('hex');
+}
+
+// ── Papéis dentro de Publicações ──────────────────────────────────────────
+// "Buscador" = quem pode BAIXAR publicações (permissão publicacoes/cadastrar) ou
+// admin/super (nível <= 1). O buscador vê TODAS as publicações e enxerga o selo
+// de status GLOBAL da publicação.
+// Quem NÃO é buscador só vê as publicações ATRIBUÍDAS a ele e cada um tem o seu
+// próprio status "tratada / pendente" (guardado em publicacao_usuario).
+async function temPermissaoPublicacoes(usuarioId, acao) {
+  const [rows] = await pool.execute(
+    "SELECT permitido FROM permissoes WHERE usuario_id = ? AND modulo = 'publicacoes' AND submodulo IS NULL AND acao = ?",
+    [usuarioId, acao]
+  );
+  return rows.length > 0 && Number(rows[0].permitido) === 1;
+}
+async function ehBuscador(req) {
+  if (Number(req.usuario.nivel) <= 1) return true;
+  return temPermissaoPublicacoes(req.usuario.id, 'cadastrar');
+}
+async function podeAlterarPublicacoes(req) {
+  if (Number(req.usuario.nivel) <= 1) return true;
+  return temPermissaoPublicacoes(req.usuario.id, 'alterar');
+}
+// A publicação está atribuída a este usuário? (existe linha em publicacao_usuario)
+async function estaAtribuidaA(db, publicacaoId, usuarioId) {
+  const [rows] = await db.execute(
+    'SELECT 1 FROM publicacao_usuario WHERE publicacao_id = ? AND usuario_id = ? LIMIT 1',
+    [publicacaoId, usuarioId]
+  );
+  return rows.length > 0;
+}
+// Quem pode AGIR numa publicação (criar prazo/tarefa/compromisso, enviar e-mail,
+// marcar tratada/reabrir): admin/super, OU tem publicacoes/alterar, OU a publicação
+// está atribuída a ele. NÃO cobre excluir — excluir é exclusivo de buscador.
+async function podeAgirNaPublicacao(req, publicacaoId) {
+  if (await podeAlterarPublicacoes(req)) return true;
+  return estaAtribuidaA(pool, publicacaoId, req.usuario.id);
 }
 
 // Lê a configuração da AASP (Configurações → Integrações). Retorna { ativo, chave, url }.
@@ -221,7 +262,7 @@ function periodoExcede(dataInicio, dataFim) {
 // Usado por listar() E por excluirLote() para ficarem SEMPRE em sincronia (mesmo recorte
 // que o usuário vê é o que pode apagar). `q` é o objeto de filtros (req.query ou req.body):
 //   { fonte, data, tratada, busca, escopo }. Retorna { where, params, fonte }.
-function montarFiltroPublicacoes(q, usuario) {
+function montarFiltroPublicacoes(q, usuario, ehBuscadorFlag) {
   const cond = [];
   const params = [];
 
@@ -234,23 +275,32 @@ function montarFiltroPublicacoes(q, usuario) {
   if (q.dataInicio && q.dataFim) { cond.push('p.data_publicacao BETWEEN ? AND ?'); params.push(q.dataInicio, q.dataFim); }
   else if (q.dataInicio)         { cond.push('p.data_publicacao >= ?'); params.push(q.dataInicio); }
   else if (q.dataFim)            { cond.push('p.data_publicacao <= ?'); params.push(q.dataFim); }
-  if (q.tratada === '0' || q.tratada === '1') { cond.push('p.tratada = ?'); params.push(q.tratada); }
-  // Pesquisa por conteúdo (e, de brinde, pelo número do processo).
+
+  if (ehBuscadorFlag) {
+    // BUSCADOR (ou admin/super): vê TODAS as publicações da fonte; o status é o
+    // selo GLOBAL da publicação.
+    if (q.tratada === '0' || q.tratada === '1') { cond.push('p.tratada = ?'); params.push(q.tratada); }
+    // "Atribuídas a mim": recorte opcional para o buscador também.
+    if (q.escopo === 'minhas') {
+      cond.push('EXISTS (SELECT 1 FROM publicacao_usuario pu WHERE pu.publicacao_id = p.id AND pu.usuario_id = ?)');
+      params.push(usuario.id);
+    }
+  } else {
+    // NÃO-BUSCADOR: vê SÓ as publicações ATRIBUÍDAS a ele; o filtro de status
+    // (Não tratadas / Tratadas) age na LINHA PESSOAL dele (publicacao_usuario.tratada).
+    let sub = 'SELECT 1 FROM publicacao_usuario pu WHERE pu.publicacao_id = p.id AND pu.usuario_id = ?';
+    const subParams = [usuario.id];
+    if (q.tratada === '0' || q.tratada === '1') { sub += ' AND pu.tratada = ?'; subParams.push(q.tratada); }
+    cond.push(`EXISTS (${sub})`);
+    params.push(...subParams);
+  }
+
+  // Pesquisa por conteúdo (e, de brinde, pelo número do processo). Vale p/ ambos.
   if (q.busca && q.busca.trim()) {
     cond.push('(p.texto LIKE ? OR p.numero_processo LIKE ?)');
     params.push(`%${q.busca.trim()}%`, `%${q.busca.trim()}%`);
   }
 
-  if (q.escopo === 'minhas') {
-    // "Direcionadas a mim": só as direcionadas pessoalmente ao usuário logado (não as gerais
-    // do escritório). Vale para qualquer nível, inclusive admin.
-    cond.push('EXISTS (SELECT 1 FROM publicacao_usuario pu WHERE pu.publicacao_id = p.id AND pu.usuario_id = ?)');
-    params.push(usuario.id);
-  } else if (Number(usuario.nivel) > 1) {
-    // Visibilidade normal — não-admin vê/apaga as do escritório OU as direcionadas a ele.
-    cond.push('(p.escritorio = 1 OR EXISTS (SELECT 1 FROM publicacao_usuario pu WHERE pu.publicacao_id = p.id AND pu.usuario_id = ?))');
-    params.push(usuario.id);
-  }
   return { where: 'WHERE ' + cond.join(' AND '), params, fonte };
 }
 
@@ -267,7 +317,13 @@ async function listar(req, res) {
       return erro(res, 'O período de pesquisa não pode passar de 3 meses.');
     }
 
-    let { where, params } = montarFiltroPublicacoes(req.query, req.usuario);
+    // Buscador vê tudo (status global); não-buscador vê só as atribuídas a ele
+    // (status pessoal, guardado em publicacao_usuario). `alterar` decide se pode
+    // AGIR sem depender de estar atribuída.
+    const buscador = await ehBuscador(req);
+    const alterar  = await podeAlterarPublicacoes(req);
+
+    let { where, params } = montarFiltroPublicacoes(req.query, req.usuario, buscador);
 
     // Filtro por etiqueta PESSOAL do usuário logado (só as que ELE marcou com aquela cor).
     const etqSlot = parseInt(req.query.etiqueta);
@@ -298,7 +354,7 @@ async function listar(req, res) {
               ut.nome AS tratada_por_nome,
               (SELECT GROUP_CONCAT(u.nome SEPARATOR ', ')
                  FROM publicacao_usuario pu JOIN usuarios u ON pu.usuario_id = u.id
-                WHERE pu.publicacao_id = p.id) AS direcionada_nomes,
+                WHERE pu.publicacao_id = p.id) AS atribuida_nomes,
               EXISTS (SELECT 1 FROM publicacoes p2
                        WHERE p2.data_publicacao = p.data_publicacao
                          AND p2.fonte = p.fonte
@@ -308,6 +364,15 @@ async function listar(req, res) {
                              = REPLACE(REPLACE(REPLACE(p.numero_processo,'.',''),'-',''),' ','')) AS duplicada,
               EXISTS (SELECT 1 FROM publicacoes_lidas pl
                        WHERE pl.publicacao_id = p.id AND pl.usuario_id = ?) AS lida,
+              -- atribuida_a_mim / tratada_pessoal / motivo_pessoal: a LINHA do usuario
+              -- logado em publicacao_usuario. Para quem NAO e buscador, o status exibido
+              -- e o "pode agir" saem daqui (cada um tem o seu). Os 3 parametros = id do usuario.
+              EXISTS (SELECT 1 FROM publicacao_usuario pu
+                       WHERE pu.publicacao_id = p.id AND pu.usuario_id = ?) AS atribuida_a_mim,
+              (SELECT pu.tratada FROM publicacao_usuario pu
+                WHERE pu.publicacao_id = p.id AND pu.usuario_id = ? LIMIT 1) AS tratada_pessoal,
+              (SELECT pu.motivo_sem_acao FROM publicacao_usuario pu
+                WHERE pu.publicacao_id = p.id AND pu.usuario_id = ? LIMIT 1) AS motivo_pessoal,
               -- Só AASP: 1 quando já existia OUTRA publicação (mais antiga) desse mesmo dia
               -- ANTES desta ter sido salva — ou seja, esta veio de uma 2ª/3ª/4ª... busca do
               -- dia, não da primeira. Usado para pintar amarelo-claro (1ª busca fica branca).
@@ -362,7 +427,9 @@ async function listar(req, res) {
        ${where}
        ${orderBy}
        LIMIT ${limitInt} OFFSET ${offsetInt}`,
-      [req.usuario.id, req.usuario.id, ...params]
+      // 5 `?` no SELECT antes do WHERE: lida, atribuida_a_mim, tratada_pessoal,
+      // motivo_pessoal, etiqueta_pessoal — todos = id do usuário logado.
+      [req.usuario.id, req.usuario.id, req.usuario.id, req.usuario.id, req.usuario.id, ...params]
     );
 
     const [totalRows] = await pool.execute(
@@ -373,8 +440,25 @@ async function listar(req, res) {
     const registros = rows.map(r => {
       const nomes = [r.resp_prazos, r.resp_tarefas, r.resp_compromissos]
         .filter(Boolean).join('§').split('§').map(s => s.trim()).filter(Boolean);
-      const { resp_prazos, resp_tarefas, resp_compromissos, ...resto } = r;
-      return { ...resto, resp_acoes: [...new Set(nomes)].join(', ') || null };
+      const {
+        resp_prazos, resp_tarefas, resp_compromissos,
+        tratada_pessoal, motivo_pessoal, atribuida_a_mim,
+        ...resto
+      } = r;
+      // BUSCADOR enxerga o selo global; NÃO-BUSCADOR enxerga a linha pessoal dele.
+      const tratadaView = buscador ? resto.tratada : (tratada_pessoal ? 1 : 0);
+      const motivoView  = buscador ? resto.motivo_sem_acao : (motivo_pessoal || null);
+      // Pode agir (criar prazo/tarefa/compromisso, e-mail, tratar): tem "alterar"
+      // OU a publicação está atribuída a ele. (Excluir NÃO entra aqui.)
+      const podeAgir = alterar || !!atribuida_a_mim;
+      return {
+        ...resto,
+        tratada: tratadaView,
+        motivo_sem_acao: motivoView,
+        atribuida_a_mim: !!atribuida_a_mim,
+        pode_agir: podeAgir,
+        resp_acoes: [...new Set(nomes)].join(', ') || null,
+      };
     });
 
     return sucesso(res, { registros, total: totalRows[0].total });
@@ -506,51 +590,160 @@ async function importar(req, res) {
   }
 }
 
-// PUT /api/publicacoes/:id/direcionar — direciona ao escritório (todos) ou a usuários específicos.
-// Body: { escritorio: true }  OU  { escritorio: false, usuario_ids: [..] }
-async function direcionar(req, res) {
-  const { id } = req.params;
-  const escritorio = !!req.body.escritorio;
-
-  // Sanitiza os IDs de usuário (inteiros>0, sem repetição).
-  const usuarioIds = [...new Set(
-    (Array.isArray(req.body.usuario_ids) ? req.body.usuario_ids : [])
+// Sanitiza uma lista de IDs de usuário vinda do corpo (inteiros > 0, sem repetição).
+function idsUsuarioDoCorpo(body) {
+  return [...new Set(
+    (Array.isArray(body.usuario_ids) ? body.usuario_ids : [])
       .map(Number).filter(n => Number.isInteger(n) && n > 0)
   )];
+}
 
-  if (!escritorio && !usuarioIds.length) {
-    return erro(res, 'Escolha "escritório" ou ao menos um usuário');
-  }
-
-  const conn = await pool.getConnection();
+// GET /api/publicacoes/:id/atribuicoes — quem está atribuído nesta publicação e o
+// status (tratada/pendente) de cada um. Usado pelo modal "Atribuir" para começar
+// com os já atribuídos marcados e travar quem já tratou.
+async function atribuicoesPub(req, res) {
   try {
-    await conn.beginTransaction();
-
-    const [pub] = await conn.execute('SELECT id FROM publicacoes WHERE id = ?', [id]);
-    if (!pub.length) { await conn.rollback(); return naoEncontrado(res, 'Publicação não encontrada'); }
-
-    await conn.execute(
-      'UPDATE publicacoes SET escritorio = ?, direcionada_por = ?, direcionada_em = NOW() WHERE id = ?',
-      [escritorio ? 1 : 0, req.usuario.id, id]
+    const { id } = req.params;
+    const [rows] = await pool.execute(
+      `SELECT pu.usuario_id, u.nome, pu.tratada
+         FROM publicacao_usuario pu JOIN usuarios u ON pu.usuario_id = u.id
+        WHERE pu.publicacao_id = ? ORDER BY u.nome`, [id]
     );
+    return sucesso(res, rows);
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
 
-    // Refaz os vínculos: limpa e (se for direcionada) insere os escolhidos.
-    await conn.execute('DELETE FROM publicacao_usuario WHERE publicacao_id = ?', [id]);
-    if (!escritorio) {
-      for (const uid of usuarioIds) {
+// PUT /api/publicacoes/:id/atribuir — o BUSCADOR define QUEM fica com a publicação.
+// Body: { usuario_ids: [..] } = a lista COMPLETA desejada (pode vir vazia).
+//   - Adiciona quem entrou; remove quem saiu — MENOS quem já tratou (esse fica,
+//     e o nome dele volta na resposta para a tela avisar).
+//   - Enquanto houver pelo menos 1 pessoa: a publicação fica "tratada" na visão
+//     dos buscadores (o buscador roteou = resolveu a triagem). NÃO exige processo
+//     cadastrado — é status do buscador.
+//   - Se NÃO sobrar ninguém: a publicação volta a PENDENTE para o buscador.
+//   - Aviso no sino para cada pessoa adicionada e para cada pessoa removida.
+async function atribuir(req, res) {
+  try {
+    if (!(await ehBuscador(req))) {
+      return proibido(res, 'Apenas quem pode buscar publicações pode atribuí-las.');
+    }
+    const { id } = req.params;
+    const desejados = idsUsuarioDoCorpo(req.body);
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      const [pub] = await conn.execute(
+        'SELECT id, data_publicacao, numero_processo FROM publicacoes WHERE id = ?', [id]
+      );
+      if (!pub.length) { await conn.rollback(); return naoEncontrado(res, 'Publicação não encontrada'); }
+
+      // Estado atual (com o status pessoal de cada um).
+      const [atuais] = await conn.execute(
+        `SELECT pu.usuario_id, pu.tratada, u.nome
+           FROM publicacao_usuario pu JOIN usuarios u ON pu.usuario_id = u.id
+          WHERE pu.publicacao_id = ?`, [id]
+      );
+      const atuaisIds = new Set(atuais.map(a => a.usuario_id));
+
+      // Só usuários ativos entram na lista desejada.
+      let desejadosValidos = [];
+      if (desejados.length) {
+        const ph = desejados.map(() => '?').join(',');
+        const [ok] = await conn.execute(
+          `SELECT id FROM usuarios WHERE ativo = 1 AND nivel > 0 AND id IN (${ph})`, desejados
+        );
+        desejadosValidos = ok.map(u => u.id);
+      }
+      const desejadosSet = new Set(desejadosValidos);
+
+      const toAdd      = desejadosValidos.filter(uid => !atuaisIds.has(uid));
+      const saindo     = atuais.filter(a => !desejadosSet.has(a.usuario_id));
+      const toRemove   = saindo.filter(a => !a.tratada).map(a => a.usuario_id);
+      const protegidos = saindo.filter(a => a.tratada).map(a => a.nome); // já trataram → ficam
+
+      if (!toAdd.length && !toRemove.length) {
+        await conn.rollback();
+        if (protegidos.length) {
+          // Buscador tentou remover só quem já tratou → bloqueado, com aviso na faixa interna.
+          return erro(res, `${protegidos.join(', ')} já tratou esta publicação e não pode ser removido(a).`);
+        }
+        return sucesso(res, { adicionados: 0, removidos: 0, protegidos: [] }, 'Nada para alterar.');
+      }
+
+      for (const uid of toAdd) {
         await conn.execute(
-          'INSERT INTO publicacao_usuario (publicacao_id, usuario_id) VALUES (?, ?)', [id, uid]
+          `INSERT INTO publicacao_usuario (publicacao_id, usuario_id, atribuida_por, atribuida_em)
+           VALUES (?, ?, ?, NOW())
+           ON DUPLICATE KEY UPDATE atribuida_por = VALUES(atribuida_por), atribuida_em = VALUES(atribuida_em)`,
+          [id, uid, req.usuario.id]
         );
       }
-    }
+      if (toRemove.length) {
+        const ph = toRemove.map(() => '?').join(',');
+        await conn.execute(
+          `DELETE FROM publicacao_usuario WHERE publicacao_id = ? AND usuario_id IN (${ph})`,
+          [id, ...toRemove]
+        );
+      }
 
-    await conn.commit();
-    return sucesso(res, null, escritorio ? 'Direcionada ao escritório' : 'Direcionada aos usuários escolhidos');
+      // Quantos sobraram?
+      const [rest] = await conn.execute(
+        'SELECT COUNT(*) AS n FROM publicacao_usuario WHERE publicacao_id = ?', [id]
+      );
+      const sobraram = Number(rest[0].n);
+
+      if (sobraram > 0) {
+        // Registro de quem mexeu + selo global "tratada" (liga só se ainda não estava,
+        // para não sobrescrever um tratada/motivo anterior — ex.: já tinha virado prazo).
+        await conn.execute(
+          'UPDATE publicacoes SET direcionada_por = ?, direcionada_em = NOW() WHERE id = ?',
+          [req.usuario.id, id]
+        );
+        await conn.execute(
+          'UPDATE publicacoes SET tratada = 1, tratada_por = ?, tratada_em = NOW() WHERE id = ? AND tratada = 0',
+          [req.usuario.id, id]
+        );
+      } else {
+        // Não sobrou ninguém → volta a PENDENTE para o buscador (limpa selo + registro).
+        await conn.execute(
+          `UPDATE publicacoes
+              SET tratada = 0, tratada_por = NULL, tratada_em = NULL, motivo_sem_acao = NULL,
+                  direcionada_por = NULL, direcionada_em = NULL
+            WHERE id = ?`, [id]
+        );
+      }
+
+      // Avisos no sino (dentro da transação).
+      const proc   = pub[0].numero_processo ? ` — processo ${pub[0].numero_processo}` : '';
+      const dataBR = dataBrPub(pub[0].data_publicacao);
+      for (const uid of toAdd) {
+        await conn.execute('INSERT INTO notificacoes (usuario_id, mensagem) VALUES (?, ?)',
+          [uid, `Publicação de ${dataBR}${proc} foi atribuída a você.`.slice(0, 300)]);
+      }
+      for (const uid of toRemove) {
+        await conn.execute('INSERT INTO notificacoes (usuario_id, mensagem) VALUES (?, ?)',
+          [uid, `Publicação de ${dataBR}${proc} deixou de estar atribuída a você.`.slice(0, 300)]);
+      }
+
+      await conn.commit();
+      const partes = [];
+      if (toAdd.length)    partes.push(`${toAdd.length} adicionada(s)`);
+      if (toRemove.length) partes.push(`${toRemove.length} removida(s)`);
+      let msg = `Atribuição atualizada (${partes.join(', ')}).`;
+      if (protegidos.length) msg += ` ${protegidos.join(', ')} já tratou e não foi removido(a).`;
+      return sucesso(res, { adicionados: toAdd.length, removidos: toRemove.length, protegidos }, msg);
+    } catch (e) {
+      await conn.rollback();
+      return erroInterno(res, e);
+    } finally {
+      conn.release();
+    }
   } catch (err) {
-    await conn.rollback();
     return erroInterno(res, err);
-  } finally {
-    conn.release();
   }
 }
 
@@ -564,6 +757,13 @@ async function tratar(req, res) {
     const tratada = !!req.body.tratada;
     const semAcao = !!req.body.sem_acao;
     const motivo  = (req.body.motivo || '').toString().trim();
+
+    // AUTORIZAÇÃO (a rota exige só "visualizar"; a regra de verdade é aqui):
+    // precisa poder AGIR nesta publicação — admin/super, OU tem "alterar", OU
+    // a publicação está atribuída a ele. Um "só visualizador" não passa.
+    if (!(await podeAgirNaPublicacao(req, id))) {
+      return proibido(res, 'Você não pode tratar esta publicação.');
+    }
 
     // Marcar como tratada SEM AÇÃO exige justificativa (defesa no servidor, além da tela).
     if (tratada && semAcao && !motivo) {
@@ -583,21 +783,34 @@ async function tratar(req, res) {
 
     // REGRA: só vira TRATADA se o processo estiver cadastrado no sistema. Sem processo
     // cadastrado, a publicação fica SEMPRE Pendente. (Reabrir é sempre permitido.)
+    // Vale tanto para o buscador quanto para o recebedor.
     if (tratada && !rows[0].proc_cadastrado) {
       return erro(res, 'Esta publicação não pode ser tratada: o processo não está cadastrado no sistema. Cadastre o processo — ou exclua a publicação, se não precisar dela.');
     }
 
-    if (tratada) {
-      // Guarda o motivo só no caso manual "sem ação"; no automático fica NULL.
-      await pool.execute(
-        'UPDATE publicacoes SET tratada = 1, tratada_por = ?, tratada_em = NOW(), motivo_sem_acao = ? WHERE id = ?',
-        [req.usuario.id, semAcao ? motivo : null, id]
-      );
+    // BUSCADOR mexe no selo GLOBAL da publicação (comportamento de sempre).
+    // NÃO-BUSCADOR (recebedor) mexe SÓ na linha DELE em publicacao_usuario.
+    const buscador = await ehBuscador(req);
+    if (buscador) {
+      if (tratada) {
+        await pool.execute(
+          'UPDATE publicacoes SET tratada = 1, tratada_por = ?, tratada_em = NOW(), motivo_sem_acao = ? WHERE id = ?',
+          [req.usuario.id, semAcao ? motivo : null, id]
+        );
+      } else {
+        await pool.execute(
+          'UPDATE publicacoes SET tratada = 0, tratada_por = NULL, tratada_em = NULL, motivo_sem_acao = NULL WHERE id = ?', [id]
+        );
+      }
     } else {
-      // Reabrir limpa o motivo junto.
-      await pool.execute(
-        'UPDATE publicacoes SET tratada = 0, tratada_por = NULL, tratada_em = NULL, motivo_sem_acao = NULL WHERE id = ?', [id]
-      );
+      const [r] = tratada
+        ? await pool.execute(
+            'UPDATE publicacao_usuario SET tratada = 1, tratada_por = ?, tratada_em = NOW(), motivo_sem_acao = ? WHERE publicacao_id = ? AND usuario_id = ?',
+            [req.usuario.id, semAcao ? motivo : null, id, req.usuario.id])
+        : await pool.execute(
+            'UPDATE publicacao_usuario SET tratada = 0, tratada_por = NULL, tratada_em = NULL, motivo_sem_acao = NULL WHERE publicacao_id = ? AND usuario_id = ?',
+            [id, req.usuario.id]);
+      if (!r.affectedRows) return proibido(res, 'Esta publicação não está atribuída a você.');
     }
     return sucesso(res, null, tratada ? 'Publicação marcada como tratada' : 'Publicação reaberta');
   } catch (err) {
@@ -605,7 +818,7 @@ async function tratar(req, res) {
   }
 }
 
-// GET /api/publicacoes/usuarios — usuários ativos para o modal de direcionamento
+// GET /api/publicacoes/usuarios — usuários ativos para o modal de atribuição
 // (exclui o superusuário invisível, nivel 0).
 async function usuariosParaDirecionar(req, res) {
   try {
@@ -636,9 +849,15 @@ async function historico(req, res) {
     );
     if (!rows.length) return naoEncontrado(res, 'Publicação não encontrada');
 
+    // Atribuições: para quem a publicação foi entregue, quem entregou e quando,
+    // e o status (tratada/pendente) de CADA pessoa.
     const [usuarios] = await pool.execute(
-      `SELECT u.nome FROM publicacao_usuario pu JOIN usuarios u ON pu.usuario_id = u.id
-       WHERE pu.publicacao_id = ? ORDER BY u.nome`, [id]
+      `SELECT u.nome, pu.tratada, pu.tratada_em, pu.atribuida_em,
+              ab.nome AS atribuida_por_nome
+         FROM publicacao_usuario pu
+         JOIN usuarios u ON pu.usuario_id = u.id
+         LEFT JOIN usuarios ab ON pu.atribuida_por = ab.id
+        WHERE pu.publicacao_id = ? ORDER BY u.nome`, [id]
     );
 
     // Ações que NASCERAM desta publicação (vínculo publicacao_id nas 3 tabelas).
@@ -682,6 +901,7 @@ async function historico(req, res) {
     return sucesso(res, {
       ...rows[0],
       direcionada_usuarios: usuarios.map(u => u.nome),
+      atribuicoes: usuarios,
       acoes: { prazos, tarefas, compromissos },
       emails,
     });
@@ -693,6 +913,10 @@ async function historico(req, res) {
 // DELETE /api/publicacoes/:id — exclui a publicação (vínculos caem por CASCADE) + registra log.
 async function excluir(req, res) {
   const { id } = req.params;
+  // Excluir é EXCLUSIVO de buscador. Quem só recebe publicações atribuídas nunca exclui.
+  if (!(await ehBuscador(req))) {
+    return proibido(res, 'Você não pode excluir publicações — apenas trabalhar as que foram atribuídas a você.');
+  }
   const [pub] = await pool.execute('SELECT data_publicacao, tratada FROM publicacoes WHERE id = ?', [id]);
   if (!pub.length) return naoEncontrado(res, 'Publicação não encontrada');
   // Publicação tratada é preservada (pode ter originado prazo/tarefa/compromisso).
@@ -728,13 +952,17 @@ async function excluir(req, res) {
 // Os vínculos em publicacao_usuario caem por CASCADE (sem órfãos). Registra o total no log.
 async function excluirLote(req, res) {
   const body = req.body || {};
+  // Excluir é EXCLUSIVO de buscador (idem exclusão avulsa).
+  if (!(await ehBuscador(req))) {
+    return proibido(res, 'Você não pode excluir publicações — apenas trabalhar as que foram atribuídas a você.');
+  }
   const todas = !!body.todas;
 
   // Modo "todas": usa todos os filtros da tela. Modo "seleção": só fonte + visibilidade
   // (as ids escolhidas valem por si, independentemente de data/status/busca da tela).
   let alvoSql, alvoParams;
   if (todas) {
-    const { where, params } = montarFiltroPublicacoes(body, req.usuario);
+    const { where, params } = montarFiltroPublicacoes(body, req.usuario, true);
     alvoSql = where; alvoParams = params;
   } else {
     const ids = [...new Set(
@@ -742,7 +970,7 @@ async function excluirLote(req, res) {
         .map(Number).filter(n => Number.isInteger(n) && n > 0)
     )];
     if (!ids.length) return erro(res, 'Nenhuma publicação selecionada');
-    const { where, params } = montarFiltroPublicacoes({ fonte: body.fonte }, req.usuario);
+    const { where, params } = montarFiltroPublicacoes({ fonte: body.fonte }, req.usuario, true);
     const ph = ids.map(() => '?').join(',');
     alvoSql = `${where} AND p.id IN (${ph})`;
     alvoParams = [...params, ...ids];
@@ -868,6 +1096,11 @@ async function destinatariosEmail(req, res) {
 async function enviarEmailPublicacao(req, res) {
   try {
     const { id } = req.params;
+    // AUTORIZAÇÃO (a rota exige só "visualizar"): admin/super, OU tem "alterar",
+    // OU a publicação está atribuída a ele.
+    if (!(await podeAgirNaPublicacao(req, id))) {
+      return proibido(res, 'Você não pode enviar esta publicação por e-mail.');
+    }
     const destinatarios = Array.isArray(req.body?.destinatarios) ? req.body.destinatarios : [];
     if (!destinatarios.length) return erro(res, 'Selecione ao menos um destinatário.');
 
@@ -946,6 +1179,6 @@ async function marcarLida(req, res) {
 }
 
 module.exports = {
-  statusAasp, listar, importar, direcionar, tratar, historico, excluir, excluirLote, usuariosParaDirecionar,
+  statusAasp, listar, importar, atribuir, atribuicoesPub, tratar, historico, excluir, excluirLote, usuariosParaDirecionar,
   statusCnj, importarCnj, obter, destinatariosEmail, enviarEmailPublicacao, marcarLida,
 };

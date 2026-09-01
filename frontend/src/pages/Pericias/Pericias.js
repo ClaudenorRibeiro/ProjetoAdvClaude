@@ -305,6 +305,7 @@ export default function Pericias() {
 // aberto já dentro de um processo (ex.: aba Perícias da pasta), pré-seleciona o processo e dispensa
 // a busca de pasta. Default undefined => comportamento idêntico ao da tela de Perícias.
 export function ModalPericia({ tipos, pericia, processoInicial, onTiposChange, onFechar }) {
+  const overlayRef = useEscFechar(() => onFechar(false)); // ESC fecha esta janela (só quando é a de cima)
   const { temPermissao } = useAuth();
   // Mostra o botão "..." de gerenciar tipos só para quem pode cadastrar/alterar tipos
   const podeTipos = temPermissao('pericias', 'tipos', 'cadastrar') || temPermissao('pericias', 'tipos', 'alterar');
@@ -601,7 +602,7 @@ export function ModalPericia({ tipos, pericia, processoInicial, onTiposChange, o
   }
 
   return (
-    <div className="modal-overlay">
+    <div className="modal-overlay" ref={overlayRef}>
       <div className="modal-box modal-grande">
         <div className="modal-header">
           <h3>{pericia ? 'Editar Perícia' : 'Nova Perícia'}</h3>

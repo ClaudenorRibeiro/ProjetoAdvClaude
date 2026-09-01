@@ -50,7 +50,7 @@ const MODULOS_PERM = [
   { chave: 'documentos',   label: 'Documentos (menu)', submodulos: [
     { chave: 'documentos.modelos', label: 'Modelos de documento' },
   ]},
-  { chave: 'publicacoes',  label: 'Publicações' },
+  { chave: 'publicacoes',  label: 'Publicações — "Cadastrar" = buscar/baixar (vê todas); sem ele, só vê as publicações atribuídas a ele' },
   { chave: 'relatorios',   label: 'Relatórios' },
   { chave: 'sms',          label: 'SMS (enviar)' },
 ];
@@ -525,7 +525,7 @@ function TabEscritorio() {
             <option value="">— Não definido —</option>
             {usuariosOrdenados.map(u => (
               <option key={u.id} value={u.id}>
-                {u.nome}{u.tipo === 'advogado' ? ' — advogado' : ''}{u.oab ? ` — OAB ${u.oab}` : ''}
+                {u.nome}{u.oab ? ` — OAB ${u.oab}` : ''}
               </option>
             ))}
           </select>

@@ -2151,19 +2151,17 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos, onTiposChange })
   const [modalNovoFreela, setModalNovoFreela] = useState(false);
   const [aviso, setAviso]                 = useState(''); // faixa interna de validação
 
-  // Carrega advogados + preferência do escritório + pré-preenche com o Responsável pela condução.
+  // Carrega advogados + dados da audiência (pré-preenche com o Responsável pela condução).
   useEffect(() => {
     let vivo = true;
     (async () => {
       try {
-        const [av, aud, cfg] = await Promise.all([
+        const [av, aud] = await Promise.all([
           audienciasAPI.advogados(),
           audienciasAPI.buscar(audiencia.id),
-          configuracaoAPI.buscarEscritorio(),
         ]);
         if (!vivo) return;
         if (av.data.ok)  setAdvogados(av.data.dados || []);
-        if (cfg.data.ok) setAdvObrigatorio(!!(cfg.data.dados && cfg.data.dados.ata_advogado_obrigatorio));
         if (aud.data.ok) {
           const d = aud.data.dados;
           if (d.responsavel_id)             setAdvogadoSel(`usuario:${d.responsavel_id}`);
@@ -2171,6 +2169,13 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos, onTiposChange })
         }
       } catch { /* silencioso: se falhar, o campo apenas começa vazio */ }
     })();
+    // Preferência do escritório: chamada À PARTE (a rota é só-admin). Se falhar — ex.:
+    // usuário não-admin recebe 403 — o modal continua funcionando; só não aplica a
+    // obrigatoriedade do advogado. NÃO pode ir junto no Promise.all acima, senão
+    // derrubava o carregamento dos advogados/da audiência para quem não é admin.
+    configuracaoAPI.buscarEscritorio()
+      .then(({ data }) => { if (vivo && data.ok) setAdvObrigatorio(!!(data.dados && data.dados.ata_advogado_obrigatorio)); })
+      .catch(() => {});
     return () => { vivo = false; };
   }, [audiencia.id]);
 

@@ -5,7 +5,7 @@
 
 const jwt = require('jsonwebtoken');
 const { pool } = require('../config/database');
-const { naoAutorizado, erroInterno } = require('../utils/response');
+const { naoAutorizado, proibido, erroInterno } = require('../utils/response');
 
 // Verifica se o token JWT é válido E reconfere o cadastro atual do usuário no banco
 // (nível + se segue ativo). Reconferir no banco garante que rebaixar ou desativar um
@@ -61,17 +61,22 @@ async function autenticar(req, res, next) {
 }
 
 // Middleware especial: verifica se é o superusuário
+// IMPORTANTE: usa 403 (proibido), NÃO 401. Quem chega aqui JÁ está autenticado
+// (passou pelo `autenticar`), só não tem o nível. 401 faria o front tratar como
+// "sessão expirada" e deslogar o usuário — o que estava derrubando não-admins que
+// esbarravam numa rota de admin (ex.: pré-preenchimento no "Novo Processo").
 function apenasSuper(req, res, next) {
   if (!req.usuario || req.usuario.nivel !== 0) {
-    return naoAutorizado(res, 'Acesso restrito ao superusuário');
+    return proibido(res, 'Acesso restrito ao superusuário');
   }
   next();
 }
 
-// Middleware: verifica se é admin (nível 1) ou superusuário (nível 0)
+// Middleware: verifica se é admin (nível 1) ou superusuário (nível 0). Ver nota acima
+// sobre 403 x 401.
 function apenasAdmin(req, res, next) {
   if (!req.usuario || req.usuario.nivel > 1) {
-    return naoAutorizado(res, 'Acesso restrito a administradores');
+    return proibido(res, 'Acesso restrito a administradores');
   }
   next();
 }

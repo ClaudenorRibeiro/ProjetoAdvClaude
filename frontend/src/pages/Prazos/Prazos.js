@@ -13,6 +13,7 @@ import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import ModalInfo from '../../components/ui/ModalInfo';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
 import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetasSubmenu, useEtiquetasPessoais } from '../../components/Etiquetas';
+import useEscFechar from '../../hooks/useEscFechar';
 
 // Status calculados pela data — concluido/cancelado são os únicos armazenados no banco
 // 'fazendo' é filtro auxiliar que mostra prazos ativos com alguém fazendo
@@ -480,6 +481,8 @@ function SelectComAdicao({ label, nomeEntidade, value, onChange, opcoes = [],
 //   prazo nasce de uma publicação e a pasta ainda precisa ser escolhida pelo usuário.
 // publicacaoId: vínculo de origem (publicação que gerou o prazo).
 export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial, publicacaoId }) {
+  // ESC fecha esta janela — mas só quando ela é a mais acima (nunca fecha a de trás).
+  const overlayRef = useEscFechar(() => onFechar(false));
   const [form, setForm]         = useState({
     tipo_dias: 'uteis',
     data_inicio: new Date().toISOString().split('T')[0],
@@ -639,7 +642,7 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
 
   return (
     <>
-    <div className="modal-overlay">
+    <div className="modal-overlay" ref={overlayRef}>
       <div className="modal-box modal-grande">
         <div className="modal-header">
           <h3>Novo Prazo</h3>

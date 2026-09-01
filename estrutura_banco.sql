@@ -1,17 +1,25 @@
 -- =====================================================================
 -- ESTRUTURA DO BANCO — Sistema de Advocacia (NovoJud)
 -- ---------------------------------------------------------------------
--- Gerado em 18/08/2026 a partir do banco LOCAL (sistema_advocacia).
--- Contém 74 tabelas — SOMENTE A ESTRUTURA, sem nenhum dado.
+-- Gerado em 31/08/2026 a partir do banco LOCAL (sistema_advocacia), via:
+--   mysqldump --no-data --databases --add-drop-database
+--             --routines --triggers --events sistema_advocacia
+-- Contém 79 tabelas — SOMENTE A ESTRUTURA, sem nenhum dado.
+-- O banco não possui procedures, triggers, views nem events.
 -- Os dados de partida (feriados, varas, tipos etc.) ficam em scripts/.
+--
+-- Conferido em 31/08/2026: estrutura idêntica às 3 instâncias em uso
+-- (local, AWS-Antônio e AWS-Erick).
 --
 -- ATENÇÃO: este arquivo COMEÇA APAGANDO o banco inteiro
 -- (DROP DATABASE IF EXISTS). Use apenas para montar uma INSTÂNCIA NOVA,
 -- do zero. NUNCA rode em uma instância que já esteja em uso.
 --
--- Versão anterior deste arquivo era de 05/08/2026 e estava com 61 tabelas:
--- faltavam as 11 de etiquetas, a publicacoes_lidas e as colunas do
--- Google Agenda em usuarios — uma instância criada por ela nasceria quebrada.
+-- Versão anterior era de 18/08/2026 com 74 tabelas: faltavam parentesco,
+-- pessoas_avisos_idade, pericia_local_reu, tblassuntoproc e
+-- processo_assunto, além das colunas responsavel_id/parentesco_id em
+-- pessoas_fisicas, pessoa_id em notificacoes e em_recuperacao_judicial
+-- em pessoas_juridicas — uma instância criada por ela nasceria incompleta.
 -- =====================================================================
 
 -- MySQL dump 10.13  Distrib 8.0.46, for Win64 (x86_64)
@@ -183,7 +191,7 @@ CREATE TABLE `agenda_compromisso` (
   CONSTRAINT `fk_agcomp_delegado` FOREIGN KEY (`delegado_para`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_agcomp_publicacao` FOREIGN KEY (`publicacao_id`) REFERENCES `publicacoes` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_agcomp_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=24 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=48 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -214,7 +222,7 @@ CREATE TABLE `andamento_processual` (
   CONSTRAINT `andamento_processual_ibfk_2` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `andamento_processual_ibfk_3` FOREIGN KEY (`editado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `fk_andamento_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=23 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5433 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -299,7 +307,7 @@ CREATE TABLE `audiencia` (
   CONSTRAINT `audiencia_ibfk_2` FOREIGN KEY (`tipo_audiencia_id`) REFERENCES `tipo_audiencia` (`id`),
   CONSTRAINT `audiencia_ibfk_3` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `fk_audiencia_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=21 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=24 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -362,7 +370,7 @@ CREATE TABLE `auditoria_audiencia` (
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `audaud_ibfk_1` FOREIGN KEY (`audiencia_id`) REFERENCES `audiencia` (`id`) ON DELETE CASCADE,
   CONSTRAINT `audaud_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=44 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=45 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -409,7 +417,7 @@ CREATE TABLE `auditoria_etiqueta_escritorio` (
   KEY `idx_aee_usuario` (`usuario_id`),
   KEY `idx_aee_data` (`criado_em`),
   CONSTRAINT `fk_aee_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -456,7 +464,7 @@ CREATE TABLE `auditoria_pericia` (
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `audper_ibfk_1` FOREIGN KEY (`pericia_id`) REFERENCES `pericia` (`id`) ON DELETE CASCADE,
   CONSTRAINT `audper_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -479,7 +487,7 @@ CREATE TABLE `auditoria_prazo` (
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `auditoria_prazo_ibfk_1` FOREIGN KEY (`prazo_id`) REFERENCES `prazos_processo` (`id`),
   CONSTRAINT `auditoria_prazo_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=178 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=331 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -556,7 +564,7 @@ CREATE TABLE `configuracoes_integracoes` (
   `configuracoes` json DEFAULT NULL,
   `atualizado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -620,7 +628,7 @@ CREATE TABLE `emails_pf` (
   PRIMARY KEY (`id`),
   KEY `pessoa_id` (`pessoa_id`),
   CONSTRAINT `emails_pf_ibfk_1` FOREIGN KEY (`pessoa_id`) REFERENCES `pessoas_fisicas` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=1752 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1782 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -654,7 +662,7 @@ CREATE TABLE `estado_civil` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(50) NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=20 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -757,7 +765,7 @@ CREATE TABLE `historico_atendimento` (
   PRIMARY KEY (`id`),
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `historico_atendimento_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=39 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=40 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -785,7 +793,7 @@ CREATE TABLE `log_comunicacoes` (
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `fk_logcomun_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`),
   CONSTRAINT `log_comunicacoes_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -813,7 +821,7 @@ CREATE TABLE `log_documentos_gerados` (
   KEY `gerado_em` (`gerado_em`),
   CONSTRAINT `fk_logdoc_modelo` FOREIGN KEY (`modelo_id`) REFERENCES `modelo_documento` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_logdoc_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=48 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=66 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -838,7 +846,7 @@ CREATE TABLE `log_emails` (
   KEY `idx_log_emails_status` (`status`),
   KEY `idx_log_emails_publicacao` (`publicacao_id`),
   CONSTRAINT `fk_log_emails_pub` FOREIGN KEY (`publicacao_id`) REFERENCES `publicacoes` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=212 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=554 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -857,7 +865,7 @@ CREATE TABLE `log_publicacoes` (
   PRIMARY KEY (`id`),
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `log_publicacoes_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=93 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=156 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -882,7 +890,7 @@ CREATE TABLE `logs_auditoria` (
   KEY `idx_usuario` (`usuario_id`),
   KEY `idx_data` (`criado_em`),
   KEY `idx_usuario_data` (`usuario_id`,`criado_em`)
-) ENGINE=InnoDB AUTO_INCREMENT=1232 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2293 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -921,7 +929,7 @@ CREATE TABLE `modelo_documento` (
   CONSTRAINT `fk_modelo_subtipo_prazo` FOREIGN KEY (`subtipo_prazo_id`) REFERENCES `prazo_subtipo` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_modelo_tipo_aud` FOREIGN KEY (`tipo_audiencia_id`) REFERENCES `tipo_audiencia` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_modelo_tipo_per` FOREIGN KEY (`tipo_pericia_id`) REFERENCES `tipo_pericia` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=25 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=26 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -950,6 +958,7 @@ CREATE TABLE `notificacoes` (
   `usuario_id` int NOT NULL,
   `prazo_id` int DEFAULT NULL,
   `tarefa_id` int DEFAULT NULL,
+  `pessoa_id` int DEFAULT NULL,
   `mensagem` varchar(300) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
   `lida` tinyint(1) DEFAULT '0',
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
@@ -957,10 +966,12 @@ CREATE TABLE `notificacoes` (
   KEY `usuario_id` (`usuario_id`),
   KEY `prazo_id` (`prazo_id`),
   KEY `idx_notif_tarefa` (`tarefa_id`),
+  KEY `idx_notif_pessoa` (`pessoa_id`),
+  CONSTRAINT `fk_notif_pessoa` FOREIGN KEY (`pessoa_id`) REFERENCES `pessoas_fisicas` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_notif_prazo` FOREIGN KEY (`prazo_id`) REFERENCES `prazos_processo` (`id`),
   CONSTRAINT `fk_notif_tarefa` FOREIGN KEY (`tarefa_id`) REFERENCES `tarefas` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_notif_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=42 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=128 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -981,6 +992,20 @@ CREATE TABLE `parabens_enviados` (
   KEY `idx_pessoa_ano` (`pessoa_id`,`ano`),
   CONSTRAINT `fk_parabens_pessoa` FOREIGN KEY (`pessoa_id`) REFERENCES `pessoas_fisicas` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `parentesco`
+--
+
+DROP TABLE IF EXISTS `parentesco`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `parentesco` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `nome` varchar(50) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1051,7 +1076,28 @@ CREATE TABLE `pericia` (
   CONSTRAINT `pericia_ibfk_2` FOREIGN KEY (`tipo_pericia_id`) REFERENCES `tipo_pericia` (`id`),
   CONSTRAINT `pericia_ibfk_3` FOREIGN KEY (`assistente_tecnico_id`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `pericia_ibfk_4` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `pericia_local_reu`
+--
+
+DROP TABLE IF EXISTS `pericia_local_reu`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `pericia_local_reu` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `pericia_id` int NOT NULL,
+  `tipo_pessoa` enum('fisica','juridica') NOT NULL,
+  `pessoa_id` int NOT NULL,
+  `criado_em` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_pericia_local_reu` (`pericia_id`,`tipo_pessoa`,`pessoa_id`),
+  KEY `idx_pericia_local_reu_pericia` (`pericia_id`),
+  KEY `idx_pericia_local_reu_pessoa` (`tipo_pessoa`,`pessoa_id`),
+  CONSTRAINT `fk_pericia_local_reu_pericia` FOREIGN KEY (`pericia_id`) REFERENCES `pericia` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1089,7 +1135,30 @@ CREATE TABLE `permissoes` (
   PRIMARY KEY (`id`),
   KEY `idx_usuario_modulo` (`usuario_id`,`modulo`,`submodulo`,`acao`),
   CONSTRAINT `permissoes_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=7678 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10638 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `pessoas_avisos_idade`
+--
+
+DROP TABLE IF EXISTS `pessoas_avisos_idade`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `pessoas_avisos_idade` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `pessoa_id` int NOT NULL,
+  `idade` tinyint unsigned NOT NULL,
+  `avisado_em` datetime DEFAULT NULL,
+  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  `criado_por` int DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_aviso_pessoa_idade` (`pessoa_id`,`idade`),
+  KEY `idx_aviso_pendente` (`avisado_em`),
+  KEY `fk_aviso_criado_por` (`criado_por`),
+  CONSTRAINT `fk_aviso_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_aviso_pessoa` FOREIGN KEY (`pessoa_id`) REFERENCES `pessoas_fisicas` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1110,6 +1179,8 @@ CREATE TABLE `pessoas_fisicas` (
   `ctps_serie` varchar(20) DEFAULT NULL,
   `nome_pai` varchar(200) DEFAULT NULL,
   `nome_mae` varchar(200) DEFAULT NULL,
+  `responsavel_id` int DEFAULT NULL,
+  `parentesco_id` int DEFAULT NULL,
   `data_nascimento` date DEFAULT NULL,
   `estado_civil_id` int DEFAULT NULL,
   `profissao_id` int DEFAULT NULL,
@@ -1138,13 +1209,17 @@ CREATE TABLE `pessoas_fisicas` (
   KEY `fk_pf_alterado_por` (`alterado_por`),
   KEY `nacionalidade_id` (`nacionalidade_id`),
   KEY `idx_pf_ativo_nome` (`ativo`,`nome`),
+  KEY `idx_pf_responsavel` (`responsavel_id`),
+  KEY `fk_pf_parentesco` (`parentesco_id`),
   CONSTRAINT `fk_pf_alterado_por` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `fk_pf_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `fk_pf_parentesco` FOREIGN KEY (`parentesco_id`) REFERENCES `parentesco` (`id`),
+  CONSTRAINT `fk_pf_responsavel` FOREIGN KEY (`responsavel_id`) REFERENCES `pessoas_fisicas` (`id`),
   CONSTRAINT `pessoas_fisicas_ibfk_1` FOREIGN KEY (`estado_civil_id`) REFERENCES `estado_civil` (`id`),
   CONSTRAINT `pessoas_fisicas_ibfk_2` FOREIGN KEY (`profissao_id`) REFERENCES `profissao` (`id`),
   CONSTRAINT `pessoas_fisicas_ibfk_3` FOREIGN KEY (`genero_id`) REFERENCES `genero` (`id`),
   CONSTRAINT `pessoas_fisicas_ibfk_4` FOREIGN KEY (`nacionalidade_id`) REFERENCES `nacionalidade` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=5007 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5094 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1178,6 +1253,7 @@ CREATE TABLE `pessoas_juridicas` (
   `razao_social` varchar(200) NOT NULL,
   `nome_fantasia` varchar(200) DEFAULT NULL,
   `cnpj` varchar(18) DEFAULT NULL,
+  `em_recuperacao_judicial` tinyint(1) NOT NULL DEFAULT '0',
   `inscricao_estadual` varchar(30) DEFAULT NULL,
   `cep` varchar(9) DEFAULT NULL,
   `logradouro` varchar(200) DEFAULT NULL,
@@ -1199,7 +1275,7 @@ CREATE TABLE `pessoas_juridicas` (
   KEY `idx_pj_ativo_razao` (`ativo`,`razao_social`),
   CONSTRAINT `fk_pj_alterado_por` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `fk_pj_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2943 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2983 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1236,7 +1312,7 @@ CREATE TABLE `prazo_subtipo` (
   PRIMARY KEY (`id`),
   KEY `tipo_prazo_id` (`tipo_prazo_id`),
   CONSTRAINT `prazo_subtipo_ibfk_1` FOREIGN KEY (`tipo_prazo_id`) REFERENCES `tipo_prazo` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=57 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=63 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1305,7 +1381,30 @@ CREATE TABLE `prazos_processo` (
   CONSTRAINT `prazos_processo_ibfk_4` FOREIGN KEY (`concluido_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `prazos_processo_ibfk_5` FOREIGN KEY (`status_alterado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `prazos_processo_ibfk_6` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=141 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=244 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `processo_assunto`
+--
+
+DROP TABLE IF EXISTS `processo_assunto`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `processo_assunto` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `processo_id` int NOT NULL,
+  `assunto_id` int NOT NULL,
+  `criado_por` int DEFAULT NULL,
+  `criado_em` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_processo_assunto` (`processo_id`,`assunto_id`),
+  KEY `idx_processo_assunto_assunto` (`assunto_id`),
+  KEY `idx_processo_assunto_criado_por` (`criado_por`),
+  CONSTRAINT `processo_assunto_ibfk_1` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `processo_assunto_ibfk_2` FOREIGN KEY (`assunto_id`) REFERENCES `tblassuntoproc` (`id`),
+  CONSTRAINT `processo_assunto_ibfk_3` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1360,7 +1459,7 @@ CREATE TABLE `profissao` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(100) NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=61 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=99 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1374,11 +1473,22 @@ CREATE TABLE `publicacao_usuario` (
   `id` int NOT NULL AUTO_INCREMENT,
   `publicacao_id` int NOT NULL,
   `usuario_id` int NOT NULL,
+  `atribuida_por` int DEFAULT NULL,
+  `atribuida_em` datetime DEFAULT NULL,
+  `tratada` tinyint(1) NOT NULL DEFAULT '0',
+  `tratada_em` datetime DEFAULT NULL,
+  `tratada_por` int DEFAULT NULL,
+  `motivo_sem_acao` varchar(500) DEFAULT NULL,
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_pu_pub_user` (`publicacao_id`,`usuario_id`),
   KEY `idx_pu_pub` (`publicacao_id`),
   KEY `idx_pu_user` (`usuario_id`),
+  KEY `idx_pu_atribuida_por` (`atribuida_por`),
+  KEY `idx_pu_tratada_por` (`tratada_por`),
   CONSTRAINT `fk_pu_pub` FOREIGN KEY (`publicacao_id`) REFERENCES `publicacoes` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_pu_user` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+  CONSTRAINT `fk_pu_user` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_pu_atribuida_por` FOREIGN KEY (`atribuida_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_pu_tratada_por` FOREIGN KEY (`tratada_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -1425,7 +1535,7 @@ CREATE TABLE `publicacoes` (
   CONSTRAINT `fk_pub_direcionada` FOREIGN KEY (`direcionada_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_pub_importada` FOREIGN KEY (`importada_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_pub_tratada` FOREIGN KEY (`tratada_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=2126 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2195 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1482,7 +1592,7 @@ CREATE TABLE `reset_tokens` (
   UNIQUE KEY `token` (`token`),
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `reset_tokens_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=25 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=28 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1525,7 +1635,7 @@ CREATE TABLE `tarefas` (
   CONSTRAINT `tarefas_ibfk_4` FOREIGN KEY (`atribuida_para`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `tarefas_ibfk_5` FOREIGN KEY (`concluida_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `tarefas_ibfk_6` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=85 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=254 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1544,6 +1654,31 @@ CREATE TABLE `tarefas_etiquetas` (
   CONSTRAINT `fk_tare_reg` FOREIGN KEY (`tarefa_id`) REFERENCES `tarefas` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_tare_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `tblassuntoproc`
+--
+
+DROP TABLE IF EXISTS `tblassuntoproc`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tblassuntoproc` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `nome` varchar(150) NOT NULL,
+  `ativo` tinyint(1) NOT NULL DEFAULT '1',
+  `criado_por` int DEFAULT NULL,
+  `criado_em` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `alterado_por` int DEFAULT NULL,
+  `alterado_em` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_tblassuntoproc_nome` (`nome`),
+  KEY `idx_tblassuntoproc_ativo_nome` (`ativo`,`nome`),
+  KEY `idx_tblassuntoproc_criado_por` (`criado_por`),
+  KEY `idx_tblassuntoproc_alterado_por` (`alterado_por`),
+  CONSTRAINT `tblassuntoproc_ibfk_1` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `tblassuntoproc_ibfk_2` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1574,7 +1709,7 @@ CREATE TABLE `tblforum` (
   KEY `alterado_por` (`alterado_por`),
   CONSTRAINT `tblforum_ibfk_1` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblforum_ibfk_2` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=141 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=149 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1621,7 +1756,7 @@ CREATE TABLE `tblpasta` (
   KEY `alterado_por` (`alterado_por`),
   CONSTRAINT `tblpasta_ibfk_1` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblpasta_ibfk_2` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=8865 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=8880 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1664,15 +1799,15 @@ CREATE TABLE `tblproc` (
   KEY `idx_proc_pasta_ativo` (`pasta_id`,`ativo`),
   KEY `idx_proc_protocolo` (`protocolo`),
   KEY `fk_tblproc_responsavel` (`responsavel_id`),
+  CONSTRAINT `fk_tblproc_responsavel` FOREIGN KEY (`responsavel_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblproc_ibfk_1` FOREIGN KEY (`pasta_id`) REFERENCES `tblpasta` (`id`),
   CONSTRAINT `tblproc_ibfk_2` FOREIGN KEY (`vara_id`) REFERENCES `tblvara` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblproc_ibfk_3` FOREIGN KEY (`tipo_id`) REFERENCES `tbltipoproc` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblproc_ibfk_4` FOREIGN KEY (`status_id`) REFERENCES `tblstatusproc` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblproc_ibfk_5` FOREIGN KEY (`instancia_id`) REFERENCES `tblinstanciaproc` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblproc_ibfk_6` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `tblproc_ibfk_7` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `fk_tblproc_responsavel` FOREIGN KEY (`responsavel_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=6083 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  CONSTRAINT `tblproc_ibfk_7` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=6146 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1695,7 +1830,7 @@ CREATE TABLE `tblstatusproc` (
   KEY `alterado_por` (`alterado_por`),
   CONSTRAINT `tblstatusproc_ibfk_1` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblstatusproc_ibfk_2` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1719,7 +1854,7 @@ CREATE TABLE `tbltipoproc` (
   KEY `alterado_por` (`alterado_por`),
   CONSTRAINT `tbltipoproc_ibfk_1` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tbltipoproc_ibfk_2` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1742,7 +1877,7 @@ CREATE TABLE `tbltituloprocautor` (
   KEY `idx_titautor_pessoa` (`pessoa_id`,`tipo_pessoa`,`proc_id`),
   CONSTRAINT `tbltituloprocautor_ibfk_1` FOREIGN KEY (`proc_id`) REFERENCES `tblproc` (`id`) ON DELETE CASCADE,
   CONSTRAINT `tbltituloprocautor_ibfk_2` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=6089 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6168 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1765,7 +1900,7 @@ CREATE TABLE `tbltituloprocreu` (
   KEY `idx_titreu_pessoa` (`pessoa_id`,`tipo_pessoa`,`proc_id`),
   CONSTRAINT `tbltituloprocreu_ibfk_1` FOREIGN KEY (`proc_id`) REFERENCES `tblproc` (`id`) ON DELETE CASCADE,
   CONSTRAINT `tbltituloprocreu_ibfk_2` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=6103 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6178 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1796,7 +1931,7 @@ CREATE TABLE `tblvara` (
   CONSTRAINT `tblvara_ibfk_1` FOREIGN KEY (`forum_id`) REFERENCES `tblforum` (`id`),
   CONSTRAINT `tblvara_ibfk_2` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblvara_ibfk_3` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=645 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=659 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1817,7 +1952,7 @@ CREATE TABLE `telefones_pf` (
   PRIMARY KEY (`id`),
   KEY `pessoa_id` (`pessoa_id`),
   CONSTRAINT `telefones_pf_ibfk_1` FOREIGN KEY (`pessoa_id`) REFERENCES `pessoas_fisicas` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=22352 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=22429 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1920,7 +2055,7 @@ CREATE TABLE `usuarios` (
   UNIQUE KEY `uq_login` (`login`),
   KEY `fk_usuarios_criado_por` (`criado_por`),
   CONSTRAINT `fk_usuarios_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=28 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=27 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1940,4 +2075,4 @@ CREATE TABLE `usuarios` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed
+-- Dump completed on 2026-08-31 10:27:59

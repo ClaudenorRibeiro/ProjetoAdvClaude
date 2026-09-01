@@ -16,6 +16,7 @@ import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import MenuAcoes from '../../components/MenuAcoes';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
 import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetasSubmenu, useEtiquetasPessoais } from '../../components/Etiquetas';
+import useEscFechar from '../../hooks/useEscFechar';
 // Reuso dos modais de criação já existentes (sem duplicar código): a partir de uma
 // publicação o usuário cria Prazo, Tarefa ou Compromisso, já com o vínculo de origem.
 import { ModalNovoPrazo } from '../Prazos/Prazos';
@@ -210,17 +211,20 @@ function ModalAcaoDaPublicacao({ acao, usuariosAgenda, usuarioLogadoId, ehAdmin,
 
 // Barra com os mesmos botões de ação do menu ⋮, para usar DENTRO da janela de leitura
 // da publicação. Compartilhada pelas duas abas.
-function BarraAcoesPublicacao({ pub, podeAlterar, podeCriarPericia, onCriar, onTratar, onEmail }) {
-  if (!podeAlterar && !podeCriarPericia) return null;
+function BarraAcoesPublicacao({ pub, podeAgir, podeCriarPericia, podeAtribuir, onCriar, onTratar, onEmail, onAtribuir }) {
+  if (!podeAgir && !podeCriarPericia && !podeAtribuir) return null;
   return (
     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-      {podeAlterar && (
+      {podeAgir && (
         <>
           <button className="btn btn-outline" onClick={() => onCriar('prazo', pub)}>📌 Criar prazo</button>
           <button className="btn btn-outline" onClick={() => onCriar('tarefa', pub)}>✓ Criar tarefa</button>
           <button className="btn btn-outline" onClick={() => onCriar('compromisso', pub)}>📅 Criar compromisso</button>
           <button className="btn btn-outline" onClick={() => onEmail(pub)}>📧 Enviar por e-mail</button>
         </>
+      )}
+      {podeAtribuir && (
+        <button className="btn btn-outline" onClick={() => onAtribuir(pub)}>👤 Atribuir</button>
       )}
       {podeCriarPericia && (
         <span style={{ display: 'inline-flex' }}
@@ -232,7 +236,7 @@ function BarraAcoesPublicacao({ pub, podeAlterar, podeCriarPericia, onCriar, onT
       {/* Só pode marcar tratada com o processo cadastrado; Reabrir é sempre permitido.
           Quando não pode, o botão fica VISÍVEL porém desabilitado, com aviso no hover.
           (o <span> em volta garante o tooltip mesmo com o botão desabilitado) */}
-      {podeAlterar && (() => {
+      {podeAgir && (() => {
         const podeTratar = !!(pub.tratada || pub.processo_cadastrado);
         return (
           <span style={{ display: 'inline-flex' }}
@@ -251,6 +255,7 @@ function BarraAcoesPublicacao({ pub, podeAlterar, podeCriarPericia, onCriar, onT
 // Mini-modal: justificar a marcação MANUAL "Tratada / sem ação". O motivo é obrigatório
 // (validação em faixa interna, nunca toast). Compartilhado pelas duas abas.
 function ModalJustificarSemAcao({ pub, onFechar, onSucesso }) {
+  const overlayRef = useEscFechar(onFechar); // ESC fecha esta janela (só quando é a de cima)
   const [motivo, setMotivo]     = useState('');
   const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso]       = useState('');
@@ -270,7 +275,7 @@ function ModalJustificarSemAcao({ pub, onFechar, onSucesso }) {
   }
 
   return (
-    <div className="modal-overlay">
+    <div className="modal-overlay" ref={overlayRef}>
       <div className="modal-box">
         <div className="modal-header">
           <h3>Tratar sem ação</h3>
@@ -309,6 +314,7 @@ function ModalJustificarSemAcao({ pub, onFechar, onSucesso }) {
 // freelancers (vários de uma vez). Quem não tem e-mail cadastrado fica desabilitado.
 // Compartilhado pelas duas abas.
 function ModalEnviarPublicacaoEmail({ pub, onFechar, onSucesso }) {
+  const overlayRef = useEscFechar(onFechar); // ESC fecha esta janela (só quando é a de cima)
   const [dados, setDados]           = useState(null);   // { usuarios, freelancers }
   const [sel, setSel]               = useState(new Set());
   const [incluirOutro, setIncluirOutro] = useState(false); // checkbox "Outro"
@@ -373,7 +379,7 @@ function ModalEnviarPublicacaoEmail({ pub, onFechar, onSucesso }) {
   }
 
   return (
-    <div className="modal-overlay" style={{ zIndex: 1100 }}>
+    <div className="modal-overlay" style={{ zIndex: 1100 }} ref={overlayRef}>
       <div className="modal-box" style={{ maxWidth: '560px' }}>
         <div className="modal-header">
           <h3>Enviar publicação por e-mail</h3>
@@ -481,15 +487,17 @@ function PublicacoesAASP() {
   const [historicoAberto, setHistoricoAberto]   = useState(null);
   const [justificando, setJustificando]         = useState(null); // publicação aguardando justificativa de "sem ação"
   const [enviandoEmailPub, setEnviandoEmailPub] = useState(null); // publicação a enviar por e-mail
+  const [atribuindoPub, setAtribuindoPub]       = useState(null); // publicação a atribuir a alguém
 
-  // Fecha a janela de leitura da publicação com a tecla Esc — só quando não há outro
-  // modal por cima (Criar prazo/tarefa/compromisso ou a justificativa de "sem ação").
+  // Fecha a janela de leitura da publicação com a tecla Esc — só quando NÃO há outra
+  // janela por cima (criar prazo/tarefa/compromisso/perícia, justificar "sem ação",
+  // enviar por e-mail ou atribuir). Senão o ESC fecharia esta, que é a de trás.
   useEffect(() => {
-    if (!textoAberto || acaoAberta || justificando) return;
+    if (!textoAberto || acaoAberta || justificando || enviandoEmailPub || atribuindoPub) return;
     function handleKey(e) { if (e.key === 'Escape') setTextoAberto(null); }
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-  }, [textoAberto, acaoAberta, justificando]);
+  }, [textoAberto, acaoAberta, justificando, enviandoEmailPub, atribuindoPub]);
   const [confirmar, setConfirmar]             = useState(null);
 
   // Verifica se a AASP está configurada (para mostrar o aviso, sem quebrar a tela).
@@ -789,24 +797,27 @@ function PublicacoesAASP() {
                         itemEtiquetasSubmenu({ definicoes: etqDefs, slotAtual: p.etiqueta_pessoal,
                           onMarcar: (slot) => marcarEtq(p.id, slot) }),
                         { label: 'Criar prazo', icone: '📌',
-                          oculto: !podeAlterar,
+                          oculto: !p.pode_agir,
                           onClick: () => setAcaoAberta({ tipo: 'prazo', pub: p }) },
                         { label: 'Criar tarefa', icone: '✓',
-                          oculto: !podeAlterar,
+                          oculto: !p.pode_agir,
                           onClick: () => setAcaoAberta({ tipo: 'tarefa', pub: p }) },
                         { label: 'Criar compromisso', icone: '📅',
-                          oculto: !podeAlterar,
+                          oculto: !p.pode_agir,
                           onClick: () => setAcaoAberta({ tipo: 'compromisso', pub: p }) },
                         { label: 'Criar perícia', icone: '🔬',
                           oculto: !podeCriarPericia || !p.processo_cadastrado,
                           onClick: () => setAcaoAberta({ tipo: 'pericia', pub: p }) },
                         { label: 'Enviar por e-mail', icone: '📧',
-                          oculto: !podeAlterar,
+                          oculto: !p.pode_agir,
                           onClick: () => setEnviandoEmailPub(p) },
+                        { label: 'Atribuir', icone: '👤',
+                          oculto: !podeImportar,   // "Atribuir" é ação do BUSCADOR (permissão de baixar)
+                          onClick: () => setAtribuindoPub(p) },
                         { label: p.tratada ? 'Reabrir' : 'Tratada / sem ação',
                           icone: p.tratada ? '↩️' : '✔️',
                           // Só pode marcar tratada com o processo cadastrado; Reabrir é sempre permitido.
-                          oculto: !podeAlterar || (!p.tratada && !p.processo_cadastrado),
+                          oculto: !p.pode_agir || (!p.tratada && !p.processo_cadastrado),
                           onClick: () => alternarTratada(p) },
                         { label: 'Histórico', icone: '📋',
                           onClick: () => setHistoricoAberto(p) },
@@ -882,6 +893,12 @@ function PublicacoesAASP() {
                     <div style={{ whiteSpace: 'nowrap' }}><strong>Nº da publicação:</strong> {textoAberto.numero_publicacao}</div>
                   )}
                 </div>
+                {(textoAberto.atribuida_nomes || '').trim() && (
+                  <div style={{ fontSize: '13px', color: '#3730a3', background: '#eef2ff',
+                    border: '1px solid #c7d2fe', borderRadius: '6px', padding: '6px 10px', marginBottom: '12px' }}>
+                    👤 Atribuída a: {textoAberto.atribuida_nomes}
+                  </div>
+                )}
                 <div style={{
                   background: '#f8fafc', padding: '16px', borderRadius: '8px',
                   fontSize: '14px', lineHeight: '1.7', whiteSpace: 'pre-wrap', maxHeight: '420px', overflowY: 'auto',
@@ -890,11 +907,14 @@ function PublicacoesAASP() {
                 </div>
               </div>
               <div className="modal-footer">
-                <BarraAcoesPublicacao pub={textoAberto} podeAlterar={podeAlterar}
+                <BarraAcoesPublicacao pub={textoAberto}
+                  podeAgir={podeAlterar || !!textoAberto.pode_agir}
                   podeCriarPericia={podeCriarPericia}
+                  podeAtribuir={podeImportar}
                   onCriar={(tipo, p) => setAcaoAberta({ tipo, pub: p })}
                   onTratar={(p) => alternarTratada(p)}
-                  onEmail={(p) => setEnviandoEmailPub(p)} />
+                  onEmail={(p) => setEnviandoEmailPub(p)}
+                  onAtribuir={(p) => setAtribuindoPub(p)} />
                 <button className="btn btn-secondary" style={{ marginLeft: 'auto' }}
                   onClick={() => setTextoAberto(null)}>Fechar</button>
               </div>
@@ -937,6 +957,11 @@ function PublicacoesAASP() {
           onFechar={() => setEnviandoEmailPub(null)}
           onSucesso={() => setEnviandoEmailPub(null)} />
       )}
+      {atribuindoPub && (
+        <ModalAtribuir publicacao={atribuindoPub}
+          onFechar={() => setAtribuindoPub(null)}
+          onSucesso={(msg) => { setAtribuindoPub(null); setTextoAberto(null); toast.success(msg || 'Atribuição atualizada'); carregar(); }} />
+      )}
 
       {confirmar && <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(null)} />}
     </div>
@@ -947,7 +972,7 @@ function PublicacoesAASP() {
 // Aba CNJ / DJEN (Diário de Justiça Eletrônico Nacional)
 // Tela separada da AASP. Busca por PERÍODO, usando as OABs cadastradas em
 // Configurações → Integrações → CNJ. Direcionamento manual (igual à AASP).
-// Reaproveita os modais ModalDirecionar/ModalHistorico e o helper realcarTexto.
+// Reaproveita os modais ModalAtribuir/ModalHistorico e o helper realcarTexto.
 // ------------------------------------------------------------
 // Base para baixar a certidão oficial (PDF) de uma comunicação do CNJ.
 const CNJ_CERTIDAO_BASE = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
@@ -982,15 +1007,17 @@ function PublicacoesCNJ() {
   const [historicoAberto, setHistoricoAberto]   = useState(null);
   const [justificando, setJustificando]         = useState(null); // publicação aguardando justificativa de "sem ação"
   const [enviandoEmailPub, setEnviandoEmailPub] = useState(null); // publicação a enviar por e-mail
+  const [atribuindoPub, setAtribuindoPub]       = useState(null); // publicação a atribuir a alguém
 
-  // Fecha a janela de leitura da publicação com a tecla Esc — só quando não há outro
-  // modal por cima (Criar prazo/tarefa/compromisso ou a justificativa de "sem ação").
+  // Fecha a janela de leitura da publicação com a tecla Esc — só quando NÃO há outra
+  // janela por cima (criar prazo/tarefa/compromisso/perícia, justificar "sem ação",
+  // enviar por e-mail ou atribuir). Senão o ESC fecharia esta, que é a de trás.
   useEffect(() => {
-    if (!textoAberto || acaoAberta || justificando) return;
+    if (!textoAberto || acaoAberta || justificando || enviandoEmailPub || atribuindoPub) return;
     function handleKey(e) { if (e.key === 'Escape') setTextoAberto(null); }
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-  }, [textoAberto, acaoAberta, justificando]);
+  }, [textoAberto, acaoAberta, justificando, enviandoEmailPub, atribuindoPub]);
   const [confirmar, setConfirmar]               = useState(null);
 
   // Verifica se o CNJ está configurado (para mostrar o aviso, sem quebrar a tela).
@@ -1296,24 +1323,27 @@ function PublicacoesCNJ() {
                         itemEtiquetasSubmenu({ definicoes: etqDefs, slotAtual: p.etiqueta_pessoal,
                           onMarcar: (slot) => marcarEtq(p.id, slot) }),
                         { label: 'Criar prazo', icone: '📌',
-                          oculto: !podeAlterar,
+                          oculto: !p.pode_agir,
                           onClick: () => setAcaoAberta({ tipo: 'prazo', pub: p }) },
                         { label: 'Criar tarefa', icone: '✓',
-                          oculto: !podeAlterar,
+                          oculto: !p.pode_agir,
                           onClick: () => setAcaoAberta({ tipo: 'tarefa', pub: p }) },
                         { label: 'Criar compromisso', icone: '📅',
-                          oculto: !podeAlterar,
+                          oculto: !p.pode_agir,
                           onClick: () => setAcaoAberta({ tipo: 'compromisso', pub: p }) },
                         { label: 'Criar perícia', icone: '🔬',
                           oculto: !podeCriarPericia || !p.processo_cadastrado,
                           onClick: () => setAcaoAberta({ tipo: 'pericia', pub: p }) },
                         { label: 'Enviar por e-mail', icone: '📧',
-                          oculto: !podeAlterar,
+                          oculto: !p.pode_agir,
                           onClick: () => setEnviandoEmailPub(p) },
+                        { label: 'Atribuir', icone: '👤',
+                          oculto: !podeImportar,   // "Atribuir" é ação do BUSCADOR (permissão de baixar)
+                          onClick: () => setAtribuindoPub(p) },
                         { label: p.tratada ? 'Reabrir' : 'Tratada / sem ação',
                           icone: p.tratada ? '↩️' : '✔️',
                           // Só pode marcar tratada com o processo cadastrado; Reabrir é sempre permitido.
-                          oculto: !podeAlterar || (!p.tratada && !p.processo_cadastrado),
+                          oculto: !p.pode_agir || (!p.tratada && !p.processo_cadastrado),
                           onClick: () => alternarTratada(p) },
                         { label: 'Histórico', icone: '📋',
                           onClick: () => setHistoricoAberto(p) },
@@ -1398,6 +1428,12 @@ function PublicacoesCNJ() {
                   )}
                   </div>
                 </div>
+                {(textoAberto.atribuida_nomes || '').trim() && (
+                  <div style={{ fontSize: '13px', color: '#3730a3', background: '#eef2ff',
+                    border: '1px solid #c7d2fe', borderRadius: '6px', padding: '6px 10px', marginBottom: '12px' }}>
+                    👤 Atribuída a: {textoAberto.atribuida_nomes}
+                  </div>
+                )}
                 <div style={{
                   background: '#f8fafc', padding: '16px', borderRadius: '8px',
                   fontSize: '14px', lineHeight: '1.7', whiteSpace: 'pre-wrap', maxHeight: '420px', overflowY: 'auto',
@@ -1406,11 +1442,14 @@ function PublicacoesCNJ() {
                 </div>
               </div>
               <div className="modal-footer">
-                <BarraAcoesPublicacao pub={textoAberto} podeAlterar={podeAlterar}
+                <BarraAcoesPublicacao pub={textoAberto}
+                  podeAgir={podeAlterar || !!textoAberto.pode_agir}
                   podeCriarPericia={podeCriarPericia}
+                  podeAtribuir={podeImportar}
                   onCriar={(tipo, p) => setAcaoAberta({ tipo, pub: p })}
                   onTratar={(p) => alternarTratada(p)}
-                  onEmail={(p) => setEnviandoEmailPub(p)} />
+                  onEmail={(p) => setEnviandoEmailPub(p)}
+                  onAtribuir={(p) => setAtribuindoPub(p)} />
                 <button className="btn btn-secondary" style={{ marginLeft: 'auto' }}
                   onClick={() => setTextoAberto(null)}>Fechar</button>
               </div>
@@ -1453,6 +1492,11 @@ function PublicacoesCNJ() {
           onFechar={() => setEnviandoEmailPub(null)}
           onSucesso={() => setEnviandoEmailPub(null)} />
       )}
+      {atribuindoPub && (
+        <ModalAtribuir publicacao={atribuindoPub}
+          onFechar={() => setAtribuindoPub(null)}
+          onSucesso={(msg) => { setAtribuindoPub(null); setTextoAberto(null); toast.success(msg || 'Atribuição atualizada'); carregar(); }} />
+      )}
 
       {confirmar && <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(null)} />}
     </div>
@@ -1460,76 +1504,99 @@ function PublicacoesCNJ() {
 }
 
 // ------------------------------------------------------------
-// Modal: direcionar a publicação (escritório OU usuários específicos)
+// Modal: gerenciar QUEM fica com a publicação (só o BUSCADOR usa).
+// Abre com os já atribuídos MARCADOS. Marcar = adicionar; desmarcar = remover.
+// Quem JÁ TRATOU aparece travado (não dá para remover). Ao salvar, manda a lista
+// COMPLETA para o backend, que aplica a diferença. Se não sobrar ninguém, a
+// publicação volta a pendente para o buscador.
+// Validação em faixa interna (nunca toast). Compartilhado pelas duas abas.
 // ------------------------------------------------------------
-function ModalDirecionar({ publicacao, onFechar }) {
-  const [escritorio, setEscritorio] = useState(!!publicacao.escritorio);
-  const [usuarios, setUsuarios]     = useState([]);
-  const [selecionados, setSelecionados] = useState([]);
+function ModalAtribuir({ publicacao, onFechar, onSucesso }) {
+  const overlayRef = useEscFechar(onFechar); // ESC fecha esta janela (só quando é a de cima)
+  const [usuarios, setUsuarios]     = useState([]);      // todos os usuários (checklist)
+  const [atuais, setAtuais]         = useState([]);      // [{usuario_id, nome, tratada}]
+  const [marcados, setMarcados]     = useState(() => new Set());
+  const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando]     = useState(false);
+  const [aviso, setAviso]           = useState('');
 
   useEffect(() => {
-    publicacoesAPI.usuarios()
-      .then(({ data }) => { if (data.ok) setUsuarios(data.dados); })
-      .catch(() => toast.error('Erro ao carregar usuários'));
-  }, []);
+    Promise.all([publicacoesAPI.usuarios(), publicacoesAPI.atribuicoes(publicacao.id)])
+      .then(([u, a]) => {
+        setUsuarios((u.data.ok && u.data.dados) || []);
+        const at = (a.data.ok && a.data.dados) || [];
+        setAtuais(at);
+        setMarcados(new Set(at.map(x => x.usuario_id))); // começa com os já atribuídos marcados
+      })
+      .catch(() => setAviso('Não foi possível carregar. Tente novamente.'))
+      .finally(() => setCarregando(false));
+  }, [publicacao.id]);
 
-  function toggleUsuario(id) {
-    setSelecionados(sel => sel.includes(id) ? sel.filter(x => x !== id) : [...sel, id]);
+  // usuario_id -> já tratou? (esses ficam travados: não dá para desmarcar)
+  const tratouPorId = new Map(atuais.map(a => [a.usuario_id, !!a.tratada]));
+
+  function toggle(id) {
+    if (tratouPorId.get(id)) return; // já tratou → travado
+    setMarcados(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
 
   async function salvar() {
-    if (!escritorio && !selecionados.length) return toast.error('Escolha ao menos um usuário');
-    setSalvando(true);
+    setSalvando(true); setAviso('');
     try {
-      await publicacoesAPI.direcionar(publicacao.id, { escritorio, usuario_ids: escritorio ? [] : selecionados });
-      toast.success('Direcionamento salvo');
-      onFechar(true);
+      const { data } = await publicacoesAPI.atribuir(publicacao.id, { usuario_ids: [...marcados] });
+      onSucesso(data.mensagem);
     } catch (err) {
-      toast.error(err.response?.data?.mensagem || 'Erro ao direcionar');
-    } finally {
+      setAviso(err.response?.data?.mensagem || 'Não foi possível salvar. Tente novamente.');
       setSalvando(false);
     }
   }
 
   return (
-    <div className="modal-overlay">
+    <div className="modal-overlay" style={{ zIndex: 1100 }} ref={overlayRef}>
       <div className="modal-box">
         <div className="modal-header">
-          <h3>Direcionar publicação</h3>
-          <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
+          <h3>Atribuir publicação</h3>
+          <button className="modal-fechar" onClick={onFechar}>✕</button>
         </div>
         <div className="modal-body">
-          <div className="form-group">
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-              <input type="radio" checked={escritorio} onChange={() => setEscritorio(true)} />
-              <span>Escritório (todos com permissão veem)</span>
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginTop: '6px' }}>
-              <input type="radio" checked={!escritorio} onChange={() => setEscritorio(false)} />
-              <span>Usuários específicos (só eles e os administradores veem)</span>
-            </label>
-          </div>
-
-          {!escritorio && (
-            <div className="form-group">
-              <label className="form-label">Selecione os usuários</label>
-              <div style={{ border: '1px solid #cbd5e1', borderRadius: '6px', maxHeight: '220px', overflowY: 'auto', padding: '6px' }}>
-                {usuarios.length === 0
-                  ? <span style={{ fontSize: '12px', color: '#9ca3af' }}>Carregando...</span>
-                  : usuarios.map(u => (
-                    <label key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 2px', cursor: 'pointer' }}>
-                      <input type="checkbox" checked={selecionados.includes(u.id)} onChange={() => toggleUsuario(u.id)} />
-                      <span style={{ fontSize: '13px' }}>{u.nome}</span>
-                    </label>
-                  ))}
-              </div>
+          {aviso && (
+            <div style={{ background: '#fff4e5', border: '1px solid #ffcf99', color: '#8a5300',
+              padding: '8px 12px', borderRadius: '6px', fontSize: '13px', marginBottom: '12px' }}>
+              {aviso}
             </div>
           )}
+          <p style={{ fontSize: '13px', color: '#555', marginTop: 0 }}>
+            Marque quem deve receber a publicação. Quem sair da lista deixa de vê-la
+            (e é avisado). Quem <strong>já tratou</strong> fica travado. Se não sobrar
+            ninguém, a publicação volta para você como pendente.
+          </p>
+          <div className="form-group">
+            <label className="form-label">Pessoas</label>
+            <div style={{ border: '1px solid #cbd5e1', borderRadius: '6px', maxHeight: '260px', overflowY: 'auto', padding: '6px' }}>
+              {carregando
+                ? <span style={{ fontSize: '12px', color: '#9ca3af' }}>Carregando...</span>
+                : usuarios.length === 0
+                  ? <span style={{ fontSize: '12px', color: '#9ca3af' }}>Nenhum usuário disponível.</span>
+                  : usuarios.map(u => {
+                    const tratou = tratouPorId.get(u.id);
+                    return (
+                      <label key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '8px',
+                        padding: '4px 2px', cursor: tratou ? 'not-allowed' : 'pointer', opacity: tratou ? 0.75 : 1 }}>
+                        <input type="checkbox" checked={marcados.has(u.id)} disabled={tratou}
+                          onChange={() => toggle(u.id)} />
+                        <span style={{ fontSize: '13px' }}>
+                          {u.nome}
+                          {tratou && <span style={{ color: '#15803d', marginLeft: '6px' }}>✓ já tratou — não pode remover</span>}
+                        </span>
+                      </label>
+                    );
+                  })}
+            </div>
+          </div>
         </div>
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+          <button className="btn btn-secondary" onClick={onFechar}>Cancelar</button>
+          <button className="btn btn-primary" onClick={salvar} disabled={salvando || carregando}>
             {salvando ? 'Salvando...' : 'Salvar'}
           </button>
         </div>
@@ -1542,6 +1609,7 @@ function ModalDirecionar({ publicacao, onFechar }) {
 // Modal: histórico (lido das colunas da própria publicação)
 // ------------------------------------------------------------
 function ModalHistorico({ publicacao, onFechar }) {
+  const overlayRef = useEscFechar(onFechar); // ESC fecha esta janela (só quando é a de cima)
   const [dados, setDados] = useState(null);
 
   useEffect(() => {
@@ -1555,7 +1623,7 @@ function ModalHistorico({ publicacao, onFechar }) {
   }
 
   return (
-    <div className="modal-overlay">
+    <div className="modal-overlay" ref={overlayRef}>
       <div className="modal-box">
         <div className="modal-header">
           <h3>Histórico da publicação</h3>
@@ -1569,15 +1637,24 @@ function ModalHistorico({ publicacao, onFechar }) {
                 <span style={{ color: '#888' }}> · {dataHora(dados.criado_em)}</span>
               </li>
               <li>
-                <strong>Direcionamento:</strong>{' '}
-                {dados.escritorio
-                  ? 'Escritório (todos)'
-                  : (dados.direcionada_usuarios && dados.direcionada_usuarios.length
-                      ? dados.direcionada_usuarios.join(', ')
-                      : '—')}
-                {dados.direcionada_por_nome && (
-                  <span style={{ color: '#888' }}> · por {dados.direcionada_por_nome} em {dataHora(dados.direcionada_em)}</span>
-                )}
+                <strong>Atribuída a:</strong>{' '}
+                {Array.isArray(dados.atribuicoes) && dados.atribuicoes.length
+                  ? (
+                    <ul style={{ margin: '4px 0 0', paddingLeft: '18px', lineHeight: '1.7' }}>
+                      {dados.atribuicoes.map((a, i) => (
+                        <li key={i}>
+                          👤 {a.nome} — {a.tratada ? 'tratada' : 'pendente'}
+                          {a.tratada && a.tratada_em && (
+                            <span style={{ color: '#888' }}> em {dataHora(a.tratada_em)}</span>
+                          )}
+                          {a.atribuida_por_nome && (
+                            <span style={{ color: '#888' }}> · atribuída por {a.atribuida_por_nome} em {dataHora(a.atribuida_em)}</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )
+                  : ' ninguém'}
               </li>
               <li>
                 <strong>Tratada:</strong>{' '}

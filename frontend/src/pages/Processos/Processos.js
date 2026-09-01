@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { processosAPI, pessoasAPI, etiquetasAPI, configuracaoAPI } from '../../services/api';
+import { processosAPI, pessoasAPI, etiquetasAPI } from '../../services/api';
 import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetasSubmenu } from '../../components/Etiquetas';
 import { formatarNumeroPasta, mascaraCNJ, toTitleCase } from '../../utils/formatters';
 import { useAuth } from '../../context/AuthContext';
@@ -492,28 +492,23 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
 
   // Carrega auxiliares + sugestão de pasta + pré-preenche partes do processoBase
   useEffect(() => {
-    Promise.all([
-      processosAPI.auxiliares(),
-      configuracaoAPI.buscarEscritorio(),
-    ]).then(([auxResp, cfgResp]) => {
-      if (auxResp.data.ok) {
-        const dados = auxResp.data.dados;
-        setAux(dados);
-        setVarasFiltradas(dados.varas);
-        // Pré-preenche Status = "Conhecimento" e Instância = "1ª Instância" para novo cadastro
-        const statusPadrao = dados.status.find(s => s.nome.toLowerCase().includes('conhecimento'));
-        if (statusPadrao) setForm(f => ({ ...f, status_id: String(statusPadrao.id) }));
-        const instanciaPadrao = dados.instancias.find(i => i.nome.startsWith('1'));
-        if (instanciaPadrao) setForm(f => ({ ...f, instancia_id: String(instanciaPadrao.id) }));
-      }
-      if (cfgResp.data.ok) {
-        const cfg = cfgResp.data.dados || {};
-        setForm(f => ({
-          ...f,
-          responsavel_id: cfg.advogado_principal_id ? String(cfg.advogado_principal_id) : '',
-          oab_processo: cfg.oab_principal || '',
-        }));
-      }
+    processosAPI.auxiliares().then(({ data }) => {
+      if (!data.ok) return;
+      const dados = data.dados;
+      setAux(dados);
+      setVarasFiltradas(dados.varas);
+      // Pré-preenche Status = "Conhecimento" e Instância = "1ª Instância" para novo cadastro
+      const statusPadrao = dados.status.find(s => s.nome.toLowerCase().includes('conhecimento'));
+      if (statusPadrao) setForm(f => ({ ...f, status_id: String(statusPadrao.id) }));
+      const instanciaPadrao = dados.instancias.find(i => i.nome.startsWith('1'));
+      if (instanciaPadrao) setForm(f => ({ ...f, instancia_id: String(instanciaPadrao.id) }));
+      // Padrões do escritório (Responsável / OAB do processo) — vêm na MESMA resposta
+      // de auxiliares (rota aberta a qualquer usuário logado), não mais pela rota de admin.
+      setForm(f => ({
+        ...f,
+        responsavel_id: dados.advogado_principal_id ? String(dados.advogado_principal_id) : '',
+        oab_processo: dados.oab_principal || '',
+      }));
     });
     if (!pastaId) {
       processosAPI.sugerirPasta().then(r => {
@@ -957,7 +952,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
                 <option value="">— Não definido —</option>
                 {aux.usuarios?.map(u => (
                   <option key={u.id} value={u.id}>
-                    {u.nome}{u.tipo === 'advogado' ? ' — advogado' : ''}{u.oab ? ` — OAB ${u.oab}` : ''}
+                    {u.nome}{u.oab ? ` — OAB ${u.oab}` : ''}
                   </option>
                 ))}
               </select>
@@ -1548,7 +1543,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
                 <option value="">— Não definido —</option>
                 {aux.usuarios?.map(u => (
                   <option key={u.id} value={u.id}>
-                    {u.nome}{u.tipo === 'advogado' ? ' — advogado' : ''}{u.oab ? ` — OAB ${u.oab}` : ''}
+                    {u.nome}{u.oab ? ` — OAB ${u.oab}` : ''}
                   </option>
                 ))}
               </select>

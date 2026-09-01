@@ -323,12 +323,17 @@ router.get('/publicacoes/usuarios',       autenticar, verificarPermissao('public
 router.get('/publicacoes/destinatarios-email', autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.destinatariosEmail);
 router.get('/publicacoes',                autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.listar);
 router.get('/publicacoes/:id/historico',  autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.historico);
+router.get('/publicacoes/:id/atribuicoes', autenticar, verificarPermissao('publicacoes','cadastrar'), publicacoesCtrl.atribuicoesPub);
 router.post('/publicacoes/:id/marcar-lida', autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.marcarLida);
 router.get('/publicacoes/:id',            autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.obter);
 router.post('/publicacoes/importar',      autenticar, verificarPermissao('publicacoes','cadastrar'),  publicacoesCtrl.importar);
-router.put('/publicacoes/:id/direcionar', autenticar, verificarPermissao('publicacoes','alterar'),    publicacoesCtrl.direcionar);
-router.put('/publicacoes/:id/tratar',     autenticar, verificarPermissao('publicacoes','alterar'),    publicacoesCtrl.tratar);
-router.post('/publicacoes/:id/enviar-email', autenticar, verificarPermissao('publicacoes','alterar'), publicacoesCtrl.enviarEmailPublicacao);
+// Atribuir: só BUSCADOR (permissão de baixar = publicacoes/cadastrar). O corpo traz a
+// lista COMPLETA de quem fica com a publicação; o backend adiciona/remove a diferença.
+router.put('/publicacoes/:id/atribuir',    autenticar, verificarPermissao('publicacoes','cadastrar'), publicacoesCtrl.atribuir);
+// Tratar / enviar por e-mail: a rota exige só "visualizar"; o controller decide de
+// verdade ("alterar" OU a publicação está atribuída ao usuário; admin/super sempre).
+router.put('/publicacoes/:id/tratar',     autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.tratar);
+router.post('/publicacoes/:id/enviar-email', autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.enviarEmailPublicacao);
 router.post('/publicacoes/excluir-lote',  autenticar, verificarPermissao('publicacoes','excluir'),    publicacoesCtrl.excluirLote);
 router.delete('/publicacoes/:id',         autenticar, verificarPermissao('publicacoes','excluir'),    publicacoesCtrl.excluir);
 

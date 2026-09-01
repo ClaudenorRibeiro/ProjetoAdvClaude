@@ -827,7 +827,7 @@ async function atualizarProcesso(req, res) {
 // GET /api/processos/auxiliares — Dados para selects do formulário
 async function buscarAuxiliares(req, res) {
   try {
-    const [foruns, varas, tipos, status, instancias, usuarios, assuntos] = await Promise.all([
+    const [foruns, varas, tipos, status, instancias, usuarios, assuntos, escritorio] = await Promise.all([
       pool.execute('SELECT * FROM tblforum WHERE ativo=1 ORDER BY nome'),
       pool.execute(`SELECT v.*,
                            f.nome AS forum_nome, f.abrev_nome AS forum_abrev_nome,
@@ -841,8 +841,13 @@ async function buscarAuxiliares(req, res) {
       pool.execute('SELECT * FROM tblinstanciaproc WHERE ativo=1 ORDER BY nome'),
       pool.execute("SELECT id, nome, tipo, oab FROM usuarios WHERE ativo=1 AND nivel > 0 ORDER BY tipo = 'advogado' DESC, nome"),
       pool.execute('SELECT * FROM tblassuntoproc WHERE ativo=1 ORDER BY nome'),
+      // Padrões do escritório para pré-preencher o "Responsável pelo processo" e a
+      // "OAB do processo" no Novo Processo. Vem por AQUI (rota de auxiliares, aberta a
+      // qualquer usuário logado) e NÃO pela rota /configuracoes/escritorio, que é só admin.
+      pool.execute('SELECT advogado_principal_id, oab_principal FROM configuracoes_escritorio LIMIT 1'),
     ]);
 
+    const cfg = escritorio[0][0] || {};
     return sucesso(res, {
       foruns:    foruns[0],
       varas:     varas[0],
@@ -851,6 +856,8 @@ async function buscarAuxiliares(req, res) {
       instancias: instancias[0],
       usuarios:  usuarios[0],
       assuntos:  assuntos[0],
+      advogado_principal_id: cfg.advogado_principal_id || null,
+      oab_principal:         cfg.oab_principal || null,
     });
   } catch (err) {
     return erroInterno(res, err);

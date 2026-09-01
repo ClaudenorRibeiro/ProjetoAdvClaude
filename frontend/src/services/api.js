@@ -386,7 +386,7 @@ export const documentosAPI = {
 
 // ============================================================
 // PUBLICAÇÕES (fontes: AASP e CNJ/DJEN — telas separadas, mesmas ações)
-// listar/direcionar/tratar/historico/excluir são compartilhados (por id da publicação);
+// listar/atribuir/tratar/historico/excluir são compartilhados (por id da publicação);
 // a fonte é distinguida pelo parâmetro `fonte` no listar e pelas rotas de importar/status.
 // ============================================================
 export const publicacoesAPI = {
@@ -399,7 +399,8 @@ export const publicacoesAPI = {
   marcarLida:   (id) => api.post(`/publicacoes/${id}/marcar-lida`),
   importar:     (dados) => api.post('/publicacoes/importar', dados),
   importarCnj:  (dados) => api.post('/publicacoes/cnj/importar', dados),
-  direcionar:   (id, dados) => api.put(`/publicacoes/${id}/direcionar`, dados),
+  atribuir:     (id, dados) => api.put(`/publicacoes/${id}/atribuir`, dados),
+  atribuicoes:  (id) => api.get(`/publicacoes/${id}/atribuicoes`),
   tratar:       (id, dados) => api.put(`/publicacoes/${id}/tratar`, dados),
   historico:    (id) => api.get(`/publicacoes/${id}/historico`),
   obter:        (id) => api.get(`/publicacoes/${id}`),   // leitura da publicação de origem
