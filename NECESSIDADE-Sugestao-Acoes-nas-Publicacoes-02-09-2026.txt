@@ -1,0 +1,247 @@
+================================================================================
+NECESSIDADE + ANALISE / SUGESTOES
+Recurso: "Sugestao de acao" em cada publicacao
+Data: 02/09/2026
+Status: SO ANALISE. Nada foi codado. Nada de SQL. Nada no Git.
+================================================================================
+
+
+--------------------------------------------------------------------------------
+1) A NECESSIDADE (nas palavras do usuario)
+--------------------------------------------------------------------------------
+
+Ao abrir uma publicacao, o advogado JA SABE, lendo o texto, o que precisa ser
+feito. Exemplo real (publicacao no 40966, processo 1002005-92.2026.5.02.0613,
+TRT2 / Diario de Justica Eletronico Nacional):
+
+   "...AUDIENCIA PRESENCIAL DESIGNE-SE audiencia, na modalidade PRESENCIAL,
+    para o dia 08/10/2026 10:00 horas, na sala de audiencias da 13a Vara do
+    Trabalho de Sao Paulo - Zona Leste, a Avenida Amador Bueno da Veiga, 1888
+    - Penha de Franca, SAO PAULO/SP - CEP: 03636-100, na modalidade UNA RITO
+    SUMARISSIMO, devendo as partes comparecerem, nos termos do art. 844 da CLT..."
+
+O usuario sabe que isso significa: AGENDAR UMA AUDIENCIA em 08/10/2026 as 10:00.
+
+O que ele quer:
+  - Que o sistema tenha, EM CADA PUBLICACAO, uma opcao de "Sugestao".
+  - Que a Sugestao venha acompanhada dos BOTOES DE ACAO (criar prazo / criar
+    tarefa / criar compromisso / criar audiencia / criar pericia), ja apontando
+    para a acao certa e, de preferencia, com os campos ja preenchidos
+    (data, hora, local, descricao) a partir do texto da publicacao.
+  - Isso deve valer para TODAS as publicacoes, nao so as de audiencia.
+
+Pergunta do usuario: "qual a melhor solucao para isso?"
+
+
+--------------------------------------------------------------------------------
+2) O NUCLEO DA QUESTAO: como o sistema "le" a publicacao
+--------------------------------------------------------------------------------
+
+Existem dois motores possiveis para extrair a informacao estruturada
+(tipo de acao + data + hora + local + prazo) de dentro do texto corrido.
+
+
+== OPCAO A - Parser de regras (regex / heuristica), rodando no back ==
+
+As intimacoes do DJEN/TRT sao TEXTO DE FORMA. Os mesmos trechos se repetem:
+   - "DESIGNE-SE audiencia ... para o dia DD/MM/AAAA HH:MM horas"
+   - "na modalidade PRESENCIAL" / "TELEPRESENCIAL" / "por videoconferencia"
+   - "no prazo de 15 (quinze) dias"
+   - "fica intimado para ... no prazo legal"
+   - "RECLAMANTE: ...  RECLAMADO: ..."
+Um conjunto de aproximadamente 15 a 20 padroes cobre a maioria dos casos.
+
+Vantagens:
+   + Gratis, funciona offline.
+   + DETERMINISTICO: a mesma publicacao gera sempre a mesma sugestao.
+     Da para testar de forma isolada (combina com a regra do usuario de
+     "nunca supor / nunca achar").
+   + NADA SAI DO SERVIDOR. A publicacao tem nome das partes e numero do
+     processo; com o parser local, esse dado nao vai para nenhum servico
+     externo.
+   + Sem middleware. E apenas analise de string.
+
+Desvantagens:
+   - Redacao fora do padrao escapa do parser.
+   - Manutencao: conforme surgem variacoes de texto, novos padroes precisam
+     ser adicionados.
+   - O calculo de PRAZO LEGAL e juridicamente delicado (ver secao 4).
+
+
+== OPCAO B - IA (Claude API) devolvendo JSON ==
+
+Manda o texto da publicacao para um modelo de IA e recebe de volta algo como
+{ tipo: "audiencia", data: "2026-10-08", hora: "10:00", local: "...", ... }.
+
+Vantagens:
+   + Entende praticamente qualquer redacao, inclusive os casos que a regex
+     nao pega.
+
+Desvantagens:
+   - Custo por publicacao processada.
+   - Exige chave de API / servico externo.
+   - Latencia (a resposta demora) e dependencia de conexao com a internet.
+   - OS DADOS DA PUBLICACAO SAEM DO SERVIDOR (partes, numero do processo,
+     conteudo do despacho). E uma nova superficie de exposicao de dados.
+   - NAO-DETERMINISTICO: a mesma entrada pode gerar saidas ligeiramente
+     diferentes.
+
+
+--------------------------------------------------------------------------------
+3) RECOMENDACAO
+--------------------------------------------------------------------------------
+
+Comecar com a OPCAO A (parser de regras).
+
+Motivos:
+   - O material e padronizado o suficiente para um acerto estimado de
+     80% a 90% com um conjunto de padroes gerenciavel.
+   - Mantem todo o dado juridico dentro de casa.
+   - Nao cria dependencia de servico externo, chave, custo ou internet.
+   - Combina com a preferencia do usuario: manual, sem middleware,
+     deterministico, testavel.
+
+Deixar a OPCAO B como FASE FUTURA, usada apenas para as sugestoes de baixa
+confianca, e somente se o usuario aceitar enviar o texto para fora.
+
+
+--------------------------------------------------------------------------------
+4) FORMATO DA SOLUCAO (arquitetura proposta)
+--------------------------------------------------------------------------------
+
+(1) NOVO SERVICO NO BACK: sugestoesPublicacaoService.js
+    - Funcao PURA (sem banco, sem estado).
+    - Entrada: o texto da publicacao + a data de disponibilizacao.
+    - Saida: uma LISTA de sugestoes, cada uma no formato:
+         {
+           tipo:            "audiencia" | "prazo" | "pericia" | "compromisso" | "tarefa",
+           titulo:          texto curto para o botao (ex: "Agendar audiencia"),
+           data:            "2026-10-08" (ou null se nao achou),
+           hora:            "10:00" (ou null),
+           local:           "13a Vara do Trabalho SP - Zona Leste, Av. Amador
+                            Bueno da Veiga, 1888 - CEP 03636-100" (ou null),
+           descricao:       texto sugerido para o campo descricao da acao,
+           trecho_origem:   o pedaco exato do texto de onde a sugestao saiu
+                            (para o usuario conferir a olho),
+           confianca:       "alta" | "media" | "baixa"
+         }
+    - Testavel isoladamente (mesma entrada -> mesma saida).
+
+(2) O controller de publicacoes (funcao "obter", que roda quando o usuario
+    ABRE a janela de leitura) passa a devolver, junto do texto, um campo
+    "sugestoes: [...]" com o resultado do servico.
+    - ZERO SQL. Nenhuma tabela nova, nenhuma coluna nova.
+    - (Opcional, fase posterior) um indicador "tem_sugestao" na listagem,
+      para pintar um icone (ex: uma estrela) na linha da publicacao que
+      tem sugestao. Isso pode vir depois, exige mexer no "listar".
+
+(3) NO FRONT, dentro da janela de leitura da publicacao, um painel novo:
+    "SUGESTAO"
+    - Mostra o que foi detectado, COM O TRECHO DE ORIGEM DESTACADO, para
+      o usuario bater o olho e confirmar.
+    - Um botao por sugestao, ja com o rotulo preenchido, por exemplo:
+         [ Agendar audiencia - 08/10/2026 10:00 ]
+    - Ao clicar, abre o modal de acao correspondente JA PREENCHIDO.
+
+(4) PRE-PREENCHIMENTO DOS MODAIS DE CRIACAO
+    - Hoje os modais chamados pela publicacao (Criar prazo, Criar tarefa,
+      Criar compromisso, Criar pericia) so recebem o NUMERO DO PROCESSO e o
+      id da publicacao. Nao recebem data, hora, titulo, descricao ou local.
+    - Seria preciso ensina-los a aceitar propriedades OPCIONAIS:
+         dataInicial, horaInicial, tituloInicial, descricaoInicial, localInicial
+    - Isso e ADITIVO: se a propriedade nao vier, o modal se comporta
+      exatamente como hoje. Nenhum fluxo atual quebra.
+    - Esta e a parte mais trabalhosa do recurso, porque mexe em tres
+      modais diferentes (Prazo, Compromisso, Pericia).
+
+Resumo de impacto:
+   - BANCO: nenhuma mudanca (nenhum SQL).
+   - BACK:  1 arquivo novo (servico) + ajuste na funcao "obter".
+   - FRONT: painel novo na janela de leitura + props opcionais nos 3 modais
+            de acao + a ponte "ModalAcaoDaPublicacao" repassando as props.
+
+
+--------------------------------------------------------------------------------
+5) REGRAS DE SEGURANCA DO DESIGN (sistema juridico)
+--------------------------------------------------------------------------------
+
+   - NUNCA agenda / cria nada sozinho. A sugestao apenas PRE-PREENCHE; o
+     usuario revisa e confirma. Uma audiencia marcada errada e grave.
+
+   - SEMPRE mostra o trecho de origem do texto, para conferencia visual.
+
+   - CONFIANCA visivel em cada sugestao:
+       ALTA  = achou data + hora + a palavra "audiencia"/"designe-se" juntas.
+       MEDIA = achou so a data, ou o ano estava omitido e foi inferido.
+       BAIXA = prazo calculado (envolve regra juridica). Rotulo "conferir".
+
+   - PRAZO: o inicio legal da contagem (disponibilizacao -> publicacao no
+     dia util seguinte -> prazo comeca no dia util seguinte) e materia
+     juridica e varia conforme o rito. A sugestao de prazo deve ser
+     entregue como RASCUNHO com aviso, reaproveitando os feriados e a
+     tabela calendario/dia_util que o sistema ja tem.
+
+
+--------------------------------------------------------------------------------
+6) CASOS QUE O PARSER PRECISA TRATAR (levantados do exemplo real)
+--------------------------------------------------------------------------------
+
+   - Formatos de hora: "10:00 horas", "10h", "as 10 e 30", "10:00min".
+
+   - Ano omitido: "dia 08/10 as 10h" sem o ano -> inferir a partir da data
+     de disponibilizacao da publicacao; marcar confianca MEDIA.
+
+   - Varias datas no mesmo texto: a data do despacho X a data da audiencia.
+     Escolher a que esta proxima de "audiencia" / "designe-se" / "para o dia".
+
+   - Modalidade: PRESENCIAL / TELEPRESENCIAL / semipresencial /
+     "por videoconferencia".
+
+   - Local + CEP: ja vem escrito no texto
+     ("Avenida Amador Bueno da Veiga, 1888 ... CEP: 03636-100") -> montar
+     o campo local juntando logradouro + numero + bairro + cidade/UF + CEP.
+
+   - Tipo de audiencia: "UNA", "conciliacao", "instrucao", "inicial".
+
+   - Prazo por extenso: "no prazo de 15 (quinze) dias" -> usar o numero,
+     nao o texto por extenso.
+
+   - Dias uteis X dias corridos: a maioria dos prazos processuais conta
+     em dias uteis. Deixar explicito na sugestao qual regra foi usada.
+
+
+--------------------------------------------------------------------------------
+7) FASEAMENTO SUGERIDO
+--------------------------------------------------------------------------------
+
+   FASE 1 - Parser somente de AUDIENCIA (data + hora + local + modalidade)
+            + painel "Sugestao" na janela de leitura
+            + pre-preencher o "Criar compromisso".
+            E o caso do print e o de maior valor imediato.
+
+   FASE 2 - PRAZO: "N dias" -> data de vencimento calculada em dias uteis,
+            entregue como rascunho com aviso "conferir".
+
+   FASE 3 - PERICIA: espelha a logica da audiencia (data + hora + local).
+
+   FASE 4 - (Opcional) Fallback de IA (Opcao B) apenas para publicacoes
+            em que o parser retornou confianca BAIXA ou nada. So se o
+            usuario aceitar enviar o texto para um servico externo.
+
+
+--------------------------------------------------------------------------------
+8) PROXIMO PASSO
+--------------------------------------------------------------------------------
+
+Se o usuario aprovar este caminho, o proximo passo e transformar a FASE 1
+num PLANO CONCRETO DE IMPLEMENTACAO:
+   - lista exata de arquivos que serao tocados,
+   - efeitos colaterais em front / back / banco,
+   - riscos,
+para aprovacao ANTES de qualquer linha de codigo (fluxo de 2 passos).
+
+Nada sera codado, nem SQL, nem Git, sem o "pode codar".
+
+================================================================================
+FIM
+================================================================================

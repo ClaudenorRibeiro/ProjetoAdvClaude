@@ -713,11 +713,13 @@ export default function PastaDetalhe() {
         {/* === ABA: PROCESSOS === */}
         {abaAtiva === 'processos' && (
           <div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
-              <button className="btn btn-primary" onClick={() => setModalProcesso(true)}>
-                + Novo Processo (mesma pasta)
-              </button>
-            </div>
+            {temPermissao('processos', 'cadastrar') && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+                <button className="btn btn-primary" onClick={() => setModalProcesso(true)}>
+                  + Novo Processo (mesma pasta)
+                </button>
+              </div>
+            )}
             {catEscritorioEmUsoNaLista.length > 0 && (
               <LegendaEtiquetasPessoais definicoes={catEscritorioEmUsoNaLista} titulo="Etiquetas do escritório" />
             )}

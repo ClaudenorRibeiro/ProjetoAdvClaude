@@ -7,9 +7,10 @@
 // ou usuários), marcar tratada, ver histórico e excluir.
 // ============================================================
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { publicacoesAPI, agendaAPI, periciasAPI } from '../../services/api';
-import { formatarData, hojeLocal, textoLimpo } from '../../utils/formatters';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { publicacoesAPI, agendaAPI, periciasAPI, audienciasAPI, processosAPI } from '../../services/api';
+import { formatarData, formatarDataHora, hojeLocal, textoLimpo } from '../../utils/formatters';
+import { analisarPublicacao } from '../../utils/sugestoesPublicacao';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
@@ -23,6 +24,7 @@ import { ModalNovoPrazo } from '../Prazos/Prazos';
 import { ModalTarefa } from '../Tarefas/Tarefas';
 import { ModalCompromisso } from '../Agenda/Agenda';
 import { ModalPericia } from '../Pericias/Pericias';
+import { ModalNovaAudiencia } from '../Audiencias/Audiencias';
 
 const POR_PAGINA = 30;
 
@@ -32,43 +34,114 @@ function dobrarTexto(s) {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
 
-// Realça (fundo amarelo) as ocorrências de `termo` dentro de `texto`.
-// Sem termo, devolve o texto puro (modal "limpo").
-// A comparação ignora ACENTOS e maiúsc./minúsc. (igual à busca no banco), mas o trecho
-// pintado preserva o texto ORIGINAL (com acento). Para isso, comparamos uma versão "dobrada"
-// do texto e guardamos um mapa posição-dobrada -> índice no texto original.
-function realcarTexto(texto, termo) {
-  const t = (termo || '').trim();
-  if (!t) return texto;
-  const txt  = String(texto);
-  const alvo = dobrarTexto(t);
-  if (!alvo) return txt;
+// Realça, dentro de `texto`, as ocorrências de vários termos ao mesmo tempo.
+// `needles` = [{ termo, cor, alvo? }]. A comparação ignora ACENTOS, maiúsc./minúsc.
+// E DIFERENÇAS DE ESPAÇO/QUEBRA DE LINHA (colapsa qualquer espaço em um só) — assim
+// um trecho vindo do texto "achatado" casa com o texto exibido (que tem quebras).
+// O primeiro <mark> de um needle com `alvo:true` recebe `alvoRef` (para dar scroll até ele).
+function realcarVarios(texto, needles, alvoRef) {
+  const txt = String(texto);
+  const ativos = (needles || [])
+    .map(n => ({ ...n, fold: dobrarTexto(String(n.termo || '').replace(/\s+/g, ' ').trim()) }))
+    .filter(n => n.fold);
+  if (!ativos.length) return txt;
 
-  // Monta a versão dobrada do texto, caractere a caractere, mantendo o mapa de posições.
-  // mapa[j] = índice, no texto ORIGINAL, do j-ésimo caractere da versão dobrada.
+  // Versão "dobrada" do texto (espaços colapsados), com mapa posição-dobrada -> índice original.
   let foldStr = '';
   const mapa = [];
+  let ultimoEspaco = false;
   for (let i = 0; i < txt.length; i++) {
-    const f = dobrarTexto(txt[i]);        // normalmente 1 caractere (pode ser 0 ou +)
+    const ch = txt[i];
+    if (/\s/.test(ch)) {
+      if (!ultimoEspaco) { foldStr += ' '; mapa.push(i); ultimoEspaco = true; }
+      continue;
+    }
+    ultimoEspaco = false;
+    const f = dobrarTexto(ch);
     for (let k = 0; k < f.length; k++) { foldStr += f[k]; mapa.push(i); }
   }
 
-  // Procura todas as ocorrências no texto dobrado e remonta destacando os trechos originais.
+  // Coleta as faixas (início/fim no texto ORIGINAL) de todas as ocorrências de todos os termos.
+  const faixas = [];
+  for (const n of ativos) {
+    let from = 0, pos;
+    while ((pos = foldStr.indexOf(n.fold, from)) !== -1) {
+      faixas.push({
+        oIni: mapa[pos], oFim: mapa[pos + n.fold.length - 1] + 1,
+        cor: n.cor, alvo: !!n.alvo, ref: n.ref, prioridade: n.prioridade || 0,
+      });
+      from = pos + n.fold.length;
+    }
+  }
+  if (!faixas.length) return txt;
+
+  // A busca digitada no modal tem prioridade sobre um trecho azul de sugestão que
+  // ocupe a mesma parte do texto. Os demais destaques continuam aparecendo normalmente.
+  const escolhidas = [];
+  faixas
+    .sort((a, b) => b.prioridade - a.prioridade || a.oIni - b.oIni || b.oFim - a.oFim)
+    .forEach(f => {
+      if (!escolhidas.some(e => f.oIni < e.oFim && f.oFim > e.oIni)) escolhidas.push(f);
+    });
+  escolhidas.sort((a, b) => a.oIni - b.oIni || b.oFim - a.oFim);
+
   const out = [];
-  let cursor = 0;   // até onde já consumimos o texto original
-  let from   = 0;   // de onde continuar a busca no texto dobrado
-  let key    = 0;
-  let pos;
-  while ((pos = foldStr.indexOf(alvo, from)) !== -1) {
-    const oIni = mapa[pos];                     // início da ocorrência no texto original
-    const oFim = mapa[pos + alvo.length - 1] + 1; // fim (exclusivo) no texto original
-    if (oIni > cursor) out.push(<React.Fragment key={key++}>{txt.slice(cursor, oIni)}</React.Fragment>);
-    out.push(<mark key={key++} style={{ background: '#fde047', padding: 0 }}>{txt.slice(oIni, oFim)}</mark>);
-    cursor = oFim;
-    from = pos + alvo.length;
+  let cursor = 0, key = 0, primeiroAlvo = true;
+  const refsUsadas = new Set();
+  for (const f of escolhidas) {
+    if (f.oIni < cursor) continue; // sobreposição: a primeira faixa ganha
+    if (f.oIni > cursor) out.push(<React.Fragment key={key++}>{txt.slice(cursor, f.oIni)}</React.Fragment>);
+    const refFaixa = f.ref || (f.alvo && primeiroAlvo ? alvoRef : null);
+    const usaRef = refFaixa && !refsUsadas.has(refFaixa);
+    if (usaRef) {
+      refsUsadas.add(refFaixa);
+      if (f.alvo && refFaixa === alvoRef) primeiroAlvo = false;
+    }
+    out.push(
+      <mark key={key++} ref={usaRef ? refFaixa : undefined}
+        style={{ background: f.cor, padding: 0, borderRadius: '2px' }}>
+        {txt.slice(f.oIni, f.oFim)}
+      </mark>,
+    );
+    cursor = f.oFim;
   }
   if (cursor < txt.length) out.push(<React.Fragment key={key++}>{txt.slice(cursor)}</React.Fragment>);
   return out;
+}
+
+// Compat: realce simples de um termo (fundo amarelo).
+function realcarTexto(texto, termo) {
+  const t = (termo || '').trim();
+  return t ? realcarVarios(texto, [{ termo: t, cor: '#fde047' }]) : texto;
+}
+
+// Conta ocorrências sem diferenciar acentos, maiúsculas ou quebras de linha.
+function contarOcorrencias(texto, termo) {
+  const alvo = dobrarTexto(String(termo || '').replace(/\s+/g, ' ').trim());
+  if (!alvo) return 0;
+  const base = dobrarTexto(String(texto || '').replace(/\s+/g, ' '));
+  let total = 0, pos = 0;
+  while ((pos = base.indexOf(alvo, pos)) !== -1) {
+    total++;
+    pos += alvo.length;
+  }
+  return total;
+}
+
+// Campo compartilhado pelos modais AASP e CNJ.
+function CampoBuscaPublicacao({ valor, onChange, total }) {
+  const ativa = valor.trim();
+  return (
+    <div className="busca-publicacao-modal">
+      <input type="search" value={valor} onChange={e => onChange(e.target.value)}
+        placeholder="Localizar no texto..." aria-label="Localizar conteúdo nesta publicação" />
+      {ativa && (
+        <span className={total ? '' : 'sem-resultado'}>
+          {total} {total === 1 ? 'ocorrência' : 'ocorrências'}
+        </span>
+      )}
+    </div>
+  );
 }
 
 // Célula "Resp": responsáveis das ações da publicação. Campo estreito → corta com "…".
@@ -106,11 +179,48 @@ function excede3Meses(dataInicio, dataFim) {
 // Compartilhado pelas duas abas (AASP e CNJ).
 // ------------------------------------------------------------
 function ModalAcaoDaPublicacao({ acao, usuariosAgenda, usuarioLogadoId, ehAdmin, onFechar }) {
-  const { tipo, pub } = acao;
+  const { tipo, pub, sugestao } = acao;
   const numero = pub.numero_processo || '';
+  // Sugestão de AUDIÊNCIA abre a Audiência de verdade (não o Compromisso).
+  const ehSugestaoAudiencia = tipo === 'compromisso' && sugestao?.subtipo === 'audiencia';
   const [tiposPericia, setTiposPericia] = useState([]);
   const [carregandoTiposPericia, setCarregandoTiposPericia] = useState(false);
   const [avisoPericia, setAvisoPericia] = useState('');
+  const [tiposAudiencia, setTiposAudiencia] = useState([]);
+  const [carregandoTiposAudiencia, setCarregandoTiposAudiencia] = useState(false);
+  const [avisoAudiencia, setAvisoAudiencia] = useState('');
+  // Processo COMPLETO (id, numProc, NomeTituloProc, numPasta, vara_id) — a Nova Audiência
+  // precisa da PASTA e da vara; a publicação só tem o id, então buscamos pelo número.
+  const [processoAud, setProcessoAud] = useState(null);
+  const [carregandoProcAud, setCarregandoProcAud] = useState(false);
+
+  const soDigitos = (s) => String(s || '').replace(/\D/g, '');
+  // Prioridade: o processo_id que a publicação JÁ TEM (busca exata por ID, sem ambiguidade).
+  // Só cai pra busca por TEXTO quando não há processo_id — e, nesse caso, exige o número
+  // normalizado batendo (nunca aceita "sobrou só 1 resultado" às cegas — ver auditoria 02/09,
+  // item 7: aceitar o único resultado podia vincular a audiência a um processo errado).
+  const carregarProcessoAudiencia = useCallback(async () => {
+    setCarregandoProcAud(true);
+    setAvisoAudiencia('');
+    try {
+      if (pub.processo_id) {
+        const { data } = await processosAPI.buscarPorId(pub.processo_id);
+        if (data && data.ok && data.dados) { setProcessoAud(data.dados); return; }
+        setAvisoAudiencia('Não foi possível localizar a pasta do processo cadastrado. Abra a audiência pela pasta do processo.');
+        return;
+      }
+      const { data } = await processosAPI.buscarPorNumero(pub.processo_numero || numero);
+      const lista = (data && data.ok) ? (data.dados || []) : [];
+      const alvo = soDigitos(pub.processo_numero || numero);
+      const match = lista.find(p => soDigitos(p.numProc) === alvo);
+      if (match) setProcessoAud(match);
+      else setAvisoAudiencia('Não foi possível localizar a pasta do processo cadastrado. Abra a audiência pela pasta do processo.');
+    } catch (err) {
+      setAvisoAudiencia(err.response?.data?.mensagem || 'Não foi possível carregar o processo da audiência.');
+    } finally {
+      setCarregandoProcAud(false);
+    }
+  }, [pub.processo_id, pub.processo_numero, numero]);
 
   const processoInicialPericia = pub.processo_id
     ? {
@@ -134,17 +244,39 @@ function ModalAcaoDaPublicacao({ acao, usuariosAgenda, usuarioLogadoId, ehAdmin,
     }
   }, []);
 
+  const carregarTiposAudiencia = useCallback(async () => {
+    setCarregandoTiposAudiencia(true);
+    setAvisoAudiencia('');
+    try {
+      const { data } = await audienciasAPI.tipos();
+      if (data.ok) setTiposAudiencia(data.dados || []);
+      else setAvisoAudiencia(data.mensagem || 'Não foi possível carregar os tipos de audiência.');
+    } catch (err) {
+      setAvisoAudiencia(err.response?.data?.mensagem || 'Não foi possível carregar os tipos de audiência.');
+    } finally {
+      setCarregandoTiposAudiencia(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (tipo === 'pericia') carregarTiposPericia();
-  }, [tipo, carregarTiposPericia]);
+    if (ehSugestaoAudiencia && pub.processo_id) { carregarTiposAudiencia(); carregarProcessoAudiencia(); }
+  }, [tipo, ehSugestaoAudiencia, pub.processo_id, carregarTiposPericia, carregarTiposAudiencia, carregarProcessoAudiencia]);
 
   if (tipo === 'prazo') {
+    // Da sugestão: dias + descrição já preenchidos (a data de início o usuário confere).
     return <ModalNovoPrazo tipos={{ tipos: [], subtipos: [] }}
-      buscaInicial={numero} publicacaoId={pub.id} onFechar={onFechar} />;
+      buscaInicial={numero} publicacaoId={pub.id}
+      descricaoInicial={sugestao?.descricaoInicial}
+      quantidadeInicial={sugestao?.quantidadeInicial}
+      tipoDiasInicial={sugestao?.tipoDiasInicial}
+      onFechar={onFechar} />;
   }
   if (tipo === 'tarefa') {
+    // Da sugestão: título/descrição já preenchidos (objeto SEM id = nova tarefa).
     return <ModalTarefa
       preSelecao={numero ? { tipo: 'processo', processo_numero: numero } : undefined}
+      tarefa={sugestao ? { titulo: sugestao.titulo, descricao: sugestao.descricao } : undefined}
       publicacaoId={pub.id} onFechar={onFechar} />;
   }
   if (tipo === 'pericia') {
@@ -202,10 +334,97 @@ function ModalAcaoDaPublicacao({ acao, usuariosAgenda, usuarioLogadoId, ehAdmin,
     return <ModalPericia
       tipos={tiposPericia}
       processoInicial={processoInicialPericia}
+      dataInicial={sugestao?.data}
+      horaInicial={sugestao?.hora}
       onTiposChange={carregarTiposPericia}
       onFechar={onFechar} />;
   }
-  return <ModalCompromisso usuarios={usuariosAgenda} usuarioLogadoId={usuarioLogadoId}
+
+  // SUGESTÃO DE AUDIÊNCIA -> abre a Audiência de verdade (módulo Audiências).
+  // Exige processo cadastrado; sem ele, apenas informa (mesmo comportamento da perícia).
+  if (ehSugestaoAudiencia) {
+    if (!pub.processo_id) {
+      return (
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <div className="modal-header">
+              <h3>Agendar audiência</h3>
+              <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div className="alerta alerta-aviso">
+                Esta publicação ainda não está vinculada a um processo cadastrado. Cadastre ou vincule o processo antes de agendar a audiência.
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => onFechar(false)}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    if (carregandoTiposAudiencia || carregandoProcAud) {
+      return (
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <div className="modal-header">
+              <h3>Agendar audiência</h3>
+              <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
+            </div>
+            <div className="modal-body">Carregando cadastro da audiência...</div>
+          </div>
+        </div>
+      );
+    }
+    if (avisoAudiencia) {
+      return (
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <div className="modal-header">
+              <h3>Agendar audiência</h3>
+              <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
+            </div>
+            <div className="modal-body"><div className="alerta alerta-erro">{avisoAudiencia}</div></div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => onFechar(false)}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    if (!processoAud) {
+      return (
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <div className="modal-header">
+              <h3>Agendar audiência</h3>
+              <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
+            </div>
+            <div className="modal-body">Carregando cadastro da audiência...</div>
+          </div>
+        </div>
+      );
+    }
+    // processoAud = { id, numProc, NomeTituloProc, numPasta, vara_id } — objeto COMPLETO,
+    // igual ao que o modal recebe quando aberto pela pasta (mostra a Pasta e a vara).
+    return <ModalNovaAudiencia
+      tipos={tiposAudiencia}
+      processoInicial={processoAud}
+      publicacaoId={pub.id}
+      valoresIniciais={{
+        data: sugestao.data || '',
+        hora: sugestao.hora || '',
+        modalidade: /tele|video|semi/i.test(sugestao.modalidade || '') ? 'virtual' : 'presencial',
+        observacoes: sugestao.descricao || '',
+        vara_id: processoAud.vara_id ?? null,
+      }}
+      onTiposChange={carregarTiposAudiencia}
+      onFechar={onFechar} />;
+  }
+
+  // "Criar compromisso" MANUAL (sem sugestão): abre o Novo Compromisso normal.
+  return <ModalCompromisso
+    usuarios={usuariosAgenda} usuarioLogadoId={usuarioLogadoId}
     ehAdmin={ehAdmin} publicacaoId={pub.id} onFechar={onFechar} />;
 }
 
@@ -248,6 +467,171 @@ function BarraAcoesPublicacao({ pub, podeAgir, podeCriarPericia, podeAtribuir, o
           </span>
         );
       })()}
+    </div>
+  );
+}
+
+// Rótulo do botão de cada sugestão, por tipo de ação.
+const ROTULO_SUGESTAO = {
+  compromisso: '📅 Agendar audiência',
+  pericia:     '🔬 Criar perícia',
+  prazo:       '⏰ Criar prazo',
+  tarefa:      '✓ Criar tarefa',
+};
+
+// Painel "Sugestão" DENTRO da janela de leitura da publicação. Lê o texto (função
+// pura `analisarPublicacao`) e, para cada providência reconhecida (audiência,
+// perícia, prazo ou tarefa), oferece um botão que abre o cadastro já preenchido.
+// Nada é criado sozinho. Compartilhado pelas duas abas (AASP e CNJ).
+// `trechosMostrar` (Set) + `onToggleMostrar(trecho)`: checkbox "mostrar na public."
+// que liga/desliga o realce da origem da sugestão dentro do texto da publicação.
+// `permissoesDestino`: { pericia, prazo, tarefa, audiencia } — se o usuário PODE CADASTRAR
+// no módulo de destino de cada tipo de sugestão. Sem isso, o cartão oferecia "Criar perícia"
+// (etc.) mesmo pra quem não tinha permissão lá, e o 403 só aparecia ao salvar (auditoria
+// 02/09, item 13). "compromisso" (audiência à parte) não tem permissão própria — qualquer
+// usuário logado já pode criar (mesma regra do botão "+ Novo compromisso" da Agenda).
+function PainelSugestoes({ pub, sugestoes: sugestoesProp, iaHabilitada, onUsar, trechosMostrar, onToggleMostrar, permissoesDestino }) {
+  const sugestoesInternas = useMemo(
+    () => analisarPublicacao(textoLimpo(pub.texto), {
+      dataPublicacao: pub.data_publicacao,
+      numeroProcesso: pub.numero_processo,
+      numeroPublicacao: pub.numero_publicacao,
+    }),
+    [pub],
+  );
+  const regras = sugestoesProp || sugestoesInternas;
+  const [compromissosVinc, setCompromissosVinc] = useState([]); // já criados desta publicação
+  const [confirmarDup, setConfirmarDup]         = useState(null); // sugestão aguardando "abrir mesmo assim?"
+  const [sugestoesIa, setSugestoesIa]           = useState([]);
+  const [consultandoIa, setConsultandoIa]       = useState(false);
+
+  // IA como PLANO B: só consulta quando o escritório tem IA ligada E as regras
+  // não acharam nada / nenhuma com confiança "alta". Falha na IA -> fica só as regras.
+  const fraco = regras.length === 0 || !regras.some(s => s.confianca === 'alta');
+  useEffect(() => {
+    setSugestoesIa([]);
+    if (!iaHabilitada || !fraco) { setConsultandoIa(false); return; }
+    let vivo = true;
+    setConsultandoIa(true);
+    publicacoesAPI.sugestoesIa(pub.id)
+      .then(({ data }) => { if (vivo && data.ok) setSugestoesIa(data.dados?.sugestoes || []); })
+      .catch(() => {})
+      .finally(() => { if (vivo) setConsultandoIa(false); });
+    return () => { vivo = false; };
+  }, [pub.id, iaHabilitada, fraco]);
+
+  // Lista final = regras + IA (deduplicando por tipo+data).
+  const sugestoes = [
+    ...regras.map(s => ({ ...s, origem: s.origem || 'regra' })),
+    ...sugestoesIa.filter(si => !regras.some(sr => sr.tipo === si.tipo && (sr.data || '') === (si.data || ''))),
+  ];
+
+  // Só consulta o histórico se houver sugestão (para o aviso de duplicidade).
+  useEffect(() => {
+    let vivo = true;
+    if (regras.length) {
+      publicacoesAPI.historico(pub.id)
+        .then(({ data }) => { if (vivo && data.ok) setCompromissosVinc(data.dados?.acoes?.compromissos || []); })
+        .catch(() => {});
+    } else {
+      setCompromissosVinc([]);
+    }
+    return () => { vivo = false; };
+  }, [pub.id, regras.length]);
+
+  if (!sugestoes.length) {
+    return (
+      <div style={{ marginTop: '12px', fontSize: '12px', color: '#94a3b8' }}>
+        {consultandoIa
+          ? '✨ Consultando IA…'
+          : '✨ Nenhuma sugestão automática nesta publicação — use os botões de ação abaixo.'}
+      </div>
+    );
+  }
+
+  function acionar(sug) {
+    // Aviso de duplicidade só para COMPROMISSO manual gerado de sugestão (não audiência,
+    // que agora abre o módulo Audiências) — casa pela data.
+    if (sug.tipo === 'compromisso' && sug.subtipo !== 'audiencia' && sug.data) {
+      const dup = compromissosVinc.find(c => String(c.data).slice(0, 10) === sug.data);
+      if (dup) { setConfirmarDup(sug); return; }
+    }
+    onUsar(sug);
+  }
+
+  // O usuário pode cadastrar no módulo de DESTINO desta sugestão? Sem `permissoesDestino`
+  // (chamada antiga) não bloqueia nada, pra não quebrar quem ainda não passa a prop.
+  function podeUsar(sug) {
+    if (!permissoesDestino) return true;
+    if (sug.tipo === 'pericia') return permissoesDestino.pericia !== false;
+    if (sug.tipo === 'prazo') return permissoesDestino.prazo !== false;
+    if (sug.tipo === 'tarefa') return permissoesDestino.tarefa !== false;
+    if (sug.tipo === 'compromisso' && sug.subtipo === 'audiencia') return permissoesDestino.audiencia !== false;
+    return true; // compromisso comum: sem permissão própria (igual ao botão da Agenda)
+  }
+
+  return (
+    <div style={{ marginTop: '14px' }}>
+      <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px', letterSpacing: '0.5px' }}>
+        ✨ SUGESTÃO
+      </div>
+      {sugestoes.map((sug, i) => (
+        <div key={i} style={{ border: '1px solid #bae6fd', background: '#f0f9ff',
+          borderRadius: '8px', padding: '10px 12px', marginBottom: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#0c4a6e' }}>{sug.resumo}</span>
+            <span style={{ fontSize: '11px', padding: '1px 8px', borderRadius: '10px', fontWeight: 700,
+              background: sug.confianca === 'alta' ? '#dcfce7' : '#fef9c3',
+              color: sug.confianca === 'alta' ? '#166534' : '#854d0e' }}>
+              {sug.confianca === 'alta' ? 'Alta' : 'Conferir'}
+            </span>
+            <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '10px', fontWeight: 600,
+              background: sug.origem === 'ia' ? '#ede9fe' : '#e2e8f0',
+              color: sug.origem === 'ia' ? '#6d28d9' : '#475569' }}
+              title={sug.origem === 'ia' ? 'Sugestão gerada por IA' : 'Sugestão gerada pelas regras internas'}>
+              {sug.origem === 'ia' ? 'IA' : 'regra'}
+            </span>
+          </div>
+          {sug.trechoOrigem && (
+            <div style={{ fontSize: '12px', color: '#475569', marginTop: '6px', fontStyle: 'italic',
+              whiteSpace: 'pre-wrap', maxHeight: '80px', overflowY: 'auto' }}>
+              “{sug.trechoOrigem}”
+            </div>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginTop: '8px' }}>
+            <span style={{ display: 'inline-flex' }}
+              title={podeUsar(sug) ? undefined : 'Você não tem permissão de cadastro neste módulo — peça a um administrador.'}>
+              <button className="btn btn-primary" disabled={!podeUsar(sug)} onClick={() => acionar(sug)}>
+                {ROTULO_SUGESTAO[sug.tipo] || 'Criar'}{sug.data ? ` — ${sug.dataBR}${sug.hora ? ' ' + sug.hora : ''}` : ''}
+              </button>
+            </span>
+            {sug.trechoDestaque && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px',
+                color: '#0c4a6e', cursor: 'pointer', userSelect: 'none' }}>
+                <input type="checkbox"
+                  checked={!!trechosMostrar && trechosMostrar.has(sug.trechoDestaque)}
+                  onChange={() => onToggleMostrar && onToggleMostrar(sug.trechoDestaque)} />
+                mostrar na public.
+              </label>
+            )}
+          </div>
+        </div>
+      ))}
+      {consultandoIa && (
+        <div style={{ fontSize: '12px', color: '#6d28d9', marginTop: '2px' }}>✨ Consultando IA…</div>
+      )}
+      {confirmarDup && (
+        <div style={{ position: 'relative', zIndex: 2000 }}>
+          <ModalConfirmar
+            titulo="Já existe um compromisso desta publicação"
+            tipo="aviso"
+            mensagem={`Esta publicação já gerou um compromisso na mesma data (${confirmarDup.dataBR}). Deseja abrir o cadastro mesmo assim?`}
+            textoBotao="Abrir mesmo assim"
+            acao={async () => { const s = confirmarDup; setConfirmarDup(null); onUsar(s); }}
+            onCancelar={() => setConfirmarDup(null)}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -435,11 +819,48 @@ function ModalEnviarPublicacaoEmail({ pub, onFechar, onSucesso }) {
   );
 }
 
+function AvisoFalhaTratamento({ publicacao, onFechar }) {
+  if (!publicacao) return null;
+  const referencia = publicacao.numero_processo
+    ? ` do processo ${publicacao.numero_processo}`
+    : publicacao.numero_publicacao
+      ? ` nº ${publicacao.numero_publicacao}`
+      : '';
+
+  return (
+    <div className="card" role="alert"
+      style={{ marginBottom: '16px', borderLeft: '4px solid #dc2626', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+      <p style={{ margin: 0, color: '#991b1b', fontSize: '14px', flex: 1 }}>
+        ⚠️ A ação foi criada, mas a publicação{referencia} continua pendente porque não foi possível marcá-la
+        automaticamente como tratada. Marque-a manualmente para concluir o atendimento.
+      </p>
+      <button type="button" className="btn btn-outline" onClick={onFechar}
+        aria-label="Fechar aviso" style={{ flexShrink: 0 }}>
+        Fechar
+      </button>
+    </div>
+  );
+}
+
 export default function Publicacoes() {
   // Duas fontes, TELAS SEPARADAS: AASP e CNJ/DJEN. Cada aba é independente
   // (busca e listagem próprias). As ações de direcionar/tratar/histórico/excluir
   // são as mesmas por baixo (compartilhadas por id da publicação).
   const [aba, setAba] = useState('aasp');
+  const [avisosTratamento, setAvisosTratamento] = useState({ aasp: null, cnj: null });
+
+  function registrarFalhaTratamento(fonte, publicacao) {
+    setAvisosTratamento(avisos => ({ ...avisos, [fonte]: publicacao }));
+  }
+
+  function limparFalhaTratamento(fonte, publicacaoId) {
+    setAvisosTratamento(avisos => {
+      const atual = avisos[fonte];
+      if (publicacaoId && atual?.id !== publicacaoId) return avisos;
+      return { ...avisos, [fonte]: null };
+    });
+  }
+
   return (
     <div>
       <div className="abas" style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
@@ -448,8 +869,14 @@ export default function Publicacoes() {
         <button className={'btn ' + (aba === 'cnj' ? 'btn-primary' : 'btn-outline')}
           onClick={() => setAba('cnj')}>CNJ / DJEN</button>
       </div>
-      {aba === 'aasp' && <PublicacoesAASP />}
-      {aba === 'cnj'  && <PublicacoesCNJ />}
+      {aba === 'aasp' && <PublicacoesAASP
+        avisoTratamento={avisosTratamento.aasp}
+        onFalhaTratamento={(pub) => registrarFalhaTratamento('aasp', pub)}
+        onLimparFalhaTratamento={(id) => limparFalhaTratamento('aasp', id)} />}
+      {aba === 'cnj'  && <PublicacoesCNJ
+        avisoTratamento={avisosTratamento.cnj}
+        onFalhaTratamento={(pub) => registrarFalhaTratamento('cnj', pub)}
+        onLimparFalhaTratamento={(id) => limparFalhaTratamento('cnj', id)} />}
     </div>
   );
 }
@@ -457,12 +884,21 @@ export default function Publicacoes() {
 // ------------------------------------------------------------
 // Aba AASP
 // ------------------------------------------------------------
-function PublicacoesAASP() {
+function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTratamento }) {
   const { temPermissao, usuario, ehAdmin } = useAuth();
   const podeImportar = temPermissao('publicacoes', 'cadastrar');
   const podeAlterar  = temPermissao('publicacoes', 'alterar');
   const podeExcluir  = temPermissao('publicacoes', 'excluir');
   const podeCriarPericia = temPermissao('pericias', 'cadastrar');
+  // Permissão de CADASTRO no módulo de destino de cada tipo de sugestão (item 13 da
+  // auditoria 02/09) — o painel de sugestão passa a respeitar as mesmas regras que já
+  // valem pro botão manual de cada módulo.
+  const permissoesDestinoSugestao = {
+    pericia: podeCriarPericia,
+    prazo: temPermissao('prazos', 'cadastrar'),
+    tarefa: temPermissao('tarefas', 'cadastrar'),
+    audiencia: temPermissao('audiencias', 'cadastrar'),
+  };
 
   const [configurado, setConfigurado] = useState(null); // null = ainda verificando
   const [dataImport, setDataImport]   = useState(hojeLocal());
@@ -484,10 +920,49 @@ function PublicacoesAASP() {
   const [textoAberto, setTextoAberto]         = useState(null);
   const [acaoAberta, setAcaoAberta]           = useState(null); // { tipo:'prazo'|'tarefa'|'compromisso', pub }
   const [usuariosAgenda, setUsuariosAgenda]   = useState([]);   // p/ "Delegar para" do compromisso
+  const [iaHabilitada, setIaHabilitada]       = useState(false); // Sugestoes por IA ligadas neste escritorio?
   const [historicoAberto, setHistoricoAberto]   = useState(null);
   const [justificando, setJustificando]         = useState(null); // publicação aguardando justificativa de "sem ação"
   const [enviandoEmailPub, setEnviandoEmailPub] = useState(null); // publicação a enviar por e-mail
   const [atribuindoPub, setAtribuindoPub]       = useState(null); // publicação a atribuir a alguém
+  const [buscaModal, setBuscaModal]             = useState(''); // pesquisa somente na publicação aberta
+  // Trechos de origem das sugestões marcados p/ realçar no texto da publicação ("mostrar na public.").
+  const [trechosSug, setTrechosSug]            = useState(() => new Set());
+  const alvoDestaqueRef = useRef(null); // 1º <mark> destacado — para rolar até ele
+  const primeiraBuscaRef = useRef(null); // 1ª ocorrência da pesquisa dentro do modal
+  const textoModalRef = useRef(null); // área rolável do conteúdo da publicação
+  const painelSugRef = useRef(null);   // wrapper do painel "Sugestão" — o atalho do cabeçalho rola até aqui
+  // Sugestões da publicação aberta (calculadas uma vez; o painel reusa via prop).
+  const sugestoesPub = useMemo(
+    () => (textoAberto
+      ? analisarPublicacao(textoLimpo(textoAberto.texto), {
+          dataPublicacao: textoAberto.data_publicacao,
+          numeroProcesso: textoAberto.numero_processo,
+          numeroPublicacao: textoAberto.numero_publicacao,
+        })
+      : []),
+    [textoAberto],
+  );
+
+  const totalBuscaModal = useMemo(
+    () => contarOcorrencias(textoLimpo(textoAberto?.texto), buscaModal),
+    [textoAberto?.texto, buscaModal],
+  );
+
+  // Ao trocar/fechar a publicação aberta, zera a pesquisa e os realces de sugestão.
+  useEffect(() => { setBuscaModal(''); setTrechosSug(new Set()); }, [textoAberto?.id]);
+  // A cada pesquisa, posiciona somente a área de texto na primeira ocorrência.
+  useEffect(() => {
+    if (!buscaModal.trim() || !primeiraBuscaRef.current || !textoModalRef.current) return;
+    const area = textoModalRef.current, marca = primeiraBuscaRef.current;
+    area.scrollTop += marca.getBoundingClientRect().top - area.getBoundingClientRect().top - 40;
+  }, [buscaModal, totalBuscaModal]);
+  // Ao (des)marcar um "mostrar na public.", rola o texto até o 1º trecho realçado.
+  useEffect(() => {
+    if (trechosSug.size && alvoDestaqueRef.current) {
+      alvoDestaqueRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }, [trechosSug]);
 
   // Fecha a janela de leitura da publicação com a tecla Esc — só quando NÃO há outra
   // janela por cima (criar prazo/tarefa/compromisso/perícia, justificar "sem ação",
@@ -511,6 +986,9 @@ function PublicacoesAASP() {
   useEffect(() => {
     agendaAPI.listarUsuarios()
       .then(({ data }) => { if (data.ok) setUsuariosAgenda(data.dados || []); })
+      .catch(() => {});
+    publicacoesAPI.iaStatus()
+      .then(({ data }) => { if (data.ok) setIaHabilitada(!!data.dados?.habilitada); })
       .catch(() => {});
   }, []);
 
@@ -642,6 +1120,9 @@ function PublicacoesAASP() {
 
   return (
     <div>
+      <AvisoFalhaTratamento publicacao={avisoTratamento}
+        onFechar={() => onLimparFalhaTratamento()} />
+
       {/* Aviso quando a AASP não está configurada (não quebra a tela) */}
       {configurado === false && (
         <div className="card" style={{ marginBottom: '16px', borderLeft: '4px solid #d97706' }}>
@@ -863,7 +1344,7 @@ function PublicacoesAASP() {
         return (
           <div className="modal-overlay">
             <div className="modal-box modal-largo">
-              <div className="modal-header">
+              <div className="modal-header modal-publicacao-header">
                 <h3>
                   Publicação — {formatarData(textoAberto.data_publicacao)}
                   {idx >= 0 && <span style={{ color: '#888', fontWeight: 'normal', fontSize: '13px' }}> ({idx + 1} de {lista.length})</span>}
@@ -879,7 +1360,17 @@ function PublicacoesAASP() {
                       {textoAberto.cliente_polo === 'autor' ? 'AUTOR' : 'RÉU'}
                     </span>
                   )}
+                  {(podeAlterar || !!textoAberto.pode_agir) && sugestoesPub.length > 0 && (
+                    <button type="button" title="Ir para as sugestões"
+                      onClick={() => painelSugRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })}
+                      style={{ marginLeft: '10px', padding: '2px 10px', borderRadius: '12px', cursor: 'pointer',
+                        background: '#e0f2fe', border: '1px solid #7dd3fc', color: '#0369a1',
+                        fontSize: '12px', fontWeight: 700, verticalAlign: 'middle' }}>
+                      ✨ {sugestoesPub.length} sugest{sugestoesPub.length > 1 ? 'ões' : 'ão'}
+                    </button>
+                  )}
                 </h3>
+                <CampoBuscaPublicacao valor={buscaModal} onChange={setBuscaModal} total={totalBuscaModal} />
                 <button className="modal-fechar" onClick={() => setTextoAberto(null)}>✕</button>
               </div>
               <div className="modal-body">
@@ -899,11 +1390,29 @@ function PublicacoesAASP() {
                     👤 Atribuída a: {textoAberto.atribuida_nomes}
                   </div>
                 )}
-                <div style={{
+                <div ref={textoModalRef} style={{
                   background: '#f8fafc', padding: '16px', borderRadius: '8px',
                   fontSize: '14px', lineHeight: '1.7', whiteSpace: 'pre-wrap', maxHeight: '420px', overflowY: 'auto',
                 }}>
-                  {realcarTexto(textoLimpo(textoAberto.texto), filtros.busca)}
+                  {realcarVarios(
+                    textoLimpo(textoAberto.texto),
+                    [
+                      ...[...trechosSug].map(t => ({ termo: t, cor: '#bfdbfe', alvo: true })),
+                      ...(buscaModal.trim() ? [{ termo: buscaModal, cor: '#fde047', ref: primeiraBuscaRef, prioridade: 10 }] : []),
+                    ],
+                    alvoDestaqueRef,
+                  )}
+                </div>
+                <div ref={painelSugRef}>
+                {(podeAlterar || !!textoAberto.pode_agir) && (
+                  <PainelSugestoes pub={textoAberto} sugestoes={sugestoesPub} iaHabilitada={iaHabilitada}
+                    permissoesDestino={permissoesDestinoSugestao}
+                    trechosMostrar={trechosSug}
+                    onToggleMostrar={(t) => setTrechosSug(s =>
+                      s.has(t) ? new Set() : new Set([t]) // só UM realce por vez — o último clicado prevalece
+                    )}
+                    onUsar={(sug) => setAcaoAberta({ tipo: sug.tipo, pub: textoAberto, sugestao: sug })} />
+                )}
                 </div>
               </div>
               <div className="modal-footer">
@@ -937,7 +1446,17 @@ function PublicacoesAASP() {
             if (salvou) {
               // Só marca Tratada se o processo estiver cadastrado (regra). Sem processo
               // cadastrado, a publicação continua Pendente mesmo tendo gerado uma ação.
-              if (pub.processo_cadastrado) { try { await publicacoesAPI.tratar(pub.id, { tratada: true }); } catch {} }
+              // A ação (prazo/tarefa/audiência/perícia) JÁ FOI CRIADA nesse ponto — se marcar
+              // como tratada falhar, avisa (não pode sumir silenciosamente, senão a publicação
+              // fica pendente pra sempre sem ninguém saber o motivo — auditoria 02/09, item 4).
+              if (pub.processo_cadastrado) {
+                try {
+                  await publicacoesAPI.tratar(pub.id, { tratada: true });
+                  onLimparFalhaTratamento(pub.id);
+                } catch {
+                  onFalhaTratamento(pub);
+                }
+              }
               carregar();
             }
           }} />
@@ -950,7 +1469,12 @@ function PublicacoesAASP() {
       {justificando && (
         <ModalJustificarSemAcao pub={justificando}
           onFechar={() => setJustificando(null)}
-          onSucesso={() => { setJustificando(null); toast.success('Publicação marcada como tratada'); carregar(); }} />
+          onSucesso={() => {
+            onLimparFalhaTratamento(justificando.id);
+            setJustificando(null);
+            toast.success('Publicação marcada como tratada');
+            carregar();
+          }} />
       )}
       {enviandoEmailPub && (
         <ModalEnviarPublicacaoEmail pub={enviandoEmailPub}
@@ -977,12 +1501,21 @@ function PublicacoesAASP() {
 // Base para baixar a certidão oficial (PDF) de uma comunicação do CNJ.
 const CNJ_CERTIDAO_BASE = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
 
-function PublicacoesCNJ() {
+function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTratamento }) {
   const { temPermissao, usuario, ehAdmin } = useAuth();
   const podeImportar = temPermissao('publicacoes', 'cadastrar');
   const podeAlterar  = temPermissao('publicacoes', 'alterar');
   const podeExcluir  = temPermissao('publicacoes', 'excluir');
   const podeCriarPericia = temPermissao('pericias', 'cadastrar');
+  // Permissão de CADASTRO no módulo de destino de cada tipo de sugestão (item 13 da
+  // auditoria 02/09) — o painel de sugestão passa a respeitar as mesmas regras que já
+  // valem pro botão manual de cada módulo.
+  const permissoesDestinoSugestao = {
+    pericia: podeCriarPericia,
+    prazo: temPermissao('prazos', 'cadastrar'),
+    tarefa: temPermissao('tarefas', 'cadastrar'),
+    audiencia: temPermissao('audiencias', 'cadastrar'),
+  };
 
   const [configurado, setConfigurado] = useState(null); // null = ainda verificando
   const [qtdOabs, setQtdOabs]         = useState(0);     // nº de OABs cadastradas (col. OAB só aparece com >1)
@@ -1004,10 +1537,49 @@ function PublicacoesCNJ() {
   const [textoAberto, setTextoAberto]           = useState(null);
   const [acaoAberta, setAcaoAberta]           = useState(null); // { tipo:'prazo'|'tarefa'|'compromisso', pub }
   const [usuariosAgenda, setUsuariosAgenda]   = useState([]);   // p/ "Delegar para" do compromisso
+  const [iaHabilitada, setIaHabilitada]       = useState(false); // Sugestoes por IA ligadas neste escritorio?
   const [historicoAberto, setHistoricoAberto]   = useState(null);
   const [justificando, setJustificando]         = useState(null); // publicação aguardando justificativa de "sem ação"
   const [enviandoEmailPub, setEnviandoEmailPub] = useState(null); // publicação a enviar por e-mail
   const [atribuindoPub, setAtribuindoPub]       = useState(null); // publicação a atribuir a alguém
+  const [buscaModal, setBuscaModal]             = useState(''); // pesquisa somente na publicação aberta
+  // Trechos de origem das sugestões marcados p/ realçar no texto da publicação ("mostrar na public.").
+  const [trechosSug, setTrechosSug]            = useState(() => new Set());
+  const alvoDestaqueRef = useRef(null); // 1º <mark> destacado — para rolar até ele
+  const primeiraBuscaRef = useRef(null); // 1ª ocorrência da pesquisa dentro do modal
+  const textoModalRef = useRef(null); // área rolável do conteúdo da publicação
+  const painelSugRef = useRef(null);   // wrapper do painel "Sugestão" — o atalho do cabeçalho rola até aqui
+  // Sugestões da publicação aberta (calculadas uma vez; o painel reusa via prop).
+  const sugestoesPub = useMemo(
+    () => (textoAberto
+      ? analisarPublicacao(textoLimpo(textoAberto.texto), {
+          dataPublicacao: textoAberto.data_publicacao,
+          numeroProcesso: textoAberto.numero_processo,
+          numeroPublicacao: textoAberto.numero_publicacao,
+        })
+      : []),
+    [textoAberto],
+  );
+
+  const totalBuscaModal = useMemo(
+    () => contarOcorrencias(textoLimpo(textoAberto?.texto), buscaModal),
+    [textoAberto?.texto, buscaModal],
+  );
+
+  // Ao trocar/fechar a publicação aberta, zera a pesquisa e os realces de sugestão.
+  useEffect(() => { setBuscaModal(''); setTrechosSug(new Set()); }, [textoAberto?.id]);
+  // A cada pesquisa, posiciona somente a área de texto na primeira ocorrência.
+  useEffect(() => {
+    if (!buscaModal.trim() || !primeiraBuscaRef.current || !textoModalRef.current) return;
+    const area = textoModalRef.current, marca = primeiraBuscaRef.current;
+    area.scrollTop += marca.getBoundingClientRect().top - area.getBoundingClientRect().top - 40;
+  }, [buscaModal, totalBuscaModal]);
+  // Ao (des)marcar um "mostrar na public.", rola o texto até o 1º trecho realçado.
+  useEffect(() => {
+    if (trechosSug.size && alvoDestaqueRef.current) {
+      alvoDestaqueRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }, [trechosSug]);
 
   // Fecha a janela de leitura da publicação com a tecla Esc — só quando NÃO há outra
   // janela por cima (criar prazo/tarefa/compromisso/perícia, justificar "sem ação",
@@ -1036,6 +1608,9 @@ function PublicacoesCNJ() {
   useEffect(() => {
     agendaAPI.listarUsuarios()
       .then(({ data }) => { if (data.ok) setUsuariosAgenda(data.dados || []); })
+      .catch(() => {});
+    publicacoesAPI.iaStatus()
+      .then(({ data }) => { if (data.ok) setIaHabilitada(!!data.dados?.habilitada); })
       .catch(() => {});
   }, []);
 
@@ -1166,6 +1741,9 @@ function PublicacoesCNJ() {
 
   return (
     <div>
+      <AvisoFalhaTratamento publicacao={avisoTratamento}
+        onFechar={() => onLimparFalhaTratamento()} />
+
       {/* Aviso quando o CNJ não está configurado (não quebra a tela) */}
       {configurado === false && (
         <div className="card" style={{ marginBottom: '16px', borderLeft: '4px solid #d97706' }}>
@@ -1388,7 +1966,7 @@ function PublicacoesCNJ() {
         return (
           <div className="modal-overlay">
             <div className="modal-box modal-largo">
-              <div className="modal-header">
+              <div className="modal-header modal-publicacao-header">
                 <h3>
                   Publicação — {formatarData(textoAberto.data_publicacao)}
                   {idx >= 0 && <span style={{ color: '#888', fontWeight: 'normal', fontSize: '13px' }}> ({idx + 1} de {lista.length})</span>}
@@ -1404,7 +1982,17 @@ function PublicacoesCNJ() {
                       {textoAberto.cliente_polo === 'autor' ? 'AUTOR' : 'RÉU'}
                     </span>
                   )}
+                  {(podeAlterar || !!textoAberto.pode_agir) && sugestoesPub.length > 0 && (
+                    <button type="button" title="Ir para as sugestões"
+                      onClick={() => painelSugRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })}
+                      style={{ marginLeft: '10px', padding: '2px 10px', borderRadius: '12px', cursor: 'pointer',
+                        background: '#e0f2fe', border: '1px solid #7dd3fc', color: '#0369a1',
+                        fontSize: '12px', fontWeight: 700, verticalAlign: 'middle' }}>
+                      ✨ {sugestoesPub.length} sugest{sugestoesPub.length > 1 ? 'ões' : 'ão'}
+                    </button>
+                  )}
                 </h3>
+                <CampoBuscaPublicacao valor={buscaModal} onChange={setBuscaModal} total={totalBuscaModal} />
                 <button className="modal-fechar" onClick={() => setTextoAberto(null)}>✕</button>
               </div>
               <div className="modal-body">
@@ -1434,11 +2022,29 @@ function PublicacoesCNJ() {
                     👤 Atribuída a: {textoAberto.atribuida_nomes}
                   </div>
                 )}
-                <div style={{
+                <div ref={textoModalRef} style={{
                   background: '#f8fafc', padding: '16px', borderRadius: '8px',
                   fontSize: '14px', lineHeight: '1.7', whiteSpace: 'pre-wrap', maxHeight: '420px', overflowY: 'auto',
                 }}>
-                  {realcarTexto(textoLimpo(textoAberto.texto), filtros.busca)}
+                  {realcarVarios(
+                    textoLimpo(textoAberto.texto),
+                    [
+                      ...[...trechosSug].map(t => ({ termo: t, cor: '#bfdbfe', alvo: true })),
+                      ...(buscaModal.trim() ? [{ termo: buscaModal, cor: '#fde047', ref: primeiraBuscaRef, prioridade: 10 }] : []),
+                    ],
+                    alvoDestaqueRef,
+                  )}
+                </div>
+                <div ref={painelSugRef}>
+                {(podeAlterar || !!textoAberto.pode_agir) && (
+                  <PainelSugestoes pub={textoAberto} sugestoes={sugestoesPub} iaHabilitada={iaHabilitada}
+                    permissoesDestino={permissoesDestinoSugestao}
+                    trechosMostrar={trechosSug}
+                    onToggleMostrar={(t) => setTrechosSug(s =>
+                      s.has(t) ? new Set() : new Set([t]) // só UM realce por vez — o último clicado prevalece
+                    )}
+                    onUsar={(sug) => setAcaoAberta({ tipo: sug.tipo, pub: textoAberto, sugestao: sug })} />
+                )}
                 </div>
               </div>
               <div className="modal-footer">
@@ -1472,7 +2078,17 @@ function PublicacoesCNJ() {
             if (salvou) {
               // Só marca Tratada se o processo estiver cadastrado (regra). Sem processo
               // cadastrado, a publicação continua Pendente mesmo tendo gerado uma ação.
-              if (pub.processo_cadastrado) { try { await publicacoesAPI.tratar(pub.id, { tratada: true }); } catch {} }
+              // A ação (prazo/tarefa/audiência/perícia) JÁ FOI CRIADA nesse ponto — se marcar
+              // como tratada falhar, avisa (não pode sumir silenciosamente, senão a publicação
+              // fica pendente pra sempre sem ninguém saber o motivo — auditoria 02/09, item 4).
+              if (pub.processo_cadastrado) {
+                try {
+                  await publicacoesAPI.tratar(pub.id, { tratada: true });
+                  onLimparFalhaTratamento(pub.id);
+                } catch {
+                  onFalhaTratamento(pub);
+                }
+              }
               carregar();
             }
           }} />
@@ -1485,7 +2101,12 @@ function PublicacoesCNJ() {
       {justificando && (
         <ModalJustificarSemAcao pub={justificando}
           onFechar={() => setJustificando(null)}
-          onSucesso={() => { setJustificando(null); toast.success('Publicação marcada como tratada'); carregar(); }} />
+          onSucesso={() => {
+            onLimparFalhaTratamento(justificando.id);
+            setJustificando(null);
+            toast.success('Publicação marcada como tratada');
+            carregar();
+          }} />
       )}
       {enviandoEmailPub && (
         <ModalEnviarPublicacaoEmail pub={enviandoEmailPub}
@@ -1619,7 +2240,7 @@ function ModalHistorico({ publicacao, onFechar }) {
   }, [publicacao.id]);
 
   function dataHora(d) {
-    return d ? new Date(d).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
+    return formatarDataHora(d);
   }
 
   return (
@@ -1668,8 +2289,8 @@ function ModalHistorico({ publicacao, onFechar }) {
                 )}
               </li>
               {dados.acoes && (() => {
-                const { prazos = [], tarefas = [], compromissos = [] } = dados.acoes;
-                const total = prazos.length + tarefas.length + compromissos.length;
+                const { prazos = [], tarefas = [], compromissos = [], audiencias = [] } = dados.acoes;
+                const total = prazos.length + tarefas.length + compromissos.length + audiencias.length;
                 return (
                   <li style={{ marginTop: '10px', borderTop: '1px solid #eef2f7', paddingTop: '8px' }}>
                     <strong>Ações criadas a partir desta publicação:</strong>{' '}
@@ -1691,6 +2312,12 @@ function ModalHistorico({ publicacao, onFechar }) {
                           <li key={'c' + a.id}>📅 Compromisso: {a.titulo} — {formatarData(a.data)}
                             {a.concluido ? ' (concluído)' : ''}
                             <span style={{ color: '#1a56db' }}> · 👤 {a.direcionado_nome || (a.escritorio ? 'Escritório' : '—')}</span></li>
+                        ))}
+                        {audiencias.map(a => (
+                          <li key={'a' + a.id}>⚖️ Audiência: {formatarData(a.data)}{a.hora ? ` ${String(a.hora).slice(0, 5)}` : ''}
+                            {a.processo_numero ? ` · proc. ${a.processo_numero}` : ''}
+                            {a.status && a.status !== 'agendada' ? ` (${a.status})` : ''}
+                            <span style={{ color: '#1a56db' }}> · 👤 {a.direcionado_nome || 'Escritório'}</span></li>
                         ))}
                       </ul>
                     )}

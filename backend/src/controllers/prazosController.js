@@ -817,7 +817,7 @@ function labelStatus(s) {
 async function listarUsuariosFiltro(req, res) {
   try {
     const [usuarios] = await pool.execute(
-      'SELECT id, nome FROM usuarios WHERE ativo = 1 ORDER BY nome'
+      'SELECT id, nome FROM usuarios WHERE ativo = 1 AND nivel > 0 ORDER BY nome' // nivel > 0: nunca lista o superusuário
     );
     return sucesso(res, usuarios);
   } catch (err) {

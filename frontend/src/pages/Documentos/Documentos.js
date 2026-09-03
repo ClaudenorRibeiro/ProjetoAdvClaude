@@ -8,7 +8,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { documentosAPI, configuracaoAPI } from '../../services/api';
-import { toTitleCase } from '../../utils/formatters';
+import { formatarDataHora, toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
@@ -188,7 +188,7 @@ export default function Documentos() {
                           : <span className="badge badge-cinza">Desativado</span>}
                       </td>
                       {/* criado_em é DATETIME ('YYYY-MM-DD HH:MM:SS'); formatamos como data pt-BR */}
-                      <td>{m.criado_em ? new Date(m.criado_em).toLocaleDateString('pt-BR') : '—'}</td>
+                      <td>{m.criado_em ? formatarDataHora(m.criado_em).split(' ')[0] : '—'}</td>
                       <td>
                         <MenuAcoes itens={[
                           { label: 'Baixar', icone: '⬇️', onClick: () => baixar(m) },
@@ -459,7 +459,7 @@ function HistoricoDocumentos() {
                   {registros.map(r => (
                     <tr key={r.id}>
                       <td style={{ whiteSpace: 'nowrap' }}>
-                        {new Date(r.gerado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                        {formatarDataHora(r.gerado_em)}
                       </td>
                       <td>{r.modelo_nome}</td>
                       <td><span className="badge badge-azul">{(r.formato || '').toUpperCase()}</span></td>

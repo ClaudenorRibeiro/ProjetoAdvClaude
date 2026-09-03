@@ -235,7 +235,7 @@ async function darBaixa(req, res) {
 async function listarUsuariosAtivos(req, res) {
   try {
     const [rows] = await pool.execute(
-      'SELECT id, nome FROM usuarios WHERE ativo = 1 ORDER BY nome ASC'
+      'SELECT id, nome FROM usuarios WHERE ativo = 1 AND nivel > 0 ORDER BY nome ASC' // nivel > 0: nunca lista o superusuário
     );
     return sucesso(res, rows);
   } catch (e) {

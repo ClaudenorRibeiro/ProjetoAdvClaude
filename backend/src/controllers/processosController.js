@@ -1111,6 +1111,18 @@ async function excluirVara(req, res) {
         { processos: processos.map(p => p.numProc || p.NomeTituloProc || `Processo #${p.id}`) }
       );
     }
+    // Audiências também referenciam a vara (audiencia.vara_id) — sem esta checagem, excluir
+    // a vara deixava audiências apontando pra uma vara que já não existe mais (auditoria
+    // 02/09, item 10; a coluna não tem chave estrangeira, então o banco não bloqueia sozinho).
+    const [audienciasVara] = await pool.execute(
+      `SELECT COUNT(*) AS total FROM audiencia WHERE vara_id = ?`, [id]
+    );
+    if (audienciasVara[0].total > 0) {
+      return erro(
+        res,
+        `Não é possível excluir esta vara — ela está vinculada a ${audienciasVara[0].total} audiência(s). Altere a vara dessas audiências antes de excluir.`
+      );
+    }
     await pool.execute(
       'UPDATE tblvara SET ativo=0, alterado_por=?, alterado_em=NOW() WHERE id=?',
       [req.usuario.id, id]
@@ -1172,6 +1184,27 @@ async function excluirAssuntoProc(req, res) {
     return erroInterno(res, err);
   } finally {
     conn.release();
+  }
+}
+
+// GET /api/processos/:id/basico — MESMO formato de buscarProcessosPorNumero, mas pelo ID exato.
+// Usado quando o processo já é CONHECIDO (ex.: publicação já vinculada a um processo_id) —
+// evita repetir a busca por texto e arriscar casar com o processo errado (ver auditoria de
+// 02/09, item 7: a busca textual aceitava o único resultado mesmo sem o número bater).
+async function buscarProcessoPorId(req, res) {
+  try {
+    const { id } = req.params;
+    const [rows] = await pool.execute(
+      `SELECT p.id, p.numProc, p.NomeTituloProc, p.vara_id, pa.numPasta
+       FROM tblproc p
+       JOIN tblpasta pa ON pa.id = p.pasta_id
+       WHERE p.id = ? AND p.ativo = 1`,
+      [id]
+    );
+    if (!rows.length) return naoEncontrado(res, 'Processo não encontrado');
+    return sucesso(res, rows[0]);
+  } catch (err) {
+    return erroInterno(res, err);
   }
 }
 
@@ -1281,6 +1314,7 @@ async function listarProcessosParados(req, res) {
 
 module.exports = {
   buscarProcessosPorNumero,
+  buscarProcessoPorId,
   sugerirNumeroPasta,
   listarPastas,
   renumerarPasta,

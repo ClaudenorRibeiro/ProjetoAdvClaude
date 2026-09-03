@@ -1,0 +1,329 @@
+================================================================================
+RESUMO DA SESSÃO DE DESENVOLVIMENTO — 01/09/2026
+Sistema de Advocacia (NovoJud) — Antônio Ferreira
+================================================================================
+
+ESTADO GERAL
+------------
+- Tudo CODADO no computador LOCAL.
+- NADA testado pelo usuário ainda.
+- NADA commitado / enviado ao Git.
+- 1 (um) script SQL pendente de execução.
+- Validações automáticas: build do frontend OK (npm run build);
+  node --check do backend OK; as rotas carregam sem erro.
+- Fluxo de 2 passos respeitado em todas as entregas
+  (análise -> perguntas -> "pode codar" -> código).
+
+
+================================================================================
+FORAM 3 BLOCOS DE TRABALHO
+================================================================================
+
+--------------------------------------------------------------------------------
+BLOCO A — PUBLICAÇÕES: BOTÃO "ATRIBUIR" + STATUS "TRATADA" POR PESSOA
+--------------------------------------------------------------------------------
+
+O QUE MUDA NA PRÁTICA
+- O status "Tratada / Pendente" das publicações deixa de ser um selo único e
+  passa a ser POR PESSOA.
+- Passam a existir dois papéis:
+    * BUSCADOR  = administrador OU usuário com a permissão "Cadastrar" de
+                  Publicações (a mesma que libera baixar publicações).
+                  Vê TODAS as publicações. Enxerga o status GLOBAL.
+    * NÃO-BUSCADOR = qualquer outro usuário logado.
+                  Vê SOMENTE as publicações ATRIBUÍDAS a ele.
+                  Cada um tem o SEU próprio "tratada / pendente".
+
+BOTÃO "ATRIBUIR" (ícone 👤)
+- Aparece no menu de 3 pontinhos e na barra de ações da janela de leitura da
+  publicação, nas DUAS abas (AASP e CNJ).
+- Visível SOMENTE para o buscador.
+- Abre a janela "Atribuir publicação", que é um GERENCIADOR:
+    * Já abre com as pessoas que já estão atribuídas MARCADAS.
+    * Marcar uma pessoa = adicionar.
+    * Desmarcar = remover.
+    * Quem JÁ TRATOU a publicação aparece com a caixinha travada e o texto
+      "✓ já tratou — não pode remover".
+    * O botão "Salvar" envia a lista COMPLETA de quem deve ficar; o servidor
+      calcula sozinho quem entra e quem sai.
+
+AO ATRIBUIR
+- Na visão dos BUSCADORES a publicação vira "Tratada" (o buscador roteou =
+  resolveu a triagem). Sai dos pendentes de TODOS os buscadores.
+  Isso NÃO exige que o processo esteja cadastrado — é o status do buscador.
+- Para cada pessoa escolhida, a publicação nasce como PENDENTE (como se ela
+  mesma tivesse baixado).
+- Cada pessoa ADICIONADA recebe aviso no sino ("foi atribuída a você").
+- Cada pessoa REMOVIDA recebe aviso no sino ("deixou de estar atribuída a você").
+
+O RECEBEDOR
+- Faz TODAS as ações MENOS excluir, MESMO sem ter a permissão "Alterar" de
+  Publicações. Só o fato de ter recebido já autoriza.
+- Ao criar prazo/tarefa/compromisso/perícia OU marcar "Tratada / sem ação",
+  a publicação sai dos pendentes DELE (mexe só na linha dele).
+- A regra "só vira tratada se o processo estiver cadastrado" continua valendo
+  para ele (igual era para todo mundo).
+- NÃO pode excluir. NÃO pode reatribuir/repassar.
+
+"ATRIBUIU ERRADO" — COMO CORRIGIR
+- O buscador reabre a janela "Atribuir", desmarca/marca e Salva.
+- Regra, POR PESSOA:
+    * Adicionar: sempre pode.
+    * Remover quem NÃO tratou: pode.
+    * Remover quem JÁ tratou: BLOQUEADO. A pessoa fica na lista e o nome dela
+      volta na mensagem. Se a única mudança pedida for remover alguém que já
+      tratou, aparece um aviso na faixa interna e nada é alterado.
+- Se, ao salvar, NÃO sobrar ninguém atribuído, a publicação VOLTA a ser
+  PENDENTE para o buscador (limpa o selo global e o registro de atribuição).
+
+PERMISSÕES
+- A linha "Publicações" na matriz de Permissões (Configurações) ganhou um texto
+  explicando: "Cadastrar" = buscar/baixar (vê todas); sem ele, o usuário só vê
+  as publicações atribuídas a ele.
+
+CÓDIGO REMOVIDO (era código morto / criado e descartado na própria sessão)
+- Janela "Direcionar publicação" (ModalDirecionar) — nunca era exibida.
+- publicacoesAPI.direcionar / controller "direcionar" / rota
+  PUT /publicacoes/:id/direcionar.
+- Endpoint "desatribuir" (chegou a ser criado hoje e foi substituído pelo
+  "atribuir" que recebe a lista completa).
+- MANTIDO: GET /publicacoes/usuarios (a janela "Atribuir" reaproveita).
+
+
+--------------------------------------------------------------------------------
+BLOCO B — TECLA "ESC" NOS MODAIS (correção de usabilidade)
+--------------------------------------------------------------------------------
+
+PROBLEMA RELATADO
+- Ao abrir "Enviar por e-mail" ou "Atribuir" por cima da leitura da publicação,
+  o ESC fechava a janela DE TRÁS e deixava a DA FRENTE.
+- A janela "Novo Prazo" (aberta a partir da publicação) não fechava com ESC.
+- Depois: a janela "Nova/Editar Perícia" também não fechava com ESC.
+
+CORREÇÃO (somente frontend, sem SQL, sem backend)
+- Passaram a usar o hook padrão do sistema "useEscFechar" (que só fecha a janela
+  que está POR CIMA — nunca a de trás):
+    * ModalNovoPrazo (Prazos.js) — import novo no arquivo.
+    * ModalPericia "Nova/Editar Perícia" (Pericias.js).
+    * ModalAtribuir, ModalEnviarPublicacaoEmail, ModalJustificarSemAcao,
+      ModalHistorico (todos em Publicacoes.js) — import novo no arquivo.
+- O "porteiro" do ESC da janela de leitura da publicação (nas 2 abas) passou a
+  ficar quieto também quando "Enviar e-mail" ou "Atribuir" estão abertos
+  (antes só considerava "Criar prazo/tarefa/compromisso" e "Tratar sem ação").
+- ModalTarefa e ModalCompromisso já tinham ESC — não foram tocados.
+- As telas intermediárias de "Criar perícia" (não vinculado / carregando /
+  aviso) continuam sem ESC (só botão Fechar) — não foi mexido, revisitar se
+  reclamarem.
+
+
+--------------------------------------------------------------------------------
+BLOCO C — HOTFIX DE PRODUÇÃO: NÃO-ADMIN DESLOGADO AO CADASTRAR PROCESSO
+--------------------------------------------------------------------------------
+
+ATENÇÃO: este é um BUG QUE JÁ ESTÁ NO AR (não foi introduzido hoje). A produção
+roda código antigo; o "— advogado" no dropdown de responsável, removido em
+27/08, ainda estava lá — o que confirma que o trabalho de hoje NÃO está em
+produção.
+
+O QUE ACONTECIA
+- A funcionária Priscilla (não-admin) relatou: ao cadastrar processo, a tela
+  volta para o login e ela precisa entrar de novo.
+- Causa: o modal "Novo Processo" (desde a feature Responsável/OAB de 27-28/08)
+  chama a rota GET /configuracoes/escritorio para pré-preencher "Responsável
+  pelo processo" e "OAB do processo". Essa rota é EXCLUSIVA DE ADMIN e devolvia
+  o código HTTP 401. O sistema trata QUALQUER 401 como "sua sessão morreu" e
+  joga para o login.
+- A MESMA armadilha existe no modal "Registrar ata" das Audiências.
+- Varredura completa: apenas essas 2 telas caíam nisso (Documentos tem guarda
+  "if (!ehAdmin) return"; feriados e calendário não são rotas de admin).
+
+CORREÇÃO (sem SQL)
+1. RAIZ — middleware/auth.js:
+   "apenasAdmin" e "apenasSuper" passam a devolver 403 ("sem permissão") em vez
+   de 401. Quem chega ali JÁ está logado, só não tem o nível — 403 é o código
+   correto e o sistema NÃO desloga. Isso neutraliza a classe inteira do bug.
+   Autenticação de verdade (token inválido, sessão aberta em outro dispositivo)
+   continua vindo como 401 pelo middleware "autenticar" — sem mudança.
+   Confirmado por busca: nenhum código do frontend trata 401/403 diretamente
+   fora do interceptor do api.js.
+
+2. COMPLETUDE — o pré-preenchimento "Responsável / OAB do processo" agora vem
+   junto da resposta de GET /processos/auxiliares (rota aberta a qualquer
+   usuário logado). O controller "buscarAuxiliares" passou a devolver
+   "advogado_principal_id" e "oab_principal". O modal "Novo Processo" parou de
+   chamar a rota de admin. Resultado: admin igual; não-admin agora TAMBÉM
+   recebe o pré-preenchimento.
+
+3. AUDIÊNCIAS — modal "Registrar ata" (só o carregamento de dados, NADA da
+   lógica da ata): a leitura da config do escritório saiu do grupo de chamadas
+   para uma chamada isolada e tolerante a falha. Se falhar (não-admin -> 403),
+   a lista de advogados e os dados da audiência continuam carregando normal;
+   apenas a preferência "advogado obrigatório na ata" fica desligada para o
+   não-admin (decisão aprovada pelo usuário; pode ser dobrada numa rota
+   não-admin depois, se quiser).
+
+
+================================================================================
+SQL — O QUE RODAR NA PRODUÇÃO
+================================================================================
+
+DE TODA A SESSÃO EXISTE APENAS 1 SCRIPT:
+
+    sql_atribuir_publicacoes_para_heidi.sql   (na raiz do projeto)
+
+- É da feature "Atribuir publicação" (Bloco A).
+- 100% ADITIVO. Não apaga nem altera nada existente.
+- Acrescenta na tabela publicacao_usuario:
+    atribuida_por    (FK -> usuarios, ON DELETE SET NULL)
+    atribuida_em     (datetime)
+    tratada          (tinyint(1), padrão 0)
+    tratada_em       (datetime)
+    tratada_por      (FK -> usuarios, ON DELETE SET NULL)
+    motivo_sem_acao  (varchar(500))
+  + UNIQUE (publicacao_id, usuario_id)
+- Bloco OPCIONAL no fim do script: limpa linhas antigas de teste do antigo
+  "direcionar" (a tabela tem no máximo ~7 linhas de teste).
+
+O Bloco B (ESC) e o Bloco C (hotfix 401->403) NÃO TÊM SQL.
+
+IMPORTANTE: código e SQL vão JUNTOS.
+Os 3 blocos estão nos mesmos arquivos. Se subir o código sem rodar o SQL, a
+tela de Publicações QUEBRA (o "listar" procura colunas que ainda não existem).
+
+ORDEM RECOMENDADA PARA PRODUÇÃO
+1. Rodar o SQL no HeidiSQL: LOCAL -> testar -> AWS-Antônio (sistema_advocacia)
+   -> AWS-Erick (erick_adv).
+2. Subir o código (backend + frontend) nas 2 AWS.
+3. Reiniciar o Node.
+
+PASSO OBRIGATÓRIO (NÃO É SQL)
+Logo após subir: em Configurações -> Permissões, marcar "Cadastrar"
+(Publicações) para TODO usuário que precisa continuar vendo TODAS as
+publicações. Sem isso, quem não tiver essa permissão verá a lista de
+Publicações VAZIA (só verá o que for atribuído a ele). Isso é o comportamento
+projetado da feature, mas pega de surpresa.
+
+SQL DE ROLLBACK DA FEATURE (guardar como rede de segurança)
+    ALTER TABLE `publicacao_usuario`
+      DROP FOREIGN KEY `fk_pu_atribuida_por`,
+      DROP FOREIGN KEY `fk_pu_tratada_por`,
+      DROP KEY `uq_pu_pub_user`,
+      DROP COLUMN `atribuida_por`,
+      DROP COLUMN `atribuida_em`,
+      DROP COLUMN `tratada`,
+      DROP COLUMN `tratada_em`,
+      DROP COLUMN `tratada_por`,
+      DROP COLUMN `motivo_sem_acao`;
+
+
+================================================================================
+DEPLOY NA AWS LIGHTSAIL — CUIDADO
+================================================================================
+
+- NÃO rodar "npm run build" na instância Lightsail. O build do frontend consome
+  muita memória RAM e TRAVA a instância (sintoma: no terminal SSH do Lightsail
+  aparece "Your instance encountered an error... UPSTREAM_ERROR [515]").
+- Fazer o build do frontend NO PC ("npm run build") e subir apenas a pasta
+  "build/" pronta.
+- O backend não precisa de build: "npm install --omit=dev" + reiniciar o Node.
+- Se o terminal SSH der UPSTREAM_ERROR 515: tentar reconectar; se não voltar,
+  verificar se o site está no ar; se estiver fora, reiniciar a instância pelo
+  painel do Lightsail (botão Reboot). Depois checar: free -h, df -h, e se o
+  backend voltou.
+
+
+================================================================================
+ARQUIVOS ALTERADOS (ESTADO FINAL — feature + Blocos B e C)
+================================================================================
+
+BANCO
+- sql_atribuir_publicacoes_para_heidi.sql .......... NOVO
+- estrutura_banco.sql ............................... tabela publicacao_usuario
+                                                     (6 colunas + UNIQUE + 2 FKs)
+                                                     -- NÃO foi ao Git
+
+BACKEND
+- src/middleware/auth.js ............................ apenasAdmin/apenasSuper
+                                                     agora devolvem 403 (era 401)
+- src/controllers/publicacoesController.js .......... helpers de papel
+   (ehBuscador / podeAlterarPublicacoes / estaAtribuidaA / podeAgirNaPublicacao);
+   montarFiltroPublicacoes com ramo buscador x recebedor;
+   listar devolve tratada/motivo da fonte certa + pode_agir + atribuida_a_mim
+   + atribuida_nomes (renomeado de direcionada_nomes);
+   atribuir = recebe LISTA COMPLETA e faz o diff (add/remove/protege/reabre/sino);
+   atribuicoesPub (GET novo);
+   tratar com autorização no controller + ramo global(buscador) x pessoal(recebedor);
+   enviarEmailPublicacao com a mesma guarda;
+   excluir / excluirLote com guarda ehBuscador;
+   historico devolve atribuicoes[];
+   REMOVIDOS: direcionar e desatribuir.
+- src/controllers/processosController.js ............ buscarAuxiliares devolve
+                                                     advogado_principal_id e
+                                                     oab_principal.
+- src/routes/index.js .............................. PUT /publicacoes/:id/atribuir
+   e GET /publicacoes/:id/atribuicoes sob "cadastrar";
+   tratar e enviar-email afrouxados para "visualizar";
+   REMOVIDAS rotas direcionar e desatribuir.
+
+FRONTEND
+- src/pages/Publicacoes/Publicacoes.js .............. ModalDirecionar -> ModalAtribuir
+   (gerenciador add/remove; quem tratou trava);
+   botão "Atribuir" no menu e na barra, nas 2 abas, só buscador;
+   itens Criar prazo/tarefa/compromisso/e-mail/Tratada agora usam p.pode_agir;
+   "Atribuída a: ..." na leitura; ModalHistorico mostra atribuicoes[];
+   useEscFechar em 4 modais; guard do ESC da leitura inclui e-mail/atribuir.
+- src/services/api.js ............................... publicacoesAPI.atribuir
+   (lista completa) + atribuicoes (GET); REMOVIDOS direcionar e desatribuir.
+- src/pages/Configuracoes/Configuracoes.js .......... rótulo da linha "Publicações"
+   na matriz de permissões.
+- src/pages/Prazos/Prazos.js ....................... ModalNovoPrazo ganhou
+   useEscFechar (import novo).
+- src/pages/Pericias/Pericias.js ................... ModalPericia ganhou useEscFechar.
+- src/pages/Processos/Processos.js ................. ModalNovoProcesso lê
+   advogado_principal_id / oab_principal da resposta de auxiliares
+   (parou de chamar configuracaoAPI.buscarEscritorio);
+   import de configuracaoAPI removido.
+- src/pages/Audiencias/Audiencias.js ............... ModalRegistrarAta:
+   buscarEscritorio saiu do Promise.all para chamada isolada tolerante a falha.
+
+
+================================================================================
+ROTEIRO DE TESTE (fazer no LOCAL antes de qualquer AWS)
+================================================================================
+
+PRÉ: rodar o SQL no banco local.
+
+1. Login como BUSCADOR (admin ou usuário com "Cadastrar" de Publicações):
+   - Abrir uma publicação -> "Atribuir" -> marcar 1+ pessoas -> Salvar.
+   - A publicação deve sair dos pendentes do buscador (virar "Tratada").
+
+2. Login como o RECEBEDOR (usuário SEM "Cadastrar" de Publicações):
+   - Deve ver SOMENTE aquela publicação, como PENDENTE.
+   - NÃO deve ter os botões "Excluir" nem "Atribuir".
+   - Deve conseguir "Criar prazo", "Enviar por e-mail", "Tratada / sem ação".
+   - Ao fazer uma dessas, a publicação some dos pendentes DELE.
+
+3. Conferir o SINO do recebedor (aviso da atribuição).
+
+4. "Atribuiu errado": como buscador, reabrir "Atribuir", desmarcar a pessoa
+   errada, marcar a certa, Salvar.
+   - Se a pessoa removida NÃO tinha tratado: sai da lista dela + recebe aviso.
+   - Se a pessoa JÁ tinha tratado: fica travada, com aviso.
+   - Removendo todo mundo (ninguém tratou): a publicação volta como PENDENTE
+     para o buscador.
+
+5. "Histórico" da publicação: deve mostrar quem recebeu e o status de cada um.
+
+6. TECLA ESC: abrir a publicação -> "Atribuir" (ou "Criar prazo", ou "Enviar
+   e-mail") -> apertar ESC. Deve fechar SÓ a janela da frente. Apertar ESC de
+   novo fecha a leitura.
+
+7. HOTFIX: login como NÃO-ADMIN -> abrir "Novo Processo".
+   - NÃO deve voltar para o login.
+   - "Responsável pelo processo" e "OAB do processo" devem vir pré-preenchidos.
+   - Idem abrir "Registrar ata" numa audiência: não pode deslogar.
+
+
+================================================================================
+FIM DO RESUMO — 01/09/2026
+================================================================================

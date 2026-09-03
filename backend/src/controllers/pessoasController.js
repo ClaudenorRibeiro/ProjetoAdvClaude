@@ -592,7 +592,8 @@ async function excluirFisica(req, res) {
     if (!rows.length) return naoEncontrado(res, 'Pessoa não encontrada');
 
     // Verifica todos os vínculos em paralelo antes de permitir exclusão
-    const [[autoresTbl], [reusTbl], [historico], [comunicacoes], [testemunhas], [peritos], [representados]] = await Promise.all([
+    const [[autoresTbl], [reusTbl], [historico], [comunicacoes], [testemunhas], [peritos], [representados],
+           [peritoPericia], [localPericia], [parceriaAcordo]] = await Promise.all([
       pool.execute('SELECT COUNT(*) AS total FROM tbltituloprocautor WHERE tipo_pessoa = ? AND pessoa_id = ?',      ['fisica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM tbltituloprocreu WHERE tipo_pessoa = ? AND pessoa_id = ?',        ['fisica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM historico_atendimento WHERE tipo_pessoa = ? AND pessoa_id = ?',   ['fisica', id]),
@@ -606,6 +607,13 @@ async function excluirFisica(req, res) {
       // Responsável legal: apagar quem representa alguém deixaria o representado apontando
       // para o vazio (o banco também barraria pela chave estrangeira, com erro feio)
       pool.execute('SELECT COUNT(*) AS total FROM pessoas_fisicas WHERE responsavel_id = ?',                        [id]),
+      // Perito DA PERÍCIA (pericia.perito_tipo/perito_id) e local da perícia (pericia_local_reu) e
+      // sócio/parceria de honorários (acordo_parcela) — vínculos polimórficos SEM chave estrangeira.
+      // A rotina de unificação já trata esses 3 campos (confirmando que são vínculos reais); sem
+      // esta checagem, excluir a pessoa deixava órfão neles (auditoria 02/09, item 8).
+      pool.execute('SELECT COUNT(*) AS total FROM pericia WHERE perito_tipo = ? AND perito_id = ?',                 ['fisica', id]),
+      pool.execute('SELECT COUNT(*) AS total FROM pericia_local_reu WHERE tipo_pessoa = ? AND pessoa_id = ?',       ['fisica', id]),
+      pool.execute('SELECT COUNT(*) AS total FROM acordo_parcela WHERE parceria_pessoa_tipo = ? AND parceria_pessoa_id = ?', ['fisica', id]),
     ]);
 
     // Monta lista de vínculos encontrados para informar o usuário
@@ -617,6 +625,9 @@ async function excluirFisica(req, res) {
     if (testemunhas[0].total > 0)  vinculos.push(`${testemunhas[0].total} audiência(s) como testemunha`);
     if (peritos[0].total > 0)      vinculos.push(`${peritos[0].total} perícia(s) como perito`);
     if (representados[0].total > 0) vinculos.push(`${representados[0].total} pessoa(s) que representa como responsável legal`);
+    if (peritoPericia[0].total > 0) vinculos.push(`${peritoPericia[0].total} perícia(s) como perito designado`);
+    if (localPericia[0].total > 0)  vinculos.push(`${localPericia[0].total} perícia(s) usando seu endereço como local`);
+    if (parceriaAcordo[0].total > 0) vinculos.push(`${parceriaAcordo[0].total} parcela(s) de acordo com parceria de honorários`);
 
     if (vinculos.length > 0) {
       return erro(res, `Pessoa não pode ser excluída pois possui: ${vinculos.join(', ')}`);
@@ -642,13 +653,19 @@ async function excluirJuridica(req, res) {
     if (!rows.length) return naoEncontrado(res, 'Pessoa jurídica não encontrada');
 
     // Verifica todos os vínculos em paralelo antes de permitir exclusão
-    const [[autoresTbl], [reusTbl], [historico], [comunicacoes], [peritos]] = await Promise.all([
+    const [[autoresTbl], [reusTbl], [historico], [comunicacoes], [peritos],
+           [peritoPericia], [localPericia], [parceriaAcordo]] = await Promise.all([
       pool.execute('SELECT COUNT(*) AS total FROM tbltituloprocautor WHERE tipo_pessoa = ? AND pessoa_id = ?',      ['juridica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM tbltituloprocreu WHERE tipo_pessoa = ? AND pessoa_id = ?',        ['juridica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM historico_atendimento WHERE tipo_pessoa = ? AND pessoa_id = ?',   ['juridica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM log_comunicacoes WHERE tipo_pessoa = ? AND pessoa_id = ?',        ['juridica', id]),
       // Perito polimórfico SEM chave estrangeira — sem esta checagem, apagar a empresa deixaria órfão em processo_perito.
       pool.execute('SELECT COUNT(*) AS total FROM processo_perito WHERE tipo_pessoa = ? AND pessoa_id = ?',         ['juridica', id]),
+      // Mesmos 3 vínculos polimórficos SEM chave estrangeira verificados em excluirFisica
+      // (auditoria 02/09, item 8) — aqui do lado jurídico (empresa perito/local/parceira).
+      pool.execute('SELECT COUNT(*) AS total FROM pericia WHERE perito_tipo = ? AND perito_id = ?',                 ['juridica', id]),
+      pool.execute('SELECT COUNT(*) AS total FROM pericia_local_reu WHERE tipo_pessoa = ? AND pessoa_id = ?',       ['juridica', id]),
+      pool.execute('SELECT COUNT(*) AS total FROM acordo_parcela WHERE parceria_pessoa_tipo = ? AND parceria_pessoa_id = ?', ['juridica', id]),
     ]);
 
     // Monta lista de vínculos encontrados para informar o usuário
@@ -658,6 +675,9 @@ async function excluirJuridica(req, res) {
     if (historico[0].total > 0)    vinculos.push(`${historico[0].total} registro(s) de histórico`);
     if (comunicacoes[0].total > 0) vinculos.push(`${comunicacoes[0].total} comunicação(ões)`);
     if (peritos[0].total > 0)      vinculos.push(`${peritos[0].total} perícia(s) como perito`);
+    if (peritoPericia[0].total > 0) vinculos.push(`${peritoPericia[0].total} perícia(s) como perito designado`);
+    if (localPericia[0].total > 0)  vinculos.push(`${localPericia[0].total} perícia(s) usando seu endereço como local`);
+    if (parceriaAcordo[0].total > 0) vinculos.push(`${parceriaAcordo[0].total} parcela(s) de acordo com parceria de honorários`);
 
     if (vinculos.length > 0) {
       return erro(res, `Pessoa não pode ser excluída pois possui: ${vinculos.join(', ')}`);

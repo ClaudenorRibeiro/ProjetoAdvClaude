@@ -1,0 +1,433 @@
+================================================================================
+SUGESTAO DE ACAO EM PUBLICACOES  -  DOCUMENTO CONSOLIDADO
+Data: 02/09/2026
+Status: SO ANALISE. Nada codado. Nenhum SQL. Nada no Git.
+
+Este arquivo unifica e SUBSTITUI os dois anteriores:
+  - NECESSIDADE-Sugestao-Acoes-nas-Publicacoes-02-09-2026.txt  (analise Claude)
+  - SUGESTOES-PUBLICACOES-02-09-2026.txt                        (proposta funcional)
+Pegou o melhor dos dois. Os dois antigos podem ser apagados.
+================================================================================
+
+
+================================================================================
+1) A NECESSIDADE
+================================================================================
+
+Ao abrir uma publicacao, o advogado JA SABE, lendo o texto, o que precisa ser
+feito. O sistema deve LER o texto e oferecer atalhos prontos para essa
+providencia, com os campos ja preenchidos.
+
+Exemplo real (publicacao no 40966, processo 1002005-92.2026.5.02.0613,
+TRT2 / Diario de Justica Eletronico Nacional):
+
+   "...AUDIENCIA PRESENCIAL DESIGNE-SE audiencia, na modalidade PRESENCIAL,
+    para o dia 08/10/2026 10:00 horas, na sala de audiencias da 13a Vara do
+    Trabalho de Sao Paulo - Zona Leste, a Avenida Amador Bueno da Veiga, 1888
+    - Penha de Franca, SAO PAULO/SP - CEP: 03636-100, na modalidade UNA RITO
+    SUMARISSIMO, devendo as partes comparecerem, nos termos do art. 844 da CLT..."
+
+Significa: AGENDAR AUDIENCIA em 08/10/2026 as 10:00, naquele local.
+
+O que o usuario quer:
+  - Uma opcao "Sugestao" em CADA publicacao.
+  - A sugestao vem acompanhada do BOTAO DE ACAO certo (criar audiencia / prazo /
+    tarefa / compromisso / pericia), ja apontando para a acao adequada e, de
+    preferencia, com data, hora, local e descricao preenchidos a partir do texto.
+  - Vale para TODAS as publicacoes, nao so as de audiencia.
+  - O sistema NUNCA cria nada sozinho. O usuario confere, ajusta e so entao salva.
+
+
+================================================================================
+2) O MOTOR: COMO O SISTEMA "LE" A PUBLICACAO
+================================================================================
+
+Dois motores possiveis para extrair a informacao estruturada
+(tipo de acao + data + hora + local + prazo) de dentro do texto corrido.
+
+
+--- OPCAO A - PARSER DE REGRAS (interno, rodando no back) ---
+
+As intimacoes do DJEN/TRT/DJe sao TEXTO DE FORMA. Os mesmos trechos se repetem:
+   - "DESIGNE-SE audiencia ... para o dia DD/MM/AAAA HH:MM horas"
+   - "na modalidade PRESENCIAL" / "TELEPRESENCIAL" / "por videoconferencia"
+   - "no prazo de 15 (quinze) dias"
+   - "fica intimado para ... no prazo legal"
+   - "intime-se" / "cumpra-se" / "manifeste-se"
+
+Vantagens:
+   + Gratis, funciona offline.
+   + DETERMINISTICO: mesma publicacao -> mesma sugestao, sempre. Testavel de
+     forma isolada. Combina com a regra do usuario de "nunca supor".
+   + NADA SAI DO SERVIDOR. Nome das partes e numero do processo nao vao para
+     nenhum servico externo.
+   + Sem middleware. E analise de string.
+
+Desvantagens:
+   - Redacao fora do padrao escapa.
+   - Manutencao continua: variacoes novas -> regras novas.
+   - Calculo de PRAZO LEGAL e juridicamente delicado (ver secao 6).
+
+
+--- OPCAO B - IA (modelo de linguagem) devolvendo JSON ---
+
+Manda o texto e recebe { tipo, data, hora, local, dias, ... }.
+
+Vantagens:
+   + Entende praticamente qualquer redacao, inclusive o que a regra nao pega.
+   + E a UNICA forma realista de cobrir "milhares de situacoes" de texto livre
+     (esse e o ponto forte dela).
+
+Desvantagens (API paga externa):
+   - Custo por publicacao.
+   - Chave / servico externo, latencia, depende de internet.
+   - OS DADOS DA PUBLICACAO SAEM DO SERVIDOR. Nova superficie de exposicao.
+   - NAO-DETERMINISTICO.
+   (Uma IA LOCAL, rodando no proprio servidor, elimina custo, internet e
+    vazamento, ao preco de mais maquina e manutencao.)
+
+
+================================================================================
+3) DECISAO SOBRE O MOTOR (recomendacao honesta)
+================================================================================
+
+COMECAR com a OPCAO A (parser de regras interno).
+
+Motivos:
+   - O material e padronizado o suficiente para um acerto estimado de 80-90%
+     com um conjunto de regras gerenciavel (ver secao 5).
+   - Mantem todo o dado juridico dentro de casa.
+   - Zero dependencia de servico externo, chave, custo ou internet.
+   - Previsivel, testavel, sob controle.
+
+A OPCAO B (IA) entra como FASE FUTURA e APENAS COMO APOIO, so nas publicacoes
+em que a regra retornou confianca baixa ou nada. Nunca como unica fonte, nunca
+criando cadastro sozinha. Preferir avaliar primeiro uma IA LOCAL antes de API
+paga externa, por causa do dado que sai.
+
+IMPORTANTE - a verdade sobre "centenas/milhares de situacoes":
+   Uma lista gigante de "palavra-chave -> acao" NAO funciona bem (ver secao 4).
+   O parser interno NUNCA vai cobrir "todas" as redacoes. Cobertura ampla de
+   texto bagunçado e justamente o que a IA resolve. Inchar lista de palavra e
+   a forma errada de perseguir isso.
+
+
+================================================================================
+4) O QUE SE CONFIGURA: "REGRAS", NAO "PALAVRAS"
+================================================================================
+
+PREMISSA A CORRIGIR:
+   Publicacao juridica NAO se identifica por palavra solta.
+   "audiencia" aparece em:
+     - "designo audiencia para o dia..."      -> AGENDAR
+     - "audiencia ja realizada"               -> nao fazer nada
+     - "redesignada a audiencia ... aprazada" -> REMARCAR
+   Mesma palavra, tres acoes. O que identifica e um PADRAO COM ESTRUTURA:
+   um verbo de designacao + "audiencia" + "para o dia" + DATA + HORA, perto
+   uns dos outros.
+
+
+A UNIDADE DE CONFIGURACAO E A "REGRA". Cada regra tem:
+
+   NOME          : "Audiencia designada"
+   GATILHO       : contem [audiencia] E (designo|designada|aprazada|marcada)
+                   E existe uma DATA por perto
+   O QUE EXTRAI  : data, hora, local, modalidade
+   ACAO SUGERIDA : Criar compromisso / audiencia
+   CONFIANCA     : ALTA se achou data E hora; MEDIA se so data; etc.
+
+
+QUANTAS REGRAS, DE VERDADE?
+   As intimacoes se resumem a ~15 a 40 FAMILIAS de regra. Exemplos:
+     - Audiencia designada (una / inicial / instrucao / conciliacao)
+     - Audiencia redesignada / remarcada / cancelada
+     - Prazo para manifestacao / impugnacao
+     - Prazo para contestacao
+     - Prazo para recurso / contrarrazoes / embargos
+     - Intimacao de pericia / apresentacao de laudo / quesitos
+     - Intimacao de pagamento / RPV / precatorio / deposito
+     - Sentenca ou acordao publicado            -> tarefa "analisar"
+     - Despacho "cumpra-se" / "intime-se" generico -> tarefa
+     - Extincao / arquivamento / baixa
+   Cada familia com 2 a 5 variacoes de redacao => ~100 a 150 trechos no total,
+   NAO milhares.
+
+
+ONDE SE CONFIGURA - DUAS OPCOES:
+
+   OPCAO 1 (comecar assim):
+     As regras ficam num ARQUIVO do sistema (servico do back). Um desenvolvedor
+     edita, testa e sobe. O usuario nao mexe. Simples, versionado, a prova de
+     quebra. Adequado para o lancamento.
+
+   OPCAO 2 (so se a Opcao 1 provar que precisa):
+     Uma tela "Configuracoes -> Regras de sugestao", com TABELA no banco
+     (regras_sugestao, minusculo) e um CRUD, para o usuario cadastrar regras
+     sem depender de deploy. Cuidados OBRIGATORIOS nessa tela:
+       - NAO expor "regex cru" (perigoso na mao de leigo: regra ruim casa com
+         tudo, ou nada, ou trava o sistema). Usar um CONSTRUTOR GUIADO:
+         "quando o texto contem [estas palavras], dentro de N caracteres de
+         uma data -> sugerir [esta acao] com confianca [X]".
+       - CAIXA DE TESTE: colar um texto real e ver o que a regra casaria,
+         antes de salvar.
+       - As regras de fabrica continuam como base intocavel; as do usuario
+         entram por cima.
+     Isso e uma feature propria (tela + tabela + CRUD + transacoes).
+
+   RECOMENDACAO: Opcao 1 primeiro. Ainda nao se sabe de quais regras se
+   precisa. O caminho certo: subir ~20-30 regras, rodar contra as publicacoes
+   REAIS que chegam, e criar regra nova A PARTIR DO QUE O SISTEMA ERROU - nao
+   da imaginacao. Depois de 2-3 meses, decidir se vale a tela de configuracao.
+
+
+================================================================================
+5) FORMATO DA SOLUCAO (arquitetura proposta)
+================================================================================
+
+(1) NOVO SERVICO NO BACK: sugestoesPublicacaoService.js
+    - Funcao PURA (sem banco, sem estado).
+    - Entrada: texto da publicacao + data de disponibilizacao (+ dados do
+      processo vinculado, se houver).
+    - Saida: LISTA de sugestoes:
+         {
+           tipo:          "audiencia" | "prazo" | "pericia" | "compromisso" | "tarefa",
+           titulo:        rotulo do botao (ex: "Agendar audiencia"),
+           data:          "2026-10-08"  (ou null),
+           hora:          "10:00"       (ou null),
+           local:         "13a Vara ... Av. Amador Bueno da Veiga, 1888 - CEP 03636-100"  (ou null),
+           descricao:     texto sugerido para o campo descricao da acao,
+           trecho_origem: o pedaco EXATO do texto de onde saiu (para conferencia),
+           regra:         nome da regra que disparou (rastreabilidade),
+           confianca:     "alta" | "media" | "baixa"
+         }
+    - Testavel isoladamente (mesma entrada -> mesma saida).
+
+(2) O controller de publicacoes ("obter", que roda ao ABRIR a leitura) passa a
+    devolver "sugestoes: [...]" junto do texto.
+    - ZERO SQL. Nenhuma tabela nova, nenhuma coluna nova (na fase 1).
+    - (Fase posterior, opcional) um flag "tem_sugestao" no "listar" para pintar
+      um icone na linha. Exige mexer no "listar"; pode vir depois.
+
+(3) NO FRONT, dentro da janela de leitura da publicacao: painel "SUGESTAO".
+    - PAINEL CONTEXTUAL, SEM EXCESSO DE BOTOES: mostra SOMENTE as sugestoes
+      compativeis com o conteudo daquela publicacao. Se o texto nao tem nada
+      reconhecivel, o painel mostra "Nenhuma sugestao automatica - use os
+      botoes de acao manuais". Nao repetir os 5 botoes fixos em toda publicacao.
+    - Cada sugestao mostra a JUSTIFICATIVA + o TRECHO DE ORIGEM destacado
+      ("Audiencia identificada para 08/10/2026 as 10:00").
+    - Um botao por sugestao, com rotulo preenchido:
+         [ Agendar audiencia - 08/10/2026 10:00 ]
+    - Ao clicar, abre o modal de acao correspondente JA PREENCHIDO.
+
+(4) PRE-PREENCHIMENTO DOS MODAIS DE CRIACAO
+    - Hoje os modais chamados pela publicacao (Criar prazo, Criar tarefa,
+      Criar compromisso, Criar pericia) so recebem o NUMERO DO PROCESSO e o id
+      da publicacao. Nao recebem data, hora, titulo, descricao ou local.
+    - Ensina-los a aceitar propriedades OPCIONAIS:
+         dataInicial, horaInicial, tituloInicial, descricaoInicial, localInicial
+    - ADITIVO: sem a propriedade, o modal se comporta como hoje. Nada quebra.
+    - E a parte mais trabalhosa (mexe em 3 modais: Prazo, Compromisso, Pericia).
+
+(5) DEDUPLICACAO (impedir criar a mesma coisa 2x a partir de uma publicacao)
+    - O sistema ja vincula publicacao_id nas acoes criadas a partir da
+      publicacao. Antes de abrir o modal pre-preenchido, checar se JA existe
+      uma acao daquele tipo com aquele publicacao_id (e/ou mesma data + mesmo
+      processo) e, se existir, AVISAR na propria tela: "Ja existe uma audiencia
+      criada a partir desta publicacao em DD/MM. Deseja abrir mesmo assim?".
+    - Nunca bloquear cegamente (pode haver 2 audiencias legitimas), so alertar.
+
+RESUMO DE IMPACTO (fase 1):
+   - BANCO: nenhuma mudanca (nenhum SQL).
+   - BACK : 1 arquivo novo (servico) + ajuste na funcao "obter" + a checagem
+            de duplicidade (consulta, sem escrita).
+   - FRONT: painel novo na leitura + props opcionais nos 3 modais de acao +
+            a ponte "ModalAcaoDaPublicacao" repassando as props + aviso de
+            duplicidade.
+
+
+================================================================================
+6) REGRAS DE SEGURANCA DO DESIGN (sistema juridico)
+================================================================================
+
+   - NUNCA agenda / cria nada sozinho. Sugestao apenas PRE-PREENCHE; o usuario
+     revisa e confirma. Audiencia ou prazo errado e grave.
+
+   - SEMPRE mostra o trecho de origem do texto, para conferencia visual, e o
+     nome da regra que disparou.
+
+   - CONFIANCA visivel em cada sugestao:
+       ALTA  = data + hora + palavra de designacao juntas.
+       MEDIA = so a data, ou o ano foi inferido da data de disponibilizacao.
+       BAIXA = prazo calculado (envolve regra juridica). Rotulo "conferir".
+
+   - PRAZO: o inicio legal da contagem (disponibilizacao -> publicacao no dia
+     util seguinte -> prazo comeca no dia util seguinte; contagem em dias
+     uteis no processo eletronico) e materia juridica e varia conforme o rito
+     e o tribunal (recesso, suspensoes, feriado forense). A sugestao de prazo
+     e sempre RASCUNHO com aviso, reaproveitando os feriados e a tabela
+     calendario/dia_util que o sistema ja tem.
+
+   - RASTREABILIDADE: manter processo e publicacao de origem vinculados na
+     acao criada, quando a rotina atual permitir.
+
+
+================================================================================
+7) CASOS QUE O PARSER PRECISA TRATAR
+================================================================================
+
+   - Formatos de hora: "10:00 horas", "10h", "as 10 e 30", "10:00min".
+   - Ano omitido ("dia 08/10 as 10h") -> inferir da data de disponibilizacao;
+     confianca MEDIA.
+   - Varias datas no texto (data do despacho X data da audiencia) -> escolher
+     a que esta perto de "audiencia" / "designe-se" / "para o dia".
+   - Modalidade: PRESENCIAL / TELEPRESENCIAL / semipresencial / videoconferencia.
+   - Local + CEP: ja vem no texto -> montar o campo local juntando logradouro +
+     numero + bairro + cidade/UF + CEP.
+   - Tipo de audiencia: UNA, conciliacao, instrucao, inicial.
+   - Prazo por extenso: "no prazo de 15 (quinze) dias" -> usar o numero.
+   - Dias uteis X dias corridos: deixar explicito na sugestao qual regra usou.
+   - Negativas: "audiencia CANCELADA", "prazo SUSPENSO", "REALIZADA" -> nao
+     sugerir criacao (ou sugerir a acao inversa, ex: cancelar).
+
+
+================================================================================
+8) FASEAMENTO
+================================================================================
+
+   FASE 1  Parser so de AUDIENCIA (data + hora + local + modalidade)
+           + painel "Sugestao" contextual na leitura
+           + pre-preencher "Criar compromisso"
+           + aviso de duplicidade.
+           E o caso do print e o de maior valor imediato.
+
+   FASE 2  PRAZO: "N dias" -> vencimento em dias uteis, como rascunho "conferir".
+
+   FASE 3  PERICIA: espelha a audiencia (data + hora + local).
+
+   FASE 4  TAREFA / COMPROMISSO genericos ("intime-se", "cumpra-se", "manifeste-se").
+
+   FASE 5  (Opcional) Tela "Regras de sugestao" no Configuracoes (secao 4,
+           Opcao 2) - so se o volume de ajustes justificar.
+
+   FASE 6  (Opcional) IA como apoio para confianca baixa - preferir IA local.
+
+
+================================================================================
+9) COMO OS GRANDES SISTEMAS DE ADVOCACIA FAZEM ISSO HOJE
+================================================================================
+
+(Panorama do mercado - Legal One, Astrea, Projuris, ADVBOX, SAJ ADV, Espaider,
+Benner, Digesto, Turivius, monitoramento do Jusbrasil/Escavador, etc. Ninguem
+publica o detalhe; isto e o padrao conhecido do setor.)
+
+   a) CAPTURA E NORMALIZACAO
+      Ingerem DJEN / DJe / diarios oficiais, fazem OCR quando preciso,
+      normalizam o texto, removem duplicatas por hash e amarram a publicacao a
+      OAB / processo do cliente.
+
+   b) EXTRACAO POR REGRAS (o cavalo de batalha)
+      Dicionarios + regex + gramaticas construidos e curados ao longo de ANOS
+      para reconhecer: tipo de movimento (despacho, sentenca, decisao,
+      intimacao, audiencia designada...), gatilho de prazo, dados de audiencia,
+      valores, varas e comarcas. E exatamente o modelo de "regras" da secao 4,
+      so que com uma base madura e grande.
+
+   c) TAXONOMIA OFICIAL - CNJ / TPU
+      O "assunto" do processo e classificado contra as TABELAS PROCESSUAIS
+      UNIFICADAS do CNJ (codigos padronizados de assunto e de movimento).
+      Os sistemas mapeiam o texto livre para esses codigos, e/ou para a
+      taxonomia propria de "area do direito" do fornecedor.
+
+   d) CLASSIFICADOR DE MACHINE LEARNING / NLP
+      Os mais modernos rodam um classificador de texto treinado em MILHOES de
+      publicacoes rotuladas (historicamente TF-IDF + regressao logistica/SVM;
+      hoje modelos transformer ajustados para portugues juridico, tipo
+      BERTimbau). Classificam: tipo da publicacao, se gera prazo e qual,
+      assunto/area, urgencia. O dataset rotulado - construido pelos operadores
+      do proprio fornecedor durante anos - e o maior diferencial competitivo
+      (dificil de copiar).
+
+   e) NER (extracao de entidades)
+      Modelos que extraem datas, valores, nomes de partes e advogados,
+      numeros de processo no padrao CNJ, IDs de documento, varas.
+
+   f) MOTOR DE PRAZOS
+      Modulo dedicado: data-base (disponibilizacao -> publicacao D+1 util ->
+      inicio D+1 util -> contagem), aplicando feriados nacionais/estaduais/
+      municipais + portarias de suspensao de cada tribunal. Calendario mantido
+      manualmente por uma equipe.
+
+   g) ESTEIRA DE TRIAGEM COM REVISAO HUMANA
+      Mesmo com ML, mantem um SETOR DE PUBLICACOES que confere a saida da
+      maquina, corrige, e essas correcoes REALIMENTAM o treino e as regras.
+      O produto entregue e "sugestao da maquina + confirmacao do operador" -
+      exatamente a filosofia deste documento.
+
+   h) LLM (mais recente, 2023 em diante)
+      Alguns usam modelos GPT/Claude para os casos de texto longo e
+      irregular: extrair JSON, resumir a publicacao, responder perguntas.
+      Quase sempre como CAMADA DE APOIO sobre regras + ML, com salvaguardas,
+      nunca como fonte unica. Fornecedores preocupados com sigilo rodam
+      modelos abertos localmente.
+
+   RESUMO: regras maduras + classificador de ML treinado em base rotulada
+   gigante + equipe de triagem + motor de prazos com calendario mantido, e,
+   na cauda dificil, um LLM de apoio.
+
+   O QUE ISSO SIGNIFICA PARA ESTE SISTEMA:
+   Nao da para replicar o diferencial de ML (nao existe a base rotulada). Mas
+   a parte de REGRAS + MOTOR DE PRAZO + CONFIRMACAO HUMANA e viavel e e por
+   onde esses sistemas TAMBEM comecaram. Caminho de evolucao realista:
+     (1) registrar as confirmacoes/correcoes dos operadores como dados
+         rotulados ao longo do tempo;
+     (2) so entao treinar um classificador pequeno, OU
+     (3) usar um LLM de apoio (local de preferencia) para a cauda.
+
+
+================================================================================
+10) O QUE MUDOU EM RELACAO A PRIMEIRA SUGESTAO DO CLAUDE
+================================================================================
+
+O MOTOR ESCOLHIDO NAO MUDOU: parser interno primeiro, IA so como apoio depois.
+
+O QUE FOI ACRESCENTADO / CORRIGIDO:
+   - DEDUPLICACAO virou item de primeira classe (secao 5.5) - antes nao estava.
+   - PAINEL SO-CONTEXTUAL, sem repetir botoes fixos, virou principio explicito
+     (secao 5.3) - antes estava implicito.
+   - Modelo de configuracao reescrito: "REGRAS, NAO PALAVRAS" (secao 4). A
+     ideia de uma lista de centenas/milhares de palavras-chave foi
+     DESCARTADA por nao funcionar; no lugar, ~15-40 familias de regra com
+     estrutura. Configuracao comeca EMBUTIDA no codigo; tela de administracao
+     so se provar necessario, e nunca com "regex cru" na mao do usuario.
+   - Ficou explicito que "cobrir milhares de situacoes" e ponto forte da IA,
+     nao do parser - e que inchar lista de palavra e o caminho errado.
+   - Tratamento de NEGATIVAS (cancelada / suspenso / realizada) entrou nos
+     casos do parser (secao 7).
+   - Faseamento ampliado (secoes 8): tarefa/compromisso genericos, tela de
+     regras, IA de apoio.
+   - Nova secao 9: como os grandes sistemas fazem hoje.
+
+O QUE NAO MUDOU:
+   - Sem IA externa na primeira versao.
+   - Nunca criar cadastro automaticamente; revisao humana obrigatoria.
+   - Niveis de confianca visiveis.
+   - Prazo legal tratado como rascunho delicado, com aviso.
+   - Reaproveitar modais e vinculos existentes; nenhum SQL na fase 1.
+
+
+================================================================================
+11) PROXIMO PASSO
+================================================================================
+
+Se o usuario aprovar este caminho, o proximo passo e transformar a FASE 1 num
+PLANO CONCRETO DE IMPLEMENTACAO:
+   - lista exata de arquivos que serao tocados (front / back),
+   - efeitos colaterais em front / back / banco,
+   - riscos,
+para aprovacao ANTES de qualquer linha de codigo (fluxo de 2 passos).
+
+Nada sera codado, nem SQL, nem Git, sem o "pode codar".
+
+================================================================================
+FIM
+================================================================================

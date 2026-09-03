@@ -4,6 +4,7 @@
 // ============================================================
 
 const { pool } = require('../config/database');
+const { dataParaIsoLocal } = require('../utils/helpers');
 
 // Calcula a data de vencimento somando dias úteis ou corridos
 // dataInicio: string 'YYYY-MM-DD'
@@ -17,7 +18,7 @@ async function calcularVencimento(dataInicio, quantidade, tipoDias) {
     // Dias corridos: data início = dia 1, então soma quantidade - 1
     const data = new Date(dataInicio + 'T12:00:00');
     data.setDate(data.getDate() + quantidade - 1);
-    return data.toISOString().split('T')[0];
+    return dataParaIsoLocal(data);
   }
 
   // Dias úteis: usa >= para incluir a data início se ela for dia útil (dia 1 da contagem)

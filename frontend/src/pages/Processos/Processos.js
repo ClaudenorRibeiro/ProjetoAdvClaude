@@ -35,6 +35,8 @@ function labelPessoaSelecao(pessoa, tipo) {
 
 export default function Processos() {
   const navigate = useNavigate();
+  const { temPermissao } = useAuth();
+  const podeCadastrarProcesso = temPermissao('processos', 'cadastrar'); // admin/super já retornam true
   const [lista, setLista]           = useState([]);
   const [total, setTotal]           = useState(0);
   const [busca, setBusca]           = useState('');     // termo já aplicado (usado na consulta)
@@ -118,9 +120,11 @@ export default function Processos() {
             value={buscaInput}
             onChange={e => setBuscaInput(e.target.value)}
           />
-          <button className="btn btn-primary" onClick={() => setModalAberto(true)}>
-            + Novo Processo
-          </button>
+          {podeCadastrarProcesso && (
+            <button className="btn btn-primary" onClick={() => setModalAberto(true)}>
+              + Novo Processo
+            </button>
+          )}
           <div style={{ minWidth: '320px', flex: '0 1 420px' }}>
             <label className="form-label" style={{ fontSize: '11px', marginBottom: '3px' }}>Assuntos</label>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>

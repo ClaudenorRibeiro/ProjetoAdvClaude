@@ -24,21 +24,41 @@ function apenasNumeros(str) {
 function formatarData(data) {
   if (!data) return '';
   const d = new Date(data);
-  return d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  const partes = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric',
+  }).formatToParts(d);
+  const obter = (tipo) => partes.find(p => p.type === tipo)?.value || '';
+  return `${obter('day')}/${obter('month')}/${obter('year')}`;
 }
 
 // Formata data e hora para exibição (DD/MM/YYYY HH:MM)
 function formatarDataHora(data) {
   if (!data) return '';
   const d = new Date(data);
-  return d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  const partes = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(d);
+  const obter = (tipo) => partes.find(p => p.type === tipo)?.value || '';
+  return `${obter('day')}/${obter('month')}/${obter('year')} ${obter('hour')}:${obter('minute')}`;
 }
 
-// Converte data brasileira (DD/MM/YYYY) para formato MySQL (YYYY-MM-DD)
+// Converte data brasileira (DD/MM/YYYY; também tolera hífens)
+// para o formato técnico do MySQL (YYYY-MM-DD).
 function dataParaMySQL(data) {
   if (!data) return null;
-  const [dia, mes, ano] = data.split('/');
+  const [dia, mes, ano] = String(data).split(/[/-]/);
   return `${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
+}
+
+// Extrai a data civil de um Date sem converter o instante para UTC.
+function dataParaIsoLocal(data) {
+  if (!(data instanceof Date) || Number.isNaN(data.getTime())) return '';
+  const ano = data.getFullYear();
+  const mes = String(data.getMonth() + 1).padStart(2, '0');
+  const dia = String(data.getDate()).padStart(2, '0');
+  return `${ano}-${mes}-${dia}`;
 }
 
 // Retorna a data e hora atual no fuso de Brasília
@@ -81,6 +101,7 @@ module.exports = {
   formatarData,
   formatarDataHora,
   dataParaMySQL,
+  dataParaIsoLocal,
   agora,
   hojeBrasilia,
   bloqueiaAgendarPassado,

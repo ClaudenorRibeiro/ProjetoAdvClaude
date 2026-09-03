@@ -237,6 +237,43 @@ function parsarResponsavel(valor) {
   return { responsavel_id: null, responsavel_freela_id: null };
 }
 
+// Uma audiência ocupa um único horário ativo dentro do processo. Registros históricos
+// (cancelada, remarcada, realizada etc.) não impedem um novo agendamento.
+async function localizarAudienciaAtivaNoHorario(executor, processoId, data, hora, ignorarId = null) {
+  let sql = `SELECT a.id, pr.numProc AS processo_numero
+               FROM audiencia a
+               JOIN tblproc pr ON pr.id = a.processo_id
+              WHERE a.processo_id = ? AND a.data = ? AND a.hora = ?
+                AND a.status IN ('agendada', 'adiada')`;
+  const params = [processoId, data, hora];
+  if (ignorarId) {
+    sql += ' AND a.id <> ?';
+    params.push(ignorarId);
+  }
+  sql += ' LIMIT 1';
+  const [rows] = await executor.execute(sql, params);
+  return rows[0] || null;
+}
+
+async function tipoAudienciaAtivo(executor, id) {
+  const tipoId = Number(id);
+  if (!Number.isInteger(tipoId) || tipoId <= 0) return false;
+  const [rows] = await executor.execute(
+    'SELECT id FROM tipo_audiencia WHERE id = ? AND ativo = 1 LIMIT 1',
+    [tipoId]
+  );
+  return rows.length > 0;
+}
+
+function mensagemHorarioOcupado(duplicada, data, hora) {
+  const dataBr = String(data || '').split('-').reverse().join('/');
+  return `Já existe uma audiência ativa para o processo ${duplicada.processo_numero || ''} em ${dataBr} às ${String(hora || '').slice(0, 5)}.`;
+}
+
+function erroDeHorarioDuplicado(err) {
+  return err?.code === 'ER_DUP_ENTRY' && String(err?.message || '').includes('uq_audiencia_horario_ativo');
+}
+
 // ============================================================
 // Funções auxiliares para gravar nomes legíveis na auditoria
 // Chamadas NO MOMENTO DA ALTERAÇÃO — zero custo na leitura do histórico
@@ -282,33 +319,42 @@ async function criar(req, res) {
   try {
     const {
       processo_id, tipo_audiencia_id, data, hora, modalidade,
-      vara_id, plataforma_virtual, link_virtual,
+      vara_id, plataforma_virtual, link_virtual, observacoes,
       responsavel_id: responsavelRaw,
       testemunhas = [],
-      obs_auditoria
+      obs_auditoria,
+      publicacao_id,
     } = req.body;
 
-    if (!processo_id || !data || !hora) {
-      return erro(res, 'Processo, data e hora são obrigatórios');
+    if (!processo_id || !tipo_audiencia_id || !data || !hora) {
+      return erro(res, 'Processo, tipo de audiência, data e hora são obrigatórios');
     }
+    if (!(await tipoAudienciaAtivo(conn, tipo_audiencia_id))) {
+      return erro(res, 'Selecione um tipo de audiência válido e ativo');
+    }
+    const duplicada = await localizarAudienciaAtivaNoHorario(conn, processo_id, data, hora);
+    if (duplicada) return erro(res, mensagemHorarioOcupado(duplicada, data, hora), 409);
 
     const { responsavel_id, responsavel_freela_id } = parsarResponsavel(responsavelRaw);
 
     await conn.beginTransaction();
 
+    // publicacao_id: vínculo de origem, opcional (audiência da pasta do processo não tem;
+    // audiência criada a partir de uma SUGESTÃO de publicação tem — auditoria 02/09, item 6).
     const [result] = await conn.execute(
       `INSERT INTO audiencia
          (processo_id, tipo_audiencia_id, data, hora, modalidade, vara_id,
-          plataforma_virtual, link_virtual,
+          plataforma_virtual, link_virtual, observacoes,
           responsavel_id, responsavel_freela_id,
-          criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          criado_por, publicacao_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        processo_id, tipo_audiencia_id || null, data, hora,
+        processo_id, tipo_audiencia_id, data, hora,
         modalidade || 'presencial', vara_id || null,
         plataforma_virtual || null, link_virtual || null,
+        (observacoes && observacoes.trim()) ? observacoes.trim() : null,
         responsavel_id, responsavel_freela_id,
-        req.usuario.id
+        req.usuario.id, publicacao_id || null
       ]
     );
 
@@ -363,6 +409,9 @@ async function criar(req, res) {
     return sucesso(res, { id: audienciaId }, 'Audiência cadastrada com sucesso', 201);
   } catch (err) {
     await conn.rollback();
+    if (erroDeHorarioDuplicado(err)) {
+      return erro(res, 'Já existe uma audiência ativa neste processo, na mesma data e horário.', 409);
+    }
     return erroInterno(res, err);
   } finally {
     conn.release();
@@ -376,11 +425,18 @@ async function atualizar(req, res) {
     const { id } = req.params;
     const {
       tipo_audiencia_id, data, hora, modalidade, vara_id,
-      plataforma_virtual, link_virtual, responsavel_id: responsavelRaw,
+      plataforma_virtual, link_virtual, observacoes, responsavel_id: responsavelRaw,
       testemunhas = []
     } = req.body;
 
     const { responsavel_id, responsavel_freela_id } = parsarResponsavel(responsavelRaw);
+
+    if (!tipo_audiencia_id || !data || !hora) {
+      return erro(res, 'Tipo de audiência, data e hora são obrigatórios');
+    }
+    if (!(await tipoAudienciaAtivo(conn, tipo_audiencia_id))) {
+      return erro(res, 'Selecione um tipo de audiência válido e ativo');
+    }
 
     // Busca estado anterior para auditoria
     const [antes] = await pool.execute('SELECT * FROM audiencia WHERE id = ?', [id]);
@@ -389,19 +445,25 @@ async function atualizar(req, res) {
       return erro(res, `Audiência com status "${antes[0].status}" não pode ser editada`);
     }
 
+    const duplicada = await localizarAudienciaAtivaNoHorario(
+      conn, antes[0].processo_id, data, hora, id
+    );
+    if (duplicada) return erro(res, mensagemHorarioOcupado(duplicada, data, hora), 409);
+
     await conn.beginTransaction();
 
     await conn.execute(
       `UPDATE audiencia SET
          tipo_audiencia_id = ?, data = ?, hora = ?, modalidade = ?, vara_id = ?,
-         plataforma_virtual = ?, link_virtual = ?,
+         plataforma_virtual = ?, link_virtual = ?, observacoes = ?,
          responsavel_id = ?, responsavel_freela_id = ?,
          alterado_por = ?, alterado_em = NOW()
        WHERE id = ?`,
       [
-        tipo_audiencia_id || null, data, hora,
+        tipo_audiencia_id, data, hora,
         modalidade || 'presencial', vara_id || null,
         plataforma_virtual || null, link_virtual || null,
+        (observacoes && observacoes.trim()) ? observacoes.trim() : null,
         responsavel_id, responsavel_freela_id,
         req.usuario.id, id
       ]
@@ -413,7 +475,7 @@ async function atualizar(req, res) {
     // evitando queries extras toda vez que o histórico for consultado.
 
     // Campos simples — já são textos legíveis, grava direto
-    const camposSimples = ['data', 'modalidade', 'plataforma_virtual', 'link_virtual'];
+    const camposSimples = ['data', 'modalidade', 'plataforma_virtual', 'link_virtual', 'observacoes'];
     for (const campo of camposSimples) {
       const vAntes  = String(antes[0][campo] ?? '');
       const vDepois = String(req.body[campo] ?? '');
@@ -519,6 +581,9 @@ async function atualizar(req, res) {
     return sucesso(res, null, 'Audiência atualizada com sucesso');
   } catch (err) {
     await conn.rollback();
+    if (erroDeHorarioDuplicado(err)) {
+      return erro(res, 'Já existe uma audiência ativa neste processo, na mesma data e horário.', 409);
+    }
     return erroInterno(res, err);
   } finally {
     conn.release();
@@ -585,6 +650,19 @@ async function remarcar(req, res) {
       return erro(res, `Audiência com status "${antes[0].status}" não pode ser remarcada`);
     }
 
+    const orig = antes[0];
+    if (!orig.tipo_audiencia_id || !(await tipoAudienciaAtivo(conn, orig.tipo_audiencia_id))) {
+      return erro(res, 'Defina um tipo válido para a audiência antes de remarcá-la');
+    }
+    if (String(orig.data).slice(0, 10) === String(nova_data)
+        && String(orig.hora).slice(0, 5) === String(nova_hora).slice(0, 5)) {
+      return erro(res, 'Informe uma nova data ou um novo horário para remarcar a audiência');
+    }
+    const duplicada = await localizarAudienciaAtivaNoHorario(
+      conn, orig.processo_id, nova_data, nova_hora, id
+    );
+    if (duplicada) return erro(res, mensagemHorarioOcupado(duplicada, nova_data, nova_hora), 409);
+
     await conn.beginTransaction();
 
     // Marca a audiência original como remarcada
@@ -600,19 +678,23 @@ async function remarcar(req, res) {
       [id, antes[0].status, req.usuario.id]
     );
 
-    // Cria nova audiência aproveitando os dados da original
-    const orig = antes[0];
+    // Cria a nova audiência preservando os dados operacionais da anterior. O vínculo
+    // publicacao_id já não é copiado e as observações também começam vazias: quando a
+    // audiência original nasceu de uma publicação, esse campo contém o texto da sugestão
+    // daquele evento antigo e não pode aparecer como origem da audiência remarcada.
     const [result] = await conn.execute(
       `INSERT INTO audiencia
-         (processo_id, tipo_audiencia_id, data, hora, modalidade, vara_id,
+         (processo_id, tipo_audiencia_id, data, hora, modalidade, local, observacoes, vara_id,
           plataforma_virtual, link_virtual, responsavel_id, responsavel_freela_id, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orig.processo_id,
         orig.tipo_audiencia_id,
         nova_data,
         nova_hora,
         nova_modalidade || orig.modalidade,
+        orig.local,
+        null,
         nova_vara_id !== undefined ? (nova_vara_id || null) : orig.vara_id,
         orig.plataforma_virtual,
         orig.link_virtual,
@@ -639,6 +721,9 @@ async function remarcar(req, res) {
     return sucesso(res, { nova_audiencia_id: novaId }, 'Audiência remarcada e nova audiência criada com sucesso');
   } catch (err) {
     await conn.rollback();
+    if (erroDeHorarioDuplicado(err)) {
+      return erro(res, 'Já existe uma audiência ativa neste processo, na mesma data e horário.', 409);
+    }
     return erroInterno(res, err);
   } finally {
     conn.release();

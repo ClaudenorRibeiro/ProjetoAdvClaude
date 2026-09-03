@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { prazosAPI, processosAPI } from '../../services/api';
-import { formatarData, labelStatusPrazo, corPrazo, toTitleCase } from '../../utils/formatters';
+import { dataParaIsoLocal, formatarData, formatarDataHora, labelStatusPrazo, corPrazo, toTitleCase, hojeLocal } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import MenuAcoes from '../../components/MenuAcoes';
 import { useAuth } from '../../context/AuthContext';
@@ -480,12 +480,17 @@ function SelectComAdicao({ label, nomeEntidade, value, onChange, opcoes = [],
 // buscaInicial: nº de processo para JÁ pesquisar a pasta (sem travar o campo) — usado quando o
 //   prazo nasce de uma publicação e a pasta ainda precisa ser escolhida pelo usuário.
 // publicacaoId: vínculo de origem (publicação que gerou o prazo).
-export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial, publicacaoId }) {
+// descricaoInicial / quantidadeInicial / tipoDiasInicial: pré-preenchimento vindo de
+// uma SUGESTÃO da publicação (nº de dias + descrição; a data de início o usuário confere).
+export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial, publicacaoId,
+                                 descricaoInicial, quantidadeInicial, tipoDiasInicial }) {
   // ESC fecha esta janela — mas só quando ela é a mais acima (nunca fecha a de trás).
   const overlayRef = useEscFechar(() => onFechar(false));
   const [form, setForm]         = useState({
-    tipo_dias: 'uteis',
-    data_inicio: new Date().toISOString().split('T')[0],
+    tipo_dias: tipoDiasInicial || 'uteis',
+    data_inicio: hojeLocal(),
+    ...(descricaoInicial ? { descricao: descricaoInicial } : {}),
+    ...(quantidadeInicial ? { quantidade: String(quantidadeInicial) } : {}),
     ...(processoInicial ? { processo_id: processoInicial.processo_id, titulo: processoInicial.titulo } : {}),
   });
   const [salvando, setSalvando] = useState(false);
@@ -501,7 +506,8 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
   const [notificarConclusao, setNotificarConclusao] = useState(false);
   // Guarda qual campo o usuário mexeu por último ('dias' ou 'data') para os dois cálculos
   // (dias→data e data→dias) não ficarem se recalculando em loop. Começa null: nada recalcula sozinho.
-  const [modo, setModo] = useState(null);
+  // Se a sugestão já trouxe a quantidade de dias, começa em 'dias' para calcular a data final.
+  const [modo, setModo] = useState(quantidadeInicial ? 'dias' : null);
   const [pastas, setPastas]         = useState([]);
   const [naoCadastrado, setNaoCadastrado] = useState(false); // pesquisou o número e não achou pasta
   const [buscaPasta, setBuscaPasta] = useState(processoInicial?.numero || buscaInicial || '');
@@ -543,7 +549,7 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
         if (d !== 0 && d !== 6) contados++;
       }
     }
-    setForm(f => ({ ...f, data_final: data.toISOString().split('T')[0] }));
+    setForm(f => ({ ...f, data_final: dataParaIsoLocal(data) }));
     prazosAPI.calcularDataFinal(form.data_inicio, form.quantidade, form.tipo_dias)
       .then(r => { if (r.data.ok) setForm(f => ({ ...f, data_final: r.data.dados.data_final })); })
       .catch(() => {});
@@ -839,7 +845,7 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
       let contados = (diaInicio !== 0 && diaInicio !== 6) ? 1 : 0;
       while (contados < qtd) { data.setDate(data.getDate() + 1); const d = data.getDay(); if (d !== 0 && d !== 6) contados++; }
     }
-    setForm(f => ({ ...f, data_final: data.toISOString().split('T')[0] }));
+    setForm(f => ({ ...f, data_final: dataParaIsoLocal(data) }));
     prazosAPI.calcularDataFinal(form.data_inicio, form.quantidade, form.tipo_dias)
       .then(r => { if (r.data.ok) setForm(f => ({ ...f, data_final: r.data.dados.data_final })); })
       .catch(() => {});
@@ -1099,7 +1105,7 @@ function ModalHistoricoPrazo({ prazo, onFechar }) {
                     <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:'4px'}}>
                       <strong style={{fontSize:'14px', color:'#1e293b'}}>{ev.descricao}</strong>
                       <span style={{fontSize:'15px', color:'#334155', fontWeight:500, whiteSpace:'nowrap'}}>
-                        {ev.data ? new Date(ev.data).toLocaleString('pt-BR') : '—'}
+                        {ev.data ? formatarDataHora(ev.data) : '—'}
                       </span>
                     </div>
                     <div style={{fontSize:'13px', color:'#64748b', marginTop:'2px'}}>

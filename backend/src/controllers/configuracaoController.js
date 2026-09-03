@@ -515,7 +515,15 @@ async function buscarIntegracoes(req, res) {
       const cfg = r.configuracoes
         ? (typeof r.configuracoes === 'string' ? JSON.parse(r.configuracoes) : r.configuracoes)
         : {};
-      resultado[r.modulo] = { ativo: !!r.ativo, ...cfg };
+      if (r.modulo === 'ia') {
+        // A chave de API NUNCA volta pro navegador (nem mascarada) — só um booleano
+        // dizendo se já existe uma salva. Deixar a tela em branco no "Salvar" mantém
+        // a chave atual (ver salvarIntegracao); só digitando uma nova ela é trocada.
+        const temChave = !!String(cfg.chave || '').trim();
+        resultado[r.modulo] = { ativo: !!r.ativo, ...cfg, chave: '', chaveDefinida: temChave };
+      } else {
+        resultado[r.modulo] = { ativo: !!r.ativo, ...cfg };
+      }
     }
     return sucesso(res, resultado);
   } catch (err) {
@@ -529,6 +537,37 @@ async function salvarIntegracao(req, res) {
     // O frontend envia o objeto "plano" do módulo: { ativo, ...campos de configuração }.
     // Separamos o "ativo" do resto (que vira o JSON de configurações).
     const { ativo, ...configuracoes } = req.body || {};
+
+    // IA (Sugestões por IA): 1 provedor por vez (ou nenhum). Chave obrigatória se ativo.
+    if (modulo === 'ia') {
+      // A tela nunca recebe a chave de volta (ver buscarIntegracoes) — só o booleano
+      // `chaveDefinida`, que não é config de verdade e não pode ir pro JSON salvo.
+      delete configuracoes.chaveDefinida;
+
+      const provedoresOk = ['nenhum', 'claude', 'openai', 'mock'];
+      if (configuracoes.provedor && !provedoresOk.includes(configuracoes.provedor)) {
+        return erro(res, 'Provedor de IA inválido.');
+      }
+      const prov = configuracoes.provedor || 'nenhum';
+      const chaveDigitada = String(configuracoes.chave || '').trim();
+      if (chaveDigitada) {
+        configuracoes.chave = chaveDigitada;
+      } else {
+        // Campo veio vazio: NÃO apaga a chave já salva — o front nunca mostra a chave
+        // existente (por segurança), então "vazio" aqui significa "não mexi nela".
+        const [existente] = await pool.execute(
+          `SELECT configuracoes FROM configuracoes_integracoes WHERE modulo = 'ia' LIMIT 1`
+        );
+        const cfgAtual = (existente.length && existente[0].configuracoes)
+          ? (typeof existente[0].configuracoes === 'string' ? JSON.parse(existente[0].configuracoes) : existente[0].configuracoes)
+          : {};
+        configuracoes.chave = String(cfgAtual.chave || '').trim();
+      }
+      if (ativo && prov !== 'nenhum' && prov !== 'mock' && !configuracoes.chave) {
+        return erro(res, 'Informe a chave de API do provedor de IA escolhido.');
+      }
+      configuracoes.modelo = String(configuracoes.modelo || '').trim();
+    }
 
     // CNJ (DJEN): defesa no servidor, além da tela.
     if (modulo === 'cnj' && Array.isArray(configuracoes.oabs)) {
@@ -546,20 +585,39 @@ async function salvarIntegracao(req, res) {
     }
 
     const cfgJson = Object.keys(configuracoes).length ? JSON.stringify(configuracoes) : null;
-    const [upd] = await pool.execute(
-      `UPDATE configuracoes_integracoes SET ativo=?, configuracoes=?, atualizado_em=NOW()
-       WHERE modulo=?`,
-      [ativo ? 1 : 0, cfgJson, modulo]
-    );
-    // Se o módulo ainda não existe (ex.: primeira configuração de uma integração nova),
-    // cria a linha. Assim não é preciso rodar SQL manual para cada integração nova.
-    if (upd.affectedRows === 0) {
-      await pool.execute(
-        `INSERT INTO configuracoes_integracoes (modulo, ativo, configuracoes, atualizado_em)
-         VALUES (?, ?, ?, NOW())`,
-        [modulo, ativo ? 1 : 0, cfgJson]
+    // UPDATE-depois-INSERT (sem lock) permitia duas gravações simultâneas criarem DUAS linhas
+    // do mesmo módulo (ex.: 'ia'), já que nada travava a linha entre o UPDATE e o INSERT
+    // (auditoria 02/09, item 11). Agora tudo roda em UMA transação com SELECT ... FOR UPDATE:
+    // a segunda gravação concorrente espera a primeira terminar, em vez de correr em paralelo.
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      const [existe] = await conn.execute(
+        `SELECT id FROM configuracoes_integracoes WHERE modulo = ? FOR UPDATE`, [modulo]
       );
+      if (existe.length) {
+        await conn.execute(
+          `UPDATE configuracoes_integracoes SET ativo=?, configuracoes=?, atualizado_em=NOW()
+           WHERE modulo=?`,
+          [ativo ? 1 : 0, cfgJson, modulo]
+        );
+      } else {
+        await conn.execute(
+          `INSERT INTO configuracoes_integracoes (modulo, ativo, configuracoes, atualizado_em)
+           VALUES (?, ?, ?, NOW())`,
+          [modulo, ativo ? 1 : 0, cfgJson]
+        );
+      }
+      await conn.commit();
+    } catch (e) {
+      await conn.rollback();
+      throw e;
+    } finally {
+      conn.release();
     }
+
+    // Zera o cache do serviço de IA para a próxima sugestão já usar a config nova.
+    if (modulo === 'ia') { try { require('../services/iaService').limparCacheIa(); } catch {} }
 
     return sucesso(res, null, 'Integração atualizada');
   } catch (err) {

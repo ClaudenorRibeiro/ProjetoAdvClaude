@@ -1,0 +1,112 @@
+=======================================================================
+SUGESTOES INTELIGENTES EM PUBLICACOES
+Data do registro: 02/09/2026
+=======================================================================
+
+NECESSIDADE INFORMADA
+
+Nas publicacoes do sistema, o usuario precisa ter uma opcao chamada
+"Sugestoes". A finalidade e identificar providencias possiveis a partir
+do conteudo de cada publicacao e oferecer atalhos para cria-las.
+
+Exemplo informado:
+- A publicacao indica que uma audiencia foi marcada para 08/10/2026,
+  as 10:00.
+- O sistema deve sugerir o cadastro de uma audiencia com esses dados.
+
+O objetivo nao e criar nada automaticamente. O usuario deve sempre
+conferir os dados, abrir o respectivo cadastro ja preenchido e decidir
+se deseja salvar.
+
+SOLUCAO FUNCIONAL PROPOSTA
+
+1. Botao "Sugestoes" no modal de detalhes da publicacao
+
+Cada publicacao tera um botao "Sugestoes" junto aos botoes de acao ja
+existentes. Ao acionado, ele exibira somente as sugestoes que tenham
+relacao com o texto daquela publicacao.
+
+2. Sugestoes contextuais, sem excesso de botoes
+
+Nao devem existir diversos botoes fixos para todas as publicacoes.
+O painel de sugestoes exibira somente opcoes compatveis com o conteudo
+identificado, evitando poluicao visual e a impressao de que toda
+publicacao exige todas as providencias.
+
+3. Tipos iniciais de sugestao
+
+- Criar audiencia:
+  Quando o texto indicar audiencia e for possivel identificar data e/ou
+  horario. O cadastro de audiencia deve abrir com o processo vinculado,
+  data, horario e a origem na publicacao preenchidos quando encontrados.
+
+- Criar prazo:
+  Quando o texto indicar prazo processual, por exemplo "em 5 dias",
+  "prazo de 15 dias" ou outra determinacao que possa ser reconhecida.
+  O usuario revisa o prazo antes de salvar.
+
+- Criar tarefa:
+  Para providencias que precisem de acompanhamento, como preparar
+  audiencia, apresentar documento, analisar despacho ou outra acao
+  identificada no texto.
+
+- Criar compromisso:
+  Para eventos de agenda que nao sejam necessariamente uma audiencia.
+
+4. Justificativa visivel para cada sugestao
+
+Cada sugestao deve explicar de forma simples por que apareceu. Exemplo:
+"Audiencia identificada para 08/10/2026 as 10:00".
+Isso permite ao usuario validar a leitura do sistema antes de abrir o
+cadastro.
+
+5. Confirmacao e revisao humana obrigatoria
+
+Ao escolher uma sugestao, o sistema abre o cadastro correspondente ja
+preenchido, sem gravar automaticamente. O usuario confere, ajusta se
+necessario e somente entao salva. Isso reduz risco de registros errados
+ou duplicados.
+
+FORMA DE IMPLEMENTACAO RECOMENDADA
+
+A primeira versao deve ser totalmente interna ao sistema, sem consumo
+de API externa ou inteligencia artificial.
+
+O sistema analisara palavras, expressoes e formatos ja conhecidos, tais
+como:
+- "audiencia" e "designo audiencia";
+- datas como 08/10/2026;
+- horarios como "as 10:00";
+- prazos como "em 5 dias" e "prazo de 15 dias";
+- termos como "intime-se" e outras expressoes processuais relevantes.
+
+VANTAGENS DE COMEÇAR SEM IA EXTERNA
+
+- Sem custo por consulta.
+- O texto das publicacoes nao e enviado a terceiros.
+- Funciona sem depender de internet ou de disponibilidade de fornecedor.
+- Comportamento previsivel e mais facil de validar.
+- Mantem o usuario no controle final de cada cadastro.
+
+POSSIVEL EVOLUCAO FUTURA
+
+Caso futuramente seja necessario compreender redacoes muito variadas e
+complexas, uma IA podera ser estudada como apoio opcional. Ela nao deve
+ser requisito para o funcionamento e nao deve criar cadastros sozinha.
+
+CUIDADOS ANTES DA IMPLEMENTACAO
+
+- Revisar as rotinas atuais de publicacoes, audiencias, prazos, tarefas
+  e compromissos, tanto no frontend quanto no backend e banco de dados.
+- Reaproveitar os cadastros existentes, sem criar redundancia.
+- Verificar como sera evitada a criacao duplicada da mesma audiencia,
+  prazo, tarefa ou compromisso a partir de uma publicacao.
+- Manter o processo e a publicacao de origem vinculados quando a rotina
+  atual permitir, para rastreabilidade.
+- Nenhuma alteracao deve ser implementada sem novo plano aprovado e
+  autorizacao expressa do Claudio.
+
+STATUS
+
+Registro de necessidade e proposta funcional. Nenhuma implementacao foi
+iniciada nesta etapa.

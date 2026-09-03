@@ -6,7 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { dashboardAPI, audienciasAPI } from '../../services/api';
-import { formatarData, formatarMoeda } from '../../utils/formatters';
+import { formatarData, formatarMoeda, hojeLocal } from '../../utils/formatters';
 import AcoesAniversariante from '../../components/AcoesAniversariante';
 import './Dashboard.css';
 
@@ -41,6 +41,7 @@ export default function Dashboard() {
   if (!dados) return <div className="lista-vazia">Não foi possível carregar o dashboard.</div>;
 
   const { contadores } = dados;
+  const hoje = hojeLocal();
 
   return (
     <div className="dashboard">
@@ -50,7 +51,7 @@ export default function Dashboard() {
         <CardContador titulo="Prazos Atrasados" valor={contadores.prazos_atrasados}  cor="vermelho" link="/prazos?status=atrasado" />
         <CardContador titulo="Tarefas"          valor={contadores.tarefas_pendentes} cor="laranja"  link="/tarefas" />
         <CardContador titulo="Tarefas Atrasadas"valor={contadores.tarefas_atrasadas} cor="vermelho" link="/tarefas?atrasadas=1" />
-        <CardContador titulo="Audiências Hoje"       valor={contadores.audiencias_hoje}    cor="verde"    link={`/audiencias?data_de=${new Date().toISOString().slice(0,10)}&data_ate=${new Date().toISOString().slice(0,10)}`} />
+        <CardContador titulo="Audiências Hoje"       valor={contadores.audiencias_hoje}    cor="verde"    link={`/audiencias?data_de=${hoje}&data_ate=${hoje}`} />
         <CardContador titulo="Processos Parados"    valor={contadores.processos_parados} cor="laranja"  link="/relatorios?rel=processos_parados" />
         <CardContador titulo="Perícias Hoje"         valor={contadores.pericias_hoje}      cor="roxo"     link="/pericias" />
       </div>

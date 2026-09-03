@@ -1,0 +1,132 @@
+Concluí a auditoria estática do lote de 01/09 e das alterações locais de 02/09, cobrindo frontend, backend, rotas, permissões e as 79 tabelas do banco. Não alterei nenhum arquivo, não executei SQL e não mexi no Git.
+
+Encontrei problemas que impedem considerar o lote de 02/09 pronto para produção.
+
+## Problemas críticos
+
+1. O parser pode agendar a audiência na data errada.
+
+Testei o texto:
+
+> “Disponibilizado em 01/09/2026. Designo audiência para o dia 20/10/2026 às 14h.”
+
+O parser retornou `01/09/2026 às 14h`. Ele pega a primeira data da janela, que pode ser a data da publicação, não a do evento. Isso está em [sugestoesPublicacao.js](/C:/Users/Claudio/Downloads/ProjetoAdvClaude/frontend/src/utils/sugestoesPublicacao.js:47) e [sugestoesPublicacao.js](/C:/Users/Claudio/Downloads/ProjetoAdvClaude/frontend/src/utils/sugestoesPublicacao.js:153).
+
+2. Prazo em dias corridos vira dias úteis.
+
+O detector identifica se o texto contém “úteis”, mas sempre devolve `tipoDiasInicial: 'uteis'`. Como o modal já inicia recalculando a data final, “prazo de 10 dias” pode gerar uma data errada automaticamente. Está em [sugestoesPublicacao.js](/C:/Users/Claudio/Downloads/ProjetoAdvClaude/frontend/src/utils/sugestoesPublicacao.js:238) e [Prazos.js](/C:/Users/Claudio/Downloads/ProjetoAdvClaude/frontend/src/pages/Prazos/Prazos.js:536).
+
+3. Há quebra da visibilidade individual das publicações.
+
+A regra nova determina que o não-buscador veja somente publicações atribuídas a ele. Porém os endpoints de leitura, histórico e IA aceitam qualquer ID para quem tenha a permissão genérica `publicacoes/visualizar`.
+
+O endpoint de IA busca o texto diretamente por ID, sem chamar `podeAgirNaPublicacao` nem conferir atribuição. Assim, um usuário pode enumerar IDs e:
+
+- Ler uma publicação não atribuída por `/publicacoes/:id`.
+- Consultar seu histórico.
+- Enviar seu texto para OpenAI/Anthropic.
+- Gerar consumo na chave do escritório.
+
+Evidências: [routes/index.js](/C:/Users/Claudio/Downloads/ProjetoAdvClaude/backend/src/routes/index.js:326), [publicacoesController.js](/C:/Users/Claudio/Downloads/ProjetoAdvClaude/backend/src/controllers/publicacoesController.js:1022) e [publicacoesController.js](/C:/Users/Claudio/Downloads/ProjetoAdvClaude/backend/src/controllers/publicacoesController.js:1196).
+
+## Problemas altos
+
+4. Criação da ação e tratamento da publicação não são atômicos.
+
+Primeiro o frontend cria prazo, tarefa, compromisso, perícia ou audiência. Depois faz outra requisição para marcar a publicação como tratada. Se a segunda requisição falhar, o erro é silenciosamente ignorado.
+
+Resultado possível: ação criada corretamente, mas publicação permanece pendente, sem qualquer aviso. Está em [Publicacoes.js](/C:/Users/Claudio/Downloads/ProjetoAdvClaude/frontend/src/pages/Publicacoes/Publicacoes.js:1296) e existe duplicado no fluxo CNJ.
+
+5. Sugestão de prazo da IA não preenche o modal.
+
+O backend da IA devolve `descricao`, mas o modal espera `descricaoInicial`, `quantidadeInicial` e `tipoDiasInicial`. O próprio prompt nem exige a quantidade em campo estruturado.
+
+Assim, o cartão da IA aparece, mas abre um prazo praticamente em branco. Evidências: [iaService.js](/C:/Users/Claudio/Downloads/ProjetoAdvClaude/backend/src/services/iaService.js:169) e [Publicacoes.js](/C:/Users/Claudio/Downloads/ProjetoAdvClaude/frontend/src/pages/Publicacoes/Publicacoes.js:210).
+
+6. Audiência criada pela publicação perde a origem.
+
+Prazo, tarefa e compromisso têm `publicacao_id`. A tabela `audiencia` não tem esse vínculo e a criação não envia nenhum identificador de publicação.
+
+Mesmo assim, o frontend marca a publicação como tratada. Ao consultar o histórico, não aparece qual audiência foi criada. A exclusão da publicação também elimina definitivamente essa rastreabilidade.
+
+Evidências: [local.sql](/C:/Users/Claudio/Downloads/local.sql:209), [audienciasController.js](/C:/Users/Claudio/Downloads/ProjetoAdvClaude/backend/src/controllers/audienciasController.js:299) e [publicacoesController.js](/C:/Users/Claudio/Downloads/ProjetoAdvClaude/backend/src/controllers/publicacoesController.js:864).
+
+7. A localização do processo da audiência pode falhar ou selecionar processo inadequado.
+
+A publicação já possui `processo_id`, mas o frontend ignora esse ID e faz nova pesquisa textual pelo número. A pesquisa SQL usa `LIKE` sem normalizar a pontuação; portanto, o processo pode ter sido reconhecido na listagem e depois não ser encontrado no modal.
+
+Além disso, se a pesquisa retornar apenas um resultado, ele é aceito mesmo que o número normalizado não corresponda.
+
+Evidências: [Publicacoes.js](/C:/Users/Claudio/Downloads/ProjetoAdvClaude/frontend/src/pages/Publicacoes/Publicacoes.js:152) e [processosController.js](/C:/Users/Claudio/Downloads/ProjetoAdvClaude/backend/src/controllers/processosController.js:1180).
+
+8. Há caminhos reais para deixar pessoas órfãs no banco.
+
+A exclusão de pessoa verifica vários vínculos, mas não verifica:
+
+- `pericia.perito_tipo/perito_id`;
+- `pericia_local_reu.tipo_pessoa/pessoa_id`;
+- `acordo_parcela.parceria_pessoa_tipo/parceria_pessoa_id`.
+
+Esses vínculos polimórficos não têm chave estrangeira para a tabela de pessoas. A própria rotina de unificação trata esses campos, confirmando que são relacionamentos válidos, mas a exclusão não os considera.
+
+Evidências: [pessoasController.js](/C:/Users/Claudio/Downloads/ProjetoAdvClaude/backend/src/controllers/pessoasController.js:586), [pessoasController.js](/C:/Users/Claudio/Downloads/ProjetoAdvClaude/backend/src/controllers/pessoasController.js:682) e [estrutura_banco.sql](/C:/Users/Claudio/Downloads/ProjetoAdvClaude/estrutura_banco.sql:1037).
+
+## Problemas médios
+
+9. Remarcar audiência perde as novas observações.
+
+A rotina cria uma audiência nova copiando vários campos, mas não copia `orig.observacoes`. Portanto, anotações e a origem descritiva da publicação desaparecem após uma remarcação. Veja [audienciasController.js](/C:/Users/Claudio/Downloads/ProjetoAdvClaude/backend/src/controllers/audienciasController.js:605).
+
+10. `audiencia.vara_id` não possui chave estrangeira.
+
+O backend aceita qualquer `vara_id`, mas o banco não garante que a vara exista. Isso permite referências inválidas. A exclusão lógica de vara também verifica processos, mas não audiências.
+
+11. A configuração de integração pode duplicar o módulo `ia`.
+
+`configuracoes_integracoes.modulo` não é único. A implementação faz primeiro `UPDATE` e depois `INSERT`, sem transação nem proteção de unicidade. Duas gravações concorrentes podem criar duas linhas `ia`; posteriormente `configIa()` usa `LIMIT 1`, tornando a configuração escolhida imprevisível.
+
+Evidências: [local.sql](/C:/Users/Claudio/Downloads/local.sql:440), [configuracaoController.js](/C:/Users/Claudio/Downloads/ProjetoAdvClaude/backend/src/controllers/configuracaoController.js:562) e [iaService.js](/C:/Users/Claudio/Downloads/ProjetoAdvClaude/backend/src/services/iaService.js:24).
+
+12. A chave da IA fica exposta integralmente.
+
+Ela é armazenada em texto legível dentro do JSON, devolvida integralmente pelo endpoint de configurações e exibida em um campo comum, não em campo de senha. Mesmo sendo uma tela de administrador, uma falha de sessão, captura de tela ou acesso ao banco revela uma chave capaz de gerar cobrança.
+
+13. Sugestões não respeitam as permissões do módulo de destino.
+
+O painel é liberado pela permissão de Publicações. Ele pode oferecer “Criar audiência”, “Criar prazo”, “Criar tarefa” ou “Criar perícia” mesmo quando o usuário não tem permissão de cadastro nesses módulos. O usuário preenche o formulário e recebe 403 somente ao salvar.
+
+No caso da perícia, o botão manual verifica a permissão, mas o cartão de sugestão não.
+
+14. O frontend usa incorretamente permissões de submódulo.
+
+`temPermissao` aceita apenas dois argumentos e espera chaves como `audiencias.tipos`. Em alguns lugares é chamado com três argumentos, como `temPermissao('audiencias', 'tipos', 'cadastrar')`. Para usuário comum, o botão de gerenciar tipos pode ficar oculto mesmo com a permissão correta. Veja [AuthContext.js](/C:/Users/Claudio/Downloads/ProjetoAdvClaude/frontend/src/context/AuthContext.js:203) e [Audiencias.js](/C:/Users/Claudio/Downloads/ProjetoAdvClaude/frontend/src/pages/Audiencias/Audiencias.js:1247).
+
+15. A data inicial de prazo usa UTC.
+
+`new Date().toISOString()` não representa necessariamente a data local. No fuso de São Paulo, depois das 21h pode preencher o dia seguinte. Isso afeta especialmente o novo prazo sugerido, pois o cálculo é disparado automaticamente.
+
+16. Os scripts de migração dão aparência de transação que o MySQL não oferece.
+
+`ALTER TABLE` causa commit implícito. Portanto, `START TRANSACTION/COMMIT` não garante rollback do lote. O script de 01/09 ainda agrupa seis colunas em um único `ALTER`, então a instrução “pular aquela linha” não permite pular apenas uma coluna já existente.
+
+O banco atual está correto, mas os scripts não são seguros para reaplicação ou recuperação parcial.
+
+## IA OpenAI
+
+O caminho OpenAI atual não está incompatível: `gpt-4o-mini` continua suportando `v1/chat/completions` e Structured Outputs. Porém o código usa o JSON mode antigo; a documentação oficial recomenda `json_schema` quando o modelo suporta Structured Outputs. [Documentação oficial do GPT-4o mini](https://developers.openai.com/api/docs/models/gpt-4o-mini).
+
+A integração Anthropic ainda não teve teste real, conforme o próprio resumo. Portanto, não considero o padrão `claude-sonnet-5` confirmado.
+
+## Banco e validações realizadas
+
+- `local.sql` e `estrutura_banco.sql` possuem as mesmas 79 tabelas e as mesmas colunas.
+- A coluna `audiencia.observacoes` já consta no banco local exportado.
+- Todos os nomes de tabelas estão em letras minúsculas.
+- As definições de `publicacao_usuario` diferem somente na ordem textual das constraints, sem diferença funcional.
+- Os arquivos backend alterados passaram em `node --check`.
+- Executei testes diretos do parser que reproduziram os erros de data e dias corridos.
+- Não executei build, não criei arquivos e não alterei o projeto.
+
+Não tenho certeza se já existem registros órfãos reais, preciso confirmar: o `local.sql` foi exportado explicitamente sem dados.
+
+Minha recomendação é não enviar o lote de 02/09 para produção antes de corrigir pelo menos os itens 1 a 9. O plano de correção deve envolver `sugestoesPublicacao.js`, `Publicacoes.js`, `iaService.js`, os controllers de publicações/audiências/pessoas/configurações e um SQL idempotente para os vínculos e índices necessários. Se você aprovar essa direção, diga “pode codar”; antes de começar eu detalharei exatamente a ordem e o impacto de cada correção.

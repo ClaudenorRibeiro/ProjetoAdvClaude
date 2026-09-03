@@ -1,0 +1,805 @@
+================================================================================
+RESUMO DE DESENVOLVIMENTO - 01/09/2026 e 02/09/2026 (DEV)
+Sistema de Advocacia (NovoJud). Tudo que foi feito nos dois dias.
+================================================================================
+
+VISAO RAPIDA
+------------
+  LOTE 01/09  -> JA ESTA LIVE (commit 8c809b7) no LOCAL e nas 2 AWS. Codigo + o
+                 SQL (sql_atribuir_publicacoes_para_heidi.sql) ja aplicados nas 3
+                 instancias. Nada pendente. Resumo na PARTE 1 (detalhe completo
+                 em RESUMO-SESSAO-01-09-2026-DEV.txt).
+  LOTE 02/09  -> CODADO no LOCAL, fora do Git, NAO deployado. E a UNICA coisa
+                 fora de sincronia. 1 SQL (audiencia.observacoes) + o resto so
+                 codigo. Detalhe na PARTE 2 (o grosso deste arquivo).
+
+
+================================================================================
+================================================================================
+  PARTE 1 - LOTE DE 01/09/2026  (JA LIVE nas 3 instancias - commit 8c809b7)
+================================================================================
+================================================================================
+
+3 blocos, todos ja em producao. Detalhe completo em
+RESUMO-SESSAO-01-09-2026-DEV.txt. Resumo:
+
+BLOCO A - Publicacoes: botao "ATRIBUIR" + status "tratada" POR PESSOA
+  - Status "Tratada/Pendente" da publicacao deixou de ser selo unico -> virou
+    POR PESSOA (tabela publicacao_usuario).
+  - 2 papeis: BUSCADOR (admin OU permissao "Cadastrar" de Publicacoes -> ve
+    TODAS, status global) e NAO-BUSCADOR (ve so as ATRIBUIDAS a ele, status
+    proprio).
+  - Botao "Atribuir" (so buscador, nas 2 abas) abre um GERENCIADOR: ja-atribuidos
+    marcados, marcar=add / desmarcar=remove, quem ja tratou trava; "Salvar" manda
+    a lista completa e o back faz o diff (add/remove, protege quem tratou,
+    reabre p/ o buscador se sobrar zero, sino p/ adicionados E removidos).
+  - Recebedor faz tudo MENOS excluir, mesmo sem a permissao "Alterar".
+  - Codigo morto removido: "Direcionar" (ModalDirecionar) + rota/endpoint
+    direcionar; e o "desatribuir" (criado e descartado na propria sessao).
+  - SQL: sql_atribuir_publicacoes_para_heidi.sql (6 colunas + UNIQUE + 2 FKs em
+    publicacao_usuario). JA RODADO nas 3 instancias.
+  - Passo pos-deploy (nao-SQL): marcar "Cadastrar" (Publicacoes) p/ quem deve
+    continuar vendo todas as publicacoes.
+
+BLOCO B - Tecla ESC nos modais (so frontend, sem SQL)
+  - useEscFechar em ModalNovoPrazo (Prazos.js), ModalPericia (Pericias.js) e 4
+    modais de Publicacoes.js; o "porteiro" do ESC da leitura da publicacao passou
+    a considerar tambem "Enviar e-mail" e "Atribuir".
+
+BLOCO C - HOTFIX de producao: nao-admin era DESLOGADO ao abrir "Novo Processo"
+  - Causa: o modal chamava GET /configuracoes/escritorio (so-admin) que devolvia
+    401; o interceptor do axios desloga em qualquer 401.
+  - Correcao (sem SQL): middleware/auth.js -> apenasAdmin/apenasSuper devolvem
+    403 (era 401). O pre-preenchimento Responsavel/OAB do "Novo Processo" passou
+    a vir de GET /processos/auxiliares (rota aberta). "Registrar ata" (Audiencias):
+    a leitura da config saiu do Promise.all p/ chamada isolada tolerante a falha.
+
+--------------------------------------------------------------------------------
+Nota: a memoria dizia por engano "01/09 nada no Git". Conferido nesta sessao:
+o lote de 01/09 FOI COMMITADO em 8c809b7 (Claudenor, 2026-09-01 12:17) e o
+usuario JA sincronizou codigo + banco nas 3 instancias. LOCAL = AWS. Memoria
+corrigida.
+--------------------------------------------------------------------------------
+
+
+================================================================================
+================================================================================
+  PARTE 2 - LOTE DE 02/09/2026  (CODADO no local, fora do Git, NAO deployado)
+================================================================================
+================================================================================
+
+
+================================================================================
+0) ESTADO GERAL (LOTE 02/09)
+================================================================================
+
+  - CODADO no LOCAL. NADA foi para o Git. NADA foi deployado.
+  - Build do frontend: OK (npm run build, varias vezes).
+  - node --check dos controllers do backend alterados: OK.
+  - Fluxo de 2 passos cumprido em todos os pontos (analise + "pode codar").
+
+  BASE = commit 8c809b7 (lote de 01/09, ja live nas 3 instancias). As mudancas
+  de 02/09 sao diffs limpos SOBRE o 8c809b7 (git status = M, sem conflito).
+
+  SQL DESTE LOTE: 1 (um).
+     sql_audiencia_observacoes_para_heidi.sql
+     -> ALTER TABLE `audiencia` ADD COLUMN `observacoes` TEXT NULL AFTER `local`;
+     Rodar 1x em CADA instancia (local -> testar -> AWS Antonio (sistema_advocacia)
+     -> AWS Erick (erick_adv)) ANTES de subir o codigo do campo "Obs.".
+     Rollback: ALTER TABLE `audiencia` DROP COLUMN `observacoes`;
+     Todo o RESTO do lote de 02/09 e SO codigo, sem SQL (inclusive a IA - a linha
+     modulo='ia' em configuracoes_integracoes e auto-criada).
+
+  DEPLOY AWS (quando for): NUNCA rodar "npm run build" na Lightsail (estoura RAM,
+  trava a instancia, UPSTREAM_ERROR 515 no SSH). Buildar o front no PC e subir a
+  pasta build/ pronta.
+
+  TESTADO PELO USUARIO ate agora: a Sugestao de audiencia (cartao + pre-preenchimento
+  + o modal real de Audiencias), e a IA em modo SIMULACAO (cartao "[SIMULACAO]"
+  com selo roxo "IA" aparecendo ao lado do cartao de regra - fluxo OK). Os demais
+  blocos (Novo Processo, Superusuario, rotulo Pericia, prazo/pericia/providencia,
+  checkbox, selo do cabecalho, campo Obs., IA com chave real) NAO testados ainda.
+
+
+================================================================================
+1) BLOCO A - Botao "+ Novo Processo" so para quem pode cadastrar
+================================================================================
+
+MOTIVO
+  A Priscilla (estagiaria, nivel 2) conseguia ABRIR o formulario "Novo Processo".
+
+INVESTIGACAO (no banco + codigo)
+  - Unico INSERT em tblproc = funcao criarProcesso, so alcancavel pela rota
+    POST /processos, protegida por verificarPermissao('processos','cadastrar'):
+    nivel <= 1 passa; nivel >= 2 consulta a tabela permissoes e, se permitido = 0,
+    devolve 403 e NAO grava nada.
+  - Priscilla local: id 20, nivel 2, processos/cadastrar = 0, processos/alterar = 1.
+  - tblproc criado_por = 20: 7 registros, TODOS entre 05 e 10/08/2026 (quando ela
+    ainda tinha a permissao / antes do guard). Nada depois.
+  - Conclusao: o backend JA barrava. Era so FURO COSMETICO no front - o botao
+    aparecia, deixava abrir e preencher, e so no "Salvar" o servidor recusava.
+
+MUDANCA (SO FRONT)
+  frontend/src/pages/Processos/Processos.js
+    + const { temPermissao } = useAuth();
+    + const podeCadastrarProcesso = temPermissao('processos','cadastrar');
+      (temPermissao ja devolve true p/ nivel <= 1)
+    + o botao "+ Novo Processo" da lista virou:
+      {podeCadastrarProcesso && (<button ...>+ Novo Processo</button>)}
+  frontend/src/pages/Processos/PastaDetalhe.js
+    + o botao "+ Novo Processo (mesma pasta)" (aba Processos da pasta) virou:
+      {temPermissao('processos','cadastrar') && (<div ...><button ...></div>)}
+  Feitos os DOIS botoes. Nada no "Salvar" do modal nem no backend.
+
+EFEITO
+  Admin/super e quem tem processos/cadastrar: veem o botao como antes.
+  Os demais: deixam de ver. "Editar processo" (alterar) intocado.
+
+
+================================================================================
+2) BLOCO B - "Sugestao" nas Publicacoes (o grosso do dia)
+================================================================================
+
+Plano executado: PLANO-FASE-1-Sugestao-Audiencia-Publicacao-02-09-2026.txt
+Arquitetura:     SUGESTOES-PUBLICACOES-CONSOLIDADO-02-09-2026.txt
+
+--------------------------------------------------------------------------
+2.1) DECISOES DE ARQUITETURA
+--------------------------------------------------------------------------
+  - Motor = PARSER DE REGRAS interno (regex/heuristica no front), NAO IA.
+    Deterministico, gratis, offline, o texto da publicacao NAO sai do servidor.
+  - Config = "REGRAS", nao "PALAVRAS" (~15-40 familias de regra cobrem a maioria;
+    NAO fazer lista de milhares de palavras-chave).
+  - Config comeca EMBUTIDA no codigo. Tela de administracao (Fase 5) e IA
+    (Fase 6) NAO feitas - ver secao 8.
+  - NUNCA cria nada sozinho: a sugestao so pre-preenche o modal; o usuario
+    confere e salva.
+
+--------------------------------------------------------------------------
+2.2) ARQUIVO NOVO: frontend/src/utils/sugestoesPublicacao.js
+--------------------------------------------------------------------------
+Funcao PURA e DETERMINISTICA:
+  analisarPublicacao(texto, { dataPublicacao, numeroProcesso, numeroPublicacao })
+    -> LISTA de sugestoes (0, 1 ou varias). Excecao interna -> retorna [].
+
+RODA 4 DETECTORES INDEPENDENTES (uma publicacao pode gerar 2+ cartoes):
+
+  (1) detectarAudiencia  -> tipo 'compromisso', subtipo 'audiencia'
+      - Exige "audiencia" + sinal de designacao (designe-se | designad[ao] |
+        designar | apraz | redesign | remarcad[ao] | "para o dia").
+      - SUPRIME se disser audiencia realizada | cancelada | prejudicada |
+        adiada sine die | redesignada sem data.
+      - DATA numa janela de ~440 chars ao redor do gatilho (assim pega a data
+        da audiencia, nao a do despacho):
+          DD/MM/AAAA (ou DD/MM/AA); ou DD/MM sem ano -> infere o ano da data de
+          publicacao (+1 se cair >3 dias antes dela) -> confianca "media".
+          Rejeita data impossivel (31/02).
+      - HORA (nos ~80 chars apos a data): "10:00 horas", "10h", "as 10 e 30",
+        "10 horas".
+      - LOCAL: (a) "sala de audiencias / sala N / forum / edificio / centro
+        judiciario ..."  OU  (b) endereco "Av./Avenida/Rua/R./Praca/Rod./
+        Rodovia/Alameda/Al./Estrada/Largo + nome", com ou sem "a/na/no",
+        INCLUSIVE entre parenteses "(Av. Tiradentes, 1125 - ...)".
+        Corta antes de "devendo as partes / nos termos / na modalidade /
+        ficando / sob pena / ...".
+      - MODALIDADE: presencial | telepresencial | semipresencial |
+        "por videoconferencia".  (Exposta como campo `modalidade` da sugestao.)
+      - TIPO: una | de conciliacao | de instrucao | inicial.
+      - CONFIANCA: "alta" se data + hora + sem inferencia de ano; senao "media".
+      - Retorna: titulo, descricao ("Audiencia {tipo} ({modalidade}). / Local:
+        ... / Origem: publicacao no {n} de DD/MM/AAAA."), data (ISO), dataBR,
+        hora, local, modalidade, resumo, trechoOrigem, trechoDestaque,
+        regra: 'audiencia-designada', confianca.
+
+  (2) detectarPericia  -> tipo 'pericia'
+      *** CORRIGIDO nesta sessao (falso positivo achado pelo usuario:
+      "Finalizados os trabalhos periciais, fica redesignada Audiencia ... para
+      o dia 03/11" estava sugerindo pericia). Agora: ***
+      - Gatilho e "per[ii]cias?\b" (o SUBSTANTIVO "pericia"/"pericias"), NAO os
+        adjetivos "pericial"/"periciais" (trabalhos periciais, laudo pericial,
+        prova pericial, honorarios periciais).
+      - SUPRIME: "pericia concluida/encerrada/finalizada/realizada/cancelada/
+        prejudicada"; "Finalizados/concluidos ... trabalhos periciais";
+        "laudo pericial apresentado/juntado/protocolado".
+      - A designacao tem que estar COLADA na palavra "pericia": verbo
+        (designo/agendo/marco/nomeio/determino) + pericia, OU pericia
+        designada/agendada/marcada/redesignada ate 50 chars. NAO usa mais
+        "para o dia"/"dia N" soltos (esses costumam ser da AUDIENCIA citada na
+        mesma frase).
+      - Exige UMA DATA (sem data nao sugere). Extrai data/hora/local.
+      - Retorna titulo, descricao, data, dataBR, hora, local, resumo,
+        trechoOrigem, trechoDestaque, regra: 'pericia-designada', confianca.
+
+  (3) detectarPrazo  -> tipo 'prazo'
+      - Regex "(no )prazo (comum |sucessivo )de (N) (...) dias( uteis)?"  (N<=365).
+      - NAO CALCULA a data de inicio (materia juridica). Entrega:
+          quantidadeInicial = N; tipoDiasInicial = 'uteis';
+          descricaoInicial = "Prazo de N dia(s) [uteis] [para <finalidade>]. /
+            CONFERIR a data de inicio - a contagem legal NAO e calculada
+            automaticamente. / Origem: ..."
+      - Finalidade pega perto: contestacao/impugnacao/manifestacao/recurso/
+        contrarrazoes/embargos/replica/razoes finais/cumprimento/pagamento/
+        apresentar documento/especificacao de provas.
+      - CONFIANCA: sempre "media" (selo "Conferir").
+      - Retorna titulo, descricaoInicial, quantidadeInicial, tipoDiasInicial,
+        resumo, trechoOrigem, trechoDestaque, regra: 'prazo-processual'.
+
+  (4) detectarProvidencia  -> tipo 'tarefa'
+      - SO roda se NENHUM dos 3 acima disparou.
+      - Gatilhos: "intime-se | manifeste-se | manifestem-se | cumpra-se |
+        junte-se | providencie | regularize | especifiquem/digam as partes".
+      - Titulo derivado do verbo (intime-se -> "Providencia da publicacao";
+        manifeste(m)-se -> "Manifestar-se nos autos"; cumpra-se -> "Cumprir
+        determinacao"; junte-se -> "Juntar documento"; etc.).
+      - descricao = "Providencia a partir da publicacao no {n} de {data}. /
+        Trecho: <trecho>".
+      - CONFIANCA: "media".
+      - Retorna titulo, descricao, resumo, trechoOrigem, trechoDestaque,
+        regra: 'providencia-generica'.
+
+  Helpers: acharDataEvento(janela, dataPublicacao), acharHora, acharLocal (2
+  estilos), acharModalidade, acharTipoAudiencia, trechoAoRedor (para o card),
+  nucleoTrecho (para o realce - nucleo sem "..." e sem palavra cortada nas
+  pontas), montarData, isoDe, dataBrDeIso, doisDigitos, achatar, rodapeOrigem.
+
+  trechoDestaque = campo novo em TODA sugestao: o nucleo do trecho, usado pelo
+  checkbox "mostrar na public." (ver 2.4).
+
+  TESTES DO PARSER (scripts nao versionados, ~15 textos nas varias rodadas):
+    - print real do 40966: 08/10/2026 10:00 presencial una + local com CEP.
+    - sem ano ("as 14h30") -> infere o ano, "media".
+    - "audiencia ... realizada" -> [].
+    - "no prazo de 15 (quinze) dias" p/ contestacao -> [prazo] dias=15.
+    - "Designo pericia medica para o dia 03/11/2026 as 14:00" -> [pericia].
+    - "Manifeste-se ... Cumpra-se." (sem data/prazo) -> [tarefa].
+    - "Designo audiencia ... 20/11/2026 09:00 ... rol de testemunhas no prazo de
+      5 dias" -> 2 sugestoes [compromisso] + [prazo].
+    - despacho simples -> [].
+    - "(Av. Tiradentes, 1125 - ...)" -> local capturado.
+    - "trabalhos periciais + audiencia redesignada" -> SO [compromisso]
+      (nao mais [pericia]) apos a correcao.
+
+--------------------------------------------------------------------------
+2.3) frontend/src/pages/Publicacoes/Publicacoes.js
+--------------------------------------------------------------------------
+  - Imports: + useMemo, + useRef (React); + analisarPublicacao;
+    + audienciasAPI, + processosAPI; + ModalNovaAudiencia.
+  - const ROTULO_SUGESTAO = { compromisso:"Agendar audiencia",
+    pericia:"Criar pericia", prazo:"Criar prazo", tarefa:"Criar tarefa" }
+    (com emojis).
+
+  - realcarVarios(texto, [{termo, cor, alvo?}], alvoRef):
+      Realca VARIOS termos numa passada so. TOLERANTE a diferenca de espaco/
+      quebra de linha (colapsa qualquer \s para um unico espaco no "fold", dos
+      DOIS lados) - necessario porque o trechoDestaque vem do texto "achatado" e
+      o texto exibido passa por textoLimpo (mantem \n). Alem de acento e
+      maiusc./minusc. (ja fazia). O primeiro <mark> de um termo com alvo:true
+      recebe alvoRef.
+      realcarTexto virou wrapper simples de realcarVarios (compat).
+
+  - Componente COMPARTILHADO PainelSugestoes({ pub, sugestoes, onUsar,
+    trechosMostrar, onToggleMostrar }):
+      * Recebe as sugestoes por PROP (calculadas 1x na tela); mantem fallback
+        interno.
+      * Sem sugestao -> linha "Nenhuma sugestao automatica nesta publicacao -
+        use os botoes de acao abaixo."
+      * Com sugestao -> um cartao azul por sugestao: resumo + selo de confianca
+        (Alta verde / Conferir amarelo) + trecho de origem em italico +
+        [botao ROTULO_SUGESTAO + " - DD/MM/AAAA HH:MM" quando ha data] +
+        [checkbox "mostrar na public."].
+      * DEDUP: so para 'compromisso' que NAO e 'audiencia' (na pratica nunca
+        ocorre, ja que audiencia virou Audiencia real). Prazo/pericia/tarefa/
+        audiencia abrem direto.
+
+  - CHECKBOX "mostrar na public." (por cartao):
+      * Marcar -> o trechoDestaque daquela sugestao fica DESTACADO (azul
+        #bfdbfe) dentro da caixa de texto da publicacao, e a caixa ROLA ate ele
+        (scrollIntoView). Desmarcar -> some.
+      * SO UM ativo por vez: clicar em outro desliga o anterior
+        (setTrechosSug(s => s.has(t) ? new Set() : new Set([t]))).
+      * Convive com o realce da busca por texto (amarelo #fde047).
+      * Estado trechosSug (Set) + alvoDestaqueRef; zera ao trocar de publicacao.
+      * Nas 2 telas de leitura (aba AASP e aba CNJ).
+
+  - SELO "N sugestao/oes" no CABECALHO do modal de leitura:
+      * analisarPublicacao subiu para o componente da tela
+        (sugestoesPub = useMemo(..., [textoAberto])) e e passado ao
+        PainelSugestoes como prop.
+      * No <h3> do modal, quando sugestoesPub.length > 0 e o usuario pode agir,
+        aparece um pill "N sugestao/oes" CLICAVEL -> painelSugRef.current
+        .scrollIntoView({block:'start'}) rola ate o painel. Assim o usuario JA
+        SABE que ha sugestao sem precisar rolar. Nas 2 telas.
+
+  - ModalAcaoDaPublicacao (a ponte publicacao -> modal de cadastro):
+      destructure { tipo, pub, sugestao };
+      ehSugestaoAudiencia = tipo==='compromisso' && sugestao?.subtipo==='audiencia'.
+      Roteia:
+        * 'prazo'  -> <ModalNovoPrazo buscaInicial={numero} publicacaoId
+                      descricaoInicial / quantidadeInicial / tipoDiasInicial >
+        * 'tarefa' -> <ModalTarefa preSelecao={processo}
+                      tarefa={{ titulo, descricao }} (SEM id = nova) publicacaoId >
+        * 'pericia'-> <ModalPericia processoInicial dataInicial horaInicial >
+                      (so abre de fato se pub.processo_id; senao faixa
+                      "vincule o processo")
+        * SUGESTAO DE AUDIENCIA (ehSugestaoAudiencia):
+            - SEM pub.processo_id -> faixa "Cadastre ou vincule o processo antes
+              de agendar a audiencia" (SO informa; padrao da pericia).
+            - COM pub.processo_id -> BUSCA O PROCESSO COMPLETO no banco (ver
+              2.6) e abre <ModalNovaAudiencia processoInicial={objeto completo}
+              valoresIniciais={ data, hora, modalidade (presencial/virtual),
+              observacoes (= corpo da sugestao), vara_id } >.
+        * 'compromisso' SEM sugestao (botao MANUAL "Criar compromisso") ->
+          <ModalCompromisso ...> normal (o pre-preenchimento da sugestao de
+          audiencia foi REMOVIDO daqui).
+
+--------------------------------------------------------------------------
+2.4) PROPS OPCIONAIS DE PRE-PREENCHIMENTO NOS MODAIS (aditivas)
+--------------------------------------------------------------------------
+  frontend/src/pages/Prazos/Prazos.js - ModalNovoPrazo
+    + props: descricaoInicial, quantidadeInicial, tipoDiasInicial
+    - semeiam o form (descricao / quantidade / tipo_dias); "modo" comeca em
+      'dias' quando veio quantidadeInicial -> o modal calcula a data final a
+      partir de hoje (o usuario ajusta a data de inicio).
+    - Sem as props: comportamento 100% identico.
+
+  frontend/src/pages/Pericias/Pericias.js - ModalPericia
+    + props: dataInicial, horaInicial (semeadas no ramo "processoInicial" do
+      form: campos data / hora).
+    - Sem as props: comportamento identico.
+    - (Tambem levou o BLOCO D - ver secao 4.)
+
+  frontend/src/pages/Audiencias/Audiencias.js - ModalNovaAudiencia
+    + form inicial le valoresIniciais?.data, valoresIniciais?.hora e
+      valoresIniciais?.observacoes (antes so modalidade/tipo/responsavel/vara).
+    - "Pasta: undefined" CORRIGIDO: a linha "Pasta: {numPasta}" so aparece
+      quando procSelecionado.numPasta existe (aberta de uma publicacao com o
+      processo completo, ela mostra; sem numPasta, some).
+    - CAMPO "Obs." (textarea) adicionado antes das Testemunhas - ver BLOCO E
+      (secao 5).
+
+  frontend/src/pages/Tarefas/Tarefas.js
+    - NAO foi tocado - reusa o objeto "tarefa" SEM id.
+  frontend/src/pages/Agenda/Agenda.js - ModalCompromisso
+    - NAO foi tocado.
+
+--------------------------------------------------------------------------
+2.5) DECISOES DO USUARIO NO BLOCO B (na ordem)
+--------------------------------------------------------------------------
+  1. "siga o plano original" -> audiencia abria o "Novo Compromisso" (Fase 1).
+  2. "termine todo o planejado" -> feitas Fases 2, 3, 4 (prazo, pericia,
+     providencia). Parser de LOCAL ampliado (enderecos e parenteses) - a
+     secao 7 do plano ja previa o Local, nao e escopo novo.
+  3. Fases 5 (tela de regras) e 6 (IA) NAO - condicionais no plano; o usuario
+     decidiu "nenhuma, deixa como esta" (ver secao 8).
+  4. "porque nao temos o agendar audiencia?" -> a sugestao de audiencia passou
+     a abrir a AUDIENCIA DE VERDADE (ModalNovaAudiencia). Sem processo
+     cadastrado -> so informa.
+  5. "cade a pasta no agendar audiencia?!" -> correcao: buscar o processo
+     completo (secao 2.6).
+  6. "coloca um campo Obs." -> BLOCO E (secao 5).
+
+--------------------------------------------------------------------------
+2.6) CORRECAO "CADE A PASTA?!" (audiencia real a partir da publicacao)
+--------------------------------------------------------------------------
+  PROBLEMA: o processoInicial passado ao ModalNovaAudiencia era montado FAKE a
+  partir do `pub` (so id / numProc / NomeTituloProc). Faltava numPasta e vara_id
+  -> o modal mostrava "Pasta: undefined" e nao pre-preenchia a vara.
+  (Regra reforcada pelo usuario: TODO PROCESSO TEM PASTA.)
+
+  CORRECAO em Publicacoes.js / ModalAcaoDaPublicacao:
+    - Estados novos: processoAud, carregandoProcAud.
+    - carregarProcessoAudiencia(): chama processosAPI.buscarPorNumero
+      (GET /processos/buscar) com pub.processo_numero; a rota retorna
+      { id, numProc, NomeTituloProc, vara_id, numPasta } - EXATAMENTE o shape
+      que o modal usa quando aberto pela pasta. Casa pelo numero (so digitos);
+      se lista tem 1 item, usa ele; se nao achar -> faixa "abra a audiencia
+      pela pasta do processo".
+    - O <ModalNovaAudiencia> passa a receber processoInicial={processoAud}
+      (objeto COMPLETO) + valoresIniciais.vara_id = processoAud.vara_id.
+    - Resultado: "Pasta: 0092" no topo do modal + vara do processo ja
+      selecionada em "Local da audiencia".
+
+
+================================================================================
+3) BLOCO C - Superusuario vazava em 2 dropdowns do front
+================================================================================
+
+REGRA (user_permissions.md): "Superusuario nao aparece na listagem de usuarios
+para ninguem - em nenhuma tela."
+
+Estava FURADA em 2 endpoints (SELECT id, nome FROM usuarios WHERE ativo = 1,
+SEM "AND nivel > 0"):
+  1. agendaCompromissoController.listarUsuariosAtivos  (GET /agenda/usuarios)
+     -> "Delegar para" do Novo Compromisso (Agenda e via Publicacoes) + filtro
+        "ver agenda de" do admin. (E o que o usuario viu no print.)
+  2. prazosController.listarUsuariosFiltro  (GET /prazos/usuarios)
+     -> filtro "ver prazos de" do admin / delegar no Novo Prazo.
+
+CORRECAO
+  "... WHERE ativo = 1 AND nivel > 0 ..." nos dois (comentario
+  "// nivel > 0: nunca lista o superusuario"). Mesmo padrao dos 4 endpoints que
+  JA filtravam certo (processosController auxiliares; publicacoesController
+  atribuir/direcionar/email; configuracaoController.listarUsuarios).
+
+DADOS
+  Superusuario local: id 13, login "superadmin", tipo "administrador",
+  nivel = 0, ativo 1.
+  Conferido no banco local: 0 registros com delegado_para / usuario_id /
+  atribuida_para = 13 em agenda_compromisso, prazos_processo e tarefas ->
+  zero impacto em dados.
+
+REGRA PERMANENTE adicionada em user_permissions.md (nas 2 pastas de memoria):
+  todo SELECT de lista de usuarios destinado ao FRONT precisa de "AND nivel > 0".
+
+
+================================================================================
+4) BLOCO D - Rotulo "Escritorio" no dropdown da Pericia
+================================================================================
+
+INVESTIGACAO dos 5 modais (audiencia, prazo, pericia, tarefa, compromisso):
+  - Prazo, Tarefa, Audiencia: JA tinham opcao "Escritorio" como padrao vazio.
+  - Pericia: ja era opcional, mas o rotulo era "- Nao definido -".
+  - Compromisso: unico fora do padrao (default = usuario logado) - E DE
+    PROPOSITO (delegado_para vazio = "e do criador"; ha checkbox separado
+    "Compartilhar com o escritorio"). Decisao do usuario: "compromisso deixa
+    como esta".
+
+MUDANCA (SO TEXTO)
+  frontend/src/pages/Pericias/Pericias.js - o <option value=""> do select
+  "Responsavel pela conducao" passou de "- Nao definido -" para "Escritorio".
+  O outro <option value="">- Nao definido -</option> (campo "Assistente
+  tecnico", logo abaixo) NAO foi mexido. O backend ja gravava null quando vazio.
+
+
+================================================================================
+5) BLOCO E - Campo "Obs." na Audiencia  (UNICO SQL DO LOTE)
+================================================================================
+
+MOTIVO: o usuario quer um campo de anotacao livre na audiencia, que ao ser
+criada a partir de uma publicacao ja venha com o corpo da sugestao.
+
+CONFERIDO: a tabela `audiencia` NAO tinha campo de observacao (so motivo_status,
+que e para cancelamento/remarcacao). Entao e COLUNA NOVA.
+
+SQL: sql_audiencia_observacoes_para_heidi.sql (NOVO, raiz do projeto)
+  ALTER TABLE `audiencia` ADD COLUMN `observacoes` TEXT NULL AFTER `local`;
+  - Rodar 1x/instancia: local -> testar -> AWS Antonio -> AWS Erick.
+  - Rodar ANTES de subir o codigo (sem a coluna, INSERT/UPDATE de audiencia
+    quebra).
+  - Rollback: ALTER TABLE `audiencia` DROP COLUMN `observacoes`;
+  - Coluna nullable -> audiencias antigas ficam NULL, sem impacto.
+
+estrutura_banco.sql: adicionado `observacoes` text depois de `local` na
+  CREATE TABLE `audiencia`. (Fora do Git, como sempre.)
+
+BACKEND - backend/src/controllers/audienciasController.js
+  - criar: destructure de `observacoes`; adicionado nas colunas e valores do
+    INSERT (grava null se vazio/so espaco).
+  - atualizar: destructure de `observacoes`; adicionado ao UPDATE SET;
+    'observacoes' adicionado a `camposSimples` (auditoria campo-a-campo).
+  - buscar: nenhuma mudanca (usa SELECT a.* -> ja devolve).
+  - listar: usa colunas explicitas -> nao afetado.
+
+FRONTEND - frontend/src/pages/Audiencias/Audiencias.js
+  - ModalNovaAudiencia: form inicial + observacoes: valoresIniciais?.observacoes
+    || ''; textarea "Obs." (rows=3) antes das Testemunhas. O salvar ja faz
+    {...form} -> observacoes vai junto.
+  - ModalEditarAudiencia: carrega observacoes: d.observacoes || ''; textarea
+    "Obs." (disabled quando leitura) antes das Testemunhas. O salvar ja faz
+    {...form}.
+
+FRONTEND - frontend/src/pages/Publicacoes/Publicacoes.js
+  - Ao rotear a sugestao de audiencia, valoresIniciais.observacoes =
+    sugestao.descricao (modalidade + Local + "Origem: publicacao no ...").
+
+Fluxo "Registrar ata -> designar nova audiencia" NAO regride
+  (valoresIniciais.observacoes undefined -> campo vazio).
+
+
+================================================================================
+5-G) BLOCO G - FASE 6: IA COMO APOIO (Opcao A, BYOK por escritorio)
+================================================================================
+
+CONTEXTO: o sistema e PRODUTO vendido a varios escritorios. 1 instancia = 1
+escritorio. Cada escritorio escolhe Claude OU GPT OU nenhum (mutuamente
+exclusivo) e usa a PROPRIA chave/credito (BYOK - pre-pago, cobrado pelo
+provedor; o usuario so configura em Integracoes).
+
+DECISAO: Opcao A (parser continua no front; IA = endpoint de fallback), NAO a B
+(portar o parser p/ o back) - porque a Sugestao ainda nem foi testada e a B e
+refactor em cima de codigo nao provado. A B fica pra quando precisar de cron /
+badge na listagem.
+
+ZERO SQL: a tabela configuracoes_integracoes (modulo, ativo, configuracoes JSON)
+ja AUTO-CRIA a linha de integracao nova. Nova linha modulo='ia',
+configuracoes = { provedor:'nenhum'|'claude'|'openai'|'mock', modelo:'', chave:'' }.
+O provedor e UM <select> -> impossivel marcar os dois.
+
+BACKEND
+  backend/src/services/iaService.js (NOVO)
+    - configIa() (cache 60s) le a linha 'ia'.
+    - iaHabilitada(cfg) = ativo && provedor!=nenhum && (mock OU tem chave).
+    - sugerirComIa(texto, ctx): switch(provedor):
+        claude -> POST api.anthropic.com/v1/messages (x-api-key + anthropic-version;
+                  modelo default claude-sonnet-5)
+        openai -> POST api.openai.com/v1/chat/completions (Bearer; response_format
+                  json_object; default gpt-4o-mini)
+        mock   -> devolve sugestao fixa "[SIMULACAO IA]" (teste sem custo)
+      HTTP via modulo 'https' NATIVO (postJson, timeout 15s) - NENHUMA dependencia
+      nova. 1 retry. Prompt pede JSON {sugestoes:[...]} no MESMO formato do parser,
+      proibe inventar data, manda devolver [] se nada.
+    - normalizar(): so tipo valido (compromisso/pericia/prazo/tarefa), data ->
+      YYYY-MM-DD ou null, corta strings, exige resumo, marca origem:'ia',
+      regra:'ia', teto 6.
+    - sugerirComIa NUNCA lanca -> qualquer falha = { sugestoes:[] }.
+  publicacoesController.js
+    - + require iaService.
+    - iaStatus  -> GET /publicacoes/ia-status -> { habilitada, provedor } (sem a chave).
+    - sugestoesIa -> POST /publicacoes/:id/sugestoes-ia -> carrega texto+metadados,
+      chama sugerirComIa. SEMPRE 200; falha -> { sugestoes:[] }.
+  routes/index.js
+    - GET /publicacoes/ia-status (ANTES de /publicacoes/:id)
+    - POST /publicacoes/:id/sugestoes-ia
+    (ambos verificarPermissao('publicacoes','visualizar'))
+  configuracaoController.salvarIntegracao
+    - bloco novo p/ modulo==='ia': provedor so aceita os 4 valores; se
+      ativo && provedor nao-em-{nenhum,mock} && sem chave -> erro(); trim.
+    - ao salvar 'ia' -> iaService.limparCacheIa().
+
+FRONTEND
+  services/api.js
+    - + publicacoesAPI.iaStatus() e + publicacoesAPI.sugestoesIa(id).
+  Configuracoes.js -> aba Integracoes -> card NOVO "Sugestoes por IA":
+    - toggle "Integracao ativa" + <select> Nenhuma / Claude (Anthropic) /
+      GPT (OpenAI) / Simulacao (teste, sem custo).
+    - se ativo e provedor != nenhum/mock: campo Chave de API + Modelo (opcional)
+      + aviso "o texto da publicacao e enviado ao provedor; a chave e da conta do
+      escritorio, pre-pago".
+    - salva via salvarIntegracao('ia', ...).
+  Publicacoes.js
+    - PublicacoesAASP/PublicacoesCNJ: estado iaHabilitada + publicacoesAPI.iaStatus()
+      no mount; passado a <PainelSugestoes iaHabilitada=...>.
+    - PainelSugestoes: renomeou sugestoes->regras; novo sugestoesIa/consultandoIa;
+      useEffect chama sugestoesIa(pub.id) SO se iaHabilitada && (regras vazias OU
+      nenhuma "alta"); lista final = regras + IA (dedup por tipo+data); cada
+      cartao ganha selo "regra" (cinza) ou "IA" (roxo); linha "Consultando IA...".
+      Falha da IA -> fica so as regras, sem erro na tela.
+
+EFEITOS COLATERAIS: BANCO nenhum (linha auto-criada). BACKEND: 1 servico novo +
+2 rotas + validacao no salvarIntegracao (sem dependencia; https nativo).
+FRONTEND: card em Integracoes + fallback no PainelSugestoes + 2 metodos no api.js.
+PRIVACIDADE: so o escritorio que ligar manda texto pro provedor dele, com a chave
+dele. CUSTO: so quem liga, pago ao provedor, e so quando as regras nao resolvem.
+
+MODELO DE COBRANCA (decidido nesta sessao): 1 provedor por vez, 1 campo de chave.
+O usuario decidiu NAO guardar as 2 chaves ao mesmo tempo -> trocar de provedor =
+mudar o <select> + colar a chave do novo + salvar. Conta de API (OpenAI e
+Anthropic) e PRE-PAGO por uso p/ conta nova: poe credito, vai descontando, e
+quando zera a API para (o sistema cai nas regras, sem fatura surpresa). Cada
+escritorio poe o proprio credito; o fornecedor (usuario) nunca e cobrado.
+
+TESTADO (02/09, modo SIMULACAO): apos marcar "Integracao ativa" + provedor
+Simulacao + Salvar + F5 na tela de Publicacoes (backend reiniciado), abrindo a
+publicacao do "prazo de 15 dias" apareceu o cartao de regra (selo cinza "regra")
+E o cartao "[SIMULACAO] a IA responderia aqui" (selo roxo "IA"). Fluxo 100% OK.
+FALTA: 1 teste real com chave OpenAI ou Anthropic (centavos).
+
+PENDENCIAS: o selo "N sugestoes" no cabecalho conta so as regras (nao soma as da
+IA); "Testar conexao" na tela nao foi feito (era opcional).
+
+COMO TESTAR COM CHAVE REAL (GPT): platform.openai.com -> Billing (por credito,
+min US$ 5) -> API keys -> criar chave sk-... . No sistema: Configuracoes ->
+Integracoes -> Sugestoes por IA -> ativa + provedor "GPT (OpenAI)" + colar a
+chave + (Modelo em branco = gpt-4o-mini) + Salvar + F5 em Publicacoes. Erro fica
+so no console do backend ([iaService] ...); o painel nunca mostra erro (cai nas
+regras). Claude e igual: console.anthropic.com, chave sk-ant-..., provedor
+"Claude (Anthropic)", modelo default claude-sonnet-5.
+
+CONTEXTO (concorrencia): a eLaw (eLaw ADV) NAO divulga qual modelo usa - provavel
+Azure OpenAI (GPT-4 class). O BLOCO G ja da ao sistema a mesma capacidade
+(Claude OU GPT via API, BYOK por escritorio). O que a eLaw ADV tem e o sistema
+NAO tem: cadastro automatico de processo (extracao do no CNJ), portal do cliente,
+pesquisa de jurisprudencia integrada, captura de mais fontes (PJe/Projudi/eProc),
+gerador de pecas com IA. Fase 5 (tela de regras editaveis no banco) segue NAO
+recomendada agora - so depois de 2-3 meses de uso real das Fases 1-4.
+
+
+================================================================================
+6) CORRECAO DE MEMORIA (nao e codigo)
+================================================================================
+
+A memoria de 01/09 dizia "nada no Git". Conferido no Git nesta sessao: o lote
+de 01/09 FOI COMMITADO - commit 8c809b7 (Claudenor, 2026-09-01 12:17), que e o
+HEAD atual, com os 15 arquivos + sql_atribuir_publicacoes_para_heidi.sql +
+estrutura_banco.sql. E - confirmado pelo usuario - JA foi sincronizado (codigo
++ banco) nas 3 instancias. LOCAL = AWS. Memoria de 01/09 e 02/09 corrigidas.
+
+
+================================================================================
+7) ARQUIVOS ALTERADOS - ESTADO FINAL
+================================================================================
+
+FRONTEND
+  NOVO  frontend/src/utils/sugestoesPublicacao.js
+        Parser puro, 4 detectores (audiencia/pericia/prazo/providencia).
+  M     frontend/src/pages/Publicacoes/Publicacoes.js
+        + useMemo/useRef + audienciasAPI/processosAPI + ModalNovaAudiencia;
+        ROTULO_SUGESTAO; realcarVarios (+ realcarTexto vira wrapper);
+        PainelSugestoes (cartoes, dedup so compromisso-nao-audiencia, checkbox
+        "mostrar na public." exclusivo); sugestoesPub subido ao componente;
+        selo "N sugestoes" clicavel no cabecalho (scroll ate o painel);
+        trechosSug / alvoDestaqueRef / painelSugRef;
+        ModalAcaoDaPublicacao roteia por tipo (prazo / tarefa / pericia /
+        AUDIENCIA REAL com busca do processo completo / compromisso manual).
+  M     frontend/src/pages/Prazos/Prazos.js
+        ModalNovoPrazo: +props descricaoInicial/quantidadeInicial/tipoDiasInicial
+        + "modo" inicial 'dias'.
+  M     frontend/src/pages/Pericias/Pericias.js
+        ModalPericia: +props dataInicial/horaInicial;
+        + rotulo "Escritorio" no <option> de "Responsavel pela conducao".
+  M     frontend/src/pages/Audiencias/Audiencias.js
+        ModalNovaAudiencia: form le valoresIniciais.data/hora/observacoes;
+        "Pasta: undefined" corrigida; campo "Obs." (textarea) antes das
+        Testemunhas.
+        ModalEditarAudiencia: carrega d.observacoes; campo "Obs." (trava em
+        leitura).
+  M     frontend/src/pages/Processos/Processos.js
+        useAuth + gate podeCadastrarProcesso no botao "+ Novo Processo".
+  M     frontend/src/pages/Processos/PastaDetalhe.js
+        gate temPermissao('processos','cadastrar') no botao "+ Novo Processo
+        (mesma pasta)".
+  M     frontend/src/pages/Configuracoes/Configuracoes.js
+        aba Integracoes: card novo "Sugestoes por IA" (BLOCO G).
+  M     frontend/src/services/api.js
+        + publicacoesAPI.iaStatus() e + publicacoesAPI.sugestoesIa(id) (BLOCO G).
+
+BACKEND
+  NOVO  backend/src/services/iaService.js  (BLOCO G: config + dispatch
+        claude/openai/mock via https nativo + normalizacao; nunca lanca)
+  M     backend/src/controllers/agendaCompromissoController.js
+        listarUsuariosAtivos: + AND nivel > 0
+  M     backend/src/controllers/prazosController.js
+        listarUsuariosFiltro: + AND nivel > 0
+  M     backend/src/controllers/audienciasController.js
+        criar / atualizar gravam `observacoes` (+ camposSimples da auditoria).
+  M     backend/src/controllers/publicacoesController.js
+        + require iaService; iaStatus + sugestoesIa (BLOCO G).
+  M     backend/src/controllers/configuracaoController.js
+        salvarIntegracao: validacao modulo==='ia' + limparCacheIa() (BLOCO G).
+  M     backend/src/routes/index.js
+        GET /publicacoes/ia-status + POST /publicacoes/:id/sugestoes-ia (BLOCO G).
+
+SQL / ESTRUTURA
+  NOVO  sql_audiencia_observacoes_para_heidi.sql  (BLOCO E; UNICO SQL do lote)
+  M     estrutura_banco.sql  (+ `observacoes` text na tabela `audiencia`)
+        BLOCO G (IA): ZERO SQL (linha modulo='ia' em configuracoes_integracoes
+        e auto-criada pelo salvarIntegracao).
+
+DOCUMENTOS DE APOIO (raiz, fora do Git)
+  NOVO  NECESSIDADE-Sugestao-Acoes-nas-Publicacoes-02-09-2026.txt
+  NOVO  SUGESTOES-PUBLICACOES-CONSOLIDADO-02-09-2026.txt
+        (substitui o SUGESTOES-PUBLICACOES-02-09-2026.txt, que era do Codex)
+  NOVO  PLANO-FASE-1-Sugestao-Audiencia-Publicacao-02-09-2026.txt
+  NOVO  RESUMO-SESSAO-02-09-2026-DEV.txt  (este arquivo)
+
+MEMORIA (nas 2 pastas, byte-identicas)
+  M     MEMORY.md              (linha de handoff 02/09 + correcao na de 01/09)
+  M     sessao_02092026.md     (blocos A-F, arquivos, roteiro, o que ficou fora)
+  M     user_permissions.md    (bloco 02/09: os 2 endpoints do superusuario +
+                                regra permanente "AND nivel > 0" no front)
+
+SEM ALTERACAO (verificado): ModalCompromisso (Agenda.js), ModalTarefa
+(Tarefas.js), backend de Publicacoes / Processos.
+
+
+================================================================================
+8) O QUE NAO FOI FEITO DA "SUGESTAO" (e por que)
+================================================================================
+
+FEITO: Fases 1, 2, 3, 4 + AUDIENCIA REAL + checkbox "mostrar na public." +
+selo no cabecalho + campo "Obs." na audiencia + FASE 6 (IA como apoio, Opcao A,
+BYOK por escritorio - ver BLOCO G).
+
+NAO FEITO:
+
+  FASE 5 - TELA DE REGRAS CONFIGURAVEIS NO BANCO
+    Exige: tabela nova `regras_sugestao` (arquivo .sql, 3 instancias) + tela
+    CRUD + construtor guiado (sem regex cru) + caixa de teste + rewire do
+    parser para ler regras do banco. O plano poe como CONDICIONAL ("so se o
+    volume de ajustes justificar"). Recomendacao do Claude: NAO fazer agora -
+    usar Fases 1-4 por 2-3 meses, anotar o que o sistema erra/perde, e so
+    entao decidir.
+
+  Contexto honesto registrado nesta sessao: o parser de regras e o PISO, nao o
+  estado da arte. Mais robusto hoje: motores de regras maduros, taxonomia CNJ
+  (TPU), classificadores de ML (BERTimbau etc.), LLMs para texto livre, e APIs
+  de legaltech prontas (Digesto, Escavador, Jusbrasil, Turivius, Judit.io...).
+  A eLaw (concorrente) NAO divulga qual modelo usa - provavel Azure OpenAI
+  (GPT-4 class), padrao enterprise-safe pra dado juridico. O BLOCO G desta
+  sessao ja da ao seu sistema a mesma capacidade (Claude/GPT via API, BYOK).
+
+
+================================================================================
+9) ROTEIRO DE TESTE (usuario, no LOCAL)  - "build nao e teste"
+================================================================================
+
+  0. Rodar o SQL sql_audiencia_observacoes_para_heidi.sql no banco LOCAL.
+
+  1. BOTAO NOVO PROCESSO: logar como Priscilla -> o botao "+ Novo Processo"
+     some na lista de Processos e dentro da pasta. Logar como admin -> aparece.
+
+  2. SUGESTAO / AUDIENCIA (COM processo cadastrado): abrir a publicacao ->
+     no cabecalho aparece o selo "1 sugestao" (clicavel -> rola ate o painel).
+     Cartao "Audiencia identificada para DD/MM as HH:MM" + trecho + botao
+     "Agendar audiencia - ...". Clicar -> abre "Nova Audiencia" com:
+       - "Pasta: 00XX" no topo (NAO "undefined");
+       - Processo travado e correto;
+       - Data / Hora / Modalidade preenchidas;
+       - "Local da audiencia" ja com a VARA do processo;
+       - "Obs." preenchido com o corpo da sugestao.
+     Escolher Tipo de audiencia, Salvar -> aparece em Audiencias com a Obs.
+
+  3. SUGESTAO / AUDIENCIA (SEM processo cadastrado): clicar -> faixa "Cadastre
+     ou vincule o processo antes de agendar a audiencia" (nao abre nada).
+
+  4. SUGESTAO / PRAZO: publicacao com "no prazo de N dias" -> cartao "Criar
+     prazo" (selo "Conferir"). Clicar -> Novo Prazo com a quantidade de dias e
+     a descricao preenchidas; a data de inicio comeca hoje -> AJUSTAR antes de
+     salvar.
+
+  5. SUGESTAO / PERICIA: publicacao com "Designo pericia ... para o dia DD/MM
+     as HH" e processo cadastrado -> cartao "Criar pericia" -> Nova Pericia com
+     data/hora. Sem processo -> a tela avisa para vincular o processo.
+     Conferir tambem: a publicacao "trabalhos periciais + audiencia redesignada"
+     do print NAO deve mais sugerir pericia (so audiencia).
+
+  6. SUGESTAO / PROVIDENCIA: publicacao so com "manifeste-se"/"cumpra-se" (sem
+     data e sem "prazo de N dias") -> cartao "Criar tarefa" -> Nova Tarefa com
+     titulo e descricao.
+
+  7. SEM NADA: despacho simples -> "Nenhuma sugestao automatica nesta publicacao".
+
+  7b. IA (BLOCO G) - modo SIMULACAO JA TESTADO OK em 02/09:
+      Configuracoes -> Integracoes -> "Sugestoes por IA" -> Integracao ativa +
+      provedor SIMULACAO + Salvar + F5 na tela de Publicacoes (backend
+      reiniciado). Abrir publicacao com sugestao "Conferir" (nao "alta") ->
+      cartao "[SIMULACAO] a IA responderia aqui" com selo roxo "IA" ao lado do
+      cartao de regra (selo cinza "regra"). Provedor "Nenhuma" + Salvar -> para
+      de consultar IA.
+      FALTA testar com chave REAL: provedor "GPT (OpenAI)" ou "Claude (Anthropic)"
+      + chave sk-... (conta pre-paga do escritorio, credito minimo ~US$ 5,
+      consumo em centavos). Se a chamada real falhar, o painel fica so com as
+      regras (sem erro na tela); o motivo aparece no console do backend
+      ([iaService] ...).
+
+  8. CHECKBOX "mostrar na public.": marcar num cartao -> o trecho de origem fica
+     azul no texto da publicacao e a caixa rola ate ele. Marcar outro cartao ->
+     o primeiro DESLIGA e realca o novo (so um por vez). Desmarcar -> some.
+
+  9. SUPERUSUARIO: "Delegar para" no Novo Compromisso e filtro "ver prazos de"
+     do admin -> "Superusuario" NAO aparece.
+
+ 10. PERICIA (rotulo): abrir a Nova Pericia -> "Responsavel pela conducao"
+     mostra "Escritorio" como 1a opcao.
+
+ 11. EDITAR AUDIENCIA: abrir uma audiencia existente -> o campo "Obs." aparece
+     (vazio nas antigas); editar e salvar -> persiste; abrir em modo leitura ->
+     "Obs." travado.
+
+
+================================================================================
+10) DEPOIS DE TESTADO (quando o usuario quiser) - LOTE 02/09
+================================================================================
+
+  1) Rodar sql_audiencia_observacoes_para_heidi.sql nas 2 AWS (Antonio e Erick).
+     (Ja rodar no LOCAL para testar o campo "Obs.".)
+  2) Build do front no PC.
+  3) Git (so o usuario).
+  4) Deploy nas 2 AWS com a pasta build/ pronta (NUNCA npm run build na
+     Lightsail). Reiniciar o Node.
+  O lote de 01/09 (8c809b7) ja esta live nas 3 instancias - nao precisa fazer
+  nada com ele.
+
+================================================================================
+FIM - RESUMO 01/09 e 02/09/2026
+================================================================================

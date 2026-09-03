@@ -1,0 +1,275 @@
+PLANO DE CORREÇÃO — AUDITORIA DE 02/09/2026 (lote "Sugestão nas Publicações" + IA)
+Criado em 03/09/2026. Baseado em "Resultado da auditoria gtp 0309-1050.txt" + verificação linha a
+linha feita nesta sessão (todos os 16 pontos foram lidos no código-fonte, não só aceitos de olho).
+
+============================= STATUS (atualizado 03/09/2026) =============================
+FASES 1 a 4: CODADAS E TESTADAS (build do frontend limpo + `node --check` em TODO o backend,
+em cada fase, cumulativo). Itens 1,2,3,4,5,7,8,9,12,13,14,15 — TODOS os 12 sem SQL — feitos.
++2 achados extras corrigidos (fora da lista original, mesma causa raiz de itens já mapeados):
+  - remarcar audiência também perdia o campo `local` (não só `observacoes`, item 9).
+  - mesmo bug do temPermissao com 3 argumentos (item 14) também existia em Pericias.js
+    ("Tipos de perícia"), não só em Audiencias.js.
+
+FASE 5 (itens 6, 10, 11, 16): CÓDIGO PRONTO E TESTADO (blindado contra a coluna/constraint
+ainda não existir, onde deu pra blindar). SQL ESCRITO, NÃO EXECUTADO — precisa você rodar no
+HeidiSQL, nesta ordem, local primeiro:
+  1) sql_diagnostico_auditoria_03092026.sql        (só leitura — confere antes de tudo)
+  2) sql_audiencia_publicacao_id_para_heidi.sql    (item 6 — pode rodar a qualquer momento)
+  3) sql_audiencia_vara_fk_para_heidi.sql          (item 10 — só se o diagnóstico vier limpo)
+  4) sql_configuracoes_integracoes_unique_modulo_para_heidi.sql (item 11 — idem)
+Prática do item 16 já aplicada nestes 3 scripts: um ALTER por instrução, diagnóstico antes de
+cada FK/UNIQUE, sem fingir transação em volta de DDL.
+
+NADA FOI EXECUTADO NO BANCO NEM NO GIT POR MIM. Falta: você rodar os 4 SQLs (local → 2 AWS) e
+testar manualmente cada fase antes de decidir subir pro Git/produção.
+============================================================================================
+
+REGRA GERAL DESTE PLANO: nada é executado sem "pode codar". Cada fase é pequena o bastante para
+testar sozinha antes de ir pra próxima. Nenhuma fase mexe em arquivo/tela fora do escopo do lote de
+02/09, exceto onde marcado "TOCA CÓDIGO ANTIGO" — esses pontos exigem atenção redobrada.
+
+ORDEM ESCOLHIDA: da correção mais isolada (função pura, zero dependência) para a mais arriscada
+(SQL em produção). Isso é proposital — se algo sair errado, sai errado cedo e barato de reverter.
+
+────────────────────────────────────────────────────────────────────────────
+FASE 1 — Funções puras (sugestoesPublicacao.js) — RISCO BAIXO
+Nenhuma mexe em banco, rota ou permissão. São funções sem estado, fáceis de testar isoladas.
+────────────────────────────────────────────────────────────────────────────
+
+[1] Data errada na audiência/perícia designada (crítico #1)
+  Onde: frontend/src/utils/sugestoesPublicacao.js — acharDataEvento() e a janela em
+        detectarAudiencia()/detectarPericia().
+  Problema: a janela de busca começa 40 caracteres ANTES da âncora ("para o dia", "designo
+        perícia" etc.), então se a data de publicação aparecer nesses 40 caracteres, o regex
+        pega ela em vez da data do evento (fica DEPOIS da âncora).
+  Correção: procurar a data SÓ a partir da âncora pra frente (não incluir os 40 caracteres
+        anteriores na busca de data — esses 40 continuam servindo só pra hora/local/modalidade
+        que às vezes vêm antes). Ou seja: cortar a janela de data em janela.slice(idxAncoraRelativo)
+        antes de rodar acharDataEvento.
+  Teste obrigatório antes de aprovar: rodar os textos que já tínhamos de exemplo (audiência
+        simples, sem ano, com "redesignada", com data de publicação colada antes da âncora) e
+        conferir que NENHUM dos casos que já funcionavam mudou de resultado.
+  Depende de SQL: não.
+
+[2] Prazo em dias corridos vira "dias úteis" sempre (crítico #2)
+  Onde: frontend/src/utils/sugestoesPublicacao.js:262 — detectarPrazo().
+  Problema: `tipoDiasInicial: 'uteis'` é fixo; a variável `uteis` (calculada certinha a partir
+        do texto) é ignorada.
+  Correção: `tipoDiasInicial: uteis ? 'uteis' : 'corridos'` (confirmar com Prazos.js qual é o
+        valor exato esperado para "corridos" — ver item abaixo).
+  Teste: publicação com "prazo de 15 dias" (sem "úteis") deve abrir o modal em modo dias
+        corridos; "prazo de 15 dias úteis" deve abrir em dias úteis.
+  Depende de SQL: não.
+
+[15] Data de hoje calculada em UTC pode virar o dia seguinte (médio #15)
+  Onde: frontend/src/pages/Prazos/Prazos.js:491, 552, 848 — `new Date().toISOString().split('T')[0]`.
+  Problema: toISOString() sempre em UTC; depois das 21h em São Paulo (UTC-3) o resultado já é o
+        dia seguinte.
+  Correção: usar um helper de data LOCAL (o projeto já tem funções centrais em formatters.js —
+        vou conferir se já existe uma "hoje local" antes de criar outra; a regra é reusar).
+  TOCA CÓDIGO ANTIGO: as 3 linhas em Prazos.js não são do lote de 02/09, são de antes. Mexer
+        com cuidado — são usadas nos dois modais de prazo (novo e editar), então testar os dois.
+  Teste: mudar o relógio do PC pra depois das 21h (ou testar perto da meia-noite de verdade) e
+        confirmar que a data default do prazo continua sendo o dia certo.
+  Depende de SQL: não.
+
+────────────────────────────────────────────────────────────────────────────
+FASE 2 — Segurança de acesso (backend) — RISCO BAIXO-MÉDIO
+Só backend, sem mexer em tela. Rotas ficam mais restritas, não mais permissivas — só pode
+QUEBRAR algo se algum fluxo hoje dependesse do vazamento (não deveria depender).
+────────────────────────────────────────────────────────────────────────────
+
+[3] Vazamento de visibilidade das publicações (crítico #3 — o mais grave do lote)
+  Onde: backend/src/routes/index.js:326-338 e publicacoesController.js (obter, historico,
+        sugestoesIa, tratar, enviarEmailPublicacao).
+  Problema: essas rotas só checam a permissão genérica `publicacoes/visualizar`, sem chamar
+        `podeAgirNaPublicacao` (que já existe e já checa atribuição — publicacoesController.js:65).
+  Correção: dentro de cada uma dessas funções de controller, logo no início, chamar
+        `podeAgirNaPublicacao(req, id)` e devolver 403 se for falso. NÃO mexer no middleware de
+        rota (verificarPermissao) — ele continua garantindo que a pessoa tem a permissão básica
+        do módulo; o controller garante a atribuição individual por cima.
+  TOCA CÓDIGO ANTIGO: `historico` e `enviarEmailPublicacao` são de antes do lote de 02/09.
+        Testar com um usuário "buscador" (deve continuar vendo tudo) e um "não-buscador" (só o
+        que está atribuído a ele).
+  Teste: usuário nível 2 sem permissão de cadastro tentando abrir pelo ID uma publicação que
+        NÃO é dele → deve dar 403, não 200 com o texto.
+  Depende de SQL: não.
+
+[12] Chave de API da IA exposta em texto puro (médio #12)
+  Onde: backend/src/controllers/configuracaoController.js (GET de configurações de integração)
+        + tela de Configurações → Integrações no frontend.
+  Correção: no GET, mascarar a chave antes de devolver (ex.: mostrar só os 4 últimos caracteres,
+        tipo "••••••ab12"); salvar só acontece se o campo for alterado (se vier mascarado de
+        volta, o backend ignora e mantém a chave already salva). Trocar o campo de texto comum
+        por `type="password"` no frontend.
+  TOCA CÓDIGO ANTIGO: a tela de Integrações já existe para AASP/CNJ; confirmar que a máscara só
+        se aplica ao módulo `ia` (ou generalizar com cuidado pra não quebrar AASP/CNJ, que talvez
+        já tratem a chave de outro jeito).
+  Teste: salvar a chave, recarregar a tela, ver que aparece mascarada; trocar só o modelo (sem
+        mexer na chave) e confirmar que a chave antiga continua funcionando.
+  Depende de SQL: não.
+
+────────────────────────────────────────────────────────────────────────────
+FASE 3 — Fluxo de sugestões em Publicações.js — RISCO MÉDIO-ALTO
+Tela usada todo dia. Cada correção aqui entra em pequenos commits/testes separados — NÃO fazer
+tudo de uma vez nessa fase.
+────────────────────────────────────────────────────────────────────────────
+
+[7] Localização do processo da audiência ignora o processo_id (alto #7)
+  Onde: frontend/src/pages/Publicacoes/Publicacoes.js:150-156 — carregarProcessoAudiencia().
+  Correção: se `pub.processo_id` existir, buscar o processo DIRETO por ID (rota já deve ter algo
+        tipo `GET /processos/:id/resumo` — se não tiver, criar uma pequena e específica, só com
+        os campos que a Audiência precisa: id, numProc, NomeTituloProc, numPasta, vara_id).
+        Manter a busca por número como FALLBACK apenas quando não houver processo_id, e nesse
+        fallback, remover a regra de "aceitar se sobrar só 1 resultado" — exigir número
+        normalizado batendo, senão mostrar o aviso de "não localizado".
+  Teste: publicação já vinculada a processo (processo_id preenchido) → audiência deve abrir
+        direto no processo certo, mesmo que o texto tenha o número formatado diferente do banco.
+        Publicação sem processo vinculado → segue caindo no aviso, sem quebrar.
+  Depende de SQL: não (a não ser que a rota de resumo por ID precise ser criada — isso é rota
+        nova, não altera tabela).
+
+[13] Sugestões não respeitam a permissão do módulo de destino (médio #13)
+  Onde: frontend/src/pages/Publicacoes/Publicacoes.js — PainelSugestoes (usada 2x, AASP e CNJ).
+  Correção: passar pro PainelSugestoes os mesmos flags que a barra manual já usa
+        (podeCriarPericia, e equivalentes para audiência/prazo/tarefa — `temPermissao('audiencias
+        ','cadastrar')`, `temPermissao('prazos','cadastrar')`, `temPermissao('tarefas','cadastrar')`
+        — nomes exatos a confirmar nas permissões do sistema). Cartão de sugestão cujo destino o
+        usuário não pode cadastrar fica desabilitado ou oculto, igual já acontece no botão manual.
+  Teste: usuário sem permissão de cadastro de perícia não deve ver (ou deve ver desabilitado) o
+        cartão de sugestão de perícia — mesmo comportamento que já existe no botão manual.
+  Depende de SQL: não.
+
+[14] Bug do temPermissao com 3 argumentos (médio #14)
+  Onde: frontend/src/pages/Audiencias/Audiencias.js:1247 e 1649 — `temPermissao('audiencias',
+        'tipos', 'cadastrar')`.
+  TOCA CÓDIGO ANTIGO E FORA DO LOTE DE 02/09 — não é da Sugestão nas Publicações, é um bug
+        antigo. Vou tratar separado, com cautela extra: antes de mudar, preciso ver como
+        `permissoes.audiencias` está estruturado de fato (é `{tipos: {cadastrar, alterar}}` ou é
+        `{'tipos.cadastrar': true}`?) pra escrever a chamada certa, sem quebrar o botão de
+        "Gerenciar tipos de audiência" pra quem hoje (por acidente do bug) já consegue ver.
+  Teste: usuário comum COM a permissão de tipos de audiência deve passar a VER o botão de
+        gerenciar tipos (hoje não vê, por causa do bug); admin/super continuam vendo sempre.
+  Depende de SQL: não.
+
+[4] Ação criada mas publicação não marca como tratada (alto #4)
+  Onde: frontend/src/pages/Publicacoes/Publicacoes.js — dois lugares (aba AASP e aba CNJ),
+        callback `onFechar` do ModalAcaoDaPublicacao com `try { tratar(...) } catch {}`.
+  Correção: se a chamada de "marcar tratada" falhar, mostrar um aviso claro (faixa interna, não
+        toast — regra do projeto) dizendo algo como "A [prazo/tarefa/audiência/perícia] foi
+        criada, mas não foi possível marcar a publicação como tratada. Marque manualmente." Não
+        vou tentar fazer isso atômico no banco (juntar as duas operações numa transação única
+        exigiria reescrever a criação de prazo/tarefa/audiência/perícia pra aceitar publicacao_id
+        e status junto — fora de escopo e mais arriscado). Errar visível é seguro; errar
+        silencioso não é.
+  Teste: simular falha de rede na 2ª chamada (ex.: desligar o backend só depois da 1ª requisição)
+        e confirmar que aparece o aviso, e que a ação (prazo/tarefa/etc.) foi mesmo criada.
+  Depende de SQL: não.
+
+[5] Sugestão de prazo da IA não preenche o modal (alto #5)
+  Onde: backend/src/services/iaService.js — normalizar() e o prompt enviado à IA.
+  Correção: pro tipo 'prazo', pedir no prompt um campo numérico de quantidade de dias + se é
+        "uteis"/"corridos" separado da descrição; no normalizar(), montar
+        `descricaoInicial`/`quantidadeInicial`/`tipoDiasInicial` do mesmo jeito que o detector de
+        regras já faz em sugestoesPublicacao.js (reusar o mesmo formato de saída — mesma "forma"
+        de objeto pros dois casos, regra e IA, assim Publicacoes.js não precisa saber a origem).
+  Teste: com a IA configurada (ou em modo simulação), pedir sugestão de um texto de prazo e
+        conferir que o modal abre com dias e descrição preenchidos, não em branco.
+  Depende de SQL: não.
+
+────────────────────────────────────────────────────────────────────────────
+FASE 4 — Integridade de dados sem SQL (código só) — RISCO BAIXO
+────────────────────────────────────────────────────────────────────────────
+
+[8] Pessoas órfãs na exclusão (alto #8)
+  Onde: backend/src/controllers/pessoasController.js — excluirFisica() e excluirJuridica().
+  Correção: acrescentar ao Promise.all os 3 vínculos que faltam (mesmo padrão dos que já
+        existem): `pericia` (perito_tipo/perito_id), `pericia_local_reu` (tipo_pessoa/pessoa_id),
+        `acordo_parcela` (parceria_pessoa_tipo/parceria_pessoa_id) — os mesmos campos que a
+        rotina de unificação já trata, confirmando que são vínculos reais.
+  TOCA CÓDIGO ANTIGO: excluirFisica/excluirJuridica são usadas toda vez que alguém apaga uma
+        pessoa — testar exclusão normal (sem vínculo nenhum, incluindo os novos) continua
+        funcionando, e que pessoa com vínculo em pericia/pericia_local_reu/acordo_parcela agora
+        é BLOQUEADA com mensagem clara, em vez de gerar órfão silencioso.
+  Depende de SQL: não (é só checagem a mais antes do DELETE; não precisa de FK nova).
+
+[9] Remarcar audiência perde local e observações (médio #9 + achado extra)
+  Onde: backend/src/controllers/audienciasController.js:605 — remarcar(), o INSERT da nova
+        audiência.
+  Correção: acrescentar `local` e `observacoes` na lista de colunas copiadas de `orig`.
+  Teste: audiência com local preenchido e com uma observação → remarcar → nova audiência deve
+        manter os dois campos (ela pode receber novo local/hora, mas observações não deveria
+        sumir).
+  Depende de SQL: não.
+
+────────────────────────────────────────────────────────────────────────────
+FASE 5 — Banco de dados (SQL idempotente) — RISCO MAIS ALTO, POR ÚLTIMO
+Regras já combinadas: SQL só roda o usuário no HeidiSQL, script multi-instância (local + 2 AWS),
+sempre testar no LOCAL primeiro, ALTER TABLE não é coberto por transação no MySQL (commit
+implícito) — então cada ALTER é sua própria instrução, testável e pulável individualmente.
+────────────────────────────────────────────────────────────────────────────
+
+[Diagnóstico prévio — só leitura, sem alterar nada]
+  Antes de qualquer ALTER desta fase, rodar SELECTs de conferência nas 3 instâncias:
+  - `SELECT DISTINCT vara_id FROM audiencia WHERE vara_id IS NOT NULL AND vara_id NOT IN
+     (SELECT id FROM varas)` → se vier alguma linha, tem audiência com vara inválida HOJE; teria
+     que decidir o que fazer com ela ANTES de criar a FK (senão o ALTER falha).
+  - `SELECT modulo, COUNT(*) FROM configuracoes_integracoes GROUP BY modulo HAVING COUNT(*) > 1`
+     → se vier alguma linha, já existe duplicata de módulo hoje; precisa limpar antes do UNIQUE.
+  Isso responde a dúvida que a própria auditoria deixou em aberto ("não sei se já existem órfãos
+  reais") — sem isso, não dá pra aplicar os itens 10 e 11 com segurança.
+
+[10] `audiencia.vara_id` sem chave estrangeira (médio #10)
+  SQL (só se o diagnóstico vier limpo): `ALTER TABLE audiencia ADD CONSTRAINT
+        fk_audiencia_vara FOREIGN KEY (vara_id) REFERENCES varas(id) ON DELETE SET NULL;`
+  Código: a exclusão lógica de vara também precisa checar audiências vinculadas (mesmo padrão já
+        usado para processos), avisando em vez de deixar a FK estourar erro feio.
+  Depende de SQL: sim.
+
+[11] `configuracoes_integracoes.modulo` pode duplicar (médio #11)
+  SQL (só se o diagnóstico vier limpo, ou depois de apagar manualmente a duplicata mais antiga):
+        `ALTER TABLE configuracoes_integracoes ADD CONSTRAINT uq_config_modulo UNIQUE (modulo);`
+  Código: trocar o UPDATE-depois-INSERT por um único `INSERT ... ON DUPLICATE KEY UPDATE`
+        (fecha a corrida entre duas gravações simultâneas).
+  Depende de SQL: sim.
+
+[6] Audiência não guarda de qual publicação veio (crítico #6)
+  SQL: `ALTER TABLE audiencia ADD COLUMN publicacao_id INT NULL, ADD CONSTRAINT
+        fk_audiencia_publicacao FOREIGN KEY (publicacao_id) REFERENCES publicacoes(id)
+        ON DELETE SET NULL;` (SET NULL, não CASCADE — apagar a publicação não pode apagar a
+        audiência já criada, só perder o rótulo de origem).
+  Código: `ModalNovaAudiencia`/criação de audiência passa a aceitar e gravar `publicacao_id`
+        quando vier da sugestão; histórico da publicação passa a mostrar qual audiência foi
+        gerada (mesmo padrão que já existe pra prazo/tarefa/compromisso).
+  TOCA CÓDIGO ANTIGO: o módulo de Audiências é usado direto (sem publicação) na maioria das
+        vezes — publicacao_id tem que ser sempre opcional/NULL nesse caso, sem exigir nada novo
+        na tela normal de "Nova audiência" pela pasta do processo.
+  Depende de SQL: sim — é o único item desta fase que cria coluna nova (os outros 2 só
+        acrescentam constraint em coluna já existente).
+
+[16] Scripts de migração sem proteção real de transação (médio #16)
+  Isto não é um bug pra "corrigir" num arquivo — é uma prática pra adotar dos scripts DAQUI PRA
+  FRENTE: cada ALTER TABLE em sua própria instrução (nunca agrupar várias colunas — se uma já
+  existir, dá pra pular só aquela linha, sem abortar as outras); manter o SELECT de diagnóstico
+  ANTES de cada ALTER que crie FK; não fingir BEGIN/COMMIT em volta de DDL (documentar isso no
+  próprio cabeçalho dos scripts .sql pra não repetir a confusão). Aplico essa prática nos 3
+  scripts que a Fase 5 for gerar (itens 6, 10, 11).
+
+────────────────────────────────────────────────────────────────────────────
+O QUE NÃO ENTRA NESTE PLANO (fora do escopo da auditoria, não mexer)
+────────────────────────────────────────────────────────────────────────────
+- ModalCompromisso e ModalTarefa (não tocados no lote de 02/09, continuam intocados).
+- Regras de negócio do cálculo de prazo (dias úteis vs corridos NO Prazos.js em si) — só a
+  origem do valor que chega da sugestão está sendo corrigida (item 2), não o cálculo do modal.
+- FASE 5 e FASE 6 do plano original de 02/09 (tela de regras `regras_sugestao` e melhorias
+  maiores de IA) — continuam fora, como já estava decidido.
+
+────────────────────────────────────────────────────────────────────────────
+RESUMO DA ORDEM
+────────────────────────────────────────────────────────────────────────────
+Fase 1 (puro, sem SQL) → Fase 2 (segurança backend, sem SQL) → Fase 3 (Publicacoes.js/Audiencias.js,
+sem SQL, uma correção por vez) → Fase 4 (integridade de dados, sem SQL) → Fase 5 (SQL, por último,
+com diagnóstico antes de cada ALTER, testado no LOCAL antes de tocar nas 2 AWS).
+
+Cada fase termina com build do frontend + `node --check` no backend + teste manual guiado antes
+de eu seguir pra próxima. "Build não é teste" — cada item lista o que testar manualmente.

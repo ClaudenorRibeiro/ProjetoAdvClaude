@@ -7,7 +7,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { periciasAPI, processosAPI, pessoasAPI, audienciasAPI, authAPI, calendarioAPI } from '../../services/api';
-import { formatarData, toTitleCase, mascaraCNJ } from '../../utils/formatters';
+import { formatarData, formatarDataHora, hojeLocal, toTitleCase, mascaraCNJ } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import ModalGerarLote from '../../components/GerarLote';
@@ -304,16 +304,25 @@ export default function Pericias() {
 // processoInicial (opcional): { processo_id, processo_numero, pasta_titulo } — quando o modal é
 // aberto já dentro de um processo (ex.: aba Perícias da pasta), pré-seleciona o processo e dispensa
 // a busca de pasta. Default undefined => comportamento idêntico ao da tela de Perícias.
-export function ModalPericia({ tipos, pericia, processoInicial, onTiposChange, onFechar }) {
+// dataInicial / horaInicial: pré-preenchimento vindo de uma SUGESTÃO da publicação.
+export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, horaInicial, onTiposChange, onFechar }) {
   const overlayRef = useEscFechar(() => onFechar(false)); // ESC fecha esta janela (só quando é a de cima)
   const { temPermissao } = useAuth();
-  // Mostra o botão "..." de gerenciar tipos só para quem pode cadastrar/alterar tipos
-  const podeTipos = temPermissao('pericias', 'tipos', 'cadastrar') || temPermissao('pericias', 'tipos', 'alterar');
+  // Mostra o botão "..." de gerenciar tipos só para quem pode cadastrar/alterar tipos.
+  // `temPermissao` só aceita (módulo, ação); submódulo usa chave composta 'pericias.tipos'
+  // (mesmo bug encontrado em Audiencias.js na auditoria 02/09, item 14 — a chamada com 3
+  // argumentos nunca batia, então só admin/super viam o botão).
+  const podeTipos = temPermissao('pericias.tipos', 'cadastrar') || temPermissao('pericias.tipos', 'alterar');
   const [modalTipos, setModalTipos] = useState(false);
   // Inicializa o form. Em edição/aba-da-pasta já vem com processo_id e o título do processo.
   const [form, setForm]       = useState(
     pericia ? { ...pericia, titulo: pericia.pasta_titulo || '' }
-    : processoInicial ? { processo_id: processoInicial.processo_id, titulo: processoInicial.pasta_titulo || '' }
+    : processoInicial ? {
+        processo_id: processoInicial.processo_id,
+        titulo: processoInicial.pasta_titulo || '',
+        ...(dataInicial ? { data: dataInicial } : {}),
+        ...(horaInicial ? { hora: horaInicial } : {}),
+      }
     : {}
   );
   const [salvando, setSalvando] = useState(false);
@@ -538,9 +547,9 @@ export function ModalPericia({ tipos, pericia, processoInicial, onTiposChange, o
     const obs     = [];   // o que será gravado na auditoria
 
     // 1) Data retroativa (anterior a hoje)
-    const hoje = new Date().toISOString().split('T')[0];
+    const hoje = hojeLocal();
     if (form.data < hoje) {
-      const dataFmt = form.data.split('-').reverse().join('/');
+      const dataFmt = formatarData(form.data);
       motivos.push(`data retroativa (${dataFmt})`);
       obs.push(`data retroativa confirmada com senha (${dataFmt})`);
     }
@@ -802,7 +811,7 @@ export function ModalPericia({ tipos, pericia, processoInicial, onTiposChange, o
               <label className="form-label">Responsável pela condução</label>
               <select className="form-control" value={form.responsavel_id||''}
                 onChange={e => set('responsavel_id', e.target.value)}>
-                <option value="">— Não definido —</option>
+                <option value="">Escritório</option>
                 {advogados.map(a => (
                   <option key={`${a.origem}:${a.id}`} value={`${a.origem}:${a.id}`}>
                     {a.nome}{a.origem === 'freela' ? ' (freelancer)' : ''}
@@ -1227,9 +1236,9 @@ export function ModalRemarcar({ pericia, onFechar }) {
 
     // Mesma regra do cadastro: data retroativa, fim de semana, feriado ou fora de 08–18h → senha.
     const motivos = [];
-    const hoje = new Date().toISOString().split('T')[0];
+    const hoje = hojeLocal();
     if (dados.nova_data < hoje) {
-      motivos.push(`data retroativa (${dados.nova_data.split('-').reverse().join('/')})`);
+      motivos.push(`data retroativa (${formatarData(dados.nova_data)})`);
     }
     if (dados.nova_hora) {
       const h = parseInt(String(dados.nova_hora).split(':')[0], 10);
@@ -1339,7 +1348,7 @@ export function ModalHistorico({ pericia, onFechar }) {
                       <tr key={r.id}>
                         {/* alterado_em é DATETIME completo — formata data+hora juntos (mesmo padrão do histórico de audiência) */}
                         <td style={{whiteSpace:'nowrap'}}>
-                          {r.alterado_em ? new Date(r.alterado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                          {r.alterado_em ? formatarDataHora(r.alterado_em) : '—'}
                         </td>
                         <td>{r.campo_alterado}</td>
                         <td>{r.valor_anterior || '—'}</td>

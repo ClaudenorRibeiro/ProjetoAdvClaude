@@ -13,6 +13,7 @@ import ModalAparencia from '../ModalAparencia';
 import ModalGoogleAgenda from '../ModalGoogleAgenda';
 import { variaveisMenu } from '../../utils/coresMenu';
 import { variaveisLinha, variaveisLinhaLida } from '../../utils/coresLinha';
+import { formatarDataHora } from '../../utils/formatters';
 
 // Itens do menu lateral.
 // tipo: 'grupo' → item expansível com sub-itens (filhos[])
@@ -353,7 +354,7 @@ export default function Layout({ children }) {
                         <div key={n.id} style={{padding:'12px 16px',borderBottom:'1px solid #f3f4f6',fontSize:'13px'}}>
                           <div style={{color:cor}}>{n.mensagem}</div>
                           <div style={{color:cor,fontSize:'11px',marginTop:'4px'}}>
-                            {new Date(n.criado_em).toLocaleString('pt-BR')}
+                            {formatarDataHora(n.criado_em)}
                           </div>
                         </div>
                       );})

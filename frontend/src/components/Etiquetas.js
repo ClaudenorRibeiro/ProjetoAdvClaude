@@ -9,6 +9,7 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { etiquetasAPI } from '../services/api';
 import useEscFechar from '../hooks/useEscFechar';
+import { formatarDataHora } from '../utils/formatters';
 
 // Módulos com etiqueta PESSOAL. A CONFIGURAÇÃO (5 cores) vale para todos;
 // a EXIBIÇÃO na tela é ligada por rollout (hoje: só "pastas"/Processos).
@@ -267,7 +268,7 @@ export function ModalHistoricoEtiquetaEscritorio({ modulo, registroId, catalogo,
                     {ladoEtiqueta(l.slot_novo)}
                   </div>
                   <div style={{ color: '#888', fontSize: '11px', marginTop: '4px' }}>
-                    {l.usuario_nome} · {new Date(l.criado_em).toLocaleString('pt-BR')}
+                    {l.usuario_nome} · {formatarDataHora(l.criado_em)}
                   </div>
                 </div>
               ))}

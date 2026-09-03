@@ -22,6 +22,7 @@ const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno, proibido } = require('../utils/response');
 const aaspService = require('../services/aaspService');
 const cnjService = require('../services/cnjService');
+const iaService = require('../services/iaService');
 const { enviarEmail } = require('../utils/email');
 
 // "Impressão digital" (SHA-256) do texto EXATO da publicação — base da dedup fiel.
@@ -58,12 +59,26 @@ async function estaAtribuidaA(db, publicacaoId, usuarioId) {
   );
   return rows.length > 0;
 }
-// Quem pode AGIR numa publicação (criar prazo/tarefa/compromisso, enviar e-mail,
-// marcar tratada/reabrir): admin/super, OU tem publicacoes/alterar, OU a publicação
-// está atribuída a ele. NÃO cobre excluir — excluir é exclusivo de buscador.
-async function podeAgirNaPublicacao(req, publicacaoId) {
-  if (await podeAlterarPublicacoes(req)) return true;
+// Quem pode ACESSAR o conteúdo individual de uma publicação:
+// - admin/super e buscador (publicacoes/cadastrar) acessam todas;
+// - não-buscador acessa somente as atribuídas a ele.
+// A permissão `alterar` nunca amplia o alcance de leitura.
+async function podeAcessarPublicacao(req, publicacaoId) {
+  if (await ehBuscador(req)) return true;
   return estaAtribuidaA(pool, publicacaoId, req.usuario.id);
+}
+
+// Quem pode AGIR (tratar/reabrir/enviar e-mail):
+// - admin/super sempre;
+// - qualquer usuário pode agir na publicação atribuída a ele (regra do recebedor);
+// - buscador age nas demais somente se também tiver `publicacoes/alterar`.
+// Assim, `alterar` autoriza a ação, mas nunca abre publicação para não-buscador.
+// NÃO cobre excluir — excluir continua exclusivo de buscador.
+async function podeAgirNaPublicacao(req, publicacaoId) {
+  if (Number(req.usuario.nivel) <= 1) return true;
+  if (await estaAtribuidaA(pool, publicacaoId, req.usuario.id)) return true;
+  if (!(await ehBuscador(req))) return false;
+  return podeAlterarPublicacoes(req);
 }
 
 // Lê a configuração da AASP (Configurações → Integrações). Retorna { ativo, chave, url }.
@@ -758,9 +773,8 @@ async function tratar(req, res) {
     const semAcao = !!req.body.sem_acao;
     const motivo  = (req.body.motivo || '').toString().trim();
 
-    // AUTORIZAÇÃO (a rota exige só "visualizar"; a regra de verdade é aqui):
-    // precisa poder AGIR nesta publicação — admin/super, OU tem "alterar", OU
-    // a publicação está atribuída a ele. Um "só visualizador" não passa.
+    // AUTORIZAÇÃO: `alterar` não amplia o alcance. Não-buscador só trata se a
+    // publicação estiver atribuída a ele; buscador segue a regra de ação acima.
     if (!(await podeAgirNaPublicacao(req, id))) {
       return proibido(res, 'Você não pode tratar esta publicação.');
     }
@@ -835,6 +849,11 @@ async function usuariosParaDirecionar(req, res) {
 async function historico(req, res) {
   try {
     const { id } = req.params;
+    // Histórico contém o texto, atribuições e ações geradas. Usa a regra de
+    // ACESSO: não-buscador só enxerga publicação atribuída a ele.
+    if (!(await podeAcessarPublicacao(req, id))) {
+      return proibido(res, 'Você não pode ver o histórico desta publicação.');
+    }
     const [rows] = await pool.execute(
       `SELECT p.id, p.criado_em, p.escritorio, p.direcionada_em, p.tratada, p.tratada_em,
               p.motivo_sem_acao,
@@ -891,6 +910,23 @@ async function historico(req, res) {
          LEFT JOIN usuarios ud ON c.delegado_para = ud.id
         WHERE c.publicacao_id = ? ORDER BY c.data ASC, c.id ASC`, [id]
     );
+    // Audiência -> direcionado_nome vem do responsável (usuário); "status" reaproveita a
+    // coluna de status da audiência (agendada/realizada/cancelada/remarcada...).
+    // Blindado: se a coluna publicacao_id ainda não existir (SQL não rodado), NÃO derruba
+    // o histórico da publicação — apenas devolve lista vazia (mesmo padrão já usado no
+    // Dashboard para "processos parados").
+    let audiencias = [];
+    try {
+      const [rowsAud] = await pool.execute(
+        `SELECT a.id, a.data, a.hora, a.status, pr.numProc AS processo_numero,
+                ud.nome AS direcionado_nome
+           FROM audiencia a
+           LEFT JOIN tblproc pr  ON a.processo_id = pr.id
+           LEFT JOIN usuarios ud ON a.responsavel_id = ud.id
+          WHERE a.publicacao_id = ? ORDER BY a.data ASC, a.id ASC`, [id]
+      );
+      audiencias = rowsAud;
+    } catch { /* coluna audiencia.publicacao_id ainda não existe nesta instância */ }
 
     // E-mails enviados desta publicação (lidos da própria log_emails, sem tabela extra).
     const [emails] = await pool.execute(
@@ -902,7 +938,7 @@ async function historico(req, res) {
       ...rows[0],
       direcionada_usuarios: usuarios.map(u => u.nome),
       atribuicoes: usuarios,
-      acoes: { prazos, tarefas, compromissos },
+      acoes: { prazos, tarefas, compromissos, audiencias },
       emails,
     });
   } catch (err) {
@@ -1021,6 +1057,11 @@ async function excluirLote(req, res) {
 async function obter(req, res) {
   try {
     const { id } = req.params;
+    // Leitura individual segue o mesmo alcance da listagem: não-buscador só
+    // acessa publicação atribuída, mesmo que tenha `publicacoes/alterar`.
+    if (!(await podeAcessarPublicacao(req, id))) {
+      return proibido(res, 'Você não pode ver esta publicação.');
+    }
     const [rows] = await pool.execute(
       `SELECT id, fonte, data_publicacao, numero_processo, numero_publicacao,
               tribunal, oab, titulo, cabecalho, texto, hash_cnj, tratada
@@ -1096,8 +1137,7 @@ async function destinatariosEmail(req, res) {
 async function enviarEmailPublicacao(req, res) {
   try {
     const { id } = req.params;
-    // AUTORIZAÇÃO (a rota exige só "visualizar"): admin/super, OU tem "alterar",
-    // OU a publicação está atribuída a ele.
+    // Envio é ação: `alterar` não abre publicação para não-buscador.
     if (!(await podeAgirNaPublicacao(req, id))) {
       return proibido(res, 'Você não pode enviar esta publicação por e-mail.');
     }
@@ -1168,6 +1208,11 @@ async function enviarEmailPublicacao(req, res) {
 // Individual (por usuário) e idempotente: a PK composta impede duplicar; abrir de novo não muda nada.
 async function marcarLida(req, res) {
   try {
+    // Impede criar marcação e usar diferenças de resposta para sondar IDs de
+    // publicações não atribuídas. Buscador pode marcar qualquer uma como lida.
+    if (!(await podeAcessarPublicacao(req, req.params.id))) {
+      return proibido(res, 'Você não pode acessar esta publicação.');
+    }
     await pool.execute(
       'INSERT IGNORE INTO publicacoes_lidas (publicacao_id, usuario_id) VALUES (?, ?)',
       [req.params.id, req.usuario.id]
@@ -1178,7 +1223,49 @@ async function marcarLida(req, res) {
   }
 }
 
+// ============================================================
+// SUGESTOES POR IA (apoio, opcional, por escritorio - ver services/iaService.js)
+// ============================================================
+
+// GET /api/publicacoes/ia-status  — o front so tenta a IA se estiver habilitada.
+async function iaStatus(req, res) {
+  try {
+    const cfg = await iaService.configIa();
+    return sucesso(res, { habilitada: iaService.iaHabilitada(cfg), provedor: cfg.provedor });
+  } catch (err) {
+    return sucesso(res, { habilitada: false, provedor: 'nenhum' });
+  }
+}
+
+// POST /api/publicacoes/:id/sugestoes-ia  — roda a IA sobre o texto da publicacao.
+// SEMPRE responde 200. Em qualquer falha devolve sugestoes:[] (o front fica com as regras).
+async function sugestoesIa(req, res) {
+  try {
+    const { id } = req.params;
+    // ACESSO: sem poder VER esta publicação, não manda o texto pra IA nem devolve nada —
+    // segue o mesmo contrato "sempre 200" da função (o front fica só com as regras).
+    if (!(await podeAcessarPublicacao(req, id))) {
+      return sucesso(res, { sugestoes: [], ia: false });
+    }
+    const [rows] = await pool.execute(
+      'SELECT texto, data_publicacao, numero_processo, numero_publicacao FROM publicacoes WHERE id = ?',
+      [id]
+    );
+    if (!rows.length) return sucesso(res, { sugestoes: [], ia: false });
+    const p = rows[0];
+    const r = await iaService.sugerirComIa(p.texto, {
+      dataPublicacao: p.data_publicacao ? String(p.data_publicacao).slice(0, 10) : null,
+      numeroProcesso: p.numero_processo || '',
+      numeroPublicacao: p.numero_publicacao || '',
+    });
+    return sucesso(res, r);
+  } catch (err) {
+    return sucesso(res, { sugestoes: [], ia: false });
+  }
+}
+
 module.exports = {
   statusAasp, listar, importar, atribuir, atribuicoesPub, tratar, historico, excluir, excluirLote, usuariosParaDirecionar,
   statusCnj, importarCnj, obter, destinatariosEmail, enviarEmailPublicacao, marcarLida,
+  iaStatus, sugestoesIa,
 };

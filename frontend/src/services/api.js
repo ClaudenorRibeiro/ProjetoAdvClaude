@@ -181,6 +181,7 @@ export const processosAPI = {
   sugerirPasta:      () => api.get('/processos/sugerir-pasta'),
   checarPasta:       (numPasta) => api.get('/processos/pastas/checar', { params: { numPasta } }),
   buscarPorNumero:   (q) => api.get('/processos/buscar', { params: { q } }),
+  buscarPorId:       (id) => api.get(`/processos/${id}/basico`),
   // Processos
   criarProcesso:     (dados) => api.post('/processos', dados),
   atualizarProcesso: (id, dados) => api.put(`/processos/${id}`, dados),
@@ -404,6 +405,8 @@ export const publicacoesAPI = {
   tratar:       (id, dados) => api.put(`/publicacoes/${id}/tratar`, dados),
   historico:    (id) => api.get(`/publicacoes/${id}/historico`),
   obter:        (id) => api.get(`/publicacoes/${id}`),   // leitura da publicação de origem
+  iaStatus:     () => api.get('/publicacoes/ia-status'),          // { habilitada, provedor }
+  sugestoesIa:  (id) => api.post(`/publicacoes/${id}/sugestoes-ia`), // { sugestoes, ia }
   excluir:      (id) => api.delete(`/publicacoes/${id}`),
   excluirLote:  (dados) => api.post('/publicacoes/excluir-lote', dados),
 };

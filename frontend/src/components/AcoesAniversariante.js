@@ -13,6 +13,7 @@ import ModalConfirmar from './ui/ModalConfirmar';
 import { pessoasAPI } from '../services/api';
 import { linkWhatsApp } from '../utils/whatsapp';
 import { toast } from 'react-toastify';
+import { formatarDataHora } from '../utils/formatters';
 
 export default function AcoesAniversariante({ pessoa, onFeito }) {
   const [confirmar, setConfirmar] = useState(null);
@@ -49,7 +50,8 @@ export default function AcoesAniversariante({ pessoa, onFeito }) {
       const ult = pessoa.parabens[pessoa.parabens.length - 1];
       const canalTxt = ult.canal === 'whatsapp' ? 'WhatsApp' : 'e-mail';
       let quando = '';
-      try { quando = new Date(ult.enviado_em).toLocaleDateString('pt-BR'); } catch (_) { quando = ''; }
+      quando = formatarDataHora(ult.enviado_em).split(' ')[0];
+      if (quando === '—') quando = '';
       setConfirmar({
         titulo: 'Já parabenizado',
         mensagem: `${primeiroNome} já foi parabenizado(a) por ${canalTxt}` +

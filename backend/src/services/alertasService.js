@@ -8,7 +8,7 @@ const { pool } = require('../config/database');
 const { diasUteisAntes } = require('./calendarioService');
 const { emailPrazosPendentes, emailPrazosAtrasados } = require('./notificacaoService');
 const { liberarFazendoExpirados } = require('../controllers/prazosController');
-const { hojeBrasilia } = require('../utils/helpers');
+const { dataParaIsoLocal, hojeBrasilia } = require('../utils/helpers');
 
 // Fuso horário de todos os crons — sem isso, no servidor (Ubuntu/UTC) o cron
 // dispararia 3 horas mais cedo que o horário configurado pelo escritório
@@ -193,7 +193,7 @@ async function verificarAlertasAudiencias() {
       [hoje]
     );
     for (const a of audiencias) {
-      const dataA      = typeof a.data === 'string' ? a.data.split('T')[0] : a.data.toISOString().split('T')[0];
+      const dataA      = typeof a.data === 'string' ? a.data.split('T')[0] : dataParaIsoLocal(a.data);
       const dataAlerta = await diasUteisAntes(dataA, diasAlerta);
       if (dataAlerta === hoje) console.log(`📅 Alerta audiência ${a.id} em ${dataA}`);
     }
@@ -212,7 +212,7 @@ async function verificarAlertasPericias() {
       [hoje]
     );
     for (const p of pericias) {
-      const dataP      = typeof p.data === 'string' ? p.data.split('T')[0] : p.data.toISOString().split('T')[0];
+      const dataP      = typeof p.data === 'string' ? p.data.split('T')[0] : dataParaIsoLocal(p.data);
       const dataAlerta = await diasUteisAntes(dataP, diasAlerta);
       if (dataAlerta === hoje) console.log(`🔬 Alerta perícia ${p.id} em ${dataP}`);
     }

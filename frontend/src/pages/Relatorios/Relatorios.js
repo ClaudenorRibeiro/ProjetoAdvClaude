@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { prazosAPI, tarefasAPI, audienciasAPI, processosAPI, financeiroAPI, pessoasAPI, periciasAPI } from '../../services/api';
-import { formatarData, formatarNumeroPasta, formatarMoeda, labelStatusPrazo, labelPrioridade } from '../../utils/formatters';
+import { formatarData, formatarNumeroPasta, formatarMoeda, hojeLocal, labelStatusPrazo, labelPrioridade } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
 import AcoesAniversariante from '../../components/AcoesAniversariante';
@@ -189,7 +189,7 @@ export default function Relatorios() {
     const url  = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `relatorio_${modulo}_${new Date().toISOString().slice(0,10)}.csv`;
+    link.download = `relatorio_${modulo}_${hojeLocal()}.csv`;
     link.click();
   }
 

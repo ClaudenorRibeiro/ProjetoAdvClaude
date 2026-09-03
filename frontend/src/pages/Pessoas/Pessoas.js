@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { pessoasAPI } from '../../services/api';
-import { formatarCPF, formatarCNPJ, formatarTelefone, formatarData, formatarDataHora, mascaraCPF, validarCPF, mascaraCNPJ, validarCNPJ, toTitleCase } from '../../utils/formatters';
+import { formatarCPF, formatarCNPJ, formatarTelefone, formatarData, formatarDataHora, hojeLocal, mascaraCPF, validarCPF, mascaraCNPJ, validarCNPJ, toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import GerarDocumentoPartesBotao from '../../components/GerarDocumentoPartes';
 import MenuAcoes from '../../components/MenuAcoes';
@@ -15,6 +15,7 @@ import { LinhaFone, LinhaEmail } from '../../components/LinhasContato';
 import { EtiquetaCelula, LegendaEtiquetasPessoais, useEtiquetasEscritorio, itemEtiquetaEscritorioSubmenu, ModalHistoricoEtiquetaEscritorio } from '../../components/Etiquetas';
 import { linkWhatsApp } from '../../utils/whatsapp';
 import ModalCadastroRapidoParte from '../../components/ModalCadastroRapidoParte';
+import useEscFechar from '../../hooks/useEscFechar';
 
 // Campos disponíveis para exportar em Excel (mesmas chaves do backend; sem campos de auditoria)
 const CAMPOS_EXPORT_FISICA = [
@@ -1645,6 +1646,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
   const refDataNasc = useRef(null);
   const refRazao    = useRef(null);
   const refsEmail   = useRef([]);
+  const overlayRef  = useEscFechar(() => onFechar(false));
 
   // Todo alerta/erro deste modal aparece na FAIXA interna (nunca na notificação
   // do canto) e o cursor volta para o campo que originou o problema.
@@ -1766,7 +1768,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
           return;
         }
       }
-      const hoje = new Date().toISOString().split('T')[0];
+      const hoje = hojeLocal();
       if (form.data_nascimento && form.data_nascimento > hoje) {
         avisar('Data de nascimento não pode ser uma data futura.', refDataNasc.current);
         return;
@@ -1803,7 +1805,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
   }
 
   return (
-    <div className="modal-overlay">
+    <div className="modal-overlay" ref={overlayRef}>
       {confirmar && <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(null)} />}
       <div className="modal-box modal-grande">
         <div className="modal-header">
@@ -2185,7 +2187,7 @@ function CampoCNPJ({ value, onChange, somenteLeitura = false }) {
 function CampoDataNascimento({ value, onChange, somenteLeitura = false, refCampo }) {
   const [erroData, setErroData] = useState('');
   // Calcula "hoje" no formato YYYY-MM-DD para o atributo max
-  const hoje = new Date().toISOString().split('T')[0];
+  const hoje = hojeLocal();
 
   function handleChange(v) {
     if (v && v > hoje) {

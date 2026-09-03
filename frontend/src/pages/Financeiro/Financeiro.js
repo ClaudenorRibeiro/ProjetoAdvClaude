@@ -6,7 +6,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { financeiroAPI, processosAPI, pessoasAPI } from '../../services/api';
-import { formatarData, formatarMoeda, formatarNumeroPasta, toTitleCase, mascaraMoeda, numeroParaMascaraMoeda, parseMoeda, hojeLocal } from '../../utils/formatters';
+import { formatarData, formatarDataHora, formatarMoeda, formatarNumeroPasta, toTitleCase, mascaraMoeda, numeroParaMascaraMoeda, parseMoeda, hojeLocal } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
@@ -749,7 +749,7 @@ export function ModalHistoricoLancamento({ lancamento, onFechar }) {
                   <tbody>
                     {registros.map(r => (
                       <tr key={r.id}>
-                        <td style={{ whiteSpace: 'nowrap' }}>{new Date(r.criado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>{formatarDataHora(r.criado_em)}</td>
                         <td>{LABEL_ACAO[r.acao] || r.acao}</td>
                         <td>{r.campo_alterado || '—'}</td>
                         <td>{r.acao === 'editado' ? (r.valor_anterior || '—') : '—'}</td>
@@ -1015,7 +1015,7 @@ function ModalHistoricoParcela({ parcela, onFechar }) {
                   <tbody>
                     {registros.map(r => (
                       <tr key={r.id}>
-                        <td style={{ whiteSpace: 'nowrap' }}>{new Date(r.criado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>{formatarDataHora(r.criado_em)}</td>
                         <td>{LABEL_ACAO[r.acao] || r.acao}</td>
                         <td>{r.campo_alterado || '—'}</td>
                         <td>{r.acao === 'editada' ? (r.valor_anterior || '—') : '—'}</td>
@@ -1232,7 +1232,7 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
     if (cab.data_primeira < hoje) {
       setConfirmar({
         titulo: 'Data retroativa',
-        mensagem: `A 1ª parcela está com data anterior a hoje (${cab.data_primeira.split('-').reverse().join('/')}). Deseja gerar as parcelas mesmo assim?`,
+        mensagem: `A 1ª parcela está com data anterior a hoje (${formatarData(cab.data_primeira)}). Deseja gerar as parcelas mesmo assim?`,
         textoBotao: 'Sim, gerar',
         tipo: 'aviso',
         acao: executarGerar,

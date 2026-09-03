@@ -275,11 +275,12 @@ DROP TABLE IF EXISTS `audiencia`;
 CREATE TABLE `audiencia` (
   `id` int NOT NULL AUTO_INCREMENT,
   `processo_id` int NOT NULL,
-  `tipo_audiencia_id` int DEFAULT NULL,
+  `tipo_audiencia_id` int NOT NULL,
   `data` date NOT NULL,
   `hora` time NOT NULL,
   `modalidade` varchar(30) DEFAULT 'presencial',
   `local` varchar(300) DEFAULT NULL,
+  `observacoes` text,
   `vara_id` int DEFAULT NULL,
   `plataforma_virtual` varchar(100) DEFAULT NULL,
   `link_virtual` varchar(500) DEFAULT NULL,
@@ -293,7 +294,10 @@ CREATE TABLE `audiencia` (
   `alterado_em` datetime DEFAULT NULL,
   `status` varchar(20) NOT NULL DEFAULT 'agendada',
   `motivo_status` text,
+  `publicacao_id` int DEFAULT NULL,
+  `horario_ativo` tinyint GENERATED ALWAYS AS (CASE WHEN `status` IN ('agendada','adiada') THEN 1 ELSE NULL END) STORED,
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_audiencia_horario_ativo` (`processo_id`,`data`,`hora`,`horario_ativo`),
   KEY `processo_id` (`processo_id`),
   KEY `tipo_audiencia_id` (`tipo_audiencia_id`),
   KEY `criado_por` (`criado_por`),
@@ -301,12 +305,16 @@ CREATE TABLE `audiencia` (
   KEY `aud_ibfk_responsavel` (`responsavel_id`),
   KEY `aud_ibfk_resp_freela` (`responsavel_freela_id`),
   KEY `idx_aud_data_status` (`data`,`status`),
+  KEY `fk_audiencia_publicacao` (`publicacao_id`),
+  KEY `fk_audiencia_vara` (`vara_id`),
   CONSTRAINT `aud_ibfk_alterado_por` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `aud_ibfk_resp_freela` FOREIGN KEY (`responsavel_freela_id`) REFERENCES `advogados_freela` (`id`) ON DELETE SET NULL,
   CONSTRAINT `aud_ibfk_responsavel` FOREIGN KEY (`responsavel_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `audiencia_ibfk_2` FOREIGN KEY (`tipo_audiencia_id`) REFERENCES `tipo_audiencia` (`id`),
   CONSTRAINT `audiencia_ibfk_3` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`),
-  CONSTRAINT `fk_audiencia_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`)
+  CONSTRAINT `fk_audiencia_publicacao` FOREIGN KEY (`publicacao_id`) REFERENCES `publicacoes` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_audiencia_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`),
+  CONSTRAINT `fk_audiencia_vara` FOREIGN KEY (`vara_id`) REFERENCES `tblvara` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=24 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -563,7 +571,8 @@ CREATE TABLE `configuracoes_integracoes` (
   `ativo` tinyint(1) DEFAULT '0',
   `configuracoes` json DEFAULT NULL,
   `atualizado_em` datetime DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_configuracoes_integracoes_modulo` (`modulo`)
 ) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 

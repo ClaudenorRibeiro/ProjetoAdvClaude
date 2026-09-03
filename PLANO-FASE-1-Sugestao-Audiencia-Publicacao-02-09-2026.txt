@@ -1,0 +1,242 @@
+================================================================================
+PLANO DE IMPLEMENTACAO - FASE 1
+Recurso: "Sugestao" de audiencia dentro da publicacao
+Data: 02/09/2026
+Status: PLANO APROVADO PELO USUARIO. Autorizado a codar a Fase 1.
+Base conceitual: SUGESTOES-PUBLICACOES-CONSOLIDADO-02-09-2026.txt
+================================================================================
+
+Descoberta na leitura do codigo real (importante):
+A Fase 1 e MENOR e MAIS SEGURA do que o documento consolidado previa:
+  - SEM tocar no backend.
+  - SEM SQL / SEM mudanca de banco.
+  - SEM alterar o ModalCompromisso (ele ja aceita objeto pre-preenchido
+    quando vem SEM id -> cria novo com os campos preenchidos).
+  - A janela de leitura da publicacao ja abre com o texto inteiro na mao
+    (setTextoAberto(p); o campo "texto" vem da propria listagem), entao o
+    parser roda no FRONT, sem novo endpoint.
+
+
+--------------------------------------------------------------------------------
+1) ESCOPO DA FASE 1
+--------------------------------------------------------------------------------
+
+ENTRA:
+  - Detectar AUDIENCIA no texto: data + hora + local + modalidade.
+  - Painel "Sugestao" dentro da janela de leitura da publicacao.
+  - Botao que abre o "Criar compromisso" JA PREENCHIDO.
+  - Aviso de duplicidade ("ja existe compromisso criado desta publicacao").
+
+NAO ENTRA nesta fase:
+  - Prazo, pericia, tarefa generica.
+  - Tela de configuracao de regras.
+  - IA / API externa.
+  - Indicador (badge) na listagem de publicacoes.
+  - Qualquer mudanca de banco de dados.
+
+
+--------------------------------------------------------------------------------
+2) PECA 1 - O PARSER (arquivo novo, front, funcao pura)
+--------------------------------------------------------------------------------
+
+ARQUIVO NOVO: frontend/src/utils/sugestoesPublicacao.js
+
+  - Exporta: analisarPublicacao(texto, { dataPublicacao }) -> [ sugestao ]
+  - Funcao PURA: sem estado, sem API, sem banco. Deterministica.
+  - Formato de cada sugestao:
+        {
+          tipo: 'compromisso',
+          subtipo: 'audiencia',
+          titulo, data, hora, local, descricao,
+          trechoOrigem, regra, confianca
+        }
+
+  REGRAS DA FASE 1 (familia "audiencia designada"), aprox. 6 a 10 padroes:
+    - Gatilho: a palavra "audiencia" perto de
+      (designo | designada | designe-se | aprazada | marcada | redesignada).
+    - NEGATIVAS que CANCELAM a sugestao:
+      "audiencia ... realizada | cancelada | prejudicada | adiada sine die".
+    - DATA: padrao DD/MM/AAAA mais proxima do gatilho.
+      Se vier sem ano ("dia 08/10"), usa o ano de dataPublicacao
+      -> confianca MEDIA.
+    - HORA: aceita "10:00 horas", "10h", "10:00min", "as 10 e 30".
+    - LOCAL: trecho a partir de "na sala de audiencias" / "na " ate o fim
+      da frase, incluindo o CEP quando presente.
+    - MODALIDADE: PRESENCIAL | TELEPRESENCIAL | videoconferencia | semipresencial.
+    - TIPO DE AUDIENCIA: UNA | conciliacao | instrucao | inicial.
+    - CONFIANCA:
+        ALTA  = data + hora + gatilho juntos.
+        MEDIA = ano inferido, ou sem hora.
+        (BAIXA nao ocorre nesta fase.)
+    - Monta:
+        titulo    = "Audiencia {tipo} - {numero_processo}"
+        descricao = modalidade + local +
+                    "Origem: publicacao no {numero_publicacao} de {data}"
+    - Se nada casar -> retorna [].
+
+  POR QUE NO FRONT E NAO NO BACK:
+    A leitura ja tem o texto inteiro (nao chama obter). Rodar no front =
+    zero mudanca de contrato de API, zero risco na query da listagem,
+    100% removivel. Migrar para o back depois (badge na lista / cron) e
+    trivial - mesma funcao pura.
+
+
+--------------------------------------------------------------------------------
+3) PECA 2 - PAINEL "SUGESTAO" NA LEITURA (componente compartilhado)
+--------------------------------------------------------------------------------
+
+COMPONENTE NOVO, dentro do proprio Publicacoes.js
+(ao lado de BarraAcoesPublicacao, que ja e compartilhado pelas abas AASP/CNJ):
+
+    <PainelSugestoes
+        pub={textoAberto}
+        onUsar={(sug) => setAcaoAberta({ tipo:'compromisso', pub: textoAberto, sugestao: sug })}
+    />
+
+  - const sugestoes = useMemo(
+        () => analisarPublicacao(pub.texto, { dataPublicacao: pub.data_publicacao }),
+        [pub]
+    );
+  - Renderiza ACIMA da BarraAcoesPublicacao, nas DUAS telas
+    (1 componente, chamado 2x).
+  - Se sugestoes.length === 0: linha discreta
+    "Nenhuma sugestao automatica - use os botoes abaixo." (sem poluicao).
+  - Para cada sugestao, um cartao com:
+      * selo de confianca (Alta / Conferir),
+      * a frase-resumo ("Audiencia identificada para 08/10/2026 as 10:00"),
+      * o TRECHO DE ORIGEM destacado (reusa o realcarTexto que ja existe),
+      * botao [ Agendar audiencia - 08/10/2026 10:00 ].
+  - So aparece se o usuario puder agir (podeAlterar || textoAberto.pode_agir)
+    - mesma regra da BarraAcoesPublicacao.
+
+
+--------------------------------------------------------------------------------
+4) PECA 3 - PRE-PREENCHER O "CRIAR COMPROMISSO"
+           (via ponte; ZERO mudanca no ModalCompromisso)
+--------------------------------------------------------------------------------
+
+O ModalCompromisso (em Agenda.js) JA monta o formulario a partir de um objeto
+"compromisso" quando ele NAO tem id:
+    editando = !!(compromisso && compromisso.id)  -> fica false
+    -> cria NOVO, mas com os campos ja preenchidos.
+
+SO MUDA O INTERMEDIARIO ModalAcaoDaPublicacao (em Publicacoes.js):
+    - hoje:  acaoAberta = { tipo, pub }
+    - passa a: acaoAberta = { tipo, pub, sugestao }
+    - na renderizacao do compromisso:
+
+        <ModalCompromisso
+           compromisso={sugestao ? {
+             titulo: sugestao.titulo,
+             descricao: sugestao.descricao,
+             data: sugestao.data,
+             hora_inicio: sugestao.hora || ''
+           } : undefined}
+           usuarios={usuariosAgenda} usuarioLogadoId={...} ehAdmin={...}
+           publicacaoId={pub.id} onFechar={onFechar} />
+
+    - Sem id -> salva como NOVO compromisso, com publicacao_id (vinculo ja
+      existente), delegado para o proprio usuario (fallback ja existente).
+    - O LOCAL entra na DESCRICAO (o ModalCompromisso nao tem campo "local";
+      nao vou inventar um).
+
+Os botoes manuais da BarraAcoesPublicacao continuam identicos
+(passam sugestao: undefined).
+
+
+--------------------------------------------------------------------------------
+5) PECA 4 - AVISO DE DUPLICIDADE (usa endpoint que ja existe)
+--------------------------------------------------------------------------------
+
+  - GET /publicacoes/:id/historico JA retorna
+    acoes: { prazos, tarefas, compromissos } vinculados por publicacao_id.
+  - Quando o PainelSugestoes tem ao menos 1 sugestao, ele faz 1 chamada a
+    historico(pub.id) e guarda acoes.compromissos.
+  - Ao clicar no botao da sugestao, se ja houver compromisso vinculado COM A
+    MESMA DATA, mostra confirmacao inline:
+      "Ja existe um compromisso criado desta publicacao em DD/MM.
+       Abrir mesmo assim?"
+    -> AVISA, NAO BLOQUEIA (pode haver 2 audiencias legitimas).
+  - Sem endpoint novo. 1 GET a mais, so quando ha sugestao.
+
+
+--------------------------------------------------------------------------------
+6) EFEITOS COLATERAIS
+--------------------------------------------------------------------------------
+
+  BANCO     : NENHUMA mudanca. Sem SQL, sem tabela, sem coluna.
+  BACKEND   : NENHUMA mudanca. Nenhum controller, rota ou servico tocado.
+  FRONTEND  : 1 arquivo novo (utils/sugestoesPublicacao.js);
+              Publicacoes.js ganha PainelSugestoes + "sugestao" no acaoAberta
+              + repasse no ModalAcaoDaPublicacao.
+              ModalCompromisso NAO muda.
+  API SERVICE: nada (usa historico, que ja existe).
+  CODE-SPLITTING: preservado - sugestoesPublicacao.js entra no chunk de
+              Publicacoes (import estatico dentro da pagina, nao em App.js).
+
+
+--------------------------------------------------------------------------------
+7) RISCOS E MITIGACAO
+--------------------------------------------------------------------------------
+
+  1. Falso positivo (data errada / audiencia que ja aconteceu).
+     -> Nunca cria sozinho; sempre mostra o trecho de origem; regras
+        negativas (realizada|cancelada) suprimem a sugestao; selo "Conferir"
+        quando a confianca e media.
+  2. Duas datas no texto (despacho x audiencia).
+     -> Escolhe a data mais proxima do gatilho (designe-se / para o dia),
+        nao a primeira do texto.
+  3. Regra de regex lenta / travando (ReDoS).
+     -> Padroes simples e ancorados, sem aninhamento perigoso; roda uma vez
+        por abertura, sobre um texto de poucos KB.
+  4. Texto sem padrao reconhecivel.
+     -> Painel mostra "nenhuma sugestao automatica"; os botoes manuais
+        continuam la. Nada quebra.
+  5. Duplicar compromisso.
+     -> Aviso via historico antes de abrir o modal.
+
+
+--------------------------------------------------------------------------------
+8) TESTES
+--------------------------------------------------------------------------------
+
+  ANTES DE ENTREGAR (Claude):
+    - analisarPublicacao e funcao pura -> rodar um script com 10-15 textos
+      reais de publicacoes e conferir data/hora/local/modalidade extraidos.
+    - npm run build (so garante que nao quebrou sintaxe; "build nao e teste").
+
+  TESTE DO USUARIO (no local):
+    - Abrir a publicacao do print (no 40966) -> ver o cartao de sugestao.
+    - Clicar -> conferir o "Criar compromisso" preenchido com 08/10/2026,
+      10:00, descricao com o local.
+    - Salvar -> ver na Agenda.
+    - Reabrir a publicacao -> ver o aviso de duplicidade.
+    - Abrir uma publicacao SEM audiencia -> painel diz "nenhuma sugestao".
+
+
+--------------------------------------------------------------------------------
+9) FASES SEGUINTES (fora deste plano)
+--------------------------------------------------------------------------------
+
+  FASE 2  Prazo (mexe com dias uteis / feriados; sugestao como rascunho).
+  FASE 3  Pericia (espelha a audiencia).
+  FASE 4  Tarefa / compromisso genericos ("intime-se", "cumpra-se").
+  FASE 5  Tela "Regras de sugestao" no Configuracoes (tabela no banco).
+  FASE 6  IA como apoio para confianca baixa (preferir IA local).
+
+
+--------------------------------------------------------------------------------
+10) REGRAS DO PROJETO RESPEITADAS
+--------------------------------------------------------------------------------
+
+  - Fluxo de 2 passos: este plano foi explicado e aprovado ANTES de codar.
+  - Nenhum SQL, nenhuma mudanca de banco.
+  - Nada sobe para o Git sem autorizacao do usuario.
+  - Sem trechos de codigo no chat.
+  - Avisos aparecem como faixa DENTRO do modal (nunca toast do canto).
+  - Code-splitting mantido.
+  - "build nao e teste" - o teste real e o do usuario no local.
+
+================================================================================
+FIM
+================================================================================

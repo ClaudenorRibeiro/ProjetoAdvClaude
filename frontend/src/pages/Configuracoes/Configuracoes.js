@@ -7,7 +7,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { configuracaoAPI, manutencaoAPI, etiquetasAPI } from '../../services/api';
 import { EditorEtiquetasCinco, cincoLinhasEtiqueta, MODULOS_ETIQUETA_ESCRITORIO } from '../../components/Etiquetas';
-import { formatarData, toTitleCase } from '../../utils/formatters';
+import { formatarData, formatarDataHora, hojeLocal, toTitleCase } from '../../utils/formatters';
 import { UFS } from '../../utils/ufs';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
@@ -229,7 +229,7 @@ function PainelHoraServidor() {
   }, []);
 
   const diaSemana = horaAtual.toLocaleDateString('pt-BR', { weekday: 'long' });
-  const dataFmt   = horaAtual.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+  const dataFmt   = formatarData(hojeLocal());
   const horaFmt   = horaAtual.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
   return (
@@ -758,7 +758,7 @@ function TabUsuarios() {
 }
 
 function ModalHistoricoUsuario({ usuario, onFechar }) {
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeLocal();
   const [dataDe,  setDataDe]  = useState('');
   const [dataAte, setDataAte] = useState(hoje);
   const [registros, setRegistros] = useState([]);
@@ -812,7 +812,7 @@ function ModalHistoricoUsuario({ usuario, onFechar }) {
                     {registros.map(r => (
                       <tr key={r.id}>
                         <td style={{ whiteSpace: 'nowrap', fontSize: '12px' }}>
-                          {new Date(r.criado_em).toLocaleString('pt-BR')}
+                          {formatarDataHora(r.criado_em)}
                         </td>
                         <td>
                           <span style={{ color: ACAO_COR[r.acao] || '#333', fontWeight: 600, fontSize: '12px' }}>
@@ -1507,7 +1507,10 @@ function TabIntegracoes() {
     }
     setSalvando(modulo);
     try {
-      await configuracaoAPI.salvarIntegracao(modulo, integracoes[modulo] || {});
+      // `chaveDefinida` é só um aviso pra tela (não é config de verdade) — não some se
+      // for enviado, mas não faz sentido guardar no JSON de configuração.
+      const { chaveDefinida, ...payload } = integracoes[modulo] || {};
+      await configuracaoAPI.salvarIntegracao(modulo, payload);
       toast.success(`Configurações de ${modulo} salvas!`);
     } catch { toast.error('Erro ao salvar'); }
     finally { setSalvando(''); }
@@ -1520,6 +1523,7 @@ function TabIntegracoes() {
   const datajud   = integracoes.datajud   || {};
   const email     = integracoes.email     || {};
   const comtele   = integracoes.comtele   || {};
+  const ia        = integracoes.ia        || {};
 
   // Lista de OABs monitoradas no CNJ (cada item: { numero, uf }).
   const oabsCnj = Array.isArray(cnj.oabs) ? cnj.oabs : [];
@@ -1610,6 +1614,62 @@ function TabIntegracoes() {
         <button className="btn btn-primary" onClick={() => salvarModulo('comtele')}
           disabled={salvando === 'comtele'}>
           {salvando === 'comtele' ? 'Salvando...' : 'Salvar configurações SMS'}
+        </button>
+      </div>
+
+      {/* Sugestões por IA — apoio opcional ao parser de regras das Publicações */}
+      <div className="card">
+        <div style={{display:'flex',alignItems:'center',gap:'12px',marginBottom:'16px'}}>
+          <h3 style={{margin:0,fontSize:'15px',color:'#1e2a3a'}}>Sugestões por IA</h3>
+          <label style={{display:'flex',alignItems:'center',gap:'6px',cursor:'pointer',marginLeft:'auto'}}>
+            <input type="checkbox" checked={!!ia.ativo}
+              onChange={e => setModulo('ia','ativo', e.target.checked)} />
+            <span style={{fontSize:'13px'}}>Integração ativa</span>
+          </label>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Provedor</label>
+          <select className="form-control" value={ia.provedor || 'nenhum'}
+            onChange={e => setModulo('ia','provedor', e.target.value)}>
+            <option value="nenhum">Nenhuma — usar só as regras internas</option>
+            <option value="claude">Claude (Anthropic)</option>
+            <option value="openai">GPT (OpenAI)</option>
+            <option value="mock">Simulação — teste, sem custo, sem chamada externa</option>
+          </select>
+          <small style={{ color: '#888' }}>
+            Um provedor por vez (ou nenhum). A IA é usada <strong>só como apoio</strong>: as regras
+            internas rodam primeiro; a IA só é consultada quando elas não encontram nada.
+          </small>
+        </div>
+        {ia.ativo && ia.provedor && ia.provedor !== 'nenhum' && ia.provedor !== 'mock' && (
+          <>
+            <div className="form-group">
+              <label className="form-label">Chave de API</label>
+              <input className="form-control" type="password" autoComplete="new-password"
+                value={ia.chave || ''}
+                onChange={e => setModulo('ia','chave', e.target.value)}
+                placeholder={ia.chaveDefinida
+                  ? '•••••••• (chave já cadastrada — deixe em branco para manter)'
+                  : (ia.provedor === 'claude' ? 'sk-ant-...' : 'sk-...')} />
+              <small style={{ color: '#888' }}>
+                O <strong>texto da publicação</strong> é enviado ao provedor escolhido para análise.
+                A chave é da conta do próprio escritório — o consumo é <strong>pré-pago</strong>, cobrado
+                diretamente pelo provedor (Anthropic ou OpenAI). Por segurança, a chave salva não é
+                mostrada de novo aqui — deixe o campo em branco para mantê-la, ou digite uma nova para trocar.
+              </small>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Modelo (opcional)</label>
+              <input className="form-control" value={ia.modelo || ''}
+                onChange={e => setModulo('ia','modelo', e.target.value)}
+                placeholder={ia.provedor === 'claude' ? 'claude-sonnet-5' : 'gpt-4o-mini'} />
+              <small style={{ color: '#888' }}>Em branco = usa o modelo padrão do provedor.</small>
+            </div>
+          </>
+        )}
+        <button className="btn btn-primary" onClick={() => salvarModulo('ia')}
+          disabled={salvando === 'ia'}>
+          {salvando === 'ia' ? 'Salvando...' : 'Salvar configurações IA'}
         </button>
       </div>
 

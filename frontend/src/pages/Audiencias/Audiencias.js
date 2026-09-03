@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { audienciasAPI, processosAPI, pessoasAPI, authAPI, calendarioAPI, configuracaoAPI } from '../../services/api';
-import { formatarData, toTitleCase, validarCPF, mascaraCPF, formatarCPF } from '../../utils/formatters';
+import { formatarData, formatarDataHora, hojeLocal, toTitleCase, validarCPF, mascaraCPF, formatarCPF } from '../../utils/formatters';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
@@ -43,9 +43,9 @@ const STATUS_APOSENTADOS = ['adiada', 'acordo'];
 // de horário já vencido no próprio dia de hoje. Usado pelos modais de Criar e Editar.
 function alertaMomentoPassado(data, hora, sufixoObs = '') {
   if (!data) return null;
-  const hojeBr     = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });                 // YYYY-MM-DD
+  const hojeBr     = hojeLocal();                                                                                // YYYY-MM-DD
   const agoraHoraBr= new Date().toLocaleTimeString('en-GB', { timeZone: 'America/Sao_Paulo', hour12: false }).slice(0, 5); // HH:MM
-  const dataFmt = data.split('-').reverse().join('/');
+  const dataFmt = formatarData(data);
   if (data < hojeBr) {
     return {
       alerta: `• Data retroativa: ${dataFmt}`,
@@ -462,6 +462,13 @@ export function ModalRemarcarAudiencia({ audiencia, onFechar }) {
     if (!form.motivo.trim())  return toast.error('Motivo é obrigatório');
     if (!form.nova_data)      return toast.error('Nova data é obrigatória');
     if (!form.nova_hora)      return toast.error('Nova hora é obrigatória');
+    if (!audiencia.tipo_audiencia_id) {
+      return toast.error('Defina o tipo da audiência antes de remarcá-la');
+    }
+    if (form.nova_data === audiencia.data?.split('T')[0]
+        && form.nova_hora === audiencia.hora?.slice(0, 5)) {
+      return toast.error('Informe uma nova data ou um novo horário para remarcar a audiência');
+    }
     setSalvando(true);
     try {
       const { data } = await audienciasAPI.remarcar(audiencia.id, {
@@ -487,6 +494,9 @@ export function ModalRemarcarAudiencia({ audiencia, onFechar }) {
             A audiência de <strong>{formatarData(audiencia.data)}</strong> às <strong>{audiencia.hora?.slice(0,5)}</strong> será
             marcada como <strong>Remarcada</strong> e uma nova audiência será criada com a data informada.
           </p>
+          <div className="alerta alerta-aviso" style={{ marginBottom: '16px' }}>
+            A nova audiência não herdará o vínculo nem o texto da publicação que originou a audiência anterior.
+          </div>
           <div className="form-group">
             <label className="form-label">Motivo da remarcação *</label>
             <textarea className="form-control" rows={2} value={form.motivo}
@@ -585,7 +595,7 @@ export function ModalHistoricoAudiencia({ audiencia, onFechar }) {
                     <tr key={r.id}>
                       <td style={{ whiteSpace: 'nowrap', fontSize: '12px' }}>
                         {r.alterado_em
-                          ? new Date(r.alterado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+                          ? formatarDataHora(r.alterado_em)
                           : '—'}
                       </td>
                       <td style={{ fontSize: '13px' }}>{r.usuario_nome || '—'}</td>
@@ -676,7 +686,7 @@ function ModalCadastroRapidoPessoa({ onFechar, onSalvo }) {
     if (!validarCPF(cpfLimpo)) return toast.error('CPF inválido');
 
     // ── Validação de formato (só se preenchido): data de nascimento não pode ser futura ──
-    const hoje = new Date().toISOString().split('T')[0];
+    const hoje = hojeLocal();
     if (form.data_nascimento && form.data_nascimento > hoje)
       return toast.error('Data de nascimento não pode ser uma data futura');
 
@@ -1079,15 +1089,21 @@ function ModalConfirmarSenhaDiaUtil({ descricao, onCancelar, onConfirmar }) {
   );
 }
 
-export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoInicial, valoresIniciais }) {
+// publicacaoId (opcional): vínculo de origem — audiência criada a partir de uma SUGESTÃO de
+// publicação (ver Publicacoes.js). Sem publicação de origem, fica de fora normalmente.
+export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoInicial, valoresIniciais, publicacaoId }) {
   const { temPermissao } = useAuth();
   const [modalSenhaDiaUtil, setModalSenhaDiaUtil] = useState(null); // { descricao, obs, onConfirm }
   // valoresIniciais (opcional): pré-preenche tipo/modalidade/responsável/vara — usado quando a
-  // audiência é designada a partir do "Registrar Ata" (copia os dados da audiência realizada).
+  // audiência é designada a partir do "Registrar Ata" (copia os dados da audiência realizada)
+  // ou a partir de uma SUGESTÃO de publicação (também traz data/hora).
   const [form, setForm]                     = useState({
-    modalidade: valoresIniciais?.modalidade || 'presencial', hora: '09:00',
+    modalidade: valoresIniciais?.modalidade || 'presencial',
+    hora: valoresIniciais?.hora || '09:00',
+    data: valoresIniciais?.data || '',
     tipo_audiencia_id: valoresIniciais?.tipo_audiencia_id || '',
     responsavel_id: valoresIniciais?.responsavel_id || '',
+    observacoes: valoresIniciais?.observacoes || '',
     ...(processoInicial ? { processo_id: processoInicial.id } : {})
   });
   const [salvando, setSalvando]             = useState(false);
@@ -1141,12 +1157,37 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
     if (data.ok) setSugestoes(data.dados);
   }
   function selecionarProcesso(proc) {
+    const mudouDeProcesso = procSelecionado && Number(procSelecionado.id) !== Number(proc.id);
     setBuscaProc(`${proc.numProc || '(sem nº)'} — ${proc.NomeTituloProc || ''}`);
     setSugestoes([]);
     setProcSelecionado(proc);
     set('processo_id', proc.id);
     // Preenche o "Local da audiência" com a vara do processo (se tiver); o usuário pode trocar.
-    if (proc.vara_id) setVaraId(proc.vara_id);
+    setVaraId(proc.vara_id || null);
+    // Testemunhas pertencem ao processo anterior e não podem atravessar a troca.
+    if (mudouDeProcesso) {
+      setTestemunhas([]);
+      setTestemunhaPendente(false);
+    }
+  }
+
+  function alterarBuscaProcesso(valor) {
+    // Assim que o usuário altera um processo já selecionado, desfaz todos os vínculos
+    // dependentes dele. A nova vara será preenchida ao escolher o processo correto.
+    if (procSelecionado) {
+      setProcSelecionado(null);
+      set('processo_id', null);
+      setVaraId(null);
+      setTestemunhas([]);
+      setTestemunhaPendente(false);
+    }
+    setBuscaProc(valor);
+    buscarProcessos(valor);
+  }
+
+  function trocarProcesso() {
+    alterarBuscaProcesso('');
+    setSugestoes([]);
   }
 
   // Valida data no blur — exibe aviso inline abaixo do campo
@@ -1174,7 +1215,8 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
         ...form,
         vara_id: varaId || null,
         testemunhas: testemunhas.map(t => ({ pessoa_id: t.id, polo: t.polo })),
-        obs_auditoria: obs.length ? obs.join('; ') : undefined
+        obs_auditoria: obs.length ? obs.join('; ') : undefined,
+        publicacao_id: publicacaoId || null,
       });
       toast.success('Audiência criada com sucesso!');
       onFechar(true);
@@ -1184,6 +1226,7 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
 
   async function salvar() {
     if (!form.processo_id) return toast.error('Processo é obrigatório');
+    if (!form.tipo_audiencia_id) return toast.error('Tipo de audiência é obrigatório');
     if (!form.data)        return toast.error('Data é obrigatória');
     if (!form.hora)        return toast.error('Hora é obrigatória');
     if (testemunhaPendente) {
@@ -1213,7 +1256,7 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
     try {
       const { data: cal } = await calendarioAPI.verificarDiaUtil(form.data);
       if (cal.ok && !cal.dados.dia_util) {
-        const dataFmt = form.data.split('-').reverse().join('/');
+        const dataFmt = formatarData(form.data);
         const desc    = cal.dados.descricao || 'dia não útil';
         // Abre modal de confirmação + senha antes de prosseguir
         setModalSenhaDiaUtil({
@@ -1240,7 +1283,11 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
     await executarSalvar([]);
   }
 
-  const podeTipos = temPermissao('audiencias', 'tipos', 'cadastrar') || temPermissao('audiencias', 'tipos', 'alterar');
+  // `temPermissao` só aceita (módulo, ação) — submódulo usa chave composta 'audiencias.tipos'
+  // (ver AuthContext.js/backend/middleware/permissoes.js). A chamada com 3 argumentos nunca
+  // batia, então quem tinha só a permissão de "Tipos de audiência" (sem ser admin) não via
+  // o botão de gerenciar tipos (auditoria 02/09, item 14).
+  const podeTipos = temPermissao('audiencias.tipos', 'cadastrar') || temPermissao('audiencias.tipos', 'alterar');
 
   return (
     <div className="modal-overlay">
@@ -1251,21 +1298,27 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
         </div>
         <div className="modal-body">
 
-          {/* Informativo da pasta */}
-          {procSelecionado && (
+          {/* Informativo da pasta — só quando veio o número (não vem quando aberto de uma publicação) */}
+          {procSelecionado && procSelecionado.numPasta != null && procSelecionado.numPasta !== '' && (
             <div style={{marginBottom:'10px',fontSize:'17px',color:'#1e2a3a',fontWeight:700}}>
               Pasta: {String(procSelecionado.numPasta).padStart(4, '0')}
             </div>
           )}
 
-          {/* Busca de processo — somente leitura quando processo vem pré-selecionado da pasta */}
+          {/* Busca de processo — mesmo pré-selecionado, pode ser trocado antes da criação. */}
           <div className="form-group" style={{position:'relative'}}>
             <label className="form-label">Processo *</label>
-            <input className="form-control" placeholder="Digite o número CNJ ou parte do título..."
-              value={buscaProc}
-              readOnly={!!processoInicial}
-              style={processoInicial ? { background: '#f1f5f9', cursor: 'not-allowed' } : {}}
-              onChange={e => { if (processoInicial) return; setBuscaProc(e.target.value); setProcSelecionado(null); set('processo_id', null); buscarProcessos(e.target.value); }} />
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <input className="form-control" placeholder="Digite o número CNJ ou parte do título..."
+                value={buscaProc}
+                onChange={e => alterarBuscaProcesso(e.target.value)} />
+              {procSelecionado && (
+                <button type="button" className="btn btn-outline" onClick={trocarProcesso}
+                  style={{ whiteSpace: 'nowrap' }} title="Limpar e escolher outro processo">
+                  Trocar processo
+                </button>
+              )}
+            </div>
             {sugestoes.length > 0 && (
               <div style={{position:'absolute',zIndex:100,width:'100%',border:'1px solid #ddd',borderRadius:'6px',marginTop:'2px',maxHeight:'180px',overflowY:'auto',background:'#fff',boxShadow:'0 4px 12px rgba(0,0,0,0.1)'}}>
                 {sugestoes.map(p => (
@@ -1283,7 +1336,7 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
           {/* Tipo + Data + Hora */}
           <div className="grid-3">
             <div className="form-group">
-              <label className="form-label">Tipo de audiência</label>
+              <label className="form-label">Tipo de audiência *</label>
               <div style={{display:'flex',gap:'6px'}}>
                 <select className="form-control" value={form.tipo_audiencia_id||''}
                   onChange={e => set('tipo_audiencia_id', e.target.value)}>
@@ -1385,6 +1438,13 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
               </div>
             </div>
           )}
+
+          <div className="form-group">
+            <label className="form-label">Obs.</label>
+            <textarea className="form-control" rows={3} value={form.observacoes || ''}
+              onChange={e => set('observacoes', e.target.value)}
+              placeholder="Anotações da audiência (livre). Quando criada de uma publicação, já vem com o texto da sugestão." />
+          </div>
 
           {/* Testemunhas — componente reutilizável com polo e cadastro rápido */}
           <SecaoTestemunhas
@@ -1515,6 +1575,7 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
           modalidade:          d.modalidade          || 'presencial',
           plataforma_virtual:  d.plataforma_virtual  || '',
           link_virtual:        d.link_virtual         || '',
+          observacoes:         d.observacoes          || '',
           responsavel_id,
         });
 
@@ -1580,6 +1641,7 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
   }
 
   async function salvar() {
+    if (!form.tipo_audiencia_id) return toast.error('Tipo de audiência é obrigatório');
     if (!form.data) return toast.error('Data é obrigatória');
     if (!form.hora) return toast.error('Hora é obrigatória');
     if (testemunhaPendente) {
@@ -1609,7 +1671,7 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
     try {
       const { data: cal } = await calendarioAPI.verificarDiaUtil(form.data);
       if (cal.ok && !cal.dados.dia_util) {
-        const dataFmt = form.data.split('-').reverse().join('/');
+        const dataFmt = formatarData(form.data);
         const desc    = cal.dados.descricao || 'dia não útil';
         setModalSenhaDiaUtil({
           descricao: `${dataFmt} é ${desc}`,
@@ -1634,7 +1696,11 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
     await executarSalvar([]);
   }
 
-  const podeTipos = temPermissao('audiencias', 'tipos', 'cadastrar') || temPermissao('audiencias', 'tipos', 'alterar');
+  // `temPermissao` só aceita (módulo, ação) — submódulo usa chave composta 'audiencias.tipos'
+  // (ver AuthContext.js/backend/middleware/permissoes.js). A chamada com 3 argumentos nunca
+  // batia, então quem tinha só a permissão de "Tipos de audiência" (sem ser admin) não via
+  // o botão de gerenciar tipos (auditoria 02/09, item 14).
+  const podeTipos = temPermissao('audiencias.tipos', 'cadastrar') || temPermissao('audiencias.tipos', 'alterar');
 
   if (carregando) {
     return (
@@ -1678,7 +1744,7 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
           {/* Tipo + Data + Hora */}
           <div className="grid-3">
             <div className="form-group">
-              <label className="form-label">Tipo de audiência</label>
+              <label className="form-label">Tipo de audiência *</label>
               <div style={{ display: 'flex', gap: '6px' }}>
                 <select className="form-control" value={form.tipo_audiencia_id || ''} disabled={leitura}
                   onChange={e => set('tipo_audiencia_id', e.target.value)}>
@@ -1783,6 +1849,13 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
               </div>
             </div>
           )}
+
+          <div className="form-group">
+            <label className="form-label">Obs.</label>
+            <textarea className="form-control" rows={3} value={form.observacoes || ''} disabled={leitura}
+              onChange={e => set('observacoes', e.target.value)}
+              placeholder="Anotações da audiência (livre)." />
+          </div>
 
           {/* Testemunhas — componente reutilizável com polo e cadastro rápido */}
           <SecaoTestemunhas

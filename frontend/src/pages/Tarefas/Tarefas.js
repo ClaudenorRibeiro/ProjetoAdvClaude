@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { tarefasAPI, processosAPI } from '../../services/api';
-import { formatarData, labelPrioridade, toTitleCase, mascaraCNJ } from '../../utils/formatters';
+import { formatarData, formatarDataHora, labelPrioridade, toTitleCase, mascaraCNJ } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
@@ -457,7 +457,7 @@ export function ModalHistoricoTarefa({ tarefa, onFechar }) {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '4px' }}>
                       <strong style={{ fontSize: '14px', color: '#1e293b' }}>{ev.descricao}</strong>
                       <span style={{ fontSize: '15px', color: '#334155', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                        {ev.data ? new Date(ev.data).toLocaleString('pt-BR') : '—'}
+                        {ev.data ? formatarDataHora(ev.data) : '—'}
                       </span>
                     </div>
                     <div style={{ fontSize: '13px', color: '#64748b', marginTop: '2px' }}>

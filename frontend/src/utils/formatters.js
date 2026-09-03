@@ -2,22 +2,38 @@
 // FORMATADORES — Funções usadas na interface para exibição
 // ============================================================
 
-// Data de HOJE no fuso local do navegador, como 'YYYY-MM-DD'.
-// Usar em vez de new Date().toISOString() — o toISOString converte para UTC e, após as 21h
-// (horário de Brasília), retorna "amanhã", pré-preenchendo campos de data com o dia errado.
-export function hojeLocal() {
-  const d = new Date();
+const FUSO_BRASIL = 'America/Sao_Paulo';
+
+// Converte um Date para a data civil local, sem passar por UTC. Usado em cálculos
+// que alimentam campos técnicos <input type="date"> no formato obrigatório YYYY-MM-DD.
+export function dataParaIsoLocal(data) {
+  const d = data instanceof Date ? data : new Date(data);
+  if (Number.isNaN(d.getTime())) return '';
   const ano = d.getFullYear();
   const mes = String(d.getMonth() + 1).padStart(2, '0');
   const dia = String(d.getDate()).padStart(2, '0');
   return `${ano}-${mes}-${dia}`;
 }
 
-// Formata data ISO (YYYY-MM-DD) para DD/MM/YYYY
+// Data de HOJE em Brasília, como 'YYYY-MM-DD'. Usar em valores técnicos de
+// formulário/API. O toISOString não serve aqui porque converte a data para UTC.
+export function hojeLocal() {
+  return new Date().toLocaleDateString('sv-SE', { timeZone: FUSO_BRASIL });
+}
+
+// Formata data ISO (YYYY-MM-DD) para o padrão brasileiro adotado pelo sistema: DD/MM/YYYY.
 export function formatarData(data) {
   if (!data) return '—';
-  const d = new Date(data + 'T12:00:00');
-  return d.toLocaleDateString('pt-BR');
+  const partesIso = String(data).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (partesIso) return `${partesIso[3]}/${partesIso[2]}/${partesIso[1]}`;
+
+  const d = data instanceof Date ? data : new Date(data);
+  if (Number.isNaN(d.getTime())) return '—';
+  const partes = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: FUSO_BRASIL, day: '2-digit', month: '2-digit', year: 'numeric',
+  }).formatToParts(d);
+  const obter = (tipo) => partes.find(p => p.type === tipo)?.value || '';
+  return `${obter('day')}/${obter('month')}/${obter('year')}`;
 }
 
 // Deixa o texto de uma publicação legível: quando vem em HTML (acontece em algumas do CNJ),
@@ -36,10 +52,18 @@ export function textoLimpo(texto) {
   return t.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-// Formata data e hora ISO para DD/MM/YYYY HH:MM
+// Formata data e hora ISO para DD/MM/YYYY HH:MM, sempre no fuso de Brasília.
 export function formatarDataHora(data) {
   if (!data) return '—';
-  return new Date(data).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  const d = data instanceof Date ? data : new Date(data);
+  if (Number.isNaN(d.getTime())) return '—';
+  const partes = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: FUSO_BRASIL,
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(d);
+  const obter = (tipo) => partes.find(p => p.type === tipo)?.value || '';
+  return `${obter('day')}/${obter('month')}/${obter('year')} ${obter('hour')}:${obter('minute')}`;
 }
 
 // Formata valor monetário para R$ 1.234,56

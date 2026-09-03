@@ -24,6 +24,21 @@ const loginLimiter = rateLimit({
   message: { ok: false, mensagem: 'Muitas tentativas de login para este usuário. Aguarde alguns minutos e tente novamente.' },
 });
 
+// Proteção de custo da IA — aplicada DEPOIS da autenticação e chaveada pelo ID
+// do usuário, nunca pelo IP compartilhado do escritório. Cada usuário pode fazer
+// até 30 consultas em 10 minutos. As demais rotas do sistema não são afetadas.
+const sugestoesIaLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `usuario:${req.usuario.id}`,
+  message: {
+    ok: false,
+    mensagem: 'Limite temporário de consultas à IA atingido. Aguarde alguns minutos e tente novamente.',
+  },
+});
+
 // Controllers
 const authCtrl          = require('../controllers/authController');
 const pessoasCtrl       = require('../controllers/pessoasController');
@@ -123,6 +138,7 @@ router.get('/pessoas/:tipo/:id/processos', autenticar, verificarPermissao('pesso
 // ---- PROCESSOS E PASTAS ----
 // ATENÇÃO: rotas estáticas (sugerir-pasta, auxiliares, pastas) ANTES de /:id
 router.get('/processos/buscar',                     autenticar, processosCtrl.buscarProcessosPorNumero);
+router.get('/processos/:id/basico',                 autenticar, processosCtrl.buscarProcessoPorId);
 // Relatório: processos parados (risco de prescrição) — estática ANTES de /:id
 router.get('/processos/parados',                    autenticar, verificarPermissao('relatorios','visualizar'), processosCtrl.listarProcessosParados);
 router.get('/processos/sugerir-pasta',              autenticar, processosCtrl.sugerirNumeroPasta);
@@ -320,18 +336,20 @@ router.get('/publicacoes/aasp/status',    autenticar, verificarPermissao('public
 router.get('/publicacoes/cnj/status',     autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.statusCnj);
 router.post('/publicacoes/cnj/importar',  autenticar, verificarPermissao('publicacoes','cadastrar'),  publicacoesCtrl.importarCnj);
 router.get('/publicacoes/usuarios',       autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.usuariosParaDirecionar);
+router.get('/publicacoes/ia-status',      autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.iaStatus);
 router.get('/publicacoes/destinatarios-email', autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.destinatariosEmail);
 router.get('/publicacoes',                autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.listar);
 router.get('/publicacoes/:id/historico',  autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.historico);
 router.get('/publicacoes/:id/atribuicoes', autenticar, verificarPermissao('publicacoes','cadastrar'), publicacoesCtrl.atribuicoesPub);
 router.post('/publicacoes/:id/marcar-lida', autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.marcarLida);
+router.post('/publicacoes/:id/sugestoes-ia', autenticar, verificarPermissao('publicacoes','visualizar'), sugestoesIaLimiter, publicacoesCtrl.sugestoesIa);
 router.get('/publicacoes/:id',            autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.obter);
 router.post('/publicacoes/importar',      autenticar, verificarPermissao('publicacoes','cadastrar'),  publicacoesCtrl.importar);
 // Atribuir: só BUSCADOR (permissão de baixar = publicacoes/cadastrar). O corpo traz a
 // lista COMPLETA de quem fica com a publicação; o backend adiciona/remove a diferença.
 router.put('/publicacoes/:id/atribuir',    autenticar, verificarPermissao('publicacoes','cadastrar'), publicacoesCtrl.atribuir);
-// Tratar / enviar por e-mail: a rota exige só "visualizar"; o controller decide de
-// verdade ("alterar" OU a publicação está atribuída ao usuário; admin/super sempre).
+// Tratar / enviar por e-mail: a rota exige "visualizar"; o controller restringe
+// o alcance individual. `alterar` não abre publicação para não-buscador.
 router.put('/publicacoes/:id/tratar',     autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.tratar);
 router.post('/publicacoes/:id/enviar-email', autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.enviarEmailPublicacao);
 router.post('/publicacoes/excluir-lote',  autenticar, verificarPermissao('publicacoes','excluir'),    publicacoesCtrl.excluirLote);
