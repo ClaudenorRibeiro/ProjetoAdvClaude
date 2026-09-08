@@ -29,6 +29,7 @@ const MENU = [
   { path: '/financeiro',    label: 'Financeiro',    icone: '💰', modulo: 'financeiro' },
   { path: '/documentos',    label: 'Documentos',    icone: '📄', modulo: 'documentos' },
   { path: '/publicacoes',   label: 'Publicações',   icone: '📰', modulo: 'publicacoes' },
+  { path: '/pendencias-documento', label: 'Pendências de Docs.', icone: '📌', modulo: 'pendencias' },
   { path: '/agenda',        label: 'Agenda',        icone: '📅', modulo: null },
   { path: '/relatorios',    label: 'Relatórios',    icone: '📊', modulo: 'relatorios' },
   {

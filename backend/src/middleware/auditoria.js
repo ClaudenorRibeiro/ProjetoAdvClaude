@@ -27,6 +27,7 @@ const DESCRICAO_MAPA = {
   tblforum:             { coluna: 'nome',         prefixo: 'Fórum: ' },
   tblvara:              { coluna: 'nome',         prefixo: 'Vara: ' },
   usuarios:             { coluna: 'nome',         prefixo: 'Usuário: ' },
+  pendencia_documento:  { coluna: 'observacao',   prefixo: 'Pendência de documentos: ' },
 };
 
 // Descrições fixas (não dependem de um registro específico)

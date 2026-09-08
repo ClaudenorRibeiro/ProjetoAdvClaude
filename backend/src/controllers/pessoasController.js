@@ -28,6 +28,26 @@ function semRepetidos(lista, chaveFn) {
   }
   return saida;
 }
+
+// Conta os documentos ainda pendentes (não recebidos) das pendências ABERTAS de um cliente.
+// Usado só para a faixa informativa na ficha da Pessoa. Tolerante: se o banco ainda não
+// tem as tabelas do módulo (script não rodado), devolve 0 sem quebrar a ficha.
+async function contarDocumentosPendentes(tipo_pessoa, pessoaId) {
+  try {
+    const [[row]] = await pool.execute(
+      `SELECT COUNT(*) AS total
+         FROM pendencia_documento_item i
+         JOIN pendencia_documento pd ON i.pendencia_id = pd.id
+        WHERE pd.status = 'aberta' AND i.recebido = 0
+          AND pd.tipo_pessoa = ? AND pd.pessoa_id = ?`,
+      [tipo_pessoa, pessoaId]
+    );
+    return Number(row.total) || 0;
+  } catch (e) {
+    console.error('Pendências de documentos indisponíveis (banco sem o script?):', e.message);
+    return 0;
+  }
+}
 const chaveTelefone = (t) => String(t?.numero || '').replace(/\D/g, '');
 const chaveEmail    = (e) => String(e?.email  || '').trim().toLowerCase();
 
@@ -286,7 +306,10 @@ async function buscarFisica(req, res) {
       console.error('Avisos de idade indisponíveis (banco sem o script?):', e.message);
     }
 
-    return sucesso(res, { ...pessoa, telefones, emails, historico, representados, avisos_idade });
+    // Quantos documentos ainda faltam neste cliente (pendências abertas) — para a faixa na ficha
+    const pendencias_documento_abertas = await contarDocumentosPendentes('fisica', id);
+
+    return sucesso(res, { ...pessoa, telefones, emails, historico, representados, avisos_idade, pendencias_documento_abertas });
   } catch (err) {
     return erroInterno(res, err);
   }
@@ -1237,7 +1260,9 @@ async function buscarJuridica(req, res) {
       [id]
     );
 
-    return sucesso(res, { ...pessoa, telefones, emails, historico });
+    const pendencias_documento_abertas = await contarDocumentosPendentes('juridica', id);
+
+    return sucesso(res, { ...pessoa, telefones, emails, historico, pendencias_documento_abertas });
   } catch (err) {
     return erroInterno(res, err);
   }

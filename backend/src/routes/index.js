@@ -58,6 +58,7 @@ const agendaCompromissoCtrl = require('../controllers/agendaCompromissoControlle
 const notificacoesCtrl  = require('../controllers/notificacoesController');
 const etiquetasCtrl     = require('../controllers/etiquetasController');
 const manutencaoCtrl    = require('../controllers/manutencaoController');
+const pendenciasDocCtrl = require('../controllers/pendenciasDocumentoController');
 
 // ---- PÚBLICO (sem autenticação) ----
 router.get('/public/info',              configuracaoCtrl.infoPublica);
@@ -354,6 +355,23 @@ router.put('/publicacoes/:id/tratar',     autenticar, verificarPermissao('public
 router.post('/publicacoes/:id/enviar-email', autenticar, verificarPermissao('publicacoes','visualizar'), publicacoesCtrl.enviarEmailPublicacao);
 router.post('/publicacoes/excluir-lote',  autenticar, verificarPermissao('publicacoes','excluir'),    publicacoesCtrl.excluirLote);
 router.delete('/publicacoes/:id',         autenticar, verificarPermissao('publicacoes','excluir'),    publicacoesCtrl.excluir);
+
+// ---- PENDÊNCIAS DE DOCUMENTOS ----
+// Clientes (PF/PJ) que devem documentos, com o processo suspenso aguardando.
+// Rotas estáticas ANTES das com :id. Quem tem "visualizar" vê as de todos.
+router.get('/pendencias-documento/tipos',        autenticar, verificarPermissao('pendencias','visualizar'), pendenciasDocCtrl.listarTipos);
+router.post('/pendencias-documento/tipos',       autenticar, verificarPermissao('pendencias','tipos','cadastrar'), pendenciasDocCtrl.criarTipo);
+router.put('/pendencias-documento/tipos/:id',    autenticar, verificarPermissao('pendencias','tipos','alterar'),   pendenciasDocCtrl.atualizarTipo);
+router.delete('/pendencias-documento/tipos/:id', autenticar, verificarPermissao('pendencias','tipos','excluir'),   pendenciasDocCtrl.excluirTipo);
+router.get('/pendencias-documento/usuarios',     autenticar, verificarPermissao('pendencias','visualizar'), pendenciasDocCtrl.listarUsuarios);
+router.get('/pendencias-documento/clientes',     autenticar, verificarPermissao('pendencias','cadastrar'),  pendenciasDocCtrl.buscarClientes);
+router.get('/pendencias-documento',              autenticar, verificarPermissao('pendencias','visualizar'), pendenciasDocCtrl.listar);
+router.get('/pendencias-documento/:id',          autenticar, verificarPermissao('pendencias','visualizar'), pendenciasDocCtrl.buscar);
+router.post('/pendencias-documento',             autenticar, verificarPermissao('pendencias','cadastrar'),  pendenciasDocCtrl.criar);
+router.put('/pendencias-documento/:id/cancelar', autenticar, verificarPermissao('pendencias','alterar'),    pendenciasDocCtrl.cancelar);
+router.put('/pendencias-documento/:id/itens/:itemId', autenticar, verificarPermissao('pendencias','alterar'), pendenciasDocCtrl.marcarItem);
+router.put('/pendencias-documento/:id',          autenticar, verificarPermissao('pendencias','alterar'),    pendenciasDocCtrl.atualizar);
+router.delete('/pendencias-documento/:id',       autenticar, verificarPermissao('pendencias','excluir'),    pendenciasDocCtrl.excluir);
 
 // ---- CONFIGURAÇÕES (somente admin) ----
 router.get('/configuracoes/escritorio',           autenticar, apenasAdmin, configuracaoCtrl.buscarEscritorio);

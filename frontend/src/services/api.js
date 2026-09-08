@@ -466,6 +466,27 @@ export const calendarioAPI = {
   verificarDiaUtil: (data) => api.get('/calendario/dia-util', { params: { data } }),
 };
 
+// ============================================================
+// PENDÊNCIAS DE DOCUMENTOS
+// Clientes (PF/PJ) que devem documentos, com o processo suspenso aguardando.
+// ============================================================
+export const pendenciasDocAPI = {
+  listar:      (params) => api.get('/pendencias-documento', { params }),
+  buscar:      (id) => api.get(`/pendencias-documento/${id}`),
+  criar:       (dados) => api.post('/pendencias-documento', dados),
+  atualizar:   (id, dados) => api.put(`/pendencias-documento/${id}`, dados),
+  marcarItem:  (id, itemId, recebido) => api.put(`/pendencias-documento/${id}/itens/${itemId}`, { recebido }),
+  cancelar:    (id) => api.put(`/pendencias-documento/${id}/cancelar`),
+  excluir:     (id) => api.delete(`/pendencias-documento/${id}`),
+  usuarios:    () => api.get('/pendencias-documento/usuarios'),
+  buscarClientes: (busca) => api.get('/pendencias-documento/clientes', { params: { busca } }),
+  // Catálogo de tipos de documento (botão "…")
+  tipos:       () => api.get('/pendencias-documento/tipos'),
+  criarTipo:   (dados) => api.post('/pendencias-documento/tipos', dados),
+  atualizarTipo: (id, dados) => api.put(`/pendencias-documento/tipos/${id}`, dados),
+  excluirTipo: (id) => api.delete(`/pendencias-documento/tipos/${id}`),
+};
+
 // Manutenção do sistema — ações restritas ao superusuário
 export const manutencaoAPI = {
   limparDadosTeste: (dados) => api.post('/manutencao/limpar-dados-teste', dados),

@@ -7,6 +7,7 @@ const cron = require('node-cron');
 const { pool } = require('../config/database');
 const { diasUteisAntes } = require('./calendarioService');
 const { emailPrazosPendentes, emailPrazosAtrasados } = require('./notificacaoService');
+const { enviarEmail } = require('../utils/email');
 const { liberarFazendoExpirados } = require('../controllers/prazosController');
 const { dataParaIsoLocal, hojeBrasilia } = require('../utils/helpers');
 
@@ -45,6 +46,12 @@ async function iniciarAlertas() {
   cron.schedule('10 8 * * *', async () => {
     console.log('⏰ Cron: verificando avisos de idade...');
     await verificarAvisosIdade();
+  }, OPCOES_CRON);
+
+  // Pendências de documentos com aviso agendado para hoje ou antes (todo dia às 8h15)
+  cron.schedule('15 8 * * *', async () => {
+    console.log('⏰ Cron: verificando avisos de pendências de documentos...');
+    await verificarAvisosPendenciaDocumento();
   }, OPCOES_CRON);
 
   // Limpeza diária: remove tokens de redefinição de senha já usados ou expirados (3h)
@@ -280,4 +287,95 @@ async function verificarAvisosIdade() {
   }
 }
 
-module.exports = { iniciarAlertas, reagendarCronPrazos, verificarAvisosIdade };
+// ── AVISOS DE PENDÊNCIA DE DOCUMENTOS ────────────────────────────────────
+// "Me avise nesta data" configurado na pendência. O aviso vai para o USUÁRIO
+// RESPONSÁVEL da pendência, pelos canais que ele escolheu no cadastro (sino
+// e/ou e-mail). Roda 1x/dia e cada pendência avisa UMA única vez (avisado_em).
+//
+// Usa <= CURDATE() (não =) de propósito: se o sistema ficar fora do ar no dia
+// exato, o aviso sai no primeiro dia em que voltar, em vez de se perder.
+async function verificarAvisosPendenciaDocumento() {
+  try {
+    const [pendentes] = await pool.execute(
+      `SELECT pd.id, pd.tipo_pessoa, pd.pessoa_id, pd.responsavel_id,
+              pd.avisar_sino, pd.avisar_email,
+              CASE pd.tipo_pessoa
+                WHEN 'fisica'   THEN (SELECT pf.nome         FROM pessoas_fisicas   pf WHERE pf.id = pd.pessoa_id)
+                WHEN 'juridica' THEN (SELECT pj.razao_social FROM pessoas_juridicas pj WHERE pj.id = pd.pessoa_id)
+              END AS cliente_nome,
+              (SELECT COUNT(*) FROM pendencia_documento_item i
+                WHERE i.pendencia_id = pd.id AND i.recebido = 0) AS pendentes_qtd,
+              u.nome AS resp_nome, u.email AS resp_email
+         FROM pendencia_documento pd
+         JOIN usuarios u ON pd.responsavel_id = u.id AND u.ativo = 1
+        WHERE pd.status = 'aberta'
+          AND pd.data_aviso IS NOT NULL
+          AND pd.data_aviso <= CURDATE()
+          AND pd.avisado_em IS NULL
+        ORDER BY pd.data_aviso ASC`
+    );
+    if (!pendentes.length) return;
+
+    for (const p of pendentes) {
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+
+        const mensagem = `Documentos pendentes de ${p.cliente_nome || 'cliente'} — ${p.pendentes_qtd} documento(s) ainda não entregue(s). Processo aguardando.`.slice(0, 300);
+
+        // Sino: notificação na tela para o responsável. A coluna pessoa_id só
+        // referencia pessoas_fisicas — para PJ fica null (o texto já traz o nome).
+        if (Number(p.avisar_sino) === 1) {
+          await conn.execute(
+            'INSERT INTO notificacoes (usuario_id, pessoa_id, mensagem) VALUES (?, ?, ?)',
+            [p.responsavel_id, p.tipo_pessoa === 'fisica' ? p.pessoa_id : null, mensagem]
+          );
+        }
+
+        // Marca DENTRO da mesma transação: ou o aviso é registrado, ou tenta de novo amanhã.
+        await conn.execute(
+          'UPDATE pendencia_documento SET avisado_em = NOW() WHERE id = ?', [p.id]
+        );
+        await conn.commit();
+        console.log(`🔔 Aviso de pendência #${p.id} (${p.cliente_nome}) enviado ao responsável ${p.resp_nome}`);
+      } catch (err) {
+        await conn.rollback();
+        console.error('Erro no aviso de pendência de documentos #' + p.id + ':', err.message);
+        conn.release();
+        continue; // não tenta o e-mail se o registro do aviso falhou
+      }
+      conn.release();
+
+      // E-mail ao responsável — best-effort, fora da transação (nunca derruba o cron).
+      if (Number(p.avisar_email) === 1 && p.resp_email) {
+        try {
+          await enviarEmail({
+            para: p.resp_email,
+            assunto: `Pendência de documentos — ${p.cliente_nome || 'cliente'}`,
+            destinatarioNome: p.resp_nome,
+            html: `
+              <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
+                <div style="background:#b45309;padding:20px;text-align:center">
+                  <h2 style="color:#fff;margin:0">Pendência de documentos</h2>
+                </div>
+                <div style="padding:24px">
+                  <p>Olá, <strong>${p.resp_nome || ''}</strong>.</p>
+                  <p>Chegou a data que você agendou para cobrar os documentos do cliente
+                     <strong>${p.cliente_nome || 'cliente'}</strong>.</p>
+                  <p><strong>${p.pendentes_qtd}</strong> documento(s) ainda não foram entregues — o processo
+                     segue aguardando.</p>
+                  <p style="color:#555;font-size:13px">Acesse o sistema, em <strong>Pendências de Documentos</strong>, para ver a lista completa.</p>
+                </div>
+              </div>`,
+          });
+        } catch (err) {
+          console.error('Falha ao enviar e-mail de pendência #' + p.id + ':', err.message);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Erro ao verificar avisos de pendências de documentos:', err.message);
+  }
+}
+
+module.exports = { iniciarAlertas, reagendarCronPrazos, verificarAvisosIdade, verificarAvisosPendenciaDocumento };

@@ -51,6 +51,9 @@ const MODULOS_PERM = [
     { chave: 'documentos.modelos', label: 'Modelos de documento' },
   ]},
   { chave: 'publicacoes',  label: 'Publicações — "Cadastrar" = buscar/baixar (vê todas); sem ele, só vê as publicações atribuídas a ele' },
+  { chave: 'pendencias', label: 'Pendências de documentos — quem tem "Visualizar" vê as de todos os clientes', submodulos: [
+    { chave: 'pendencias.tipos', label: 'Tipos de documento (editar a lista)' },
+  ]},
   { chave: 'relatorios',   label: 'Relatórios' },
   { chave: 'sms',          label: 'SMS (enviar)' },
 ];

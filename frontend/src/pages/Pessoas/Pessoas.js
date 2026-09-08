@@ -1826,6 +1826,15 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
                 title="Fechar">✕</button>
             </div>
           )}
+          {/* Faixa informativa: este cliente tem documentos pendentes de entrega
+              (módulo "Pendências de Documentos"). Aparece para quem abre a ficha. */}
+          {Number(form.pendencias_documento_abertas) > 0 && (
+            <div style={{ background:'#fffbeb', border:'1px solid #fde68a', color:'#92400e',
+              borderRadius:'6px', padding:'8px 10px', marginBottom:'12px', fontSize:'13px' }}>
+              📌 Este cliente tem <strong>{form.pendencias_documento_abertas}</strong> documento(s) pendente(s) de entrega.
+              Acompanhe em <strong>Pendências de Documentos</strong>.
+            </div>
+          )}
           {tipo === 'fisicas' ? (
             <>
               <div className="grid-2">
