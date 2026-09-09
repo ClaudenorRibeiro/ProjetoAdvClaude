@@ -8,7 +8,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { publicacoesAPI, agendaAPI, periciasAPI, audienciasAPI, processosAPI } from '../../services/api';
+import { publicacoesAPI, agendaAPI, periciasAPI, audienciasAPI, processosAPI, authAPI } from '../../services/api';
 import { formatarData, formatarDataHora, hojeLocal, textoLimpo } from '../../utils/formatters';
 import { analisarPublicacao } from '../../utils/sugestoesPublicacao';
 import { toast } from 'react-toastify';
@@ -885,7 +885,7 @@ export default function Publicacoes() {
 // Aba AASP
 // ------------------------------------------------------------
 function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTratamento }) {
-  const { temPermissao, usuario, ehAdmin } = useAuth();
+  const { temPermissao, usuario, ehAdmin, atualizarPublicacoesEscopo } = useAuth();
   const podeImportar = temPermissao('publicacoes', 'cadastrar');
   const podeAlterar  = temPermissao('publicacoes', 'alterar');
   const podeExcluir  = temPermissao('publicacoes', 'excluir');
@@ -907,13 +907,18 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
   const [lista, setLista]       = useState([]);
   const { defs: etqDefs, marcar: marcarEtq } = useEtiquetasPessoais('publicacoes', lista, setLista);
   const [total, setTotal]       = useState(0);
+  // "Ver" (só para buscador/admin): 'todas' = tudo que pode ver | 'minhas' = só as
+  // atribuídas a ele. Preferência do usuário, salva no servidor (vale em qualquer
+  // dispositivo). Para quem não é buscador o backend já ignora e mostra só as dele.
+  const podeEscolherEscopo = ehAdmin || podeImportar;
   // filtros: janela de datas (dataInicio/dataFim, máx. 3 meses) OU todasDatas=true (mostra tudo);
   // escopo 'todas'|'minhas'; tratada; busca; paginação; e ordenação (ordenar/direcao).
-  const [filtros, setFiltros]   = useState({
+  const [filtros, setFiltros]   = useState(() => ({
     dataInicio: '', dataFim: '', todasDatas: true,
-    escopo: 'todas', tratada: '0', busca: '', pagina: 1,
+    escopo: usuario?.publicacoes_escopo === 'minhas' ? 'minhas' : 'todas',
+    tratada: '0', busca: '', pagina: 1,
     ordenar: null, direcao: null,
-  });
+  }));
   const [carregando, setCarregando] = useState(false);
   const [selecionados, setSelecionados] = useState([]); // ids marcados na página atual
 
@@ -1015,6 +1020,15 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
   useEffect(() => { carregar(); }, [carregar]);
 
   function setFiltro(k, v) { setFiltros(f => ({ ...f, [k]: v, pagina: 1 })); }
+
+  // Troca o "Ver": aplica o filtro na hora E salva como preferência do usuário no
+  // servidor (passa a valer em qualquer dispositivo no próximo carregamento).
+  function trocarEscopo(v) {
+    const escopo = v === 'minhas' ? 'minhas' : 'todas';
+    setFiltro('escopo', escopo);
+    atualizarPublicacoesEscopo(escopo);
+    authAPI.salvarPublicacoesEscopo(escopo).catch(() => toast.error('Não foi possível salvar a preferência do "Ver"'));
+  }
 
   // ---- Ordenação (3 estados: ▲ crescente → ▼ decrescente → volta ao padrão Data) ----
   function clicarOrdenar(campo) {
@@ -1178,6 +1192,17 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
               </small>
             )}
           </div>
+          {podeEscolherEscopo && (
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Ver</label>
+              <select className="form-control" value={filtros.escopo}
+                onChange={e => trocarEscopo(e.target.value)}
+                title="Fica salvo no seu usuário e vale em qualquer dispositivo">
+                <option value="minhas">Atribuídas a mim</option>
+                <option value="todas">Todas</option>
+              </select>
+            </div>
+          )}
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Status</label>
             <select className="form-control" value={filtros.tratada}
@@ -1502,7 +1527,7 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
 const CNJ_CERTIDAO_BASE = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
 
 function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTratamento }) {
-  const { temPermissao, usuario, ehAdmin } = useAuth();
+  const { temPermissao, usuario, ehAdmin, atualizarPublicacoesEscopo } = useAuth();
   const podeImportar = temPermissao('publicacoes', 'cadastrar');
   const podeAlterar  = temPermissao('publicacoes', 'alterar');
   const podeExcluir  = temPermissao('publicacoes', 'excluir');
@@ -1526,11 +1551,14 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
   const [lista, setLista]       = useState([]);
   const { defs: etqDefs, marcar: marcarEtq } = useEtiquetasPessoais('publicacoes', lista, setLista);
   const [total, setTotal]       = useState(0);
-  const [filtros, setFiltros]   = useState({
+  // "Ver": ver comentário na tela AASP. Preferência do usuário salva no servidor.
+  const podeEscolherEscopo = ehAdmin || podeImportar;
+  const [filtros, setFiltros]   = useState(() => ({
     dataInicio: '', dataFim: '', todasDatas: true,
-    escopo: 'todas', tratada: '0', busca: '', pagina: 1,
+    escopo: usuario?.publicacoes_escopo === 'minhas' ? 'minhas' : 'todas',
+    tratada: '0', busca: '', pagina: 1,
     ordenar: null, direcao: null,
-  });
+  }));
   const [carregando, setCarregando] = useState(false);
   const [selecionados, setSelecionados] = useState([]); // ids marcados na página atual
 
@@ -1638,6 +1666,15 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
   useEffect(() => { carregar(); }, [carregar]);
 
   function setFiltro(k, v) { setFiltros(f => ({ ...f, [k]: v, pagina: 1 })); }
+
+  // Troca o "Ver": aplica o filtro na hora E salva como preferência do usuário no
+  // servidor (passa a valer em qualquer dispositivo no próximo carregamento).
+  function trocarEscopo(v) {
+    const escopo = v === 'minhas' ? 'minhas' : 'todas';
+    setFiltro('escopo', escopo);
+    atualizarPublicacoesEscopo(escopo);
+    authAPI.salvarPublicacoesEscopo(escopo).catch(() => toast.error('Não foi possível salvar a preferência do "Ver"'));
+  }
 
   // ---- Ordenação (3 estados: ▲ crescente → ▼ decrescente → volta ao padrão Data) ----
   function clicarOrdenar(campo) {
@@ -1804,6 +1841,17 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
               </small>
             )}
           </div>
+          {podeEscolherEscopo && (
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Ver</label>
+              <select className="form-control" value={filtros.escopo}
+                onChange={e => trocarEscopo(e.target.value)}
+                title="Fica salvo no seu usuário e vale em qualquer dispositivo">
+                <option value="minhas">Atribuídas a mim</option>
+                <option value="todas">Todas</option>
+              </select>
+            </div>
+          )}
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Status</label>
             <select className="form-control" value={filtros.tratada}

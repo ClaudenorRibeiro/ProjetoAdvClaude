@@ -200,6 +200,17 @@ export function AuthProvider({ children }) {
     });
   }
 
+  // Atualiza o padrão do seletor "Ver" da tela de Publicações ('todas'|'minhas')
+  // do usuário logado, refletindo na hora e mantendo o sessionStorage sincronizado.
+  function atualizarPublicacoesEscopo(escopo) {
+    setUsuario(u => {
+      if (!u) return u;
+      const novo = { ...u, publicacoes_escopo: escopo === 'minhas' ? 'minhas' : 'todas' };
+      sessionStorage.setItem('usuario', JSON.stringify(novo));
+      return novo;
+    });
+  }
+
   // Verifica se o usuário tem permissão para uma ação em um módulo
   // Admins (nível 1) e superusuários (nível 0) têm acesso total
   function temPermissao(modulo, acao) {
@@ -215,7 +226,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       usuario, permissoes, carregando,
-      logar, deslogar, temPermissao, ehAdmin, ehSuper, atualizarCoresAgenda, atualizarCoresMenu, atualizarCorLinha, atualizarCorLinhaLida, atualizarGoogleAgenda,
+      logar, deslogar, temPermissao, ehAdmin, ehSuper, atualizarCoresAgenda, atualizarCoresMenu, atualizarCorLinha, atualizarCorLinhaLida, atualizarGoogleAgenda, atualizarPublicacoesEscopo,
     }}>
       {children}
     </AuthContext.Provider>

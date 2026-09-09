@@ -174,6 +174,7 @@ async function login(req, res) {
         cor_linha_lida: parseCorLinha(usuario.cor_linha_lida), // cor da linha de publicação já lida (null = padrão)
         google_agenda_ativo: Number(usuario.google_agenda_ativo) === 1 ? 1 : 0, // envia eventos ao Google Agenda?
         google_agenda_email: usuario.google_agenda_email || null,               // e-mail do Google do usuário
+        publicacoes_escopo: usuario.publicacoes_escopo === 'minhas' ? 'minhas' : 'todas', // seletor "Ver" da tela de Publicações
       },
       permissoes,
       // Tempo de inatividade (min) do escritório — o frontend usa para o logout automático.
@@ -237,14 +238,15 @@ async function verificarToken(req, res) {
     // Tempo de inatividade (min) do escritório — para o frontend rearmar o logout automático ao recarregar.
     const tempo_inatividade_min = await lerTempoInatividade();
     // Cores personalizadas da Agenda (1 SELECT leve, só ao recarregar o app — não é por requisição).
-    const [cfgCores] = await pool.execute('SELECT cores_agenda, cores_menu, cor_linha, cor_linha_lida, google_agenda_ativo, google_agenda_email FROM usuarios WHERE id = ?', [req.usuario.id]);
+    const [cfgCores] = await pool.execute('SELECT cores_agenda, cores_menu, cor_linha, cor_linha_lida, google_agenda_ativo, google_agenda_email, publicacoes_escopo FROM usuarios WHERE id = ?', [req.usuario.id]);
     const usuario = { ...req.usuario,
       cores_agenda: parseCoresAgenda(cfgCores[0]?.cores_agenda),
       cores_menu:   parseCoresMenu(cfgCores[0]?.cores_menu),
       cor_linha:    parseCorLinha(cfgCores[0]?.cor_linha),
       cor_linha_lida: parseCorLinha(cfgCores[0]?.cor_linha_lida),
       google_agenda_ativo: Number(cfgCores[0]?.google_agenda_ativo) === 1 ? 1 : 0,
-      google_agenda_email: cfgCores[0]?.google_agenda_email || null };
+      google_agenda_email: cfgCores[0]?.google_agenda_email || null,
+      publicacoes_escopo: cfgCores[0]?.publicacoes_escopo === 'minhas' ? 'minhas' : 'todas' };
     return sucesso(res, { usuario, permissoes, tempo_inatividade_min });
   } catch (err) {
     return erroInterno(res, err);
@@ -331,6 +333,22 @@ async function salvarGoogleAgenda(req, res) {
     );
     return sucesso(res, { google_agenda_ativo: ativo, google_agenda_email: email || null },
       ativo ? 'Envio para o Google Agenda ativado' : 'Envio para o Google Agenda desativado');
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// PUT /api/auth/publicacoes-escopo — o usuário escolhe o padrão do seletor "Ver" da
+// tela de Publicações: 'todas' (tudo que ele pode ver) ou 'minhas' (só as atribuídas
+// a ele). Preferência do próprio usuário, vale em qualquer dispositivo. Body: { escopo }.
+async function salvarPublicacoesEscopo(req, res) {
+  try {
+    const escopo = req.body?.escopo === 'minhas' ? 'minhas' : 'todas';
+    await pool.execute(
+      'UPDATE usuarios SET publicacoes_escopo = ? WHERE id = ?',
+      [escopo, req.usuario.id]
+    );
+    return sucesso(res, { publicacoes_escopo: escopo }, 'Preferência salva');
   } catch (err) {
     return erroInterno(res, err);
   }
@@ -513,4 +531,4 @@ async function logout(req, res) {
   return sucesso(res, null, 'Logout registrado');
 }
 
-module.exports = { login, logout, criarPrimeiroAdmin, verificarToken, esqueciSenha, validarToken, redefinirSenha, trocarSenha, verificarSenha, salvarCoresAgenda, salvarCoresMenu, salvarCorLinha, salvarCorLinhaLida, salvarGoogleAgenda };
+module.exports = { login, logout, criarPrimeiroAdmin, verificarToken, esqueciSenha, validarToken, redefinirSenha, trocarSenha, verificarSenha, salvarCoresAgenda, salvarCoresMenu, salvarCorLinha, salvarCorLinhaLida, salvarGoogleAgenda, salvarPublicacoesEscopo };

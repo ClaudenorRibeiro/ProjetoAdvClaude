@@ -2154,6 +2154,7 @@ CREATE TABLE `usuarios` (
   `cor_linha_lida` varchar(20) DEFAULT NULL,
   `google_agenda_ativo` tinyint(1) NOT NULL DEFAULT '0',
   `google_agenda_email` varchar(255) DEFAULT NULL,
+  `publicacoes_escopo` varchar(10) NOT NULL DEFAULT 'todas',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_login` (`login`),
   KEY `fk_usuarios_criado_por` (`criado_por`),

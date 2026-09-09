@@ -86,6 +86,7 @@ export const authAPI = {
   salvarCorLinha:     (cor)  => api.put('/auth/cor-linha',      { cor }),  // cor=null restaura o padrão
   salvarCorLinhaLida: (cor)  => api.put('/auth/cor-linha-lida', { cor }),  // cor=null restaura o padrão
   salvarGoogleAgenda: (dados) => api.put('/auth/google-agenda', dados),    // { ativo, email }
+  salvarPublicacoesEscopo: (escopo) => api.put('/auth/publicacoes-escopo', { escopo }), // 'todas' | 'minhas'
 };
 
 // ============================================================
