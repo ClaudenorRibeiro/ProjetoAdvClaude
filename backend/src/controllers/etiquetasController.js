@@ -8,7 +8,8 @@
 // ============================================================
 
 const { pool } = require('../config/database');
-const { sucesso, erro, erroInterno, proibido } = require('../utils/response');
+const { sucesso, erro, erroInterno, proibido, naoEncontrado } = require('../utils/response');
+const auditoria = require('../middleware/auditoria');
 
 // Whitelist dos módulos que têm etiqueta PESSOAL e onde cada marcação é gravada.
 // tabela/coluna são valores FIXOS daqui (nunca vêm do usuário) — interpolar é seguro.
@@ -207,11 +208,18 @@ async function slotsEmUsoEscritorio(db, modulo) {
 }
 
 // GET /api/etiquetas/escritorio/catalogo/:modulo — todos leem (para exibir).
+// Devolve também status_id/status_nome — só o módulo "processos" usa (etiqueta que,
+// ao ser aplicada, passa o status do processo para o status vinculado). Nos demais
+// módulos a coluna vem sempre nula.
 async function listarCatalogo(req, res) {
   try {
     const { modulo } = req.params;
     const [rows] = await pool.execute(
-      'SELECT slot, cor, significado FROM etiquetas_escritorio_catalogo WHERE modulo = ? ORDER BY slot',
+      `SELECT c.slot, c.cor, c.significado, c.status_id, s.nome AS status_nome
+         FROM etiquetas_escritorio_catalogo c
+         LEFT JOIN tblstatusproc s ON s.id = c.status_id
+        WHERE c.modulo = ?
+        ORDER BY c.slot`,
       [modulo]
     );
     return sucesso(res, rows);
@@ -238,12 +246,14 @@ async function listarSlotsEmUsoEscritorio(req, res) {
 async function salvarCatalogo(req, res) {
   const { modulo } = req.params;
   const lista = Array.isArray(req.body?.definicoes) ? req.body.definicoes : [];
+  // Só o módulo "processos" amarra a etiqueta a um status de processo.
+  const permiteStatus = modulo === 'processos';
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
 
     const [atuais] = await conn.execute(
-      'SELECT slot, cor, significado FROM etiquetas_escritorio_catalogo WHERE modulo = ?',
+      'SELECT slot, cor, significado, status_id FROM etiquetas_escritorio_catalogo WHERE modulo = ?',
       [modulo]
     );
     const atuaisPorSlot = new Map(atuais.map(d => [Number(d.slot), d]));
@@ -256,18 +266,41 @@ async function salvarCatalogo(req, res) {
       const cor = String(d.cor || '').trim();
       const significado = String(d.significado || '').trim();
       if (!cor || !significado) continue;
-      finalPorSlot.set(slot, { cor, significado: significado.slice(0, 60) });
+      let statusId = null;
+      if (permiteStatus && d.status_id != null && d.status_id !== '') {
+        statusId = Number(d.status_id) || null;
+      }
+      finalPorSlot.set(slot, { cor, significado: significado.slice(0, 60), status_id: statusId });
     }
 
+    // Valida os status_id informados numa consulta só — status inexistente/inativo
+    // vira "sem vínculo" (não derruba o salvamento).
+    const idsStatus = [...new Set([...finalPorSlot.values()].map(d => d.status_id).filter(Boolean))];
+    if (idsStatus.length) {
+      const ph = idsStatus.map(() => '?').join(',');
+      const [okRows] = await conn.execute(
+        `SELECT id FROM tblstatusproc WHERE id IN (${ph}) AND ativo = 1`,
+        idsStatus
+      );
+      const validos = new Set(okRows.map(r => Number(r.id)));
+      for (const d of finalPorSlot.values()) {
+        if (d.status_id && !validos.has(d.status_id)) d.status_id = null;
+      }
+    }
+
+    // Regra do slot em uso: cor e existência ficam travadas (defesa mesmo que o front
+    // não trave). O vínculo de status PODE mudar a qualquer momento — ele só vale nas
+    // próximas aplicações da etiqueta (não é retroativo).
     const protegidos = [];
     for (const [slot, atual] of atuaisPorSlot) {
       if (!emUso.has(slot)) continue;
+      const atualStatusId = atual.status_id ? Number(atual.status_id) : null;
       const enviado = finalPorSlot.get(slot);
       if (!enviado) {
-        finalPorSlot.set(slot, { cor: atual.cor, significado: atual.significado });
+        finalPorSlot.set(slot, { cor: atual.cor, significado: atual.significado, status_id: atualStatusId });
         protegidos.push(slot);
       } else if (enviado.cor !== atual.cor) {
-        finalPorSlot.set(slot, { cor: atual.cor, significado: enviado.significado });
+        finalPorSlot.set(slot, { cor: atual.cor, significado: enviado.significado, status_id: enviado.status_id });
         protegidos.push(slot);
       }
     }
@@ -275,8 +308,8 @@ async function salvarCatalogo(req, res) {
     await conn.execute('DELETE FROM etiquetas_escritorio_catalogo WHERE modulo = ?', [modulo]);
     for (const [slot, d] of finalPorSlot) {
       await conn.execute(
-        'INSERT INTO etiquetas_escritorio_catalogo (modulo, slot, cor, significado) VALUES (?, ?, ?, ?)',
-        [modulo, slot, d.cor, d.significado]
+        'INSERT INTO etiquetas_escritorio_catalogo (modulo, slot, cor, significado, status_id) VALUES (?, ?, ?, ?, ?)',
+        [modulo, slot, d.cor, d.significado, d.status_id ?? null]
       );
     }
     await conn.commit();
@@ -290,11 +323,20 @@ async function salvarCatalogo(req, res) {
 }
 
 // PUT /api/etiquetas/escritorio/marcar — aplica/remove a etiqueta compartilhada (permissão na rota).
-// body: { modulo, registro_id, slot }. slot vazio/0 = remover. Uma por registro (guarda quem marcou).
-// Toda mudança real (a cor mudou de fato) grava uma linha em auditoria_etiqueta_escritorio,
-// na MESMA transação — se o histórico falhar, a marcação também não vai (tudo ou nada).
+// body: { modulo, registro_id, slot, motivo_status }. slot vazio/0 = remover. Uma por registro
+// (guarda quem marcou). Toda mudança real (a cor mudou de fato) grava uma linha em
+// auditoria_etiqueta_escritorio, na MESMA transação — se o histórico falhar, a marcação
+// também não vai (tudo ou nada).
+//
+// ETIQUETA DE PROCESSO COM STATUS VINCULADO: se o módulo é "processos" e a cor que está
+// sendo APLICADA (s > 0) tem um status_id no catálogo, o status do processo passa a ser
+// esse status, na mesma transação, com registro no histórico de mudança de status
+// (motivo_status é OPCIONAL; sem texto grava motivo null + origem "etiqueta_escritorio").
+// Regras:
+//   - remover a etiqueta (s = 0) ou aplicar cor SEM vínculo NÃO reverte o status;
+//   - não é retroativo (só o processo que está recebendo a etiqueta agora é afetado).
 async function marcarEscritorio(req, res) {
-  const { modulo, registro_id, slot } = req.body || {};
+  const { modulo, registro_id, slot, motivo_status } = req.body || {};
   const cfg = MODULOS_ESCRITORIO[modulo];
   if (!cfg) return erro(res, 'Módulo inválido para etiqueta do escritório');
   if (!(await podeAplicarEscritorio(req, modulo))) {
@@ -331,8 +373,62 @@ async function marcarEscritorio(req, res) {
       );
     }
 
+    // --- Vínculo etiqueta -> status do processo ---
+    let statusAplicadoId = null;
+    let statusAplicadoNome = null;
+    if (modulo === 'processos' && s > 0) {
+      const [catRows] = await conn.execute(
+        "SELECT status_id FROM etiquetas_escritorio_catalogo WHERE modulo = 'processos' AND slot = ?",
+        [s]
+      );
+      const vincStatusId = catRows.length && catRows[0].status_id ? Number(catRows[0].status_id) : null;
+      if (vincStatusId) {
+        const [procRows] = await conn.execute(
+          'SELECT status_id FROM tblproc WHERE id = ? AND ativo = 1',
+          [regId]
+        );
+        if (!procRows.length) {
+          await conn.rollback();
+          return naoEncontrado(res, 'Processo não encontrado');
+        }
+        const statusAnteriorId = procRows[0].status_id ? Number(procRows[0].status_id) : null;
+        if (statusAnteriorId !== vincStatusId) {
+          await conn.execute(
+            'UPDATE tblproc SET status_id = ?, alterado_por = ?, alterado_em = NOW() WHERE id = ?',
+            [vincStatusId, req.usuario.id, regId]
+          );
+
+          const ids = [statusAnteriorId, vincStatusId].filter(Boolean);
+          let nomes = {};
+          if (ids.length) {
+            const ph = ids.map(() => '?').join(',');
+            const [nomeRows] = await conn.execute(
+              `SELECT id, nome FROM tblstatusproc WHERE id IN (${ph})`, ids
+            );
+            nomes = Object.fromEntries(nomeRows.map(r => [Number(r.id), r.nome]));
+          }
+          // Informar o motivo é OPCIONAL — sem texto, grava null (a origem "etiqueta_escritorio"
+          // abaixo já deixa claro no histórico de onde veio a mudança de status).
+          const motivo = (motivo_status && String(motivo_status).trim()) || null;
+
+          await auditoria.registrar(req.usuario.id, 'tblproc', 'status', regId, null, {
+            campo: 'status_id',
+            status_anterior_id: statusAnteriorId,
+            status_anterior: statusAnteriorId ? (nomes[statusAnteriorId] || null) : null,
+            status_novo_id: vincStatusId,
+            status_novo: nomes[vincStatusId] || null,
+            motivo,
+            origem: 'etiqueta_escritorio',
+          }, conn);
+
+          statusAplicadoId = vincStatusId;
+          statusAplicadoNome = nomes[vincStatusId] || null;
+        }
+      }
+    }
+
     await conn.commit();
-    return sucesso(res, { slot: slotNovo });
+    return sucesso(res, { slot: slotNovo, status_id: statusAplicadoId, status_nome: statusAplicadoNome });
   } catch (err) {
     await conn.rollback();
     return erroInterno(res, err);

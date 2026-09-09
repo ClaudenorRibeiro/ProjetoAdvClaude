@@ -5,7 +5,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { configuracaoAPI, manutencaoAPI, etiquetasAPI } from '../../services/api';
+import { configuracaoAPI, manutencaoAPI, etiquetasAPI, processosAPI } from '../../services/api';
 import { EditorEtiquetasCinco, cincoLinhasEtiqueta, MODULOS_ETIQUETA_ESCRITORIO } from '../../components/Etiquetas';
 import { formatarData, formatarDataHora, hojeLocal, toTitleCase } from '../../utils/formatters';
 import { UFS } from '../../utils/ufs';
@@ -1399,6 +1399,7 @@ function TabEtiquetasEscritorio() {
   const [emUso, setEmUso]       = useState([]);
   const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso]       = useState('');
+  const [statusProc, setStatusProc] = useState([]); // status de processo (só p/ o módulo "processos")
 
   useEffect(() => {
     Promise.all([etiquetasAPI.catalogo(modulo), etiquetasAPI.emUsoEscritorio(modulo)])
@@ -1408,6 +1409,13 @@ function TabEtiquetasEscritorio() {
       })
       .catch(() => {});
   }, [modulo]);
+
+  // Lista de status do processo — usada pelo campo "Status ao aplicar" (só módulo Processos).
+  useEffect(() => {
+    processosAPI.auxiliares()
+      .then(r => setStatusProc(r.data?.dados?.status || []))
+      .catch(() => {});
+  }, []);
 
   const setRow = (i, campo, valor) => setRows(rs => rs.map((r, j) => (j === i ? { ...r, [campo]: valor } : r)));
 
@@ -1442,6 +1450,12 @@ function TabEtiquetasEscritorio() {
         Compartilhadas: <strong>todos os usuários veem</strong>. Defina até 5 cores e o significado de cada
         (ex.: "Arquivado", "Em recurso"). Cor sem significado fica desativada. Quem pode <em>aplicar</em> a
         etiqueta é definido na aba <strong>Permissões</strong>.
+        {modulo === 'processos' && (
+          <> Em <strong>Processos</strong>, você pode amarrar cada etiqueta a um <strong>status</strong>: ao
+          aplicar a etiqueta num processo, o status dele passa a ser esse (é opcional — deixe
+          "— não alterar o status —" para as etiquetas que não representam status). Trocar o vínculo aqui
+          não mexe nos processos que já têm a etiqueta.</>
+        )}
       </p>
       {aviso && (
         <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c',
@@ -1455,7 +1469,8 @@ function TabEtiquetasEscritorio() {
           {MODULOS_ETIQUETA_ESCRITORIO.map(m => <option key={m.chave} value={m.chave}>{m.label}</option>)}
         </select>
       </div>
-      <EditorEtiquetasCinco rows={rows} onChange={setRow} emUso={emUso} />
+      <EditorEtiquetasCinco rows={rows} onChange={setRow} emUso={emUso}
+        statusOpcoes={modulo === 'processos' ? statusProc : null} />
       <div style={{ marginTop: 16 }}>
         <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
           {salvando ? 'Salvando...' : 'Salvar'}

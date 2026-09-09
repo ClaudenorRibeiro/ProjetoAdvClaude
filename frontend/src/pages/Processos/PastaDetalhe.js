@@ -12,7 +12,7 @@ import { formatarData, formatarNumeroPasta, formatarMoeda, labelStatusPrazo, cor
 // Janelas de contato/ficha reutilizadas da tela de Pessoas (painel "Partes do processo")
 import { ModalPessoa, ModalEnviarEmail, ModalEnviarSMS, ModalEscolherWhatsapp, ModalCopiarTelefone, ModalCopiarEmail, ModalAnotacoes, soNumeroLocal, copiarParaAreaTransferencia } from '../Pessoas/Pessoas';
 import { linkWhatsApp } from '../../utils/whatsapp';
-import { ModalNovoProcesso, ModalEditarProcesso } from './Processos';
+import { ModalNovoProcesso, ModalEditarProcesso, ModalMotivoStatus } from './Processos';
 import { ModalNovoPrazo, ModalCancelarPrazo, ModalEditarPrazo } from '../Prazos/Prazos';
 import { ModalTarefa, ModalHistoricoTarefa } from '../Tarefas/Tarefas';
 import { ModalNovaAudiencia, ModalEditarAudiencia, ModalCancelarAudiencia, ModalRemarcarAudiencia, ModalHistoricoAudiencia, ModalRegistrarAta } from '../Audiencias/Audiencias';
@@ -58,14 +58,53 @@ export default function PastaDetalhe() {
   const [catEscritorio, setCatEscritorio] = useState([]);
   const podeEtiquetarEscritorio = temPermissao('processos.etiqueta_escritorio', 'alterar');
   const [historicoEtiquetaAberto, setHistoricoEtiquetaAberto] = useState(null); // { modulo, registroId } | null
+  // Quando a etiqueta que está sendo aplicada tem status vinculado, abrimos antes o
+  // MESMO modal "Motivo da mudança de status" do Editar Processo (informar o motivo é
+  // opcional). null = fechado. { procId, slot, anterior, novo }
+  const [motivoEtiqueta, setMotivoEtiqueta]       = useState(null);
+  const [aplicandoEtiqueta, setAplicandoEtiqueta] = useState(false);
   useEffect(() => {
     etiquetasAPI.catalogo('processos').then(r => { if (r.data?.ok) setCatEscritorio(r.data.dados || []); }).catch(() => {});
   }, []);
-  async function marcarEscritorioProc(procId, slot) {
+
+  // Aplica de fato a etiqueta do escritório. Se o backend também mudou o status do
+  // processo (etiqueta com status vinculado), atualiza o badge na hora, sem recarregar.
+  // `motivo` = null (não informado / "sem motivo") ou o texto digitado.
+  async function aplicarEtiquetaEscritorio(procId, slot, motivo) {
     try {
-      await etiquetasAPI.marcarEscritorio({ modulo: 'processos', registro_id: procId, slot });
-      setPasta(p => (p ? { ...p, processos: (p.processos || []).map(pr => (pr.id === procId ? { ...pr, etiqueta_escritorio: slot } : pr)) } : p));
+      const { data } = await etiquetasAPI.marcarEscritorio({
+        modulo: 'processos', registro_id: procId, slot,
+        ...(motivo != null && motivo !== '' ? { motivo_status: motivo } : {}),
+      });
+      const novoStatusId   = data?.dados?.status_id   ?? null;
+      const novoStatusNome = data?.dados?.status_nome ?? null;
+      setPasta(p => (p ? { ...p, processos: (p.processos || []).map(pr => {
+        if (pr.id !== procId) return pr;
+        const atualizado = { ...pr, etiqueta_escritorio: slot };
+        if (novoStatusId) { atualizado.status_id = novoStatusId; atualizado.status_nome = novoStatusNome; }
+        return atualizado;
+      }) } : p));
     } catch { toast.error('Não foi possível salvar a etiqueta do escritório'); }
+  }
+
+  // Chamado pelo submenu de etiqueta. Se a cor que está sendo APLICADA tem status
+  // vinculado e ele é diferente do status atual do processo, abre o modal do motivo
+  // antes de gravar. Nos demais casos (remover, ou cor sem vínculo, ou status igual)
+  // aplica direto — sem modal e sem mexer no status.
+  function marcarEscritorioProc(procId, slot) {
+    const proc = (pasta?.processos || []).find(pr => pr.id === procId);
+    const def  = slot ? catEscritorio.find(d => Number(d.slot) === Number(slot)) : null;
+    const statusVinc  = def?.status_id ? Number(def.status_id) : null;
+    const statusAtual = proc?.status_id ? Number(proc.status_id) : null;
+    if (slot && statusVinc && statusVinc !== statusAtual) {
+      setMotivoEtiqueta({
+        procId, slot,
+        anterior: proc?.status_nome || 'Sem status',
+        novo:     def?.status_nome  || 'novo status',
+      });
+      return;
+    }
+    aplicarEtiquetaEscritorio(procId, slot, null);
   }
   const slotsEscritorioEmUsoNaLista = new Set((pasta?.processos || [])
     .map(pr => Number(pr.etiqueta_escritorio))
@@ -816,6 +855,25 @@ export default function PastaDetalhe() {
             registroId={historicoEtiquetaAberto.registroId}
             catalogo={catEscritorio}
             onFechar={() => setHistoricoEtiquetaAberto(null)}
+          />
+        )}
+
+        {motivoEtiqueta && (
+          <ModalMotivoStatus
+            anterior={motivoEtiqueta.anterior}
+            novo={motivoEtiqueta.novo}
+            salvando={aplicandoEtiqueta}
+            onCancelar={() => setMotivoEtiqueta(null)}
+            onSalvar={async (motivo) => {
+              const alvo = motivoEtiqueta;
+              setAplicandoEtiqueta(true);
+              try {
+                await aplicarEtiquetaEscritorio(alvo.procId, alvo.slot, motivo);
+              } finally {
+                setAplicandoEtiqueta(false);
+                setMotivoEtiqueta(null);
+              }
+            }}
           />
         )}
 

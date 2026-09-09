@@ -1792,7 +1792,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
   );
 }
 
-function ModalMotivoStatus({ anterior, novo, salvando, onCancelar, onSalvar }) {
+export function ModalMotivoStatus({ anterior, novo, salvando, onCancelar, onSalvar }) {
   const [motivo, setMotivo] = useState('');
   const overlayRef = useEscFechar(onCancelar);
 

@@ -32,26 +32,33 @@ export const MODULOS_ETIQUETA_ESCRITORIO = [
 export const CORES_ETIQUETA_PADRAO = ['#e24b4a', '#ef9f27', '#378add', '#639922', '#7f77dd'];
 
 // Monta 5 linhas para o editor, mesclando o que já está salvo (usado na Aparência e no admin).
+// `status_id` só é usado pelas etiquetas DO ESCRITÓRIO do módulo "processos" (nas demais é null).
 export function cincoLinhasEtiqueta(salvas) {
-  const base = CORES_ETIQUETA_PADRAO.map((cor, i) => ({ slot: i + 1, cor, significado: '' }));
+  const base = CORES_ETIQUETA_PADRAO.map((cor, i) => ({ slot: i + 1, cor, significado: '', status_id: null }));
   if (!salvas || !salvas.length) return base;
   return base.map(row => {
     const s = salvas.find(x => Number(x.slot) === row.slot);
-    return s ? { slot: row.slot, cor: s.cor, significado: s.significado || '' } : row;
+    return s
+      ? { slot: row.slot, cor: s.cor, significado: s.significado || '', status_id: s.status_id ?? null }
+      : row;
   });
 }
 
-// Editor das 5 cores + significados. `rows`=[{slot,cor,significado}]; onChange(i, campo, valor).
+// Editor das 5 cores + significados. `rows`=[{slot,cor,significado,status_id}]; onChange(i, campo, valor).
 // `emUso`=[slots] que já estão marcados em algum registro — a cor fica travada e o slot não
 // pode ficar vazio (só o nome/significado continua editável). O backend também protege isso
 // mesmo se esta trava visual for contornada.
-export function EditorEtiquetasCinco({ rows, onChange, emUso = [] }) {
+// `statusOpcoes` (opcional) = [{id,nome}] — quando informado, mostra por linha o campo
+// "Status ao aplicar" (usado só pelas etiquetas do escritório do módulo Processos). O
+// vínculo de status NÃO é travado por "em uso" (só vale para as próximas aplicações).
+export function EditorEtiquetasCinco({ rows, onChange, emUso = [], statusOpcoes = null }) {
+  const temStatus = Array.isArray(statusOpcoes);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
       {rows.map((row, i) => {
         const travada = emUso.includes(row.slot);
         return (
-          <div key={row.slot} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div key={row.slot} style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <input type="color" value={row.cor} disabled={travada}
               onChange={e => onChange(i, 'cor', e.target.value)}
               title={travada ? 'Cor em uso — não pode ser trocada' : ''}
@@ -62,7 +69,17 @@ export function EditorEtiquetasCinco({ rows, onChange, emUso = [] }) {
             <input className="form-control" maxLength={60}
               placeholder={`Significado da cor ${i + 1} (ex.: aguardando retorno)`}
               value={row.significado} onChange={e => onChange(i, 'significado', e.target.value)}
-              style={{ flex: 1 }} />
+              style={{ flex: 1, minWidth: 180 }} />
+            {temStatus && (
+              <select className="form-control"
+                value={row.status_id ?? ''}
+                onChange={e => onChange(i, 'status_id', e.target.value ? Number(e.target.value) : null)}
+                title="Status que o processo assume quando esta etiqueta é aplicada"
+                style={{ flex: '0 0 auto', minWidth: 210, maxWidth: 260 }}>
+                <option value="">— não alterar o status —</option>
+                {statusOpcoes.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
+              </select>
+            )}
             {travada && (
               <span style={{ fontSize: '11px', color: '#888', whiteSpace: 'nowrap' }}
                 title="Essa cor já está em uso em registros existentes — não pode mudar de cor nem ser removida, só o nome">

@@ -706,7 +706,10 @@ CREATE TABLE `etiquetas_escritorio_catalogo` (
   `slot` tinyint NOT NULL,
   `cor` varchar(20) NOT NULL,
   `significado` varchar(60) DEFAULT NULL,
-  PRIMARY KEY (`modulo`,`slot`)
+  `status_id` int DEFAULT NULL,
+  PRIMARY KEY (`modulo`,`slot`),
+  KEY `fk_etqesc_status` (`status_id`),
+  CONSTRAINT `fk_etqesc_status` FOREIGN KEY (`status_id`) REFERENCES `tblstatusproc` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
