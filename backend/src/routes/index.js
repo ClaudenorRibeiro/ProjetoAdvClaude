@@ -184,7 +184,7 @@ router.get('/prazos/hoje',        autenticar, prazosCtrl.vencemHoje);
 router.get('/prazos/usuarios',    autenticar, verificarPermissao('prazos','ver_todos','visualizar'), prazosCtrl.listarUsuariosFiltro);
 router.get('/prazos',             autenticar, verificarPermissao('prazos','visualizar'), prazosCtrl.listar);
 router.post('/prazos',            autenticar, verificarPermissao('prazos','cadastrar'),  prazosCtrl.criar);
-router.put('/prazos/:id/status',          autenticar, prazosCtrl.mudarStatus);
+router.put('/prazos/:id/status',          autenticar, verificarPermissao('prazos','visualizar'), prazosCtrl.mudarStatus);
 router.put('/prazos/:id/fazendo',         autenticar, prazosCtrl.marcarFazendo);
 router.put('/prazos/:id/liberar-fazendo', autenticar, prazosCtrl.liberarFazendo);
 // ATENÇÃO: rota estática /historico ANTES de /:id para o Express não capturar "historico" como id
@@ -202,8 +202,8 @@ router.put('/notificacoes/marcar-lidas', autenticar, notificacoesCtrl.marcarLida
 router.get('/tarefas',             autenticar, verificarPermissao('tarefas','visualizar'), tarefasCtrl.listar);
 router.post('/tarefas',            autenticar, verificarPermissao('tarefas','cadastrar'),  tarefasCtrl.criar);
 router.put('/tarefas/:id',         autenticar, verificarPermissao('tarefas','alterar'),    tarefasCtrl.atualizar);
-router.put('/tarefas/:id/concluir',autenticar, tarefasCtrl.concluir);
-router.put('/tarefas/:id/reabrir', autenticar, tarefasCtrl.reabrir);
+router.put('/tarefas/:id/concluir',autenticar, verificarPermissao('tarefas','visualizar'), tarefasCtrl.concluir);
+router.put('/tarefas/:id/reabrir', autenticar, verificarPermissao('tarefas','visualizar'), tarefasCtrl.reabrir);
 router.delete('/tarefas/:id',      autenticar, verificarPermissao('tarefas','excluir'),    tarefasCtrl.excluir);
 router.get('/tarefas/:id/historico', autenticar, verificarPermissao('tarefas','historico'), tarefasCtrl.buscarHistorico);
 

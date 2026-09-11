@@ -370,6 +370,16 @@ async function listarUsuarios(req, res) {
   }
 }
 
+// Níveis que a TELA de usuários pode gravar: 1 = Administrador, 2 = Comum.
+// O nível 0 (superusuário) NUNCA vem por aqui — é criado só no setup inicial.
+// Sem esta trava, uma chamada direta à API poderia mandar nivel:0 e criar/promover
+// um superusuário (que é "invisível para todos" e passa por qualquer permissão).
+function normalizarNivel(nivel) {
+  if (nivel === undefined || nivel === null || nivel === '') return 2; // padrão: comum
+  const n = Number(nivel);
+  return [1, 2].includes(n) ? n : null; // null = inválido
+}
+
 // Valida requisitos de senha — retorna mensagem de erro ou null se válida
 function validarSenha(senha) {
   if (!senha || senha.length < 8)   return 'A senha deve ter no mínimo 8 caracteres';
@@ -395,6 +405,9 @@ async function criarUsuario(req, res) {
     const errSenha = validarSenha(senha);
     if (errSenha) return erro(res, errSenha);
 
+    const nv = normalizarNivel(nivel);
+    if (nv === null) return erro(res, 'Nível de usuário inválido. Escolha Administrador ou Comum.');
+
     const [dup] = await pool.execute('SELECT id FROM usuarios WHERE login = ?', [login]);
     if (dup.length) return erro(res, 'Login já está em uso');
 
@@ -405,7 +418,7 @@ async function criarUsuario(req, res) {
         ver_todos_processos, criado_por)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [nome.trim(), login.trim(), senhaHash, email || null, oab || null,
-       tipo || 'advogado', nivel || 2, ver_todos_processos ? 1 : 0, req.usuario.id]
+       tipo || 'advogado', nv, ver_todos_processos ? 1 : 0, req.usuario.id]
     );
 
     await auditoria.registrar(req.usuario.id, 'usuarios', 'criar', result.insertId);
@@ -438,10 +451,13 @@ async function atualizarUsuario(req, res) {
       );
     }
 
+    const nv = normalizarNivel(nivel);
+    if (nv === null) return erro(res, 'Nível de usuário inválido. Escolha Administrador ou Comum.');
+
     await pool.execute(
       `UPDATE usuarios SET nome=?, email=?, oab=?, tipo=?, nivel=?, ativo=?, ver_todos_processos=?
        WHERE id = ?`,
-      [nome, email || null, oab || null, tipo, nivel || 2,
+      [nome, email || null, oab || null, tipo, nv,
        ativo !== undefined ? ativo : 1, ver_todos_processos ? 1 : 0, id]
     );
 
@@ -477,12 +493,20 @@ async function buscarPermissoes(req, res) {
 // PUT /api/configuracoes/permissoes/:usuarioId — Salva permissões do usuário
 // Recebe: { 'pessoas': { visualizar: true }, 'processos.andamentos': { cadastrar: false }, ... }
 async function salvarPermissoes(req, res) {
-  try {
-    const { usuarioId } = req.params;
-    const { permissoes } = req.body;
+  const { usuarioId } = req.params;
+  const { permissoes } = req.body;
+  if (!permissoes || typeof permissoes !== 'object') {
+    return erro(res, 'Nenhuma permissão recebida.');
+  }
 
-    // Deleta e recria todas as permissões do usuário
-    await pool.execute('DELETE FROM permissoes WHERE usuario_id = ?', [usuarioId]);
+  // Transação: o DELETE das permissões antigas e os INSERT das novas são um bloco
+  // ÚNICO. Se qualquer INSERT falhar, o rollback devolve o usuário às permissões
+  // que ele tinha — antes ficava sem as antigas e só com parte das novas.
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    await conn.execute('DELETE FROM permissoes WHERE usuario_id = ?', [usuarioId]);
 
     for (const [chave, acoes] of Object.entries(permissoes)) {
       // Separa 'processos.andamentos' em modulo='processos', submodulo='andamentos'
@@ -490,17 +514,21 @@ async function salvarPermissoes(req, res) {
       const modulo    = pontoDot >= 0 ? chave.slice(0, pontoDot)  : chave;
       const submodulo = pontoDot >= 0 ? chave.slice(pontoDot + 1) : null;
 
-      for (const [acao, permitido] of Object.entries(acoes)) {
-        await pool.execute(
+      for (const [acao, permitido] of Object.entries(acoes || {})) {
+        await conn.execute(
           'INSERT INTO permissoes (usuario_id, modulo, submodulo, acao, permitido) VALUES (?, ?, ?, ?, ?)',
           [usuarioId, modulo, submodulo, acao, permitido ? 1 : 0]
         );
       }
     }
 
+    await conn.commit();
     return sucesso(res, null, 'Permissões salvas com sucesso');
   } catch (err) {
+    await conn.rollback();
     return erroInterno(res, err);
+  } finally {
+    conn.release();
   }
 }
 

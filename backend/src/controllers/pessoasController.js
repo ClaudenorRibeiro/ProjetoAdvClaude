@@ -616,7 +616,7 @@ async function excluirFisica(req, res) {
 
     // Verifica todos os vínculos em paralelo antes de permitir exclusão
     const [[autoresTbl], [reusTbl], [historico], [comunicacoes], [testemunhas], [peritos], [representados],
-           [peritoPericia], [localPericia], [parceriaAcordo]] = await Promise.all([
+           [peritoPericia], [localPericia], [parceriaAcordo], [pendenciaDoc]] = await Promise.all([
       pool.execute('SELECT COUNT(*) AS total FROM tbltituloprocautor WHERE tipo_pessoa = ? AND pessoa_id = ?',      ['fisica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM tbltituloprocreu WHERE tipo_pessoa = ? AND pessoa_id = ?',        ['fisica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM historico_atendimento WHERE tipo_pessoa = ? AND pessoa_id = ?',   ['fisica', id]),
@@ -637,6 +637,9 @@ async function excluirFisica(req, res) {
       pool.execute('SELECT COUNT(*) AS total FROM pericia WHERE perito_tipo = ? AND perito_id = ?',                 ['fisica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM pericia_local_reu WHERE tipo_pessoa = ? AND pessoa_id = ?',       ['fisica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM acordo_parcela WHERE parceria_pessoa_tipo = ? AND parceria_pessoa_id = ?', ['fisica', id]),
+      // Pendência de documentos (tipo_pessoa/pessoa_id polimórfico, SEM chave estrangeira):
+      // sem esta checagem, apagar o cliente deixaria a cobrança sem cadastro correspondente.
+      pool.execute('SELECT COUNT(*) AS total FROM pendencia_documento WHERE tipo_pessoa = ? AND pessoa_id = ?',     ['fisica', id]),
     ]);
 
     // Monta lista de vínculos encontrados para informar o usuário
@@ -651,6 +654,7 @@ async function excluirFisica(req, res) {
     if (peritoPericia[0].total > 0) vinculos.push(`${peritoPericia[0].total} perícia(s) como perito designado`);
     if (localPericia[0].total > 0)  vinculos.push(`${localPericia[0].total} perícia(s) usando seu endereço como local`);
     if (parceriaAcordo[0].total > 0) vinculos.push(`${parceriaAcordo[0].total} parcela(s) de acordo com parceria de honorários`);
+    if (pendenciaDoc[0].total > 0)  vinculos.push(`${pendenciaDoc[0].total} pendência(s) de documentos`);
 
     if (vinculos.length > 0) {
       return erro(res, `Pessoa não pode ser excluída pois possui: ${vinculos.join(', ')}`);
@@ -677,7 +681,7 @@ async function excluirJuridica(req, res) {
 
     // Verifica todos os vínculos em paralelo antes de permitir exclusão
     const [[autoresTbl], [reusTbl], [historico], [comunicacoes], [peritos],
-           [peritoPericia], [localPericia], [parceriaAcordo]] = await Promise.all([
+           [peritoPericia], [localPericia], [parceriaAcordo], [pendenciaDoc]] = await Promise.all([
       pool.execute('SELECT COUNT(*) AS total FROM tbltituloprocautor WHERE tipo_pessoa = ? AND pessoa_id = ?',      ['juridica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM tbltituloprocreu WHERE tipo_pessoa = ? AND pessoa_id = ?',        ['juridica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM historico_atendimento WHERE tipo_pessoa = ? AND pessoa_id = ?',   ['juridica', id]),
@@ -689,6 +693,8 @@ async function excluirJuridica(req, res) {
       pool.execute('SELECT COUNT(*) AS total FROM pericia WHERE perito_tipo = ? AND perito_id = ?',                 ['juridica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM pericia_local_reu WHERE tipo_pessoa = ? AND pessoa_id = ?',       ['juridica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM acordo_parcela WHERE parceria_pessoa_tipo = ? AND parceria_pessoa_id = ?', ['juridica', id]),
+      // Pendência de documentos (polimórfica, sem chave estrangeira) — mesma lógica da física.
+      pool.execute('SELECT COUNT(*) AS total FROM pendencia_documento WHERE tipo_pessoa = ? AND pessoa_id = ?',     ['juridica', id]),
     ]);
 
     // Monta lista de vínculos encontrados para informar o usuário
@@ -701,6 +707,7 @@ async function excluirJuridica(req, res) {
     if (peritoPericia[0].total > 0) vinculos.push(`${peritoPericia[0].total} perícia(s) como perito designado`);
     if (localPericia[0].total > 0)  vinculos.push(`${localPericia[0].total} perícia(s) usando seu endereço como local`);
     if (parceriaAcordo[0].total > 0) vinculos.push(`${parceriaAcordo[0].total} parcela(s) de acordo com parceria de honorários`);
+    if (pendenciaDoc[0].total > 0)  vinculos.push(`${pendenciaDoc[0].total} pendência(s) de documentos`);
 
     if (vinculos.length > 0) {
       return erro(res, `Pessoa não pode ser excluída pois possui: ${vinculos.join(', ')}`);
@@ -745,6 +752,25 @@ async function unificarJuridicas(req, res) {
   }
 
   const dupPh = duplicados.map(() => '?').join(','); // placeholders para os duplicados
+
+  // A unificação NÃO migra "local de perícia" nem "pendência de documentos" (vínculos
+  // polimórficos SEM chave estrangeira). Se um DUPLICADO — que será apagado — estiver
+  // em uso nesses vínculos, BLOQUEIA (decisão do usuário 10/09), para não deixar
+  // registro apontando para um id apagado. Tolerante a banco sem as tabelas.
+  try {
+    const [[locPer], [pendDoc]] = await Promise.all([
+      pool.execute(`SELECT COUNT(*) AS total FROM pericia_local_reu WHERE tipo_pessoa = 'juridica' AND pessoa_id IN (${dupPh})`, duplicados),
+      pool.execute(`SELECT COUNT(*) AS total FROM pendencia_documento  WHERE tipo_pessoa = 'juridica' AND pessoa_id IN (${dupPh})`, duplicados),
+    ]);
+    if (locPer[0].total > 0) {
+      return erro(res, 'Não é possível unificar: um dos cadastros selecionados é usado como local de perícia. Ajuste a perícia, unifique e refaça o vínculo.');
+    }
+    if (pendDoc[0].total > 0) {
+      return erro(res, 'Não é possível unificar: um dos cadastros selecionados tem pendência(s) de documentos. Resolva ou cancele a pendência, unifique e refaça.');
+    }
+  } catch (e) {
+    console.error('Checagem de local de perícia / pendência de documentos indisponível:', e.message);
+  }
 
   const conn = await pool.getConnection();
   try {
@@ -919,6 +945,24 @@ async function unificarFisicas(req, res) {
   const cpfPrincipal = (regs.find(r => r.id === principalId)?.cpf || '').trim() || null; // CPF atual do principal
 
   const dupPh = duplicados.map(() => '?').join(',');
+
+  // A unificação NÃO migra "local de perícia" nem "pendência de documentos" (vínculos
+  // polimórficos SEM chave estrangeira). Se um DUPLICADO estiver em uso neles, BLOQUEIA
+  // (decisão do usuário 10/09). Tolerante a banco sem as tabelas.
+  try {
+    const [[locPer], [pendDoc]] = await Promise.all([
+      pool.execute(`SELECT COUNT(*) AS total FROM pericia_local_reu WHERE tipo_pessoa = 'fisica' AND pessoa_id IN (${dupPh})`, duplicados),
+      pool.execute(`SELECT COUNT(*) AS total FROM pendencia_documento  WHERE tipo_pessoa = 'fisica' AND pessoa_id IN (${dupPh})`, duplicados),
+    ]);
+    if (locPer[0].total > 0) {
+      return erro(res, 'Não é possível unificar: um dos cadastros selecionados é usado como local de perícia. Ajuste a perícia, unifique e refaça o vínculo.');
+    }
+    if (pendDoc[0].total > 0) {
+      return erro(res, 'Não é possível unificar: um dos cadastros selecionados tem pendência(s) de documentos. Resolva ou cancele a pendência, unifique e refaça.');
+    }
+  } catch (e) {
+    console.error('Checagem de local de perícia / pendência de documentos indisponível:', e.message);
+  }
 
   const conn = await pool.getConnection();
   try {

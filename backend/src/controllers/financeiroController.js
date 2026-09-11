@@ -494,6 +494,10 @@ async function excluirAcordo(req, res) {
     await conn.beginTransaction();
     const [ac] = await conn.execute('SELECT * FROM acordo WHERE id = ?', [id]);
     if (!ac.length) { await conn.rollback(); return naoEncontrado(res, 'Acordo não encontrado'); }
+    if (ac[0].status === 'cancelado') {
+      await conn.rollback();
+      return erro(res, 'Acordo cancelado é registro permanente e não pode ser excluído.');
+    }
     const [pagas] = await conn.execute(
       `SELECT COUNT(*) AS n FROM acordo_parcela WHERE acordo_id = ? AND status = 'pago'`, [id]
     );
@@ -580,15 +584,19 @@ async function pagarParcela(req, res) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    // FOR UPDATE: trava a linha da parcela até o commit. Sem isso, dois recebimentos
+    // simultâneos da MESMA parcela liam "pendente" ao mesmo tempo e geravam
+    // lançamento em dobro na conta corrente.
     const [rows] = await conn.execute(
       `SELECT ap.*, a.processo_id, a.tipo AS acordo_tipo,
               (SELECT COUNT(*) FROM acordo_parcela x WHERE x.acordo_id = ap.acordo_id) AS total_parcelas
        FROM acordo_parcela ap
-       JOIN acordo a ON ap.acordo_id = a.id WHERE ap.id = ?`, [id]
+       JOIN acordo a ON ap.acordo_id = a.id WHERE ap.id = ? FOR UPDATE`, [id]
     );
     if (!rows.length) { await conn.rollback(); return naoEncontrado(res, 'Parcela não encontrada'); }
     const parc = rows[0];
-    if (parc.status === 'pago') { await conn.rollback(); return erro(res, 'Parcela já está recebida'); }
+    if (parc.status === 'pago')      { await conn.rollback(); return erro(res, 'Parcela já está recebida'); }
+    if (parc.status === 'cancelada') { await conn.rollback(); return erro(res, 'Esta parcela está cancelada e não pode ser recebida.'); }
 
     const dataPg = recebido_em || hojeBrasilia();
 

@@ -509,7 +509,9 @@ async function verificarSenha(req, res) {
     const [rows] = await pool.execute('SELECT senha_hash FROM usuarios WHERE id = ? AND ativo = 1', [req.usuario.id]);
     if (!rows.length) return erro(res, 'Usuário não encontrado');
     const correta = await bcrypt.compare(senha, rows[0].senha_hash);
-    if (!correta) return erro(res, 'Senha incorreta', 401);
+    // 403 (não 401): o interceptor do axios desloga o usuário em QUALQUER 401.
+    // "Senha incorreta" não é sessão inválida — a tela que chamou trata o erro.
+    if (!correta) return erro(res, 'Senha incorreta', 403);
     return sucesso(res, null, 'Senha confirmada');
   } catch (err) {
     return erroInterno(res, err);

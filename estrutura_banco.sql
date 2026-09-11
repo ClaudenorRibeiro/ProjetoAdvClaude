@@ -4,9 +4,10 @@
 -- Gerado em 31/08/2026 a partir do banco LOCAL (sistema_advocacia), via:
 --   mysqldump --no-data --databases --add-drop-database
 --             --routines --triggers --events sistema_advocacia
--- Contém 82 tabelas — SOMENTE A ESTRUTURA, sem nenhum dado.
--- (79 do dump de 31/08/2026 + tipo_documento_pendencia, pendencia_documento
---  e pendencia_documento_item, do módulo "Pendências de Documentos".)
+-- Contém 83 tabelas — SOMENTE A ESTRUTURA, sem nenhum dado.
+-- (79 do dump de 31/08/2026 + tipo_documento_pendencia, pendencia_documento,
+--  pendencia_documento_item e pendencia_documento_responsavel, do módulo
+--  "Pendências de Documentos".)
 -- O banco não possui procedures, triggers, views nem events.
 -- Os dados de partida (feriados, varas, tipos etc.) ficam em scripts/.
 --
@@ -1051,11 +1052,6 @@ CREATE TABLE `pendencia_documento` (
   `id` int NOT NULL AUTO_INCREMENT,
   `tipo_pessoa` enum('fisica','juridica') NOT NULL,
   `pessoa_id` int NOT NULL,
-  `responsavel_id` int NOT NULL,
-  `avisar_sino` tinyint(1) NOT NULL DEFAULT '1',
-  `avisar_email` tinyint(1) NOT NULL DEFAULT '0',
-  `data_aviso` date DEFAULT NULL,
-  `avisado_em` datetime DEFAULT NULL,
   `observacao` varchar(1000) DEFAULT NULL,
   `status` enum('aberta','resolvida','cancelada') NOT NULL DEFAULT 'aberta',
   `resolvido_em` datetime DEFAULT NULL,
@@ -1067,15 +1063,12 @@ CREATE TABLE `pendencia_documento` (
   PRIMARY KEY (`id`),
   KEY `idx_pend_doc_status` (`status`),
   KEY `idx_pend_doc_pessoa` (`tipo_pessoa`,`pessoa_id`),
-  KEY `idx_pend_doc_aviso` (`status`,`data_aviso`,`avisado_em`),
-  KEY `fk_pend_doc_responsavel` (`responsavel_id`),
   KEY `fk_pend_doc_criado_por` (`criado_por`),
   KEY `fk_pend_doc_alterado_por` (`alterado_por`),
   KEY `fk_pend_doc_resolvido_por` (`resolvido_por`),
   CONSTRAINT `fk_pend_doc_alterado_por` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_pend_doc_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `fk_pend_doc_resolvido_por` FOREIGN KEY (`resolvido_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `fk_pend_doc_responsavel` FOREIGN KEY (`responsavel_id`) REFERENCES `usuarios` (`id`)
+  CONSTRAINT `fk_pend_doc_resolvido_por` FOREIGN KEY (`resolvido_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -1101,6 +1094,34 @@ CREATE TABLE `pendencia_documento_item` (
   CONSTRAINT `fk_pend_doc_item_pendencia` FOREIGN KEY (`pendencia_id`) REFERENCES `pendencia_documento` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_pend_doc_item_recebido_por` FOREIGN KEY (`recebido_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_pend_doc_item_tipo` FOREIGN KEY (`tipo_documento_id`) REFERENCES `tipo_documento_pendencia` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `pendencia_documento_responsavel`
+--
+
+DROP TABLE IF EXISTS `pendencia_documento_responsavel`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `pendencia_documento_responsavel` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `pendencia_id` int NOT NULL,
+  `usuario_id` int NOT NULL,
+  `avisar_sino` tinyint(1) NOT NULL DEFAULT '1',
+  `avisar_email` tinyint(1) NOT NULL DEFAULT '0',
+  `data_aviso` date DEFAULT NULL,
+  `avisado_em` datetime DEFAULT NULL,
+  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  `criado_por` int DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_pend_doc_resp` (`pendencia_id`,`usuario_id`),
+  KEY `idx_pend_doc_resp_aviso` (`data_aviso`,`avisado_em`),
+  KEY `fk_pend_doc_resp_usuario` (`usuario_id`),
+  KEY `fk_pend_doc_resp_criado_por` (`criado_por`),
+  CONSTRAINT `fk_pend_doc_resp_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_pend_doc_resp_pendencia` FOREIGN KEY (`pendencia_id`) REFERENCES `pendencia_documento` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_pend_doc_resp_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 

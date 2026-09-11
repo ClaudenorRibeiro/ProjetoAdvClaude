@@ -98,7 +98,7 @@ async function buscarDados(req, res) {
          FROM audiencia a
          LEFT JOIN tipo_audiencia ta ON a.tipo_audiencia_id = ta.id
          JOIN tblproc pr ON a.processo_id = pr.id
-         WHERE a.data = ?
+         WHERE a.data = ? AND a.status IN ('agendada','adiada')
          ORDER BY a.hora ASC`,
         [hoje]
       ),
@@ -111,7 +111,7 @@ async function buscarDados(req, res) {
          FROM audiencia a
          LEFT JOIN tipo_audiencia ta ON a.tipo_audiencia_id = ta.id
          JOIN tblproc pr ON a.processo_id = pr.id
-         WHERE a.data = ?
+         WHERE a.data = ? AND a.status IN ('agendada','adiada')
          ORDER BY a.hora ASC`,
         [amanha]
       ),
@@ -123,7 +123,7 @@ async function buscarDados(req, res) {
          FROM pericia p
          LEFT JOIN tipo_pericia tp ON p.tipo_pericia_id = tp.id
          JOIN tblproc pr ON p.processo_id = pr.id
-         WHERE p.data = ?`,
+         WHERE p.data = ? AND p.status = 'agendada'`,
         [hoje]
       ),
 
@@ -134,11 +134,12 @@ async function buscarDados(req, res) {
          FROM pericia p
          LEFT JOIN tipo_pericia tp ON p.tipo_pericia_id = tp.id
          JOIN tblproc pr ON p.processo_id = pr.id
-         WHERE p.data = ?`,
+         WHERE p.data = ? AND p.status = 'agendada'`,
         [amanha]
       ),
 
-      // Audiências sem ata (já ocorreram e não têm ata nem foram marcadas como impressas)
+      // Audiências sem ata (já ocorreram e não têm ata nem foram marcadas como impressas).
+      // Cancelada/remarcada não gera cobrança de ata.
       pool.execute(
         `SELECT a.id, a.data, a.hora, ta.nome AS tipo,
                 pr.numProc AS processo_numero, pr.NomeTituloProc AS pasta_titulo,
@@ -149,6 +150,7 @@ async function buscarDados(req, res) {
          JOIN tblpasta pa ON pr.pasta_id = pa.id
          WHERE a.data < CURDATE()
            AND a.ata_impressa = 0
+           AND a.status NOT IN ('cancelada','remarcada')
            AND NOT EXISTS (SELECT 1 FROM ata_audiencia aa WHERE aa.audiencia_id = a.id)
          ORDER BY a.data DESC`
       ),

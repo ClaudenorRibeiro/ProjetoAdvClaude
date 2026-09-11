@@ -140,8 +140,8 @@ export default function PendenciasDocumento() {
       {/* Filtros */}
       <div className="card" style={{ marginBottom: 16, padding: '12px 16px', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <div style={{ minWidth: 220, flex: 1 }}>
-          <label className="form-label" style={{ fontSize: 12 }}>Buscar cliente</label>
-          <input className="form-control" placeholder="Nome do cliente..."
+          <label className="form-label" style={{ fontSize: 12 }}>Buscar por cliente com pendências agendadas</label>
+          <input className="form-control" placeholder="Nome do cliente que tem pendências de Documentos"
             value={filtros.busca} onChange={e => setFiltros(f => ({ ...f, busca: e.target.value }))} />
         </div>
         <div style={{ minWidth: 150 }}>
@@ -191,7 +191,7 @@ export default function PendenciasDocumento() {
                   <th>Cliente</th>
                   <th>Documentos pendentes</th>
                   <th style={{ width: 90 }}>Recebidos</th>
-                  <th style={{ width: 150 }}>Responsável</th>
+                  <th style={{ width: 160 }}>Responsáveis</th>
                   <th style={{ width: 90 }}>Aberta há</th>
                   <th style={{ width: 120 }}>Avisar em</th>
                   <th style={{ width: 100 }}>Situação</th>
@@ -202,7 +202,7 @@ export default function PendenciasDocumento() {
                 {lista.map(p => {
                   const st = STATUS_INFO[p.status] || STATUS_INFO.aberta;
                   const docs = (p.documentos_pendentes || '').split(' | ').filter(Boolean);
-                  const avisoVencido = p.status === 'aberta' && p.data_aviso && String(p.data_aviso).slice(0, 10) <= hojeLocal();
+                  const avisoVencido = p.status === 'aberta' && Number(p.avisos_vencidos) > 0;
                   const acoes = [
                     { label: podeAlterar ? 'Abrir / editar' : 'Abrir', icone: '📂', onClick: () => setModal({ id: p.id }) },
                   ];
@@ -232,12 +232,12 @@ export default function PendenciasDocumento() {
                           )}
                       </td>
                       <td style={{ textAlign: 'center', fontSize: 13 }}>{p.itens_recebidos}/{p.total_itens}</td>
-                      <td style={{ fontSize: 13 }}>{p.responsavel_nome}</td>
+                      <td style={{ fontSize: 13 }}>{p.responsaveis_nomes || <span style={{ color: '#bbb' }}>—</span>}</td>
                       <td style={{ textAlign: 'center', fontSize: 13 }}>
                         {p.dias_aberta != null ? `${p.dias_aberta}d` : '—'}
                       </td>
                       <td style={{ fontSize: 13, color: avisoVencido ? '#dc2626' : '#374151', fontWeight: avisoVencido ? 700 : 400 }}>
-                        {p.data_aviso ? formatarData(p.data_aviso) : <span style={{ color: '#bbb' }}>—</span>}
+                        {p.proxima_data_aviso ? formatarData(p.proxima_data_aviso) : <span style={{ color: '#bbb' }}>—</span>}
                       </td>
                       <td>
                         <span style={{
@@ -265,6 +265,7 @@ export default function PendenciasDocumento() {
           podeAlterar={podeAlterar}
           podeGerenciarTipos={podeGerenciarTipos}
           onGerenciarTipos={() => setCatalogo(true)}
+          onAbrirExistente={(id) => setModal({ id })}
           onFechar={(recarregar) => { setModal(null); if (recarregar) carregar(); }}
         />
       )}
@@ -286,21 +287,22 @@ export default function PendenciasDocumento() {
 // ============================================================
 // MODAL — NOVA / EDITAR PENDÊNCIA
 // ============================================================
-function ModalPendencia({ pendenciaId, usuarios, tipos, podeAlterar, podeGerenciarTipos, onGerenciarTipos, onFechar }) {
+const RESP_VAZIO = { usuario_id: '', avisar_sino: true, avisar_email: false, data_aviso: '' };
+
+function ModalPendencia({ pendenciaId, usuarios, tipos, podeAlterar, podeGerenciarTipos, onGerenciarTipos, onAbrirExistente, onFechar }) {
   const editando = !!pendenciaId;
   const overlayRef = useEscFechar(() => onFechar(false));
 
   const [carregando, setCarregando] = useState(editando);
   const [salvando, setSalvando]     = useState(false);
   const [aviso, setAviso]           = useState('');
-  const refResponsavel = useRef(null);
+  const [pendenciaExistenteId, setPendenciaExistenteId] = useState(null); // cliente já tem pendência aberta
 
   const [cliente, setCliente]   = useState(null); // { tipo_pessoa, pessoa_id, nome }
   const [status, setStatus]     = useState('aberta');
   const [itens, setItens]       = useState([]);   // itens salvos (edição): { id, tipo_documento_id, tipo_nome, recebido, ... }
-  const [form, setForm] = useState({
-    responsavel_id: '', avisar_sino: true, avisar_email: false, data_aviso: '', observacao: '',
-  });
+  const [observacao, setObservacao]   = useState('');
+  const [responsaveis, setResponsaveis] = useState([{ ...RESP_VAZIO }]); // [{ usuario_id, avisar_sino, avisar_email, data_aviso }]
   const [tiposSel, setTiposSel] = useState([]);   // ids de tipo_documento selecionados
 
   useEffect(() => {
@@ -313,21 +315,29 @@ function ModalPendencia({ pendenciaId, usuarios, tipos, podeAlterar, podeGerenci
         setStatus(d.status);
         setItens(d.itens || []);
         setTiposSel((d.itens || []).map(i => i.tipo_documento_id));
-        setForm({
-          responsavel_id: String(d.responsavel_id || ''),
-          avisar_sino: !!d.avisar_sino,
-          avisar_email: !!d.avisar_email,
-          data_aviso: d.data_aviso ? String(d.data_aviso).slice(0, 10) : '',
-          observacao: d.observacao || '',
-        });
+        setObservacao(d.observacao || '');
+        const resp = (d.responsaveis || []).map(x => ({
+          usuario_id: String(x.usuario_id),
+          avisar_sino: !!x.avisar_sino,
+          avisar_email: !!x.avisar_email,
+          data_aviso: x.data_aviso ? String(x.data_aviso).slice(0, 10) : '',
+        }));
+        setResponsaveis(resp.length ? resp : [{ ...RESP_VAZIO }]);
       })
       .catch(() => setAviso('Não foi possível carregar esta pendência.'))
       .finally(() => setCarregando(false));
   }, [editando, pendenciaId]);
 
-  function avisar(msg, campo) {
-    setAviso(msg);
-    if (campo) setTimeout(() => campo.focus(), 0);
+  function avisar(msg) { setAviso(msg); }
+
+  function atualizarResp(idx, patch) {
+    setResponsaveis(prev => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  }
+  function adicionarResp() {
+    setResponsaveis(prev => [...prev, { ...RESP_VAZIO }]);
+  }
+  function removerResp(idx) {
+    setResponsaveis(prev => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
   }
 
   // Marca/desmarca um documento como recebido (edição) — efeito imediato no servidor.
@@ -346,20 +356,25 @@ function ModalPendencia({ pendenciaId, usuarios, tipos, podeAlterar, podeGerenci
 
   async function salvar() {
     setAviso('');
+    setPendenciaExistenteId(null);
     if (!editando && !cliente) return avisar('Selecione o cliente.');
-    if (!form.responsavel_id)  return avisar('Selecione o usuário responsável.', refResponsavel.current);
     if (!tiposSel.length)      return avisar('Selecione pelo menos um documento pendente.');
+
+    const respLimpos = responsaveis
+      .filter(r => r.usuario_id)
+      .map(r => ({
+        usuario_id: Number(r.usuario_id),
+        avisar_sino: r.avisar_sino,
+        avisar_email: r.avisar_email,
+        data_aviso: r.data_aviso || null,
+      }));
+    if (!respLimpos.length) return avisar('Selecione pelo menos um usuário responsável pela cobrança.');
+    if (new Set(respLimpos.map(r => r.usuario_id)).size !== respLimpos.length)
+      return avisar('Há um usuário repetido na lista de responsáveis.');
 
     setSalvando(true);
     try {
-      const payload = {
-        responsavel_id: Number(form.responsavel_id),
-        avisar_sino: form.avisar_sino,
-        avisar_email: form.avisar_email,
-        data_aviso: form.data_aviso || null,
-        observacao: form.observacao,
-        tipos: tiposSel,
-      };
+      const payload = { observacao, tipos: tiposSel, responsaveis: respLimpos };
       if (editando) {
         await pendenciasDocAPI.atualizar(pendenciaId, payload);
       } else {
@@ -367,7 +382,9 @@ function ModalPendencia({ pendenciaId, usuarios, tipos, podeAlterar, podeGerenci
       }
       onFechar(true);
     } catch (e) {
+      const jaId = e.response?.data?.detalhes?.pendencia_id;
       avisar(e.response?.data?.mensagem || 'Não foi possível salvar. Tente novamente.');
+      if (jaId) setPendenciaExistenteId(jaId);
     } finally {
       setSalvando(false);
     }
@@ -390,12 +407,19 @@ function ModalPendencia({ pendenciaId, usuarios, tipos, podeAlterar, podeGerenci
             <div style={{
               background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c',
               borderRadius: 6, padding: '8px 10px', marginBottom: 12, fontSize: 13,
-              display: 'flex', justifyContent: 'space-between', gap: 8,
               position: 'sticky', top: 0, zIndex: 5,
             }}>
-              <span>⚠️ {aviso}</span>
-              <button type="button" onClick={() => setAviso('')}
-                style={{ background: 'none', border: 'none', color: '#b91c1c', cursor: 'pointer', fontSize: 15, lineHeight: 1 }}>✕</button>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <span>⚠️ {aviso}</span>
+                <button type="button" onClick={() => { setAviso(''); setPendenciaExistenteId(null); }}
+                  style={{ background: 'none', border: 'none', color: '#b91c1c', cursor: 'pointer', fontSize: 15, lineHeight: 1 }}>✕</button>
+              </div>
+              {pendenciaExistenteId && (
+                <button type="button" className="btn btn-outline btn-sm" style={{ marginTop: 8 }}
+                  onClick={() => onAbrirExistente(pendenciaExistenteId)}>
+                  Abrir a pendência existente
+                </button>
+              )}
             </div>
           )}
 
@@ -460,48 +484,69 @@ function ModalPendencia({ pendenciaId, usuarios, tipos, podeAlterar, podeGerenci
                 </div>
               )}
 
-              {/* Responsável + aviso */}
-              <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label obrigatorio">Responsável pela cobrança</label>
-                  <select className="form-control" ref={refResponsavel} disabled={somenteLeitura}
-                    value={form.responsavel_id}
-                    onChange={e => setForm(f => ({ ...f, responsavel_id: e.target.value }))}>
-                    <option value="">— Selecione —</option>
-                    {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Avisar o responsável em</label>
-                  <input type="date" className="form-control" disabled={somenteLeitura}
-                    value={form.data_aviso}
-                    onChange={e => setForm(f => ({ ...f, data_aviso: e.target.value }))} />
-                  <small style={{ color: '#94a3b8', fontSize: 12 }}>Opcional. Deixe vazio para não agendar aviso.</small>
-                </div>
-              </div>
-
+              {/* Responsáveis pela cobrança — um ou vários, cada um com a sua data e canais */}
               <div className="form-group">
-                <label className="form-label">Como avisar</label>
-                <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: somenteLeitura ? 'default' : 'pointer' }}>
-                    <input type="checkbox" disabled={somenteLeitura} checked={form.avisar_sino}
-                      onChange={e => setForm(f => ({ ...f, avisar_sino: e.target.checked }))} />
-                    Sino do sistema
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: somenteLeitura ? 'default' : 'pointer' }}>
-                    <input type="checkbox" disabled={somenteLeitura} checked={form.avisar_email}
-                      onChange={e => setForm(f => ({ ...f, avisar_email: e.target.checked }))} />
-                    E-mail
-                  </label>
-                </div>
+                <label className="form-label obrigatorio">Responsáveis pela cobrança</label>
+                <small style={{ color: '#94a3b8', fontSize: 12, display: 'block', marginBottom: 6 }}>
+                  Cada pessoa é avisada na data dela, pelos canais que você marcar. Data em branco = sem aviso agendado.
+                </small>
+
+                {responsaveis.map((r, idx) => (
+                  <div key={idx} style={{
+                    border: '1px solid #e5eaf1', borderRadius: 8, padding: '10px 12px',
+                    marginBottom: 8, background: '#fbfcfe',
+                  }}>
+                    <div className="grid-2">
+                      <div>
+                        <label className="form-label" style={{ fontSize: 12 }}>Usuário</label>
+                        <select className="form-control" disabled={somenteLeitura}
+                          value={r.usuario_id}
+                          onChange={e => atualizarResp(idx, { usuario_id: e.target.value })}>
+                          <option value="">— Selecione —</option>
+                          {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="form-label" style={{ fontSize: 12 }}>Avisar em</label>
+                        <input type="date" className="form-control" disabled={somenteLeitura}
+                          value={r.data_aviso}
+                          onChange={e => atualizarResp(idx, { data_aviso: e.target.value })} />
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap', marginTop: 8 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: somenteLeitura ? 'default' : 'pointer' }}>
+                        <input type="checkbox" disabled={somenteLeitura} checked={r.avisar_sino}
+                          onChange={e => atualizarResp(idx, { avisar_sino: e.target.checked })} />
+                        Sino do sistema
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: somenteLeitura ? 'default' : 'pointer' }}>
+                        <input type="checkbox" disabled={somenteLeitura} checked={r.avisar_email}
+                          onChange={e => atualizarResp(idx, { avisar_email: e.target.checked })} />
+                        E-mail
+                      </label>
+                      {!somenteLeitura && responsaveis.length > 1 && (
+                        <button type="button" onClick={() => removerResp(idx)}
+                          style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 13 }}>
+                          Remover
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {!somenteLeitura && (
+                  <button type="button" className="btn btn-outline btn-sm" onClick={adicionarResp}>
+                    ＋ Adicionar responsável
+                  </button>
+                )}
               </div>
 
               <div className="form-group">
                 <label className="form-label">Observações</label>
                 <textarea className="form-control" rows={3} maxLength={1000} disabled={somenteLeitura}
                   placeholder="Ex.: cliente vai trazer na próxima semana; falta reconhecer firma..."
-                  value={form.observacao}
-                  onChange={e => setForm(f => ({ ...f, observacao: e.target.value }))} />
+                  value={observacao}
+                  onChange={e => setObservacao(e.target.value)} />
               </div>
             </>
           )}
@@ -664,11 +709,14 @@ function SeletorDocumentos({ tipos = [], selecionados = [], onChange, somenteLei
               style={{ fontSize: 13, marginBottom: 8 }} />
             <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid #edf2f7', borderRadius: 6 }}>
               {filtrados.length ? filtrados.map((t, idx) => (
-                <label key={t.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', cursor: 'pointer', fontSize: 13,
-                  borderBottom: idx < filtrados.length - 1 ? '1px solid #f1f5f9' : 'none',
-                  background: selSet.has(t.id) ? '#f0f7ff' : '#fff',
-                }}>
+                <label key={t.id}
+                  // impede que o clique no texto tire o foco e feche o dropdown antes de registrar
+                  onMouseDown={e => e.preventDefault()}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', cursor: 'pointer', fontSize: 13,
+                    borderBottom: idx < filtrados.length - 1 ? '1px solid #f1f5f9' : 'none',
+                    background: selSet.has(t.id) ? '#f0f7ff' : '#fff',
+                  }}>
                   <input type="checkbox" checked={selSet.has(t.id)} onChange={() => alternar(t.id)} style={{ accentColor: '#2d6be4' }} />
                   <span>{t.nome}</span>
                 </label>
@@ -740,13 +788,13 @@ function ModalCatalogoTipos({ onFechar, onAtualizado }) {
 
   function pedirExcluir(t) {
     setConfirmar({
-      titulo: 'Remover documento da lista',
-      mensagem: `Remover "${t.nome}" da lista de documentos? Se ele já estiver em uso em alguma pendência, será apenas desativado.`,
-      textoBotao: 'Remover',
-      tipo: 'aviso',
+      titulo: 'Excluir documento da lista',
+      mensagem: `Excluir "${t.nome}" da lista de documentos? Esta ação não pode ser desfeita.`,
+      textoBotao: '🗑️ Excluir',
+      tipo: 'perigo',
       acao: async () => {
         try { await pendenciasDocAPI.excluirTipo(t.id); setAviso(''); carregar(); }
-        catch (e) { setAviso(e.response?.data?.mensagem || 'Não foi possível remover.'); }
+        catch (e) { setAviso(e.response?.data?.mensagem || 'Não foi possível excluir.'); }
       },
     });
   }
@@ -804,11 +852,17 @@ function ModalCatalogoTipos({ onFechar, onAtualizado }) {
                   ) : (
                     <>
                       <span style={{ flex: 1 }}>{t.nome}</span>
-                      {podeAlterar && (
-                        <button className="btn btn-outline btn-sm" onClick={() => setEditando({ id: t.id, nome: t.nome })}>✏️</button>
-                      )}
-                      {podeExcluir && (
-                        <button className="btn btn-outline btn-sm" onClick={() => pedirExcluir(t)}>🗑️</button>
+                      {t.em_uso ? (
+                        <span style={{ color: '#94a3b8', fontSize: 12 }}>em uso</span>
+                      ) : (
+                        <>
+                          {podeAlterar && (
+                            <button className="btn btn-outline btn-sm" onClick={() => setEditando({ id: t.id, nome: t.nome })}>✏️</button>
+                          )}
+                          {podeExcluir && (
+                            <button className="btn btn-outline btn-sm" onClick={() => pedirExcluir(t)}>🗑️</button>
+                          )}
+                        </>
                       )}
                     </>
                   )}

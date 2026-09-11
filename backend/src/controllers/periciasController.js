@@ -721,15 +721,27 @@ async function marcarRealizada(req, res) {
       return erro(res, `Perícia com status "${antes[0].status}" não pode ser marcada como realizada`);
     }
 
-    await pool.execute(
-      `UPDATE pericia SET status = 'realizada', alterado_por = ?, alterado_em = NOW() WHERE id = ?`,
-      [req.usuario.id, id]
-    );
-    await pool.execute(
-      `INSERT INTO auditoria_pericia (pericia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
-       VALUES (?, 'status', ?, 'realizada', ?)`,
-      [id, antes[0].status, req.usuario.id]
-    );
+    // Transação: status + auditoria juntos (sem isso, falha no INSERT deixava a
+    // perícia "realizada" sem o registro de histórico).
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        `UPDATE pericia SET status = 'realizada', alterado_por = ?, alterado_em = NOW() WHERE id = ?`,
+        [req.usuario.id, id]
+      );
+      await conn.execute(
+        `INSERT INTO auditoria_pericia (pericia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
+         VALUES (?, 'status', ?, 'realizada', ?)`,
+        [id, antes[0].status, req.usuario.id]
+      );
+      await conn.commit();
+    } catch (e) {
+      await conn.rollback();
+      throw e;
+    } finally {
+      conn.release();
+    }
     return sucesso(res, null, 'Perícia marcada como realizada');
   } catch (err) {
     return erroInterno(res, err);
@@ -754,16 +766,27 @@ async function cancelar(req, res) {
       return erro(res, `Perícia com status "${antes[0].status}" não pode ser cancelada`);
     }
 
-    await pool.execute(
-      `UPDATE pericia SET status = 'cancelada', motivo_status = ?, alterado_por = ?, alterado_em = NOW()
-       WHERE id = ?`,
-      [motivo.trim(), req.usuario.id, id]
-    );
-    await pool.execute(
-      `INSERT INTO auditoria_pericia (pericia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
-       VALUES (?, 'status', ?, 'cancelada', ?)`,
-      [id, antes[0].status, req.usuario.id]
-    );
+    // Transação: status + auditoria juntos.
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        `UPDATE pericia SET status = 'cancelada', motivo_status = ?, alterado_por = ?, alterado_em = NOW()
+         WHERE id = ?`,
+        [motivo.trim(), req.usuario.id, id]
+      );
+      await conn.execute(
+        `INSERT INTO auditoria_pericia (pericia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
+         VALUES (?, 'status', ?, 'cancelada', ?)`,
+        [id, antes[0].status, req.usuario.id]
+      );
+      await conn.commit();
+    } catch (e) {
+      await conn.rollback();
+      throw e;
+    } finally {
+      conn.release();
+    }
 
     // Avisa o cliente do cancelamento — best-effort
     try { await enviarComunicadoPericia(id, 'cancelada', req.usuario.id); }

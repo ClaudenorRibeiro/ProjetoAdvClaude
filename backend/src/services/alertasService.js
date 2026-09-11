@@ -10,6 +10,7 @@ const { emailPrazosPendentes, emailPrazosAtrasados } = require('./notificacaoSer
 const { enviarEmail } = require('../utils/email');
 const { liberarFazendoExpirados } = require('../controllers/prazosController');
 const { dataParaIsoLocal, hojeBrasilia } = require('../utils/helpers');
+const { enviarComunicadoPericia } = require('./comunicadoService');
 
 // Fuso horário de todos os crons — sem isso, no servidor (Ubuntu/UTC) o cron
 // dispararia 3 horas mais cedo que o horário configurado pelo escritório
@@ -196,18 +197,25 @@ async function verificarAlertasAudiencias() {
     const diasAlerta = config[0]?.dias_alerta_audiencia || 3;
     const hoje = hojeBrasilia();
     const [audiencias] = await pool.execute(
-      `SELECT a.id, a.data FROM audiencia a WHERE a.comunicado_enviado = 0 AND a.data > ? ORDER BY a.data ASC`,
+      `SELECT a.id, a.data FROM audiencia a
+        WHERE a.comunicado_enviado = 0 AND a.data > ? AND a.status IN ('agendada','adiada')
+        ORDER BY a.data ASC`,
       [hoje]
     );
     for (const a of audiencias) {
       const dataA      = typeof a.data === 'string' ? a.data.split('T')[0] : dataParaIsoLocal(a.data);
       const dataAlerta = await diasUteisAntes(dataA, diasAlerta);
-      if (dataAlerta === hoje) console.log(`📅 Alerta audiência ${a.id} em ${dataA}`);
+      // TODO: audiência ainda não tem "comunicado ao cliente" no sistema (só perícia tem).
+      // Quando a feature existir, disparar aqui, igual ao de perícia abaixo.
+      if (dataAlerta === hoje) console.log(`📅 Alerta audiência ${a.id} em ${dataA} (comunicado de audiência ainda não implementado)`);
     }
   } catch (err) { console.error('Erro alertas audiências:', err.message); }
 }
 
 // ── Alertas de perícias ───────────────────────────────────────────────────
+// Ao chegar a "N dias úteis antes" (config dias_alerta_pericia), dispara o
+// comunicado ao cliente — o MESMO que o botão manual "Comunicar" já envia.
+// enviarComunicadoPericia marca comunicado_enviado = 1, então não repete.
 
 async function verificarAlertasPericias() {
   try {
@@ -215,13 +223,20 @@ async function verificarAlertasPericias() {
     const diasAlerta = config[0]?.dias_alerta_pericia || 2;
     const hoje = hojeBrasilia();
     const [pericias] = await pool.execute(
-      `SELECT p.id, p.data FROM pericia p WHERE p.comunicado_enviado = 0 AND p.data > ?`,
+      `SELECT p.id, p.data FROM pericia p
+        WHERE p.comunicado_enviado = 0 AND p.data > ? AND p.status = 'agendada'`,
       [hoje]
     );
     for (const p of pericias) {
       const dataP      = typeof p.data === 'string' ? p.data.split('T')[0] : dataParaIsoLocal(p.data);
       const dataAlerta = await diasUteisAntes(dataP, diasAlerta);
-      if (dataAlerta === hoje) console.log(`🔬 Alerta perícia ${p.id} em ${dataP}`);
+      if (dataAlerta !== hoje) continue;
+      try {
+        await enviarComunicadoPericia(p.id, 'agendada', null); // null = disparo automático (cron)
+        console.log(`🔬 Comunicado antecipado de perícia ${p.id} enviado ao cliente (${dataP})`);
+      } catch (err) {
+        console.error(`Falha no comunicado antecipado da perícia ${p.id}:`, err.message);
+      }
     }
   } catch (err) { console.error('Erro alertas perícias:', err.message); }
 }
@@ -288,90 +303,102 @@ async function verificarAvisosIdade() {
 }
 
 // ── AVISOS DE PENDÊNCIA DE DOCUMENTOS ────────────────────────────────────
-// "Me avise nesta data" configurado na pendência. O aviso vai para o USUÁRIO
-// RESPONSÁVEL da pendência, pelos canais que ele escolheu no cadastro (sino
-// e/ou e-mail). Roda 1x/dia e cada pendência avisa UMA única vez (avisado_em).
+// "Me avise nesta data" — cada usuário RESPONSÁVEL pela cobrança tem a SUA
+// data de aviso e os SEUS canais (sino e/ou e-mail). Roda 1x/dia e cada
+// responsável é avisado UMA única vez (avisado_em na linha dele).
 //
 // Usa <= CURDATE() (não =) de propósito: se o sistema ficar fora do ar no dia
 // exato, o aviso sai no primeiro dia em que voltar, em vez de se perder.
+// Envia o e-mail de cobrança de pendência ao responsável. Retorna true se saiu, false se falhou.
+async function enviarEmailPendencia(p) {
+  try {
+    await enviarEmail({
+      para: p.resp_email,
+      assunto: `Pendência de documentos — ${p.cliente_nome || 'cliente'}`,
+      destinatarioNome: p.resp_nome,
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
+          <div style="background:#b45309;padding:20px;text-align:center">
+            <h2 style="color:#fff;margin:0">Pendência de documentos</h2>
+          </div>
+          <div style="padding:24px">
+            <p>Olá, <strong>${p.resp_nome || ''}</strong>.</p>
+            <p>Chegou a data que você agendou para cobrar os documentos do cliente
+               <strong>${p.cliente_nome || 'cliente'}</strong>.</p>
+            <p><strong>${p.pendentes_qtd}</strong> documento(s) ainda não foram entregues — o processo
+               segue aguardando.</p>
+            <p style="color:#555;font-size:13px">Acesse o sistema, em <strong>Pendências de Documentos</strong>, para ver a lista completa.</p>
+          </div>
+        </div>`,
+    });
+    return true;
+  } catch (err) {
+    console.error('Falha ao enviar e-mail de pendência #' + p.pendencia_id + ':', err.message);
+    return false;
+  }
+}
+
 async function verificarAvisosPendenciaDocumento() {
   try {
     const [pendentes] = await pool.execute(
-      `SELECT pd.id, pd.tipo_pessoa, pd.pessoa_id, pd.responsavel_id,
-              pd.avisar_sino, pd.avisar_email,
+      `SELECT r.id AS resp_row_id, r.avisar_sino, r.avisar_email,
+              pd.id AS pendencia_id, pd.tipo_pessoa, pd.pessoa_id,
               CASE pd.tipo_pessoa
                 WHEN 'fisica'   THEN (SELECT pf.nome         FROM pessoas_fisicas   pf WHERE pf.id = pd.pessoa_id)
                 WHEN 'juridica' THEN (SELECT pj.razao_social FROM pessoas_juridicas pj WHERE pj.id = pd.pessoa_id)
               END AS cliente_nome,
               (SELECT COUNT(*) FROM pendencia_documento_item i
                 WHERE i.pendencia_id = pd.id AND i.recebido = 0) AS pendentes_qtd,
-              u.nome AS resp_nome, u.email AS resp_email
-         FROM pendencia_documento pd
-         JOIN usuarios u ON pd.responsavel_id = u.id AND u.ativo = 1
+              u.id AS resp_id, u.nome AS resp_nome, u.email AS resp_email
+         FROM pendencia_documento_responsavel r
+         JOIN pendencia_documento pd ON r.pendencia_id = pd.id
+         JOIN usuarios u ON r.usuario_id = u.id AND u.ativo = 1
         WHERE pd.status = 'aberta'
-          AND pd.data_aviso IS NOT NULL
-          AND pd.data_aviso <= CURDATE()
-          AND pd.avisado_em IS NULL
-        ORDER BY pd.data_aviso ASC`
+          AND r.data_aviso IS NOT NULL
+          AND r.data_aviso <= CURDATE()
+          AND r.avisado_em IS NULL
+        ORDER BY r.data_aviso ASC`
     );
     if (!pendentes.length) return;
 
     for (const p of pendentes) {
+      const temSino  = Number(p.avisar_sino) === 1;
+      const temEmail = Number(p.avisar_email) === 1 && !!p.resp_email;
+
+      // Caso "SÓ e-mail": o aviso só vale se o e-mail SAIR. Envia ANTES de marcar;
+      // se falhar, deixa avisado_em nulo e o cron tenta de novo amanhã.
+      if (!temSino && temEmail) {
+        const ok = await enviarEmailPendencia(p);
+        if (!ok) { console.error(`Aviso de pendência #${p.pendencia_id}: e-mail falhou, será tentado amanhã`); continue; }
+      }
+
+      // Registra o aviso: o sino (se houver) + o carimbo avisado_em, na mesma transação.
       const conn = await pool.getConnection();
       try {
         await conn.beginTransaction();
-
-        const mensagem = `Documentos pendentes de ${p.cliente_nome || 'cliente'} — ${p.pendentes_qtd} documento(s) ainda não entregue(s). Processo aguardando.`.slice(0, 300);
-
-        // Sino: notificação na tela para o responsável. A coluna pessoa_id só
-        // referencia pessoas_fisicas — para PJ fica null (o texto já traz o nome).
-        if (Number(p.avisar_sino) === 1) {
+        if (temSino) {
+          // pessoa_id só referencia pessoas_fisicas — para PJ fica null (o texto já traz o nome).
+          const mensagem = `Documentos pendentes de ${p.cliente_nome || 'cliente'} — ${p.pendentes_qtd} documento(s) ainda não entregue(s). Processo aguardando.`.slice(0, 300);
           await conn.execute(
             'INSERT INTO notificacoes (usuario_id, pessoa_id, mensagem) VALUES (?, ?, ?)',
-            [p.responsavel_id, p.tipo_pessoa === 'fisica' ? p.pessoa_id : null, mensagem]
+            [p.resp_id, p.tipo_pessoa === 'fisica' ? p.pessoa_id : null, mensagem]
           );
         }
-
-        // Marca DENTRO da mesma transação: ou o aviso é registrado, ou tenta de novo amanhã.
         await conn.execute(
-          'UPDATE pendencia_documento SET avisado_em = NOW() WHERE id = ?', [p.id]
+          'UPDATE pendencia_documento_responsavel SET avisado_em = NOW() WHERE id = ?', [p.resp_row_id]
         );
         await conn.commit();
-        console.log(`🔔 Aviso de pendência #${p.id} (${p.cliente_nome}) enviado ao responsável ${p.resp_nome}`);
+        console.log(`🔔 Aviso de pendência #${p.pendencia_id} (${p.cliente_nome}) → ${p.resp_nome}`);
       } catch (err) {
         await conn.rollback();
-        console.error('Erro no aviso de pendência de documentos #' + p.id + ':', err.message);
+        console.error('Erro no aviso de pendência de documentos #' + p.pendencia_id + ':', err.message);
         conn.release();
-        continue; // não tenta o e-mail se o registro do aviso falhou
+        continue;
       }
       conn.release();
 
-      // E-mail ao responsável — best-effort, fora da transação (nunca derruba o cron).
-      if (Number(p.avisar_email) === 1 && p.resp_email) {
-        try {
-          await enviarEmail({
-            para: p.resp_email,
-            assunto: `Pendência de documentos — ${p.cliente_nome || 'cliente'}`,
-            destinatarioNome: p.resp_nome,
-            html: `
-              <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
-                <div style="background:#b45309;padding:20px;text-align:center">
-                  <h2 style="color:#fff;margin:0">Pendência de documentos</h2>
-                </div>
-                <div style="padding:24px">
-                  <p>Olá, <strong>${p.resp_nome || ''}</strong>.</p>
-                  <p>Chegou a data que você agendou para cobrar os documentos do cliente
-                     <strong>${p.cliente_nome || 'cliente'}</strong>.</p>
-                  <p><strong>${p.pendentes_qtd}</strong> documento(s) ainda não foram entregues — o processo
-                     segue aguardando.</p>
-                  <p style="color:#555;font-size:13px">Acesse o sistema, em <strong>Pendências de Documentos</strong>, para ver a lista completa.</p>
-                </div>
-              </div>`,
-          });
-        } catch (err) {
-          console.error('Falha ao enviar e-mail de pendência #' + p.id + ':', err.message);
-        }
-      }
+      // Caso "sino + e-mail": o e-mail é um EXTRA, best-effort depois (o sino já avisou).
+      if (temSino && temEmail) await enviarEmailPendencia(p);
     }
   } catch (err) {
     console.error('Erro ao verificar avisos de pendências de documentos:', err.message);

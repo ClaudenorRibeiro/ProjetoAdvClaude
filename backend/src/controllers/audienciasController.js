@@ -609,19 +609,30 @@ async function cancelar(req, res) {
       return erro(res, `Audiência com status "${antes[0].status}" não pode ser cancelada`);
     }
 
-    await pool.execute(
-      `UPDATE audiencia SET status = 'cancelada', motivo_status = ?, alterado_por = ?, alterado_em = NOW()
-       WHERE id = ?`,
-      [motivo.trim(), req.usuario.id, id]
-    );
+    // Transação: mudar o status E registrar na auditoria são um bloco só —
+    // sem isso, uma falha no INSERT deixava a audiência cancelada sem o histórico.
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        `UPDATE audiencia SET status = 'cancelada', motivo_status = ?, alterado_por = ?, alterado_em = NOW()
+         WHERE id = ?`,
+        [motivo.trim(), req.usuario.id, id]
+      );
+      await conn.execute(
+        `INSERT INTO auditoria_audiencia (audiencia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
+         VALUES (?, 'status', ?, 'cancelada', ?)`,
+        [id, antes[0].status, req.usuario.id]
+      );
+      await conn.commit();
+    } catch (e) {
+      await conn.rollback();
+      throw e;
+    } finally {
+      conn.release();
+    }
 
-    await pool.execute(
-      `INSERT INTO auditoria_audiencia (audiencia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
-       VALUES (?, 'status', ?, 'cancelada', ?)`,
-      [id, antes[0].status, req.usuario.id]
-    );
-
-    // Cancelada → sai da agenda do Google do responsável.
+    // Cancelada → sai da agenda do Google do responsável. Depois do commit, best-effort.
     sincronizarAudienciaGoogle(id, { cancelar: true, sequence: Math.floor(Date.now() / 1000) });
     return sucesso(res, null, 'Audiência cancelada com sucesso');
   } catch (err) {

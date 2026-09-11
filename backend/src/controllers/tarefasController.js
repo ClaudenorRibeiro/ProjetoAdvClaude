@@ -5,7 +5,25 @@
 const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
-const { bloqueiaAgendarPassado } = require('../utils/helpers');
+const { bloqueiaAgendarPassado, hojeBrasilia } = require('../utils/helpers');
+
+// Mesma regra de visibilidade da listagem: admin/super (nível <= 1) OU
+// permissão 'tarefas.ver_todos:visualizar'. Usada para barrar ações (concluir/
+// reabrir) sobre tarefas que o usuário nem veria na lista — a listagem já filtra,
+// mas as rotas de ação recebem o id direto.
+async function podeVerTodasTarefas(req) {
+  if (Number(req.usuario.nivel) <= 1) return true;
+  const [p] = await pool.execute(
+    "SELECT permitido FROM permissoes WHERE usuario_id = ? AND modulo = 'tarefas' AND submodulo = 'ver_todos' AND acao = 'visualizar'",
+    [req.usuario.id]
+  );
+  return Number(p[0]?.permitido) === 1;
+}
+// Pode agir na tarefa se: é do escritório (sem atribuído), está atribuída a ele, ou ele vê todas.
+async function podeAgirNaTarefa(req, atribuidaPara) {
+  if (atribuidaPara == null || Number(atribuidaPara) === Number(req.usuario.id)) return true;
+  return podeVerTodasTarefas(req);
+}
 const { notificarConclusao, emailTarefaAtribuida } = require('../services/notificacaoService');
 const agendaGoogle = require('../services/agendaGoogleService');
 
@@ -259,7 +277,9 @@ async function criar(req, res) {
           enviar_email } = req.body;
 
   if (!titulo) return erro(res, 'O título é obrigatório');
-  if (bloqueiaAgendarPassado(req.usuario, data_vencimento)) {
+  // Toda tarefa tem vencimento: sem data no formulário, assume HOJE (regra do usuário).
+  const venc = data_vencimento || hojeBrasilia();
+  if (bloqueiaAgendarPassado(req.usuario, venc)) {
     return erro(res, 'Apenas o administrador pode agendar tarefa com data anterior a hoje. Escolha uma data a partir de hoje.');
   }
 
@@ -276,7 +296,7 @@ async function criar(req, res) {
         titulo.trim(), descricao || null,
         prioridade || 'normal',
         processo_id || null, pasta_id || null, prazo_id || null,
-        atribuida_para || null, data_vencimento || null,
+        atribuida_para || null, venc,
         req.usuario.id, publicacao_id || null, notificar_conclusao ? 1 : 0
       ]
     );
@@ -305,10 +325,14 @@ async function criar(req, res) {
 async function concluir(req, res) {
   const { id } = req.params;
   const [exists] = await pool.execute(
-    'SELECT id, titulo, criado_por, notificar_conclusao FROM tarefas WHERE id = ?', [id]
+    'SELECT id, titulo, criado_por, notificar_conclusao, atribuida_para FROM tarefas WHERE id = ?', [id]
   );
   if (!exists.length) return naoEncontrado(res, 'Tarefa não encontrada');
   const tarefa = exists[0];
+
+  if (!(await podeAgirNaTarefa(req, tarefa.atribuida_para))) {
+    return erro(res, 'Você só pode concluir tarefas atribuídas a você ou do escritório.', 403);
+  }
 
   const conn = await pool.getConnection();
   try {
@@ -352,6 +376,14 @@ async function concluir(req, res) {
 // Transação: UPDATE da tarefa + registro de auditoria (tudo ou nada)
 async function reabrir(req, res) {
   const { id } = req.params;
+
+  const [exists] = await pool.execute(
+    'SELECT id, atribuida_para FROM tarefas WHERE id = ?', [id]
+  );
+  if (!exists.length) return naoEncontrado(res, 'Tarefa não encontrada');
+  if (!(await podeAgirNaTarefa(req, exists[0].atribuida_para))) {
+    return erro(res, 'Você só pode reabrir tarefas atribuídas a você ou do escritório.', 403);
+  }
 
   const conn = await pool.getConnection();
   try {
@@ -478,7 +510,9 @@ async function atualizar(req, res) {
           pasta_id, processo_id, notificar_conclusao,
           enviar_email } = req.body;   // ver comentário em criar
 
-  if (bloqueiaAgendarPassado(req.usuario, data_vencimento)) {
+  // Sem data no formulário → HOJE (toda tarefa tem vencimento).
+  const venc = data_vencimento || hojeBrasilia();
+  if (bloqueiaAgendarPassado(req.usuario, venc)) {
     return erro(res, 'Apenas o administrador pode agendar tarefa com data anterior a hoje. Escolha uma data a partir de hoje.');
   }
 
@@ -494,7 +528,7 @@ async function atualizar(req, res) {
        atribuida_para=?, data_vencimento=?, pasta_id=?, processo_id=?, notificar_conclusao=?
        WHERE id = ?`,
       [titulo, descricao || null, prioridade || 'normal',
-       atribuida_para || null, data_vencimento || null,
+       atribuida_para || null, venc,
        pasta_id || null, processo_id || null,
        (notificar_conclusao && atribuida_para) ? 1 : 0, id]
     );

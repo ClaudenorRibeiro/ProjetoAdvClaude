@@ -190,13 +190,7 @@ export default function Pessoas() {
       const fn = aba === 'fisicas' ? pessoasAPI.excluirFisica : pessoasAPI.excluirJuridica;
       await fn(confirmarExclusao.id);
       toast.success('Pessoa excluída com sucesso');
-      setConfirmarExclusao(null);
       carregar();
-    } catch (err) {
-      // Exibe a mensagem específica retornada pelo backend (ex: "possui 2 pasta(s) de processo")
-      const mensagem = err.response?.data?.mensagem || 'Erro ao excluir pessoa';
-      toast.error(mensagem);
-      setConfirmarExclusao(null); // Fecha o modal mesmo no bloqueio
     } finally {
       setExcluindo(false);
     }
@@ -442,31 +436,22 @@ export default function Pessoas() {
 
       {/* Modal de confirmação de exclusão */}
       {confirmarExclusao && (
-        <div className="modal-overlay">
-          <div className="modal" style={{maxWidth:'420px'}}>
-            <h3 style={{marginBottom:'12px'}}>Confirmar exclusão</h3>
-            <p style={{marginBottom:'20px',color:'#555',lineHeight:'1.5'}}>
+        <ModalConfirmar
+          titulo="Confirmar exclusão"
+          mensagem={
+            <>
               Tem certeza que deseja excluir <strong>{confirmarExclusao.nome}</strong>?
               <br />
               <span style={{fontSize:'12px',color:'#888'}}>
                 O registro ficará inativo e não aparecerá mais nas listagens.
               </span>
-            </p>
-            <div style={{display:'flex',gap:'12px',justifyContent:'flex-end'}}>
-              <button className="btn btn-outline" onClick={() => setConfirmarExclusao(null)} disabled={excluindo}>
-                Cancelar
-              </button>
-              <button
-                className="btn"
-                style={{background:'#dc3545',color:'#fff',border:'none'}}
-                onClick={confirmarEExcluir}
-                disabled={excluindo}
-              >
-                {excluindo ? 'Excluindo...' : 'Excluir'}
-              </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+          textoBotao={excluindo ? 'Excluindo...' : 'Excluir'}
+          tipo="perigo"
+          acao={confirmarEExcluir}
+          onCancelar={() => setConfirmarExclusao(null)}
+        />
       )}
 
       {/* Modal de exportação para Excel — escolher os campos */}

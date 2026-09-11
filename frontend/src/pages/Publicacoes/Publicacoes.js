@@ -1132,6 +1132,21 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
 
   const totalPaginas = Math.max(1, Math.ceil(total / POR_PAGINA));
 
+  // Sub-abas "Filtrar e pesquisar" x "Importar publicações" (só quem importa vê as duas).
+  // Só visual — a escolha fica lembrada no navegador; os dois painéis seguem montados.
+  const [painel, setPainel] = useState(() => {
+    try { return localStorage.getItem('pub_painel_aasp') || 'filtrar'; } catch { return 'filtrar'; }
+  });
+  function trocarPainel(v) {
+    setPainel(v);
+    try { localStorage.setItem('pub_painel_aasp', v); } catch { /* sem localStorage: ignora */ }
+  }
+  const subAba = (on) => ({
+    background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', padding: '7px 12px',
+    color: on ? '#1a56db' : '#64748b', fontWeight: on ? 600 : 400,
+    borderBottom: on ? '2px solid #1a56db' : '2px solid transparent', marginBottom: '-1px',
+  });
+
   return (
     <div>
       <AvisoFalhaTratamento publicacao={avisoTratamento}
@@ -1147,32 +1162,51 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
         </div>
       )}
 
-      {/* Importar um dia + pesquisa/filtro */}
-      <div className="card" style={{ marginBottom: '16px' }}>
-        <div className="filtros-row" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          {podeImportar && (
-            <>
-              <div className="form-group" style={{ margin: 0 }}>
-                <label className="form-label">Dia da Disponibilização (AASP)</label>
-                <input type="date" className="form-control" value={dataImport}
-                  onChange={e => setDataImport(e.target.value)} />
-              </div>
-              <button className="btn btn-primary" style={{ marginBottom: '1px' }}
-                onClick={importarDia} disabled={importando}>
-                {importando ? 'Buscando...' : '↓ Buscar publicações do dia'}
-              </button>
-              <span style={{ width: '1px', alignSelf: 'stretch', background: '#e2e8f0', margin: '0 4px' }} />
-            </>
-          )}
+      {/* Sub-abas — só aparecem para quem pode importar (senão, só o painel de filtros) */}
+      {podeImportar && (
+        <div style={{ display: 'flex', gap: '4px', marginBottom: '10px', borderBottom: '1px solid #e2e8f0' }}>
+          <button type="button" onClick={() => trocarPainel('filtrar')} style={subAba(painel === 'filtrar')}>
+            Filtrar e pesquisar
+          </button>
+          <button type="button" onClick={() => trocarPainel('importar')} style={subAba(painel === 'importar')}>
+            Importar publicações
+          </button>
+        </div>
+      )}
 
-          <div className="form-group" style={{ margin: 0, flex: '1 1 220px' }}>
+      {/* Painel IMPORTAR */}
+      {podeImportar && (
+        <div className="card" style={{ marginBottom: '16px' }} hidden={painel !== 'importar'}>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Dia da disponibilização (AASP)</label>
+              <input type="date" className="form-control" value={dataImport}
+                onChange={e => setDataImport(e.target.value)} />
+            </div>
+            <button className="btn btn-primary" style={{ marginBottom: '1px' }}
+              onClick={importarDia} disabled={importando}>
+              {importando ? 'Buscando...' : '↓ Buscar publicações do dia'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Painel FILTRAR / PESQUISAR */}
+      <div className="card" style={{ marginBottom: '16px' }} hidden={podeImportar && painel !== 'filtrar'}>
+        {!podeImportar && (
+          <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '8px' }}>
+            Filtrar e pesquisar
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          <div className="form-group" style={{ margin: 0, flex: '2 1 240px' }}>
             <label className="form-label">Pesquisar no conteúdo</label>
-            <input className="form-control" placeholder="Digite parte do texto, nome, processo..."
+            <input className="form-control" placeholder="Parte do texto, nome ou número do processo"
               value={filtros.busca} onChange={e => setFiltro('busca', e.target.value)} />
           </div>
           {/* Janela de datas da pesquisa (máx. 3 meses). "Todas as datas" ignora a janela. */}
-          <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label">Período (máx. 3 meses)</label>
+          <div className="form-group" style={{ margin: 0, flex: '1 1 260px' }}>
+            <label className="form-label">Período <span style={{ color: '#94a3b8', fontWeight: 400 }}>(máx. 3 meses)</span></label>
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
               <input type="date" className="form-control" value={filtros.dataInicio}
                 disabled={filtros.todasDatas} onChange={e => setFiltro('dataInicio', e.target.value)} />
@@ -1180,30 +1214,13 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
               <input type="date" className="form-control" value={filtros.dataFim}
                 disabled={filtros.todasDatas} onChange={e => setFiltro('dataFim', e.target.value)} />
             </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px',
-              fontSize: '12px', color: '#555', cursor: 'pointer' }}>
-              <input type="checkbox" checked={filtros.todasDatas}
-                onChange={e => toggleTodasDatas(e.target.checked)} />
-              Todas as datas
-            </label>
             {periodoInvalido && (
               <small style={{ color: '#b91c1c', display: 'block', marginTop: '2px' }}>
                 O período não pode passar de 3 meses.
               </small>
             )}
           </div>
-          {podeEscolherEscopo && (
-            <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">Ver</label>
-              <select className="form-control" value={filtros.escopo}
-                onChange={e => trocarEscopo(e.target.value)}
-                title="Fica salvo no seu usuário e vale em qualquer dispositivo">
-                <option value="minhas">Atribuídas a mim</option>
-                <option value="todas">Todas</option>
-              </select>
-            </div>
-          )}
-          <div className="form-group" style={{ margin: 0 }}>
+          <div className="form-group" style={{ margin: 0, flex: '0 1 150px' }}>
             <label className="form-label">Status</label>
             <select className="form-control" value={filtros.tratada}
               onChange={e => setFiltro('tratada', e.target.value)}>
@@ -1213,25 +1230,66 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
             </select>
           </div>
         </div>
+        {/* Linha de opções: janela de datas x todas, e o "Ver" do buscador */}
+        <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap', marginTop: '10px' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#555', cursor: 'pointer' }}>
+            <input type="checkbox" checked={filtros.todasDatas}
+              onChange={e => toggleTodasDatas(e.target.checked)} />
+            Todas as datas
+          </label>
+          {podeEscolherEscopo && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '13px', color: '#555' }}>Ver</span>
+              <select className="form-control" style={{ width: 'auto' }} value={filtros.escopo}
+                onChange={e => trocarEscopo(e.target.value)}
+                title="Fica salvo no seu usuário e vale em qualquer dispositivo">
+                <option value="minhas">Atribuídas a mim</option>
+                <option value="todas">Todas</option>
+              </select>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Lista */}
       <div className="card">
-        {/* Ações em lote (só para quem tem permissão de excluir) */}
-        {podeExcluir && (
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
-            <button className="btn btn-outline" disabled={!selecionados.length}
-              onClick={excluirSelecionadas}>
+        {/* Barra de resultados + ação em lote */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginBottom: '8px' }}>
+          <div style={{ fontSize: '13px', color: '#64748b' }}>
+            <strong style={{ color: '#1e293b', fontWeight: 600 }}>{total} {total === 1 ? 'publicação' : 'publicações'}</strong>
+            {(() => {
+              const partes = [{ '0': 'não tratadas', '1': 'tratadas', '': 'todas' }[filtros.tratada]];
+              if (podeEscolherEscopo) partes.push(filtros.escopo === 'minhas' ? 'atribuídas a mim' : 'todas');
+              if (filtros.busca.trim()) partes.push(`busca "${filtros.busca.trim()}"`);
+              if (!filtros.todasDatas && (filtros.dataInicio || filtros.dataFim)) partes.push('período definido');
+              if (filtros.etiqueta) partes.push('etiqueta');
+              const txt = partes.filter(Boolean).join(' · ');
+              return txt ? <> · {txt}</> : null;
+            })()}
+          </div>
+          {podeExcluir && (
+            <button className="btn btn-outline" style={{ fontSize: '13px', padding: '6px 12px' }}
+              disabled={!selecionados.length} onClick={excluirSelecionadas}>
               🗑️ Excluir selecionadas{selecionados.length ? ` (${selecionados.length})` : ''}
             </button>
-          </div>
-        )}
-        {/* Legenda da pintura de duplicadas */}
-        <p style={{ margin: '0 0 10px', fontSize: '12px', color: '#888' }}>
-          <span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#fde8e8',
-            border: '1px solid #f0c0c0', borderRadius: '2px', verticalAlign: 'middle', marginRight: '6px' }} />
-          Número do processo em vermelho-claro = o mesmo processo aparece mais de uma vez no mesmo dia. Exclua manualmente as que não quiser.
-        </p>
+          )}
+        </div>
+        {/* Legenda das cores das linhas */}
+        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center',
+          fontSize: '12px', color: '#64748b', padding: '8px 0', borderTop: '1px solid #eef2f7' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#fde8e8', border: '1px solid #f0c0c0' }} />
+            processo repetido no mesmo dia
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#cdebd6' }} />
+            lida
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#fff8db', border: '1px solid #eadfa8' }} />
+            buscada novamente
+          </span>
+        </div>
         <LegendaEtiquetasPessoais definicoes={etqDefs} filtroAtivo={filtros.etiqueta} onFiltrar={(slot) => setFiltro('etiqueta', slot)} />
         {carregando ? <div className="loading">Carregando...</div> : (
           <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
@@ -1776,6 +1834,20 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
 
   const totalPaginas = Math.max(1, Math.ceil(total / POR_PAGINA));
 
+  // Sub-abas "Filtrar e pesquisar" x "Importar publicações" (só quem importa vê as duas).
+  const [painel, setPainel] = useState(() => {
+    try { return localStorage.getItem('pub_painel_cnj') || 'filtrar'; } catch { return 'filtrar'; }
+  });
+  function trocarPainel(v) {
+    setPainel(v);
+    try { localStorage.setItem('pub_painel_cnj', v); } catch { /* sem localStorage: ignora */ }
+  }
+  const subAba = (on) => ({
+    background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', padding: '7px 12px',
+    color: on ? '#1a56db' : '#64748b', fontWeight: on ? 600 : 400,
+    borderBottom: on ? '2px solid #1a56db' : '2px solid transparent', marginBottom: '-1px',
+  });
+
   return (
     <div>
       <AvisoFalhaTratamento publicacao={avisoTratamento}
@@ -1791,37 +1863,56 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
         </div>
       )}
 
-      {/* Buscar por período + pesquisa/filtro */}
-      <div className="card" style={{ marginBottom: '16px' }}>
-        <div className="filtros-row" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          {podeImportar && (
-            <>
-              <div className="form-group" style={{ margin: 0 }}>
-                <label className="form-label">De (CNJ)</label>
-                <input type="date" className="form-control" value={dataInicio}
-                  onChange={e => setDataInicio(e.target.value)} />
-              </div>
-              <div className="form-group" style={{ margin: 0 }}>
-                <label className="form-label">Até</label>
-                <input type="date" className="form-control" value={dataFim}
-                  onChange={e => setDataFim(e.target.value)} />
-              </div>
-              <button className="btn btn-primary" style={{ marginBottom: '1px' }}
-                onClick={importarPeriodo} disabled={importando}>
-                {importando ? 'Buscando...' : '↓ Buscar publicações do período'}
-              </button>
-              <span style={{ width: '1px', alignSelf: 'stretch', background: '#e2e8f0', margin: '0 4px' }} />
-            </>
-          )}
+      {/* Sub-abas — só aparecem para quem pode importar (senão, só o painel de filtros) */}
+      {podeImportar && (
+        <div style={{ display: 'flex', gap: '4px', marginBottom: '10px', borderBottom: '1px solid #e2e8f0' }}>
+          <button type="button" onClick={() => trocarPainel('filtrar')} style={subAba(painel === 'filtrar')}>
+            Filtrar e pesquisar
+          </button>
+          <button type="button" onClick={() => trocarPainel('importar')} style={subAba(painel === 'importar')}>
+            Importar publicações
+          </button>
+        </div>
+      )}
 
-          <div className="form-group" style={{ margin: 0, flex: '1 1 220px' }}>
+      {/* Painel IMPORTAR */}
+      {podeImportar && (
+        <div className="card" style={{ marginBottom: '16px' }} hidden={painel !== 'importar'}>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">De (CNJ)</label>
+              <input type="date" className="form-control" value={dataInicio}
+                onChange={e => setDataInicio(e.target.value)} />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Até</label>
+              <input type="date" className="form-control" value={dataFim}
+                onChange={e => setDataFim(e.target.value)} />
+            </div>
+            <button className="btn btn-primary" style={{ marginBottom: '1px' }}
+              onClick={importarPeriodo} disabled={importando}>
+              {importando ? 'Buscando...' : '↓ Buscar publicações do período'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Painel FILTRAR / PESQUISAR */}
+      <div className="card" style={{ marginBottom: '16px' }} hidden={podeImportar && painel !== 'filtrar'}>
+        {!podeImportar && (
+          <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '8px' }}>
+            Filtrar e pesquisar
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          <div className="form-group" style={{ margin: 0, flex: '2 1 240px' }}>
             <label className="form-label">Pesquisar no conteúdo</label>
-            <input className="form-control" placeholder="Digite parte do texto, nome, processo..."
+            <input className="form-control" placeholder="Parte do texto, nome ou número do processo"
               value={filtros.busca} onChange={e => setFiltro('busca', e.target.value)} />
           </div>
           {/* Janela de datas da pesquisa (máx. 3 meses). "Todas as datas" ignora a janela. */}
-          <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label">Período (máx. 3 meses)</label>
+          <div className="form-group" style={{ margin: 0, flex: '1 1 260px' }}>
+            <label className="form-label">Período <span style={{ color: '#94a3b8', fontWeight: 400 }}>(máx. 3 meses)</span></label>
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
               <input type="date" className="form-control" value={filtros.dataInicio}
                 disabled={filtros.todasDatas} onChange={e => setFiltro('dataInicio', e.target.value)} />
@@ -1829,30 +1920,13 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
               <input type="date" className="form-control" value={filtros.dataFim}
                 disabled={filtros.todasDatas} onChange={e => setFiltro('dataFim', e.target.value)} />
             </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px',
-              fontSize: '12px', color: '#555', cursor: 'pointer' }}>
-              <input type="checkbox" checked={filtros.todasDatas}
-                onChange={e => toggleTodasDatas(e.target.checked)} />
-              Todas as datas
-            </label>
             {periodoInvalido && (
               <small style={{ color: '#b91c1c', display: 'block', marginTop: '2px' }}>
                 O período não pode passar de 3 meses.
               </small>
             )}
           </div>
-          {podeEscolherEscopo && (
-            <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">Ver</label>
-              <select className="form-control" value={filtros.escopo}
-                onChange={e => trocarEscopo(e.target.value)}
-                title="Fica salvo no seu usuário e vale em qualquer dispositivo">
-                <option value="minhas">Atribuídas a mim</option>
-                <option value="todas">Todas</option>
-              </select>
-            </div>
-          )}
-          <div className="form-group" style={{ margin: 0 }}>
+          <div className="form-group" style={{ margin: 0, flex: '0 1 150px' }}>
             <label className="form-label">Status</label>
             <select className="form-control" value={filtros.tratada}
               onChange={e => setFiltro('tratada', e.target.value)}>
@@ -1862,24 +1936,66 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
             </select>
           </div>
         </div>
+        {/* Linha de opções: janela de datas x todas, e o "Ver" do buscador */}
+        <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap', marginTop: '10px' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#555', cursor: 'pointer' }}>
+            <input type="checkbox" checked={filtros.todasDatas}
+              onChange={e => toggleTodasDatas(e.target.checked)} />
+            Todas as datas
+          </label>
+          {podeEscolherEscopo && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '13px', color: '#555' }}>Ver</span>
+              <select className="form-control" style={{ width: 'auto' }} value={filtros.escopo}
+                onChange={e => trocarEscopo(e.target.value)}
+                title="Fica salvo no seu usuário e vale em qualquer dispositivo">
+                <option value="minhas">Atribuídas a mim</option>
+                <option value="todas">Todas</option>
+              </select>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Lista */}
       <div className="card">
-        {/* Ações em lote (só para quem tem permissão de excluir) */}
-        {podeExcluir && (
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
-            <button className="btn btn-outline" disabled={!selecionados.length}
-              onClick={excluirSelecionadas}>
+        {/* Barra de resultados + ação em lote */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginBottom: '8px' }}>
+          <div style={{ fontSize: '13px', color: '#64748b' }}>
+            <strong style={{ color: '#1e293b', fontWeight: 600 }}>{total} {total === 1 ? 'publicação' : 'publicações'}</strong>
+            {(() => {
+              const partes = [{ '0': 'não tratadas', '1': 'tratadas', '': 'todas' }[filtros.tratada]];
+              if (podeEscolherEscopo) partes.push(filtros.escopo === 'minhas' ? 'atribuídas a mim' : 'todas');
+              if (filtros.busca.trim()) partes.push(`busca "${filtros.busca.trim()}"`);
+              if (!filtros.todasDatas && (filtros.dataInicio || filtros.dataFim)) partes.push('período definido');
+              if (filtros.etiqueta) partes.push('etiqueta');
+              const txt = partes.filter(Boolean).join(' · ');
+              return txt ? <> · {txt}</> : null;
+            })()}
+          </div>
+          {podeExcluir && (
+            <button className="btn btn-outline" style={{ fontSize: '13px', padding: '6px 12px' }}
+              disabled={!selecionados.length} onClick={excluirSelecionadas}>
               🗑️ Excluir selecionadas{selecionados.length ? ` (${selecionados.length})` : ''}
             </button>
-          </div>
-        )}
-        <p style={{ margin: '0 0 10px', fontSize: '12px', color: '#888' }}>
-          <span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#fde8e8',
-            border: '1px solid #f0c0c0', borderRadius: '2px', verticalAlign: 'middle', marginRight: '6px' }} />
-          Número do processo em vermelho-claro = o mesmo processo aparece mais de uma vez no mesmo dia. Exclua manualmente as que não quiser.
-        </p>
+          )}
+        </div>
+        {/* Legenda das cores das linhas */}
+        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center',
+          fontSize: '12px', color: '#64748b', padding: '8px 0', borderTop: '1px solid #eef2f7' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#fde8e8', border: '1px solid #f0c0c0' }} />
+            processo repetido no mesmo dia
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#cdebd6' }} />
+            lida
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#fff8db', border: '1px solid #eadfa8' }} />
+            buscada novamente
+          </span>
+        </div>
         <LegendaEtiquetasPessoais definicoes={etqDefs} filtroAtivo={filtros.etiqueta} onFiltrar={(slot) => setFiltro('etiqueta', slot)} />
         {carregando ? <div className="loading">Carregando...</div> : (
           <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>

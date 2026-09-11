@@ -8,6 +8,33 @@ const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
 
+// Confere que TODA parte (autor/réu/perito) enviada aponta para uma pessoa que
+// existe e está ativa. tbltituloproc* e processo_perito são polimórficos SEM
+// chave estrangeira em pessoa_id — sem esta checagem, um formulário aberto antes
+// de a pessoa ser excluída gravaria um vínculo inválido. Devolve mensagem de erro
+// ou null se estiver tudo certo.
+async function validarPartesExistem(conn, ...listas) {
+  const fis = new Set(), jur = new Set();
+  for (const lista of listas) {
+    for (const p of (lista || [])) {
+      const pid = Number(p && p.pessoa_id);
+      if (!pid) return 'Há uma parte (autor, réu ou perito) sem pessoa selecionada.';
+      (p.tipo_pessoa === 'juridica' ? jur : fis).add(pid);
+    }
+  }
+  for (const [tabela, ids] of [['pessoas_fisicas', fis], ['pessoas_juridicas', jur]]) {
+    if (!ids.size) continue;
+    const arr = [...ids];
+    const [rows] = await conn.execute(
+      `SELECT id FROM ${tabela} WHERE ativo = 1 AND id IN (${arr.map(() => '?').join(',')})`, arr
+    );
+    if (rows.length !== arr.length) {
+      return 'Uma das pessoas selecionadas (autor, réu ou perito) não existe mais ou foi desativada. Recarregue a tela.';
+    }
+  }
+  return null;
+}
+
 // ============================================================
 // PASTAS
 // ============================================================
@@ -531,6 +558,9 @@ async function criarProcesso(req, res) {
     );
     const procId = procResult.insertId;
 
+    const erroPartes = await validarPartesExistem(conn, autores, reus, peritos);
+    if (erroPartes) { await conn.rollback(); return erro(res, erroPartes); }
+
     // Insere autores (polo ativo)
     for (const autor of autores) {
       await conn.execute(
@@ -746,6 +776,10 @@ async function atualizarProcesso(req, res) {
        req.usuario.id,
        id]
     );
+
+    // Antes de substituir qualquer parte, confere que as pessoas enviadas existem.
+    const erroPartes = await validarPartesExistem(conn, autores, reus, peritos);
+    if (erroPartes) { await conn.rollback(); return erro(res, erroPartes); }
 
     // Substitui partes se enviadas
     if (autores !== undefined) {
@@ -1247,7 +1281,9 @@ async function buscarProcessosPorNumero(req, res) {
 const JOIN_ULTIMA_ACAO = `
   LEFT JOIN (
     SELECT processo_id, MAX(dt) AS ultima FROM (
-      SELECT processo_id, GREATEST(criado_em, COALESCE(editado_em, criado_em)) AS dt FROM andamento_processual
+      -- Andamento: a data REAL do movimento (coluna 'data'), não quando foi digitado
+      -- no sistema. Importar hoje um andamento antigo NÃO "reanima" o processo.
+      SELECT processo_id, \`data\` AS dt FROM andamento_processual
       UNION ALL
       SELECT processo_id, GREATEST(criado_em, COALESCE(status_alterado_em, criado_em), COALESCE(concluido_em, criado_em)) FROM prazos_processo
       UNION ALL
@@ -1258,6 +1294,9 @@ const JOIN_ULTIMA_ACAO = `
       SELECT processo_id, GREATEST(criado_em, COALESCE(alterado_em, criado_em)) FROM pericia
       UNION ALL
       SELECT processo_id, GREATEST(criado_em, COALESCE(alterado_em, criado_em)) FROM acordo
+      UNION ALL
+      -- Lançamentos na conta corrente do processo (recebimentos, repasses, lançamentos manuais)
+      SELECT processo_id, \`data\` FROM conta_corrente WHERE processo_id IS NOT NULL
     ) acoes
     GROUP BY processo_id
   ) ult ON ult.processo_id = pr.id`;

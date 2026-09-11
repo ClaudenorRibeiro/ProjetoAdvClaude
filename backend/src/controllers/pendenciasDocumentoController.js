@@ -17,6 +17,7 @@ const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
 const { enviarEmail } = require('../utils/email');
+const { hojeBrasilia } = require('../utils/helpers');
 
 // Expressão SQL que resolve o nome do cliente (PF ou PJ) a partir de tipo_pessoa/pessoa_id.
 // `alias` é o alias da tabela pendencia_documento na consulta.
@@ -41,6 +42,31 @@ function normalizarTipos(valor) {
   return saida;
 }
 
+// Normaliza 'YYYY-MM-DD' a partir de string ou Date do banco (usado ao comparar datas de aviso).
+const soData = v => (v == null ? '' : (v instanceof Date
+  ? v.toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' }) // 'sv-SE' => YYYY-MM-DD
+  : String(v).slice(0, 10)));
+
+// Sanitiza a lista de responsáveis vinda do front. Cada item:
+//   { usuario_id, avisar_sino, avisar_email, data_aviso }
+// Descarta itens sem usuario_id válido e deduplica por usuário (fica o último).
+function normalizarResponsaveis(valor) {
+  if (!Array.isArray(valor)) return [];
+  const porUsuario = new Map();
+  for (const item of valor) {
+    const usuarioId = Number(item && item.usuario_id);
+    if (!Number.isInteger(usuarioId) || usuarioId <= 0) continue;
+    const data = soData(item && item.data_aviso);
+    porUsuario.set(usuarioId, {
+      usuario_id: usuarioId,
+      avisar_sino: item.avisar_sino ? 1 : 0,
+      avisar_email: item.avisar_email ? 1 : 0,
+      data_aviso: /^\d{4}-\d{2}-\d{2}$/.test(data) ? data : null,
+    });
+  }
+  return [...porUsuario.values()];
+}
+
 // Confere se a pessoa (PF/PJ) existe e está ativa.
 async function pessoaExiste(tipo_pessoa, pessoa_id, conn = pool) {
   const tabela = tipo_pessoa === 'juridica' ? 'pessoas_juridicas' : 'pessoas_fisicas';
@@ -57,7 +83,7 @@ async function pessoaExiste(tipo_pessoa, pessoa_id, conn = pool) {
 // Nunca mexe em pendência 'cancelada'.
 async function recalcularStatus(conn, pendenciaId, usuarioId) {
   const [[atual]] = await conn.execute(
-    'SELECT status FROM pendencia_documento WHERE id = ?', [pendenciaId]
+    'SELECT status, tipo_pessoa, pessoa_id FROM pendencia_documento WHERE id = ?', [pendenciaId]
   );
   if (!atual || atual.status === 'cancelada') return atual ? atual.status : null;
 
@@ -81,6 +107,18 @@ async function recalcularStatus(conn, pendenciaId, usuarioId) {
     return 'resolvida';
   }
   if (!tudoRecebido && atual.status === 'resolvida') {
+    // Regra "uma pendência ABERTA por cliente": não reabre esta se o cliente já
+    // tem outra aberta (senão ficariam duas). O chamador traduz para mensagem amigável.
+    const [[outra]] = await conn.execute(
+      `SELECT id FROM pendencia_documento
+        WHERE tipo_pessoa = ? AND pessoa_id = ? AND status = 'aberta' AND id <> ? LIMIT 1`,
+      [atual.tipo_pessoa, atual.pessoa_id, pendenciaId]
+    );
+    if (outra) {
+      const e = new Error('Este cliente já tem outra pendência de documentos aberta. Cancele ou conclua a outra antes de reabrir esta.');
+      e.code = 'PENDENCIA_CLIENTE_JA_ABERTA';
+      throw e;
+    }
     await conn.execute(
       `UPDATE pendencia_documento
           SET status = 'aberta', resolvido_em = NULL, resolvido_por = NULL
@@ -110,11 +148,16 @@ async function listar(req, res) {
       params.push(status);
     }
     if (responsavel_id) {
-      where += ' AND pd.responsavel_id = ?';
+      where += ` AND EXISTS (SELECT 1 FROM pendencia_documento_responsavel r
+                              WHERE r.pendencia_id = pd.id AND r.usuario_id = ?)`;
       params.push(Number(responsavel_id) || 0);
     }
     if (aviso === 'vencido') {
-      where += " AND pd.status = 'aberta' AND pd.data_aviso IS NOT NULL AND pd.data_aviso <= CURDATE()";
+      where += ` AND pd.status = 'aberta'
+                 AND EXISTS (SELECT 1 FROM pendencia_documento_responsavel r
+                              WHERE r.pendencia_id = pd.id
+                                AND r.data_aviso IS NOT NULL AND r.avisado_em IS NULL
+                                AND r.data_aviso <= CURDATE())`;
     }
     if (busca && busca.trim()) {
       where += ` AND (${nomeClienteSQL('pd')}) LIKE ?`;
@@ -122,11 +165,19 @@ async function listar(req, res) {
     }
 
     const [rows] = await pool.execute(
-      `SELECT pd.id, pd.tipo_pessoa, pd.pessoa_id, pd.responsavel_id,
-              pd.avisar_sino, pd.avisar_email, pd.data_aviso, pd.avisado_em,
+      `SELECT pd.id, pd.tipo_pessoa, pd.pessoa_id,
               pd.observacao, pd.status, pd.criado_em,
               ${nomeClienteSQL('pd')} AS cliente_nome,
-              u.nome AS responsavel_nome,
+              (SELECT GROUP_CONCAT(u.nome ORDER BY u.nome SEPARATOR ', ')
+                 FROM pendencia_documento_responsavel r
+                 JOIN usuarios u ON r.usuario_id = u.id
+                WHERE r.pendencia_id = pd.id) AS responsaveis_nomes,
+              (SELECT COUNT(*) FROM pendencia_documento_responsavel r WHERE r.pendencia_id = pd.id) AS total_responsaveis,
+              (SELECT MIN(r.data_aviso) FROM pendencia_documento_responsavel r
+                WHERE r.pendencia_id = pd.id AND r.data_aviso IS NOT NULL AND r.avisado_em IS NULL) AS proxima_data_aviso,
+              (SELECT COUNT(*) FROM pendencia_documento_responsavel r
+                WHERE r.pendencia_id = pd.id AND r.data_aviso IS NOT NULL AND r.avisado_em IS NULL
+                  AND r.data_aviso <= CURDATE()) AS avisos_vencidos,
               DATEDIFF(CURDATE(), DATE(pd.criado_em)) AS dias_aberta,
               (SELECT COUNT(*) FROM pendencia_documento_item i WHERE i.pendencia_id = pd.id) AS total_itens,
               (SELECT COUNT(*) FROM pendencia_documento_item i WHERE i.pendencia_id = pd.id AND i.recebido = 1) AS itens_recebidos,
@@ -135,9 +186,8 @@ async function listar(req, res) {
                  JOIN tipo_documento_pendencia t ON i.tipo_documento_id = t.id
                 WHERE i.pendencia_id = pd.id AND i.recebido = 0) AS documentos_pendentes
          FROM pendencia_documento pd
-         JOIN usuarios u ON pd.responsavel_id = u.id
          ${where}
-        ORDER BY (pd.data_aviso IS NULL), pd.data_aviso ASC, pd.criado_em DESC`,
+        ORDER BY (proxima_data_aviso IS NULL), proxima_data_aviso ASC, pd.criado_em DESC`,
       params
     );
 
@@ -152,10 +202,8 @@ async function buscar(req, res) {
   try {
     const [rows] = await pool.execute(
       `SELECT pd.*, ${nomeClienteSQL('pd')} AS cliente_nome,
-              u.nome AS responsavel_nome,
               ur.nome AS resolvido_por_nome
          FROM pendencia_documento pd
-         JOIN usuarios u  ON pd.responsavel_id = u.id
          LEFT JOIN usuarios ur ON pd.resolvido_por = ur.id
         WHERE pd.id = ?`,
       [req.params.id]
@@ -174,27 +222,45 @@ async function buscar(req, res) {
       [req.params.id]
     );
 
-    return sucesso(res, { ...rows[0], itens });
+    const [responsaveis] = await pool.execute(
+      `SELECT r.id, r.usuario_id, u.nome AS usuario_nome,
+              r.avisar_sino, r.avisar_email, r.data_aviso, r.avisado_em
+         FROM pendencia_documento_responsavel r
+         JOIN usuarios u ON r.usuario_id = u.id
+        WHERE r.pendencia_id = ?
+        ORDER BY u.nome`,
+      [req.params.id]
+    );
+
+    return sucesso(res, { ...rows[0], itens, responsaveis });
   } catch (e) {
     return erroInterno(res, e);
   }
 }
 
-// POST /api/pendencias-documento — cria a pendência com seus documentos
+// Confere que todos os usuários da lista existem, estão ativos e não são o superusuário.
+async function responsaveisValidos(conn, ids) {
+  if (!ids.length) return false;
+  const [rows] = await conn.execute(
+    `SELECT id FROM usuarios WHERE ativo = 1 AND nivel > 0 AND id IN (${ids.map(() => '?').join(',')})`,
+    ids
+  );
+  return rows.length === ids.length;
+}
+
+// POST /api/pendencias-documento — cria a pendência com seus documentos e responsáveis
 async function criar(req, res) {
-  const {
-    tipo_pessoa, pessoa_id, responsavel_id,
-    avisar_sino, avisar_email, data_aviso, observacao,
-    tipos: tiposRaw,
-  } = req.body;
+  const { tipo_pessoa, pessoa_id, observacao, tipos: tiposRaw } = req.body;
 
   const tp = tipo_pessoa === 'juridica' ? 'juridica' : (tipo_pessoa === 'fisica' ? 'fisica' : null);
   if (!tp)                        return erro(res, 'Informe se o cliente é Pessoa Física ou Jurídica');
   if (!Number(pessoa_id))         return erro(res, 'Selecione o cliente');
-  if (!Number(responsavel_id))    return erro(res, 'Selecione o usuário responsável pela cobrança');
 
   const tipos = normalizarTipos(tiposRaw);
   if (!tipos.length)              return erro(res, 'Selecione pelo menos um documento pendente');
+
+  const responsaveis = normalizarResponsaveis(req.body.responsaveis);
+  if (!responsaveis.length)       return erro(res, 'Selecione pelo menos um usuário responsável pela cobrança');
 
   const obs = (observacao || '').trim().slice(0, 1000) || null;
 
@@ -207,6 +273,21 @@ async function criar(req, res) {
       return erro(res, 'Cliente não encontrado ou inativo');
     }
 
+    // Uma única pendência ABERTA por cliente. Resolvida/cancelada não bloqueia.
+    const [[jaExiste]] = await conn.execute(
+      "SELECT id FROM pendencia_documento WHERE tipo_pessoa = ? AND pessoa_id = ? AND status = 'aberta' LIMIT 1",
+      [tp, Number(pessoa_id)]
+    );
+    if (jaExiste) {
+      await conn.rollback();
+      return erro(
+        res,
+        'Este cliente já tem uma pendência de documentos aberta. Abra a pendência existente e adicione-se como responsável pela cobrança.',
+        409,
+        { pendencia_id: jaExiste.id }
+      );
+    }
+
     // Todos os tipos precisam existir e estar ativos
     const [tiposOk] = await conn.execute(
       `SELECT id FROM tipo_documento_pendencia WHERE ativo = 1 AND id IN (${tipos.map(() => '?').join(',')})`,
@@ -217,16 +298,16 @@ async function criar(req, res) {
       return erro(res, 'Um dos documentos selecionados não existe mais na lista');
     }
 
+    if (!(await responsaveisValidos(conn, responsaveis.map(r => r.usuario_id)))) {
+      await conn.rollback();
+      return erro(res, 'Um dos usuários responsáveis é inválido ou está inativo');
+    }
+
     const [r] = await conn.execute(
       `INSERT INTO pendencia_documento
-        (tipo_pessoa, pessoa_id, responsavel_id, avisar_sino, avisar_email,
-         data_aviso, observacao, status, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'aberta', ?)`,
-      [
-        tp, Number(pessoa_id), Number(responsavel_id),
-        avisar_sino ? 1 : 0, avisar_email ? 1 : 0,
-        data_aviso || null, obs, req.usuario.id,
-      ]
+        (tipo_pessoa, pessoa_id, observacao, status, criado_por)
+       VALUES (?, ?, ?, 'aberta', ?)`,
+      [tp, Number(pessoa_id), obs, req.usuario.id]
     );
     const pendenciaId = r.insertId;
 
@@ -234,6 +315,15 @@ async function criar(req, res) {
       await conn.execute(
         'INSERT INTO pendencia_documento_item (pendencia_id, tipo_documento_id) VALUES (?, ?)',
         [pendenciaId, tipoId]
+      );
+    }
+
+    for (const resp of responsaveis) {
+      await conn.execute(
+        `INSERT INTO pendencia_documento_responsavel
+          (pendencia_id, usuario_id, avisar_sino, avisar_email, data_aviso, criado_por)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [pendenciaId, resp.usuario_id, resp.avisar_sino, resp.avisar_email, resp.data_aviso, req.usuario.id]
       );
     }
 
@@ -248,18 +338,19 @@ async function criar(req, res) {
   }
 }
 
-// PUT /api/pendencias-documento/:id — edita responsável/aviso/observação e a lista de documentos.
+// PUT /api/pendencias-documento/:id — edita observação, a lista de documentos e os responsáveis.
 // O cliente (PF/PJ) NÃO muda aqui — para outro cliente, abre-se uma nova pendência.
-// A marca de "recebido" dos documentos que continuam na lista é preservada.
+// A marca de "recebido" dos documentos que continuam na lista é preservada, assim como o
+// "já avisei" (avisado_em) de cada responsável que continua.
 async function atualizar(req, res) {
-  const {
-    responsavel_id, avisar_sino, avisar_email, data_aviso, observacao,
-    tipos: tiposRaw,
-  } = req.body;
+  const { observacao, tipos: tiposRaw } = req.body;
 
-  if (!Number(responsavel_id)) return erro(res, 'Selecione o usuário responsável pela cobrança');
   const tipos = normalizarTipos(tiposRaw);
   if (!tipos.length)           return erro(res, 'Selecione pelo menos um documento pendente');
+
+  const responsaveis = normalizarResponsaveis(req.body.responsaveis);
+  if (!responsaveis.length)    return erro(res, 'Selecione pelo menos um usuário responsável pela cobrança');
+
   const obs = (observacao || '').trim().slice(0, 1000) || null;
 
   const conn = await pool.getConnection();
@@ -267,7 +358,7 @@ async function atualizar(req, res) {
     await conn.beginTransaction();
 
     const [[atual]] = await conn.execute(
-      'SELECT id, status, data_aviso FROM pendencia_documento WHERE id = ?', [req.params.id]
+      'SELECT id, status FROM pendencia_documento WHERE id = ?', [req.params.id]
     );
     if (!atual) {
       await conn.rollback();
@@ -287,30 +378,16 @@ async function atualizar(req, res) {
       return erro(res, 'Um dos documentos selecionados não existe mais na lista');
     }
 
-    // Mudou a data de aviso para o futuro → volta a avisar (zera avisado_em).
-    // Normaliza ambos para 'YYYY-MM-DD' antes de comparar (o banco devolve Date).
-    const soData = v => (v == null ? '' : (v instanceof Date
-      ? v.toLocaleDateString('sv-SE')            // 'sv-SE' => YYYY-MM-DD
-      : String(v).slice(0, 10)));
-    const dataAvisoNova   = data_aviso || null;
-    const dataAvisoNovaFmt = soData(dataAvisoNova);
-    const hojeFmt = new Date().toLocaleDateString('sv-SE');
-    const avisoMudouParaFuturo =
-      dataAvisoNovaFmt &&
-      dataAvisoNovaFmt !== soData(atual.data_aviso) &&
-      dataAvisoNovaFmt > hojeFmt;
+    if (!(await responsaveisValidos(conn, responsaveis.map(r => r.usuario_id)))) {
+      await conn.rollback();
+      return erro(res, 'Um dos usuários responsáveis é inválido ou está inativo');
+    }
 
     await conn.execute(
       `UPDATE pendencia_documento SET
-         responsavel_id = ?, avisar_sino = ?, avisar_email = ?,
-         data_aviso = ?, observacao = ?,
-         ${avisoMudouParaFuturo ? 'avisado_em = NULL,' : ''}
-         alterado_por = ?, alterado_em = NOW()
+         observacao = ?, alterado_por = ?, alterado_em = NOW()
        WHERE id = ?`,
-      [
-        Number(responsavel_id), avisar_sino ? 1 : 0, avisar_email ? 1 : 0,
-        dataAvisoNova, obs, req.usuario.id, req.params.id,
-      ]
+      [obs, req.usuario.id, req.params.id]
     );
 
     // Reconcilia os itens: remove os que saíram, adiciona os novos, mantém o resto (com o "recebido").
@@ -337,6 +414,48 @@ async function atualizar(req, res) {
       );
     }
 
+    // Reconcilia os responsáveis: remove os que saíram, adiciona os novos, atualiza os que ficam.
+    // Ao mudar a data de um responsável para o futuro, ele volta a ser avisado (zera avisado_em dele).
+    const [respAtuais] = await conn.execute(
+      'SELECT id, usuario_id, data_aviso FROM pendencia_documento_responsavel WHERE pendencia_id = ?',
+      [req.params.id]
+    );
+    const mapaResp = new Map(respAtuais.map(r => [r.usuario_id, r]));
+    const novosRespIds = new Set(responsaveis.map(r => r.usuario_id));
+
+    const removerResp = respAtuais.filter(r => !novosRespIds.has(r.usuario_id)).map(r => r.id);
+    if (removerResp.length) {
+      await conn.execute(
+        `DELETE FROM pendencia_documento_responsavel WHERE id IN (${removerResp.map(() => '?').join(',')})`,
+        removerResp
+      );
+    }
+
+    const hojeFmt = hojeBrasilia();
+    for (const resp of responsaveis) {
+      const existente = mapaResp.get(resp.usuario_id);
+      if (!existente) {
+        await conn.execute(
+          `INSERT INTO pendencia_documento_responsavel
+            (pendencia_id, usuario_id, avisar_sino, avisar_email, data_aviso, criado_por)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [req.params.id, resp.usuario_id, resp.avisar_sino, resp.avisar_email, resp.data_aviso, req.usuario.id]
+        );
+      } else {
+        const dataMudouParaFuturo =
+          resp.data_aviso &&
+          soData(resp.data_aviso) !== soData(existente.data_aviso) &&
+          soData(resp.data_aviso) > hojeFmt;
+        await conn.execute(
+          `UPDATE pendencia_documento_responsavel SET
+             avisar_sino = ?, avisar_email = ?, data_aviso = ?
+             ${dataMudouParaFuturo ? ', avisado_em = NULL' : ''}
+           WHERE id = ?`,
+          [resp.avisar_sino, resp.avisar_email, resp.data_aviso, existente.id]
+        );
+      }
+    }
+
     // Mudou a lista → o status pode ter virado "resolvida" (todos já recebidos) ou reaberto.
     await recalcularStatus(conn, req.params.id, req.usuario.id);
 
@@ -345,6 +464,7 @@ async function atualizar(req, res) {
     return sucesso(res, null, 'Pendência atualizada com sucesso');
   } catch (e) {
     await conn.rollback();
+    if (e.code === 'PENDENCIA_CLIENTE_JA_ABERTA') return erro(res, e.message, 409);
     return erroInterno(res, e);
   } finally {
     conn.release();
@@ -408,6 +528,7 @@ async function marcarItem(req, res) {
     }, novoStatus === 'resolvida' ? 'Todos os documentos foram recebidos — pendência resolvida' : 'Documento atualizado');
   } catch (e) {
     await conn.rollback();
+    if (e.code === 'PENDENCIA_CLIENTE_JA_ABERTA') return erro(res, e.message, 409);
     return erroInterno(res, e);
   } finally {
     conn.release();
@@ -416,23 +537,36 @@ async function marcarItem(req, res) {
 
 // PUT /api/pendencias-documento/:id/cancelar — encerra a pendência sem exclusão (fica no histórico)
 async function cancelar(req, res) {
+  const conn = await pool.getConnection();
   try {
-    const [[pend]] = await pool.execute(
+    await conn.beginTransaction();
+
+    const [[pend]] = await conn.execute(
       'SELECT id, status FROM pendencia_documento WHERE id = ?', [req.params.id]
     );
-    if (!pend) return naoEncontrado(res, 'Pendência não encontrada');
-    if (pend.status === 'cancelada') return erro(res, 'Pendência já está cancelada');
+    if (!pend) {
+      await conn.rollback();
+      return naoEncontrado(res, 'Pendência não encontrada');
+    }
+    if (pend.status === 'cancelada') {
+      await conn.rollback();
+      return erro(res, 'Pendência já está cancelada');
+    }
 
-    await pool.execute(
+    await conn.execute(
       `UPDATE pendencia_documento
           SET status = 'cancelada', alterado_por = ?, alterado_em = NOW()
         WHERE id = ?`,
       [req.usuario.id, req.params.id]
     );
-    await auditoria.registrar(req.usuario.id, 'pendencia_documento', 'atualizar', req.params.id);
+    await auditoria.registrar(req.usuario.id, 'pendencia_documento', 'atualizar', req.params.id, null, null, conn);
+    await conn.commit();
     return sucesso(res, null, 'Pendência cancelada');
   } catch (e) {
+    await conn.rollback();
     return erroInterno(res, e);
+  } finally {
+    conn.release();
   }
 }
 
@@ -519,11 +653,16 @@ async function buscarClientes(req, res) {
 // CATÁLOGO DE TIPOS DE DOCUMENTO  (submódulo `pendencias/tipos`)
 // ============================================================
 
-// GET /api/pendencias-documento/tipos — lista os tipos ativos (para os selects)
+// GET /api/pendencias-documento/tipos — lista os tipos ativos (para os selects e o catálogo).
+// `em_uso` = está amarrado a alguma pendência → o front esconde editar/excluir.
 async function listarTipos(req, res) {
   try {
     const [rows] = await pool.execute(
-      'SELECT id, nome FROM tipo_documento_pendencia WHERE ativo = 1 ORDER BY nome'
+      `SELECT t.id, t.nome,
+              EXISTS(SELECT 1 FROM pendencia_documento_item i WHERE i.tipo_documento_id = t.id) AS em_uso
+         FROM tipo_documento_pendencia t
+        WHERE t.ativo = 1
+        ORDER BY t.nome`
     );
     return sucesso(res, rows);
   } catch (e) {
@@ -537,17 +676,9 @@ async function criarTipo(req, res) {
     const nome = (req.body.nome || '').trim();
     if (!nome) return erro(res, 'Nome é obrigatório');
     const [existe] = await pool.execute(
-      'SELECT id, ativo FROM tipo_documento_pendencia WHERE nome = ? LIMIT 1', [nome]
+      'SELECT id FROM tipo_documento_pendencia WHERE nome = ? LIMIT 1', [nome]
     );
-    if (existe.length && existe[0].ativo === 1) return erro(res, 'Já existe um documento com esse nome');
-    if (existe.length && existe[0].ativo === 0) {
-      // Reativa um que havia sido desativado, em vez de barrar pelo UNIQUE.
-      await pool.execute(
-        'UPDATE tipo_documento_pendencia SET ativo = 1, alterado_por = ?, alterado_em = NOW() WHERE id = ?',
-        [req.usuario.id, existe[0].id]
-      );
-      return sucesso(res, { id: existe[0].id }, 'Documento reativado', 201);
-    }
+    if (existe.length) return erro(res, 'Já existe um documento com esse nome');
     const [r] = await pool.execute(
       'INSERT INTO tipo_documento_pendencia (nome, criado_por) VALUES (?, ?)',
       [nome, req.usuario.id]
@@ -558,11 +689,19 @@ async function criarTipo(req, res) {
   }
 }
 
-// PUT /api/pendencias-documento/tipos/:id — renomeia um tipo
+// PUT /api/pendencias-documento/tipos/:id — renomeia um tipo.
+// Documento em uso em alguma pendência NÃO pode ser renomeado nem excluído.
 async function atualizarTipo(req, res) {
   try {
     const nome = (req.body.nome || '').trim();
     if (!nome) return erro(res, 'Nome é obrigatório');
+    const [uso] = await pool.execute(
+      'SELECT id FROM pendencia_documento_item WHERE tipo_documento_id = ? LIMIT 1',
+      [req.params.id]
+    );
+    if (uso.length) {
+      return erro(res, 'Este documento está em uso em uma ou mais pendências e não pode ser renomeado nem excluído.');
+    }
     const [existe] = await pool.execute(
       'SELECT id FROM tipo_documento_pendencia WHERE nome = ? AND id <> ? LIMIT 1',
       [nome, req.params.id]
@@ -578,8 +717,9 @@ async function atualizarTipo(req, res) {
   }
 }
 
-// DELETE /api/pendencias-documento/tipos/:id — soft-delete (ativo = 0).
-// Bloqueia se o tipo estiver em uso em alguma pendência (preserva o histórico).
+// DELETE /api/pendencias-documento/tipos/:id — exclui o tipo de vez.
+// Documento em uso em alguma pendência NÃO é excluído (nem renomeado): fica bloqueado.
+// Fora de uso, é apagado fisicamente (não há órfão — nada mais aponta para ele).
 async function excluirTipo(req, res) {
   try {
     const [uso] = await pool.execute(
@@ -587,13 +727,10 @@ async function excluirTipo(req, res) {
       [req.params.id]
     );
     if (uso.length) {
-      return erro(res, 'Este documento está em uso em uma ou mais pendências e não pode ser excluído. Use "Desativar" para tirá-lo da lista sem perder o histórico.');
+      return erro(res, 'Este documento está em uso em uma ou mais pendências e não pode ser renomeado nem excluído.');
     }
-    await pool.execute(
-      'UPDATE tipo_documento_pendencia SET ativo = 0, alterado_por = ?, alterado_em = NOW() WHERE id = ?',
-      [req.usuario.id, req.params.id]
-    );
-    return sucesso(res, null, 'Documento removido da lista');
+    await pool.execute('DELETE FROM tipo_documento_pendencia WHERE id = ?', [req.params.id]);
+    return sucesso(res, null, 'Documento excluído da lista');
   } catch (e) {
     return erroInterno(res, e);
   }

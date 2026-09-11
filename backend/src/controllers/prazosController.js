@@ -11,6 +11,23 @@ const { hojeBrasilia } = require('../utils/helpers');
 const auditoria = require('../middleware/auditoria');
 const agendaGoogle = require('../services/agendaGoogleService');
 
+// Mesma regra de visibilidade da listagem: admin/super (nível <= 1) OU
+// permissão 'prazos.ver_todos:visualizar'. Usada para barrar ações (concluir/
+// cancelar) sobre prazos que o usuário nem veria na lista.
+async function podeVerTodosPrazos(req) {
+  if (Number(req.usuario.nivel) <= 1) return true;
+  const [p] = await pool.execute(
+    "SELECT permitido FROM permissoes WHERE usuario_id = ? AND modulo = 'prazos' AND submodulo = 'ver_todos' AND acao = 'visualizar'",
+    [req.usuario.id]
+  );
+  return Number(p[0]?.permitido) === 1;
+}
+// Pode agir no prazo se: é do escritório (sem delegado), está delegado a ele, ou ele vê todos.
+async function podeAgirNoPrazo(req, delegadoPara) {
+  if (delegadoPara == null || Number(delegadoPara) === Number(req.usuario.id)) return true;
+  return podeVerTodosPrazos(req);
+}
+
 // ===== Integração com o Google Agenda (convite .ics) =====
 // O prazo vai para o Google do DELEGADO (responsável). Se não houver delegado
 // (prazo "do escritório"), não há dono pessoal → não envia. Evento de DIA INTEIRO
@@ -324,13 +341,16 @@ async function mudarStatus(req, res) {
   }
 
   const [antes] = await pool.execute(
-    `SELECT pp.status, pp.fazendo_por, pp.notificar_conclusao, pp.criado_por,
+    `SELECT pp.status, pp.fazendo_por, pp.notificar_conclusao, pp.criado_por, pp.delegado_para,
             COALESCE(ps.nome, pp.descricao, 'Prazo') AS rotulo
        FROM prazos_processo pp
        LEFT JOIN prazo_subtipo ps ON pp.subtipo_id = ps.id
       WHERE pp.id = ?`, [id]
   );
   if (!antes.length) return naoEncontrado(res, 'Prazo não encontrado');
+  if (!(await podeAgirNoPrazo(req, antes[0].delegado_para))) {
+    return erro(res, 'Você só pode concluir ou cancelar prazos delegados a você ou do escritório.', 403);
+  }
   if (['concluido', 'cancelado'].includes(antes[0].status)) {
     return erro(res, 'Prazo já finalizado — não pode ser alterado.');
   }

@@ -49,6 +49,7 @@ export default function Relatorios() {
   const [resultado, setResultado] = useState(null);
   const [total, setTotal]     = useState(0);
   const [buscando, setBuscando] = useState(false);
+  const [exportando, setExportando] = useState(false);
 
   function setFiltro(k, v) { setFiltros(f => ({...f, [k]: v})); }
   function aplicarPeriodoPericia(dias) {
@@ -132,65 +133,100 @@ export default function Relatorios() {
     finally { setBuscando(false); }
   }
 
-  function exportarCSV() {
-    if (!resultado) return;
-    let linhas = [];
-    let cabecalho = [];
+  async function carregarRegistrosParaExportar() {
+    if (!resultado) return [];
 
-    if (resultado.tipo === 'prazos') {
-      cabecalho = ['Processo','Pasta','Prazo','Vencimento','Dias','Responsável','Status'];
-      linhas = resultado.registros.map(r => [
-        r.processo_numero, r.pasta_titulo, r.subtipo_nome||r.descricao,
-        r.data_vencimento, r.dias_restantes, r.responsavel_nome||'Escritório', r.status
-      ]);
-    } else if (resultado.tipo === 'tarefas') {
-      cabecalho = ['Título','Prioridade','Vencimento','Atribuída para','Concluída'];
-      linhas = resultado.registros.map(r => [
-        r.titulo, r.prioridade, r.data_vencimento||'—', r.atribuida_para_nome||'Escritório', r.concluida?'Sim':'Não'
-      ]);
-    } else if (resultado.tipo === 'audiencias') {
-      cabecalho = ['Processo','Pasta','Tipo','Data','Hora','Modalidade','Status'];
-      linhas = resultado.registros.map(r => [
-        r.processo_numero, r.pasta_titulo, r.tipo_nome, r.data, r.hora?.slice(0,5), r.modalidade, r.ata_resultado||'agendada'
-      ]);
-    } else if (resultado.tipo === 'pericias') {
-      cabecalho = ['Perito(a)','Telefone','E-mail','Pasta','Processo','Tipo perícia','Data','Hora','Status','Origem'];
-      linhas = resultado.registros.map(r => [
-        r.perito_nome || '— não informado —', r.telefone || '', r.email || '',
-        r.pasta_numero ? String(r.pasta_numero).padStart(4, '0') : '',
-        r.processo_numero || '', r.tipo_pericia || '', r.data || '',
-        r.hora ? String(r.hora).slice(0,5) : '', r.status || '', r.origem || ''
-      ]);
-    } else if (resultado.tipo === 'pastas') {
-      cabecalho = ['Nº Pasta','Título','Cliente','Área','Processos'];
-      linhas = resultado.registros.map(r => [
-        formatarNumeroPasta(r.numero), r.titulo, r.cliente_nome, r.area_direito, r.total_processos
-      ]);
-    } else if (resultado.tipo === 'processos_parados') {
-      cabecalho = ['Pasta','Processo','Última ação','Dias parado'];
-      linhas = resultado.registros.map(r => [
-        r.pasta_numero_fmt, r.numero, r.ultima_acao, r.dias_parado
-      ]);
-    } else if (resultado.tipo === 'aniversariantes') {
-      cabecalho = ['Nome','Dia','Idade','Telefone','E-mail','Parabéns'];
-      linhas = resultado.registros.map(r => [
-        r.nome, r.dia, r.idade != null ? `${r.idade} anos` : '', r.telefone||'', r.email||'',
-        r.ja_parabenizado ? 'Já parabenizado' : 'Pendente'
-      ]);
-    } else if (resultado.tipo === 'financeiro') {
-      cabecalho = ['Data','Pasta','Cliente','Descrição','Tipo','Valor'];
-      linhas = (resultado.lancamentos||[]).map(r => [
-        r.data_lancamento, r.pasta_titulo, r.cliente_nome||'', r.descricao, r.tipo, r.valor
-      ]);
+    const registrosAtuais = resultado.registros || [];
+    const limite = Math.max(Number(total) || 0, registrosAtuais.length, 200);
+    if (registrosAtuais.length >= limite) return registrosAtuais;
+
+    let data;
+    switch (resultado.tipo) {
+      case 'prazos':
+        ({ data } = await prazosAPI.listar({ ...filtros, limite, pagina: 1 }));
+        return data.ok ? (data.dados.registros || []) : registrosAtuais;
+      case 'tarefas':
+        ({ data } = await tarefasAPI.listar({ ...filtros, limite, pagina: 1 }));
+        return data.ok ? (data.dados.registros || []) : registrosAtuais;
+      case 'audiencias':
+        ({ data } = await audienciasAPI.listar({ ...filtros, limite, pagina: 1 }));
+        return data.ok ? (data.dados.registros || []) : registrosAtuais;
+      case 'pastas':
+        ({ data } = await processosAPI.listarPastas({ ...filtros, limite, pagina: 1 }));
+        return data.ok ? (data.dados.registros || []) : registrosAtuais;
+      default:
+        return resultado.tipo === 'financeiro' ? (resultado.lancamentos || []) : registrosAtuais;
     }
+  }
 
-    const csv = [cabecalho, ...linhas].map(l => l.map(c => `"${c||''}"`).join(',')).join('\n');
-    const blob = new Blob(['﻿'+csv], { type: 'text/csv;charset=utf-8' });
-    const url  = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `relatorio_${modulo}_${hojeLocal()}.csv`;
-    link.click();
+  async function exportarCSV() {
+    if (!resultado) return;
+    setExportando(true);
+    try {
+      const registros = await carregarRegistrosParaExportar();
+      let linhas = [];
+      let cabecalho = [];
+
+      if (resultado.tipo === 'prazos') {
+        cabecalho = ['Processo','Pasta','Prazo','Vencimento','Dias','Responsável','Status'];
+        linhas = registros.map(r => [
+          r.processo_numero, r.pasta_titulo, r.subtipo_nome||r.descricao,
+          r.data_vencimento, r.dias_restantes, r.responsavel_nome||'Escritório', r.status
+        ]);
+      } else if (resultado.tipo === 'tarefas') {
+        cabecalho = ['Título','Prioridade','Vencimento','Atribuída para','Concluída'];
+        linhas = registros.map(r => [
+          r.titulo, r.prioridade, r.data_vencimento||'—', r.atribuida_para_nome||'Escritório', r.concluida?'Sim':'Não'
+        ]);
+      } else if (resultado.tipo === 'audiencias') {
+        cabecalho = ['Processo','Pasta','Tipo','Data','Hora','Modalidade','Status'];
+        linhas = registros.map(r => [
+          r.processo_numero, r.pasta_titulo, r.tipo_nome, r.data, r.hora?.slice(0,5), r.modalidade, r.ata_resultado||'agendada'
+        ]);
+      } else if (resultado.tipo === 'pericias') {
+        cabecalho = ['Perito(a)','Telefone','E-mail','Pasta','Processo','Tipo perícia','Data','Hora','Status','Origem'];
+        linhas = registros.map(r => [
+          r.perito_nome || '— não informado —', r.telefone || '', r.email || '',
+          r.pasta_numero ? String(r.pasta_numero).padStart(4, '0') : '',
+          r.processo_numero || '', r.tipo_pericia || '', r.data || '',
+          r.hora ? String(r.hora).slice(0,5) : '', r.status || '', r.origem || ''
+        ]);
+      } else if (resultado.tipo === 'pastas') {
+        cabecalho = ['Nº Pasta','Título','Cliente','Área','Processos'];
+        linhas = registros.map(r => [
+          formatarNumeroPasta(r.numero), r.titulo, r.cliente_nome, r.area_direito, r.total_processos
+        ]);
+      } else if (resultado.tipo === 'processos_parados') {
+        cabecalho = ['Pasta','Processo','Última ação','Dias parado'];
+        linhas = registros.map(r => [
+          r.pasta_numero_fmt, r.numero, r.ultima_acao, r.dias_parado
+        ]);
+      } else if (resultado.tipo === 'aniversariantes') {
+        cabecalho = ['Nome','Dia','Idade','Telefone','E-mail','Parabéns'];
+        linhas = registros.map(r => [
+          r.nome, r.dia, r.idade != null ? `${r.idade} anos` : '', r.telefone||'', r.email||'',
+          r.ja_parabenizado ? 'Já parabenizado' : 'Pendente'
+        ]);
+      } else if (resultado.tipo === 'financeiro') {
+        cabecalho = ['Data','Pasta','Cliente','Descrição','Tipo','Valor'];
+        linhas = registros.map(r => [
+          r.data_lancamento, r.pasta_titulo, r.cliente_nome||'', r.descricao, r.tipo, r.valor
+        ]);
+      }
+
+      const csv = [cabecalho, ...linhas].map(l => l.map(c => `"${c||''}"`).join(',')).join('\n');
+      const blob = new Blob(['﻿'+csv], { type: 'text/csv;charset=utf-8' });
+      const url  = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `relatorio_${modulo}_${hojeLocal()}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Erro ao exportar relatório');
+    } finally {
+      setExportando(false);
+    }
   }
 
   return (
@@ -394,8 +430,8 @@ export default function Relatorios() {
               {total} registro(s) encontrado(s)
             </span>
             <div style={{display:'flex',gap:'8px'}}>
-              <button className="btn btn-outline" style={{fontSize:'12px'}} onClick={exportarCSV}>
-                Exportar CSV
+              <button className="btn btn-outline" style={{fontSize:'12px'}} onClick={exportarCSV} disabled={exportando}>
+                {exportando ? 'Exportando...' : 'Exportar CSV'}
               </button>
             </div>
           </div>
