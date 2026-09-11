@@ -172,6 +172,62 @@ function excede3Meses(dataInicio, dataFim) {
   return fim > limite;
 }
 
+function ControlePeriodoPublicacoes({ todasDatas, onChange }) {
+  const botaoBase = {
+    border: '1px solid #1a56db',
+    padding: '6px 10px',
+    fontSize: '13px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    minWidth: '108px',
+    height: '34px',
+  };
+  const ativo = {
+    background: '#1a56db',
+    color: '#fff',
+    boxShadow: 'inset 0 2px 5px rgba(0,0,0,0.24)',
+    transform: 'translateY(1px)',
+  };
+  const inativo = {
+    background: '#fff',
+    color: '#1a56db',
+    boxShadow: '0 1px 2px rgba(15,23,42,0.08)',
+    transform: 'translateY(0)',
+  };
+
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center' }} title="Escolha se a pesquisa ignora datas ou usa um período">
+      <button
+        type="button"
+        style={{ ...botaoBase, ...(todasDatas ? ativo : inativo), borderRadius: '6px 0 0 6px' }}
+        onClick={() => onChange(true)}
+      >
+        Todas as datas
+      </button>
+      <button
+        type="button"
+        style={{ ...botaoBase, ...(!todasDatas ? ativo : inativo), borderLeft: 0, borderRadius: '0 6px 6px 0' }}
+        onClick={() => onChange(false)}
+      >
+        Escolher período
+      </button>
+    </div>
+  );
+}
+
+function estiloAbaFontePublicacao(ativo) {
+  return ativo
+    ? {
+        boxShadow: 'inset 0 2px 5px rgba(0,0,0,0.24)',
+        transform: 'translateY(1px)',
+        borderColor: '#1749bd',
+      }
+    : {
+        boxShadow: '0 1px 2px rgba(15,23,42,0.08)',
+        transform: 'translateY(0)',
+      };
+}
+
 // ------------------------------------------------------------
 // A partir de uma publicação: cria Prazo, Tarefa, Compromisso ou Perícia reusando os modais
 // existentes, já injetando o vínculo de origem (publicacao_id). No Prazo, o número do
@@ -865,8 +921,10 @@ export default function Publicacoes() {
     <div>
       <div className="abas" style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
         <button className={'btn ' + (aba === 'aasp' ? 'btn-primary' : 'btn-outline')}
+          style={estiloAbaFontePublicacao(aba === 'aasp')}
           onClick={() => setAba('aasp')}>AASP</button>
         <button className={'btn ' + (aba === 'cnj' ? 'btn-primary' : 'btn-outline')}
+          style={estiloAbaFontePublicacao(aba === 'cnj')}
           onClick={() => setAba('cnj')}>CNJ / DJEN</button>
       </div>
       {aba === 'aasp' && <PublicacoesAASP
@@ -1008,6 +1066,7 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
         busca: filtros.busca, escopo: filtros.escopo, tratada: filtros.tratada,
         pagina: filtros.pagina, limite: POR_PAGINA,
         ordenar: filtros.ordenar || '', direcao: filtros.direcao || '',
+        fonte: 'aasp',
         etiqueta: filtros.etiqueta || undefined,
       };
       if (!filtros.todasDatas) { params.dataInicio = filtros.dataInicio; params.dataFim = filtros.dataFim; }
@@ -1019,7 +1078,14 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  function setFiltro(k, v) { setFiltros(f => ({ ...f, [k]: v, pagina: 1 })); }
+  function setFiltro(k, v) {
+    setFiltros(f => ({
+      ...f,
+      [k]: v,
+      ...(k === 'dataInicio' || k === 'dataFim' ? { todasDatas: false } : {}),
+      pagina: 1,
+    }));
+  }
 
   // Troca o "Ver": aplica o filtro na hora E salva como preferência do usuário no
   // servidor (passa a valer em qualquer dispositivo no próximo carregamento).
@@ -1095,7 +1161,16 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
           toast.info(data.mensagem || 'AASP não configurada');
         } else {
           toast.success(data.mensagem || 'Publicações importadas');
-          carregar();
+          setFiltros(f => ({
+            ...f,
+            dataInicio: dataImport,
+            dataFim: dataImport,
+            todasDatas: false,
+            tratada: '',
+            escopo: 'todas',
+            pagina: 1,
+          }));
+          trocarPainel('filtrar');
         }
       }
     } catch (err) {
@@ -1205,8 +1280,11 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
               value={filtros.busca} onChange={e => setFiltro('busca', e.target.value)} />
           </div>
           {/* Janela de datas da pesquisa (máx. 3 meses). "Todas as datas" ignora a janela. */}
-          <div className="form-group" style={{ margin: 0, flex: '1 1 260px' }}>
-            <label className="form-label">Período <span style={{ color: '#94a3b8', fontWeight: 400 }}>(máx. 3 meses)</span></label>
+          <div className="form-group" style={{ margin: 0, flex: '1.35 1 420px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+              <label className="form-label" style={{ margin: 0 }}>Período <span style={{ color: '#94a3b8', fontWeight: 400 }}>(máx. 3 meses)</span></label>
+              <ControlePeriodoPublicacoes todasDatas={filtros.todasDatas} onChange={toggleTodasDatas} />
+            </div>
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
               <input type="date" className="form-control" value={filtros.dataInicio}
                 disabled={filtros.todasDatas} onChange={e => setFiltro('dataInicio', e.target.value)} />
@@ -1232,11 +1310,6 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
         </div>
         {/* Linha de opções: janela de datas x todas, e o "Ver" do buscador */}
         <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap', marginTop: '10px' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#555', cursor: 'pointer' }}>
-            <input type="checkbox" checked={filtros.todasDatas}
-              onChange={e => toggleTodasDatas(e.target.checked)} />
-            Todas as datas
-          </label>
           {podeEscolherEscopo && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ fontSize: '13px', color: '#555' }}>Ver</span>
@@ -1723,7 +1796,14 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  function setFiltro(k, v) { setFiltros(f => ({ ...f, [k]: v, pagina: 1 })); }
+  function setFiltro(k, v) {
+    setFiltros(f => ({
+      ...f,
+      [k]: v,
+      ...(k === 'dataInicio' || k === 'dataFim' ? { todasDatas: false } : {}),
+      pagina: 1,
+    }));
+  }
 
   // Troca o "Ver": aplica o filtro na hora E salva como preferência do usuário no
   // servidor (passa a valer em qualquer dispositivo no próximo carregamento).
@@ -1797,7 +1877,16 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
           toast.info(data.mensagem || 'CNJ não configurado');
         } else {
           toast.success(data.mensagem || 'Publicações importadas');
-          carregar();
+          setFiltros(f => ({
+            ...f,
+            dataInicio,
+            dataFim,
+            todasDatas: false,
+            tratada: '',
+            escopo: 'todas',
+            pagina: 1,
+          }));
+          trocarPainel('filtrar');
         }
       }
     } catch (err) {
@@ -1911,8 +2000,11 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
               value={filtros.busca} onChange={e => setFiltro('busca', e.target.value)} />
           </div>
           {/* Janela de datas da pesquisa (máx. 3 meses). "Todas as datas" ignora a janela. */}
-          <div className="form-group" style={{ margin: 0, flex: '1 1 260px' }}>
-            <label className="form-label">Período <span style={{ color: '#94a3b8', fontWeight: 400 }}>(máx. 3 meses)</span></label>
+          <div className="form-group" style={{ margin: 0, flex: '1.35 1 420px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+              <label className="form-label" style={{ margin: 0 }}>Período <span style={{ color: '#94a3b8', fontWeight: 400 }}>(máx. 3 meses)</span></label>
+              <ControlePeriodoPublicacoes todasDatas={filtros.todasDatas} onChange={toggleTodasDatas} />
+            </div>
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
               <input type="date" className="form-control" value={filtros.dataInicio}
                 disabled={filtros.todasDatas} onChange={e => setFiltro('dataInicio', e.target.value)} />
@@ -1938,11 +2030,6 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
         </div>
         {/* Linha de opções: janela de datas x todas, e o "Ver" do buscador */}
         <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap', marginTop: '10px' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#555', cursor: 'pointer' }}>
-            <input type="checkbox" checked={filtros.todasDatas}
-              onChange={e => toggleTodasDatas(e.target.checked)} />
-            Todas as datas
-          </label>
           {podeEscolherEscopo && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ fontSize: '13px', color: '#555' }}>Ver</span>
