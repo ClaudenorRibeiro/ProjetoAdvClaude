@@ -543,11 +543,13 @@ async function importar(req, res) {
             : `hx:${c.hash}`);
 
     // O que já existe no banco PARA OS DIAS deste lote (processo, numeroPublicacao e hash).
+    // Restrito a fonte='aasp': a AASP nunca compara com o que o CNJ já trouxe — são fontes
+    // independentes, sem nenhuma relação entre si (mesmo que tragam o mesmo processo).
     const dias = [...new Set(candidatos.map(c => c.data_publicacao))];
     const phDias = dias.map(() => '?').join(',');
     const [exist] = await pool.execute(
       `SELECT DATE_FORMAT(data_publicacao,'%Y-%m-%d') AS dia, numero_processo, numero_publicacao, texto_hash
-         FROM publicacoes WHERE data_publicacao IN (${phDias})`, dias
+         FROM publicacoes WHERE fonte = 'aasp' AND data_publicacao IN (${phDias})`, dias
     );
     const jaExistem = new Set();
     for (const r of exist) {
