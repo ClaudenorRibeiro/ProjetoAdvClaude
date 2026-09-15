@@ -11,8 +11,17 @@
 // ============================================================
 
 const { pool } = require('../config/database');
-const { hojeBrasilia } = require('../utils/helpers');
+const { hojeBrasilia, agora } = require('../utils/helpers');
 const { valorPorExtenso } = require('../utils/extenso');
+
+// "Bom dia" (até 12h) / "Boa tarde" (12h-18h) / "Boa noite" (depois das 18h),
+// pelo horário de Brasília no momento em que o documento/e-mail é gerado.
+function saudacaoAtual() {
+  const hora = Number(agora().slice(11, 13));
+  if (hora < 12) return 'Bom dia';
+  if (hora < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
 
 // Número -> "1.234,56" (sem "R$"; o modelo .docx coloca o "R$" onde quiser)
 function moedaBR(v) {
@@ -105,6 +114,7 @@ async function blocoEscritorio(usuario) {
     nome_advogado:       usuario?.nome || '',
     data_hoje:           dataExtenso(hojeBrasilia()), // por extenso (padrão de documento)
     cidade_hoje:         e.cidade || '',
+    saudacao:            saudacaoAtual(),
   };
 }
 

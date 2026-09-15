@@ -7,7 +7,7 @@ const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const bcrypt = require('bcryptjs');
 const auditoria = require('../middleware/auditoria');
-const { ehDiaUtil } = require('../services/calendarioService');
+const { ehDiaUtil, proximoDiaUtil, calcularVencimento } = require('../services/calendarioService');
 const { reagendarCronPrazos } = require('../services/alertasService');
 const multer = require('multer');
 
@@ -766,15 +766,69 @@ async function verificarDiaUtil(req, res) {
   }
 }
 
+function normalizarModelosEmailPerito(valor) {
+  if (Array.isArray(valor)) return valor;
+  if (!valor) return [];
+  try { return JSON.parse(valor); } catch (_) { return []; }
+}
+
+async function listarModelosEmailPerito(req, res) {
+  try {
+    const [rows] = await pool.execute('SELECT modelos_email_perito FROM configuracoes_escritorio LIMIT 1');
+    return sucesso(res, normalizarModelosEmailPerito(rows[0]?.modelos_email_perito));
+  } catch (err) {
+    if (err.code === 'ER_BAD_FIELD_ERROR') return sucesso(res, []);
+    return erroInterno(res, err);
+  }
+}
+
+// Mantém os modelos isolados da gravação das demais configurações do escritório.
+async function salvarModelosEmailPerito(req, res) {
+  const modelos = normalizarModelosEmailPerito(req.body?.modelos)
+    .map(m => ({ id: String(m.id || '').trim(), nome: String(m.nome || '').trim(), assunto: String(m.assunto || '').trim(), corpo: String(m.corpo || '').trim() }))
+    .filter(m => m.id && m.nome && m.assunto && m.corpo);
+  try {
+    await pool.execute('UPDATE configuracoes_escritorio SET modelos_email_perito = ? LIMIT 1', [JSON.stringify(modelos)]);
+    await auditoria.registrar(req.usuario.id, 'configuracoes_escritorio', 'editar', 1);
+    return sucesso(res, modelos, 'Modelos de e-mail atualizados com sucesso');
+  } catch (err) {
+    if (err.code === 'ER_BAD_FIELD_ERROR') return erro(res, 'A atualização do banco dos modelos de e-mail ainda não foi aplicada.', 409);
+    return erroInterno(res, err);
+  }
+}
+
+// GET /api/calendario/periodo-util?data=YYYY-MM-DD&quantidade=N
+// Retorna um período inclusivo de N dias úteis. Se a data inicial não for útil,
+// a contagem começa no próximo dia útil registrado no calendário do escritório.
+async function calcularPeriodoUtil(req, res) {
+  try {
+    const { data, quantidade } = req.query;
+    const qtd = Number(quantidade);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data || ''))) {
+      return erro(res, 'Data inicial inválida');
+    }
+    if (!Number.isInteger(qtd) || qtd <= 0 || qtd > 365) {
+      return erro(res, 'Quantidade de dias úteis inválida');
+    }
+
+    const dataInicial = await proximoDiaUtil(data);
+    const dataFinal = await calcularVencimento(dataInicial, qtd, 'uteis');
+    return sucesso(res, { data_inicial: dataInicial, data_final: dataFinal });
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
 module.exports = {
   infoPublica,
   uploadLogo, salvarLogo, removerLogo,
   buscarEscritorio, atualizarEscritorio, marcarSetupConcluido,
+  listarModelosEmailPerito, salvarModelosEmailPerito,
   buscarDocumentosMaiusculas, salvarDocumentosMaiusculas,
   listarFeriados, criarFeriado, excluirFeriado,
   listarUsuarios, criarUsuario, atualizarUsuario, redefinirSenhaAdmin, excluirUsuario, historicoUsuario,
   buscarPermissoes, salvarPermissoes,
   buscarIntegracoes, salvarIntegracao,
   horaServidor,
-  verificarDiaUtil,
+  verificarDiaUtil, calcularPeriodoUtil,
 };

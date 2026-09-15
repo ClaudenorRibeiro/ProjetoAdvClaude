@@ -1,0 +1,233 @@
+RELATÓRIO DE ALTERAÇÕES — 13/09/2026 20:25:59 (horário de Brasília)
+Projeto: ProjetoAdvClaude / Sistema de Advocacia
+
+FINALIDADE DESTE ARQUIVO
+Este relatório registra as alterações efetivamente feitas nesta sessão de trabalho.
+Ele separa o que foi alterado e verificado do que ainda depende de execução manual
+ou teste prático. Nenhuma alteração descrita como “pendente” foi tratada como concluída.
+
+====================================================================
+1. ATA DE AUDIÊNCIA — REGRAS GERAIS E INTEGRIDADE
+====================================================================
+
+1.1 Registro atômico da ATA
+- O fluxo de registro da ATA foi estruturado para gravar a ATA e seus itens
+  dependentes na mesma transação do banco.
+- Os itens tratados no fluxo incluem, conforme selecionados: prazos, perícias,
+  tarefas de alvará/desistência, nova audiência, testemunhas e dados da própria ATA.
+- Se alguma validação ou gravação falhar durante essa transação, é feito rollback,
+  sem concluir o registro da ATA.
+
+1.2 Itens mínimos para registrar uma ATA
+- O servidor e a interface exigem ao menos um dos seguintes itens:
+  prazo, perícia, acordo, nova audiência, alvará, desistência da ação ou
+  retorno aos autos.
+- “Testemunha(s)” é complementar: pode ser selecionada, mas sozinha não permite
+  registrar a ATA.
+- Se “Testemunha(s)” estiver selecionada, é obrigatório informar pelo menos uma
+  testemunha antes do registro.
+
+1.3 Advogado acompanhante
+- O campo de advogado(a) que acompanhou a audiência é obrigatório para registrar
+  a ATA.
+- A opção explícita “Ninguém” continua válida quando não houver acompanhante.
+
+1.4 Reversão de ATA
+- A rota de reversão de status da ATA permanece protegida para administrador.
+- A exclusão da ATA usa o relacionamento em cascata para os itens próprios da ATA.
+
+====================================================================
+2. PRAZOS CADASTRADOS A PARTIR DA ATA
+====================================================================
+
+2.1 Processo, pasta e apresentação visual
+- O prazo aberto a partir da ATA continua vinculado ao processo de origem e o
+  número do processo permanece no formulário, somente leitura.
+- O campo de título permanece sem alteração.
+- A informação da pasta foi MOVIDA de dentro do formulário para o topo do modal,
+  logo abaixo do cabeçalho “Cadastrar prazo da ata”.
+- Nenhum campo do modal de prazo foi removido.
+- O cadastro normal de prazos não foi alterado por essa mudança visual.
+
+Arquivo alterado nesta parte:
+- frontend/src/pages/Prazos/Prazos.js
+
+====================================================================
+3. PERÍCIAS ORIGINADAS DA ATA
+====================================================================
+
+3.1 Fluxo de perícia
+- A perícia pode ser cadastrada com data e horário ou sem data, ficando como
+  “Aguardando data” no menu Perícias.
+- Cada perícia possui um único perito, mas a ATA pode possuir várias perícias de
+  tipos diferentes.
+- Quando a perícia tem data, o fluxo exige perito.
+- Quando ainda não há data, o perito pode ser informado ou não.
+
+3.2 Peritos
+- A busca de peritos considera pessoas cuja profissão começa com “Perícia”.
+- O rótulo do campo passou a explicar essa regra.
+- Para esse tipo de pessoa, o CPF não é obrigatório no cadastro de Pessoas.
+- Foi mantido o cuidado para não alterar a exigência de CPF das demais pessoas.
+
+3.3 E-mail ao perito
+- Foi previsto modelo de e-mail ao perito em Configurações do escritório.
+- A estrutura contempla a escolha de enviar e-mail ao perito durante o fluxo
+  da ATA, quando a opção estiver marcada.
+- WhatsApp não foi incluído neste escopo.
+
+3.4 Banco de dados relacionado a modelos de e-mail e perícias
+- Foi incluído script SQL para adicionar o campo de modelos de e-mail ao perito
+  nas configurações do escritório.
+- Esse script NÃO foi executado automaticamente no banco.
+
+====================================================================
+4. ALVARÁ, DESISTÊNCIA E RETORNO AOS AUTOS
+====================================================================
+
+4.1 Alvará
+- Ao selecionar “Alvará”, a ATA permite cadastrar uma tarefa vinculada ao
+  processo e à pasta da audiência.
+- A tarefa recebe o vínculo de processo/pasta em modo somente leitura.
+- O título sugerido para a tarefa é “ATA com Alvará, tomar providências”.
+- O fluxo foi delimitado à tarefa; não foi criado compromisso para o alvará.
+
+4.2 Desistência da ação
+- Ao selecionar desistência, o motivo é obrigatório.
+- O fluxo permite registrar tarefa de providência relacionada à desistência.
+
+4.3 Retorno aos autos
+- Ao selecionar retorno aos autos, há opção de registrar comentário.
+- Quando a pessoa optar por registrar comentário, o texto é obrigatório.
+
+====================================================================
+5. DETALHES DA ATA
+====================================================================
+
+- Foi criado/ajustado o detalhamento operacional da ATA, separado do histórico.
+- O detalhamento mostra informações da ATA e seus itens gerados, incluindo
+  prazo, perícia, tarefa, acordo, audiência, alvará, desistência, retorno aos
+  autos e testemunhas quando aplicável.
+- A estrutura própria de itens da ATA evita alterar tabelas compartilhadas de
+  prazo, tarefas, perícias ou financeiro apenas para fins de rastreabilidade.
+
+Estrutura criada no script de banco:
+- ata_audiencia_itens
+
+ATENÇÃO:
+- A criação dessa tabela depende da execução manual do script SQL no banco.
+- Nenhuma consulta, leitura ou alteração do banco foi feita nesta sessão.
+
+====================================================================
+6. TESTEMUNHAS DA ATA
+====================================================================
+
+6.1 Cadastro dentro da ATA
+- Foi acrescentada a opção “Testemunha(s)” no registro da ATA.
+- O cadastro permite buscar pessoa física e escolher de qual parte física do
+  processo ela será testemunha.
+- A apresentação passa a mostrar “Nome da testemunha — testemunha de Nome da parte”.
+- Registros antigos sem a parte vinculada são preservados e identificados como
+  cadastro antigo na interface.
+
+6.2 Regra de impedimento por CNPJ
+- A regra foi ajustada para impedir a inversão de papéis em processos que tenham
+  réu com o mesmo CNPJ.
+- Exemplo: se João foi ou é testemunha de Pedro em processo contra determinada
+  empresa (mesmo CNPJ), Pedro não poderá ser testemunha de João em outro processo
+  contra essa mesma empresa.
+- A validação considera CPF das pessoas físicas e CNPJ do réu pessoa jurídica.
+- A validação está aplicada aos fluxos de criação e edição de testemunhas, bem
+  como ao registro pela ATA.
+
+6.3 Estrutura de banco para testemunhas
+- Foi atualizado o arquivo de estrutura do banco com a coluna parte_pessoa_id na
+  tabela audiencia_testemunhas, com índice e chave estrangeira.
+- Foi criado o script manual:
+  scripts/2026-09-13_testemunha_parte_e_impedimento.sql
+- Esse script NÃO foi executado automaticamente no banco.
+
+OBSERVAÇÃO TÉCNICA PENDENTE
+- A atualização comum de testemunha preserva registros antigos que não possuam
+  parte_pessoa_id. Para bloquear integralmente qualquer tentativa nova, inclusive
+  chamada direta à API sem essa informação, ainda é recomendável uma melhoria
+  adicional que diferencie registro legado de cadastro novo.
+
+====================================================================
+7. REGISTRAR ATA SOMENTE APÓS A AUDIÊNCIA
+====================================================================
+
+Regra adicionada nesta última alteração:
+- A opção “Registrar ata” fica oculta enquanto a audiência ainda não ocorreu.
+- A comparação usa data e hora da audiência no fuso de Brasília.
+- No minuto exato do horário marcado, a opção ainda não é liberada.
+- A opção só é exibida depois que o horário marcado passou.
+- A regra foi aplicada em dois locais da interface:
+  1) Tela principal de Audiências.
+  2) Aba de Audiências dentro do detalhe da Pasta.
+- O servidor também bloqueia o endpoint de registro da ATA se a audiência ainda
+  não tiver passado, protegendo contra chamadas diretas fora da interface.
+- Quando bloqueado pelo servidor, nada da ATA é gravado.
+
+Arquivos alterados nesta parte:
+- frontend/src/utils/formatters.js
+- frontend/src/pages/Audiencias/Audiencias.js
+- frontend/src/pages/Processos/PastaDetalhe.js
+- backend/src/controllers/audienciasController.js
+
+====================================================================
+8. ARQUIVOS ALTERADOS NESTA SESSÃO
+====================================================================
+
+- backend/src/controllers/audienciasController.js
+- frontend/src/pages/Audiencias/Audiencias.js
+- frontend/src/pages/Processos/PastaDetalhe.js
+- frontend/src/pages/Prazos/Prazos.js
+- frontend/src/utils/formatters.js
+- estrutura_banco.sql
+- scripts/2026-09-13_testemunha_parte_e_impedimento.sql
+
+Outras alterações de ATA/perícia/configuração podem existir no diretório de
+trabalho por etapas anteriores; este relatório descreve o escopo tratado nesta
+sessão e não substitui uma revisão completa do histórico Git.
+
+====================================================================
+9. VERIFICAÇÕES EXECUTADAS
+====================================================================
+
+Executado com sucesso:
+- Verificação de sintaxe do backend:
+  node --check backend/src/controllers/audienciasController.js
+- Compilação do front-end:
+  npm run build
+- Verificação de espaços/problemas de diff:
+  git diff --check
+
+RESULTADO DAS VERIFICAÇÕES
+- A sintaxe do controller de audiências foi aceita.
+- A compilação do front-end foi concluída sem erros.
+- O git diff --check não apontou erro de espaços; exibiu apenas avisos de conversão
+  de fim de linha (LF/CRLF) em arquivos já existentes no diretório de trabalho.
+
+====================================================================
+10. O QUE NÃO FOI FEITO / O QUE AINDA EXIGE TESTE
+====================================================================
+
+- Não foi acessado, consultado, alterado ou conectado nenhum banco de dados.
+- Nenhum script SQL foi executado.
+- Não foi feito push, publicação ou implantação.
+- Não foi realizado teste manual completo no navegador.
+- Ainda é necessário testar manualmente, após executar os scripts necessários no
+  banco, pelo menos os seguintes cenários:
+  1) ATA futura: “Registrar ata” não aparece.
+  2) ATA no mesmo dia, antes do horário: “Registrar ata” não aparece.
+  3) ATA após o horário: “Registrar ata” aparece para quem tem permissão.
+  4) Tentativa direta de registrar ATA futura: servidor recusa e não grava nada.
+  5) ATA com somente testemunha: sistema recusa o registro.
+  6) ATA com testemunha e outro item válido: sistema permite continuar.
+  7) Regra de testemunha inversa com mesmo CNPJ: sistema bloqueia.
+  8) Perícia sem data: aparece como aguardando data.
+  9) Perícia com data: exige perito e mantém o fluxo correto.
+  10) Prazo da ATA: pasta aparece no topo e os demais campos continuam intactos.
+
+FIM DO RELATÓRIO

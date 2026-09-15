@@ -8,7 +8,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { processosAPI, andamentoAPI, prazosAPI, tarefasAPI, audienciasAPI, periciasAPI, financeiroAPI, pessoasAPI, etiquetasAPI } from '../../services/api';
 import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetaEscritorioSubmenu, ModalHistoricoEtiquetaEscritorio } from '../../components/Etiquetas';
-import { formatarData, formatarNumeroPasta, formatarMoeda, labelStatusPrazo, corPrazo, toTitleCase, hojeLocal } from '../../utils/formatters';
+import { formatarData, formatarNumeroPasta, formatarMoeda, labelStatusPrazo, corPrazo, toTitleCase, hojeLocal, audienciaJaPassou } from '../../utils/formatters';
 // Janelas de contato/ficha reutilizadas da tela de Pessoas (painel "Partes do processo")
 import { ModalPessoa, ModalEnviarEmail, ModalEnviarSMS, ModalEscolherWhatsapp, ModalCopiarTelefone, ModalCopiarEmail, ModalAnotacoes, soNumeroLocal, copiarParaAreaTransferencia } from '../Pessoas/Pessoas';
 import { linkWhatsApp } from '../../utils/whatsapp';
@@ -165,6 +165,7 @@ export default function PastaDetalhe() {
   const [audienciaEmLeitura, setAudienciaEmLeitura] = useState(false); // true = abrir "Detalhes da Audiência" (somente leitura)
   const [audienciaCancelando, setAudienciaCancelando] = useState(null); // audiência sendo cancelada
   const [audienciaRemarcando, setAudienciaRemarcando] = useState(null); // audiência sendo remarcada
+  const [remarcacaoEmCadastro, setRemarcacaoEmCadastro] = useState(null);
   const [audienciaHistorico, setAudienciaHistorico]   = useState(null); // audiência com histórico aberto
   const [audienciaAta, setAudienciaAta]               = useState(null); // audiência para registrar ata
   const [tiposAudiencia, setTiposAudiencia]           = useState([]);   // lista de tipos para o modal de edição
@@ -1124,9 +1125,10 @@ export default function PastaDetalhe() {
         {modalNovaAudiencia && (
           <ModalNovaAudiencia
             tipos={tiposAudiencia}
+            remarcacao={remarcacaoEmCadastro}
             onTiposChange={setTiposAudiencia}
-            processoInicial={processoSelecionado ? { ...processoSelecionado, numPasta: pasta.numPasta } : null}
-            onFechar={(reload) => { setModalNovaAudiencia(false); if (reload) carregarAudiencias(); }}
+            processoInicial={!remarcacaoEmCadastro && processoSelecionado ? { ...processoSelecionado, numPasta: pasta.numPasta } : null}
+            onFechar={(reload) => { setModalNovaAudiencia(false); setRemarcacaoEmCadastro(null); if (reload) carregarAudiencias(); }}
           />
         )}
         {audienciaEditando && (
@@ -1154,6 +1156,7 @@ export default function PastaDetalhe() {
         {audienciaRemarcando && (
           <ModalRemarcarAudiencia
             audiencia={audienciaRemarcando}
+            onContinuar={(audiencia, motivo) => { setAudienciaRemarcando(null); setRemarcacaoEmCadastro({ audiencia, motivo }); setModalNovaAudiencia(true); }}
             onFechar={(reload) => { setAudienciaRemarcando(null); if (reload) carregarAudiencias(); }}
           />
         )}
@@ -1383,8 +1386,8 @@ export default function PastaDetalhe() {
                         </td>
                         <td style={{ whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
                             <MenuAcoes itens={[
-                              // Registrar ata — só audiências agendadas ou adiadas e só para quem tem a permissão de Ata (admin sempre)
-                              { label: 'Registrar ata', icone: '📝', oculto: !(['agendada','adiada'].includes(a.status) && temPermissao('audiencias.ata','visualizar')), onClick: () => setAudienciaAta(a) },
+                              // Registrar ata — só após o horário da audiência, em status pendente e com a permissão de ATA.
+                              { label: 'Registrar ata', icone: '📝', oculto: !(['agendada','adiada'].includes(a.status) && audienciaJaPassou(a.data, a.hora) && temPermissao('audiencias.ata','visualizar')), onClick: () => setAudienciaAta(a) },
                               { label: 'Gerar documento', icone: '📄', oculto: !temPermissao('documentos','cadastrar'), gerarDoc: { ancoraTipo: 'audiencia', ancoraId: a.id } },
                               { label: 'Cancelar', icone: '✖', oculto: !(['agendada','adiada'].includes(a.status) && temPermissao('audiencias','alterar')), onClick: () => setAudienciaCancelando(a) },
                               { label: 'Remarcar', icone: '🔁', oculto: !(['agendada','adiada'].includes(a.status) && temPermissao('audiencias','alterar')), onClick: () => setAudienciaRemarcando(a) },
@@ -1855,8 +1858,16 @@ function ItemParteContato({ parte, smsAtivo, onReload }) {
         borderBottom: '1px solid #f1f5f9', borderRadius: '6px',
         background: 'transparent', transition: 'background-color 0.15s' }}>
       <span className={`badge ${info.cls}`} style={{ minWidth: '58px', textAlign: 'center' }}>{info.label}</span>
-      <span style={{ flex: 1, fontSize: '14px', color: '#1e2a3a' }}>
-        {parte.nome}
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <button type="button" onClick={() => setVerCadastro(true)}
+          title="Ver cadastro"
+          style={{ padding: 0, border: 'none', background: 'transparent', color: '#1e2a3a',
+            fontSize: '14px', fontFamily: 'inherit', cursor: 'pointer', textAlign: 'left',
+            textDecoration: 'underline', textDecorationColor: 'transparent', textUnderlineOffset: '2px' }}
+          onMouseEnter={e => { e.currentTarget.style.color = '#2563eb'; e.currentTarget.style.textDecorationColor = 'currentColor'; }}
+          onMouseLeave={e => { e.currentTarget.style.color = '#1e2a3a'; e.currentTarget.style.textDecorationColor = 'transparent'; }}>
+          {parte.nome}
+        </button>
         {parte.responsavel_nome && (
           <span style={{ display: 'block', fontSize: '12px', color: '#6b7280' }}>
             representado(a) por {parte.responsavel_nome}

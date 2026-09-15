@@ -14,10 +14,17 @@ const { dataParaIsoLocal } = require('../utils/helpers');
 async function calcularVencimento(dataInicio, quantidade, tipoDias) {
   if (!dataInicio || !quantidade) return null;
 
+  const qtd = parseInt(quantidade, 10);
+  if (!Number.isInteger(qtd) || qtd <= 0) {
+    const err = new Error('A quantidade de dias deve ser um número maior que zero.');
+    err.code = 'CALENDARIO_QUANTIDADE_INVALIDA';
+    throw err;
+  }
+
   if (tipoDias === 'corridos') {
     // Dias corridos: data início = dia 1, então soma quantidade - 1
     const data = new Date(dataInicio + 'T12:00:00');
-    data.setDate(data.getDate() + quantidade - 1);
+    data.setDate(data.getDate() + qtd - 1);
     return dataParaIsoLocal(data);
   }
 
@@ -25,7 +32,6 @@ async function calcularVencimento(dataInicio, quantidade, tipoDias) {
   // Se a data início for feriado/fim de semana, ela não será contada (dia_util = 0)
   // Nota: LIMIT com parâmetro bound (?) não funciona corretamente no mysql2 —
   //       por isso embutimos o inteiro diretamente na query (sem risco: já é parseInt)
-  const qtd = parseInt(quantidade);
   const [rows] = await pool.execute(
     `SELECT data FROM calendario
      WHERE data >= ? AND dia_util = 1
@@ -34,9 +40,12 @@ async function calcularVencimento(dataInicio, quantidade, tipoDias) {
     [dataInicio]
   );
 
-  if (rows.length < quantidade) {
-    // Se não encontrou dias suficientes no banco (improvável com 30 anos)
-    throw new Error('Datas insuficientes no calendário para calcular o prazo');
+  if (rows.length < qtd) {
+    // Evita acessar rows[-1].data: o calendário pode ainda não possuir datas úteis
+    // suficientes para o período solicitado.
+    const err = new Error('Não há dias úteis cadastrados no calendário para calcular este prazo. Informe a data final ou cadastre o calendário desse período.');
+    err.code = 'CALENDARIO_INSUFICIENTE';
+    throw err;
   }
 
   // dateStrings: true na config do pool faz o MySQL2 retornar DATE já como string 'YYYY-MM-DD'

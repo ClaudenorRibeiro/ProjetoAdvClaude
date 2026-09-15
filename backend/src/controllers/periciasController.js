@@ -197,7 +197,7 @@ async function gravarLocaisReus(conn, periciaId, locaisReus) {
 // GET /api/pericias — Lista perícias com filtros
 async function listar(req, res) {
   try {
-    const { processo_id, data_de, data_ate, assistente_id, pagina = 1, limite = 30 } = req.query;
+    const { processo_id, data_de, data_ate, assistente_id, status, pagina = 1, limite = 30 } = req.query;
     const limitInt  = parseInt(limite) || 30;
     const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
     const params = [];
@@ -207,6 +207,7 @@ async function listar(req, res) {
     if (data_de)       { where += ' AND pe.data >= ?';                  params.push(data_de); }
     if (data_ate)      { where += ' AND pe.data <= ?';                  params.push(data_ate); }
     if (assistente_id) { where += ' AND pe.assistente_tecnico_id = ?';  params.push(assistente_id); }
+    if (status)        { where += ' AND pe.status = ?';                  params.push(status); }
 
     // Filtro por etiqueta PESSOAL do usuário logado.
     const etqSlot = parseInt(req.query.etiqueta);
@@ -248,7 +249,7 @@ async function listar(req, res) {
       LEFT JOIN tblproc pr ON pe.processo_id = pr.id
       LEFT JOIN tblpasta pa ON pr.pasta_id   = pa.id
       ${where}
-      ORDER BY pe.data DESC
+      ORDER BY CASE WHEN pe.status = 'aguardando_data' THEN 0 ELSE 1 END, pe.data DESC
       LIMIT ${limitInt} OFFSET ${offsetInt}
     `, [req.usuario.id, ...params]);
 
@@ -333,7 +334,7 @@ async function peritosDoProcesso(req, res) {
     const { processo_id } = req.query;
     if (!processo_id) return erro(res, 'processo_id é obrigatório');
     const [rows] = await pool.execute(
-      `SELECT pp.tipo_pessoa, pp.pessoa_id, pf.nome,
+      `SELECT pp.tipo_pessoa, pp.pessoa_id, pf.nome, pr.nome AS profissao,
               (SELECT t.numero FROM telefones_pf t
                WHERE t.pessoa_id = pf.id AND t.ativo = 1
                ORDER BY t.principal DESC, t.id ASC LIMIT 1) AS telefone,
@@ -346,6 +347,56 @@ async function peritosDoProcesso(req, res) {
        WHERE pp.proc_id = ?
        ORDER BY nome`,
       [processo_id]
+    );
+    return sucesso(res, rows);
+  } catch (e) {
+    return erroInterno(res, e);
+  }
+}
+
+// GET /api/pericias/busca-peritos?busca=X — consulta exclusiva da ATA.
+// Não reutiliza a busca geral de Pessoas: nela, o modo de seleção procura apenas
+// nome/CPF e é usado por vários outros campos do sistema. Aqui a necessidade é
+// específica: localizar profissionais cuja profissão começa com "Perícia" por
+// nome, telefone ou e-mail.
+async function buscarPeritosParaAta(req, res) {
+  try {
+    const busca = String(req.query.busca || '').trim();
+    if (busca.length < 2) return sucesso(res, []);
+
+    const limiteInformado = Number.parseInt(req.query.limite, 10);
+    const limite = Number.isInteger(limiteInformado)
+      ? Math.min(Math.max(limiteInformado, 1), 20)
+      : 10;
+    const buscaDigitos = busca.replace(/\D/g, '');
+    const porTexto = `%${busca}%`;
+    const porTelefone = `%${buscaDigitos || busca}%`;
+
+    const [rows] = await pool.execute(
+      `SELECT pf.id, pf.nome, pr.nome AS profissao,
+              (SELECT t.numero FROM telefones_pf t
+               WHERE t.pessoa_id = pf.id AND t.ativo = 1
+               ORDER BY t.principal DESC, t.id ASC LIMIT 1) AS telefone,
+              (SELECT e.email FROM emails_pf e
+               WHERE e.pessoa_id = pf.id AND e.ativo = 1
+               ORDER BY e.principal DESC, e.id ASC LIMIT 1) AS email
+         FROM pessoas_fisicas pf
+         JOIN profissao pr ON pr.id = pf.profissao_id AND pr.nome LIKE 'Perícia%'
+        WHERE pf.ativo = 1
+          AND (
+            pf.nome LIKE ?
+            OR EXISTS (
+              SELECT 1 FROM telefones_pf t
+               WHERE t.pessoa_id = pf.id AND t.ativo = 1 AND t.numero LIKE ?
+            )
+            OR EXISTS (
+              SELECT 1 FROM emails_pf e
+               WHERE e.pessoa_id = pf.id AND e.ativo = 1 AND e.email LIKE ?
+            )
+          )
+        ORDER BY (pf.nome LIKE ?) DESC, pf.nome ASC
+        LIMIT ${limite}`,
+      [porTexto, porTelefone, porTexto, `${busca}%`]
     );
     return sucesso(res, rows);
   } catch (e) {
@@ -650,7 +701,7 @@ async function atualizar(req, res) {
   try {
     await conn.beginTransaction();
 
-    const [existe] = await conn.execute('SELECT id, processo_id, responsavel_id FROM pericia WHERE id = ?', [req.params.id]);
+    const [existe] = await conn.execute('SELECT id, processo_id, responsavel_id, status FROM pericia WHERE id = ?', [req.params.id]);
     if (!existe.length) {
       await conn.rollback();
       return naoEncontrado(res, 'Perícia não encontrada');
@@ -671,7 +722,7 @@ async function atualizar(req, res) {
         tipo_pericia_id=?, data=?, hora=?,
         local=?, cep=?, logradouro=?, numero=?, complemento=?, bairro=?, cidade=?, estado=?,
         perito_tipo=?, perito_id=?, assistente_tecnico_id=?,
-        responsavel_id=?, responsavel_freela_id=?,
+        responsavel_id=?, responsavel_freela_id=?, status=?,
         alterado_por=?, alterado_em=NOW()
        WHERE id=?`,
       [
@@ -680,6 +731,7 @@ async function atualizar(req, res) {
         complemento || null, bairro || null, cidade || null, estado || null,
         perito_id ? 'fisica' : null, perito_id || null, assistente_tecnico_id || null,
         responsavel_id, responsavel_freela_id,
+        existe[0].status === 'aguardando_data' ? 'agendada' : existe[0].status,
         req.usuario.id, req.params.id
       ]
     );
@@ -689,6 +741,11 @@ async function atualizar(req, res) {
     await auditoria.registrar(req.usuario.id, 'pericia', 'atualizar', req.params.id, null, null, conn);
 
     await conn.commit();
+    if (existe[0].status === 'aguardando_data') {
+      // A perícia só passa a comunicar o cliente quando finalmente ganha uma data.
+      enviarComunicadoPericia(req.params.id, 'agendada', req.usuario.id)
+        .catch(err => console.error('Falha ao comunicar cliente após informar data da perícia:', err.message));
+    }
     // Reflete no Google. Se o responsável (usuário) mudou, migra: cancela no antigo e
     // cria no novo. Freelancer/sem responsável = ids nulos e o envio é ignorado.
     const seq = Math.floor(Date.now() / 1000);
@@ -1033,6 +1090,6 @@ async function enviarComunicado(req, res) {
 module.exports = {
   listar, buscar, criar, atualizar, tipos,
   criarTipo, atualizarTipo, excluirTipo,
-  reusDoProcesso, peritosDoProcesso, relatorioPeritos, marcarRealizada, cancelar, remarcar, excluir,
+  reusDoProcesso, peritosDoProcesso, buscarPeritosParaAta, relatorioPeritos, marcarRealizada, cancelar, remarcar, excluir,
   buscarHistorico, enviarComunicado,
 };

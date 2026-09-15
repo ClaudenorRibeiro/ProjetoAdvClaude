@@ -38,6 +38,9 @@ INSTALACAO_AWS_LIGHTSAIL.txt
 # Pasta de scripts de deploy — fica só local (contém senhas dos clientes)
 deploy/
 
+# Scripts locais e SQLs operacionais — não enviar ao Git
+/scripts/
+
 # Bateria de verificação/testes — fica só local, nunca vai para o Git (decidido 10/09/2026)
 /_verificacao/
 /VERIFICACAO-SISTEMA.txt

@@ -9,6 +9,14 @@ const { calcularVencimento, calcularQuantidade } = require('../services/calendar
 const { criarNotificacao, notificarConclusao, emailPrazoDelegado } = require('../services/notificacaoService');
 const { hojeBrasilia } = require('../utils/helpers');
 const auditoria = require('../middleware/auditoria');
+
+function responderErroCalendario(res, err) {
+  if (err?.code === 'CALENDARIO_INSUFICIENTE' || err?.code === 'CALENDARIO_QUANTIDADE_INVALIDA') {
+    erro(res, err.message, 422);
+    return true;
+  }
+  return false;
+}
 const agendaGoogle = require('../services/agendaGoogleService');
 
 // Mesma regra de visibilidade da listagem: admin/super (nível <= 1) OU
@@ -323,6 +331,7 @@ async function criar(req, res) {
     sincronizarPrazoGoogle(result.insertId, {});
     return sucesso(res, { id: result.insertId, data_vencimento }, 'Prazo criado com sucesso', 201);
   } catch (err) {
+    if (responderErroCalendario(res, err)) return;
     return erroInterno(res, err);
   }
 }
@@ -525,6 +534,7 @@ async function calcularDataFinal(req, res) {
     const dataFinal = await calcularVencimento(data_inicio, parseInt(quantidade), tipo_dias);
     return sucesso(res, { data_final: dataFinal });
   } catch (err) {
+    if (responderErroCalendario(res, err)) return;
     return erroInterno(res, err);
   }
 }
@@ -594,6 +604,7 @@ async function editar(req, res) {
     });
     return sucesso(res, { data_vencimento }, 'Prazo atualizado com sucesso');
   } catch (err) {
+    if (responderErroCalendario(res, err)) return;
     return erroInterno(res, err);
   }
 }

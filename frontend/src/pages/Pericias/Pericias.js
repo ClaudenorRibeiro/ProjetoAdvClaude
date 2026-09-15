@@ -23,6 +23,7 @@ function badgeStatus(status) {
     case 'realizada': return { cls: 'badge-verde',    txt: 'Realizada' };
     case 'cancelada': return { cls: 'badge-vermelho',  txt: 'Cancelada' };
     case 'remarcada': return { cls: 'badge-amarelo',   txt: 'Remarcada' };
+    case 'aguardando_data': return { cls: 'badge-laranja', txt: 'Aguardando data' };
     default:          return { cls: 'badge-azul',      txt: 'Agendada' };
   }
 }
@@ -47,7 +48,7 @@ export default function Pericias() {
   const [lista, setLista]         = useState([]);
   const { defs: etqDefs, marcar: marcarEtq } = useEtiquetasPessoais('pericias', lista, setLista);
   const [total, setTotal]         = useState(0);
-  const [filtros, setFiltros]     = useState({ data_de: '', data_ate: '', pagina: 1 });
+  const [filtros, setFiltros]     = useState({ status: '', data_de: '', data_ate: '', pagina: 1 });
   const [tipos, setTipos]         = useState([]);
   const [carregando, setCarregando] = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
@@ -154,6 +155,17 @@ export default function Pericias() {
       <div className="card" style={{marginBottom:'16px'}}>
         <div style={{display:'flex',gap:'12px',flexWrap:'wrap',alignItems:'flex-end'}}>
           <div className="form-group" style={{margin:0}}>
+            <label className="form-label">Status</label>
+            <select className="form-control" value={filtros.status} onChange={e => setFiltro('status', e.target.value)}>
+              <option value="">Todos</option>
+              <option value="aguardando_data">Aguardando data</option>
+              <option value="agendada">Agendada</option>
+              <option value="realizada">Realizada</option>
+              <option value="cancelada">Cancelada</option>
+              <option value="remarcada">Remarcada</option>
+            </select>
+          </div>
+          <div className="form-group" style={{margin:0}}>
             <label className="form-label">Data de</label>
             <input type="date" className="form-control" value={filtros.data_de}
               onChange={e => setFiltro('data_de', e.target.value)} />
@@ -206,6 +218,7 @@ export default function Pericias() {
                 {lista.map(p => {
                   const bg = badgeStatus(p.status);
                   const agendada = p.status === 'agendada' || !p.status;
+                  const aguardandoData = p.status === 'aguardando_data';
                   const historico = p.status === 'cancelada' || p.status === 'remarcada';
                   return (
                     <tr key={p.id}>
@@ -227,7 +240,7 @@ export default function Pericias() {
                       </td>
                       <td>{p.tipo_nome || '—'}</td>
                       <td>
-                        <strong>{formatarData(p.data)}</strong>
+                        <strong>{p.data ? formatarData(p.data) : 'Aguardando data'}</strong>
                         {p.hora && <div style={{fontSize:'12px',color:'#888'}}>{p.hora.slice(0,5)}</div>}
                       </td>
                       <td>{p.perito_nome || '—'}</td>
@@ -243,7 +256,7 @@ export default function Pericias() {
                             // Marcar realizada — só quando agendada
                             { label: 'Marcar realizada', icone: '✅', oculto: !agendada, onClick: () => pedirMarcarRealizada(p) },
                             { label: 'Gerar documento', icone: '📄', oculto: !temPermissao('documentos','cadastrar'), gerarDoc: { ancoraTipo: 'pericia', ancoraId: p.id } },
-                            { label: 'Editar', icone: '✏️', oculto: !agendada, onClick: () => abrirEdicao(p) },
+                            { label: aguardandoData ? 'Informar data' : 'Editar', icone: '✏️', oculto: !(agendada || aguardandoData), onClick: () => abrirEdicao(p) },
                             { label: 'Remarcar', icone: '🔁', oculto: !agendada, onClick: () => setRemarcando(p) },
                             { label: 'Cancelar', icone: '✖', oculto: !agendada, onClick: () => setCancelando(p) },
                             { label: p.comunicado_enviado ? 'Reenviar comunicado' : 'Comunicar cliente', icone: '✉', oculto: !agendada, onClick: () => enviarComunicado(p.id) },
@@ -804,6 +817,7 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
               </div>
             </>
           )}
+
 
           {/* Responsável + Assistente técnico */}
           <div className="grid-2">

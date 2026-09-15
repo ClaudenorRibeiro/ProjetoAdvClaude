@@ -1,0 +1,42 @@
+-- Perícias originadas da ATA podem aguardar a definição de data.
+ALTER TABLE pericia MODIFY COLUMN data DATE NULL;
+
+-- Modelos de e-mail que podem ser escolhidos para o perito ao registrar uma ATA.
+ALTER TABLE configuracoes_escritorio
+  ADD COLUMN modelos_email_perito JSON NULL
+  COMMENT 'Modelos editáveis de e-mail enviados ao perito a partir da ata';
+
+
+==============================================================
+
+
+-- Consulta operacional da ATA. Execute uma única vez no banco de dados do sistema.
+-- Não altera as tabelas compartilhadas de prazos, tarefas, perícias ou financeiro.
+CREATE TABLE `ata_audiencia_itens` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `ata_audiencia_id` int NOT NULL,
+  `tipo` varchar(40) NOT NULL,
+  `registro_id` int DEFAULT NULL,
+  `titulo` varchar(255) NOT NULL,
+  `descricao` text,
+  `data_referencia` date DEFAULT NULL,
+  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_ata_audiencia_itens_ata` (`ata_audiencia_id`),
+  CONSTRAINT `fk_ata_audiencia_itens_ata`
+    FOREIGN KEY (`ata_audiencia_id`) REFERENCES `ata_audiencia` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+
+=================================================================
+
+
+
+-- Execute UMA vez no banco sistema_advocacia, antes de usar o novo cadastro de testemunhas.
+-- Não altera nem deduz informações dos registros antigos.
+ALTER TABLE audiencia_testemunhas
+  ADD COLUMN parte_pessoa_id INT NULL COMMENT 'Parte física específica para quem a pessoa presta testemunho; nulo somente em registros legados' AFTER pessoa_id,
+  ADD KEY idx_at_parte_pessoa (parte_pessoa_id),
+  ADD CONSTRAINT fk_at_parte_pessoa FOREIGN KEY (parte_pessoa_id)
+    REFERENCES pessoas_fisicas (id) ON DELETE RESTRICT;

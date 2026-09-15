@@ -151,6 +151,7 @@ const CATALOGO = {
       { tag: 'nome_advogado',       descricao: 'Nome do usuário que gerou o documento' },
       { tag: 'data_hoje',           descricao: 'Data de hoje' },
       { tag: 'cidade_hoje',         descricao: 'Cidade (para fecho do documento)' },
+      { tag: 'saudacao',            descricao: 'Saudação conforme o horário do envio: "Bom dia", "Boa tarde" ou "Boa noite"' },
     ],
   },
 };

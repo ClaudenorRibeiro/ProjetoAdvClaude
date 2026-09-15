@@ -7,6 +7,18 @@ const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
 const agendaGoogle = require('../services/agendaGoogleService');
+const { enviarComunicadoPericia, enviarEmailPeritoPericia } = require('../services/comunicadoService');
+
+function audienciaJaPassou(data, hora) {
+  const dataAudiencia = String(data || '').slice(0, 10);
+  const horaAudiencia = String(hora || '').slice(0, 5);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataAudiencia) || !/^\d{2}:\d{2}$/.test(horaAudiencia)) return false;
+
+  const agora = new Date();
+  const dataAgora = agora.toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+  const horaAgora = agora.toLocaleTimeString('en-GB', { timeZone: 'America/Sao_Paulo', hour12: false }).slice(0, 5);
+  return `${dataAudiencia} ${horaAudiencia}` < `${dataAgora} ${horaAgora}`;
+}
 
 // ===== Integração com o Google Agenda (convite .ics) =====
 // O evento vai para o Google do RESPONSÁVEL, mas SÓ quando ele for um USUÁRIO do
@@ -81,6 +93,32 @@ function sincronizarAudienciaGoogle(audienciaId, { cancelar = false, sequence = 
   );
 }
 
+// Integração exclusiva das perícias criadas pela ATA. A rotina normal do menu
+// Perícias continua independente; falhas aqui nunca desfazem uma ata já gravada.
+function sincronizarPericiaDaAtaGoogle(periciaId) {
+  (async () => {
+    try {
+      const [rows] = await pool.execute(
+        `SELECT pe.responsavel_id, pe.data, pe.hora, pe.local, pr.numProc AS processo_numero
+           FROM pericia pe JOIN tblproc pr ON pr.id = pe.processo_id WHERE pe.id = ?`, [periciaId]
+      );
+      const pericia = rows[0];
+      if (!pericia?.responsavel_id || !pericia.data) return;
+      const [usuarios] = await pool.execute(
+        'SELECT nome, google_agenda_ativo, google_agenda_email FROM usuarios WHERE id = ?', [pericia.responsavel_id]
+      );
+      const usuario = usuarios[0];
+      if (!usuario || Number(usuario.google_agenda_ativo) !== 1 || !usuario.google_agenda_email) return;
+      await agendaGoogle.enviarConviteEvento({
+        tipo: 'pericia', id: periciaId, resumo: `Perícia: ${pericia.processo_numero || ''}`.trim(),
+        descricao: pericia.local ? `Local: ${pericia.local}` : '', data: pericia.data,
+        diaTodo: !pericia.hora, horaInicio: pericia.hora, horaFim: null,
+        destinatarioEmail: usuario.google_agenda_email, destinatarioNome: usuario.nome,
+      });
+    } catch (err) { console.error('[ata->pericia google] falha ao enviar:', err.message); }
+  })();
+}
+
 // Verifica permissão granular na tabela `permissoes` para o usuário logado
 // Admin e super (nivel <= 1) têm acesso total sem consultar a tabela
 // Retorna true se permitido, false se negado
@@ -113,7 +151,7 @@ async function listarAdvogados(req, res) {
 // GET /api/audiencias — Lista audiências com filtros
 async function listar(req, res) {
   try {
-    const { processo_id, data_de, data_ate, status, sem_ata, responsavel_id, pagina = 1, limite = 30 } = req.query;
+    const { processo_id, data_de, data_ate, status, sem_ata, responsavel_id, pagina = 1, limite = 30, ordenar, direcao } = req.query;
     const params = [];
     let where = 'WHERE 1=1';
 
@@ -137,6 +175,17 @@ async function listar(req, res) {
 
     const limitInt  = parseInt(limite) || 30;
     const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
+
+    const ordenacoes = {
+      processo: 'pr.numProc', pasta: 'pa.numPasta', titulo: 'pr.NomeTituloProc', tipo: 'ta.nome',
+      data_hora: null, modalidade: 'a.modalidade', responsavel: 'responsavel_nome', status: 'a.status',
+    };
+    const ordemPadrao = "(a.status = 'agendada') DESC, a.data ASC, a.hora ASC";
+    const ordem = ordenar === 'data_hora' && (direcao === 'ASC' || direcao === 'DESC')
+      ? `a.data ${direcao}, a.hora ${direcao}`
+      : ordenacoes[ordenar] && (direcao === 'ASC' || direcao === 'DESC')
+      ? `${ordenacoes[ordenar]} ${direcao}`
+      : ordemPadrao;
 
     const [rows] = await pool.execute(
       `SELECT a.id, a.data, a.hora, a.modalidade, a.plataforma_virtual,
@@ -167,7 +216,7 @@ async function listar(req, res) {
        JOIN tblproc pr ON a.processo_id = pr.id
        JOIN tblpasta pa ON pr.pasta_id = pa.id
        ${where}
-       ORDER BY (a.status = 'agendada') DESC, a.data ASC, a.hora ASC
+        ORDER BY ${ordem}
        LIMIT ${limitInt} OFFSET ${offsetInt}`,
       [req.usuario.id, ...params]
     );
@@ -189,6 +238,7 @@ async function buscar(req, res) {
 
     const [rows] = await pool.execute(
       `SELECT a.*, ta.nome AS tipo_nome, pr.numProc AS processo_numero,
+              pr.NomeTituloProc AS processo_titulo, pa.numPasta AS pasta_numero,
               COALESCE(ur.nome, CONCAT(rf.nome, ' (freelancer)')) AS responsavel_nome,
               vr.nome AS vara_nome, vr.abrev_nome AS vara_abrev_nome, vr.compl_end AS vara_compl_end,
               fr.nome AS vara_forum_nome,
@@ -201,7 +251,8 @@ async function buscar(req, res) {
        LEFT JOIN advogados_freela rf ON a.responsavel_freela_id  = rf.id
        LEFT JOIN tblvara vr          ON a.vara_id                = vr.id
        LEFT JOIN tblforum fr         ON vr.forum_id              = fr.id
-       JOIN tblproc pr ON a.processo_id = pr.id
+        JOIN tblproc pr ON a.processo_id = pr.id
+        JOIN tblpasta pa ON pr.pasta_id = pa.id
        WHERE a.id = ?`,
       [id]
     );
@@ -213,16 +264,30 @@ async function buscar(req, res) {
 
     // Busca testemunhas da audiência com polo (autor/réu)
     const [testemunhas] = await pool.execute(
-      `SELECT at.id, at.pessoa_id, at.polo, pf.nome, pf.cpf,
+      `SELECT at.id, at.pessoa_id, at.parte_pessoa_id, at.polo, pf.nome, pf.cpf, parte.nome AS parte_nome,
               (SELECT t.numero FROM telefones_pf t WHERE t.pessoa_id = pf.id AND t.principal = 1 LIMIT 1) AS telefone_principal
        FROM audiencia_testemunhas at
        JOIN pessoas_fisicas pf ON at.pessoa_id = pf.id
+       LEFT JOIN pessoas_fisicas parte ON parte.id = at.parte_pessoa_id
        WHERE at.audiencia_id = ?
        ORDER BY at.polo ASC, pf.nome ASC`,
       [id]
     );
 
-    return sucesso(res, { ...rows[0], ata: ata[0] || null, testemunhas });
+    const responsaveis = await tabelaResponsaveisDisponivel(pool)
+      ? (await pool.execute(
+          `SELECT ar.responsavel_id, ar.responsavel_freela_id,
+                  COALESCE(u.nome, CONCAT(f.nome, ' (freelancer)')) AS nome
+           FROM audiencia_responsaveis ar
+           LEFT JOIN usuarios u ON u.id = ar.responsavel_id
+           LEFT JOIN advogados_freela f ON f.id = ar.responsavel_freela_id
+           WHERE ar.audiencia_id = ? ORDER BY ar.id`,
+          [id]
+        ))[0]
+      : (rows[0].responsavel_id || rows[0].responsavel_freela_id
+          ? [{ responsavel_id: rows[0].responsavel_id, responsavel_freela_id: rows[0].responsavel_freela_id, nome: rows[0].responsavel_nome }]
+          : []);
+    return sucesso(res, { ...rows[0], ata: ata[0] || null, testemunhas, responsaveis });
   } catch (err) {
     return erroInterno(res, err);
   }
@@ -235,6 +300,45 @@ function parsarResponsavel(valor) {
   if (tipo === 'usuario') return { responsavel_id: parseInt(id), responsavel_freela_id: null };
   if (tipo === 'freela')  return { responsavel_id: null, responsavel_freela_id: parseInt(id) };
   return { responsavel_id: null, responsavel_freela_id: null };
+}
+
+// A atualização que permite vários responsáveis é aplicada manualmente via SQL.
+// Enquanto ela não existir em uma instância, as rotinas continuam operando com o
+// responsável antigo, sem derrubar detalhes, edição ou remarcação.
+async function tabelaResponsaveisDisponivel(executor) {
+  const [rows] = await executor.execute("SHOW TABLES LIKE 'audiencia_responsaveis'");
+  return rows.length > 0;
+}
+
+function normalizarResponsaveis(responsaveis, responsavelLegado) {
+  const valores = Array.isArray(responsaveis) ? responsaveis : (responsavelLegado ? [responsavelLegado] : []);
+  return [...new Set(valores.filter(v => /^(usuario|freela):\d+$/.test(String(v))))];
+}
+
+async function validarResponsaveis(executor, valores) {
+  for (const valor of valores) {
+    const [tipo, id] = String(valor).split(':');
+    const [rows] = await executor.execute(
+      tipo === 'usuario'
+        ? "SELECT id FROM usuarios WHERE id = ? AND tipo = 'advogado' AND ativo = 1"
+        : 'SELECT id FROM advogados_freela WHERE id = ?',
+      [id]
+    );
+    if (!rows.length) return false;
+  }
+  return true;
+}
+
+async function gravarResponsaveis(executor, audienciaId, valores, usuarioId) {
+  await executor.execute('DELETE FROM audiencia_responsaveis WHERE audiencia_id = ?', [audienciaId]);
+  for (const valor of valores) {
+    const { responsavel_id, responsavel_freela_id } = parsarResponsavel(valor);
+    await executor.execute(
+      `INSERT INTO audiencia_responsaveis (audiencia_id, responsavel_id, responsavel_freela_id, criado_por)
+       VALUES (?, ?, ?, ?)`,
+      [audienciaId, responsavel_id, responsavel_freela_id, usuarioId]
+    );
+  }
 }
 
 // Uma audiência ocupa um único horário ativo dentro do processo. Registros históricos
@@ -272,6 +376,74 @@ function mensagemHorarioOcupado(duplicada, data, hora) {
 
 function erroDeHorarioDuplicado(err) {
   return err?.code === 'ER_DUP_ENTRY' && String(err?.message || '').includes('uq_audiencia_horario_ativo');
+}
+
+function erroValidacaoTestemunha(mensagem) {
+  const err = new Error(mensagem);
+  err.codigoValidacaoTestemunha = true;
+  return err;
+}
+
+// A identidade da testemunha e da parte é sempre conferida pelo CPF. O vínculo
+// específico impede a inversão testemunha/parte em processos cujo réu tenha o
+// mesmo CNPJ, sem inferir dados em registros antigos (parte_pessoa_id nulo).
+async function validarVinculoTestemunha(executor, processoId, pessoaId, partePessoaId, ignorarAudienciaId = null) {
+  if (!pessoaId || !partePessoaId) throw erroValidacaoTestemunha('Informe a pessoa para quem esta testemunha prestará depoimento');
+  if (Number(pessoaId) === Number(partePessoaId)) throw erroValidacaoTestemunha('A testemunha não pode prestar depoimento para si mesma');
+  const [pessoas] = await executor.execute(
+    'SELECT id, nome, cpf FROM pessoas_fisicas WHERE id IN (?, ?)', [pessoaId, partePessoaId]
+  );
+  const testemunha = pessoas.find(p => Number(p.id) === Number(pessoaId));
+  const parte = pessoas.find(p => Number(p.id) === Number(partePessoaId));
+  if (!testemunha || !parte) throw erroValidacaoTestemunha('Testemunha ou parte não encontrada');
+  if (!testemunha.cpf || !parte.cpf) throw erroValidacaoTestemunha('A testemunha e a pessoa para quem ela depõe precisam ter CPF cadastrado');
+
+  const [partes] = await executor.execute(
+    `SELECT pessoa_id, 'autor' AS polo FROM tbltituloprocautor WHERE proc_id=? AND tipo_pessoa='fisica'
+     UNION ALL
+     SELECT pessoa_id, 'reu' AS polo FROM tbltituloprocreu WHERE proc_id=? AND tipo_pessoa='fisica'`,
+    [processoId, processoId]
+  );
+  if (partes.some(p => Number(p.pessoa_id) === Number(pessoaId))) {
+    throw erroValidacaoTestemunha('Esta pessoa é parte do processo e não pode ser testemunha');
+  }
+  const parteAtual = partes.find(p => Number(p.pessoa_id) === Number(partePessoaId));
+  if (!parteAtual) throw erroValidacaoTestemunha('Selecione uma pessoa física que seja parte deste processo');
+
+  const [cnpjs] = await executor.execute(
+    `SELECT DISTINCT pj.cnpj FROM tbltituloprocreu tr
+       JOIN pessoas_juridicas pj ON pj.id=tr.pessoa_id
+      WHERE tr.proc_id=? AND tr.tipo_pessoa='juridica' AND pj.cnpj IS NOT NULL AND pj.cnpj<>''`, [processoId]
+  );
+  if (!cnpjs.length) return { polo: parteAtual.polo };
+  const marcas = cnpjs.map(() => '?').join(',');
+  let sql = `SELECT pr.numProc, pfw.nome AS testemunha_anterior, pfp.nome AS parte_anterior
+               FROM audiencia_testemunhas at
+               JOIN audiencia a ON a.id=at.audiencia_id
+               JOIN tblproc pr ON pr.id=a.processo_id
+               JOIN tbltituloprocreu tr ON tr.proc_id=a.processo_id AND tr.tipo_pessoa='juridica'
+               JOIN pessoas_juridicas pj ON pj.id=tr.pessoa_id
+               JOIN pessoas_fisicas pfw ON pfw.id=at.pessoa_id
+               JOIN pessoas_fisicas pfp ON pfp.id=at.parte_pessoa_id
+              WHERE at.pessoa_id=? AND at.parte_pessoa_id=? AND pj.cnpj IN (${marcas})`;
+  const params = [partePessoaId, pessoaId, ...cnpjs.map(r => r.cnpj)];
+  if (ignorarAudienciaId) { sql += ' AND at.audiencia_id<>?'; params.push(ignorarAudienciaId); }
+  sql += ' LIMIT 1';
+  const [conflitos] = await executor.execute(sql, params);
+  if (conflitos.length) {
+    const c = conflitos[0];
+    throw erroValidacaoTestemunha(`Impedimento: ${c.testemunha_anterior} já foi testemunha de ${c.parte_anterior} no processo ${c.numProc}, que possui réu com o mesmo CNPJ deste processo.`);
+  }
+  return { polo: parteAtual.polo };
+}
+
+async function inserirTestemunha(executor, audienciaId, processoId, dados, usuarioId, ignorarAudienciaId = null) {
+  const vinculo = await validarVinculoTestemunha(executor, processoId, dados.pessoa_id, dados.parte_pessoa_id, ignorarAudienciaId);
+  await executor.execute(
+    'INSERT INTO audiencia_testemunhas (audiencia_id, pessoa_id, parte_pessoa_id, polo, criado_por) VALUES (?, ?, ?, ?, ?)',
+    [audienciaId, dados.pessoa_id, dados.parte_pessoa_id, vinculo.polo, usuarioId]
+  );
+  return vinculo;
 }
 
 // ============================================================
@@ -320,7 +492,7 @@ async function criar(req, res) {
     const {
       processo_id, tipo_audiencia_id, data, hora, modalidade,
       vara_id, plataforma_virtual, link_virtual, observacoes,
-      responsavel_id: responsavelRaw,
+       responsavel_id: responsavelRaw, responsaveis,
       testemunhas = [],
       obs_auditoria,
       publicacao_id,
@@ -335,7 +507,15 @@ async function criar(req, res) {
     const duplicada = await localizarAudienciaAtivaNoHorario(conn, processo_id, data, hora);
     if (duplicada) return erro(res, mensagemHorarioOcupado(duplicada, data, hora), 409);
 
-    const { responsavel_id, responsavel_freela_id } = parsarResponsavel(responsavelRaw);
+    const responsaveisNormalizados = normalizarResponsaveis(responsaveis, responsavelRaw);
+    if (!(await validarResponsaveis(conn, responsaveisNormalizados))) {
+      return erro(res, 'Selecione apenas advogados ativos cadastrados ou freelancers cadastrados');
+    }
+    const suportaMultiplos = await tabelaResponsaveisDisponivel(conn);
+    if (!suportaMultiplos && responsaveisNormalizados.length > 1) {
+      return erro(res, 'Para selecionar mais de um responsável, execute primeiro o script SQL de atualização.');
+    }
+    const { responsavel_id, responsavel_freela_id } = parsarResponsavel(responsaveisNormalizados[0]);
 
     await conn.beginTransaction();
 
@@ -359,29 +539,12 @@ async function criar(req, res) {
     );
 
     const audienciaId = result.insertId;
+    if (suportaMultiplos) await gravarResponsaveis(conn, audienciaId, responsaveisNormalizados, req.usuario.id);
 
-    // Insere testemunhas — cada item: { pessoa_id, polo }
-    // Valida que nenhuma testemunha é parte do processo (autor ou réu)
+    // Insere testemunhas com a parte específica; a validação recíproca é centralizada.
     if (testemunhas.length > 0) {
-      const [autores] = await conn.execute(
-        `SELECT pessoa_id FROM tbltituloprocautor WHERE proc_id = ? AND tipo_pessoa = 'fisica'`, [processo_id]
-      );
-      const [reus] = await conn.execute(
-        `SELECT pessoa_id FROM tbltituloprocreu WHERE proc_id = ? AND tipo_pessoa = 'fisica'`, [processo_id]
-      );
-      const partesIds = new Set([
-        ...autores.map(a => Number(a.pessoa_id)),
-        ...reus.map(r => Number(r.pessoa_id)),
-      ]);
-
       for (const t of testemunhas) {
-        if (partesIds.has(Number(t.pessoa_id))) {
-          throw new Error('Uma ou mais testemunhas fazem parte do processo como autor ou réu');
-        }
-        await conn.execute(
-          'INSERT INTO audiencia_testemunhas (audiencia_id, pessoa_id, polo, criado_por) VALUES (?, ?, ?, ?)',
-          [audienciaId, t.pessoa_id, t.polo || 'autor', req.usuario.id]
-        );
+        await inserirTestemunha(conn, audienciaId, processo_id, t, req.usuario.id);
       }
     }
 
@@ -409,6 +572,7 @@ async function criar(req, res) {
     return sucesso(res, { id: audienciaId }, 'Audiência cadastrada com sucesso', 201);
   } catch (err) {
     await conn.rollback();
+    if (err.codigoValidacaoTestemunha) return erro(res, err.message, 422);
     if (erroDeHorarioDuplicado(err)) {
       return erro(res, 'Já existe uma audiência ativa neste processo, na mesma data e horário.', 409);
     }
@@ -425,11 +589,19 @@ async function atualizar(req, res) {
     const { id } = req.params;
     const {
       tipo_audiencia_id, data, hora, modalidade, vara_id,
-      plataforma_virtual, link_virtual, observacoes, responsavel_id: responsavelRaw,
+       plataforma_virtual, link_virtual, observacoes, responsavel_id: responsavelRaw, responsaveis,
       testemunhas = []
     } = req.body;
 
-    const { responsavel_id, responsavel_freela_id } = parsarResponsavel(responsavelRaw);
+    const responsaveisNormalizados = normalizarResponsaveis(responsaveis, responsavelRaw);
+    if (!(await validarResponsaveis(conn, responsaveisNormalizados))) {
+      return erro(res, 'Selecione apenas advogados ativos cadastrados ou freelancers cadastrados');
+    }
+    const suportaMultiplos = await tabelaResponsaveisDisponivel(conn);
+    if (!suportaMultiplos && responsaveisNormalizados.length > 1) {
+      return erro(res, 'Para selecionar mais de um responsável, execute primeiro o script SQL de atualização.');
+    }
+    const { responsavel_id, responsavel_freela_id } = parsarResponsavel(responsaveisNormalizados[0]);
 
     if (!tipo_audiencia_id || !data || !hora) {
       return erro(res, 'Tipo de audiência, data e hora são obrigatórios');
@@ -450,6 +622,15 @@ async function atualizar(req, res) {
     );
     if (duplicada) return erro(res, mensagemHorarioOcupado(duplicada, data, hora), 409);
 
+    const responsaveisAntes = suportaMultiplos
+      ? (await conn.execute(
+          `SELECT responsavel_id, responsavel_freela_id FROM audiencia_responsaveis
+           WHERE audiencia_id = ? ORDER BY id`, [id]
+        ))[0]
+      : (antes[0].responsavel_id || antes[0].responsavel_freela_id
+          ? [{ responsavel_id: antes[0].responsavel_id, responsavel_freela_id: antes[0].responsavel_freela_id }]
+          : []);
+
     await conn.beginTransaction();
 
     await conn.execute(
@@ -468,6 +649,7 @@ async function atualizar(req, res) {
         req.usuario.id, id
       ]
     );
+    if (suportaMultiplos) await gravarResponsaveis(conn, id, responsaveisNormalizados, req.usuario.id);
 
     // ---- Auditoria campo a campo ----
     // Valores já legíveis são comparados e gravados diretamente.
@@ -523,13 +705,10 @@ async function atualizar(req, res) {
 
     // Responsável — reconstrói "usuario:X"/"freela:X" do banco para comparar com o que veio do frontend,
     // depois resolve ambos para nome legível antes de gravar
-    const respAntesBruto = antes[0].responsavel_freela_id
-      ? `freela:${antes[0].responsavel_freela_id}`
-      : antes[0].responsavel_id ? `usuario:${antes[0].responsavel_id}` : '';
-    const respDepoisBruto = String(responsavelRaw ?? '');
-    if (respAntesBruto !== respDepoisBruto) {
-      const nomeAntes  = await resolverNomeResponsavel(respAntesBruto);
-      const nomeDepois = await resolverNomeResponsavel(respDepoisBruto);
+    const respAntesBrutos = responsaveisAntes.map(r => r.responsavel_id ? `usuario:${r.responsavel_id}` : `freela:${r.responsavel_freela_id}`);
+    if (respAntesBrutos.join('|') !== responsaveisNormalizados.join('|')) {
+      const nomeAntes  = (await Promise.all(respAntesBrutos.map(resolverNomeResponsavel))).filter(Boolean).join(', ');
+      const nomeDepois = (await Promise.all(responsaveisNormalizados.map(resolverNomeResponsavel))).filter(Boolean).join(', ');
       await conn.execute(
         `INSERT INTO auditoria_audiencia (audiencia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
          VALUES (?, 'responsavel_id', ?, ?, ?)`,
@@ -537,30 +716,13 @@ async function atualizar(req, res) {
       );
     }
 
-    // Atualiza testemunhas — remove todas e reinsere com polo
-    // Valida que nenhuma testemunha é parte do processo
+    // Registros antigos sem parte específica são preservados sem qualquer inferência.
     await conn.execute('DELETE FROM audiencia_testemunhas WHERE audiencia_id = ?', [id]);
     if (testemunhas.length > 0) {
-      const processoId = antes[0].processo_id;
-      const [autores] = await conn.execute(
-        `SELECT pessoa_id FROM tbltituloprocautor WHERE proc_id = ? AND tipo_pessoa = 'fisica'`, [processoId]
-      );
-      const [reus] = await conn.execute(
-        `SELECT pessoa_id FROM tbltituloprocreu WHERE proc_id = ? AND tipo_pessoa = 'fisica'`, [processoId]
-      );
-      const partesIds = new Set([
-        ...autores.map(a => Number(a.pessoa_id)),
-        ...reus.map(r => Number(r.pessoa_id)),
-      ]);
-
       for (const t of testemunhas) {
-        if (partesIds.has(Number(t.pessoa_id))) {
-          throw new Error('Uma ou mais testemunhas fazem parte do processo como autor ou réu');
-        }
-        await conn.execute(
-          'INSERT INTO audiencia_testemunhas (audiencia_id, pessoa_id, polo, criado_por) VALUES (?, ?, ?, ?)',
-          [id, t.pessoa_id, t.polo || 'autor', req.usuario.id]
-        );
+        if (t.parte_pessoa_id) await inserirTestemunha(conn, id, antes[0].processo_id, t, req.usuario.id, id);
+        else await conn.execute('INSERT INTO audiencia_testemunhas (audiencia_id, pessoa_id, parte_pessoa_id, polo, criado_por) VALUES (?, ?, NULL, ?, ?)',
+          [id, t.pessoa_id, t.polo || 'autor', req.usuario.id]);
       }
     }
 
@@ -581,6 +743,7 @@ async function atualizar(req, res) {
     return sucesso(res, null, 'Audiência atualizada com sucesso');
   } catch (err) {
     await conn.rollback();
+    if (err.codigoValidacaoTestemunha) return erro(res, err.message, 422);
     if (erroDeHorarioDuplicado(err)) {
       return erro(res, 'Já existe uma audiência ativa neste processo, na mesma data e horário.', 409);
     }
@@ -594,7 +757,7 @@ async function atualizar(req, res) {
 async function cancelar(req, res) {
   try {
     const { id } = req.params;
-    const { motivo } = req.body;
+    const { motivo, processo_id, tipo_audiencia_id, data, hora, modalidade, vara_id, plataforma_virtual, link_virtual, observacoes, responsavel_id: responsavelRaw } = req.body;
 
     // Verifica permissão no banco — não confia apenas no frontend
     const permitido = await temPermissaoBackend(req.usuario.id, req.usuario.nivel, 'audiencias', 'alterar');
@@ -640,41 +803,62 @@ async function cancelar(req, res) {
   }
 }
 
-// PUT /api/audiencias/:id/remarcar — Marca original como remarcada e cria nova audiência com os dados informados
+// PUT /api/audiencias/:id/remarcar — Cria a nova audiência e marca a anterior
+// como remarcada na mesma transação.
 async function remarcar(req, res) {
   const conn = await pool.getConnection();
+  let transacaoAberta = false;
   try {
     const { id } = req.params;
-    const { motivo, nova_data, nova_hora, nova_vara_id, nova_modalidade } = req.body;
+    const {
+      motivo, processo_id, tipo_audiencia_id, data, hora, modalidade, vara_id,
+      plataforma_virtual, link_virtual, observacoes, responsavel_id: responsavelRaw,
+      responsaveis, testemunhas = [], obs_auditoria,
+    } = req.body;
 
     // Verifica permissão no banco — não confia apenas no frontend
     const permitido = await temPermissaoBackend(req.usuario.id, req.usuario.nivel, 'audiencias', 'alterar');
     if (!permitido) return erro(res, 'Sem permissão para remarcar audiências', 403);
 
     if (!motivo?.trim()) return erro(res, 'Motivo da remarcação é obrigatório');
-    if (!nova_data)      return erro(res, 'Nova data é obrigatória');
-    if (!nova_hora)      return erro(res, 'Nova hora é obrigatória');
+    if (!processo_id || !tipo_audiencia_id || !data || !hora) return erro(res, 'Processo, tipo de audiência, data e hora são obrigatórios');
+    if (!(await tipoAudienciaAtivo(conn, tipo_audiencia_id))) return erro(res, 'Selecione um tipo de audiência válido e ativo');
+    const responsaveisNormalizados = normalizarResponsaveis(responsaveis, responsavelRaw);
+    if (!(await validarResponsaveis(conn, responsaveisNormalizados))) {
+      return erro(res, 'Selecione apenas advogados ativos cadastrados ou freelancers cadastrados');
+    }
+    const suportaMultiplos = await tabelaResponsaveisDisponivel(conn);
+    if (!suportaMultiplos && responsaveisNormalizados.length > 1) {
+      return erro(res, 'Para selecionar mais de um responsável, execute primeiro o script SQL de atualização.');
+    }
 
-    const [antes] = await pool.execute('SELECT * FROM audiencia WHERE id = ?', [id]);
+    const [antes] = await conn.execute('SELECT * FROM audiencia WHERE id = ?', [id]);
     if (!antes.length) return naoEncontrado(res, 'Audiência não encontrada');
     if (antes[0].status !== 'agendada' && antes[0].status !== 'adiada') {
       return erro(res, `Audiência com status "${antes[0].status}" não pode ser remarcada`);
     }
 
-    const orig = antes[0];
-    if (!orig.tipo_audiencia_id || !(await tipoAudienciaAtivo(conn, orig.tipo_audiencia_id))) {
-      return erro(res, 'Defina um tipo válido para a audiência antes de remarcá-la');
-    }
-    if (String(orig.data).slice(0, 10) === String(nova_data)
-        && String(orig.hora).slice(0, 5) === String(nova_hora).slice(0, 5)) {
-      return erro(res, 'Informe uma nova data ou um novo horário para remarcar a audiência');
-    }
-    const duplicada = await localizarAudienciaAtivaNoHorario(
-      conn, orig.processo_id, nova_data, nova_hora, id
-    );
-    if (duplicada) return erro(res, mensagemHorarioOcupado(duplicada, nova_data, nova_hora), 409);
+    const duplicada = await localizarAudienciaAtivaNoHorario(conn, processo_id, data, hora, id);
+    if (duplicada) return erro(res, mensagemHorarioOcupado(duplicada, data, hora), 409);
+    const { responsavel_id, responsavel_freela_id } = parsarResponsavel(responsaveisNormalizados[0]);
 
     await conn.beginTransaction();
+    transacaoAberta = true;
+
+    const [nova] = await conn.execute(
+      `INSERT INTO audiencia
+         (processo_id, tipo_audiencia_id, data, hora, modalidade, vara_id,
+          plataforma_virtual, link_virtual, observacoes, responsavel_id,
+          responsavel_freela_id, criado_por)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [processo_id, tipo_audiencia_id, data, hora, modalidade || 'presencial', vara_id || null,
+       plataforma_virtual || null, link_virtual || null, (observacoes || '').trim() || null,
+       responsavel_id, responsavel_freela_id, req.usuario.id]
+    );
+    const novaAudienciaId = nova.insertId;
+    if (suportaMultiplos) await gravarResponsaveis(conn, novaAudienciaId, responsaveisNormalizados, req.usuario.id);
+
+    for (const testemunha of testemunhas) await inserirTestemunha(conn, novaAudienciaId, processo_id, testemunha, req.usuario.id);
 
     // Marca a audiência original como remarcada
     await conn.execute(
@@ -688,50 +872,33 @@ async function remarcar(req, res) {
        VALUES (?, 'status', ?, 'remarcada', ?)`,
       [id, antes[0].status, req.usuario.id]
     );
-
-    // Cria a nova audiência preservando os dados operacionais da anterior. O vínculo
-    // publicacao_id já não é copiado e as observações também começam vazias: quando a
-    // audiência original nasceu de uma publicação, esse campo contém o texto da sugestão
-    // daquele evento antigo e não pode aparecer como origem da audiência remarcada.
-    const [result] = await conn.execute(
-      `INSERT INTO audiencia
-         (processo_id, tipo_audiencia_id, data, hora, modalidade, local, observacoes, vara_id,
-          plataforma_virtual, link_virtual, responsavel_id, responsavel_freela_id, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        orig.processo_id,
-        orig.tipo_audiencia_id,
-        nova_data,
-        nova_hora,
-        nova_modalidade || orig.modalidade,
-        orig.local,
-        null,
-        nova_vara_id !== undefined ? (nova_vara_id || null) : orig.vara_id,
-        orig.plataforma_virtual,
-        orig.link_virtual,
-        orig.responsavel_id,
-        orig.responsavel_freela_id,
-        req.usuario.id
-      ]
-    );
-
-    const novaId = result.insertId;
-
-    // Registra na auditoria da nova audiência que ela veio de uma remarcação
     await conn.execute(
       `INSERT INTO auditoria_audiencia (audiencia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
-       VALUES (?, 'criacao', null, ?, ?)`,
-      [novaId, `Criada por remarcação da audiência #${id}`, req.usuario.id]
+       VALUES (?, 'motivo_status', ?, ?, ?)`,
+      [id, antes[0].motivo_status || '', motivo.trim(), req.usuario.id]
     );
+    await conn.execute(
+      `INSERT INTO auditoria_audiencia (audiencia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
+       VALUES (?, 'cadastrado', null, 'Audiência criada por remarcação', ?)`,
+      [novaAudienciaId, req.usuario.id]
+    );
+    if (obs_auditoria) {
+      await conn.execute(
+        `INSERT INTO auditoria_audiencia (audiencia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
+         VALUES (?, 'criacao', null, ?, ?)`,
+        [novaAudienciaId, obs_auditoria, req.usuario.id]
+      );
+    }
+    await auditoria.registrar(req.usuario.id, 'audiencia', 'criar', novaAudienciaId, null, null, conn);
 
     await conn.commit();
-    // Remarcação: a antiga sai do Google e a nova (agendada) entra.
-    const seqRem = Math.floor(Date.now() / 1000);
-    sincronizarAudienciaGoogle(id,     { cancelar: true, sequence: seqRem });
-    sincronizarAudienciaGoogle(novaId, {});
-    return sucesso(res, { nova_audiencia_id: novaId }, 'Audiência remarcada e nova audiência criada com sucesso');
+    transacaoAberta = false;
+    sincronizarAudienciaGoogle(id, { cancelar: true, sequence: Math.floor(Date.now() / 1000) });
+    sincronizarAudienciaGoogle(novaAudienciaId, {});
+    return sucesso(res, { id: novaAudienciaId }, 'Audiência remarcada com sucesso');
   } catch (err) {
-    await conn.rollback();
+    if (transacaoAberta) await conn.rollback();
+    if (err.codigoValidacaoTestemunha) return erro(res, err.message, 422);
     if (erroDeHorarioDuplicado(err)) {
       return erro(res, 'Já existe uma audiência ativa neste processo, na mesma data e horário.', 409);
     }
@@ -741,14 +908,155 @@ async function remarcar(req, res) {
   }
 }
 
+function erroDaAta(mensagem, status = 400) {
+  const erroValidacao = new Error(mensagem);
+  erroValidacao.erroDaAta = true;
+  erroValidacao.status = status;
+  return erroValidacao;
+}
+
+// Cria a audiência que nasceu da ATA usando a conexão transacional já aberta.
+// O processo vem exclusivamente da audiência original: o cliente não pode trocá-lo.
+async function criarAudienciaDaAta(conn, dados, processoId, usuarioId) {
+  const {
+    tipo_audiencia_id, data, hora, modalidade, vara_id,
+    plataforma_virtual, link_virtual, observacoes,
+    responsavel_id: responsavelRaw, responsaveis, testemunhas = [], obs_auditoria,
+  } = dados || {};
+
+  if (!tipo_audiencia_id || !data || !hora) {
+    throw erroDaAta('Dados da nova audiência incompletos. Informe tipo, data e horário.');
+  }
+  if (!(await tipoAudienciaAtivo(conn, tipo_audiencia_id))) {
+    throw erroDaAta('Selecione um tipo de audiência válido e ativo para a nova audiência.');
+  }
+  const duplicada = await localizarAudienciaAtivaNoHorario(conn, processoId, data, hora);
+  if (duplicada) throw erroDaAta(mensagemHorarioOcupado(duplicada, data, hora), 409);
+
+  const responsaveisNormalizados = normalizarResponsaveis(responsaveis, responsavelRaw);
+  if (!(await validarResponsaveis(conn, responsaveisNormalizados))) {
+    throw erroDaAta('Selecione apenas advogados ativos cadastrados ou freelancers cadastrados.');
+  }
+  const suportaMultiplos = await tabelaResponsaveisDisponivel(conn);
+  if (!suportaMultiplos && responsaveisNormalizados.length > 1) {
+    throw erroDaAta('Para selecionar mais de um responsável, execute primeiro o script SQL de atualização.');
+  }
+  const { responsavel_id, responsavel_freela_id } = parsarResponsavel(responsaveisNormalizados[0]);
+  const [result] = await conn.execute(
+    `INSERT INTO audiencia
+       (processo_id, tipo_audiencia_id, data, hora, modalidade, vara_id,
+        plataforma_virtual, link_virtual, observacoes, responsavel_id,
+        responsavel_freela_id, criado_por, publicacao_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, null)`,
+    [processoId, tipo_audiencia_id, data, hora, modalidade || 'presencial', vara_id || null,
+      plataforma_virtual || null, link_virtual || null,
+      (observacoes && observacoes.trim()) ? observacoes.trim() : null,
+      responsavel_id, responsavel_freela_id, usuarioId]
+  );
+  const audienciaId = result.insertId;
+  if (suportaMultiplos) await gravarResponsaveis(conn, audienciaId, responsaveisNormalizados, usuarioId);
+
+  if (testemunhas.length > 0) {
+    for (const t of testemunhas) {
+      try { await inserirTestemunha(conn, audienciaId, processoId, t, usuarioId); }
+      catch (err) { throw erroDaAta(err.message); }
+    }
+  }
+  await conn.execute(
+    `INSERT INTO auditoria_audiencia (audiencia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
+     VALUES (?, 'cadastrado', null, 'Audiência cadastrada a partir de ata', ?)`, [audienciaId, usuarioId]
+  );
+  if (obs_auditoria) {
+    await conn.execute(
+      `INSERT INTO auditoria_audiencia (audiencia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
+       VALUES (?, 'criacao', null, ?, ?)`, [audienciaId, obs_auditoria, usuarioId]
+    );
+  }
+  await auditoria.registrar(usuarioId, 'audiencia', 'criar', audienciaId, null, null, conn);
+  return audienciaId;
+}
+
+async function criarPericiaDaAta(conn, dados, processoId, usuarioId) {
+  const aguardandoData = dados.status === 'aguardando_data' || !dados.data;
+  if (!dados.tipo_pericia_id) throw erroDaAta('Informe o tipo de cada perícia da ata.');
+  if (!aguardandoData && !dados.data) throw erroDaAta('Informe a data da perícia ou marque que ela está aguardando data.');
+  const locaisReus = Array.isArray(dados.locais_reus) ? dados.locais_reus : [];
+  const temLocalManual = [dados.local, dados.cep, dados.logradouro, dados.numero, dados.bairro, dados.cidade, dados.estado]
+    .some(valor => valor && String(valor).trim());
+  if (!aguardandoData && !temLocalManual && locaisReus.length === 0) {
+    throw erroDaAta('Informe pelo menos um local para a perícia que já possui data.');
+  }
+  const [result] = await conn.execute(
+    `INSERT INTO pericia
+      (processo_id, tipo_pericia_id, data, hora, local, cep, logradouro, numero, complemento, bairro, cidade, estado,
+       perito_tipo, perito_id, assistente_tecnico_id, responsavel_id, responsavel_freela_id, status, criado_por)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      processoId, dados.tipo_pericia_id, aguardandoData ? null : dados.data, aguardandoData ? null : (dados.hora || null),
+      aguardandoData ? null : (dados.local || null), aguardandoData ? null : (dados.cep || null),
+      aguardandoData ? null : (dados.logradouro || null), aguardandoData ? null : (dados.numero || null),
+      aguardandoData ? null : (dados.complemento || null), aguardandoData ? null : (dados.bairro || null),
+      aguardandoData ? null : (dados.cidade || null), aguardandoData ? null : (dados.estado || null),
+      dados.perito_id ? 'fisica' : null, dados.perito_id || null, dados.assistente_tecnico_id || null,
+      dados.responsavel_id || null, dados.responsavel_freela_id || null,
+      aguardandoData ? 'aguardando_data' : 'agendada', usuarioId,
+    ]
+  );
+  for (const local of locaisReus) {
+    if (local?.tipo_pessoa && local?.pessoa_id) {
+      await conn.execute('INSERT INTO pericia_local_reu (pericia_id, tipo_pessoa, pessoa_id) VALUES (?, ?, ?)',
+        [result.insertId, local.tipo_pessoa, local.pessoa_id]);
+    }
+  }
+  await conn.execute(
+    `INSERT INTO auditoria_pericia (pericia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
+     VALUES (?, 'cadastrado', NULL, ?, ?)`,
+    [result.insertId, aguardandoData ? 'Perícia cadastrada aguardando data pela ata' : 'Perícia cadastrada pela ata', usuarioId]
+  );
+  await auditoria.registrar(usuarioId, 'pericia', 'criar', result.insertId, null, null, conn);
+  return { id: result.insertId, agendada: !aguardandoData, enviarEmailPerito: !!dados.enviar_email_perito, modeloEmailPeritoId: dados.modelo_email_perito_id || null };
+}
+
 // POST /api/audiencias/:id/ata — Registra a ata de uma audiência
 async function registrarAta(req, res) {
   const { id } = req.params;
   const { houve_acordo, valor_acordo, parcelas, valor_parcela,
-          data_primeiro_pagamento, nova_audiencia, observacoes,
+          data_primeiro_pagamento, nova_audiencia, observacoes, resultado_texto,
           teve_prazo, teve_pericia, teve_alvara, teve_desistencia, teve_retorno_autos,
-          advogado_acompanhante,
-          prazos = [], tarefas = [] } = req.body;
+          advogado_acompanhante, nova_audiencia_dados,
+          prazos = [], pericias = [], tarefas = [],
+            motivo_desistencia, comentario_retorno_autos, testemunhas = [], teve_testemunha } = req.body;
+
+  // A ATA só pode ser registrada depois do horário agendado. Esta checagem no
+  // servidor impede o registro antecipado mesmo por uma chamada direta à API.
+  try {
+    const [audiencias] = await pool.execute('SELECT data, hora FROM audiencia WHERE id = ?', [id]);
+    if (!audiencias.length) return naoEncontrado(res, 'Audiência não encontrada');
+    if (!audienciaJaPassou(audiencias[0].data, audiencias[0].hora)) {
+      return erro(res, 'A ata só pode ser registrada após a data e o horário da audiência.');
+    }
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+
+  // A ATA precisa registrar ao menos um fato da audiência. A validação também
+  // fica no servidor para impedir que uma chamada fora da tela gere uma ATA vazia.
+  // Testemunhas complementam a ata, mas sozinhas não caracterizam um resultado.
+  // Por isso não entram na regra do item mínimo obrigatório.
+  const temItemSelecionado = [teve_prazo, teve_pericia, houve_acordo, nova_audiencia,
+    teve_alvara, teve_desistencia, teve_retorno_autos]
+    .some(valor => valor === true || Number(valor) === 1);
+  if (!temItemSelecionado) {
+    return erro(res, 'Selecione ao menos um item que ocorreu na audiência antes de registrar a ata.');
+  }
+  if (teve_desistencia && !String(motivo_desistencia || '').trim()) {
+    return erro(res, 'Informe o motivo da desistência da ação.');
+  }
+  if (teve_testemunha && !Array.isArray(testemunhas)) return erro(res, 'Informe as testemunhas da ata corretamente.');
+  if (teve_testemunha && testemunhas.length === 0) return erro(res, 'Cadastre ao menos uma testemunha ou desmarque essa opção.');
+  if (comentario_retorno_autos != null && !String(comentario_retorno_autos).trim()) {
+    return erro(res, 'Informe o comentário sobre o retorno aos autos ou escolha não registrá-lo.');
+  }
 
   try {
     const [ataExistente] = await pool.execute(
@@ -761,15 +1069,10 @@ async function registrarAta(req, res) {
     return erroInterno(res, err);
   }
 
-  // Preferência do escritório: exigir advogado acompanhante na ata? (blindado: se a coluna ainda
-  // não existir, não bloqueia). "ninguem" é uma escolha válida (a parte compareceu sozinha).
-  try {
-    const [cfg] = await pool.execute('SELECT ata_advogado_obrigatorio FROM configuracoes_escritorio LIMIT 1');
-    const obrig = cfg.length ? (cfg[0].ata_advogado_obrigatorio || 0) : 0;
-    if (obrig && !advogado_acompanhante) {
-      return erro(res, 'Informe o advogado que acompanhou a audiência (ou selecione "Ninguém").');
-    }
-  } catch { /* coluna ainda não existe — não bloqueia */ }
+  // A ATA exige uma escolha explícita. "ninguem" é válido quando a parte compareceu sozinha.
+  if (!advogado_acompanhante) {
+    return erro(res, 'Informe o advogado que acompanhou a audiência (ou selecione "Ninguém").');
+  }
 
   // Advogado acompanhante: "usuario:X" | "freela:X" | "ninguem" | vazio (não informado).
   let advogado_id = null, advogado_freela_id = null, sem_advogado = 0;
@@ -799,7 +1102,7 @@ async function registrarAta(req, res) {
           advogado_id, advogado_freela_id, sem_advogado, criado_por)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        id, statusFinal,
+        id, String(resultado_texto || '').trim() || null,
         houve_acordo ? 1 : 0,
         valor_acordo || null, parcelas || null, valor_parcela || null,
         data_primeiro_pagamento || null, nova_audiencia ? 1 : 0,
@@ -811,40 +1114,106 @@ async function registrarAta(req, res) {
       ]
     );
 
+    // Registro próprio dos efeitos desta ATA. Ele guarda o vínculo e uma descrição
+    // legível sem alterar as rotinas compartilhadas de prazo, perícia ou tarefa.
+    const registrarItemAta = async (tipo, registroId, titulo, descricao = null, dataReferencia = null) => {
+      await conn.execute(
+        `INSERT INTO ata_audiencia_itens
+           (ata_audiencia_id, tipo, registro_id, titulo, descricao, data_referencia)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [result.insertId, tipo, registroId || null, titulo, descricao || null, dataReferencia || null]
+      );
+    };
+
     const [aud] = await conn.execute('SELECT * FROM audiencia WHERE id = ?', [id]);
+    if (!aud.length) throw erroDaAta('Audiência não encontrada.', 404);
     const orig = aud[0] || {};
     const processoId = orig.processo_id;
+    const [processo] = await conn.execute('SELECT pasta_id FROM tblproc WHERE id = ?', [processoId]);
+    if (!processo.length) throw erroDaAta('Processo da audiência não encontrado.', 404);
+    const pastaId = processo[0].pasta_id || null;
+
+    for (const testemunha of testemunhas) {
+      try {
+        await inserirTestemunha(conn, id, processoId, testemunha, req.usuario.id, id);
+        const [pessoas] = await conn.execute('SELECT nome FROM pessoas_fisicas WHERE id IN (?, ?)', [testemunha.pessoa_id, testemunha.parte_pessoa_id]);
+        const nomeTestemunha = pessoas.find(p => Number(p.id) === Number(testemunha.pessoa_id))?.nome || 'Testemunha';
+        const nomeParte = pessoas.find(p => Number(p.id) === Number(testemunha.parte_pessoa_id))?.nome || 'Parte';
+        await registrarItemAta('testemunha', null, `${nomeTestemunha} — testemunha de ${nomeParte}`);
+      } catch (err) { throw erroDaAta(err.message); }
+    }
 
     // (O acordo, quando há, é criado pelo modal completo do Financeiro — parcelas/honorário/parceria.
     //  Por isso NÃO lançamos mais nada na conta corrente aqui, para não duplicar o Financeiro.)
 
     for (const p of prazos) {
-      if (p.descricao && p.data_inicio) {
-        const { calcularVencimento } = require('../services/calendarioService');
-        const vencimento = p.quantidade
-          ? await calcularVencimento(p.data_inicio, p.quantidade, p.tipo_dias || 'uteis')
-          : p.data_vencimento;
-        await conn.execute(
-          `INSERT INTO prazos_processo (processo_id, subtipo_id, descricao, data_inicio,
-            quantidade, tipo_dias, data_vencimento, delegado_para, criado_por)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [processoId, p.subtipo_id || null, p.descricao, p.data_inicio,
-           p.quantidade || null, p.tipo_dias || 'uteis', vencimento,
-           p.delegado_para || null, req.usuario.id]
-        );
+      const dataFinalInformada = p.data_final || p.data_vencimento;
+      if (!p.data_inicio || !p.subtipo_id || (!p.quantidade && !dataFinalInformada)) {
+        throw erroDaAta('Cada prazo da ata precisa de data inicial, tipo, subtipo e data final ou quantidade de dias.');
       }
+      const { calcularVencimento } = require('../services/calendarioService');
+      const vencimento = p.quantidade
+        ? await calcularVencimento(p.data_inicio, p.quantidade, p.tipo_dias || 'uteis')
+        : dataFinalInformada;
+      const [prazoResult] = await conn.execute(
+        `INSERT INTO prazos_processo (processo_id, subtipo_id, descricao, data_inicio,
+          quantidade, tipo_dias, data_vencimento, delegado_para, criado_por)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [processoId, p.subtipo_id, p.descricao || null, p.data_inicio,
+         p.quantidade || null, p.tipo_dias || 'uteis', vencimento,
+         p.delegado_para || null, req.usuario.id]
+      );
+      await auditoria.registrar(req.usuario.id, 'prazos_processo', 'criar', prazoResult.insertId, null, null, conn);
+      await registrarItemAta('prazo', prazoResult.insertId, p.descricao || 'Prazo', null, vencimento);
     }
 
+    // A nova audiência é só um rascunho no navegador até este momento. Ao salvar a ata,
+    // ela nasce no mesmo commit e sempre fica vinculada ao processo da audiência original.
+    let novaAudienciaId = null;
+    if (nova_audiencia && !nova_audiencia_dados) {
+      throw erroDaAta('Cadastre os dados da nova audiência antes de registrar a ata.');
+    }
+    if (nova_audiencia_dados) {
+      novaAudienciaId = await criarAudienciaDaAta(conn, nova_audiencia_dados, processoId, req.usuario.id);
+      await registrarItemAta('nova_audiencia', novaAudienciaId, 'Nova audiência', null, nova_audiencia_dados.data || null);
+    }
+
+    const periciasCriadas = [];
+    for (const pericia of pericias) {
+      const periciaCriada = await criarPericiaDaAta(conn, pericia, processoId, req.usuario.id);
+      periciasCriadas.push(periciaCriada);
+      await registrarItemAta('pericia', periciaCriada.id, pericia.tipo_pericia_nome || 'Perícia', pericia.perito_nome || null, pericia.data || null);
+    }
+
+    if (tarefas.length && !(await temPermissaoBackend(req.usuario.id, req.usuario.nivel, 'tarefas', 'cadastrar'))) {
+      throw erroDaAta('Você não possui permissão para cadastrar tarefas. Remova a tarefa da ata ou solicite essa permissão.');
+    }
     for (const t of tarefas) {
-      if (t.titulo) {
-        await conn.execute(
-          `INSERT INTO tarefas (titulo, descricao, prioridade, processo_id, atribuida_para,
-            data_vencimento, criado_por)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [t.titulo, t.descricao || null, t.prioridade || 'normal',
-           processoId, t.atribuida_para || null, t.data_vencimento || null, req.usuario.id]
-        );
-      }
+      if (!t?.titulo?.trim()) throw erroDaAta('Informe o título de cada tarefa da ata.');
+      if (!t.data_vencimento) throw erroDaAta('Informe o vencimento de cada tarefa da ata.');
+      const [tarefaResult] = await conn.execute(
+        `INSERT INTO tarefas
+           (titulo, descricao, prioridade, processo_id, pasta_id, prazo_id,
+            atribuida_para, data_vencimento, criado_por, publicacao_id, notificar_conclusao)
+         VALUES (?, ?, ?, ?, ?, null, ?, ?, ?, null, ?)`,
+        [t.titulo.trim(), t.descricao || null, t.prioridade || 'normal', processoId, pastaId,
+          t.atribuida_para || null, t.data_vencimento, req.usuario.id,
+          t.notificar_conclusao && t.atribuida_para ? 1 : 0]
+      );
+      await auditoria.registrar(req.usuario.id, 'tarefas', 'criar', tarefaResult.insertId, null, null, conn);
+      await registrarItemAta(t.origem_ata === 'desistencia' ? 'tarefa_desistencia' : 'tarefa_alvara',
+        tarefaResult.insertId, t.titulo.trim(), t.descricao || null, t.data_vencimento);
+    }
+
+    if (houve_acordo) {
+      await registrarItemAta('acordo', null, 'Acordo registrado no Financeiro');
+    }
+    if (teve_desistencia) {
+      await registrarItemAta('desistencia', null, 'Desistência da ação', String(motivo_desistencia).trim());
+    }
+    if (teve_retorno_autos) {
+      await registrarItemAta('retorno_autos', null, 'Retorno aos autos',
+        comentario_retorno_autos != null ? String(comentario_retorno_autos).trim() : null);
     }
 
     // Atualiza o status da audiência (a ata sempre conclui a audiência: Realizada ou Acordo).
@@ -861,9 +1230,30 @@ async function registrarAta(req, res) {
     // Auditoria na MESMA transação (tudo ou nada): antes do commit, com conn
     await auditoria.registrar(req.usuario.id, 'ata_audiencia', 'criar', result.insertId, null, null, conn);
     await conn.commit();
+    if (novaAudienciaId) sincronizarAudienciaGoogle(novaAudienciaId, {});
+    // Comunicação externa é feita somente após o commit: nenhuma falha de SMTP pode deixar a ATA parcialmente salva.
+    for (const pericia of periciasCriadas) {
+      if (pericia.enviarEmailPerito && pericia.modeloEmailPeritoId) {
+        enviarEmailPeritoPericia(pericia.id, pericia.modeloEmailPeritoId, req.usuario.id)
+          .catch(err => console.error('Falha ao enviar e-mail ao perito da ATA:', err.message));
+      }
+      if (pericia.agendada) {
+        sincronizarPericiaDaAtaGoogle(pericia.id);
+        enviarComunicadoPericia(pericia.id, 'agendada', req.usuario.id)
+          .catch(err => console.error('Falha ao enviar comunicado ao cliente da perícia:', err.message));
+      }
+    }
     return sucesso(res, { id: result.insertId }, 'Ata registrada com sucesso', 201);
   } catch (err) {
     await conn.rollback();
+    if (err.erroDaAta) return erro(res, err.message, err.status || 400);
+    if (err.code === 'ER_NO_SUCH_TABLE' && String(err.message || '').includes('ata_audiencia_itens')) {
+      return erro(res, 'A atualização de detalhes da ATA ainda não foi aplicada no banco. Execute o script 2026-09-13_itens_detalhes_ata.sql antes de registrar uma nova ATA.', 409);
+    }
+    if (err.code === 'CALENDARIO_INSUFICIENTE' || err.code === 'CALENDARIO_QUANTIDADE_INVALIDA') {
+      return erro(res, err.message, 422);
+    }
+    if (erroDeHorarioDuplicado(err)) return erro(res, 'Já existe uma audiência ativa neste processo, na mesma data e horário.', 409);
     return erroInterno(res, err);
   } finally {
     conn.release();
@@ -917,29 +1307,17 @@ async function buscarPartesProcesso(req, res) {
 
 // POST /api/audiencias/:id/testemunhas — Adiciona testemunha à audiência
 async function adicionarTestemunha(req, res) {
+  const conn = await pool.getConnection();
   try {
     const { id } = req.params;
-    const { pessoa_id, polo } = req.body;
+    const { pessoa_id, parte_pessoa_id } = req.body;
 
     if (!pessoa_id) return erro(res, 'pessoa_id é obrigatório');
-    if (!['autor', 'reu'].includes(polo)) return erro(res, 'polo deve ser "autor" ou "reu"');
+    if (!parte_pessoa_id) return erro(res, 'Informe a pessoa para quem a testemunha prestará depoimento');
 
     // Verifica se a audiência existe
     const [aud] = await pool.execute('SELECT processo_id FROM audiencia WHERE id = ?', [id]);
     if (!aud.length) return naoEncontrado(res, 'Audiência não encontrada');
-
-    // Verifica se a pessoa é parte do processo
-    const [autores] = await pool.execute(
-      `SELECT pessoa_id FROM tbltituloprocautor WHERE proc_id = ? AND tipo_pessoa = 'fisica' AND pessoa_id = ?`,
-      [aud[0].processo_id, pessoa_id]
-    );
-    const [reus] = await pool.execute(
-      `SELECT pessoa_id FROM tbltituloprocreu WHERE proc_id = ? AND tipo_pessoa = 'fisica' AND pessoa_id = ?`,
-      [aud[0].processo_id, pessoa_id]
-    );
-    if (autores.length || reus.length) {
-      return erro(res, 'Esta pessoa é parte do processo e não pode ser testemunha');
-    }
 
     // Verifica duplicata
     const [dup] = await pool.execute(
@@ -947,13 +1325,16 @@ async function adicionarTestemunha(req, res) {
     );
     if (dup.length) return erro(res, 'Esta pessoa já é testemunha desta audiência');
 
-    const [result] = await pool.execute(
-      'INSERT INTO audiencia_testemunhas (audiencia_id, pessoa_id, polo, criado_por) VALUES (?, ?, ?, ?)',
-      [id, pessoa_id, polo, req.usuario.id]
-    );
-    return sucesso(res, { id: result.insertId }, 'Testemunha adicionada com sucesso', 201);
+    await conn.beginTransaction();
+    await inserirTestemunha(conn, id, aud[0].processo_id, { pessoa_id, parte_pessoa_id }, req.usuario.id, id);
+    const [result] = await conn.execute('SELECT LAST_INSERT_ID() AS id');
+    await conn.commit();
+    return sucesso(res, { id: result[0].id }, 'Testemunha adicionada com sucesso', 201);
   } catch (err) {
-    return erroInterno(res, err);
+    await conn.rollback();
+    return erro(res, err.message || 'Não foi possível cadastrar a testemunha');
+  } finally {
+    conn.release();
   }
 }
 
@@ -961,18 +1342,20 @@ async function adicionarTestemunha(req, res) {
 async function editarTestemunha(req, res) {
   try {
     const { id, testId } = req.params;
-    const { polo } = req.body;
-
-    if (!['autor', 'reu'].includes(polo)) return erro(res, 'polo deve ser "autor" ou "reu"');
+    const { parte_pessoa_id } = req.body;
 
     const [rows] = await pool.execute(
       'SELECT id FROM audiencia_testemunhas WHERE id = ? AND audiencia_id = ?', [testId, id]
     );
     if (!rows.length) return naoEncontrado(res, 'Testemunha não encontrada');
 
-    await pool.execute('UPDATE audiencia_testemunhas SET polo = ? WHERE id = ?', [polo, testId]);
-    return sucesso(res, null, 'Polo atualizado com sucesso');
+    if (!parte_pessoa_id) return erro(res, 'Informe a pessoa para quem a testemunha prestará depoimento');
+    const [dados] = await pool.execute(`SELECT at.pessoa_id, a.processo_id FROM audiencia_testemunhas at JOIN audiencia a ON a.id=at.audiencia_id WHERE at.id=?`, [testId]);
+    const vinculo = await validarVinculoTestemunha(pool, dados[0].processo_id, dados[0].pessoa_id, parte_pessoa_id, id);
+    await pool.execute('UPDATE audiencia_testemunhas SET parte_pessoa_id = ?, polo = ? WHERE id = ?', [parte_pessoa_id, vinculo.polo, testId]);
+    return sucesso(res, null, 'Vínculo da testemunha atualizado com sucesso');
   } catch (err) {
+    if (err.codigoValidacaoTestemunha) return erro(res, err.message, 422);
     return erroInterno(res, err);
   }
 }
@@ -1142,6 +1525,44 @@ async function buscarHistorico(req, res) {
   }
 }
 
+// GET /api/audiencias/:id/detalhes-ata — consulta operacional da ATA, separada do histórico técnico.
+async function buscarDetalhesAta(req, res) {
+  try {
+    const { id } = req.params;
+    const [atas] = await pool.execute(
+      `SELECT aa.id, aa.resultado, aa.observacoes, aa.criado_em,
+              aa.houve_acordo, aa.nova_audiencia, aa.teve_prazo, aa.teve_pericia,
+              aa.teve_alvara, aa.teve_desistencia, aa.teve_retorno_autos,
+              u.nome AS criado_por_nome,
+              COALESCE(ua.nome, af.nome, CASE WHEN aa.sem_advogado = 1 THEN 'Ninguém (a parte compareceu sozinha)' END) AS advogado_nome,
+              a.data AS audiencia_data, a.hora AS audiencia_hora,
+              pr.numProc AS processo_numero, pa.numPasta AS pasta_numero
+         FROM ata_audiencia aa
+         JOIN audiencia a ON a.id = aa.audiencia_id
+         JOIN tblproc pr ON pr.id = a.processo_id
+         JOIN tblpasta pa ON pa.id = pr.pasta_id
+         LEFT JOIN usuarios u ON u.id = aa.criado_por
+         LEFT JOIN usuarios ua ON ua.id = aa.advogado_id
+         LEFT JOIN advogados_freela af ON af.id = aa.advogado_freela_id
+        WHERE aa.audiencia_id = ?`,
+      [id]
+    );
+    if (!atas.length) return naoEncontrado(res, 'Esta audiência ainda não possui ata registrada.');
+    const [itens] = await pool.execute(
+      `SELECT id, tipo, registro_id, titulo, descricao, data_referencia, criado_em
+         FROM ata_audiencia_itens
+        WHERE ata_audiencia_id = ?
+        ORDER BY id`, [atas[0].id]
+    );
+    return sucesso(res, { ata: atas[0], itens });
+  } catch (err) {
+    if (err.code === 'ER_NO_SUCH_TABLE' && String(err.message || '').includes('ata_audiencia_itens')) {
+      return erro(res, 'A atualização de detalhes da ATA ainda não foi aplicada no banco. Execute o script 2026-09-13_itens_detalhes_ata.sql.', 409);
+    }
+    return erroInterno(res, err);
+  }
+}
+
 // DELETE /api/audiencias/tipos/:id
 async function excluirTipo(req, res) {
   try {
@@ -1283,7 +1704,7 @@ module.exports = {
   listarAdvogados,
   listar, buscar, criar, atualizar, excluir, cancelar, remarcar,
   registrarAta, marcarAtaImpressa, reverterStatus,
-  buscarHistorico,
+  buscarHistorico, buscarDetalhesAta,
   buscarPartesProcesso,
   adicionarTestemunha, editarTestemunha, excluirTestemunha,
   buscarTipos, criarTipo, atualizarTipo, excluirTipo,

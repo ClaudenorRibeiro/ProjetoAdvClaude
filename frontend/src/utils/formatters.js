@@ -21,6 +21,20 @@ export function hojeLocal() {
   return new Date().toLocaleDateString('sv-SE', { timeZone: FUSO_BRASIL });
 }
 
+// Indica se uma audiência já terminou de começar no horário de Brasília.
+// Enquanto o instante marcado ainda não passou (inclusive no minuto exato),
+// a ata não pode ser registrada.
+export function audienciaJaPassou(data, hora) {
+  const dataAudiencia = String(data || '').slice(0, 10);
+  const horaAudiencia = String(hora || '').slice(0, 5);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataAudiencia) || !/^\d{2}:\d{2}$/.test(horaAudiencia)) return false;
+
+  const agora = new Date();
+  const dataAgora = agora.toLocaleDateString('sv-SE', { timeZone: FUSO_BRASIL });
+  const horaAgora = agora.toLocaleTimeString('en-GB', { timeZone: FUSO_BRASIL, hour12: false }).slice(0, 5);
+  return `${dataAudiencia} ${horaAudiencia}` < `${dataAgora} ${horaAgora}`;
+}
+
 // Formata data ISO (YYYY-MM-DD) para o padrão brasileiro adotado pelo sistema: DD/MM/YYYY.
 export function formatarData(data) {
   if (!data) return '—';

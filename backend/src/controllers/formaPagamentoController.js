@@ -33,7 +33,9 @@ async function criar(req, res) {
   try {
     const { nome } = req.body;
     if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
-    // Evita nome duplicado entre as formas ATIVAS (regra de negócio fica no app, não no banco)
+    // Confere ANTES de gravar, só para dar a mensagem cedo (evita a viagem ao banco
+    // no caso comum). A trava que garante isso de verdade — mesmo com duas gravações
+    // simultâneas — é o índice único (nome, ativo) no banco; ver catch abaixo.
     const [existe] = await pool.execute(
       'SELECT id FROM forma_pagamento WHERE nome = ? AND ativo = 1 LIMIT 1', [nome.trim()]
     );
@@ -41,6 +43,7 @@ async function criar(req, res) {
     const [r] = await pool.execute('INSERT INTO forma_pagamento (nome) VALUES (?)', [nome.trim()]);
     return sucesso(res, { id: r.insertId }, 'Forma de pagamento criada', 201);
   } catch (e) {
+    if (e.code === 'ER_DUP_ENTRY') return erro(res, 'Já existe uma forma de pagamento com esse nome');
     return erroInterno(res, e);
   }
 }
@@ -51,7 +54,7 @@ async function atualizar(req, res) {
     const { id } = req.params;
     const { nome } = req.body;
     if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
-    // Duplicidade ignorando o próprio registro
+    // Duplicidade ignorando o próprio registro (mesma observação do criar acima)
     const [existe] = await pool.execute(
       'SELECT id FROM forma_pagamento WHERE nome = ? AND ativo = 1 AND id <> ? LIMIT 1', [nome.trim(), id]
     );
@@ -59,6 +62,7 @@ async function atualizar(req, res) {
     await pool.execute('UPDATE forma_pagamento SET nome = ? WHERE id = ?', [nome.trim(), id]);
     return sucesso(res, null, 'Forma de pagamento atualizada');
   } catch (e) {
+    if (e.code === 'ER_DUP_ENTRY') return erro(res, 'Já existe uma forma de pagamento com esse nome');
     return erroInterno(res, e);
   }
 }

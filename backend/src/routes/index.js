@@ -81,6 +81,7 @@ router.put('/auth/cor-linha-lida',     autenticar, authCtrl.salvarCorLinhaLida);
 router.put('/auth/google-agenda',      autenticar, authCtrl.salvarGoogleAgenda);
 router.put('/auth/publicacoes-escopo', autenticar, authCtrl.salvarPublicacoesEscopo);
 router.get('/calendario/dia-util',     autenticar, configuracaoCtrl.verificarDiaUtil);
+router.get('/calendario/periodo-util', autenticar, configuracaoCtrl.calcularPeriodoUtil);
 
 // --- AGENDA: compromissos pessoais/avulsos (cada usuário gerencia os seus) ---
 router.get('/agenda/usuarios',                autenticar, agendaCompromissoCtrl.listarUsuariosAtivos);
@@ -225,6 +226,7 @@ router.delete('/audiencias/freelas/:id',     autenticar, verificarPermissao('aud
 router.get('/audiencias',                    autenticar, verificarPermissao('audiencias','visualizar'), audienciasCtrl.listar);
 router.get('/audiencias/:id',                autenticar, verificarPermissao('audiencias','visualizar'), audienciasCtrl.buscar);
 router.get('/audiencias/:id/historico',      autenticar, verificarPermissao('audiencias','visualizar'), audienciasCtrl.buscarHistorico);
+router.get('/audiencias/:id/detalhes-ata',   autenticar, verificarPermissao('audiencias','visualizar'), audienciasCtrl.buscarDetalhesAta);
 router.post('/audiencias',                   autenticar, verificarPermissao('audiencias','cadastrar'),  audienciasCtrl.criar);
 router.put('/audiencias/:id',                autenticar, verificarPermissao('audiencias','alterar'),    audienciasCtrl.atualizar);
 router.delete('/audiencias/:id',             autenticar, verificarPermissao('audiencias','excluir'),    audienciasCtrl.excluir);
@@ -267,11 +269,12 @@ router.put('/financeiro/parcela/:id/repasse',              autenticar, verificar
 router.put('/financeiro/parcela/:id/repasse/desfazer',     autenticar, verificarPermissao('financeiro','alterar'),    financeiroCtrl.desfazerRepasse);
 router.get('/financeiro/parcela/:id/historico',            autenticar, verificarPermissao('financeiro','visualizar'), financeiroCtrl.buscarHistoricoParcela);
 
-// Formas de pagamento — cadastro no menu Controle (admin); a lista também alimenta o select do recebimento
+// Formas de pagamento — cadastro no menu Controle (admin); a lista também alimenta o select do recebimento.
+// Escrever (criar/editar/excluir) é só admin — mesma trava da tela, não a permissão comum do Financeiro.
 router.get('/financeiro/formas-pagamento',        autenticar, verificarPermissao('financeiro','visualizar'), formaPagamentoCtrl.listar);
-router.post('/financeiro/formas-pagamento',       autenticar, verificarPermissao('financeiro','cadastrar'),  formaPagamentoCtrl.criar);
-router.put('/financeiro/formas-pagamento/:id',    autenticar, verificarPermissao('financeiro','alterar'),    formaPagamentoCtrl.atualizar);
-router.delete('/financeiro/formas-pagamento/:id', autenticar, verificarPermissao('financeiro','excluir'),    formaPagamentoCtrl.excluir);
+router.post('/financeiro/formas-pagamento',       autenticar, apenasAdmin, formaPagamentoCtrl.criar);
+router.put('/financeiro/formas-pagamento/:id',    autenticar, apenasAdmin, formaPagamentoCtrl.atualizar);
+router.delete('/financeiro/formas-pagamento/:id', autenticar, apenasAdmin, formaPagamentoCtrl.excluir);
 
 // ---- ANDAMENTO PROCESSUAL ----
 // Usa sub-módulo 'andamentos' — permissão granular independente do módulo 'processos'
@@ -321,6 +324,7 @@ router.delete('/pericias/tipos/:id',      autenticar, verificarPermissao('perici
 router.get('/pericias/relatorio-peritos', autenticar, verificarPermissao('relatorios','visualizar'), periciasCtrl.relatorioPeritos);
 router.get('/pericias/reus-processo',     autenticar, verificarPermissao('pericias','visualizar'), periciasCtrl.reusDoProcesso);
 router.get('/pericias/peritos-processo',  autenticar, verificarPermissao('pericias','visualizar'), periciasCtrl.peritosDoProcesso);
+router.get('/pericias/busca-peritos',     autenticar, verificarPermissao('pericias','visualizar'), periciasCtrl.buscarPeritosParaAta);
 router.get('/pericias',                   autenticar, verificarPermissao('pericias','visualizar'), periciasCtrl.listar);
 router.get('/pericias/:id',               autenticar, verificarPermissao('pericias','visualizar'), periciasCtrl.buscar);
 router.get('/pericias/:id/historico',     autenticar, verificarPermissao('pericias','visualizar'), periciasCtrl.buscarHistorico);
@@ -377,6 +381,8 @@ router.delete('/pendencias-documento/:id',       autenticar, verificarPermissao(
 // ---- CONFIGURAÇÕES (somente admin) ----
 router.get('/configuracoes/escritorio',           autenticar, apenasAdmin, configuracaoCtrl.buscarEscritorio);
 router.put('/configuracoes/escritorio',           autenticar, apenasAdmin, configuracaoCtrl.atualizarEscritorio);
+router.get('/configuracoes/modelos-email-perito', autenticar, configuracaoCtrl.listarModelosEmailPerito);
+router.put('/configuracoes/modelos-email-perito', autenticar, apenasAdmin, configuracaoCtrl.salvarModelosEmailPerito);
 // Liga/desliga da CAIXA ALTA no nome do autor/réu nos documentos (somente admin)
 router.get('/configuracoes/documentos-maiusculas', autenticar, apenasAdmin, configuracaoCtrl.buscarDocumentosMaiusculas);
 router.put('/configuracoes/documentos-maiusculas', autenticar, apenasAdmin, configuracaoCtrl.salvarDocumentosMaiusculas);

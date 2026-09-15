@@ -276,6 +276,7 @@ export const audienciasAPI = {
   marcarAtaImpressa: (id) => api.put(`/audiencias/${id}/ata-impressa`),
   reverterStatus:    (id, dados) => api.put(`/audiencias/${id}/reverter`, dados),
   historico:         (id) => api.get(`/audiencias/${id}/historico`),
+  detalhesAta:       (id) => api.get(`/audiencias/${id}/detalhes-ata`),
   advogados:         () => api.get('/audiencias/advogados'),
   // Partes do processo — para filtrar testemunhas inválidas
   partesProcesso:    (processoId) => api.get('/audiencias/partes-processo', { params: { processo_id: processoId } }),
@@ -427,6 +428,7 @@ export const periciasAPI = {
   excluirTipo:       (id) => api.delete(`/pericias/tipos/${id}`),
   reusProcesso:      (processoId) => api.get('/pericias/reus-processo', { params: { processo_id: processoId } }),
   peritosProcesso:   (processoId) => api.get('/pericias/peritos-processo', { params: { processo_id: processoId } }),
+  buscarPeritosAta:  (busca) => api.get('/pericias/busca-peritos', { params: { busca, limite: 10 } }),
   marcarRealizada:   (id) => api.put(`/pericias/${id}/realizada`),
   cancelar:          (id, motivo) => api.put(`/pericias/${id}/cancelar`, { motivo }),
   remarcar:          (id, dados) => api.put(`/pericias/${id}/remarcar`, dados),
@@ -441,6 +443,8 @@ export const periciasAPI = {
 export const configuracaoAPI = {
   buscarEscritorio:    () => api.get('/configuracoes/escritorio'),
   atualizarEscritorio: (dados) => api.put('/configuracoes/escritorio', dados),
+  modelosEmailPerito:  () => api.get('/configuracoes/modelos-email-perito'),
+  salvarModelosEmailPerito: (modelos) => api.put('/configuracoes/modelos-email-perito', { modelos }),
   // Liga/desliga da CAIXA ALTA no nome do autor/réu nos documentos (admin)
   buscarDocumentosMaiusculas: () => api.get('/configuracoes/documentos-maiusculas'),
   salvarDocumentosMaiusculas: (ativo) => api.put('/configuracoes/documentos-maiusculas', { ativo }),
@@ -465,6 +469,7 @@ export const configuracaoAPI = {
 
 export const calendarioAPI = {
   verificarDiaUtil: (data) => api.get('/calendario/dia-util', { params: { data } }),
+  calcularPeriodoUtil: (data, quantidade) => api.get('/calendario/periodo-util', { params: { data, quantidade } }),
 };
 
 // ============================================================

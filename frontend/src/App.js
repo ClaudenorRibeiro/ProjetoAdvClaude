@@ -196,6 +196,26 @@ export default function App() {
     });
   }, []);
 
+  // ESC sempre fecha apenas o modal que está por cima. Aciona exclusivamente o
+  // botão de fechar/cancelar já existente — nunca confirma nem salva uma ação.
+  useEffect(() => {
+    function fecharModalComEsc(event) {
+      if (event.key !== 'Escape') return;
+      const modais = document.querySelectorAll('.modal-overlay');
+      const modalAtivo = modais[modais.length - 1];
+      if (!modalAtivo) return;
+      const fechar = [...modalAtivo.querySelectorAll('button:not(:disabled)')].find(botao =>
+        botao.classList.contains('modal-fechar') || ['Cancelar', 'Fechar', 'Voltar'].includes(botao.textContent.trim())
+      );
+      if (!fechar) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      fechar.click();
+    }
+    document.addEventListener('keydown', fecharModalComEsc, true);
+    return () => document.removeEventListener('keydown', fecharModalComEsc, true);
+  }, []);
+
   // Desativa o autocomplete do navegador em todos os inputs do sistema.
   // O MutationObserver monitora inputs adicionados dinamicamente (modais, etc.)
   // e aplica autoComplete="off" assim que aparecem no DOM.

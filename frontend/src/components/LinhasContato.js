@@ -10,7 +10,7 @@ import { limparEspacos, limparEmail } from '../utils/formatters';
 // ------------------------------------------------------------
 // LINHA TELEFONE — número com máscara adaptativa + descrição livre
 // ------------------------------------------------------------
-export function LinhaFone({ tel, index, onChange, onRemove, somenteLeitura = false, refNumero }) {
+export function LinhaFone({ tel, index, onChange, onRemove, somenteLeitura = false, refNumero, onAbrirWhatsApp = null }) {
   // Máscara adaptativa: fixo (xx) xxxx-xxxx ou celular (xx) xxxxx-xxxx
   function mascaraTelefone(value) {
     const limpo = value.replace(/\D/g, '').slice(0, 11);
@@ -44,6 +44,20 @@ export function LinhaFone({ tel, index, onChange, onRemove, somenteLeitura = fal
         onChange={e => onChange({ ...tel, tipo: e.target.value })}
         onBlur={() => onChange({ ...tel, tipo: limparEspacos(tel.tipo || '') })}
       />
+      {/* Na ficha em leitura, permite iniciar uma conversa sem liberar a edição. */}
+      {somenteLeitura && tel.numero && onAbrirWhatsApp && (
+        <button
+          type="button"
+          onClick={() => onAbrirWhatsApp(tel.numero)}
+          title="Enviar WhatsApp para este telefone"
+          aria-label="Enviar WhatsApp para este telefone"
+          style={{ width: '34px', height: '34px', padding: 0, flexShrink: 0, border: 'none',
+            borderRadius: '6px', background: '#25d366', color: '#fff', cursor: 'pointer',
+            display: 'grid', placeItems: 'center' }}
+        >
+          <span aria-hidden="true" style={{ fontSize: '18px', lineHeight: 1 }}>☎</span>
+        </button>
+      )}
       {/* Botão remover — só aparece a partir da segunda linha */}
       {index > 0 && !somenteLeitura && (
         <button

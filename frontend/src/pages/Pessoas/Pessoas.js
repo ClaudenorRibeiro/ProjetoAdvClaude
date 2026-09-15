@@ -1611,7 +1611,7 @@ function ModalUnificarPessoas({ tipo, selecionados, onFechar }) {
 }
 
 // Modal de cadastro / edição de pessoa
-export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeitura = false }) {
+export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeitura = false, onSalvo = null }) {
   // leitura = true → todos os campos travados e rodapé só com "Editar"/"Fechar".
   // Ao clicar em "Editar", destrava para o modo de edição normal.
   const [leitura, setLeitura]   = useState(somenteLeitura);
@@ -1659,6 +1659,27 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
   }, []);
 
   function set(campo, valor) { setForm(f => ({...f, [campo]: valor})); }
+  // Peritos normalmente não informam CPF. A exceção é estrita: só vale quando
+  // a profissão selecionada começa por "Perícia", mesma regra usada na busca de peritos.
+  const profissaoSelecionada = (auxiliares.profissoes || [])
+    .find(p => String(p.id) === String(form.profissao_id));
+  const ehPerito = String(profissaoSelecionada?.nome || '').trim().toLocaleLowerCase('pt-BR').startsWith('perícia');
+  const cpfDispensado = !!form.responsavel_id || ehPerito;
+
+  // Disponível mesmo nos detalhes (somente leitura): abre o WhatsApp para o
+  // telefone selecionado e mantém o mesmo registro de contato usado na lista.
+  function abrirWhatsAppTelefone(numero) {
+    const link = linkWhatsApp(numero);
+    if (!link) { toast.error('Telefone inválido para o WhatsApp'); return; }
+    window.open(link, '_blank', 'noopener');
+    if (pessoa?.id) {
+      pessoasAPI.registrarZap({
+        telefone: numero,
+        tipo_pessoa: tipo === 'juridicas' ? 'juridica' : 'fisica',
+        pessoa_id: pessoa.id,
+      }).catch(() => {});
+    }
+  }
 
   // Chamado pelo SelectComAdicao quando o usuário cadastra um novo item auxiliar
   // Adiciona o novo item na lista local já ordenado e auto-seleciona no form
@@ -1706,8 +1727,11 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
         toast.success('Pessoa atualizada com sucesso!');
       } else {
         const fn = tipo === 'fisicas' ? pessoasAPI.criarFisica : pessoasAPI.criarJuridica;
-        await fn(payload);
+        const resposta = await fn(payload);
         toast.success('Pessoa cadastrada com sucesso!');
+        // Opcional: usado somente por quem abriu este modal para escolher a pessoa
+        // recém-cadastrada. Quem já usa o ModalPessoa continua com o mesmo fluxo.
+        onSalvo?.({ id: resposta.data?.dados?.id, nome: payload.nome, profissao: profissaoSelecionada?.nome || '' });
       }
       onFechar(true);
     } catch (err) {
@@ -1739,7 +1763,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
       if (!form.nome?.trim()) { avisar('Nome é obrigatório.', refNome.current); return; }
       const partes = form.nome.trim().split(/\s+/).filter(Boolean);
       if (partes.length < 2)  { avisar('Informe o nome completo (nome e sobrenome).', refNome.current); return; }
-      if (!form.cpf?.replace(/\D/g, '') && !form.responsavel_id) {
+      if (!form.cpf?.replace(/\D/g, '') && !cpfDispensado) {
         avisar('CPF é obrigatório. Se for menor ou incapaz sem CPF, informe o responsável legal.', refCpf.current);
         return;
       }
@@ -1833,7 +1857,8 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
                   onAbrirEdicao={onAbrirEdicao}
                   somenteLeitura={leitura}
                   refCampo={refCpf}
-                  dispensado={!!form.responsavel_id}
+                  dispensado={cpfDispensado}
+                  motivoDispensa={ehPerito ? 'profissional de perícia' : 'pessoa com responsável legal'}
                 />
               </div>
               <div className="grid-4">
@@ -1969,6 +1994,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
               tel={tel}
               index={i}
               somenteLeitura={leitura}
+              onAbrirWhatsApp={leitura ? abrirWhatsAppTelefone : null}
               onChange={v => setTelefones(t => t.map((x,j) => j===i ? v : x))}
               onRemove={() => setTelefones(t => t.filter((_,j) => j!==i))}
             />
@@ -2030,7 +2056,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
 // pessoaIdAtual: id da pessoa em edição (evita alertar sobre ela mesma)
 // onAbrirEdicao: callback chamado com { id, nome, cpf } quando usuário quer editar a duplicata
 // ============================================================
-function CampoCPF({ value, onChange, pessoaIdAtual = null, onAbrirEdicao = null, somenteLeitura = false, refCampo, dispensado = false }) {
+function CampoCPF({ value, onChange, pessoaIdAtual = null, onAbrirEdicao = null, somenteLeitura = false, refCampo, dispensado = false, motivoDispensa = '' }) {
   const [erroCpf, setErroCpf]       = useState('');
   const [verificando, setVerificando] = useState(false);
   const [duplicata, setDuplicata]   = useState(null); // { id, nome, cpf } se já existe no banco
@@ -2076,7 +2102,7 @@ function CampoCPF({ value, onChange, pessoaIdAtual = null, onAbrirEdicao = null,
 
   return (
     <div className="form-group">
-      <label className="form-label">{dispensado ? 'CPF (não obrigatório — pessoa com responsável legal)' : 'CPF *'}</label>
+      <label className="form-label">{dispensado ? `CPF (não obrigatório — ${motivoDispensa})` : 'CPF *'}</label>
       <input
         ref={refCampo}
         type="text"

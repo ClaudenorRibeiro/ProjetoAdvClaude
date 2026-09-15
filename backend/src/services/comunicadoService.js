@@ -10,6 +10,22 @@
 
 const { pool } = require('../config/database');
 const { enviarEmail } = require('../utils/email');
+const variaveisResolver = require('./variaveisResolver');
+
+function escaparHtml(valor) {
+  return String(valor || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[c]);
+}
+
+// Aceita qualquer variável do mesmo catálogo usado em "Gerar documento" (cliente,
+// processo, parte adversa, perícia, escritório...). Variável sem valor ou que não
+// existe no catálogo vira string vazia — nunca quebra o envio nem sobra "{{tag}}".
+function preencherModeloPerito(texto, dados) {
+  return String(texto || '').replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi, (_, chave) => {
+    const valor = dados ? dados[String(chave).toLowerCase()] : undefined;
+    if (valor == null || typeof valor === 'object') return '';
+    return escaparHtml(valor);
+  });
+}
 
 // Busca os clientes do processo (autor OU réu, conforme cliente_polo) com e-mail principal.
 // Retorna { polo, clientes: [{ tipo_pessoa, pessoa_id, nome, email }] }
@@ -162,4 +178,53 @@ async function enviarComunicadoPericia(periciaId, tipoEvento, usuarioId) {
   return { enviados, semCliente: false, semEmail: semEmailCount > 0, polo };
 }
 
-module.exports = { enviarComunicadoPericia, buscarClientesDoProcesso, montarComunicadoPericia };
+// Dispara o modelo escolhido para o perito indicado na perícia. É chamado depois
+// do commit da ATA: falha de SMTP é registrada, mas nunca desfaz a ATA já salva.
+async function enviarEmailPeritoPericia(periciaId, modeloId, usuarioId) {
+  const [rows] = await pool.execute(`
+    SELECT pe.id, pe.processo_id, pf.id AS perito_id, pf.nome AS perito_nome, tp.nome AS tipo_nome,
+           pr.numProc AS processo_numero,
+           (SELECT email FROM emails_pf WHERE pessoa_id = pf.id AND ativo = 1 ORDER BY principal DESC, id ASC LIMIT 1) AS perito_email
+      FROM pericia pe
+      JOIN pessoas_fisicas pf ON pe.perito_tipo = 'fisica' AND pe.perito_id = pf.id
+      LEFT JOIN tipo_pericia tp ON tp.id = pe.tipo_pericia_id
+      JOIN tblproc pr ON pr.id = pe.processo_id
+     WHERE pe.id = ?`, [periciaId]);
+  const pericia = rows[0];
+  if (!pericia || !pericia.perito_email) return { enviado: false, semEmail: true };
+
+  const [cfgRows] = await pool.execute('SELECT nome, modelos_email_perito FROM configuracoes_escritorio LIMIT 1');
+  const cfg = cfgRows[0] || {};
+  let modelos = [];
+  try { modelos = Array.isArray(cfg.modelos_email_perito) ? cfg.modelos_email_perito : JSON.parse(cfg.modelos_email_perito || '[]'); } catch (_) { modelos = []; }
+  const modelo = modelos.find(m => String(m.id) === String(modeloId));
+  if (!modelo || !modelo.assunto || !modelo.corpo) return { enviado: false, semModelo: true };
+
+  // Mesmo catálogo de variáveis do "Gerar documento" (cliente, processo, parte
+  // adversa, perícia, escritório...), reaproveitado aqui em vez de duplicado.
+  const [usuarioRows] = await pool.execute('SELECT id, nome FROM usuarios WHERE id = ?', [usuarioId]);
+  const ctx = await variaveisResolver.resolver('pericia', periciaId, usuarioRows[0] || null, {});
+  const valores = { ...(ctx?.dados || {}) };
+  // Compatibilidade com modelos salvos antes desta mudança (nomes antigos das 4 variáveis).
+  if (!valores.nome_perito) valores.nome_perito = valores.perito || pericia.perito_nome || '';
+  if (!valores.escritorio)  valores.escritorio  = valores.nome_escritorio || cfg.nome || '';
+  if (!valores.processo)    valores.processo    = valores.numero_processo || pericia.processo_numero || '';
+  if (!valores.tipo_pericia) valores.tipo_pericia = pericia.tipo_nome || '';
+
+  const assunto = preencherModeloPerito(modelo.assunto, valores);
+  const corpo = preencherModeloPerito(modelo.corpo, valores).replace(/\n/g, '<br>');
+  const html = `<div style="font-family:Arial,sans-serif;color:#333;line-height:1.5">${corpo}</div>`;
+  let enviado = false, erroMsg = null;
+  try { await enviarEmail({ para: pericia.perito_email, assunto, html, destinatarioNome: pericia.perito_nome, mensagem: modelo.corpo }); enviado = true; }
+  catch (err) { erroMsg = err.message; }
+  try {
+    await pool.execute(`INSERT INTO log_comunicacoes
+      (canal, destinatario, assunto, conteudo, enviado, erro_msg, tipo_pessoa, pessoa_id, processo_id, usuario_id)
+      VALUES ('email', ?, ?, ?, ?, ?, 'fisica', ?, ?, ?)`,
+      [pericia.perito_email, assunto, html, enviado ? 1 : 0, erroMsg, pericia.perito_id, pericia.processo_id, usuarioId || null]);
+  } catch (e) { console.error('Erro ao registrar e-mail do perito:', e.message); }
+  if (enviado) await pool.execute('UPDATE pericia SET email_perito_enviado = 1 WHERE id = ?', [periciaId]);
+  return { enviado, semEmail: false, semModelo: false };
+}
+
+module.exports = { enviarComunicadoPericia, enviarEmailPeritoPericia, buscarClientesDoProcesso, montarComunicadoPericia };

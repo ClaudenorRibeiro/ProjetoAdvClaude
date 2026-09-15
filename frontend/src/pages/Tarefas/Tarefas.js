@@ -491,17 +491,17 @@ export function ModalHistoricoTarefa({ tarefa, onFechar }) {
 // preSelecao: { tipo, processo_id, processo_numero }
 //   usado quando aberto a partir do PastaDetalhe
 // ============================================================
-export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publicacaoId }) {
+export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publicacaoId, bloquearProcesso = false, pastaInicial = '', onSalvarRascunho = null, tituloInicial = '' }) {
   // Deduz tipo inicial: tarefa existente → preSelecao → 'rotina'
   // Obs: tipo 'pasta' foi removido da UI — tarefas antigas com pasta_id continuam exibidas
   //      corretamente na listagem, mas não é mais possível criar/editar com esse vínculo
-  const tipoInicial = tarefa?.processo_id ? 'processo'
+  const tipoInicial = bloquearProcesso || tarefa?.processo_id ? 'processo'
     : preSelecao?.tipo === 'processo' ? 'processo'
     : 'rotina';
 
   const [tipo, setTipo]         = useState(tipoInicial);
   const [form, setForm]         = useState({
-    titulo:          tarefa?.titulo || '',
+    titulo:          tarefa?.titulo || tituloInicial,
     descricao:       tarefa?.descricao || '',
     prioridade:      tarefa?.prioridade || 'normal',
     data_vencimento: tarefa?.data_vencimento ? tarefa.data_vencimento.split('T')[0] : (dataInicial || dataMaisDias(0)),
@@ -644,6 +644,18 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
         enviar_email: pedirEmail,
       };
 
+      // Fluxo da ATA: guarda somente o rascunho no navegador. A gravação real é
+      // feita junto da ATA, pela mesma transação, para nunca deixar tarefa órfã.
+      if (onSalvarRascunho) {
+        onSalvarRascunho({
+          ...payload,
+          notificar_conclusao: (notificarConclusao && form.atribuida_para) ? 1 : 0,
+        });
+        toast.success('Tarefa adicionada à ata. Ela será salva somente ao registrar a ata.');
+        onFechar(false);
+        return;
+      }
+
       let resp;
       if (tarefa?.id) {
         resp = await tarefasAPI.atualizar(tarefa.id, { ...payload, ...extras });
@@ -710,7 +722,7 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
           )}
 
           {/* ── Seleção de tipo ── */}
-          <div className="form-group">
+          {!bloquearProcesso && <div className="form-group">
             <label className="form-label">Tipo da tarefa *</label>
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               {[
@@ -731,7 +743,7 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
                 </button>
               ))}
             </div>
-          </div>
+          </div>}
 
           {/* ── Campo de busca conforme tipo ── */}
 
@@ -748,6 +760,7 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
               <input className="form-control" ref={buscaProcRef}
                 placeholder="0000000-00.0000.0.00.0000"
                 value={buscaProc} maxLength={25}
+                readOnly={bloquearProcesso}
                 style={{ fontFamily: 'monospace', letterSpacing: '0.5px',
                          ...(form.processo_id ? { background: '#f0fdf4', borderColor: '#16a34a' } : {}) }}
                 onChange={e => {
@@ -763,9 +776,14 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
                   ✓ Processo selecionado
                 </span>
               )}
+              {bloquearProcesso && pastaInicial && (
+                <span style={{ fontSize: '12px', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                  {pastaInicial} — vínculo definido pela audiência e não pode ser alterado.
+                </span>
+              )}
 
               {/* Lista de pastas encontradas */}
-              {sugestoesProc.length > 0 && (
+              {!bloquearProcesso && sugestoesProc.length > 0 && (
                 <div style={{ position: 'absolute', left: 0, right: 0, top: '100%', zIndex: 20,
                               border: '1px solid #ddd', borderRadius: '6px', background: '#fff',
                               maxHeight: '180px', overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
@@ -779,7 +797,7 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
               )}
 
               {/* Se a pasta tem múltiplos processos, mostra seletor */}
-              {processosDaPasta.length > 1 && (
+              {!bloquearProcesso && processosDaPasta.length > 1 && (
                 <div style={{ marginTop: '8px', border: '1px solid #e2e8f0', borderRadius: '6px',
                               background: '#f8fafc', padding: '8px' }}>
                   <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>
@@ -855,14 +873,14 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
             </label>
 
             {/* Envio na hora do salvamento: não fica guardado, cada salvamento decide de novo. */}
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14,
+            {!onSalvarRascunho && <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14,
                             cursor: form.atribuida_para ? 'pointer' : 'not-allowed',
                             color: form.atribuida_para ? '#111' : '#9ca3af' }}>
               <input type="checkbox" disabled={!form.atribuida_para}
                 checked={enviarEmailPara && !!form.atribuida_para}
                 onChange={e => setEnviarEmailPara(e.target.checked)} />
               📧 Enviar e-mail{nomeAtribuido ? ` para ${nomeAtribuido}` : ''}
-            </label>
+            </label>}
           </div>
 
         </div>

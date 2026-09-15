@@ -79,12 +79,16 @@ body {
   line-height: 1.3;
   color: var(--menu-text-strong, #fff);
 }
+
 .layout.sidebar-fechada .logo-nome {
-  font-size: 0;              /* menu recolhido: esconde o texto para não estourar a largura */
+  font-size: 0;
+  /* menu recolhido: esconde o texto para não estourar a largura */
   padding: 8px;
 }
+
 .layout.sidebar-fechada .logo-nome::first-letter {
-  font-size: 22px;          /* mostra só a inicial quando recolhido */
+  font-size: 22px;
+  /* mostra só a inicial quando recolhido */
 }
 
 /* Botão de recolher — canto superior direito sobre o logo */
@@ -141,7 +145,8 @@ body {
   padding: 13px 20px;
   color: var(--menu-text, #ccc);
   text-decoration: none;
-  border-right: 3px solid transparent;   /* reserva o espaço da barra p/ não "pular" no hover */
+  border-right: 3px solid transparent;
+  /* reserva o espaço da barra p/ não "pular" no hover */
   transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
   white-space: nowrap;
   overflow: hidden;
@@ -155,6 +160,7 @@ body {
   color: var(--menu-accent, #7eb8f7);
   border-right-color: var(--menu-accent, #7eb8f7);
 }
+
 .menu-item.ativo .menu-icone,
 .menu-item.ativo .menu-label,
 .menu-item:hover .menu-icone,
@@ -169,6 +175,7 @@ body {
   color: var(--menu-text, #ccc);
   border-right-color: transparent;
 }
+
 .menu:hover .menu-item.ativo:not(:hover) .menu-icone,
 .menu:hover .menu-item.ativo:not(:hover) .menu-label {
   transform: none;
@@ -184,7 +191,8 @@ body {
 .menu-label {
   font-size: 15px;
   display: inline-block;
-  transform-origin: left center;   /* o rótulo cresce para a direita, sem empurrar o layout */
+  transform-origin: left center;
+  /* o rótulo cresce para a direita, sem empurrar o layout */
   transition: transform 0.2s ease;
 }
 
@@ -278,7 +286,8 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-width: 0; /* permite o título encolher com ellipsis */
+  min-width: 0;
+  /* permite o título encolher com ellipsis */
 }
 
 /* Hambúrguer — escondido no desktop, aparece só no celular (media query abaixo) */
@@ -446,6 +455,8 @@ body {
   border: 1px solid #d1d5db;
   border-radius: 6px;
   font-size: 14px;
+  font-family: inherit;
+  font-weight: 400;
   color: #111827;
   transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
 }
@@ -467,7 +478,7 @@ body {
 .tabela {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 17px;
 }
 
 .tabela th {
@@ -602,7 +613,8 @@ body {
     top: 0;
     bottom: 0;
     left: 0;
-    width: 270px !important; /* sempre expandida no celular (com rótulos) */
+    width: 270px !important;
+    /* sempre expandida no celular (com rótulos) */
     transform: translateX(-100%);
     transition: transform 0.25s ease;
     box-shadow: 4px 0 16px rgba(0, 0, 0, 0.25);
@@ -618,7 +630,8 @@ body {
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.45);
-    z-index: 99; /* abaixo da sidebar (100), acima do conteúdo */
+    z-index: 99;
+    /* abaixo da sidebar (100), acima do conteúdo */
   }
 
   /* Botão de recolher (◀/▶) não faz sentido no celular */
@@ -894,13 +907,20 @@ body {
 }
 
 /* Spinner de carregamento (reutilizável) — anel azul girando */
-@keyframes spin-mini { to { transform: rotate(360deg); } }
+@keyframes spin-mini {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .spinner-mini {
   display: inline-block;
   width: 14px;
   height: 14px;
-  border: 2px solid #c7d2fe;        /* anel claro */
-  border-top-color: #1a56db;        /* parte azul que gira */
+  border: 2px solid #c7d2fe;
+  /* anel claro */
+  border-top-color: #1a56db;
+  /* parte azul que gira */
   border-radius: 50%;
   animation: spin-mini 0.7s linear infinite;
   vertical-align: middle;
@@ -913,7 +933,8 @@ body {
   top: 0;
   background: #fff;
   z-index: 1;
-  box-shadow: inset 0 -1px 0 #9ca3af;  /* mantém o separador visível ao rolar */
+  box-shadow: inset 0 -1px 0 #9ca3af;
+  /* mantém o separador visível ao rolar */
 }
 
 /* Título do mês na Agenda (react-big-calendar). O padrão da biblioteca fica pequeno e

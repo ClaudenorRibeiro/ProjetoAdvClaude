@@ -269,6 +269,24 @@ CREATE TABLE `ata_audiencia` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Itens gerados pela ATA: vínculo isolado para a consulta operacional da ata.
+--
+DROP TABLE IF EXISTS `ata_audiencia_itens`;
+CREATE TABLE `ata_audiencia_itens` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `ata_audiencia_id` int NOT NULL,
+  `tipo` varchar(40) NOT NULL,
+  `registro_id` int DEFAULT NULL,
+  `titulo` varchar(255) NOT NULL,
+  `descricao` text,
+  `data_referencia` date DEFAULT NULL,
+  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_ata_audiencia_itens_ata` (`ata_audiencia_id`),
+  CONSTRAINT `fk_ata_audiencia_itens_ata` FOREIGN KEY (`ata_audiencia_id`) REFERENCES `ata_audiencia` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+--
 -- Table structure for table `audiencia`
 --
 
@@ -332,16 +350,42 @@ CREATE TABLE `audiencia_testemunhas` (
   `id` int NOT NULL AUTO_INCREMENT,
   `audiencia_id` int NOT NULL,
   `pessoa_id` int NOT NULL,
+  `parte_pessoa_id` int DEFAULT NULL COMMENT 'Parte física específica para quem a pessoa presta testemunho; nulo somente em registros legados',
   `polo` varchar(10) NOT NULL DEFAULT 'autor',
   `criado_por` int DEFAULT NULL,
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `audiencia_id` (`audiencia_id`),
   KEY `pessoa_id` (`pessoa_id`),
+  KEY `idx_at_parte_pessoa` (`parte_pessoa_id`),
   CONSTRAINT `aut_ibfk_1` FOREIGN KEY (`audiencia_id`) REFERENCES `audiencia` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `aut_ibfk_2` FOREIGN KEY (`pessoa_id`) REFERENCES `pessoas_fisicas` (`id`) ON DELETE RESTRICT
+  CONSTRAINT `aut_ibfk_2` FOREIGN KEY (`pessoa_id`) REFERENCES `pessoas_fisicas` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `fk_at_parte_pessoa` FOREIGN KEY (`parte_pessoa_id`) REFERENCES `pessoas_fisicas` (`id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `audiencia_responsaveis`
+--
+
+DROP TABLE IF EXISTS `audiencia_responsaveis`;
+CREATE TABLE `audiencia_responsaveis` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `audiencia_id` int NOT NULL,
+  `responsavel_id` int DEFAULT NULL,
+  `responsavel_freela_id` int DEFAULT NULL,
+  `criado_por` int NOT NULL,
+  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_audiencia_responsavel_usuario` (`audiencia_id`,`responsavel_id`),
+  UNIQUE KEY `uq_audiencia_responsavel_freela` (`audiencia_id`,`responsavel_freela_id`),
+  KEY `idx_ar_responsavel` (`responsavel_id`),
+  KEY `idx_ar_freela` (`responsavel_freela_id`),
+  CONSTRAINT `fk_ar_audiencia` FOREIGN KEY (`audiencia_id`) REFERENCES `audiencia` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_ar_usuario` FOREIGN KEY (`responsavel_id`) REFERENCES `usuarios` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `fk_ar_freela` FOREIGN KEY (`responsavel_freela_id`) REFERENCES `advogados_freela` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `chk_ar_um_responsavel` CHECK ((`responsavel_id` IS NULL) <> (`responsavel_freela_id` IS NULL))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
 -- Table structure for table `audiencias_etiquetas`
@@ -555,6 +599,7 @@ CREATE TABLE `configuracoes_escritorio` (
   `ata_advogado_obrigatorio` tinyint DEFAULT '0',
   `advogado_principal_id` int DEFAULT NULL,
   `oab_principal` varchar(30) DEFAULT NULL,
+  `modelos_email_perito` json DEFAULT NULL COMMENT 'Modelos editáveis de e-mail enviados ao perito a partir da ata',
   PRIMARY KEY (`id`),
   KEY `fk_config_advogado_principal` (`advogado_principal_id`),
   CONSTRAINT `fk_config_advogado_principal` FOREIGN KEY (`advogado_principal_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
@@ -745,7 +790,8 @@ CREATE TABLE `forma_pagamento` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(60) NOT NULL,
   `ativo` tinyint(1) NOT NULL DEFAULT '1',
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_forma_pagamento_nome_ativo` (`nome`,`ativo`)
 ) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 

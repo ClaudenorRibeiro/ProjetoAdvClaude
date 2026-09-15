@@ -228,6 +228,9 @@ export default function Documentos() {
       {/* ===== VARIÁVEIS DO "DOCUMENTO DE PARTES" (multipessoas) ===== */}
       <CatalogoVariaveisPartes />
 
+      {/* ===== MODELOS DE E-MAIL PARA PERITO (só admin) ===== */}
+      {ehAdmin && <ModelosEmailPerito />}
+
       {/* ===== HISTÓRICO DE DOCUMENTOS GERADOS ===== */}
       {podeHistorico && <HistoricoDocumentos />}
 
@@ -400,6 +403,96 @@ function CatalogoVariaveisPartes() {
             </div>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------
+// Modelos de e-mail para o perito (usados ao registrar uma ATA). Ficam aqui, perto
+// do catálogo de variáveis, porque aceitam o mesmo conjunto de {{tags}} dos
+// documentos — evita ter a mesma rotina duplicada em duas telas (Configurações e
+// Documentos). Só o administrador vê/edita (mesma trava de antes).
+// ------------------------------------------------------------
+function ModelosEmailPerito() {
+  const [modelos, setModelos] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [salvando, setSalvando] = useState(false);
+  const [aberto, setAberto] = useState(false);
+
+  useEffect(() => {
+    configuracaoAPI.modelosEmailPerito()
+      .then(({ data }) => { if (data.ok) setModelos(data.dados || []); })
+      .catch(() => setModelos([]))
+      .finally(() => setCarregando(false));
+  }, []);
+
+  function adicionar() {
+    setModelos(lista => [...lista, { id: `perito-${Date.now()}`, nome: '', assunto: '', corpo: '' }]);
+  }
+  function alterar(indice, campo, valor) {
+    setModelos(lista => lista.map((m, i) => (i === indice ? { ...m, [campo]: valor } : m)));
+  }
+  function remover(indice) {
+    setModelos(lista => lista.filter((_, i) => i !== indice));
+  }
+  async function salvar() {
+    const invalidos = modelos.some(m => !m.nome?.trim() || !m.assunto?.trim() || !m.corpo?.trim());
+    if (invalidos) return toast.error('Preencha nome, assunto e mensagem de cada modelo.');
+    setSalvando(true);
+    try {
+      const { data } = await configuracaoAPI.salvarModelosEmailPerito(modelos);
+      if (!data.ok) throw new Error(data.mensagem);
+      toast.success('Modelos de e-mail salvos!');
+    } catch (err) {
+      toast.error(err.response?.data?.mensagem || err.message || 'Erro ao salvar os modelos.');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+        onClick={() => setAberto(a => !a)}>
+        <h3 style={{ margin: 0 }}>{aberto ? '▼' : '▶'} Modelos de e-mail para perito</h3>
+      </div>
+      {aberto && (
+        <div style={{ marginTop: '12px' }}>
+          <small style={{ color: '#888', display: 'block', marginBottom: '10px' }}>
+            Estes modelos aparecem ao registrar uma ata. Aceitam as mesmas variáveis do catálogo acima
+            (cliente, processo, parte adversa, perícia, escritório...).
+          </small>
+          {carregando ? <div className="loading">Carregando...</div> : (
+            <>
+              {modelos.length === 0 && (
+                <small style={{ color: '#888', display: 'block', marginBottom: '10px' }}>Nenhum modelo cadastrado.</small>
+              )}
+              {modelos.map((modelo, indice) => (
+                <div key={modelo.id || indice} style={{ border: '1px solid #dbeafe', borderRadius: 8, padding: 12, marginBottom: 10, background: '#f8fbff' }}>
+                  <div className="grid-2">
+                    <div className="form-group"><label className="form-label">Nome do modelo *</label>
+                      <input className="form-control" value={modelo.nome || ''} onChange={e => alterar(indice, 'nome', e.target.value)} placeholder="Ex.: Convocação para perícia" />
+                    </div>
+                    <div className="form-group"><label className="form-label">Assunto *</label>
+                      <input className="form-control" value={modelo.assunto || ''} onChange={e => alterar(indice, 'assunto', e.target.value)} placeholder="Ex.: Perícia referente ao processo {{numero_processo}}" />
+                    </div>
+                  </div>
+                  <div className="form-group"><label className="form-label">Mensagem *</label>
+                    <textarea className="form-control" rows={4} value={modelo.corpo || ''} onChange={e => alterar(indice, 'corpo', e.target.value)} />
+                  </div>
+                  <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: 12 }} onClick={() => remover(indice)}>Remover modelo</button>
+                </div>
+              ))}
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button type="button" className="btn btn-outline" style={{ padding: '4px 9px', fontSize: 12 }} onClick={adicionar}>+ Novo modelo</button>
+                <button type="button" className="btn btn-primary" onClick={salvar} disabled={salvando}>
+                  {salvando ? 'Salvando modelos...' : 'Salvar modelos de e-mail'}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       )}
     </div>
   );

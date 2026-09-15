@@ -1,0 +1,249 @@
+RESUMO DA SESSÃO — 14/09/2026 16:33:38 (horário local do PC)
+Projeto: ProjetoAdvClaude / Sistema de Advocacia
+
+FINALIDADE DESTE ARQUIVO
+Registro fiel do que foi feito nesta sessão de trabalho com a IA, separando o que
+foi corrigido/criado do que ainda depende de ação manual (rodar SQL, testar na
+tela, decidir algo, subir para o Git). Nada aqui foi commitado ou enviado a
+nenhum servidor — tudo está só no código local desta máquina.
+
+====================================================================
+1. AUDITORIA COMPLETA (código + banco de dados)
+====================================================================
+Foi feita uma auditoria de ponta a ponta do trabalho da sessão anterior (ATA de
+audiência, perícias, testemunhas): backend, frontend e o banco de dados local
+(a partir de um dump real enviado pelo usuário), sem supor nada — cada achado foi
+conferido direto no código-fonte ou no dump do banco antes de ser reportado.
+
+====================================================================
+2. BUGS REAIS ENCONTRADOS E CORRIGIDOS NESTA SESSÃO
+====================================================================
+
+2.1 Erro escondido ao EDITAR uma testemunha
+- Onde: backend/src/controllers/audienciasController.js (função editarTestemunha)
+- Problema: quando a edição do vínculo de uma testemunha esbarrava numa regra de
+  validação (ex.: impedimento por CNPJ do réu), o sistema mostrava só "Erro
+  interno no servidor. Tente novamente." em vez do motivo real. Acontecia só
+  nesta rota; ao CADASTRAR uma testemunha pela primeira vez, a mensagem certa já
+  aparecia.
+- Correção: adicionada a mesma checagem já usada nas outras 3 rotas do arquivo
+  que usam essa validação.
+- Status: CORRIGIDO e verificado (sintaxe + bateria de testes).
+
+2.2 Desmarcar um item da ATA não apagava o que foi preenchido
+- Onde: frontend/src/pages/Audiencias/Audiencias.js (ModalRegistrarAta)
+- Problema: ao marcar um item (Prazo, Perícia, Alvará, Desistência, Retorno aos
+  autos, Nova audiência, Testemunha), preencher os dados e depois DESMARCAR a
+  caixinha, os dados preenchidos continuavam guardados na tela. Se marcasse de
+  novo, reapareciam do jeito que estavam.
+- Correção: ao desmarcar qualquer um desses itens, os dados daquele item são
+  apagados da tela. Voltando a marcar, começa do zero.
+- Exceção proposital: a caixinha "Acordo" ficou de fora, porque ela não guarda
+  rascunho — o acordo já é gravado de verdade no Financeiro no instante em que é
+  cadastrado (não espera a ATA), então não existe "rascunho" para apagar ali.
+- Status: CORRIGIDO e verificado.
+
+2.3 Arquivo estrutura_banco.sql desalinhado do banco real (coluna do Financeiro)
+- Onde: estrutura_banco.sql, tabela conta_corrente, coluna "data"
+- Problema: o arquivo dizia que a coluna era opcional; o banco real (conferido no
+  dump) e a regra de negócio confirmada pelo usuário ("lançamento financeiro sem
+  data está errado") dizem que ela é obrigatória. Não havia nenhum script SQL
+  nem relatório explicando essa mudança — ficou parecendo um acidente de edição.
+- Correção: revertida a linha no arquivo, voltando a coluna para obrigatória
+  (NOT NULL), batendo com o banco real.
+- Status: CORRIGIDO e conferido byte a byte contra o dump do banco.
+
+====================================================================
+3. ITENS IDENTIFICADOS E DEIXADOS DE PROPÓSITO (decisão do usuário / risco real de quebrar)
+====================================================================
+
+3.1 Testemunhas dentro da MESMA audiência podem inverter papéis sem serem barradas
+- Onde: backend/src/controllers/audienciasController.js (validarVinculoTestemunha)
+- A regra de impedimento por CNPJ funciona corretamente ENTRE audiências
+  diferentes. Só falha quando as duas testemunhas (A depõe para B, e B depõe
+  para A) são cadastradas dentro da MESMA audiência — nesse caso específico, a
+  checagem que evita a pessoa se autoconflitar durante uma edição acaba
+  ignorando por engano todas as testemunhas já cadastradas naquela mesma
+  audiência, e não só o registro sendo editado.
+- Decisão do usuário: "esse exemplo é improvável que aconteça, deixa como está,
+  não mexa em nada". NÃO FOI CORRIGIDO — fica registrado aqui como risco
+  conhecido e aceito, caso precise ser revisto no futuro.
+
+3.2 Segundo mecanismo de "ESC fecha o modal" em frontend/src/App.js
+- Foi investigado a fundo se dava para remover essa duplicação (já existe desde
+  agosto um mecanismo próprio, o hook useEscFechar). Resultado da investigação:
+  NÃO é seguro remover — o mecanismo novo do App.js é hoje o ÚNICO jeito de
+  fechar com ESC em boa parte do sistema (confirmado: a tela de Audiências
+  inteira — 14 janelas — a aba de Audiências dentro da Pasta, Configurações,
+  Documentos, Financeiro, Login e outras NUNCA tiveram o hook antigo). Remover
+  quebraria o ESC nessas telas.
+- Status: NÃO MEXIDO, por não haver certeza absoluta de que a mudança não
+  quebraria nada (condição que o próprio usuário colocou). Fica como pendência
+  para uma revisão futura mais profunda (ex.: conferir o texto de todos os
+  botões de fechar do sistema um a um).
+
+====================================================================
+4. SCRIPTS SQL PENDENTES — ANÁLISE E CORREÇÃO
+====================================================================
+
+4.1 Análise linha a linha
+Os 4 scripts da pasta scripts/ foram conferidos, um a um, contra a estrutura
+REAL de cada um dos bancos (dumps enviados pelo usuário: banco Local/
+AntonioLocal, AWS-Antônio, AWS-Erick). Resultado: os 4 scripts estão
+corretos — colunas/tabelas referenciadas existem, tipos batem, nenhum nome de
+índice/chave estrangeira colide com o que já existe nos bancos, e a versão do
+MySQL dos 3 bancos (8.0.46) suporta tudo que os scripts usam (inclusive a
+trava CHECK do script de múltiplos responsáveis).
+
+4.2 Correção de segurança feita
+- scripts/2026-09-13_itens_detalhes_ata.sql não tinha a proteção "só cria se não
+  existir" (diferente do script de múltiplos responsáveis, que já tinha). Foi
+  isso que causou o erro "Table already exists" que o usuário viu no HeidiSQL ao
+  rodar esse script pela segunda vez sem querer.
+- Correção: adicionada a mesma proteção (CREATE TABLE IF NOT EXISTS) — agora,
+  rodar de novo por engano não dá mais erro, só não faz nada (seguro).
+- Status: CORRIGIDO.
+
+4.3 Estado de cada banco no fim desta sessão (conferido nos dumps enviados)
+- LOCAL / AntonioLocal: os 4 scripts JÁ FORAM RODADOS (85 tabelas). Nada
+  pendente aqui.
+- AWS-ANTÔNIO: nenhum dos 4 scripts foi rodado ainda (83 tabelas).
+- AWS-ERICK: nenhum dos 4 scripts foi rodado ainda (83 tabelas). Estrutura
+  idêntica ao AWS-Antônio.
+
+Os 4 scripts, na pasta scripts/ do projeto:
+  1) 2026-09-13_pericias_ata_e_modelos_email_perito.sql
+  2) 2026-09-13_testemunha_parte_e_impedimento.sql
+  3) 2026-09-13_itens_detalhes_ata.sql
+  4) 2026-09-12_multiplos_responsaveis_audiencia.sql
+São independentes entre si (não importa a ordem).
+
+====================================================================
+5. NOVA FUNCIONALIDADE — Variáveis completas no e-mail do perito
+====================================================================
+- Antes: o e-mail enviado ao perito (a partir do registro da ATA) só reconhecia
+  4 variáveis fixas: {{nome_perito}}, {{escritorio}}, {{tipo_pericia}},
+  {{processo}}.
+- Agora: reaproveita a MESMA "máquina de variáveis" já usada pela tela
+  Documentos (Gerar Documento) — passa a aceitar {{parte_adversa}},
+  {{nome_cliente}}, {{numero_processo}}, {{data_pericia}}, {{local_pericia}},
+  {{nome_escritorio}}, {{nome_advogado}} e todas as outras variáveis daquele
+  catálogo.
+- Compatibilidade: os nomes antigos ({{nome_perito}}, {{escritorio}},
+  {{processo}}) continuam funcionando, caso algum modelo já salvo os use.
+- Arquivos: backend/src/services/comunicadoService.js
+- Status: IMPLEMENTADO e verificado (bateria de testes + build).
+
+====================================================================
+6. REORGANIZAÇÃO DE TELA — Modelos de e-mail para perito
+====================================================================
+- A seção inteira "Modelos de e-mail para perito" (cadastro/edição dos modelos)
+  foi TIRADA de Configurações e RECRIADA dentro da tela Documentos, como mais um
+  bloco recolhível (mesmo padrão visual dos outros blocos daquela tela: Catálogo
+  de Variáveis, Variáveis de Partes, Histórico). Continua visível só para
+  administrador.
+- Motivo: evitar a mesma rotina duplicada em duas telas diferentes do menu,
+  já que os modelos agora usam o mesmo catálogo de variáveis exibido em
+  Documentos.
+- Nada no backend mudou nessa reorganização (mesma rota, mesma tabela no banco)
+  — só a tela onde se edita.
+- Confirmado que a tela de Audiências (quem de fato USA os modelos, no fluxo de
+  Registrar Ata) não foi afetada — ela só consome a mesma rota de sempre.
+- Arquivos: frontend/src/pages/Configuracoes/Configuracoes.js (removido — o
+  arquivo voltou a ficar idêntico à última versão commitada no Git, já que essa
+  era a única diferença que ele tinha),
+  frontend/src/pages/Documentos/Documentos.js (adicionado).
+- Status: IMPLEMENTADO e verificado.
+
+====================================================================
+7. NOVA VARIÁVEL — {{saudacao}}
+====================================================================
+- Escreve automaticamente "Bom dia" (até 12h), "Boa tarde" (12h às 17h59) ou
+  "Boa noite" (a partir das 18h), pelo horário de Brasília no momento em que o
+  documento/e-mail é gerado.
+- Colocada na categoria "Escritório (sempre disponível)" — funciona em
+  QUALQUER modelo de documento e também no e-mail do perito.
+- Arquivos: backend/src/config/variaveisDocumento.js (catálogo, aparece no
+  painel da tela Documentos), backend/src/services/variaveisResolver.js
+  (cálculo do valor).
+- Status: IMPLEMENTADO e testados os limites de horário (11h/12h/17h/18h).
+
+====================================================================
+8. VERIFICAÇÕES EXECUTADAS NESTA SESSÃO
+====================================================================
+A bateria de verificação local (node _verificacao/rodar.mjs) foi executada
+diversas vezes ao longo da sessão, sempre depois de cada mudança de código.
+Resultado, em TODAS as vezes:
+  - Testes unitários: 37/37 passaram
+  - Backend carrega os 37 arquivos sem erro de sintaxe/import
+  - Build do frontend concluído sem erro
+  - Nenhuma referência a nome de tabela em maiúscula no código
+
+====================================================================
+9. ARQUIVOS ALTERADOS NESTA SESSÃO
+====================================================================
+(Além dos arquivos já alterados pela sessão anterior — ver
+RELATORIO-ALTERACOES-2026-09-13_20-25-59.txt para o histórico completo)
+
+Modificados por esta sessão:
+- backend/src/config/variaveisDocumento.js
+- backend/src/controllers/audienciasController.js
+- backend/src/services/comunicadoService.js
+- backend/src/services/variaveisResolver.js
+- estrutura_banco.sql
+- frontend/src/pages/Documentos/Documentos.js
+- scripts/2026-09-13_itens_detalhes_ata.sql
+
+Voltou a ficar idêntico ao Git (a mudança da sessão anterior foi removida):
+- frontend/src/pages/Configuracoes/Configuracoes.js
+
+Os demais arquivos que aparecem como alterados no Git são da SESSÃO ANTERIOR
+(13/09), não desta sessão.
+
+====================================================================
+10. O QUE AINDA FALTA FAZER
+====================================================================
+
+10.1 Rodar os scripts SQL (ação do usuário, fora do alcance da IA)
+- AWS-Antônio: rodar os 4 scripts.
+- AWS-Erick: rodar os 4 scripts.
+- Local/AntonioLocal: nenhum pendente (já rodados).
+
+10.2 Testes manuais na tela (build/bateria automática não substitui isso)
+Nada do que foi corrigido ou criado nesta sessão foi clicado/testado num
+navegador de verdade — só verificado no código. Ainda precisa testar na prática:
+- Editar uma testemunha e forçar a regra de impedimento por CNPJ: a mensagem
+  de erro específica precisa aparecer (não mais "erro interno").
+- No Registrar Ata: marcar um item, preencher, desmarcar, marcar de novo —
+  conferir que veio vazio.
+- Tela Documentos: cadastrar, editar e remover um modelo de e-mail de perito
+  (a seção que mudou de lugar).
+- Enviar um e-mail de teste ao perito usando variáveis novas (ex.:
+  {{parte_adversa}}, {{nome_cliente}}) e conferir se substituem certo.
+- Gerar um documento ou enviar um e-mail em horários diferentes do dia e
+  conferir se {{saudacao}} imprime "Bom dia"/"Boa tarde"/"Boa noite" corretamente.
+- Continuam pendentes também os testes manuais já listados no relatório da
+  sessão anterior (13/09): ATA futura não mostra o botão de registrar; ATA no
+  mesmo horário ainda não libera; ATA após o horário libera; chamada direta à
+  API de uma ATA futura é recusada pelo servidor; ATA só com testemunha é
+  recusada; perícia sem data aparece "Aguardando data"; perícia com data exige
+  perito; prazo aberto pela ATA mostra a pasta no topo do modal.
+
+10.3 Itens conhecidos e não corrigidos (por decisão do usuário ou por segurança)
+- Testemunhas invertendo papéis dentro da MESMA audiência (item 3.1 acima) —
+  usuário decidiu não mexer.
+- Duplicidade do mecanismo de ESC no App.js (item 3.2 acima) — não é seguro
+  mexer sem antes revisar, um a um, o texto de todos os botões de fechar do
+  sistema.
+
+10.4 Pendência cosmética, nunca corrigida (baixíssima prioridade)
+- O comentário no topo do estrutura_banco.sql ainda diz "Contém 83 tabelas",
+  mas o arquivo já tem 85 comandos CREATE TABLE (ficou desatualizado quando as
+  tabelas ata_audiencia_itens e audiencia_responsaveis foram incluídas nele).
+  Não afeta o funcionamento do sistema, é só um comentário.
+
+10.5 Git
+- NADA foi commitado nem enviado para o GitHub nesta sessão. Tudo continua só
+  no código local, como de costume — só sobe quando o usuário autorizar.
+
+FIM DO RESUMO

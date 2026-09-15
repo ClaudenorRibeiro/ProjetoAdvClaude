@@ -483,12 +483,13 @@ function SelectComAdicao({ label, nomeEntidade, value, onChange, opcoes = [],
 // descricaoInicial / quantidadeInicial / tipoDiasInicial: pré-preenchimento vindo de
 // uma SUGESTÃO da publicação (nº de dias + descrição; a data de início o usuário confere).
 export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial, publicacaoId,
-                                 descricaoInicial, quantidadeInicial, tipoDiasInicial }) {
+                                 descricaoInicial, quantidadeInicial, tipoDiasInicial,
+                                 onSalvarRascunho, dataInicioInicial, pastaInicial }) {
   // ESC fecha esta janela — mas só quando ela é a mais acima (nunca fecha a de trás).
   const overlayRef = useEscFechar(() => onFechar(false));
   const [form, setForm]         = useState({
     tipo_dias: tipoDiasInicial || 'uteis',
-    data_inicio: hojeLocal(),
+    data_inicio: dataInicioInicial || hojeLocal(),
     ...(descricaoInicial ? { descricao: descricaoInicial } : {}),
     ...(quantidadeInicial ? { quantidade: String(quantidadeInicial) } : {}),
     ...(processoInicial ? { processo_id: processoInicial.processo_id, titulo: processoInicial.titulo } : {}),
@@ -633,6 +634,13 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
     if (!form.subtipo_id)    return setInfo({ titulo: 'Subtipo obrigatório', mensagem: 'Selecione o subtipo.', focar: () => subtipoWrapRef.current?.querySelector('select')?.focus() });
     if (!form.data_final)    return setInfo({ titulo: 'Data final obrigatória', mensagem: 'Informe a data final (ou a quantidade de dias).', focar: () => dataFinalRef.current?.focus() });
     setAviso('');
+    // Quando aberto pelo registro de ATA, o prazo ainda é apenas um rascunho.
+    // A persistência acontece junto com a ATA, em uma única transação.
+    if (onSalvarRascunho) {
+      onSalvarRascunho({ ...form, notificar_conclusao: (notificarConclusao && form.delegado_para) ? 1 : 0 });
+      onFechar(false);
+      return;
+    }
     setSalvando(true);
     try {
       await prazosAPI.criar({ ...form, publicacao_id: publicacaoId || null, notificar_conclusao: (notificarConclusao && form.delegado_para) ? 1 : 0 });
@@ -651,10 +659,15 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
     <div className="modal-overlay" ref={overlayRef}>
       <div className="modal-box modal-grande">
         <div className="modal-header">
-          <h3>Novo Prazo</h3>
+          <h3>{onSalvarRascunho ? 'Cadastrar prazo da ata' : 'Novo Prazo'}</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
         </div>
         <div className="modal-body">
+          {pastaInicial && (
+            <div style={{ marginBottom: '10px', fontSize: '17px', color: '#1e2a3a', fontWeight: 700 }}>
+              {pastaInicial}
+            </div>
+          )}
           {aviso && (
             <div style={{ background:'#fff4e5', border:'1px solid #ffcf99', color:'#8a5300',
               padding:'8px 12px', borderRadius:'6px', fontSize:'13px', marginBottom:'12px' }}>
@@ -780,7 +793,7 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
           <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
-            {salvando ? 'Salvando...' : 'Salvar Prazo'}
+            {salvando ? 'Salvando...' : (onSalvarRascunho ? 'Adicionar à ata' : 'Salvar Prazo')}
           </button>
         </div>
       </div>

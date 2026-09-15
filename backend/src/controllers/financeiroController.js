@@ -15,6 +15,16 @@ const auditoria = require('../middleware/auditoria');
 
 // ---------- helpers de cálculo ----------
 const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
+const fmtReal = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Erro de validação financeira: mensagem específica (nunca "erro interno") quando um
+// valor de parcela/acordo fere uma regra de negócio. O backend nunca confia no cálculo
+// do front — quem grava sempre recusa em vez de corrigir em silêncio.
+function erroValidacaoFinanceiro(mensagem) {
+  const err = new Error(mensagem);
+  err.codigoValidacaoFinanceiro = true;
+  return err;
+}
 
 // Soma N meses a uma data 'YYYY-MM-DD', mantendo o dia (com clamp no último dia do mês).
 function somarMeses(dataStr, n) {
@@ -29,17 +39,24 @@ function somarMeses(dataStr, n) {
 
 // Recalcula honorário, líquido e parceria de UMA parcela a partir dos campos crus.
 // Regra acordada: parceria incide sobre o HONORÁRIO (não sobre o bruto, não mexe no líquido do cliente).
-function calcularValoresParcela(p) {
+// Nunca confia no cálculo do front: RECUSA (não corrige em silêncio) valor bruto zerado/
+// negativo, percentual negativo, e parceria negativa ou maior que o honorário da parcela.
+// `rotulo` identifica a parcela na mensagem de erro quando há mais de uma (ex.: "Parcela 2").
+function calcularValoresParcela(p, rotulo = 'A parcela') {
   const bruto = round2(p.valor_bruto);
+  if (bruto <= 0) throw erroValidacaoFinanceiro(`${rotulo}: informe um valor bruto maior que zero.`);
+
   const honorTipo = ['percent', 'fixo', 'sem'].includes(p.honor_tipo) ? p.honor_tipo : 'percent';
 
   let honorPct = null;
   let honorValor = 0;
   if (honorTipo === 'percent') {
     honorPct = Number(p.honor_percentual) || 0;
+    if (honorPct < 0) throw erroValidacaoFinanceiro(`${rotulo}: o percentual de honorário não pode ser negativo.`);
     honorValor = round2(bruto * honorPct / 100);
   } else if (honorTipo === 'fixo') {
     honorValor = round2(p.honor_valor);
+    if (honorValor < 0) throw erroValidacaoFinanceiro(`${rotulo}: o valor do honorário não pode ser negativo.`);
   } // 'sem' => 0
   if (honorValor > bruto) honorValor = bruto;          // honorário nunca passa do bruto
   const liquido = round2(bruto - honorValor);
@@ -52,8 +69,13 @@ function calcularValoresParcela(p) {
   if (temParceria) {
     if (parcTipo === 'fixo') {
       parcValor = round2(p.parceria_valor);
+      if (parcValor < 0) throw erroValidacaoFinanceiro(`${rotulo}: o valor da parceria não pode ser negativo.`);
+      if (parcValor > honorValor) {
+        throw erroValidacaoFinanceiro(`${rotulo}: a parceria (${fmtReal(parcValor)}) não pode ser maior que o honorário desta parcela (${fmtReal(honorValor)}).`);
+      }
     } else {
       parcPct = Number(p.parceria_percentual) || 0;
+      if (parcPct < 0 || parcPct > 100) throw erroValidacaoFinanceiro(`${rotulo}: o percentual de parceria deve estar entre 0 e 100.`);
       parcValor = round2(honorValor * parcPct / 100);
     }
   }
@@ -250,11 +272,12 @@ async function gerarPreviaParcelas(req, res) {
       const venc = await proximoDiaUtil(somarMeses(data_primeira, i));
       const calc = calcularValoresParcela({
         valor_bruto: bruto, honor_tipo: 'percent', honor_percentual: pct,
-      });
+      }, `Parcela ${i + 1}`);
       parcelas.push({ numero: i + 1, vencimento: venc, status: 'pendente', ...calc });
     }
     return sucesso(res, { valor_total: total, qtd_parcelas: qtd, parcelas });
   } catch (err) {
+    if (err.codigoValidacaoFinanceiro) return erro(res, err.message, 422);
     return erroInterno(res, err);
   }
 }
@@ -278,12 +301,13 @@ async function criarAcordo(req, res) {
        data_primeira || parcelas[0].vencimento, req.usuario.id]
     );
     const acordoId = a.insertId;
-    await inserirParcelas(conn, acordoId, parcelas, req.usuario.id);
+    await inserirParcelas(conn, acordoId, parcelas, req.usuario.id, valor_total);
     await auditoria.registrar(req.usuario.id, 'acordo', 'criar', acordoId, null, null, conn);
     await conn.commit();
     return sucesso(res, { id: acordoId }, 'Acordo criado com sucesso', 201);
   } catch (err) {
     await conn.rollback();
+    if (err.codigoValidacaoFinanceiro) return erro(res, err.message, 422);
     return erroInterno(res, err);
   } finally {
     conn.release();
@@ -357,11 +381,17 @@ function fmtCC(campo, v) {
 }
 
 // Insere a lista de parcelas (recalculando os valores no backend — nunca confia na conta do front).
-// Registra o evento 'criada' no histórico de cada parcela.
-async function inserirParcelas(conn, acordoId, parcelas, usuarioId) {
+// Registra o evento 'criada' no histórico de cada parcela. Antes de gravar qualquer coisa,
+// confere que a soma dos valores brutos bate EXATAMENTE com o valor total do acordo.
+async function inserirParcelas(conn, acordoId, parcelas, usuarioId, valorTotal) {
+  const calculadas = parcelas.map((p, i) => calcularValoresParcela(p, `Parcela ${p.numero || (i + 1)}`));
+  const soma = round2(calculadas.reduce((s, v) => s + v.valor_bruto, 0));
+  if (round2(valorTotal) !== soma) {
+    throw erroValidacaoFinanceiro(`A soma das parcelas (${fmtReal(soma)}) não bate com o valor total do acordo (${fmtReal(valorTotal)}).`);
+  }
   for (let i = 0; i < parcelas.length; i++) {
     const p = parcelas[i];
-    const v = calcularValoresParcela(p);
+    const v = calculadas[i];
     const [r] = await conn.execute(
       `INSERT INTO acordo_parcela
         (acordo_id, numero, vencimento, valor_bruto, honor_tipo, honor_percentual, honor_valor,
@@ -420,6 +450,15 @@ async function atualizarAcordo(req, res) {
       return erro(res, 'Há parcelas já recebidas. Desfaça os recebimentos antes de editar o acordo.');
     }
 
+    // Recalcula e valida TODAS as parcelas antes de gravar qualquer coisa — inclusive que a
+    // soma dos valores brutos bate EXATAMENTE com o valor total informado para o acordo.
+    const calculadas = parcelas.map((p, i) => calcularValoresParcela(p, `Parcela ${p.numero || (i + 1)}`));
+    const somaParcelas = round2(calculadas.reduce((s, v) => s + v.valor_bruto, 0));
+    if (round2(valor_total) !== somaParcelas) {
+      await conn.rollback();
+      return erro(res, `A soma das parcelas (${fmtReal(somaParcelas)}) não bate com o valor total do acordo (${fmtReal(valor_total)}).`, 422);
+    }
+
     await conn.execute(
       `UPDATE acordo SET descricao = ?, valor_total = ?, qtd_parcelas = ?, data_primeira = ?,
               alterado_por = ?, alterado_em = NOW() WHERE id = ?`,
@@ -439,7 +478,7 @@ async function atualizarAcordo(req, res) {
 
     for (let i = 0; i < parcelas.length; i++) {
       const p = parcelas[i];
-      const v = calcularValoresParcela(p);
+      const v = calculadas[i];
       const numero = p.numero || (i + 1);
       const ex = p.id ? existentes.find(e => Number(e.id) === Number(p.id)) : null;
       if (ex) {
@@ -480,6 +519,7 @@ async function atualizarAcordo(req, res) {
     return sucesso(res, null, 'Acordo atualizado');
   } catch (err) {
     await conn.rollback();
+    if (err.codigoValidacaoFinanceiro) return erro(res, err.message, 422);
     return erroInterno(res, err);
   } finally {
     conn.release();
