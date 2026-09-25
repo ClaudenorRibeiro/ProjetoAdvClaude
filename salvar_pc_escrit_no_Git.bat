@@ -6,6 +6,28 @@
 
 cd /d "%~dp0"
 
+:: Verifica se sobrou uma trava antiga do Git (index.lock) de uma execucao
+:: anterior que foi interrompida no meio do caminho. So remove se NAO houver
+:: nenhum processo git.exe rodando de verdade agora (senao, so avisa e para).
+if exist ".git\index.lock" (
+    tasklist /FI "IMAGENAME eq git.exe" 2>nul | find /I "git.exe" >nul
+    if errorlevel 1 (
+        del /f /q ".git\index.lock" >nul 2>&1
+        echo.
+        echo Aviso: uma trava antiga do Git foi encontrada e removida
+        echo automaticamente ^(nao havia nenhum processo do Git em andamento^).
+    ) else (
+        echo.
+        echo ============================================================
+        echo  Existe um processo do Git rodando agora nesta pasta.
+        echo  Aguarde ele terminar e rode o script novamente.
+        echo ============================================================
+        echo.
+        pause
+        exit /b
+    )
+)
+
 :: Garante que a pasta de memorias NUNCA va para o GitHub.
 :: "git rm --cached" tira a pasta do controle do git, mas MANTEM os arquivos no seu PC.
 :: --ignore-unmatch evita erro quando a pasta ja esta fora do git. Roda sempre, sem risco.
