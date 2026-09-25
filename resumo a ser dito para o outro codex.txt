@@ -1,0 +1,131 @@
+CONTINUIDADE DO PROJETO — 18/09/2026
+
+LEIA PRIMEIRO
+- Leia integralmente o AGENTS.md da raiz antes de qualquer ação.
+- O usuário é Claudio e exige: nunca supor; analisar frontend, backend e banco; explicar plano e impactos; aguardar “pode codar” antes de editar arquivos.
+- NUNCA acessar, executar SQL, alterar ou apagar dados no banco LOCAL ou AWS. SQL é entregue para Claudio executar manualmente no HeidiSQL.
+- Não executar Git, commit, push, reset ou ações destrutivas sem autorização explícita.
+- Não use o export local.sql como backup/restauração: ele ficou incompleto por erro 1146 durante exportação do HeidiSQL.
+- aws-antonio.sql contém comandos destrutivos de exportação, inclusive DROP DATABASE; nunca use como migração.
+
+PASTA DO PROJETO
+C:\Users\Claudio\Downloads\ProjetoAdvClaude
+
+ESTADO ATUAL CONFIRMADO DO BANCO LOCAL
+- O usuário executou manualmente e sem erro os scripts S1, S2 e S3.
+- O primeiro S4 falhou por sintaxe IF NOT EXISTS incompatível. Ele falhou antes de alterar qualquer coluna.
+- O S4 foi corrigido no projeto. Claudio executou manualmente a verificação prévia corrigida, recebeu APROVADO e executou o S4 corrigido.
+- Uma consulta posterior confirmou exatamente 17 colunas novas do S4 no LOCAL.
+- Portanto, a migração financeira/freelancer está aplicada no LOCAL.
+- AWS não foi alterada.
+
+ARQUIVOS SQL IMPORTANTES
+1. scripts\S1 - 2026-09-17_freelancer_assistente_tecnico.sql
+   - Cria coluna profissao_id em advogados_freela e assistente_tecnico_freela_id em pericia.
+
+2. scripts\S2 - 2026-09-17_contas_financeiras.sql
+   - Cria instituicao_financeira e conta_financeira.
+   - Cria contas iniciais Bradesco, Banco do Brasil, Caixa e caixa físico em espécie.
+   - Acrescenta vínculos de conta nos recebimentos e repasses de acordo_parcela.
+
+3. scripts\S3 - 2026-09-17_contas_bancarias_pessoas.sql
+   - Cria contas_bancarias_pf e contas_bancarias_pj.
+   - Permite várias contas por pessoa, conta principal e conta de terceiro autorizado.
+
+4. scripts\S4 - 2026-09-18_verificar_pre-requisitos.sql
+   - Somente leitura. Mostra versão do servidor e retorna APROVADO ou BLOQUEADO.
+   - Deve ser usado depois de S1/S2/S3 e antes do S4 de migração, em CADA instância.
+
+5. scripts\S4 - 2026-09-18_destinos_financeiros_robustos.sql
+   - Migração, executada uma única vez por instância após o verificador retornar APROVADO.
+   - Não usa IF NOT EXISTS.
+   - Usa apenas DDL básico compatível com MySQL/MariaDB.
+   - Usa LONGTEXT para snapshots JSON, evitando depender do tipo JSON de versões diferentes.
+
+IMPORTANTE PARA AWS E OUTRO COMPUTADOR
+- NÃO rodar S1/S2/S3 cegamente em AWS. Antes é obrigatório fazer diagnóstico somente leitura do estado real da instância.
+- Os scripts S1/S2/S3 não são idempotentes. Só devem ser executados se o diagnóstico confirmar que a instância está no ponto inicial equivalente ao LOCAL antes da migração.
+- Depois de validar AWS, a sequência será: S1, S2, S3, S4 verificador, S4 migração.
+- Não se deve chamar o verificador de “segunda migração S4”: ele não altera nada.
+- Antes de qualquer AWS, terminar e aprovar os testes manuais no LOCAL.
+
+O QUE FOI IMPLEMENTADO NO CÓDIGO NESTA SESSÃO
+
+Financeiro e contas bancárias:
+- Cadastro de instituições financeiras (catálogo de bancos) separado das contas do escritório.
+- Contas do escritório suportam múltiplas contas no mesmo banco e caixa físico em espécie.
+- Contas bancárias de PF/PJ suportam múltiplas contas, conta principal, terceiro autorizado e observação.
+- Ao editar pessoa, contas removidas da ficha são desativadas, não apagadas, preservando histórico.
+- Acordo/alvará pode ter beneficiário e conta padrão.
+- Cada parcela pode usar conta de destino diferente no momento do repasse.
+- Recebimento e repasse exigem conta/caixa ativo do escritório.
+- O backend verifica dono/tipo/atividade da conta de destino.
+- O repasse grava um snapshot do destino (titular, documento, banco, agência, conta, PIX, terceiro e observação), preservando histórico após alteração futura na ficha da pessoa.
+
+Caixa físico em espécie — último ajuste implementado:
+- Dinheiro em espécie é caixa físico, não conta bancária.
+- Na tela de conta do escritório, ao selecionar espécie, Banco, Agência, Conta, Dígito e PIX ficam ocultos.
+- Ao trocar uma conta bancária para espécie, os campos bancários são limpos no frontend.
+- O backend também grava esses campos como NULL para espécie, mesmo que uma chamada incorreta os envie.
+- A interface não oferece “Desativar” para um caixa físico.
+- O backend protege a regra de negócio: o último caixa físico ativo não pode ser desativado nem convertido para conta bancária.
+- Há transação no backend para essas operações.
+- Não houve nova mudança de banco para esse ajuste.
+
+ARQUIVOS DE CÓDIGO PRINCIPAIS ALTERADOS
+- backend\src\controllers\financeiroController.js
+- backend\src\controllers\pessoasController.js
+- backend\src\routes\index.js
+- frontend\src\services\api.js
+- frontend\src\pages\Financeiro\Financeiro.js
+- frontend\src\pages\Controle\InstituicoesFinanceiras.js
+- frontend\src\components\LinhaContaBancaria.js
+- frontend\src\pages\Pessoas\Pessoas.js
+- estrutura_banco.sql
+- scripts\S4 - 2026-09-18_destinos_financeiros_robustos.sql
+- scripts\S4 - 2026-09-18_verificar_pre-requisitos.sql
+
+TESTES E VALIDAÇÕES EXECUTADOS
+- Backend: npm.cmd test em backend — 34 testes aprovados.
+- Frontend: npm.cmd test em frontend — 41 testes aprovados.
+- Frontend: npm.cmd run build em frontend — compilação concluída sem erro.
+- Em ambiente sandbox o teste frontend precisou ser executado fora do isolamento para ler dependências locais; não houve acesso a banco ou rede.
+- Não foram executados os testes de integração que recriam banco isolado.
+- Build não substitui teste funcional; ainda falta teste manual completo no LOCAL.
+
+TESTES MANUAIS AINDA NECESSÁRIOS NO LOCAL
+1. Atualizar navegador com Ctrl+F5 e garantir backend/frontend locais atualizados.
+2. Em Controle > Instituições financeiras:
+   - cadastrar Santander, se desejado;
+   - editar/cadastrar duas contas reais do escritório no mesmo banco;
+   - verificar que o caixa físico só mostra nome, local físico/observação e opção de principal;
+   - confirmar que não há opção de desativar o caixa físico.
+3. Em Pessoas:
+   - cadastrar duas contas para uma PF;
+   - cadastrar duas contas para uma PJ;
+   - testar conta de terceiro autorizado e observação;
+   - definir uma conta principal.
+4. Em Financeiro:
+   - criar/editar acordo escolhendo beneficiário e conta padrão;
+   - registrar recebimento numa conta bancária do escritório;
+   - registrar recebimento em dinheiro em espécie;
+   - registrar repasse selecionando conta de origem do escritório e conta de destino do beneficiário;
+   - verificar que a alteração posterior da conta da pessoa não modifica o repasse histórico.
+5. Só após aprovação desses testes locais, planejar/autorizar a implantação AWS.
+
+PONTOS DE UX JÁ EXPLICADOS AO USUÁRIO
+- Tela Controle > Instituições financeiras:
+  - parte inferior: catálogo de bancos; cadastrar um banco não cria conta;
+  - parte superior: apenas contas e caixa do escritório;
+  - contas de clientes/parceiros devem ser cadastradas na ficha da própria pessoa em Pessoas.
+- O usuário está testando agora a tela de contas do escritório e perguntou sobre dinheiro em espécie. O ajuste foi implementado e validado por testes/compilação, mas ele ainda precisa recarregar a interface e verificar visualmente.
+
+ARQUIVOS DE RESUMO ANTERIORES
+- RESUMO-SESSAO-2026-09-18.txt contém o resumo para o usuário.
+- Este arquivo é o handoff técnico/operacional para o próximo Codex.
+
+PENDÊNCIAS FUTURAS
+- Não há autorização atual para nova codificação.
+- Aguardar Claudio testar e relatar o resultado da interface LOCAL.
+- Se houver falha, primeiro analisar frontend + backend + banco relacionado e apresentar plano antes de modificar.
+- Quando LOCAL estiver aprovado, criar/analisar um diagnóstico inicial seguro específico da AWS antes de recomendar S1/S2/S3.

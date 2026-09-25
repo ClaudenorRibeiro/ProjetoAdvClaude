@@ -146,6 +146,14 @@ async function enviarEmailColetivo({ destinatarios, assunto, html }) {
   return enviados;
 }
 
+// Escapa o que veio do cadastro (nome do usuário, nome do escritório) antes de entrar
+// no HTML do e-mail — um "&" ou "<" no nome não pode quebrar o layout.
+function escaparHtml(txt) {
+  return String(txt == null ? '' : txt)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 // Template HTML para o e-mail de redefinição de senha
 function templateResetSenha({ nome, link, escritorio }) {
   return `
@@ -155,10 +163,10 @@ function templateResetSenha({ nome, link, escritorio }) {
   <body style="font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 20px;">
     <div style="max-width: 500px; margin: 0 auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
       <div style="background: #2d6be4; padding: 24px; text-align: center;">
-        <h1 style="color: #fff; margin: 0; font-size: 20px;">${escritorio || 'Sistema de Advocacia'}</h1>
+        <h1 style="color: #fff; margin: 0; font-size: 20px;">${escaparHtml(escritorio || 'Sistema de Advocacia')}</h1>
       </div>
       <div style="padding: 32px 24px;">
-        <p style="margin: 0 0 12px; color: #333;">Olá, <strong>${nome}</strong>.</p>
+        <p style="margin: 0 0 12px; color: #333;">Olá, <strong>${escaparHtml(nome)}</strong>.</p>
         <p style="margin: 0 0 24px; color: #555;">
           Recebemos uma solicitação para redefinir a senha da sua conta. Clique no botão abaixo para criar uma nova senha.
         </p>

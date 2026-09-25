@@ -43,6 +43,7 @@ const Foruns          = lazyComRetry(() => import('./pages/Controle/Foruns'));
 const Varas           = lazyComRetry(() => import('./pages/Controle/Varas'));
 const Auxiliares      = lazyComRetry(() => import('./pages/Controle/Auxiliares'));
 const FormasPagamento = lazyComRetry(() => import('./pages/Controle/FormasPagamento'));
+const InstituicoesFinanceiras = lazyComRetry(() => import('./pages/Controle/InstituicoesFinanceiras'));
 // Fase 2: telas pesadas e independentes.
 const Audiencias      = lazyComRetry(() => import('./pages/Audiencias/Audiencias'));
 const Pericias        = lazyComRetry(() => import('./pages/Pericias/Pericias'));
@@ -112,10 +113,15 @@ function CarregandoTela() {
 class ErroAoCarregarTela extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { falhou: false };
+    this.state = { falhou: false, erro: null };
   }
-  static getDerivedStateFromError() {
-    return { falhou: true };
+  static getDerivedStateFromError(erro) {
+    return { falhou: true, erro };
+  }
+  componentDidCatch(erro, informacoes) {
+    // Mantém o detalhe técnico no console local. A tela abaixo mostra uma
+    // explicação legível apenas durante o desenvolvimento, sem expô-la em produção.
+    console.error('Erro ao carregar tela:', erro, informacoes);
   }
   render() {
     if (this.state.falhou) {
@@ -125,6 +131,11 @@ class ErroAoCarregarTela extends React.Component {
             <div style={{fontSize:14,marginBottom:12}}>
               Não foi possível carregar esta tela. Isso costuma acontecer após uma atualização do sistema. Clique em Atualizar para recarregar.
             </div>
+            {import.meta.env.DEV && this.state.erro?.message && (
+              <div style={{fontSize:12,margin:'0 0 12px',padding:'8px',borderRadius:5,background:'#fff',color:'#7c2d12',textAlign:'left',wordBreak:'break-word'}}>
+                Detalhe para diagnóstico: {this.state.erro.message}
+              </div>
+            )}
             <button
               onClick={() => window.location.reload()}
               style={{background:'#8a5300',color:'#fff',border:'none',padding:'8px 16px',borderRadius:6,fontSize:13,cursor:'pointer'}}
@@ -171,6 +182,7 @@ function AppRoutes() {
       <Route path="/controle/varas"   element={<RotaProtegida apenasAdmin><Varas /></RotaProtegida>} />
       <Route path="/controle/auxiliares" element={<RotaProtegida apenasAdmin><Auxiliares /></RotaProtegida>} />
       <Route path="/controle/formas-pagamento" element={<RotaProtegida apenasAdmin><FormasPagamento /></RotaProtegida>} />
+      <Route path="/controle/instituicoes-financeiras" element={<RotaProtegida apenasAdmin><InstituicoesFinanceiras /></RotaProtegida>} />
 
       {/* Redireciona raiz para dashboard */}
       <Route path="/" element={<Navigate to="/dashboard" replace />} />

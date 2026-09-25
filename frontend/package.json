@@ -4,23 +4,39 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "axios": "^1.6.2",
+    "date-fns": "^3.3.1",
     "react": "^18.2.0",
+    "react-big-calendar": "^1.10.3",
+    "react-datepicker": "^6.1.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.21.0",
-    "axios": "^1.6.2",
-    "react-big-calendar": "^1.10.3",
-    "date-fns": "^3.3.1",
-    "react-datepicker": "^6.1.0",
     "react-select": "^5.8.0",
     "react-toastify": "^10.0.4"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.0",
+    "@playwright/test": "^1.63.0",
+    "@stryker-mutator/core": "^10.0.0",
+    "@stryker-mutator/vitest-runner": "^10.0.0",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
+    "@vitejs/plugin-react": "^4.3.0",
+    "@vitest/coverage-v8": "^2.1.9",
+    "axe-core": "^4.13.0",
+    "jsdom": "^29.1.1",
     "vite": "^5.4.0",
-    "@vitejs/plugin-react": "^4.3.0"
+    "vitest": "^2.1.9"
   },
   "scripts": {
     "start": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run --passWithNoTests",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:critical": "playwright test --project=chromium --grep @critical",
+    "test:mutation": "stryker run"
   }
 }

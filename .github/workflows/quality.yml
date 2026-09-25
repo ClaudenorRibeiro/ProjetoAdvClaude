@@ -1,0 +1,106 @@
+name: Bateria de qualidade
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qualidade-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: sistema_advocacia_test
+          MYSQL_USER: novojud_test
+          MYSQL_PASSWORD: teste_ci_exclusivo
+          MYSQL_ROOT_PASSWORD: root_ci_descartavel
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      TEST_DB_HOST: 127.0.0.1
+      TEST_DB_PORT: 3306
+      TEST_DB_USER: novojud_test
+      TEST_DB_PASSWORD: teste_ci_exclusivo
+      TEST_DB_NAME: sistema_advocacia_test
+      TEST_JWT_SECRET: chave-exclusiva-ci-com-mais-de-trinta-e-dois-caracteres
+      CI: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - run: npm ci
+        working-directory: backend
+      - run: npm ci
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - run: node quality/run.mjs --completo
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relatorios-testes
+          path: |
+            frontend/test-results
+            backend/test-results
+          if-no-files-found: ignore
+
+  navegadores:
+    if: github.event_name == 'workflow_dispatch'
+    needs: testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: sistema_advocacia_test
+          MYSQL_USER: novojud_test
+          MYSQL_PASSWORD: teste_ci_exclusivo
+          MYSQL_ROOT_PASSWORD: root_ci_descartavel
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      TEST_DB_HOST: 127.0.0.1
+      TEST_DB_PORT: 3306
+      TEST_DB_USER: novojud_test
+      TEST_DB_PASSWORD: teste_ci_exclusivo
+      TEST_DB_NAME: sistema_advocacia_test
+      TEST_JWT_SECRET: chave-exclusiva-ci-com-mais-de-trinta-e-dois-caracteres
+      CI: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: npm ci
+        working-directory: backend
+      - run: npm ci
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium firefox webkit
+        working-directory: frontend
+      - run: npm run test:e2e
+        working-directory: frontend

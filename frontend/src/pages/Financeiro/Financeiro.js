@@ -4,13 +4,15 @@
 //        + acordos parcelados (modal-tabela editável) + baixa de parcela (vira entrada).
 // ============================================================
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { financeiroAPI, processosAPI, pessoasAPI } from '../../services/api';
-import { formatarData, formatarDataHora, formatarMoeda, formatarNumeroPasta, toTitleCase, mascaraMoeda, numeroParaMascaraMoeda, parseMoeda, hojeLocal } from '../../utils/formatters';
+import { formatarData, formatarDataHora, formatarMoeda, formatarNumeroPasta, toTitleCase, mascaraMoeda, numeroParaMascaraMoeda, parseMoeda, hojeLocal, mascaraDocumento } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
+import ModalInfo from '../../components/ui/ModalInfo';
 import MenuAcoes from '../../components/MenuAcoes';
+import { ModalGerar } from '../../components/GerarDocumento';
 
 const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
 
@@ -31,6 +33,29 @@ function parceriaDaParcela(p) {
   if (!p.parceria_pessoa_id) return null;
   if (p.parceria_tipo === 'fixo') return parseMoeda(p.parceria_valor);
   return round2(honorDaParcela(p) * (Number(p.parceria_percentual) || 0) / 100);
+}
+
+// Agrupamento do "Saldo" do extrato (coluna que só aparece na última linha de cada grupo).
+// Datas são comparadas pelo prefixo YYYY-MM-DD (sem hora/fuso) para não variar por timezone.
+function dataIsoDia(valor) {
+  const m = String(valor || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? m[0] : null;
+}
+function diasDesdeEpoca(iso) {
+  const [ano, mes, dia] = iso.split('-').map(Number);
+  return Math.floor(Date.UTC(ano, mes - 1, dia) / 86400000);
+}
+// 'diario': cada data é seu próprio grupo. 'semanal'/'mensal': blocos fixos de 7/30 dias
+// corridos, contados a partir da data do PRIMEIRO lançamento do extrato (não é semana/mês
+// de calendário, e o bloco não muda dependendo de quando a tela é aberta).
+function grupoSaldo(dataLancamento, dataAncora, periodo) {
+  const iso = dataIsoDia(dataLancamento);
+  if (!iso) return null;
+  if (periodo === 'diario') return iso;
+  const isoAncora = dataIsoDia(dataAncora);
+  if (!isoAncora) return iso;
+  const tamanhoBloco = periodo === 'semanal' ? 7 : 30;
+  return Math.floor((diasDesdeEpoca(iso) - diasDesdeEpoca(isoAncora)) / tamanhoBloco);
 }
 
 export default function Financeiro() {
@@ -57,10 +82,19 @@ export default function Financeiro() {
   const [confirmar, setConfirmar]             = useState(null);
   const [aba, setAba] = useState('processo');   // 'processo' (por processo) | 'repasses' (worklist global)
   const [acordoTipoNovo, setAcordoTipoNovo] = useState('acordo'); // tipo ao criar: 'acordo' | 'alvara'
+  const [periodoSaldo, setPeriodoSaldo] = useState('diario'); // agrupamento da coluna Saldo do extrato: 'diario' | 'semanal' | 'mensal'
+  // Guarda contra resposta desatualizada: trocar de processo rápido pode fazer a busca do
+  // processo anterior responder DEPOIS da do processo novo e sobrescrever a tela com o
+  // saldo/acordos errados (auditoria 23/09).
+  const carregarSeqRef = useRef(0);
 
   async function buscarPastas(termo) {
     if (termo.length < 2) return setPastas([]);
-    const { data } = await processosAPI.listarPastas({ busca: termo, limite: 10 });
+    // apenasComFinanceiro: só o Financeiro liga esse filtro — traz só pastas com algum
+    // processo que já teve lançamento/acordo/alvará. As outras telas que reaproveitam esta
+    // mesma busca (Perícias, Prazos, Processos, Relatórios, Tarefas) não mandam este
+    // parâmetro e continuam vendo todas as pastas, normalmente.
+    const { data } = await processosAPI.listarPastas({ busca: termo, limite: 10, apenasComFinanceiro: 1 });
     if (data.ok) setPastas(data.dados.registros);
   }
 
@@ -79,16 +113,18 @@ export default function Financeiro() {
 
   const carregar = useCallback(async () => {
     if (!processoId) return;
+    const minhaSeq = ++carregarSeqRef.current;
     setCarregando(true);
     try {
       const [c, a] = await Promise.all([
         financeiroAPI.buscarConta(processoId, {}),
         financeiroAPI.listarAcordos(processoId),
       ]);
+      if (minhaSeq !== carregarSeqRef.current) return; // já saiu outra busca depois desta (trocou de processo)
       if (c.data.ok) setConta(c.data.dados);
       if (a.data.ok) setAcordos(a.data.dados);
     } catch { toast.error('Erro ao carregar financeiro'); }
-    finally { setCarregando(false); }
+    finally { if (minhaSeq === carregarSeqRef.current) setCarregando(false); }
   }, [processoId]);
 
   useEffect(() => { carregar(); }, [carregar]);
@@ -134,7 +170,7 @@ export default function Financeiro() {
         </button>
       </div>
 
-      {aba === 'repasses' && <RepassesView podeAlterar={podeAlterar} />}
+      {aba === 'repasses' && <RepassesView podeAlterar={podeAlterar} onMudou={carregar} />}
       {aba === 'consulta' && <ConsultaFinanceiro />}
 
       {aba === 'processo' && (<>
@@ -221,19 +257,35 @@ export default function Financeiro() {
                 </strong>
               </div>
             </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <button className={`btn ${periodoSaldo === 'diario' ? 'btn-primary' : 'btn-outline'}`} style={{ fontSize: 12, padding: '4px 10px' }}
+                onClick={() => setPeriodoSaldo('diario')}>Diário</button>
+              <button className={`btn ${periodoSaldo === 'semanal' ? 'btn-primary' : 'btn-outline'}`} style={{ fontSize: 12, padding: '4px 10px' }}
+                onClick={() => setPeriodoSaldo('semanal')}>Semanal</button>
+              <button className={`btn ${periodoSaldo === 'mensal' ? 'btn-primary' : 'btn-outline'}`} style={{ fontSize: 12, padding: '4px 10px' }}
+                onClick={() => setPeriodoSaldo('mensal')}>Mensal</button>
+            </div>
             <div className="tabela-wrapper">
               <table className="tabela">
                 <thead>
                   <tr>
                     <th>Data</th><th>Descrição</th><th>Tipo</th>
-                    <th style={{ textAlign: 'right' }}>Valor</th>
+                    <th style={{ textAlign: 'right' }}>Entrada</th>
+                    <th style={{ textAlign: 'right' }}>Saída</th>
+                    <th style={{ textAlign: 'right' }}>Saldo</th>
                     <th>Ações</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(conta.lancamentos || []).map(l => {
-                    const ehAcordo = l.origem === 'acordo';
-                    return (
+                  {(() => {
+                    const lista = conta.lancamentos || [];
+                    const dataAncora = lista[0]?.data;
+                    return lista.map((l, i) => {
+                      const ehAcordo = l.origem !== 'manual';
+                      const grupoAtual = grupoSaldo(l.data, dataAncora, periodoSaldo);
+                      const grupoProximo = i + 1 < lista.length ? grupoSaldo(lista[i + 1].data, dataAncora, periodoSaldo) : null;
+                      const ultimoDoGrupo = grupoProximo === null || grupoProximo !== grupoAtual;
+                      return (
                       <tr key={l.id}>
                         <td style={{ whiteSpace: 'nowrap' }}>{formatarData(l.data)}</td>
                         <td>{l.descricao}</td>
@@ -242,8 +294,18 @@ export default function Financeiro() {
                             {l.tipo === 'entrada' ? 'Entrada' : 'Saída'}
                           </span>
                         </td>
-                        <td style={{ textAlign: 'right' }} className={l.tipo === 'entrada' ? 'valor-positivo' : 'valor-negativo'}>
-                          {l.tipo === 'saida' ? '−' : '+'}{formatarMoeda(l.valor)}
+                        <td style={{ textAlign: 'right' }} className="valor-positivo">
+                          {l.tipo === 'entrada' ? `+${formatarMoeda(l.valor)}` : ''}
+                        </td>
+                        <td style={{ textAlign: 'right' }} className="valor-negativo">
+                          {l.tipo === 'saida' ? `−${formatarMoeda(l.valor)}` : ''}
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: ultimoDoGrupo ? 600 : 400 }}>
+                          {ultimoDoGrupo && (
+                            <span style={{ color: (l.saldo_acumulado || 0) >= 0 ? '#059669' : '#dc2626' }}>
+                              {formatarMoeda(l.saldo_acumulado)}
+                            </span>
+                          )}
                         </td>
                         <td style={{ whiteSpace: 'nowrap' }}>
                           {ehAcordo ? (
@@ -262,8 +324,9 @@ export default function Financeiro() {
                           )}
                         </td>
                       </tr>
-                    );
-                  })}
+                      );
+                    });
+                  })()}
                 </tbody>
               </table>
               {(!conta.lancamentos || conta.lancamentos.length === 0) && (
@@ -296,7 +359,7 @@ export default function Financeiro() {
 // ainda falta repassar ao cliente e/ou ao parceiro). Cada pendência vira
 // uma linha (uma parcela com cliente E parceiro pendentes gera 2 linhas).
 // ============================================================
-function RepassesView({ podeAlterar }) {
+function RepassesView({ podeAlterar, onMudou }) {
   const { temPermissao } = useAuth();
   const [sub, setSub] = useState('pendentes');         // 'pendentes' | 'concluidos'
   const [pendentes, setPendentes] = useState(null);
@@ -304,28 +367,34 @@ function RepassesView({ podeAlterar }) {
   const [repassando, setRepassando] = useState(null);   // linha aguardando o modal de repasse
   const [historicoDe, setHistoricoDe] = useState(null); // parcela com histórico aberto
 
-  // Pendentes: uma linha por repasse que ainda FALTA (cliente e/ou parceiro)
+  // Pendentes: uma linha por repasse que ainda FALTA (cliente e/ou parceiro), da parcela OU da
+  // multa dela. Prefixa a key com a origem: parcela e multa podem ter o MESMO id (id da multa
+  // devolvido pelo backend é o id da própria parcela — é 1 multa por parcela).
   function montarPendentes(parcelas) {
     const out = [];
     for (const p of parcelas) {
+      const origem = p.origem || 'parcela';
       if (Number(p.valor_liquido) > 0 && !p.repasse_cliente_em)
-        out.push({ key: `c${p.id}`, parcela: p, tipo: 'cliente', beneficiario: 'Cliente', valor: p.valor_liquido });
-      if (p.parceria_pessoa_id && !p.repasse_parceiro_em)
-        out.push({ key: `p${p.id}`, parcela: p, tipo: 'parceiro', beneficiario: p.parceria_nome || 'Parceiro', valor: p.parceria_valor });
+        out.push({ key: `c${origem}${p.id}`, parcela: p, tipo: 'cliente', beneficiario: 'Cliente', valor: p.valor_liquido, origem });
+      if (p.parceria_pessoa_id && Number(p.parceria_valor) > 0 && !p.repasse_parceiro_em)
+        out.push({ key: `p${origem}${p.id}`, parcela: p, tipo: 'parceiro', beneficiario: p.parceria_nome || 'Parceiro', valor: p.parceria_valor, origem });
     }
     return out;
   }
 
-  // Concluídos: uma linha por repasse JÁ FEITO (com data, forma e quem fez)
+  // Concluídos: uma linha por repasse JÁ FEITO (com data, forma e quem fez), da parcela OU da multa.
   function montarConcluidos(parcelas) {
     const out = [];
     for (const p of parcelas) {
+      const origem = p.origem || 'parcela';
       if (p.repasse_cliente_em)
-        out.push({ key: `c${p.id}`, parcela: p, tipo: 'cliente', beneficiario: 'Cliente', valor: p.valor_liquido,
-                   data: p.repasse_cliente_em, forma: p.repasse_cliente_forma_nome, quem: p.repasse_cliente_por_nome });
+        out.push({ key: `c${origem}${p.id}`, parcela: p, tipo: 'cliente', beneficiario: 'Cliente', valor: p.valor_liquido,
+                   data: p.repasse_cliente_em, forma: p.repasse_cliente_forma_nome, quem: p.repasse_cliente_por_nome,
+                   observacao: p.repasse_cliente_observacao, origem });
       if (p.repasse_parceiro_em)
-        out.push({ key: `p${p.id}`, parcela: p, tipo: 'parceiro', beneficiario: p.parceria_nome || 'Parceiro', valor: p.parceria_valor,
-                   data: p.repasse_parceiro_em, forma: p.repasse_parceiro_forma_nome, quem: p.repasse_parceiro_por_nome });
+        out.push({ key: `p${origem}${p.id}`, parcela: p, tipo: 'parceiro', beneficiario: p.parceria_nome || 'Parceiro', valor: p.parceria_valor,
+                   data: p.repasse_parceiro_em, forma: p.repasse_parceiro_forma_nome, quem: p.repasse_parceiro_por_nome,
+                   observacao: p.repasse_parceiro_observacao, origem });
     }
     return out;
   }
@@ -341,12 +410,19 @@ function RepassesView({ podeAlterar }) {
 
   async function confirmarRepasse(dados) {
     try {
-      await financeiroAPI.registrarRepasse(repassando.parcela.id, { tipo: repassando.tipo, ...dados });
-      toast.success('Repasse registrado'); setRepassando(null); carregar();
+      if (repassando.origem === 'multa') await financeiroAPI.registrarRepasseMulta(repassando.parcela.id, { tipo: repassando.tipo, ...dados });
+      else await financeiroAPI.registrarRepasse(repassando.parcela.id, { tipo: repassando.tipo, ...dados });
+      toast.success('Repasse registrado'); setRepassando(null);
+      await Promise.all([carregar(), onMudou?.()]);
     } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao repassar'); }
   }
   async function desfazerRepasse(l) {
-    try { await financeiroAPI.desfazerRepasse(l.parcela.id, l.tipo); toast.success('Repasse desfeito'); carregar(); }
+    try {
+      if (l.origem === 'multa') await financeiroAPI.desfazerRepasseMulta(l.parcela.id, l.tipo);
+      else await financeiroAPI.desfazerRepasse(l.parcela.id, l.tipo);
+      toast.success('Repasse desfeito');
+      await Promise.all([carregar(), onMudou?.()]);
+    }
     catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao desfazer repasse'); }
   }
 
@@ -393,7 +469,7 @@ function RepassesView({ podeAlterar }) {
                     {colProc(l.parcela)}
                     <td>
                       <span className={`badge ${l.tipo === 'cliente' ? 'badge-azul' : 'badge-roxo'}`}>
-                        {l.tipo === 'cliente' ? 'Cliente' : `Parceiro: ${l.beneficiario}`}
+                        {l.tipo === 'cliente' ? 'Cliente' : `Parceiro: ${l.beneficiario}`}{l.origem === 'multa' ? ' (multa)' : ''}
                       </span>
                     </td>
                     <td style={{ textAlign: 'right' }}>{formatarMoeda(l.valor)}</td>
@@ -421,7 +497,7 @@ function RepassesView({ podeAlterar }) {
                 <tr>
                   <th>Repassado em</th><th>Processo</th><th>Pasta</th><th>Parcela</th>
                   <th>Beneficiário</th><th style={{ textAlign: 'right' }}>Valor</th>
-                  <th>Forma</th><th>Quem fez</th><th>Ações</th>
+                  <th>Forma</th><th>Observação</th><th>Quem fez</th><th>Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -431,16 +507,19 @@ function RepassesView({ podeAlterar }) {
                     {colProc(l.parcela)}
                     <td>
                       <span className={`badge ${l.tipo === 'cliente' ? 'badge-azul' : 'badge-roxo'}`}>
-                        {l.tipo === 'cliente' ? 'Cliente' : `Parceiro: ${l.beneficiario}`}
+                        {l.tipo === 'cliente' ? 'Cliente' : `Parceiro: ${l.beneficiario}`}{l.origem === 'multa' ? ' (multa)' : ''}
                       </span>
                     </td>
                     <td style={{ textAlign: 'right' }}>{formatarMoeda(l.valor)}</td>
                     <td>{l.forma || '—'}</td>
+                    <td style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.observacao || ''}>{l.observacao || '—'}</td>
                     <td>{l.quem || '—'}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>
                       <MenuAcoes itens={[
+                        // Recibo de multa fica fora por enquanto (o modelo de recibo usa os valores
+                        // da parcela, não os da multa — geraria um recibo com o valor errado).
                         { label: 'Recibo', icone: '📄',
-                          oculto: !temPermissao('documentos','cadastrar'),
+                          oculto: l.origem === 'multa' || !temPermissao('documentos','cadastrar'),
                           gerarDoc: { ancoraTipo: 'pagamento', ancoraId: l.parcela.id, beneficiario: l.tipo } },
                         { label: 'Histórico', icone: '📋',
                           onClick: () => setHistoricoDe(l.parcela) },
@@ -475,6 +554,31 @@ function ModalRepasse({ linha, onCancelar, onConfirmar }) {
   const [formaId, setFormaId] = useState('');
   const [formas, setFormas] = useState([]);
   const [salvando, setSalvando] = useState(false);
+  const [contasEscritorio, setContasEscritorio] = useState([]);
+  const [contaEscritorioId, setContaEscritorioId] = useState('');
+  const p = linha.parcela;
+  const inicialTipo = linha.tipo === 'parceiro' ? p.parceria_pessoa_tipo : p.repasse_cliente_tipo;
+  const inicialPessoa = linha.tipo === 'parceiro' ? p.parceria_pessoa_id : p.repasse_cliente_pessoa_id;
+  const [beneficiarios, setBeneficiarios] = useState([]);
+  const [destinoTipo, setDestinoTipo] = useState(inicialTipo || '');
+  const [destinoPessoa, setDestinoPessoa] = useState(inicialPessoa || '');
+  const [contasDestino, setContasDestino] = useState([]);
+  const [contaDestinoId, setContaDestinoId] = useState(linha.tipo === 'cliente' ? (p.repasse_cliente_conta_id || '') : '');
+  const [tipoDestino, setTipoDestino] = useState('bancaria');
+  const [observacao, setObservacao] = useState('');
+  const [modalNovaConta, setModalNovaConta] = useState(false);
+  const [info, setInfo] = useState(null);
+  const { temPermissao } = useAuth();
+  const formasCompativeis = formas.filter(f => f.uso_permitido === 'ambos' || f.uso_permitido === (tipoDestino === 'em_maos' ? 'especie' : 'financeira'));
+  // Guarda contra resposta desatualizada: trocar de beneficiário rápido pode fazer a lista de
+  // contas de um beneficiário anterior chegar DEPOIS e ficar exibida como se fosse do atual
+  // — risco real de escolher a conta bancária da pessoa errada num repasse (auditoria 23/09).
+  const contasDestinoSeqRef = useRef(0);
+  const dataRef = useRef(null);
+  const contaEscritorioRef = useRef(null);
+  const beneficiarioRef = useRef(null);
+  const contaDestinoRef = useRef(null);
+  const formaRef = useRef(null);
 
   useEffect(() => {
     financeiroAPI.formasPagamento()
@@ -482,15 +586,58 @@ function ModalRepasse({ linha, onCancelar, onConfirmar }) {
       .catch(() => toast.error('Erro ao carregar formas de pagamento'));
   }, []);
 
+  useEffect(() => {
+    financeiroAPI.contasEscritorio().then(({ data }) => {
+      if (data.ok) {
+        setContasEscritorio(data.dados);
+        // Pré-seleciona a conta principal do escritório (mesmo padrão já usado abaixo p/
+        // "Conta do beneficiário") — evita o usuário esquecer de escolher a cada repasse.
+        setContaEscritorioId(atual => atual || (data.dados.find(c => c.principal)?.id || ''));
+      }
+    }).catch(() => toast.error('Erro ao carregar contas do escritório'));
+    if (linha.tipo === 'cliente' && !inicialPessoa) {
+      financeiroAPI.beneficiariosProcesso(p.processo_id).then(({ data }) => { if (data.ok) setBeneficiarios(data.dados); })
+        .catch(() => toast.error('Erro ao carregar beneficiários do processo'));
+    }
+  }, []);
+  useEffect(() => {
+    const minhaSeq = ++contasDestinoSeqRef.current;
+    if (!destinoTipo || !destinoPessoa) { setContasDestino([]); return; }
+    financeiroAPI.contasBeneficiario(destinoTipo, destinoPessoa)
+      .then(({ data }) => {
+        if (minhaSeq !== contasDestinoSeqRef.current) return; // já trocou de beneficiário depois desta busca
+        if (data.ok) { setContasDestino(data.dados); if (!contaDestinoId) setContaDestinoId(data.dados.find(c => c.principal)?.id || ''); }
+      })
+      .catch(() => toast.error('Erro ao carregar contas do beneficiário'));
+  }, [destinoTipo, destinoPessoa]);
+
   async function confirmar() {
-    if (!data) return toast.error('Informe a data do repasse');
-    if (!formaId) return toast.error('Informe a forma de pagamento');
+    if (!data) return setInfo({ titulo: 'Data obrigatória', mensagem: 'Informe a data do repasse.', focar: () => dataRef.current?.focus() });
+    if (!contaEscritorioId) return setInfo({ titulo: 'Conta de saída obrigatória', mensagem: 'Selecione de qual conta ou caixa do escritório o dinheiro vai sair.', focar: () => contaEscritorioRef.current?.focus() });
+    if (!destinoTipo || !destinoPessoa) return setInfo({ titulo: 'Beneficiário obrigatório', mensagem: 'Selecione o beneficiário do repasse.', focar: () => beneficiarioRef.current?.focus() });
+    if (tipoDestino === 'bancaria' && !contaDestinoId) return setInfo({ titulo: 'Conta do beneficiário obrigatória', mensagem: 'Selecione a conta bancária do beneficiário, ou cadastre uma nova.', focar: () => contaDestinoRef.current?.focus() });
+    if (!formaId) return setInfo({ titulo: 'Forma de pagamento obrigatória', mensagem: 'Informe a forma do repasse.', focar: () => formaRef.current?.focus() });
     setSalvando(true);
-    await onConfirmar({ data, forma_id: parseInt(formaId, 10) });
+    await onConfirmar({ data, forma_id: parseInt(formaId, 10), conta_financeira_id: Number(contaEscritorioId),
+      beneficiario_tipo: destinoTipo, beneficiario_id: Number(destinoPessoa),
+      conta_bancaria_id: tipoDestino === 'bancaria' ? Number(contaDestinoId) : null, destino_tipo: tipoDestino, observacao });
     setSalvando(false);
   }
 
   const destino = linha.tipo === 'cliente' ? 'cliente' : `parceiro (${linha.beneficiario})`;
+  const podeCadastrarConta = temPermissao('financeiro', 'alterar') && temPermissao('pessoas', 'alterar');
+
+  async function aoCadastrarConta(contaId) {
+    try {
+      const { data } = await financeiroAPI.contasBeneficiario(destinoTipo, destinoPessoa);
+      if (data.ok) {
+        setContasDestino(data.dados);
+        setContaDestinoId(String(contaId));
+      }
+      setModalNovaConta(false);
+      toast.success('Conta cadastrada e selecionada para este repasse.');
+    } catch { toast.error('A conta foi cadastrada, mas não foi possível recarregar a lista.'); }
+  }
 
   return (
     <div className="modal-overlay" style={{ zIndex: 1100 }}>
@@ -502,14 +649,49 @@ function ModalRepasse({ linha, onCancelar, onConfirmar }) {
         <div className="modal-body">
           <div className="form-group">
             <label className="form-label">Data do repasse *</label>
-            <input type="date" className="form-control" value={data}
+            <input ref={dataRef} type="date" className="form-control" value={data}
               onChange={e => setData(e.target.value)} autoFocus />
           </div>
           <div className="form-group">
-            <label className="form-label">Forma de pagamento *</label>
-            <select className="form-control" value={formaId} onChange={e => setFormaId(e.target.value)}>
+            <label className="form-label">Conta ou caixa de saída *</label>
+            <select ref={contaEscritorioRef} className="form-control" value={contaEscritorioId} onChange={e => { setContaEscritorioId(e.target.value); setFormaId(''); }}>
+              <option value="">Selecione a conta ou caixa...</option>
+              {contasEscritorio.map(c => <option key={c.id} value={c.id}>{c.instituicao_nome ? `${c.instituicao_nome} — ${c.nome}` : c.nome}</option>)}
+            </select>
+          </div>
+          {linha.tipo === 'cliente' && !inicialPessoa && (
+            <div className="form-group"><label className="form-label">Beneficiário *</label>
+              <select ref={beneficiarioRef} className="form-control" value={destinoPessoa ? `${destinoTipo}:${destinoPessoa}` : ''} onChange={e => { const [t, id] = e.target.value.split(':'); setDestinoTipo(t || ''); setDestinoPessoa(id || ''); setContaDestinoId(''); }}>
+                <option value="">Selecione...</option>{beneficiarios.map(b => <option key={`${b.tipo}:${b.id}`} value={`${b.tipo}:${b.id}`}>{b.nome}</option>)}
+              </select></div>
+          )}
+          <div className="form-group"><label className="form-label">Destino do repasse *</label>
+            <select className="form-control" value={tipoDestino} onChange={e => { setTipoDestino(e.target.value); setFormaId(''); }}>
+              <option value="bancaria">Conta bancária</option>
+              <option value="em_maos">Dinheiro em espécie — em mãos</option>
+            </select>
+          </div>
+          {tipoDestino === 'bancaria' ? (
+            <div className="form-group"><label className="form-label">Conta do beneficiário *</label>
+              <select ref={contaDestinoRef} className="form-control" value={contaDestinoId} onChange={e => setContaDestinoId(e.target.value)}>
+                <option value="">Selecione...</option>{contasDestino.map(c => <option key={c.id} value={c.id}>{c.instituicao_nome} — {c.agencia ? `Ag. ${c.agencia} · ` : ''}{c.numero || c.chave_pix || c.titular}</option>)}
+              </select>
+              {podeCadastrarConta && destinoTipo && destinoPessoa && (
+                <button type="button" className="btn btn-outline" style={{ marginTop: 8, fontSize: 12, padding: '4px 8px' }} onClick={() => setModalNovaConta(true)}>
+                  + Cadastrar conta do beneficiário
+                </button>
+              )}
+            </div>
+          ) : (
+            <p style={{ marginTop: 0, color: '#6b7280', fontSize: 13 }}>
+              O valor será entregue pessoalmente ao beneficiário. Não será usada nenhuma instituição financeira ou conta bancária de destino.
+            </p>
+          )}
+          <div className="form-group">
+            <label className="form-label">Forma do repasse *</label>
+            <select ref={formaRef} className="form-control" value={formaId} onChange={e => setFormaId(e.target.value)}>
               <option value="">Selecione...</option>
-              {formas.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
+              {formasCompativeis.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
             </select>
             {formas.length === 0 && (
               <small style={{ color: '#b45309' }}>
@@ -517,17 +699,100 @@ function ModalRepasse({ linha, onCancelar, onConfirmar }) {
               </small>
             )}
           </div>
+          <div className="form-group">
+            <label className="form-label">Observação do repasse (opcional)</label>
+            <textarea className="form-control" rows="3" maxLength={1000} value={observacao}
+              onChange={e => setObservacao(e.target.value)} placeholder="Anotações gerais sobre este repasse" />
+          </div>
           <p style={{ color: '#6b7280', fontSize: '13px' }}>
             Valor: <strong>{formatarMoeda(linha.valor)}</strong>
           </p>
         </div>
-        <div className="modal-footer">
+      <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onCancelar}>Cancelar</button>
           <button className="btn btn-primary" onClick={confirmar} disabled={salvando}>
             {salvando ? 'Salvando...' : 'Confirmar repasse'}
           </button>
         </div>
       </div>
+      {modalNovaConta && (
+        <ModalNovaContaBeneficiario tipo={destinoTipo} pessoaId={destinoPessoa} nome={linha.beneficiario || 'beneficiário'}
+          onFechar={() => setModalNovaConta(false)} onSalva={aoCadastrarConta} />
+      )}
+      {info && (
+        <ModalInfo {...info} zIndex={1200}
+          onFechar={() => { const f = info.focar; setInfo(null); if (f) setTimeout(f, 50); }} />
+      )}
+    </div>
+  );
+}
+
+// Cadastro concentrado no fluxo de repasse: cria somente uma conta, sem tocar em
+// telefones, e-mails ou demais dados da ficha do beneficiário.
+function ModalNovaContaBeneficiario({ tipo, pessoaId, nome, onFechar, onSalva }) {
+  const [instituicoes, setInstituicoes] = useState([]);
+  const [salvando, setSalvando] = useState(false);
+  const [form, setForm] = useState({ instituicao_financeira_id: '', tipo_conta: 'corrente', agencia: '', numero: '', digito: '', chave_pix: '', conta_terceiro: false, titular: '', documento_titular: '', observacao: '', principal: false });
+  const [confirmarDigito, setConfirmarDigito] = useState(null);
+  const set = (campo, valor) => setForm(f => ({ ...f, [campo]: valor }));
+
+  useEffect(() => {
+    financeiroAPI.instituicoesFinanceiras().then(({ data }) => { if (data.ok) setInstituicoes(data.dados); })
+      .catch(() => toast.error('Erro ao carregar instituições financeiras'));
+  }, []);
+
+  async function salvar(digitoConfirmado = false) {
+    if (!form.instituicao_financeira_id) return toast.error('Escolha a instituição financeira.');
+    if (form.conta_terceiro && (!form.titular.trim() || !form.documento_titular.replace(/\D/g, ''))) {
+      return toast.error('Informe o titular e o CPF/CNPJ da conta de terceiro.');
+    }
+    const digito = form.digito.trim();
+    if (digito.length > 2 && !digitoConfirmado) {
+      setConfirmarDigito({
+        titulo: 'Confirmar dígito da conta',
+        mensagem: `O dígito informado (${digito}) tem ${digito.length} caracteres. Normalmente ele possui até 2. Deseja cadastrar mesmo assim?`,
+        textoBotao: 'Cadastrar mesmo assim',
+        tipo: 'aviso',
+        acao: () => salvar(true),
+      });
+      return;
+    }
+    setSalvando(true);
+    try {
+      const { data } = await financeiroAPI.criarContaBeneficiario(tipo, pessoaId, { ...form, instituicao_financeira_id: Number(form.instituicao_financeira_id) });
+      if (data.ok) onSalva(data.dados.id);
+    } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao cadastrar a conta.'); }
+    finally { setSalvando(false); }
+  }
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 1200 }}>
+      <div className="modal-box" style={{ maxWidth: 560 }}>
+        <div className="modal-header"><h3>Nova conta de {nome}</h3><button className="modal-fechar" onClick={onFechar}>✕</button></div>
+        <div className="modal-body">
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div className="form-group" style={{ flex: 2, minWidth: 220 }}><label className="form-label">Instituição financeira *</label>
+              <select className="form-control" value={form.instituicao_financeira_id} onChange={e => set('instituicao_financeira_id', e.target.value)}><option value="">Selecione...</option>{instituicoes.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}</select></div>
+            <div className="form-group" style={{ flex: 1, minWidth: 130 }}><label className="form-label">Tipo</label>
+              <select className="form-control" value={form.tipo_conta} onChange={e => set('tipo_conta', e.target.value)}><option value="corrente">Corrente</option><option value="poupanca">Poupança</option></select></div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div className="form-group" style={{ flex: 1, minWidth: 100 }}><label className="form-label">Agência</label><input className="form-control" value={form.agencia} onChange={e => set('agencia', e.target.value)} /></div>
+            <div className="form-group" style={{ flex: 2, minWidth: 130 }}><label className="form-label">Conta</label><input className="form-control" value={form.numero} onChange={e => set('numero', e.target.value)} /></div>
+            <div className="form-group" style={{ width: 80 }}><label className="form-label">Dígito</label><input className="form-control" maxLength={4} value={form.digito} onChange={e => set('digito', e.target.value)} /></div>
+          </div>
+          <div className="form-group"><label className="form-label">Chave PIX</label><input className="form-control" value={form.chave_pix} onChange={e => set('chave_pix', e.target.value)} /></div>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, marginBottom: 10 }}><input type="checkbox" checked={form.conta_terceiro} onChange={e => set('conta_terceiro', e.target.checked)} />Conta de outra pessoa (autorização)</label>
+          {form.conta_terceiro && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div className="form-group" style={{ flex: 2, minWidth: 210 }}><label className="form-label">Titular *</label><input className="form-control" value={form.titular} onChange={e => set('titular', e.target.value)} /></div>
+            <div className="form-group" style={{ flex: 1, minWidth: 150 }}><label className="form-label">CPF/CNPJ *</label><input className="form-control" value={form.documento_titular} onChange={e => set('documento_titular', mascaraDocumento(e.target.value))} /></div>
+          </div>}
+          <div className="form-group"><label className="form-label">Observação da conta (opcional)</label><textarea className="form-control" rows="2" maxLength={1000} value={form.observacao} onChange={e => set('observacao', e.target.value)} /></div>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}><input type="checkbox" checked={form.principal} onChange={e => set('principal', e.target.checked)} />Definir como conta principal</label>
+        </div>
+        <div className="modal-footer"><button className="btn btn-secondary" onClick={onFechar}>Cancelar</button><button className="btn btn-primary" disabled={salvando} onClick={() => salvar()}>{salvando ? 'Salvando...' : 'Cadastrar conta'}</button></div>
+      </div>
+      {confirmarDigito && <ModalConfirmar {...confirmarDigito} onCancelar={() => setConfirmarDigito(null)} />}
     </div>
   );
 }
@@ -781,8 +1046,20 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
   const [recebendo, setRecebendo] = useState(null); // parcela aguardando a data do recebimento
   const [historicoDe, setHistoricoDe] = useState(null); // parcela com histórico aberto
   const [cancelando, setCancelando] = useState(false); // modal de cancelar acordo (pede motivo)
+  const [recibosAcordo, setRecibosAcordo] = useState(false);
+  const [multaEditando, setMultaEditando] = useState(null); // parcela lançando/editando a multa
+  const [recebendoMulta, setRecebendoMulta] = useState(null); // parcela aguardando a data do recebimento da multa
+  const [confirmar, setConfirmar] = useState(null); // confirmação genérica (ex.: remover multa)
   const cancelado = acordo.status === 'cancelado';
   const tipoLabel = acordo.tipo === 'alvara' ? 'Alvará' : 'Acordo';
+
+  function cicloDaParcela(p) {
+    if (p.status !== 'pago') return null;
+    const pendencias = [];
+    if (Number(p.valor_liquido) > 0 && !p.repasse_cliente_em) pendencias.push('cliente');
+    if (p.parceria_pessoa_id && Number(p.parceria_valor) > 0 && !p.repasse_parceiro_em) pendencias.push('parceiro');
+    return pendencias;
+  }
 
   async function abrir() {
     if (!aberto && !parcelas) {
@@ -805,6 +1082,31 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
     catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao desfazer'); }
   }
   // (O desfazer de repasse fica na aba Repasses → Concluídos, não na linha da parcela.)
+
+  // Multa por atraso desta parcela: lançar/editar (mesmo modal), remover, receber, desfazer.
+  // Ainda não recebida: fica "lançada" e não mexe na conta corrente. "Receber multa" é o
+  // único passo que gera lançamento — só então o "Receber" da parcela principal libera.
+  async function salvarMulta(p, dados) {
+    try {
+      if (p.multa) await financeiroAPI.editarMulta(p.id, dados);
+      else await financeiroAPI.lancarMulta(p.id, dados);
+      toast.success(p.multa ? 'Multa atualizada' : 'Multa lançada'); setMultaEditando(null); setParcelas(null); setAberto(false); onMudou();
+    } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao salvar a multa'); }
+  }
+  async function removerMultaDaParcela(p) {
+    try { await financeiroAPI.removerMulta(p.id); toast.success('Multa removida'); setParcelas(null); setAberto(false); onMudou(); }
+    catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao remover a multa'); }
+  }
+  async function receberMulta(p, dados) {
+    try {
+      await financeiroAPI.receberMulta(p.id, dados);
+      toast.success('Multa recebida'); setRecebendoMulta(null); setParcelas(null); setAberto(false); onMudou();
+    } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao receber a multa'); }
+  }
+  async function desfazerMulta(p) {
+    try { await financeiroAPI.desfazerMulta(p.id); toast.success('Recebimento da multa desfeito'); setParcelas(null); setAberto(false); onMudou(); }
+    catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao desfazer o recebimento da multa'); }
+  }
   // Cancela o acordo (parcelas pendentes viram canceladas; pagas permanecem). Definitivo.
   async function cancelar(motivo) {
     try {
@@ -834,6 +1136,7 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
               onClick={() => setCancelando(true)}>Cancelar</button>
           )}
           {!cancelado && podeExcluir && <button className="btn btn-danger" style={{ fontSize: '11px', padding: '3px 8px' }} onClick={onExcluir}>Excluir</button>}
+          {temPermissao('documentos', 'cadastrar') && <button className="btn btn-outline" style={{ fontSize: '11px', padding: '3px 8px' }} onClick={() => setRecibosAcordo(true)}>Recibos</button>}
         </div>
       </div>
 
@@ -851,7 +1154,8 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
             </thead>
             <tbody>
               {parcelas.map(p => (
-                <tr key={p.id}>
+                <React.Fragment key={p.id}>
+                <tr>
                   <td>{p.numero}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{formatarData(p.vencimento)}</td>
                   <td style={{ textAlign: 'right' }}>{formatarMoeda(p.valor_bruto)}</td>
@@ -871,38 +1175,119 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
                       {p.status === 'pago' ? `Recebida ${p.recebido_em ? formatarData(p.recebido_em) : ''}`
                         : p.status === 'cancelada' ? 'Cancelada' : 'Pendente'}
                     </span>
-                    {/* Indicadores dos repasses já feitos */}
-                    {p.status === 'pago' && (p.repasse_cliente_em || p.repasse_parceiro_em) && (
+                    {p.status === 'pago' && (
                       <div style={{ fontSize: 10, color: '#059669', marginTop: 2 }}>
-                        {p.repasse_cliente_em && <div>✓ Cliente {formatarData(p.repasse_cliente_em)}</div>}
-                        {p.repasse_parceiro_em && <div>✓ Parceiro {formatarData(p.repasse_parceiro_em)}</div>}
+                        {p.repasse_cliente_em ? <div>✓ Cliente {formatarData(p.repasse_cliente_em)}</div>
+                          : Number(p.valor_liquido) > 0 && <div style={{ color: '#b45309' }}>○ Falta repassar ao cliente</div>}
+                        {p.parceria_pessoa_id && (p.repasse_parceiro_em ? <div>✓ Parceiro {formatarData(p.repasse_parceiro_em)}</div>
+                          : Number(p.parceria_valor) > 0 && <div style={{ color: '#b45309' }}>○ Falta repassar ao parceiro</div>)}
+                        {cicloDaParcela(p)?.length === 0 && <div style={{ color: '#059669', fontWeight: 600 }}>✓ Ciclo concluído</div>}
                       </div>
                     )}
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <MenuAcoes itens={[
-                      // Gerar documento da parcela (recibo/declaração/autorização) — o modal lista os modelos (ou avisa se não houver).
-                      { label: 'Gerar documento', icone: '📄',
-                        oculto: !temPermissao('documentos','cadastrar'),
-                        gerarDoc: { ancoraTipo: 'pagamento', ancoraId: p.id } },
                       // Pendente recebe; recebida desfaz (bloqueado se houver repasse); cancelada não tem ação
                       { label: 'Receber', icone: '💰',
                         oculto: !(podeAlterar && p.status === 'pendente'),
-                        onClick: () => setRecebendo(p) },
+                        onClick: () => {
+                          if (p.multa && p.multa.status === 'pendente') {
+                            toast.info('Existe uma multa lançada nesta parcela. Receba (ou remova) a multa antes de receber a parcela.');
+                            return;
+                          }
+                          setRecebendo(p);
+                        } },
                       { label: 'Desfazer recebimento', icone: '↩️',
                         oculto: !(podeAlterar && p.status === 'pago'),
-                        // Continua visível com repasse feito para poder explicar o porquê do bloqueio
+                        // Continua visível com repasse/multa pendente para poder explicar o porquê do bloqueio
                         onClick: () => {
+                          if (p.multa && p.multa.status === 'pago') {
+                            toast.info('Desfaça o recebimento da multa antes de desfazer o recebimento da parcela.');
+                            return;
+                          }
                           if (p.repasse_cliente_em || p.repasse_parceiro_em) {
                             toast.info("Desfaça os repasses na aba 'Repasses' antes de desfazer o recebimento.");
                             return;
                           }
                           desfazer(p);
                         } },
+                      // Multa por atraso: só pode ser LANÇADA enquanto a parcela ainda não foi recebida.
+                      // Uma vez lançada, o restante do ciclo (editar/receber/remover/desfazer) não
+                      // depende mais do status da parcela em si — a parcela pode até já ter sido
+                      // recebida depois (ela só destrava quando a multa é recebida).
+                      { label: 'Lançar multa', icone: '⚠️',
+                        oculto: !(podeAlterar && p.status === 'pendente' && !p.multa),
+                        onClick: () => setMultaEditando(p) },
+                      { label: 'Multa', icone: '⚠️',
+                        oculto: !(podeAlterar && p.multa && p.multa.status === 'pendente'),
+                        submenu: [
+                          { label: 'Editar multa', icone: '✏️', onClick: () => setMultaEditando(p) },
+                          { label: 'Receber multa', icone: '💰', onClick: () => setRecebendoMulta(p) },
+                          { label: 'Remover multa', icone: '🗑️', perigo: true,
+                            onClick: () => setConfirmar({
+                              titulo: 'Remover multa', mensagem: 'A multa lançada nesta parcela será removida. Esta ação não pode ser desfeita.',
+                              textoBotao: 'Remover', tipo: 'perigo', acao: () => removerMultaDaParcela(p),
+                            }) },
+                        ] },
+                      { label: 'Desfazer recebimento da multa', icone: '↩️',
+                        oculto: !(podeAlterar && p.multa && p.multa.status === 'pago'),
+                        onClick: () => {
+                          if (p.multa.repasse_cliente_em || p.multa.repasse_parceiro_em) {
+                            toast.info("Desfaça os repasses da multa na aba 'Repasses' antes de desfazer o recebimento dela.");
+                            return;
+                          }
+                          desfazerMulta(p);
+                        } },
                       { label: 'Histórico', icone: '📋', onClick: () => setHistoricoDe(p) },
+                      { label: 'Recibo', icone: '📄',
+                        submenu: [
+                          { label: 'Recibo — Cliente', icone: '📄',
+                            oculto: !(temPermissao('documentos','cadastrar') && p.repasse_cliente_em),
+                            gerarDoc: { ancoraTipo: 'pagamento', ancoraId: p.id, beneficiario: 'cliente' } },
+                          { label: `Recibo — Parceiro${p.parceria_nome ? `: ${p.parceria_nome}` : ''}`, icone: '📄',
+                            oculto: !(temPermissao('documentos','cadastrar') && p.repasse_parceiro_em),
+                            gerarDoc: { ancoraTipo: 'pagamento', ancoraId: p.id, beneficiario: 'parceiro' } },
+                        ] },
                     ]} />
                   </td>
                 </tr>
+                {p.multa && (
+                  <tr style={{ background: '#fffbeb' }}>
+                    <td style={{ textAlign: 'center' }} title="Multa por atraso desta parcela">⚠️</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#92400e' }}>Multa ·</span>{' '}
+                      {formatarData(p.multa.vencimento)}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>{formatarMoeda(p.multa.valor_bruto)}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      {p.multa.honor_tipo === 'sem' ? '—' : formatarMoeda(p.multa.honor_valor)}
+                      {p.multa.honor_tipo === 'percent' && p.multa.honor_percentual != null && <span style={{ color: '#888', fontSize: 11 }}> ({p.multa.honor_percentual}%)</span>}
+                      {p.multa.honor_tipo === 'fixo' && <span style={{ color: '#888', fontSize: 11 }}> (Fixo)</span>}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>{formatarMoeda(p.multa.valor_liquido)}</td>
+                    <td>{p.multa.parceria_nome ? `${p.multa.parceria_nome}${p.multa.parceria_valor ? ' · ' + formatarMoeda(p.multa.parceria_valor) : ''}` : '—'}</td>
+                    <td style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      title={p.multa.percentual_juiz != null ? `Percentual fixado pelo juiz: ${p.multa.percentual_juiz}%` : ''}>
+                      {p.multa.percentual_juiz != null ? `${p.multa.percentual_juiz}% (juiz)` : '—'}
+                    </td>
+                    <td>
+                      <span className={`badge ${p.multa.status === 'pago' ? 'badge-verde' : 'badge-laranja'}`}
+                        title={p.multa.status === 'pago' && p.multa.recebimento_forma_nome ? `Forma: ${p.multa.recebimento_forma_nome}${p.multa.recebimento_identificacao ? ' · ' + p.multa.recebimento_identificacao : ''}` : ''}>
+                        {p.multa.status === 'pago' ? `Multa recebida ${p.multa.recebido_em ? formatarData(p.multa.recebido_em) : ''}` : 'Multa pendente'}
+                      </span>
+                      {p.multa.status === 'pago' && (
+                        <div style={{ fontSize: 10, color: '#059669', marginTop: 2 }}>
+                          {p.multa.repasse_cliente_habilitado ? (p.multa.repasse_cliente_em ? <div>✓ Cliente {formatarData(p.multa.repasse_cliente_em)}</div>
+                            : <div style={{ color: '#b45309' }}>○ Falta repassar ao cliente</div>) : null}
+                          {p.multa.repasse_parceiro_habilitado ? (p.multa.repasse_parceiro_em ? <div>✓ Parceiro {formatarData(p.multa.repasse_parceiro_em)}</div>
+                            : <div style={{ color: '#b45309' }}>○ Falta repassar ao parceiro</div>) : null}
+                        </div>
+                      )}
+                    </td>
+                    <td></td>
+                  </tr>
+                )}
+                </React.Fragment>
               ))}
             </tbody>
             <tfoot>
@@ -931,6 +1316,74 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
       {cancelando && (
         <ModalCancelarAcordo onCancelar={() => setCancelando(false)} onConfirmar={cancelar} />
       )}
+      {recibosAcordo && <ModalRecibosAcordo acordoId={acordo.id} onFechar={() => setRecibosAcordo(false)} />}
+      {multaEditando && (
+        <ModalMulta parcela={multaEditando}
+          onCancelar={() => setMultaEditando(null)}
+          onConfirmar={(dados) => salvarMulta(multaEditando, dados)} />
+      )}
+      {recebendoMulta && (
+        <ModalReceberParcela parcela={recebendoMulta} titulo={`Receber multa da parcela ${recebendoMulta.numero}`} valorExibido={recebendoMulta.multa?.valor_bruto}
+          onCancelar={() => setRecebendoMulta(null)}
+          onConfirmar={(dados) => receberMulta(recebendoMulta, dados)} />
+      )}
+      {confirmar && <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(null)} />}
+    </div>
+  );
+}
+
+// Recibos consolidados nunca misturam destinatários: cada opção reúne somente os
+// repasses concluídos da mesma pessoa dentro deste acordo.
+function ModalRecibosAcordo({ acordoId, onFechar }) {
+  const [parcelas, setParcelas] = useState(null);
+  const [escolhido, setEscolhido] = useState(null);
+
+  useEffect(() => {
+    financeiroAPI.buscarAcordo(acordoId)
+      .then(({ data }) => { if (data.ok) setParcelas(data.dados.parcelas || []); })
+      .catch(() => { toast.error('Erro ao carregar os repasses do acordo'); setParcelas([]); });
+  }, [acordoId]);
+
+  function nomeDoSnapshot(texto, fallback) {
+    try { return JSON.parse(texto || '{}').titular || fallback; } catch { return fallback; }
+  }
+
+  const destinatarios = (() => {
+    const mapa = new Map();
+    for (const p of parcelas || []) {
+      const adicionar = (tipoRecibo, pessoaTipo, pessoaId, nome) => {
+        if (!pessoaTipo || !pessoaId) return;
+        const chave = `${tipoRecibo}:${pessoaTipo}:${pessoaId}`;
+        const atual = mapa.get(chave) || { tipoRecibo, pessoaTipo, pessoaId, nome: nome || (tipoRecibo === 'cliente' ? 'Cliente' : 'Parceiro'), quantidade: 0 };
+        atual.quantidade += 1;
+        mapa.set(chave, atual);
+      };
+      if (p.repasse_cliente_em) adicionar('cliente', p.repasse_cliente_tipo, p.repasse_cliente_pessoa_id,
+        nomeDoSnapshot(p.repasse_cliente_destino_snapshot, 'Cliente'));
+      if (p.repasse_parceiro_em) adicionar('parceiro', p.parceria_pessoa_tipo, p.parceria_pessoa_id, p.parceria_nome);
+    }
+    return [...mapa.values()];
+  })();
+
+  if (escolhido) return <ModalGerar ancoraTipo="acordo" ancoraId={acordoId}
+    beneficiario={escolhido.tipoRecibo} destinatarioTipo={escolhido.pessoaTipo} destinatarioId={escolhido.pessoaId}
+    onFechar={() => setEscolhido(null)} />;
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 1100 }}>
+      <div className="modal-box" style={{ maxWidth: 520 }}>
+        <div className="modal-header"><h3>Recibos do acordo</h3><button className="modal-fechar" onClick={onFechar}>✕</button></div>
+        <div className="modal-body">
+          <p style={{ color: '#6b7280', fontSize: 13, marginTop: 0 }}>Escolha o destinatário. O recibo reunirá somente os repasses já concluídos para essa pessoa.</p>
+          {parcelas === null ? <div className="loading">Carregando...</div>
+            : destinatarios.length === 0 ? <p className="lista-vazia">Ainda não há repasses concluídos neste acordo.</p>
+            : destinatarios.map(d => <button key={`${d.tipoRecibo}:${d.pessoaTipo}:${d.pessoaId}`} className="btn btn-outline"
+              style={{ width: '100%', marginBottom: 8, textAlign: 'left' }} onClick={() => setEscolhido(d)}>
+              📄 Recibo consolidado — {d.tipoRecibo === 'cliente' ? 'Cliente' : 'Parceiro'}: {d.nome} ({d.quantidade} parcela{d.quantidade === 1 ? '' : 's'})
+            </button>)}
+        </div>
+        <div className="modal-footer"><button className="btn btn-secondary" onClick={onFechar}>Fechar</button></div>
+      </div>
     </div>
   );
 }
@@ -997,6 +1450,10 @@ function ModalHistoricoParcela({ parcela, onFechar }) {
     'criada': 'Criada', 'editada': 'Editada', 'recebida': 'Recebida', 'recebimento-desfeito': 'Recebimento desfeito', 'cancelada': 'Cancelada',
     'repasse-cliente': 'Repasse ao cliente', 'repasse-parceiro': 'Repasse ao parceiro',
     'repasse-cliente-desfeito': 'Repasse ao cliente desfeito', 'repasse-parceiro-desfeito': 'Repasse ao parceiro desfeito',
+    'multa-lancada': 'Multa lançada', 'multa-editada': 'Multa editada', 'multa-removida': 'Multa removida',
+    'multa-recebida': 'Multa recebida', 'multa-recebimento-desfeito': 'Recebimento da multa desfeito',
+    'multa-rep-cliente': 'Repasse da multa ao cliente', 'multa-rep-parceiro': 'Repasse da multa ao parceiro',
+    'multa-rep-cliente-desfeito': 'Repasse da multa ao cliente desfeito', 'multa-rep-parceiro-desfeito': 'Repasse da multa ao parceiro desfeito',
   };
 
   return (
@@ -1040,12 +1497,16 @@ function ModalHistoricoParcela({ parcela, onFechar }) {
 // ============================================================
 // MODAL: data do recebimento de uma parcela
 // ============================================================
-function ModalReceberParcela({ parcela, onCancelar, onConfirmar }) {
+function ModalReceberParcela({ parcela, onCancelar, onConfirmar, titulo, valorExibido }) {
   const [data, setData] = useState(hojeLocal());          // data em que o réu pagou (default hoje)
   const [formaId, setFormaId] = useState('');             // forma de pagamento do recebimento
   const [identificacao, setIdentificacao] = useState(''); // identificação no extrato bancário
   const [formas, setFormas] = useState([]);               // formas cadastradas (Controle)
   const [salvando, setSalvando] = useState(false);
+  const [contasEscritorio, setContasEscritorio] = useState([]);
+  const [contaEscritorioId, setContaEscritorioId] = useState('');
+  const contaRecebimento = contasEscritorio.find(c => Number(c.id) === Number(contaEscritorioId));
+  const formasCompativeis = formas.filter(f => !contaRecebimento || f.uso_permitido === 'ambos' || f.uso_permitido === (contaRecebimento.tipo === 'especie' ? 'especie' : 'financeira'));
 
   // Carrega as formas de pagamento ativas para o select
   useEffect(() => {
@@ -1053,15 +1514,21 @@ function ModalReceberParcela({ parcela, onCancelar, onConfirmar }) {
       .then(({ data }) => { if (data.ok) setFormas(data.dados); })
       .catch(() => toast.error('Erro ao carregar formas de pagamento'));
   }, []);
+  useEffect(() => {
+    financeiroAPI.contasEscritorio().then(({ data }) => { if (data.ok) setContasEscritorio(data.dados); })
+      .catch(() => toast.error('Erro ao carregar contas do escritório'));
+  }, []);
 
   async function confirmar() {
     if (!data) return toast.error('Informe a data do recebimento');
-    if (!formaId) return toast.error('Informe a forma de pagamento');
+    if (!contaEscritorioId) return toast.error('Informe a conta ou caixa de recebimento');
+    if (!formaId) return toast.error('Informe a forma de recebimento');
     setSalvando(true);
     await onConfirmar({
       recebido_em: data,
       recebimento_forma_id: parseInt(formaId, 10),
       recebimento_identificacao: identificacao.trim() || null,
+      recebimento_conta_financeira_id: Number(contaEscritorioId),
     });
     setSalvando(false);
   }
@@ -1070,7 +1537,7 @@ function ModalReceberParcela({ parcela, onCancelar, onConfirmar }) {
     <div className="modal-overlay" style={{ zIndex: 1100 }}>
       <div className="modal-box" style={{ maxWidth: '420px' }}>
         <div className="modal-header">
-          <h3>Receber parcela {parcela.numero}</h3>
+          <h3>{titulo || `Receber parcela ${parcela.numero}`}</h3>
           <button className="modal-fechar" onClick={onCancelar}>✕</button>
         </div>
         <div className="modal-body">
@@ -1080,10 +1547,17 @@ function ModalReceberParcela({ parcela, onCancelar, onConfirmar }) {
               onChange={e => setData(e.target.value)} autoFocus />
           </div>
           <div className="form-group">
-            <label className="form-label">Forma de pagamento *</label>
+            <label className="form-label">Conta ou caixa de recebimento *</label>
+            <select className="form-control" value={contaEscritorioId} onChange={e => { setContaEscritorioId(e.target.value); setFormaId(''); }}>
+              <option value="">Selecione a conta ou caixa...</option>
+              {contasEscritorio.map(c => <option key={c.id} value={c.id}>{c.instituicao_nome ? `${c.instituicao_nome} — ${c.nome}` : c.nome}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Forma de recebimento *</label>
             <select className="form-control" value={formaId} onChange={e => setFormaId(e.target.value)}>
               <option value="">Selecione...</option>
-              {formas.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
+              {formasCompativeis.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
             </select>
             {formas.length === 0 && (
               <small style={{ color: '#b45309' }}>
@@ -1098,13 +1572,113 @@ function ModalReceberParcela({ parcela, onCancelar, onConfirmar }) {
               onChange={e => setIdentificacao(e.target.value)} />
           </div>
           <p style={{ color: '#6b7280', fontSize: '13px' }}>
-            Valor: <strong>{formatarMoeda(parcela.valor_bruto)}</strong>
+            Valor: <strong>{formatarMoeda(valorExibido ?? parcela.valor_bruto)}</strong>
           </p>
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onCancelar}>Cancelar</button>
           <button className="btn btn-primary" onClick={confirmar} disabled={salvando}>
             {salvando ? 'Salvando...' : 'Confirmar recebimento'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// MODAL: lançar/editar a multa por atraso de uma parcela.
+// O percentual e os checkboxes de repasse vêm pré-preenchidos (do cadastro do acordo, na
+// 1ª vez; da própria multa, ao editar) mas continuam editáveis. Honorário/parceria da multa
+// são calculados pelo backend com o MESMO honor_tipo/percentual e parceria já desta parcela.
+// ============================================================
+function ModalMulta({ parcela, onCancelar, onConfirmar }) {
+  const multa = parcela.multa;
+  const [percentualJuiz, setPercentualJuiz] = useState(multa?.percentual_juiz ?? parcela.multa_percentual ?? '');
+  // Sem multa existente mas com percentual padrão do acordo: já calcula o valor (mesma
+  // fórmula do onChangePercentual), pra não nascer com o % preenchido e o valor em branco.
+  const [valorBruto, setValorBruto] = useState(() => {
+    if (multa) return numeroParaMascaraMoeda(multa.valor_bruto);
+    const pct = Number(parcela.multa_percentual);
+    if (pct > 0) return numeroParaMascaraMoeda(Number(parcela.valor_bruto) * pct / 100);
+    return '';
+  });
+  const [vencimento, setVencimento] = useState(multa ? String(multa.vencimento).slice(0, 10) : hojeLocal());
+  const [repasseCliente, setRepasseCliente] = useState(!!multa?.repasse_cliente_habilitado);
+  const [repasseParceiro, setRepasseParceiro] = useState(!!multa?.repasse_parceiro_habilitado);
+  const [salvando, setSalvando] = useState(false);
+  const temParceiro = !!parcela.parceria_pessoa_id;
+
+  // % preenche o valor automaticamente (base = valor bruto da própria parcela); editar o
+  // valor na mão zera o % e o valor digitado passa a prevalecer.
+  function onChangePercentual(e) {
+    const texto = e.target.value;
+    setPercentualJuiz(texto);
+    const pct = parseFloat(texto.replace(',', '.'));
+    if (texto !== '' && !isNaN(pct) && pct > 0) {
+      setValorBruto(numeroParaMascaraMoeda(Number(parcela.valor_bruto) * pct / 100));
+    }
+  }
+  function onChangeValor(e) {
+    setValorBruto(mascaraMoeda(e.target.value));
+    setPercentualJuiz('');
+  }
+
+  async function confirmar() {
+    if (parseMoeda(valorBruto) <= 0) return toast.error('Informe o valor da multa');
+    if (!vencimento) return toast.error('Informe a data em que a multa deve ser paga');
+    setSalvando(true);
+    await onConfirmar({
+      percentual_juiz: percentualJuiz === '' ? null : Number(percentualJuiz),
+      valor_bruto: parseMoeda(valorBruto), vencimento,
+      repasse_cliente_habilitado: repasseCliente,
+      repasse_parceiro_habilitado: temParceiro ? repasseParceiro : false,
+    });
+    setSalvando(false);
+  }
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 1100 }}>
+      <div className="modal-box" style={{ maxWidth: '440px' }}>
+        <div className="modal-header">
+          <h3>{multa ? 'Editar multa' : 'Lançar multa'} — parcela {parcela.numero}</h3>
+          <button className="modal-fechar" onClick={onCancelar}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div className="grid-2" style={{ gap: '12px' }}>
+            <div className="form-group">
+              <label className="form-label">Percentual da multa (%)</label>
+              <input type="number" step="0.01" min="0" className="form-control" value={percentualJuiz}
+                onChange={onChangePercentual} placeholder="Ex: 10" autoFocus />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Valor da multa (R$) *</label>
+              <input type="text" inputMode="numeric" className="form-control" value={valorBruto}
+                onChange={onChangeValor} placeholder="0,00" />
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Data em que a multa deve ser paga *</label>
+            <input type="date" className="form-control" value={vencimento} onChange={e => setVencimento(e.target.value)} />
+          </div>
+          <p style={{ color: '#6b7280', fontSize: '13px', marginTop: 0 }}>
+            O escritório sempre fica com o honorário desta multa. Marque abaixo só se parte dela também for repassada.
+          </p>
+          <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <input type="checkbox" id="multaRepCliente" checked={repasseCliente} onChange={e => setRepasseCliente(e.target.checked)} />
+            <label htmlFor="multaRepCliente" style={{ margin: 0 }}>Repasse ao cliente</label>
+          </div>
+          {temParceiro && (
+            <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input type="checkbox" id="multaRepParceiro" checked={repasseParceiro} onChange={e => setRepasseParceiro(e.target.checked)} />
+              <label htmlFor="multaRepParceiro" style={{ margin: 0 }}>Repasse ao parceiro{parcela.parceria_nome ? ` (${parcela.parceria_nome})` : ''}</label>
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onCancelar}>Cancelar</button>
+          <button className="btn btn-primary" onClick={confirmar} disabled={salvando}>
+            {salvando ? 'Salvando...' : 'Salvar multa'}
           </button>
         </div>
       </div>
@@ -1186,10 +1760,12 @@ export function ModalLancamento({ processoId, lancamento, onFechar }) {
 // MODAL: ACORDO — gera a tabela de parcelas, edita linha a linha, salva
 // ============================================================
 export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoInicial }) {
+  const { temPermissao } = useAuth();
+  const podeCadastrarContaBeneficiario = temPermissao('financeiro', 'alterar') && temPermissao('pessoas', 'alterar');
   const [tipoAcordo, setTipoAcordo] = useState(tipo || 'acordo'); // 'acordo' | 'alvara'
   const tipoLabel = tipoAcordo === 'alvara' ? 'Alvará' : 'Acordo';
   // descricaoInicial: pré-preenche a descrição (usado quando o acordo é aberto a partir do "Registrar Ata")
-  const [cab, setCab] = useState({ descricao: descricaoInicial || '', valor_total: '', qtd_parcelas: '', data_primeira: '', honor_percentual: 30 });
+  const [cab, setCab] = useState({ descricao: descricaoInicial || '', valor_total: '', qtd_parcelas: '', data_primeira: '', honor_percentual: 30, multa_percentual: '' });
   const [parcelas, setParcelas] = useState([]);
   const [gerando, setGerando] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -1197,6 +1773,44 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
   const [parceriaAcordo, setParceriaAcordo] = useState(null); // parceria aplicada a TODAS as parcelas
   const [modalParcAcordo, setModalParcAcordo] = useState(false);
   const [confirmar, setConfirmar] = useState(null); // confirmação (ex.: total do acordo mudou)
+  const [beneficiarios, setBeneficiarios] = useState([]);
+  const [beneficiarioTipo, setBeneficiarioTipo] = useState('');
+  const [beneficiarioId, setBeneficiarioId] = useState('');
+  const [contasBeneficiario, setContasBeneficiario] = useState([]);
+  const [contaBeneficiarioId, setContaBeneficiarioId] = useState('');
+  const [modalNovaContaBeneficiario, setModalNovaContaBeneficiario] = useState(false);
+  // Mesma guarda contra resposta desatualizada usada em ModalRepasse: trocar de beneficiário
+  // rápido não pode deixar a conta bancária de outra pessoa selecionada (auditoria 23/09).
+  const contasBeneficiarioSeqRef = useRef(0);
+
+  const beneficiarioSelecionado = beneficiarios.find(b => b.tipo === beneficiarioTipo && String(b.id) === String(beneficiarioId));
+
+  useEffect(() => {
+    financeiroAPI.beneficiariosProcesso(processoId).then(({ data }) => { if (data.ok) setBeneficiarios(data.dados); })
+      .catch(() => toast.error('Erro ao carregar pessoas vinculadas ao processo'));
+  }, [processoId]);
+  useEffect(() => {
+    const minhaSeq = ++contasBeneficiarioSeqRef.current;
+    if (!beneficiarioTipo || !beneficiarioId) { setContasBeneficiario([]); return; }
+    financeiroAPI.contasBeneficiario(beneficiarioTipo, beneficiarioId).then(({ data }) => {
+      if (minhaSeq !== contasBeneficiarioSeqRef.current) return; // já trocou de beneficiário depois desta busca
+      if (data.ok) { setContasBeneficiario(data.dados); if (!contaBeneficiarioId) setContaBeneficiarioId(data.dados.find(c => c.principal)?.id || ''); }
+    }).catch(() => toast.error('Erro ao carregar contas do beneficiário'));
+  }, [beneficiarioTipo, beneficiarioId]);
+
+  async function aoCadastrarContaBeneficiario(novaContaId) {
+    try {
+      const { data } = await financeiroAPI.contasBeneficiario(beneficiarioTipo, beneficiarioId);
+      if (data.ok) {
+        setContasBeneficiario(data.dados);
+        setContaBeneficiarioId(String(novaContaId));
+      }
+      setModalNovaContaBeneficiario(false);
+      toast.success('Conta cadastrada e definida como padrão do acordo.');
+    } catch {
+      toast.error('A conta foi cadastrada, mas não foi possível atualizar a lista agora.');
+    }
+  }
 
   // Edição: carrega o acordo existente
   useEffect(() => {
@@ -1204,10 +1818,13 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
     financeiroAPI.buscarAcordo(acordoId).then(({ data }) => {
       if (data.ok) {
         setTipoAcordo(data.dados.tipo || 'acordo');
+        setBeneficiarioTipo(data.dados.beneficiario_cliente_tipo || '');
+        setBeneficiarioId(data.dados.beneficiario_cliente_id || '');
+        setContaBeneficiarioId(data.dados.beneficiario_cliente_conta_id || '');
         setCab({
           descricao: data.dados.descricao || '', valor_total: numeroParaMascaraMoeda(data.dados.valor_total),
           qtd_parcelas: data.dados.qtd_parcelas, data_primeira: String(data.dados.data_primeira).slice(0, 10),
-          honor_percentual: 30,
+          honor_percentual: 30, multa_percentual: '',
         });
         setParcelas(data.dados.parcelas.map(p => ({
           ...p,
@@ -1247,7 +1864,7 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
     try {
       const { data } = await financeiroAPI.previaParcelas({
         valor_total: parseMoeda(cab.valor_total), qtd_parcelas: cab.qtd_parcelas,
-        data_primeira: cab.data_primeira, honor_percentual: cab.honor_percentual,
+        data_primeira: cab.data_primeira, honor_percentual: cab.honor_percentual, multa_percentual: cab.multa_percentual,
       });
       // backend devolve números → converte campos de moeda p/ string mascarada nos inputs
       if (data.ok) setParcelas(data.dados.parcelas.map(p => ({
@@ -1279,6 +1896,7 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
   }
 
   const somaBruto = parcelas.reduce((s, p) => s + parseMoeda(p.valor_bruto), 0);
+  const temParcelasRecebidas = parcelas.some(p => p.status === 'pago');
 
   function salvar() {
     if (!parcelas.length) return toast.error('Gere as parcelas primeiro');
@@ -1317,6 +1935,8 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
       tipo: tipoAcordo,
       descricao: cab.descricao || null, valor_total: round2(somaBruto),
       qtd_parcelas: parcelasNum.length, data_primeira: parcelasNum[0].vencimento, parcelas: parcelasNum,
+      beneficiario_cliente_tipo: beneficiarioTipo || null, beneficiario_cliente_id: beneficiarioId || null,
+      beneficiario_cliente_conta_id: contaBeneficiarioId || null,
     };
     try {
       if (acordoId) await financeiroAPI.atualizarAcordo(acordoId, payload);
@@ -1357,18 +1977,42 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
               <input type="number" step="0.01" min="0" max="100" className="form-control" value={cab.honor_percentual}
                 onChange={e => setC('honor_percentual', e.target.value)} />
             </div>
+            <div className="form-group">
+              <label className="form-label">Multa por atraso (%)</label>
+              <input type="number" step="0.01" min="0" className="form-control" value={cab.multa_percentual}
+                onChange={e => setC('multa_percentual', e.target.value)} placeholder="Ex: 10 (opcional)" />
+            </div>
           </div>
           <div className="form-group">
             <label className="form-label">Descrição (opcional)</label>
             <input className="form-control" autoComplete="off" value={cab.descricao}
               onChange={e => setC('descricao', e.target.value)} placeholder="Ex: Acordo trabalhista homologado" />
           </div>
-          <button className="btn btn-outline" onClick={gerar} disabled={gerando} style={{ marginBottom: '12px' }}>
+          <div className="grid-2" style={{ gap: '12px' }}>
+            <div className="form-group"><label className="form-label">Beneficiário padrão das parcelas</label>
+              <select className="form-control" value={beneficiarioId ? `${beneficiarioTipo}:${beneficiarioId}` : ''}
+                onChange={e => { const [t, id] = e.target.value.split(':'); setBeneficiarioTipo(t || ''); setBeneficiarioId(id || ''); setContaBeneficiarioId(''); }}>
+                <option value="">Definir depois, no repasse</option>
+                {beneficiarios.map(b => <option key={`${b.tipo}:${b.id}`} value={`${b.tipo}:${b.id}`}>{b.nome}</option>)}
+              </select></div>
+            <div className="form-group"><label className="form-label">Conta padrão do beneficiário</label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <select className="form-control" value={contaBeneficiarioId} disabled={!beneficiarioId} onChange={e => setContaBeneficiarioId(e.target.value)}>
+                  <option value="">Selecione...</option>
+                  {contasBeneficiario.map(c => <option key={c.id} value={c.id}>{c.instituicao_nome} — {c.numero || c.chave_pix || c.titular}</option>)}
+                </select>
+                {podeCadastrarContaBeneficiario && <button type="button" className="btn btn-outline" title={beneficiarioId ? 'Cadastrar conta do beneficiário' : 'Selecione primeiro o beneficiário'}
+                  disabled={!beneficiarioId} onClick={() => setModalNovaContaBeneficiario(true)} style={{ minWidth: '42px', padding: '0 10px' }}>...</button>}
+              </div></div>
+          </div>
+          <button className="btn btn-outline" onClick={gerar} disabled={gerando || temParcelasRecebidas}
+            title={temParcelasRecebidas ? 'Não é possível regenerar parcelas após um recebimento.' : ''} style={{ marginBottom: '12px' }}>
             {gerando ? 'Gerando...' : (parcelas.length ? '↻ Regerar parcelas' : 'Gerar parcelas')}
           </button>
           {/* Parceria de TODO o acordo — aplica a mesma parceria em todas as parcelas */}
           <button type="button" className="btn btn-outline" style={{ marginBottom: '12px', marginLeft: '8px' }}
-            onClick={() => setModalParcAcordo(true)}>
+            onClick={() => setModalParcAcordo(true)} disabled={temParcelasRecebidas}
+            title={temParcelasRecebidas ? 'Não é possível alterar todas as parcelas após um recebimento.' : ''}>
             {parceriaAcordo?.parceria_pessoa_id ? `👥 Parceria do acordo: ${parceriaAcordo.parceria_nome}` : '+ Parceria do acordo (todas as parcelas)'}
           </button>
           {parcelas.length > 0 && (
@@ -1388,20 +2032,22 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
                   </tr>
                 </thead>
                 <tbody>
-                  {parcelas.map((p, i) => (
-                    <tr key={i}>
-                      <td>{p.numero || i + 1}</td>
+                  {parcelas.map((p, i) => {
+                    const parcelaRecebida = p.status === 'pago';
+                    return (
+                    <tr key={i} style={parcelaRecebida ? { background: '#eff6ff' } : undefined}>
+                      <td>{p.numero || i + 1}{parcelaRecebida && <span title="Parcela recebida: não pode ser alterada" style={{ marginLeft: 5 }}>🔒</span>}</td>
                       <td>
                         <input type="date" className="form-control" style={{ minWidth: '140px', padding: '4px 6px' }}
-                          value={p.vencimento} onChange={e => setParc(i, 'vencimento', e.target.value)} />
+                          value={p.vencimento} disabled={parcelaRecebida} onChange={e => setParc(i, 'vencimento', e.target.value)} />
                       </td>
                       <td>
                         <input type="text" inputMode="numeric" className="form-control" style={{ width: '110px', padding: '4px 6px' }}
-                          value={p.valor_bruto} onChange={e => setParc(i, 'valor_bruto', mascaraMoeda(e.target.value))} />
+                          value={p.valor_bruto} disabled={parcelaRecebida} onChange={e => setParc(i, 'valor_bruto', mascaraMoeda(e.target.value))} />
                       </td>
                       <td>
                         <select className="form-control" style={{ width: '90px', padding: '4px 6px' }}
-                          value={p.honor_tipo} onChange={e => setParc(i, 'honor_tipo', e.target.value)}>
+                          value={p.honor_tipo} disabled={parcelaRecebida} onChange={e => setParc(i, 'honor_tipo', e.target.value)}>
                           <option value="percent">%</option>
                           <option value="fixo">Fixo</option>
                           <option value="sem">Sem</option>
@@ -1410,14 +2056,14 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
                       <td>
                         {p.honor_tipo === 'percent' && (
                           <input type="number" step="0.01" className="form-control" style={{ width: '70px', padding: '4px 6px' }}
-                            value={p.honor_percentual ?? ''} onChange={e => setParc(i, 'honor_percentual', e.target.value)} />
+                            value={p.honor_percentual ?? ''} disabled={parcelaRecebida} onChange={e => setParc(i, 'honor_percentual', e.target.value)} />
                         )}
                         {p.honor_tipo === 'fixo' && (
                           <>
                             <input type="text" inputMode="numeric"
                               className={`form-control ${parseMoeda(p.honor_valor) > parseMoeda(p.valor_bruto) ? 'is-invalid' : ''}`}
                               style={{ width: '100px', padding: '4px 6px' }}
-                              value={p.honor_valor ?? ''} onChange={e => setParc(i, 'honor_valor', mascaraMoeda(e.target.value))} />
+                              value={p.honor_valor ?? ''} disabled={parcelaRecebida} onChange={e => setParc(i, 'honor_valor', mascaraMoeda(e.target.value))} />
                             {parseMoeda(p.honor_valor) > parseMoeda(p.valor_bruto) && (
                               <div style={{ color: '#dc2626', fontSize: 10, marginTop: 2 }}>
                                 Máx. {formatarMoeda(parseMoeda(p.valor_bruto))} (não passa do bruto)
@@ -1432,16 +2078,17 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
                         {p.parceria_pessoa_id
                           ? <button className="btn btn-outline" title={`${p.parceria_nome || 'Parceiro'}${parceriaDaParcela(p) ? ' · ' + formatarMoeda(parceriaDaParcela(p)) : ''}`}
                               style={{ fontSize: '11px', padding: '2px 6px', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block', verticalAlign: 'middle' }}
-                              onClick={() => setParceriaRow(i)}>{p.parceria_nome || 'Parceiro'}{parceriaDaParcela(p) ? ` · ${formatarMoeda(parceriaDaParcela(p))}` : ''}</button>
+                              disabled={parcelaRecebida} onClick={() => setParceriaRow(i)}>{p.parceria_nome || 'Parceiro'}{parceriaDaParcela(p) ? ` · ${formatarMoeda(parceriaDaParcela(p))}` : ''}</button>
                           : <button className="btn btn-outline" style={{ fontSize: '11px', padding: '2px 6px', whiteSpace: 'nowrap' }}
-                              onClick={() => setParceriaRow(i)}>+ parceria</button>}
+                              disabled={parcelaRecebida} onClick={() => setParceriaRow(i)}>+ parceria</button>}
                       </td>
                       <td>
                         <input className="form-control" style={{ width: '120px', padding: '4px 6px' }}
-                          value={p.observacao || ''} onChange={e => setParc(i, 'observacao', e.target.value)} />
+                          value={p.observacao || ''} disabled={parcelaRecebida} onChange={e => setParc(i, 'observacao', e.target.value)} />
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1465,6 +2112,10 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
         <ModalParceriaParcela parcela={parceriaAcordo || {}} titulo="Parceria do acordo (todas as parcelas)"
           onCancelar={() => setModalParcAcordo(false)}
           onAplicar={aplicarParceriaAcordo} />
+      )}
+      {modalNovaContaBeneficiario && beneficiarioId && (
+        <ModalNovaContaBeneficiario tipo={beneficiarioTipo} pessoaId={beneficiarioId} nome={beneficiarioSelecionado?.nome || 'beneficiário'}
+          onFechar={() => setModalNovaContaBeneficiario(false)} onSalva={aoCadastrarContaBeneficiario} />
       )}
       {confirmar && <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(null)} />}
     </div>

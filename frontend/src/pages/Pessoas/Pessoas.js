@@ -12,6 +12,8 @@ import { useAuth } from '../../context/AuthContext';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import { LinhaFone, LinhaEmail } from '../../components/LinhasContato';
+import { LinhaContaBancaria } from '../../components/LinhaContaBancaria';
+import { SelectComAdicao } from '../../components/ui/SelectComAdicao';
 import { EtiquetaCelula, LegendaEtiquetasPessoais, useEtiquetasEscritorio, itemEtiquetaEscritorioSubmenu, ModalHistoricoEtiquetaEscritorio } from '../../components/Etiquetas';
 import { linkWhatsApp } from '../../utils/whatsapp';
 import ModalCadastroRapidoParte from '../../components/ModalCadastroRapidoParte';
@@ -1616,13 +1618,25 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
   // Ao clicar em "Editar", destrava para o modo de edição normal.
   const [leitura, setLeitura]   = useState(somenteLeitura);
   const [form, setForm]         = useState(pessoa || {});
-  const [auxiliares, setAux]    = useState({ estados_civis: [], generos: [], profissoes: [], nacionalidades: [], parentescos: [] });
+  const [auxiliares, setAux]    = useState({ estados_civis: [], generos: [], profissoes: [], nacionalidades: [], parentescos: [], instituicoes_financeiras: [] });
   const [salvando, setSalvando] = useState(false);
   const [confirmar, setConfirmar] = useState(null); // modal de aviso "campos sem informação"
   const [avisoDup, setAvisoDup]   = useState('');   // faixa interna: telefone/e-mail repetido no próprio cadastro
   const [telefones, setTelefones] = useState(pessoa?.telefones || [{ numero: '', tipo: '', principal: true }]);
-  const [emails, setEmails]       = useState(pessoa?.emails || [{ email: '', principal: true }]);
+  // Chave estável de lista para e-mail SEM id ainda (o da linha inicial de pessoa nova, ou
+  // um adicionado nesta sessão do modal) — mesmo motivo da conta bancária logo abaixo: sem
+  // isso, remover o e-mail do meio da lista fazia o aviso "e-mail inválido" ficar preso ao
+  // índice antigo em vez de seguir a linha certa (auditoria 23/09).
+  const proximaChaveEmailLocalRef = useRef(-1);
+  const [emails, setEmails]       = useState(() => pessoa?.emails || [{ email: '', principal: true, _chaveLocal: proximaChaveEmailLocalRef.current-- }]);
   const [avisosIdade, setAvisosIdade] = useState(pessoa?.avisos_idade || []); // "avise aos X anos"
+  const [contasBancarias, setContasBancarias] = useState(pessoa?.contas_bancarias || []); // aba "Financeiro"
+  // Chave estável de lista para contas SEM id ainda (recém-adicionadas nesta sessão do
+  // modal): índice negativo, nunca colide com o id real (positivo) vindo do banco.
+  // Sem isso, remover uma conta do meio da lista fazia o React reaproveitar a instância
+  // do componente pelo índice antigo, "vazando" o mini-formulário aberto para a linha
+  // errada (auditoria 23/09).
+  const proximaChaveLocalRef = useRef(-1);
   // Ref do campo Número — recebe o foco automaticamente após o CEP ser preenchido
   const refNumero = useRef(null);
   // Refs dos campos obrigatórios: o aviso devolve o foco a quem causou o erro
@@ -1653,6 +1667,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
           const mails = r.data.dados.emails || [];
           setEmails(mails.length ? mails : [{ email: '', principal: true }]);
           setAvisosIdade(r.data.dados.avisos_idade || []);
+          setContasBancarias(r.data.dados.contas_bancarias || []);
         }
       });
     }
@@ -1665,6 +1680,10 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
     .find(p => String(p.id) === String(form.profissao_id));
   const ehPerito = String(profissaoSelecionada?.nome || '').trim().toLocaleLowerCase('pt-BR').startsWith('perícia');
   const cpfDispensado = !!form.responsavel_id || ehPerito;
+  // Nome/documento da PRÓPRIA pessoa — usados para preencher automaticamente o titular
+  // de uma conta bancária marcada como "própria" (aba Financeiro, mais abaixo).
+  const nomeProprioConta = tipo === 'fisicas' ? (form.nome || '') : (form.razao_social || '');
+  const documentoProprioConta = tipo === 'fisicas' ? (form.cpf || '') : (form.cnpj || '');
 
   // Disponível mesmo nos detalhes (somente leitura): abre o WhatsApp para o
   // telefone selecionado e mantém o mesmo registro de contato usado na lista.
@@ -1700,6 +1719,17 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
     set(campoPorTipo[tipo], String(novoItem.id));
   }
 
+  // Banco novo cadastrado a partir de uma linha de conta bancária específica (não é um
+  // campo único do formulário como os de cima — por isso auto-seleciona só NAQUELA linha).
+  function handleNovoBanco(index, novoItem) {
+    setAux(a => ({
+      ...a,
+      instituicoes_financeiras: [...(a.instituicoes_financeiras || []), novoItem]
+        .sort((x, y) => x.nome.localeCompare(y.nome, 'pt-BR')),
+    }));
+    setContasBancarias(c => c.map((x, j) => j === index ? { ...x, instituicao_financeira_id: novoItem.id } : x));
+  }
+
   // Chamado pelo CampoCEP após buscar o endereço na ViaCEP
   // Preenche logradouro, bairro, cidade e estado — e move o cursor para Número
   // ViaCEP pode retornar tudo maiúsculo; aplica Title Case automaticamente
@@ -1719,7 +1749,9 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
   async function executarSalvar() {
     setSalvando(true);
     try {
-      const payload = { ...form, telefones, emails, avisos_idade: avisosIdade };
+      // _chaveLocal é só controle de lista no front (chave estável antes de ter id) — não vai ao backend.
+      const contasBancariasEnvio = contasBancarias.map(({ _chaveLocal, ...c }) => c);
+      const payload = { ...form, telefones, emails, avisos_idade: avisosIdade, contasBancarias: contasBancariasEnvio };
       if (pessoa?.id) {
         // Edição: usa a atualização correta conforme o tipo (antes chamava sempre a de física — bug)
         const fnAtualizar = tipo === 'fisicas' ? pessoasAPI.atualizarFisica : pessoasAPI.atualizarJuridica;
@@ -1739,7 +1771,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
     } finally { setSalvando(false); }
   }
 
-  async function salvar() {
+  async function salvar(digitoConfirmado = false) {
     // ── Bloqueio: mesmo telefone ou mesmo e-mail repetido no MESMO cadastro (PF e PJ) ──
     // Telefone compara só os dígitos (ignora máscara); e-mail compara em minúsculas. Linhas em branco não contam.
     setAvisoDup('');
@@ -1753,6 +1785,21 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
     const emailRepetido = emailsNorm.find((e, i) => emailsNorm.indexOf(e) !== i);
     if (emailRepetido) {
       setAvisoDup(`O e-mail ${emailRepetido} está repetido. Cada e-mail só pode aparecer uma vez neste cadastro — remova o duplicado.`);
+      return;
+    }
+
+    const digitosLongos = contasBancarias
+      .map((conta, indice) => ({ indice: indice + 1, digito: String(conta?.digito || '').trim() }))
+      .filter(conta => conta.digito.length > 2);
+    if (digitosLongos.length && !digitoConfirmado) {
+      const contas = digitosLongos.map(conta => `conta ${conta.indice}: ${conta.digito}`).join('; ');
+      setConfirmar({
+        titulo: 'Confirmar dígito da conta',
+        mensagem: `Foi informado dígito com mais de 2 caracteres (${contas}). Normalmente o dígito possui até 2. Deseja salvar mesmo assim?`,
+        textoBotao: 'Salvar mesmo assim',
+        tipo: 'aviso',
+        acao: () => salvar(true),
+      });
       return;
     }
 
@@ -2009,7 +2056,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
           <h4 style={{margin:'16px 0 8px',color:'#555',fontSize:'13px',fontWeight:600}}>E-mails</h4>
           {emails.map((em, i) => (
             <LinhaEmail
-              key={i}
+              key={em.id ?? em._chaveLocal}
               email={em.email}
               index={i}
               somenteLeitura={leitura}
@@ -2019,8 +2066,39 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
             />
           ))}
           {!leitura && (
-            <button className="btn btn-outline" style={{fontSize:'12px'}} onClick={() => setEmails(e=>[...e,{email:'',principal:false}])}>
+            <button className="btn btn-outline" style={{fontSize:'12px'}} onClick={() => setEmails(e=>[...e,{email:'',principal:false,_chaveLocal:proximaChaveEmailLocalRef.current--}])}>
               + Adicionar e-mail
+            </button>
+          )}
+
+          {/* Financeiro: contas bancárias/PIX */}
+          {(contasBancarias.length > 0 || !leitura) && (
+            <h4 style={{margin:'16px 0 8px',color:'#555',fontSize:'13px',fontWeight:600}}>Contas Bancárias</h4>
+          )}
+          {contasBancarias.map((conta, i) => (
+            <LinhaContaBancaria
+              key={conta.id ?? conta._chaveLocal}
+              conta={conta}
+              index={i}
+              instituicoes={auxiliares.instituicoes_financeiras || []}
+              somenteLeitura={leitura}
+              nomeProprio={nomeProprioConta}
+              documentoProprio={documentoProprioConta}
+              onChange={v => setContasBancarias(c => c.map((x,j) => j===i ? v : x))}
+              onRemove={() => setContasBancarias(c => c.filter((_,j) => j!==i))}
+              onDefinirPrincipal={() => setContasBancarias(c => c.map((x,j) => ({...x, principal: j===i})))}
+              onNovoBanco={item => handleNovoBanco(i, item)}
+            />
+          ))}
+          {!leitura && (
+            <button className="btn btn-outline" style={{fontSize:'12px'}}
+              onClick={() => setContasBancarias(c=>[...c, {
+                instituicao_financeira_id: '', tipo: 'corrente', agencia: '', numero: '', digito: '',
+              chave_pix: '', conta_terceiro: false, titular: '', documento_titular: '', observacao: '',
+                principal: c.length === 0,
+                _chaveLocal: proximaChaveLocalRef.current--,
+              }])}>
+              + Financeiro
             </button>
           )}
 
@@ -2231,118 +2309,6 @@ function CampoDataNascimento({ value, onChange, somenteLeitura = false, refCampo
         onChange={e => handleChange(e.target.value)}
       />
       {erroData && <small style={{ color: '#e74c3c', fontSize: '12px' }}>⚠️ {erroData}</small>}
-    </div>
-  );
-}
-
-// ============================================================
-// SELECT COM ADIÇÃO — select normal + botão "..." para cadastrar
-// novo item diretamente na tela, sem abrir outra página
-// tipo: 'generos' | 'estados_civis' | 'profissoes'
-// onNovoItem: callback chamado com { id, nome } após salvar
-// ============================================================
-function SelectComAdicao({ label, value, onChange, opcoes = [], tipo, onNovoItem, somenteLeitura = false }) {
-  const [miniFormAberto, setMiniFormAberto] = useState(false);
-  const [novoNome, setNovoNome]             = useState('');
-  const [salvando, setSalvando]             = useState(false);
-  const [erroMini, setErroMini]             = useState(''); // aviso DENTRO do mini formulário
-
-  // Fecha o mini form e limpa o estado — sem sujeira
-  function fecharMiniForm() {
-    setMiniFormAberto(false);
-    setNovoNome('');
-    setErroMini('');
-  }
-
-  async function salvarNovo() {
-    setErroMini('');
-    if (!novoNome.trim()) { setErroMini('Digite um nome para cadastrar.'); return; }
-    setSalvando(true);
-    try {
-      const { data } = await pessoasAPI.criarAuxiliar(tipo, { nome: novoNome.trim() });
-      if (data.ok) {
-        toast.success(`"${data.dados.nome}" cadastrado com sucesso!`);
-        onNovoItem(data.dados); // atualiza lista e auto-seleciona no form pai
-        fecharMiniForm();
-      }
-    } catch (err) {
-      setErroMini(err.response?.data?.mensagem || 'Não foi possível cadastrar.');
-    } finally {
-      setSalvando(false);
-    }
-  }
-
-  return (
-    <div className="form-group">
-      <label className="form-label">{label}</label>
-      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-        <select
-          className="form-control"
-          value={value}
-          disabled={somenteLeitura}
-          onChange={e => onChange(e.target.value)}
-          style={{ flex: 1 }}
-        >
-          <option value="">— Selecione —</option>
-          {opcoes.map(o => <option key={o.id} value={o.id}>{o.nome}</option>)}
-        </select>
-        {/* Botão "..." abre mini formulário para cadastrar novo item */}
-        {!somenteLeitura && (
-          <button
-            type="button"
-            title={`Cadastrar novo(a) ${label} que não está na lista`}
-            className="btn btn-outline"
-            style={{ padding: '6px 10px', fontSize: '15px', flexShrink: 0, lineHeight: 1 }}
-            onClick={() => setMiniFormAberto(v => !v)}
-          >
-            …
-          </button>
-        )}
-      </div>
-
-      {/* Mini formulário inline — aparece abaixo do select quando "..." é clicado */}
-      {miniFormAberto && (
-        <div style={{
-          marginTop: '8px', padding: '10px 12px',
-          background: '#f0f4ff', border: '1px solid #c5d0e6',
-          borderRadius: '4px'
-        }}>
-          <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: '#444' }}>
-            Novo(a) {label}
-          </div>
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <input
-              autoFocus
-              className="form-control"
-              placeholder={`Ex.: ${label === 'Profissão' ? 'Pedreiro' : label === 'Gênero' ? 'Não binário' : 'Viúvo(a)'}`}
-              value={novoNome}
-              onChange={e => { setErroMini(''); setNovoNome(e.target.value); }}
-              onKeyDown={e => { if (e.key === 'Enter') salvarNovo(); if (e.key === 'Escape') fecharMiniForm(); }}
-              style={{ flex: 1 }}
-            />
-            <button
-              type="button"
-              className="btn btn-primary"
-              style={{ fontSize: '12px', padding: '6px 14px', flexShrink: 0 }}
-              onClick={salvarNovo}
-              disabled={salvando}
-            >
-              {salvando ? '...' : 'Salvar'}
-            </button>
-            <button
-              type="button"
-              className="btn btn-outline"
-              style={{ fontSize: '12px', padding: '6px 10px', flexShrink: 0 }}
-              onClick={fecharMiniForm}
-            >
-              ✕
-            </button>
-          </div>
-          {erroMini && (
-            <div style={{ marginTop: '6px', color: '#b91c1c', fontSize: '12px' }}>⚠️ {erroMini}</div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

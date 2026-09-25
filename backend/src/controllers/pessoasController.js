@@ -11,6 +11,7 @@ const { enviarEmail } = require('../utils/email');
 const { registrarComunicacao } = require('../utils/logComunicacao');
 const smsService = require('../services/smsService');
 const multer = require('multer');
+const { criarBancoNoCatalogo } = require('./instituicaoFinanceiraController');
 
 // ---- Rede de segurança: sem telefone/e-mail repetido no MESMO cadastro ----
 // O front já bloqueia e avisa; aqui é a proteção do servidor (qualquer caminho).
@@ -50,6 +51,84 @@ async function contarDocumentosPendentes(tipo_pessoa, pessoaId) {
 }
 const chaveTelefone = (t) => String(t?.numero || '').replace(/\D/g, '');
 const chaveEmail    = (e) => String(e?.email  || '').trim().toLowerCase();
+// Chave de deduplicação: só considera duas linhas "a mesma conta" se baterem banco, tipo,
+// agência, número/dígito e chave PIX — TUDO igual. Precisa ser rica porque, ao contrário de
+// telefone/e-mail, uma conta bancária pode legitimamente não ter agência/número preenchido
+// (ex.: conta só com PIX) e duas contas assim seriam confundidas com uma chave mais simples.
+const chaveConta    = (c) => c?.instituicao_financeira_id
+  ? `${c.instituicao_financeira_id}|${c.tipo || ''}|${String(c.agencia || '').replace(/\D/g, '')}|${String(c.numero || '').replace(/\D/g, '')}|${String(c.digito || '').replace(/\D/g, '')}|${String(c.chave_pix || '').trim().toLowerCase()}`
+  : '';
+function erroContaBancaria(mensagem) { const e = new Error(mensagem); e.codigoContaBancaria = true; return e; }
+function normalizarDigitoConta(valor) {
+  const digito = String(valor ?? '').trim();
+  if (digito.length > 4) throw erroContaBancaria('O dígito da conta pode ter no máximo 4 caracteres.');
+  return digito || null;
+}
+
+// Sincroniza as contas bancárias/PIX de uma pessoa sem trocar os seus IDs. Diferente de
+// telefones/e-mails, contas passam a ser referência de acordo, parcela e comprovante; por
+// isso nunca podem ser apagadas e recriadas numa edição comum.
+// "Própria" (conta_terceiro=0) SEMPRE usa nome/documento da PRÓPRIA pessoa — o servidor não
+// confia no que o formulário mandou para esses dois campos nesse caso.
+async function gravarContasBancarias(conn, tabela, pessoaId, contas, nomeProprio, documentoProprio) {
+  if (!Array.isArray(contas)) return;
+  try {
+    await conn.execute(`SELECT 1 FROM ${tabela} LIMIT 1`);
+  } catch (e) {
+    console.error(`Contas bancárias não gravadas (banco sem o script S3? ${tabela}):`, e.message);
+    return;
+  }
+
+  const normalizadas = semRepetidos(contas, chaveConta);
+  const principais = normalizadas.filter(c => c?.instituicao_financeira_id && c.principal);
+  if (principais.length > 1) throw erroContaBancaria('Escolha apenas uma conta principal.');
+  const idsRecebidos = [];
+
+  for (const c of normalizadas) {
+    if (!c?.instituicao_financeira_id) {
+      if (c && Object.values(c).some(v => v !== '' && v !== false && v !== null && v !== undefined)) {
+        throw erroContaBancaria('Escolha a instituição financeira de cada conta informada.');
+      }
+      continue;
+    }
+    const terceiro = c.conta_terceiro ? 1 : 0;
+    const titular = terceiro ? String(c.titular || '').trim() : (nomeProprio || '');
+    const documentoTitular = terceiro
+      ? String(c.documento_titular || '').replace(/\D/g, '')
+      : (documentoProprio || '');
+    if (!titular || !documentoTitular) throw erroContaBancaria('Informe CPF/CNPJ da pessoa ou marque a conta como de terceiro e informe seu titular.');
+    const digito = normalizarDigitoConta(c.digito);
+    const valores = [
+      c.instituicao_financeira_id, c.tipo === 'poupanca' ? 'poupanca' : 'corrente',
+      c.agencia || null, c.numero || null, digito, c.chave_pix || null,
+      terceiro, titular, documentoTitular, c.observacao ? String(c.observacao).trim() : null, c.principal ? 1 : 0
+    ];
+    if (c.id) {
+      const [r] = await conn.execute(
+        `UPDATE ${tabela} SET instituicao_financeira_id=?, tipo=?, agencia=?, numero=?, digito=?, chave_pix=?,
+           conta_terceiro=?, titular=?, documento_titular=?, observacao=?, principal=?, ativo=1
+         WHERE id=? AND pessoa_id=?`, [...valores, c.id, pessoaId]
+      );
+      if (!r.affectedRows) throw erroContaBancaria('Uma das contas informadas não pertence a esta pessoa.');
+      idsRecebidos.push(Number(c.id));
+    } else {
+      const [r] = await conn.execute(
+        `INSERT INTO ${tabela}
+          (pessoa_id, instituicao_financeira_id, tipo, agencia, numero, digito, chave_pix,
+           conta_terceiro, titular, documento_titular, observacao, principal)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [pessoaId, ...valores]
+      );
+      idsRecebidos.push(r.insertId);
+    }
+  }
+  // Remover da ficha não apaga histórico: desativa apenas as contas que não voltaram.
+  if (idsRecebidos.length) {
+    const marks = idsRecebidos.map(() => '?').join(',');
+    await conn.execute(`UPDATE ${tabela} SET ativo=0, principal=0 WHERE pessoa_id=? AND id NOT IN (${marks})`, [pessoaId, ...idsRecebidos]);
+  } else {
+    await conn.execute(`UPDATE ${tabela} SET ativo=0, principal=0 WHERE pessoa_id=?`, [pessoaId]);
+  }
+}
 
 // ---- Anexos do "Enviar e-mail" avulso (Pessoas) ----
 // Upload em memória: os arquivos são anexados ao e-mail e DESCARTADOS (nada vai para
@@ -147,7 +226,7 @@ async function listarFisicas(req, res) {
     // selecao=1: chamada de um campo de ESCOLHER pessoa, não da tela de Pessoas.
     const modoSelecao = selecao === '1' || selecao === 'true' || selecao === true;
     // parseInt garante valores inteiros seguros para uso direto na query
-    const limitInt  = parseInt(limite)  || 20;
+    const limitInt  = Math.min(parseInt(limite) || 20, 100);
     const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
     const params = [];
     let where = 'WHERE pf.ativo = 1';
@@ -309,7 +388,24 @@ async function buscarFisica(req, res) {
     // Quantos documentos ainda faltam neste cliente (pendências abertas) — para a faixa na ficha
     const pendencias_documento_abertas = await contarDocumentosPendentes('fisica', id);
 
-    return sucesso(res, { ...pessoa, telefones, emails, historico, representados, avisos_idade, pendencias_documento_abertas });
+    // Contas bancárias/PIX cadastradas. TOLERANTE: se a tabela ainda não existe nesta
+    // instância (banco sem o script S3), devolve lista vazia em vez de quebrar a ficha.
+    let contas_bancarias = [];
+    try {
+      const [rowsContas] = await pool.execute(
+        `SELECT cb.*, ifin.nome AS instituicao_nome
+           FROM contas_bancarias_pf cb
+           JOIN instituicao_financeira ifin ON ifin.id = cb.instituicao_financeira_id
+          WHERE cb.pessoa_id = ? AND cb.ativo = 1
+          ORDER BY cb.principal DESC, cb.id ASC`,
+        [id]
+      );
+      contas_bancarias = rowsContas;
+    } catch (e) {
+      console.error('Contas bancárias indisponíveis (banco sem o script S3?):', e.message);
+    }
+
+    return sucesso(res, { ...pessoa, telefones, emails, historico, representados, avisos_idade, pendencias_documento_abertas, contas_bancarias });
   } catch (err) {
     return erroInterno(res, err);
   }
@@ -413,7 +509,7 @@ async function criarFisica(req, res) {
     data_nascimento, estado_civil_id, profissao_id,
     genero_id, nacionalidade_id, nome_pai, nome_mae,
     cep, logradouro, numero, complemento, bairro, cidade, estado,
-    observacoes, telefones = [], emails = [],
+    observacoes, telefones = [], emails = [], contasBancarias = [],
     responsavel_id, parentesco_id, avisos_idade = []
   } = req.body;
 
@@ -492,6 +588,10 @@ async function criarFisica(req, res) {
       }
     }
 
+    // Contas bancárias/PIX (conta própria usa nome/CPF da própria pessoa, gravado agora)
+    await gravarContasBancarias(conn, 'contas_bancarias_pf', pessoaId, contasBancarias,
+      nome.trim(), cpf?.replace(/\D/g, '') || null);
+
     // Avisos de idade ("me avise quando completar X anos")
     await gravarAvisosIdade(conn, pessoaId, avisos_idade, req.usuario.id);
 
@@ -504,6 +604,7 @@ async function criarFisica(req, res) {
     // Rede de segurança da trava de unicidade do banco: se dois cadastros do mesmo CPF
     // chegarem ao mesmo tempo, o segundo é barrado aqui com mensagem amigável (não erro 500).
     if (err.code === 'ER_DUP_ENTRY') return erro(res, 'CPF já cadastrado no sistema');
+    if (err.codigoContaBancaria) return erro(res, err.message, 422);
     return erroInterno(res, err);
   } finally {
     conn.release();              // SEMPRE devolve a conexão ao pool
@@ -518,7 +619,7 @@ async function atualizarFisica(req, res) {
     data_nascimento, estado_civil_id, profissao_id,
     genero_id, nacionalidade_id, nome_pai, nome_mae,
     cep, logradouro, numero, complemento, bairro, cidade, estado, observacoes,
-    telefones = [], emails = [],
+    telefones = [], emails = [], contasBancarias = [],
     responsavel_id, parentesco_id, avisos_idade
   } = req.body;
 
@@ -586,6 +687,11 @@ async function atualizarFisica(req, res) {
       }
     }
 
+    // Contas bancárias/PIX: mesma regra de telefones/e-mails — regrava a lista completa
+    // (conta própria sempre usa nome/CPF atuais, mesmo que o formulário mande outra coisa)
+    await gravarContasBancarias(conn, 'contas_bancarias_pf', id, contasBancarias,
+      nome?.trim(), cpf?.replace(/\D/g, '') || null);
+
     // Avisos de idade — só mexe se a tela mandou a lista (undefined = não alterar)
     await gravarAvisosIdade(conn, id, avisos_idade, req.usuario.id);
 
@@ -596,6 +702,7 @@ async function atualizarFisica(req, res) {
     await conn.rollback();
     // Trava de unicidade: editar o CPF para um que já existe em outra pessoa cai aqui.
     if (err.code === 'ER_DUP_ENTRY') return erro(res, 'Este CPF já está cadastrado em outra pessoa');
+    if (err.codigoContaBancaria) return erro(res, err.message, 422);
     return erroInterno(res, err);
   } finally {
     conn.release();
@@ -616,7 +723,7 @@ async function excluirFisica(req, res) {
 
     // Verifica todos os vínculos em paralelo antes de permitir exclusão
     const [[autoresTbl], [reusTbl], [historico], [comunicacoes], [testemunhas], [peritos], [representados],
-           [peritoPericia], [localPericia], [parceriaAcordo], [pendenciaDoc]] = await Promise.all([
+           [peritoPericia], [localPericia], [parceriaAcordo], [pendenciaDoc], [beneficiarioAcordo], [beneficiarioRepasse]] = await Promise.all([
       pool.execute('SELECT COUNT(*) AS total FROM tbltituloprocautor WHERE tipo_pessoa = ? AND pessoa_id = ?',      ['fisica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM tbltituloprocreu WHERE tipo_pessoa = ? AND pessoa_id = ?',        ['fisica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM historico_atendimento WHERE tipo_pessoa = ? AND pessoa_id = ?',   ['fisica', id]),
@@ -640,6 +747,20 @@ async function excluirFisica(req, res) {
       // Pendência de documentos (tipo_pessoa/pessoa_id polimórfico, SEM chave estrangeira):
       // sem esta checagem, apagar o cliente deixaria a cobrança sem cadastro correspondente.
       pool.execute('SELECT COUNT(*) AS total FROM pendencia_documento WHERE tipo_pessoa = ? AND pessoa_id = ?',     ['fisica', id]),
+      // Beneficiário do acordo/alvará e destino do repasse por parcela (colunas polimórficas SEM
+      // chave estrangeira, iguais em espírito a parceria_pessoa_id) — sem esta checagem, excluir o
+      // beneficiário deixava acordo/parcela órfão (auditoria 23/09).
+      pool.execute('SELECT COUNT(*) AS total FROM acordo WHERE beneficiario_cliente_tipo = ? AND beneficiario_cliente_id = ?', ['fisica', id]),
+      pool.execute('SELECT COUNT(*) AS total FROM acordo_parcela WHERE repasse_cliente_tipo = ? AND repasse_cliente_pessoa_id = ?', ['fisica', id]),
+    ]);
+
+    // Multa da parcela (acordo_parcela_multa) — mesmos 2 campos polimórficos SEM chave
+    // estrangeira da parcela (parceria/repasse), mas em tabela própria: a multa GRAVA UMA
+    // CÓPIA da pessoa no momento em que é lançada, então pode divergir da parcela se a
+    // pessoa da parcela mudou depois (auditoria 24/09, item 2).
+    const [[multaParceria], [multaRepasse]] = await Promise.all([
+      pool.execute('SELECT COUNT(*) AS total FROM acordo_parcela_multa WHERE parceria_pessoa_tipo = ? AND parceria_pessoa_id = ?', ['fisica', id]),
+      pool.execute('SELECT COUNT(*) AS total FROM acordo_parcela_multa WHERE repasse_cliente_tipo = ? AND repasse_cliente_pessoa_id = ?', ['fisica', id]),
     ]);
 
     // Monta lista de vínculos encontrados para informar o usuário
@@ -655,14 +776,24 @@ async function excluirFisica(req, res) {
     if (localPericia[0].total > 0)  vinculos.push(`${localPericia[0].total} perícia(s) usando seu endereço como local`);
     if (parceriaAcordo[0].total > 0) vinculos.push(`${parceriaAcordo[0].total} parcela(s) de acordo com parceria de honorários`);
     if (pendenciaDoc[0].total > 0)  vinculos.push(`${pendenciaDoc[0].total} pendência(s) de documentos`);
+    if (beneficiarioAcordo[0].total > 0) vinculos.push(`${beneficiarioAcordo[0].total} acordo(s)/alvará(s) tendo esta pessoa como beneficiária do repasse`);
+    if (beneficiarioRepasse[0].total > 0) vinculos.push(`${beneficiarioRepasse[0].total} parcela(s) com repasse configurado para esta pessoa`);
+    if (multaParceria[0].total > 0) vinculos.push(`${multaParceria[0].total} multa(s) de parcela com parceria de honorários`);
+    if (multaRepasse[0].total > 0)  vinculos.push(`${multaRepasse[0].total} multa(s) de parcela com repasse configurado para esta pessoa`);
 
     if (vinculos.length > 0) {
       return erro(res, `Pessoa não pode ser excluída pois possui: ${vinculos.join(', ')}`);
     }
 
-    // Sem vínculos — DELETE real (telefones e e-mails apagam via CASCADE do banco)
-    await pool.execute('DELETE FROM pessoas_fisicas WHERE id = ?', [id]);
-    await auditoria.registrar(req.usuario.id, 'pessoas_fisicas', 'excluir', id);
+    // Sem vínculos — DELETE real (telefones, e-mails e contas bancárias apagam via CASCADE do banco)
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('DELETE FROM pessoas_fisicas WHERE id = ?', [id]);
+      await auditoria.registrar(req.usuario.id, 'pessoas_fisicas', 'excluir', id, null, null, conn);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Pessoa excluída com sucesso');
   } catch (err) {
     return erroInterno(res, err);
@@ -681,7 +812,7 @@ async function excluirJuridica(req, res) {
 
     // Verifica todos os vínculos em paralelo antes de permitir exclusão
     const [[autoresTbl], [reusTbl], [historico], [comunicacoes], [peritos],
-           [peritoPericia], [localPericia], [parceriaAcordo], [pendenciaDoc]] = await Promise.all([
+           [peritoPericia], [localPericia], [parceriaAcordo], [pendenciaDoc], [beneficiarioAcordo], [beneficiarioRepasse]] = await Promise.all([
       pool.execute('SELECT COUNT(*) AS total FROM tbltituloprocautor WHERE tipo_pessoa = ? AND pessoa_id = ?',      ['juridica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM tbltituloprocreu WHERE tipo_pessoa = ? AND pessoa_id = ?',        ['juridica', id]),
       pool.execute('SELECT COUNT(*) AS total FROM historico_atendimento WHERE tipo_pessoa = ? AND pessoa_id = ?',   ['juridica', id]),
@@ -695,6 +826,18 @@ async function excluirJuridica(req, res) {
       pool.execute('SELECT COUNT(*) AS total FROM acordo_parcela WHERE parceria_pessoa_tipo = ? AND parceria_pessoa_id = ?', ['juridica', id]),
       // Pendência de documentos (polimórfica, sem chave estrangeira) — mesma lógica da física.
       pool.execute('SELECT COUNT(*) AS total FROM pendencia_documento WHERE tipo_pessoa = ? AND pessoa_id = ?',     ['juridica', id]),
+      // Beneficiário do acordo/alvará e destino do repasse por parcela — mesma lógica da física
+      // (auditoria 23/09).
+      pool.execute('SELECT COUNT(*) AS total FROM acordo WHERE beneficiario_cliente_tipo = ? AND beneficiario_cliente_id = ?', ['juridica', id]),
+      pool.execute('SELECT COUNT(*) AS total FROM acordo_parcela WHERE repasse_cliente_tipo = ? AND repasse_cliente_pessoa_id = ?', ['juridica', id]),
+    ]);
+
+    // Multa da parcela (acordo_parcela_multa) — mesma lógica da física: campos polimórficos
+    // SEM chave estrangeira que gravam uma CÓPIA da pessoa ao lançar a multa, podendo
+    // divergir da parcela (auditoria 24/09, item 2).
+    const [[multaParceria], [multaRepasse]] = await Promise.all([
+      pool.execute('SELECT COUNT(*) AS total FROM acordo_parcela_multa WHERE parceria_pessoa_tipo = ? AND parceria_pessoa_id = ?', ['juridica', id]),
+      pool.execute('SELECT COUNT(*) AS total FROM acordo_parcela_multa WHERE repasse_cliente_tipo = ? AND repasse_cliente_pessoa_id = ?', ['juridica', id]),
     ]);
 
     // Monta lista de vínculos encontrados para informar o usuário
@@ -708,14 +851,24 @@ async function excluirJuridica(req, res) {
     if (localPericia[0].total > 0)  vinculos.push(`${localPericia[0].total} perícia(s) usando seu endereço como local`);
     if (parceriaAcordo[0].total > 0) vinculos.push(`${parceriaAcordo[0].total} parcela(s) de acordo com parceria de honorários`);
     if (pendenciaDoc[0].total > 0)  vinculos.push(`${pendenciaDoc[0].total} pendência(s) de documentos`);
+    if (beneficiarioAcordo[0].total > 0) vinculos.push(`${beneficiarioAcordo[0].total} acordo(s)/alvará(s) tendo esta pessoa como beneficiária do repasse`);
+    if (beneficiarioRepasse[0].total > 0) vinculos.push(`${beneficiarioRepasse[0].total} parcela(s) com repasse configurado para esta pessoa`);
+    if (multaParceria[0].total > 0) vinculos.push(`${multaParceria[0].total} multa(s) de parcela com parceria de honorários`);
+    if (multaRepasse[0].total > 0)  vinculos.push(`${multaRepasse[0].total} multa(s) de parcela com repasse configurado para esta pessoa`);
 
     if (vinculos.length > 0) {
       return erro(res, `Pessoa não pode ser excluída pois possui: ${vinculos.join(', ')}`);
     }
 
-    // Sem vínculos — DELETE real (telefones e e-mails apagam via CASCADE do banco)
-    await pool.execute('DELETE FROM pessoas_juridicas WHERE id = ?', [id]);
-    await auditoria.registrar(req.usuario.id, 'pessoas_juridicas', 'excluir', id);
+    // Sem vínculos — DELETE real (telefones, e-mails e contas bancárias apagam via CASCADE do banco)
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('DELETE FROM pessoas_juridicas WHERE id = ?', [id]);
+      await auditoria.registrar(req.usuario.id, 'pessoas_juridicas', 'excluir', id, null, null, conn);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Pessoa jurídica excluída com sucesso');
   } catch (err) {
     return erroInterno(res, err);
@@ -731,6 +884,8 @@ async function excluirJuridica(req, res) {
 //     historico_atendimento, log_comunicacoes, processo_perito.
 //   - Por coluna própria (tipo+id): pericia (perito_tipo/perito_id), acordo_parcela
 //     (parceria_pessoa_tipo/parceria_pessoa_id).
+//   - Beneficiário do repasse (tipo+id): acordo (beneficiario_cliente_tipo/id), acordo_parcela
+//     (repasse_cliente_tipo/pessoa_id).
 //   - "Filhos" do cadastro (por pessoa_id): telefones_pj, emails_pj.
 async function unificarJuridicas(req, res) {
   const principalId = parseInt(req.body.principal_id);
@@ -770,6 +925,26 @@ async function unificarJuridicas(req, res) {
     }
   } catch (e) {
     console.error('Checagem de local de perícia / pendência de documentos indisponível:', e.message);
+  }
+
+  // Se algum DUPLICADO tiver acordo, alvará ou qualquer lançamento no Financeiro, a
+  // unificação fica PROIBIDA (decisão do usuário 24/09) — em vez de mover o vínculo.
+  // O principal não entra nesta checagem: ele continua existindo, seus lançamentos ficam intactos.
+  try {
+    const [[acordoBenef], [parcelaParceria], [parcelaRepasse], [multaParceria], [multaRepasse]] = await Promise.all([
+      pool.execute(`SELECT COUNT(*) AS total FROM acordo WHERE beneficiario_cliente_tipo = 'juridica' AND beneficiario_cliente_id IN (${dupPh})`, duplicados),
+      pool.execute(`SELECT COUNT(*) AS total FROM acordo_parcela WHERE parceria_pessoa_tipo = 'juridica' AND parceria_pessoa_id IN (${dupPh})`, duplicados),
+      pool.execute(`SELECT COUNT(*) AS total FROM acordo_parcela WHERE repasse_cliente_tipo = 'juridica' AND repasse_cliente_pessoa_id IN (${dupPh})`, duplicados),
+      pool.execute(`SELECT COUNT(*) AS total FROM acordo_parcela_multa WHERE parceria_pessoa_tipo = 'juridica' AND parceria_pessoa_id IN (${dupPh})`, duplicados),
+      pool.execute(`SELECT COUNT(*) AS total FROM acordo_parcela_multa WHERE repasse_cliente_tipo = 'juridica' AND repasse_cliente_pessoa_id IN (${dupPh})`, duplicados),
+    ]);
+    const totalFinanceiro = acordoBenef[0].total + parcelaParceria[0].total + parcelaRepasse[0].total
+      + multaParceria[0].total + multaRepasse[0].total;
+    if (totalFinanceiro > 0) {
+      return erro(res, 'Não é possível unificar: um dos cadastros selecionados tem acordo, alvará ou lançamento no Financeiro (parceria, repasse ou multa). Resolva/finalize no Financeiro antes de unificar.');
+    }
+  } catch (err) {
+    return erroInterno(res, err);
   }
 
   const conn = await pool.getConnection();
@@ -820,25 +995,30 @@ async function unificarJuridicas(req, res) {
       );
     }
 
-    // 4) Perito de PERÍCIA e PARCEIRO de acordo (colunas próprias; 1 por linha — só mover).
+    // 4) Perito de PERÍCIA (coluna própria; 1 por linha — só mover). Parceria/beneficiário/repasse
+    // do Financeiro NÃO são movidos: a checagem acima já garante que nenhum duplicado os tem.
     await conn.execute(
       `UPDATE pericia SET perito_id = ?
         WHERE perito_tipo = 'juridica' AND perito_id IN (${dupPh})`,
       [principalId, ...duplicados]
     );
-    await conn.execute(
-      `UPDATE acordo_parcela SET parceria_pessoa_id = ?
-        WHERE parceria_pessoa_tipo = 'juridica' AND parceria_pessoa_id IN (${dupPh})`,
-      [principalId, ...duplicados]
-    );
 
-    // 5) "Filhos" do cadastro (telefones e e-mails): move para o principal p/ não
-    //    perder contatos (esses não têm tipo_pessoa; pertencem só à empresa).
+    // 5) "Filhos" do cadastro (telefones, e-mails e contas bancárias): move para o principal
+    //    p/ não perder contatos (esses não têm tipo_pessoa; pertencem só à empresa).
+    // contas_bancarias_pj é TOLERANTE (banco sem o script S3 ainda) — as demais são fixas.
     for (const tabela of ['telefones_pj', 'emails_pj']) {
       await conn.execute(
         `UPDATE ${tabela} SET pessoa_id = ? WHERE pessoa_id IN (${dupPh})`,
         [principalId, ...duplicados]
       );
+    }
+    try {
+      await conn.execute(
+        `UPDATE contas_bancarias_pj SET pessoa_id = ? WHERE pessoa_id IN (${dupPh})`,
+        [principalId, ...duplicados]
+      );
+    } catch (e) {
+      console.error('Contas bancárias não movidas na unificação (banco sem o script S3?):', e.message);
     }
 
     // 5.1) Marca "Em Recuperação Judicial": se QUALQUER um dos cadastros unidos estiver
@@ -880,6 +1060,8 @@ async function unificarJuridicas(req, res) {
 //     historico_atendimento, log_comunicacoes, processo_perito.
 //   - Por coluna própria (tipo+id): pericia (perito_tipo/perito_id), acordo_parcela
 //     (parceria_pessoa_tipo/parceria_pessoa_id).
+//   - Beneficiário do repasse (tipo+id): acordo (beneficiario_cliente_tipo/id), acordo_parcela
+//     (repasse_cliente_tipo/pessoa_id).
 //   - FK diretas (por pessoa_id): audiencia_testemunhas, telefones_pf, emails_pf.
 // TRAVA DE CPF: CPFs diferentes = pessoas diferentes -> bloqueia. O principal HERDA o CPF
 // se estiver sem (só um dos selecionados pode ter CPF, pois cpf é UNIQUE no banco).
@@ -964,6 +1146,26 @@ async function unificarFisicas(req, res) {
     console.error('Checagem de local de perícia / pendência de documentos indisponível:', e.message);
   }
 
+  // Se algum DUPLICADO tiver acordo, alvará ou qualquer lançamento no Financeiro, a
+  // unificação fica PROIBIDA (decisão do usuário 24/09) — em vez de mover o vínculo.
+  // O principal não entra nesta checagem: ele continua existindo, seus lançamentos ficam intactos.
+  try {
+    const [[acordoBenef], [parcelaParceria], [parcelaRepasse], [multaParceria], [multaRepasse]] = await Promise.all([
+      pool.execute(`SELECT COUNT(*) AS total FROM acordo WHERE beneficiario_cliente_tipo = 'fisica' AND beneficiario_cliente_id IN (${dupPh})`, duplicados),
+      pool.execute(`SELECT COUNT(*) AS total FROM acordo_parcela WHERE parceria_pessoa_tipo = 'fisica' AND parceria_pessoa_id IN (${dupPh})`, duplicados),
+      pool.execute(`SELECT COUNT(*) AS total FROM acordo_parcela WHERE repasse_cliente_tipo = 'fisica' AND repasse_cliente_pessoa_id IN (${dupPh})`, duplicados),
+      pool.execute(`SELECT COUNT(*) AS total FROM acordo_parcela_multa WHERE parceria_pessoa_tipo = 'fisica' AND parceria_pessoa_id IN (${dupPh})`, duplicados),
+      pool.execute(`SELECT COUNT(*) AS total FROM acordo_parcela_multa WHERE repasse_cliente_tipo = 'fisica' AND repasse_cliente_pessoa_id IN (${dupPh})`, duplicados),
+    ]);
+    const totalFinanceiro = acordoBenef[0].total + parcelaParceria[0].total + parcelaRepasse[0].total
+      + multaParceria[0].total + multaRepasse[0].total;
+    if (totalFinanceiro > 0) {
+      return erro(res, 'Não é possível unificar: um dos cadastros selecionados tem acordo, alvará ou lançamento no Financeiro (parceria, repasse ou multa). Resolva/finalize no Financeiro antes de unificar.');
+    }
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -1017,22 +1219,28 @@ async function unificarFisicas(req, res) {
       );
     }
 
-    // 5) Perito de PERÍCIA e PARCEIRO de acordo (coluna própria; 1 por linha — só mover).
+    // 5) Perito de PERÍCIA (coluna própria; 1 por linha — só mover). Parceria/beneficiário/repasse
+    // do Financeiro NÃO são movidos: a checagem acima já garante que nenhum duplicado os tem.
     await conn.execute(
       `UPDATE pericia SET perito_id = ? WHERE perito_tipo = 'fisica' AND perito_id IN (${dupPh})`,
       [principalId, ...duplicados]
     );
-    await conn.execute(
-      `UPDATE acordo_parcela SET parceria_pessoa_id = ? WHERE parceria_pessoa_tipo = 'fisica' AND parceria_pessoa_id IN (${dupPh})`,
-      [principalId, ...duplicados]
-    );
 
-    // 6) Telefones e e-mails (FK por pessoa_id): move para o principal.
+    // 6) Telefones, e-mails e contas bancárias (FK por pessoa_id): move para o principal.
+    // contas_bancarias_pf é TOLERANTE (banco sem o script S3 ainda) — as demais são fixas.
     for (const tabela of ['telefones_pf', 'emails_pf']) {
       await conn.execute(
         `UPDATE ${tabela} SET pessoa_id = ? WHERE pessoa_id IN (${dupPh})`,
         [principalId, ...duplicados]
       );
+    }
+    try {
+      await conn.execute(
+        `UPDATE contas_bancarias_pf SET pessoa_id = ? WHERE pessoa_id IN (${dupPh})`,
+        [principalId, ...duplicados]
+      );
+    } catch (e) {
+      console.error('Contas bancárias não movidas na unificação (banco sem o script S3?):', e.message);
     }
 
     // 7) Apaga os cadastros duplicados (agora sem nenhum vínculo). Isso LIBERA o CPF único.
@@ -1072,11 +1280,17 @@ async function adicionarHistorico(req, res) {
 
     if (!descricao || !descricao.trim()) return erro(res, 'A anotação não pode ficar em branco');
 
-    await pool.execute(
-      `INSERT INTO historico_atendimento (tipo_pessoa, pessoa_id, descricao, usuario_id)
-       VALUES (?, ?, ?, ?)`,
-      [tipoPessoa, id, descricao.trim(), req.usuario.id]
-    );
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        `INSERT INTO historico_atendimento (tipo_pessoa, pessoa_id, descricao, usuario_id)
+         VALUES (?, ?, ?, ?)`,
+        [tipoPessoa, id, descricao.trim(), req.usuario.id]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
 
     return sucesso(res, null, 'Anotação registrada com sucesso', 201);
   } catch (err) {
@@ -1116,11 +1330,17 @@ async function editarHistorico(req, res) {
     if (permissao.naoEncontrado) return naoEncontrado(res, 'Anotação não encontrada');
     if (!permissao.ok)           return erro(res, permissao.motivo, 403);
 
-    await pool.execute(
-      'UPDATE historico_atendimento SET descricao = ? WHERE id = ?',
-      [descricao.trim(), histId]
-    );
-    await auditoria.registrar(req.usuario.id, 'historico_atendimento', 'alterar', histId);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        'UPDATE historico_atendimento SET descricao = ? WHERE id = ?',
+        [descricao.trim(), histId]
+      );
+      await auditoria.registrar(req.usuario.id, 'historico_atendimento', 'alterar', histId, null, null, conn);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Anotação atualizada com sucesso');
   } catch (err) {
     return erroInterno(res, err);
@@ -1136,8 +1356,14 @@ async function excluirHistorico(req, res) {
     if (permissao.naoEncontrado) return naoEncontrado(res, 'Anotação não encontrada');
     if (!permissao.ok)           return erro(res, permissao.motivo, 403);
 
-    await pool.execute('DELETE FROM historico_atendimento WHERE id = ?', [histId]);
-    await auditoria.registrar(req.usuario.id, 'historico_atendimento', 'excluir', histId);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('DELETE FROM historico_atendimento WHERE id = ?', [histId]);
+      await auditoria.registrar(req.usuario.id, 'historico_atendimento', 'excluir', histId, null, null, conn);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Anotação excluída com sucesso');
   } catch (err) {
     return erroInterno(res, err);
@@ -1152,7 +1378,7 @@ async function listarJuridicas(req, res) {
     const { busca, pagina = 1, limite = 20, selecao } = req.query;
     const modoSelecao = selecao === '1' || selecao === 'true' || selecao === true; // ver listarFisicas
     // parseInt garante valores inteiros seguros para uso direto na query
-    const limitInt  = parseInt(limite)  || 20;
+    const limitInt  = Math.min(parseInt(limite) || 20, 100);
     const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
     const params = [];
     let where = 'WHERE pj.ativo = 1';
@@ -1212,7 +1438,7 @@ async function criarJuridica(req, res) {
   const {
     razao_social, nome_fantasia, cnpj, inscricao_estadual,
     cep, logradouro, numero, complemento, bairro, cidade, estado,
-    observacoes, telefones = [], emails = [],
+    observacoes, telefones = [], emails = [], contasBancarias = [],
     // Marca "Em Recuperação Judicial": fica no cadastro da EMPRESA. É dela que nasce
     // o aviso vermelho na pasta de todo processo em que ela é parte.
     em_recuperacao_judicial
@@ -1264,6 +1490,10 @@ async function criarJuridica(req, res) {
       }
     }
 
+    // Contas bancárias/PIX (conta própria usa razão social/CNPJ da própria empresa)
+    await gravarContasBancarias(conn, 'contas_bancarias_pj', pessoaId, contasBancarias,
+      razao_social.trim(), cnpj?.replace(/\D/g, '') || null);
+
     // Auditoria participa da MESMA transação (tudo ou nada): grava antes do commit, com conn
     await auditoria.registrar(req.usuario.id, 'pessoas_juridicas', 'criar', pessoaId, null, null, conn);
     await conn.commit();         // Grava tudo de uma vez — empresa + telefones + e-mails + auditoria
@@ -1273,6 +1503,7 @@ async function criarJuridica(req, res) {
     // Trava de unicidade do banco (uq_pj_cnpj): sem isto o CNPJ repetido virava
     // "Erro interno no servidor" e o usuário não descobria o motivo.
     if (err.code === 'ER_DUP_ENTRY') return erro(res, 'CNPJ já cadastrado no sistema');
+    if (err.codigoContaBancaria) return erro(res, err.message, 422);
     return erroInterno(res, err);
   } finally {
     conn.release();              // SEMPRE devolve a conexão ao pool
@@ -1306,7 +1537,24 @@ async function buscarJuridica(req, res) {
 
     const pendencias_documento_abertas = await contarDocumentosPendentes('juridica', id);
 
-    return sucesso(res, { ...pessoa, telefones, emails, historico, pendencias_documento_abertas });
+    // Contas bancárias/PIX cadastradas. TOLERANTE: se a tabela ainda não existe nesta
+    // instância (banco sem o script S3), devolve lista vazia em vez de quebrar a ficha.
+    let contas_bancarias = [];
+    try {
+      const [rowsContas] = await pool.execute(
+        `SELECT cb.*, ifin.nome AS instituicao_nome
+           FROM contas_bancarias_pj cb
+           JOIN instituicao_financeira ifin ON ifin.id = cb.instituicao_financeira_id
+          WHERE cb.pessoa_id = ? AND cb.ativo = 1
+          ORDER BY cb.principal DESC, cb.id ASC`,
+        [id]
+      );
+      contas_bancarias = rowsContas;
+    } catch (e) {
+      console.error('Contas bancárias indisponíveis (banco sem o script S3?):', e.message);
+    }
+
+    return sucesso(res, { ...pessoa, telefones, emails, historico, pendencias_documento_abertas, contas_bancarias });
   } catch (err) {
     return erroInterno(res, err);
   }
@@ -1322,7 +1570,7 @@ async function atualizarJuridica(req, res) {
   const {
     razao_social, nome_fantasia, cnpj,
     cep, logradouro, numero, complemento, bairro, cidade, estado, observacoes,
-    telefones = [], emails = [],
+    telefones = [], emails = [], contasBancarias = [],
     em_recuperacao_judicial   // ver comentário em criarJuridica
   } = req.body;
 
@@ -1373,6 +1621,10 @@ async function atualizarJuridica(req, res) {
       }
     }
 
+    // Contas bancárias/PIX: regrava a lista completa (conta própria usa razão social/CNPJ atuais)
+    await gravarContasBancarias(conn, 'contas_bancarias_pj', id, contasBancarias,
+      razao_social?.trim(), cnpj?.replace(/\D/g, '') || null);
+
     await auditoria.registrar(req.usuario.id, 'pessoas_juridicas', 'editar', id, antes[0], null, conn);
     await conn.commit();
     return sucesso(res, null, 'Pessoa jurídica atualizada com sucesso');
@@ -1380,6 +1632,7 @@ async function atualizarJuridica(req, res) {
     await conn.rollback();
     // Trava de unicidade: editar o CNPJ para um que já existe em outra empresa cai aqui.
     if (err.code === 'ER_DUP_ENTRY') return erro(res, 'Este CNPJ já está cadastrado em outra empresa');
+    if (err.codigoContaBancaria) return erro(res, err.message, 422);
     return erroInterno(res, err);
   } finally {
     conn.release();
@@ -1397,15 +1650,30 @@ async function criarAuxiliar(req, res) {
 
     // Whitelist de tabelas — evita SQL injection via parâmetro de rota
     const tabelas = {
-      generos:        'genero',
-      estados_civis:  'estado_civil',
-      profissoes:     'profissao',
-      nacionalidades: 'nacionalidade',
-      parentescos:    'parentesco',
+      generos:                  'genero',
+      estados_civis:            'estado_civil',
+      profissoes:               'profissao',
+      nacionalidades:           'nacionalidade',
+      parentescos:              'parentesco',
+      instituicoes_financeiras: 'instituicao_financeira',
     };
 
     const tabela = tabelas[tipo];
-    if (!tabela) return erro(res, 'Tipo inválido. Use: generos, estados_civis, profissoes, nacionalidades ou parentescos');
+    if (!tabela) return erro(res, 'Tipo inválido. Use: generos, estados_civis, profissoes, nacionalidades, parentescos ou instituicoes_financeiras');
+
+    // Banco (instituicao_financeira) tem regra própria — mesma usada pela tela dedicada de
+    // Controle (preserva a grafia digitada e só compara contra bancos ATIVOS), em vez da
+    // normalização genérica abaixo (auditoria 23/09: os dois caminhos divergiam).
+    if (tabela === 'instituicao_financeira') {
+      try {
+        const banco = await criarBancoNoCatalogo(nome, req.usuario.id);
+        return sucesso(res, banco, 'Cadastrado com sucesso', 201);
+      } catch (e) {
+        if (e.codigoValidacaoAuxiliar) return erro(res, e.message);
+        if (e.code === 'ER_DUP_ENTRY') return erro(res, 'Já existe um banco com esse nome');
+        return erroInterno(res, e);
+      }
+    }
 
     // Normaliza: primeira letra maiúscula, demais minúsculas
     const nomeTrimmed = nome.trim();
@@ -1417,9 +1685,16 @@ async function criarAuxiliar(req, res) {
     );
     if (dup.length > 0) return erro(res, `"${nomeNormalizado}" já está cadastrado na lista`);
 
-    const [result] = await pool.execute(
-      `INSERT INTO ${tabela} (nome) VALUES (?)`, [nomeNormalizado]
-    );
+    const conn = await pool.getConnection();
+    let result;
+    try {
+      await conn.beginTransaction();
+      [result] = await conn.execute(
+        `INSERT INTO ${tabela} (nome) VALUES (?)`, [nomeNormalizado]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
 
     return sucesso(res, { id: result.insertId, nome: nomeNormalizado }, 'Cadastrado com sucesso', 201);
   } catch (err) {
@@ -1485,10 +1760,17 @@ async function criarProfissao(req, res) {
     );
     if (dup.length > 0) return erro(res, `"${nomeNormalizado}" já está cadastrada na lista`);
 
-    const [result] = await pool.execute(
-      'INSERT INTO profissao (nome) VALUES (?)',
-      [nomeNormalizado]
-    );
+    const conn = await pool.getConnection();
+    let result;
+    try {
+      await conn.beginTransaction();
+      [result] = await conn.execute(
+        'INSERT INTO profissao (nome) VALUES (?)',
+        [nomeNormalizado]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
 
     return sucesso(res, { id: result.insertId, nome: nomeNormalizado }, 'Profissão cadastrada com sucesso', 201);
   } catch (err) {
@@ -1512,7 +1794,13 @@ async function atualizarProfissao(req, res) {
     );
     if (dup.length > 0) return erro(res, `"${nomeNormalizado}" já está cadastrada na lista`);
 
-    await pool.execute('UPDATE profissao SET nome = ? WHERE id = ?', [nomeNormalizado, id]);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE profissao SET nome = ? WHERE id = ?', [nomeNormalizado, id]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Profissão atualizada com sucesso');
   } catch (err) {
     return erroInterno(res, err);
@@ -1534,7 +1822,24 @@ async function excluirProfissao(req, res) {
       return erro(res, `Não é possível excluir "${atual[0].nome}" porque existem ${total} pessoa(s) usando esta profissão`);
     }
 
-    await pool.execute('DELETE FROM profissao WHERE id = ?', [id]);
+    // Freelancers também usam profissão (advogados_freela.profissao_id, FK SET NULL) — sem
+    // esta checagem, excluir apagava a profissão do freelancer em silêncio (auditoria 24/09).
+    const [usoFreela] = await pool.execute(
+      'SELECT COUNT(*) AS total FROM advogados_freela WHERE profissao_id = ?',
+      [id]
+    );
+    const totalFreela = Number(usoFreela[0]?.total || 0);
+    if (totalFreela > 0) {
+      return erro(res, `Não é possível excluir "${atual[0].nome}" porque existem ${totalFreela} freelancer(s) usando esta profissão`);
+    }
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('DELETE FROM profissao WHERE id = ?', [id]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Profissão excluída com sucesso');
   } catch (err) {
     return erroInterno(res, err);
@@ -1569,8 +1874,18 @@ async function buscarAuxiliares(req, res) {
     const [profissoes]     = await pool.execute('SELECT * FROM profissao ORDER BY nome');
     const [nacionalidades] = await pool.execute('SELECT * FROM nacionalidade ORDER BY nome');
     const [parentescos]    = await pool.execute('SELECT * FROM parentesco ORDER BY nome');
+    // Catálogo de bancos para o cadastro de contas bancárias (aba "Financeiro" da Pessoa).
+    // TOLERANTE: se a tabela ainda não existe nesta instância (script do banco pendente),
+    // devolve lista vazia em vez de quebrar TODOS os auxiliares da tela de Pessoas.
+    let instituicoes_financeiras = [];
+    try {
+      const [rowsInst] = await pool.execute('SELECT id, nome FROM instituicao_financeira WHERE ativo = 1 ORDER BY nome');
+      instituicoes_financeiras = rowsInst;
+    } catch (e) {
+      console.error('Catálogo de bancos indisponível (banco sem o script S2?):', e.message);
+    }
 
-    return sucesso(res, { estados_civis, generos, profissoes, nacionalidades, parentescos });
+    return sucesso(res, { estados_civis, generos, profissoes, nacionalidades, parentescos, instituicoes_financeiras });
   } catch (err) {
     return erroInterno(res, err);
   }

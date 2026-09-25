@@ -9,6 +9,20 @@ const auditoria = require('../middleware/auditoria');
 const agendaGoogle = require('../services/agendaGoogleService');
 const { enviarComunicadoPericia, enviarEmailPeritoPericia } = require('../services/comunicadoService');
 
+const MODALIDADES_AUDIENCIA = new Set(['presencial', 'virtual', 'sem_comparecimento']);
+
+function normalizarModalidadeAudiencia(modalidade) {
+  return modalidade || 'presencial';
+}
+
+function modalidadeAudienciaValida(modalidade) {
+  return MODALIDADES_AUDIENCIA.has(normalizarModalidadeAudiencia(modalidade));
+}
+
+function semComparecimento(modalidade) {
+  return normalizarModalidadeAudiencia(modalidade) === 'sem_comparecimento';
+}
+
 function audienciaJaPassou(data, hora) {
   const dataAudiencia = String(data || '').slice(0, 10);
   const horaAudiencia = String(hora || '').slice(0, 5);
@@ -46,13 +60,13 @@ async function dadosAudienciaParaGoogle(audienciaId) {
     const partes = [];
     if (a.tipo_nome)   partes.push(`Tipo: ${a.tipo_nome}`);
     if (a.vara_nome)   partes.push(`Vara: ${a.vara_nome}${a.forum_nome ? ` — ${a.forum_nome}` : ''}`);
-    if (a.modalidade)  partes.push(`Modalidade: ${a.modalidade}`);
+    if (a.modalidade)  partes.push(`Modalidade: ${a.modalidade === 'sem_comparecimento' ? 'Sem comparecimento' : a.modalidade}`);
     if (a.modalidade === 'virtual' && (a.plataforma_virtual || a.link_virtual)) {
       partes.push(`Link: ${a.plataforma_virtual ? a.plataforma_virtual + ' — ' : ''}${a.link_virtual || ''}`);
     }
     return {
       responsavel_id: a.responsavel_id,
-      resumo: `Audiência: ${a.num_processo || ''}`.trim(),
+      resumo: `${semComparecimento(a.modalidade) ? 'Acompanhamento de ato processual' : 'Audiência'}: ${a.num_processo || ''}`.trim(),
       descricao: partes.join('\n'),
       data: a.data,
       hora: a.hora,
@@ -173,7 +187,7 @@ async function listar(req, res) {
       params.push(req.usuario.id, etqSlot);
     }
 
-    const limitInt  = parseInt(limite) || 30;
+    const limitInt  = Math.min(parseInt(limite) || 30, 100);
     const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
 
     const ordenacoes = {
@@ -501,6 +515,13 @@ async function criar(req, res) {
     if (!processo_id || !tipo_audiencia_id || !data || !hora) {
       return erro(res, 'Processo, tipo de audiência, data e hora são obrigatórios');
     }
+    const modalidadeNormalizada = normalizarModalidadeAudiencia(modalidade);
+    if (!modalidadeAudienciaValida(modalidadeNormalizada)) {
+      return erro(res, 'Selecione uma modalidade de audiência válida');
+    }
+    if (semComparecimento(modalidadeNormalizada) && testemunhas.length > 0) {
+      return erro(res, 'Eventos sem comparecimento não podem ter testemunhas vinculadas');
+    }
     if (!(await tipoAudienciaAtivo(conn, tipo_audiencia_id))) {
       return erro(res, 'Selecione um tipo de audiência válido e ativo');
     }
@@ -530,8 +551,9 @@ async function criar(req, res) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         processo_id, tipo_audiencia_id, data, hora,
-        modalidade || 'presencial', vara_id || null,
-        plataforma_virtual || null, link_virtual || null,
+        modalidadeNormalizada, semComparecimento(modalidadeNormalizada) ? null : vara_id || null,
+        modalidadeNormalizada === 'virtual' ? plataforma_virtual || null : null,
+        modalidadeNormalizada === 'virtual' ? link_virtual || null : null,
         (observacoes && observacoes.trim()) ? observacoes.trim() : null,
         responsavel_id, responsavel_freela_id,
         req.usuario.id, publicacao_id || null
@@ -606,6 +628,13 @@ async function atualizar(req, res) {
     if (!tipo_audiencia_id || !data || !hora) {
       return erro(res, 'Tipo de audiência, data e hora são obrigatórios');
     }
+    const modalidadeNormalizada = normalizarModalidadeAudiencia(modalidade);
+    if (!modalidadeAudienciaValida(modalidadeNormalizada)) {
+      return erro(res, 'Selecione uma modalidade de audiência válida');
+    }
+    if (semComparecimento(modalidadeNormalizada) && testemunhas.length > 0) {
+      return erro(res, 'Eventos sem comparecimento não podem ter testemunhas vinculadas');
+    }
     if (!(await tipoAudienciaAtivo(conn, tipo_audiencia_id))) {
       return erro(res, 'Selecione um tipo de audiência válido e ativo');
     }
@@ -615,6 +644,14 @@ async function atualizar(req, res) {
     if (!antes.length) return naoEncontrado(res, 'Audiência não encontrada');
     if (['cancelada','remarcada','realizada','acordo'].includes(antes[0].status)) {
       return erro(res, `Audiência com status "${antes[0].status}" não pode ser editada`);
+    }
+    if (semComparecimento(modalidadeNormalizada)) {
+      const [testemunhasExistentes] = await conn.execute(
+        'SELECT id FROM audiencia_testemunhas WHERE audiencia_id = ? LIMIT 1', [id]
+      );
+      if (testemunhasExistentes.length) {
+        return erro(res, 'Não é possível alterar esta audiência para sem comparecimento porque ela possui testemunhas vinculadas. Remova as testemunhas antes de alterar a modalidade.');
+      }
     }
 
     const duplicada = await localizarAudienciaAtivaNoHorario(
@@ -642,8 +679,9 @@ async function atualizar(req, res) {
        WHERE id = ?`,
       [
         tipo_audiencia_id, data, hora,
-        modalidade || 'presencial', vara_id || null,
-        plataforma_virtual || null, link_virtual || null,
+        modalidadeNormalizada, semComparecimento(modalidadeNormalizada) ? null : vara_id || null,
+        modalidadeNormalizada === 'virtual' ? plataforma_virtual || null : null,
+        modalidadeNormalizada === 'virtual' ? link_virtual || null : null,
         (observacoes && observacoes.trim()) ? observacoes.trim() : null,
         responsavel_id, responsavel_freela_id,
         req.usuario.id, id
@@ -660,7 +698,7 @@ async function atualizar(req, res) {
     const camposSimples = ['data', 'modalidade', 'plataforma_virtual', 'link_virtual', 'observacoes'];
     for (const campo of camposSimples) {
       const vAntes  = String(antes[0][campo] ?? '');
-      const vDepois = String(req.body[campo] ?? '');
+      const vDepois = String(campo === 'modalidade' ? modalidadeNormalizada : req.body[campo] ?? '');
       if (vAntes !== vDepois) {
         await conn.execute(
           `INSERT INTO auditoria_audiencia (audiencia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
@@ -822,6 +860,11 @@ async function remarcar(req, res) {
 
     if (!motivo?.trim()) return erro(res, 'Motivo da remarcação é obrigatório');
     if (!processo_id || !tipo_audiencia_id || !data || !hora) return erro(res, 'Processo, tipo de audiência, data e hora são obrigatórios');
+    const modalidadeNormalizada = normalizarModalidadeAudiencia(modalidade);
+    if (!modalidadeAudienciaValida(modalidadeNormalizada)) return erro(res, 'Selecione uma modalidade de audiência válida');
+    if (semComparecimento(modalidadeNormalizada) && testemunhas.length > 0) {
+      return erro(res, 'Eventos sem comparecimento não podem ter testemunhas vinculadas');
+    }
     if (!(await tipoAudienciaAtivo(conn, tipo_audiencia_id))) return erro(res, 'Selecione um tipo de audiência válido e ativo');
     const responsaveisNormalizados = normalizarResponsaveis(responsaveis, responsavelRaw);
     if (!(await validarResponsaveis(conn, responsaveisNormalizados))) {
@@ -851,8 +894,8 @@ async function remarcar(req, res) {
           plataforma_virtual, link_virtual, observacoes, responsavel_id,
           responsavel_freela_id, criado_por)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [processo_id, tipo_audiencia_id, data, hora, modalidade || 'presencial', vara_id || null,
-       plataforma_virtual || null, link_virtual || null, (observacoes || '').trim() || null,
+      [processo_id, tipo_audiencia_id, data, hora, modalidadeNormalizada, semComparecimento(modalidadeNormalizada) ? null : vara_id || null,
+       modalidadeNormalizada === 'virtual' ? plataforma_virtual || null : null, modalidadeNormalizada === 'virtual' ? link_virtual || null : null, (observacoes || '').trim() || null,
        responsavel_id, responsavel_freela_id, req.usuario.id]
     );
     const novaAudienciaId = nova.insertId;
@@ -927,6 +970,13 @@ async function criarAudienciaDaAta(conn, dados, processoId, usuarioId) {
   if (!tipo_audiencia_id || !data || !hora) {
     throw erroDaAta('Dados da nova audiência incompletos. Informe tipo, data e horário.');
   }
+  const modalidadeNormalizada = normalizarModalidadeAudiencia(modalidade);
+  if (!modalidadeAudienciaValida(modalidadeNormalizada)) {
+    throw erroDaAta('Selecione uma modalidade de audiência válida para a nova audiência.');
+  }
+  if (semComparecimento(modalidadeNormalizada) && testemunhas.length > 0) {
+    throw erroDaAta('Eventos sem comparecimento não podem ter testemunhas vinculadas.');
+  }
   if (!(await tipoAudienciaAtivo(conn, tipo_audiencia_id))) {
     throw erroDaAta('Selecione um tipo de audiência válido e ativo para a nova audiência.');
   }
@@ -948,8 +998,8 @@ async function criarAudienciaDaAta(conn, dados, processoId, usuarioId) {
         plataforma_virtual, link_virtual, observacoes, responsavel_id,
         responsavel_freela_id, criado_por, publicacao_id)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, null)`,
-    [processoId, tipo_audiencia_id, data, hora, modalidade || 'presencial', vara_id || null,
-      plataforma_virtual || null, link_virtual || null,
+    [processoId, tipo_audiencia_id, data, hora, modalidadeNormalizada, semComparecimento(modalidadeNormalizada) ? null : vara_id || null,
+      modalidadeNormalizada === 'virtual' ? plataforma_virtual || null : null, modalidadeNormalizada === 'virtual' ? link_virtual || null : null,
       (observacoes && observacoes.trim()) ? observacoes.trim() : null,
       responsavel_id, responsavel_freela_id, usuarioId]
   );
@@ -1029,10 +1079,12 @@ async function registrarAta(req, res) {
 
   // A ATA só pode ser registrada depois do horário agendado. Esta checagem no
   // servidor impede o registro antecipado mesmo por uma chamada direta à API.
+  let audiencia;
   try {
-    const [audiencias] = await pool.execute('SELECT data, hora FROM audiencia WHERE id = ?', [id]);
+    const [audiencias] = await pool.execute('SELECT data, hora, modalidade FROM audiencia WHERE id = ?', [id]);
     if (!audiencias.length) return naoEncontrado(res, 'Audiência não encontrada');
-    if (!audienciaJaPassou(audiencias[0].data, audiencias[0].hora)) {
+    audiencia = audiencias[0];
+    if (!audienciaJaPassou(audiencia.data, audiencia.hora)) {
       return erro(res, 'A ata só pode ser registrada após a data e o horário da audiência.');
     }
   } catch (err) {
@@ -1043,10 +1095,15 @@ async function registrarAta(req, res) {
   // fica no servidor para impedir que uma chamada fora da tela gere uma ATA vazia.
   // Testemunhas complementam a ata, mas sozinhas não caracterizam um resultado.
   // Por isso não entram na regra do item mínimo obrigatório.
+  const ehSemComparecimento = semComparecimento(audiencia.modalidade);
+  const resultadoTexto = String(resultado_texto || '').trim();
   const temItemSelecionado = [teve_prazo, teve_pericia, houve_acordo, nova_audiencia,
     teve_alvara, teve_desistencia, teve_retorno_autos]
     .some(valor => valor === true || Number(valor) === 1);
-  if (!temItemSelecionado) {
+  if (ehSemComparecimento && !resultadoTexto) {
+    return erro(res, 'Descreva o que aconteceu no ato processual antes de registrar o resultado.');
+  }
+  if (!ehSemComparecimento && !temItemSelecionado) {
     return erro(res, 'Selecione ao menos um item que ocorreu na audiência antes de registrar a ata.');
   }
   if (teve_desistencia && !String(motivo_desistencia || '').trim()) {
@@ -1071,7 +1128,9 @@ async function registrarAta(req, res) {
 
   // A ATA exige uma escolha explícita. "ninguem" é válido quando a parte compareceu sozinha.
   if (!advogado_acompanhante) {
-    return erro(res, 'Informe o advogado que acompanhou a audiência (ou selecione "Ninguém").');
+    return erro(res, ehSemComparecimento
+      ? 'Informe o responsável pelo acompanhamento (ou selecione "Não informado").'
+      : 'Informe o advogado que acompanhou a audiência (ou selecione "Ninguém").');
   }
 
   // Advogado acompanhante: "usuario:X" | "freela:X" | "ninguem" | vazio (não informado).
@@ -1102,7 +1161,7 @@ async function registrarAta(req, res) {
           advogado_id, advogado_freela_id, sem_advogado, criado_por)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        id, String(resultado_texto || '').trim() || null,
+        id, resultadoTexto || null,
         houve_acordo ? 1 : 0,
         valor_acordo || null, parcelas || null, valor_parcela || null,
         data_primeiro_pagamento || null, nova_audiencia ? 1 : 0,
@@ -1264,7 +1323,13 @@ async function registrarAta(req, res) {
 async function marcarAtaImpressa(req, res) {
   try {
     const { id } = req.params;
-    await pool.execute('UPDATE audiencia SET ata_impressa = 1 WHERE id = ?', [id]);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE audiencia SET ata_impressa = 1 WHERE id = ?', [id]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Audiência marcada como ata impressa');
   } catch (err) {
     return erroInterno(res, err);
@@ -1316,8 +1381,11 @@ async function adicionarTestemunha(req, res) {
     if (!parte_pessoa_id) return erro(res, 'Informe a pessoa para quem a testemunha prestará depoimento');
 
     // Verifica se a audiência existe
-    const [aud] = await pool.execute('SELECT processo_id FROM audiencia WHERE id = ?', [id]);
+    const [aud] = await pool.execute('SELECT processo_id, modalidade FROM audiencia WHERE id = ?', [id]);
     if (!aud.length) return naoEncontrado(res, 'Audiência não encontrada');
+    if (semComparecimento(aud[0].modalidade)) {
+      return erro(res, 'Eventos sem comparecimento não permitem cadastrar testemunhas');
+    }
 
     // Verifica duplicata
     const [dup] = await pool.execute(
@@ -1332,7 +1400,8 @@ async function adicionarTestemunha(req, res) {
     return sucesso(res, { id: result[0].id }, 'Testemunha adicionada com sucesso', 201);
   } catch (err) {
     await conn.rollback();
-    return erro(res, err.message || 'Não foi possível cadastrar a testemunha');
+    if (err.codigoValidacaoTestemunha) return erro(res, err.message, 422);
+    return erroInterno(res, err);
   } finally {
     conn.release();
   }
@@ -1350,9 +1419,16 @@ async function editarTestemunha(req, res) {
     if (!rows.length) return naoEncontrado(res, 'Testemunha não encontrada');
 
     if (!parte_pessoa_id) return erro(res, 'Informe a pessoa para quem a testemunha prestará depoimento');
-    const [dados] = await pool.execute(`SELECT at.pessoa_id, a.processo_id FROM audiencia_testemunhas at JOIN audiencia a ON a.id=at.audiencia_id WHERE at.id=?`, [testId]);
+    const [dados] = await pool.execute(`SELECT at.pessoa_id, a.processo_id, a.modalidade FROM audiencia_testemunhas at JOIN audiencia a ON a.id=at.audiencia_id WHERE at.id=?`, [testId]);
+    if (semComparecimento(dados[0].modalidade)) return erro(res, 'Eventos sem comparecimento não permitem editar testemunhas');
     const vinculo = await validarVinculoTestemunha(pool, dados[0].processo_id, dados[0].pessoa_id, parte_pessoa_id, id);
-    await pool.execute('UPDATE audiencia_testemunhas SET parte_pessoa_id = ?, polo = ? WHERE id = ?', [parte_pessoa_id, vinculo.polo, testId]);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE audiencia_testemunhas SET parte_pessoa_id = ?, polo = ? WHERE id = ?', [parte_pessoa_id, vinculo.polo, testId]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Vínculo da testemunha atualizado com sucesso');
   } catch (err) {
     if (err.codigoValidacaoTestemunha) return erro(res, err.message, 422);
@@ -1370,7 +1446,13 @@ async function excluirTestemunha(req, res) {
     );
     if (!rows.length) return naoEncontrado(res, 'Testemunha não encontrada');
 
-    await pool.execute('DELETE FROM audiencia_testemunhas WHERE id = ?', [testId]);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('DELETE FROM audiencia_testemunhas WHERE id = ?', [testId]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Testemunha removida com sucesso');
   } catch (err) {
     return erroInterno(res, err);
@@ -1402,7 +1484,14 @@ async function criarTipo(req, res) {
       [nome.trim()]
     );
     if (existe.length) return erro(res, 'Já existe um tipo com esse nome');
-    const [r] = await pool.execute('INSERT INTO tipo_audiencia (nome) VALUES (?)', [nome.trim()]);
+    const conn = await pool.getConnection();
+    let r;
+    try {
+      await conn.beginTransaction();
+      [r] = await conn.execute('INSERT INTO tipo_audiencia (nome) VALUES (?)', [nome.trim()]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, { id: r.insertId }, 'Tipo criado com sucesso', 201);
   } catch (err) {
     return erroInterno(res, err);
@@ -1421,7 +1510,13 @@ async function atualizarTipo(req, res) {
       [nome.trim(), id]
     );
     if (existe.length) return erro(res, 'Já existe um tipo com esse nome');
-    await pool.execute('UPDATE tipo_audiencia SET nome = ? WHERE id = ?', [nome.trim(), id]);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE tipo_audiencia SET nome = ? WHERE id = ?', [nome.trim(), id]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Tipo atualizado');
   } catch (err) {
     return erroInterno(res, err);
@@ -1570,7 +1665,13 @@ async function excluirTipo(req, res) {
     // Verifica se está em uso
     const [uso] = await pool.execute('SELECT id FROM audiencia WHERE tipo_audiencia_id = ? LIMIT 1', [id]);
     if (uso.length) return erro(res, 'Tipo está em uso e não pode ser excluído');
-    await pool.execute('UPDATE tipo_audiencia SET ativo = 0 WHERE id = ?', [id]);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE tipo_audiencia SET ativo = 0 WHERE id = ?', [id]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Tipo removido');
   } catch (err) {
     return erroInterno(res, err);
@@ -1600,17 +1701,24 @@ async function listarFreelas(req, res) {
 // POST /api/audiencias/freelas
 async function criarFreela(req, res) {
   try {
-    const { nome, oab, email, telefone, cep, logradouro, numero, complemento, bairro, cidade, estado } = req.body;
+    const { nome, oab, profissao_id, email, telefone, cep, logradouro, numero, complemento, bairro, cidade, estado } = req.body;
     if (!nome?.trim())  return erro(res, 'Nome é obrigatório');
     if (!email?.trim()) return erro(res, 'E-mail é obrigatório');
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return erro(res, 'Informe um e-mail válido');
-    const [r] = await pool.execute(
-      `INSERT INTO advogados_freela
-         (nome, oab, email, telefone, cep, logradouro, numero, complemento, bairro, cidade, estado, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [nome.trim(), oab||null, email.trim().toLowerCase(), telefone||null, cep||null, logradouro||null,
-       numero||null, complemento||null, bairro||null, cidade||null, estado||null, req.usuario.id]
-    );
+    const conn = await pool.getConnection();
+    let r;
+    try {
+      await conn.beginTransaction();
+      [r] = await conn.execute(
+        `INSERT INTO advogados_freela
+           (nome, oab, profissao_id, email, telefone, cep, logradouro, numero, complemento, bairro, cidade, estado, criado_por)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [nome.trim(), oab||null, profissao_id || null, email.trim().toLowerCase(), telefone||null, cep||null, logradouro||null,
+         numero||null, complemento||null, bairro||null, cidade||null, estado||null, req.usuario.id]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, { id: r.insertId }, 'Freelancer cadastrado', 201);
   } catch (err) {
     return erroInterno(res, err);
@@ -1625,13 +1733,19 @@ async function atualizarFreela(req, res) {
     if (!nome?.trim())  return erro(res, 'Nome é obrigatório');
     if (!email?.trim()) return erro(res, 'E-mail é obrigatório');
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return erro(res, 'Informe um e-mail válido');
-    await pool.execute(
-      `UPDATE advogados_freela
-       SET nome=?, oab=?, email=?, telefone=?, cep=?, logradouro=?, numero=?, complemento=?, bairro=?, cidade=?, estado=?
-       WHERE id=?`,
-      [nome.trim(), oab||null, email.trim().toLowerCase(), telefone||null, cep||null, logradouro||null,
-       numero||null, complemento||null, bairro||null, cidade||null, estado||null, id]
-    );
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        `UPDATE advogados_freela
+         SET nome=?, oab=?, email=?, telefone=?, cep=?, logradouro=?, numero=?, complemento=?, bairro=?, cidade=?, estado=?
+         WHERE id=?`,
+        [nome.trim(), oab||null, email.trim().toLowerCase(), telefone||null, cep||null, logradouro||null,
+         numero||null, complemento||null, bairro||null, cidade||null, estado||null, id]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Freelancer atualizado');
   } catch (err) {
     return erroInterno(res, err);
@@ -1642,9 +1756,35 @@ async function atualizarFreela(req, res) {
 async function excluirFreela(req, res) {
   try {
     const { id } = req.params;
-    const [uso] = await pool.execute('SELECT id FROM audiencia WHERE responsavel_freela_id = ? LIMIT 1', [id]);
-    if (uso.length) return erro(res, 'Freelancer está vinculado a audiências e não pode ser excluído');
-    await pool.execute('DELETE FROM advogados_freela WHERE id = ?', [id]);
+
+    // Regra nº1 do sistema: não excluir registro em uso em lugar nenhum, mesmo o uso mais
+    // simples. Confere TODOS os pontos onde o freelancer pode estar referenciado.
+    const [[audienciaResp], [ataAdvogado], [audienciaRespon], [periciaResp], [periciaAssist]] = await Promise.all([
+      pool.execute('SELECT COUNT(*) AS total FROM audiencia WHERE responsavel_freela_id = ?', [id]),
+      pool.execute('SELECT COUNT(*) AS total FROM ata_audiencia WHERE advogado_freela_id = ?', [id]),
+      pool.execute('SELECT COUNT(*) AS total FROM audiencia_responsaveis WHERE responsavel_freela_id = ?', [id]),
+      pool.execute('SELECT COUNT(*) AS total FROM pericia WHERE responsavel_freela_id = ?', [id]),
+      pool.execute('SELECT COUNT(*) AS total FROM pericia WHERE assistente_tecnico_freela_id = ?', [id]),
+    ]);
+
+    const vinculos = [];
+    if (audienciaResp[0].total > 0)  vinculos.push(`${audienciaResp[0].total} audiência(s) como responsável`);
+    if (ataAdvogado[0].total > 0)    vinculos.push(`${ataAdvogado[0].total} ata(s) de audiência como advogado acompanhante`);
+    if (audienciaRespon[0].total > 0) vinculos.push(`${audienciaRespon[0].total} audiência(s) na lista de responsáveis`);
+    if (periciaResp[0].total > 0)    vinculos.push(`${periciaResp[0].total} perícia(s) como responsável`);
+    if (periciaAssist[0].total > 0)  vinculos.push(`${periciaAssist[0].total} perícia(s) como assistente técnico`);
+
+    if (vinculos.length > 0) {
+      return erro(res, `Freelancer não pode ser excluído pois está vinculado a: ${vinculos.join(', ')}`);
+    }
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('DELETE FROM advogados_freela WHERE id = ?', [id]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Freelancer removido');
   } catch (err) {
     return erroInterno(res, err);

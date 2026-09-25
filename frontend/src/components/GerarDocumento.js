@@ -34,7 +34,7 @@ export default function GerarDocumentoBotao({ ancoraTipo, ancoraId, beneficiario
 // Modal de geração — exportado para também ser usado de forma controlada
 // por outras telas (ex.: no fluxo do "Fazer" em Prazos).
 // beneficiario (opcional): só usado em recibos (âncora 'pagamento') — 'cliente' | 'parceiro'.
-export function ModalGerar({ ancoraTipo, ancoraId, beneficiario, onFechar }) {
+export function ModalGerar({ ancoraTipo, ancoraId, beneficiario, destinatarioTipo, destinatarioId, onFechar }) {
   const [modelos, setModelos]     = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [modeloId, setModeloId]   = useState('');
@@ -49,12 +49,12 @@ export function ModalGerar({ ancoraTipo, ancoraId, beneficiario, onFechar }) {
 
   useEffect(() => {
     let ativo = true;
-    documentosAPI.modelosParaGerar(ancoraTipo, ancoraId, beneficiario)
+    documentosAPI.modelosParaGerar(ancoraTipo, ancoraId, beneficiario, destinatarioTipo, destinatarioId)
       .then(({ data }) => { if (ativo && data.ok) setModelos(data.dados); })
       .catch(() => { if (ativo) toast.error('Erro ao carregar modelos'); })
       .finally(() => { if (ativo) setCarregando(false); });
     return () => { ativo = false; };
-  }, [ancoraTipo, ancoraId, beneficiario]);
+  }, [ancoraTipo, ancoraId, beneficiario, destinatarioTipo, destinatarioId]);
 
   async function gerar() {
     if (!modeloId) return toast.error('Escolha um modelo');
@@ -62,6 +62,7 @@ export function ModalGerar({ ancoraTipo, ancoraId, beneficiario, onFechar }) {
     try {
       const resp = await documentosAPI.gerar({
         modelo_id: modeloId, ancora_tipo: ancoraTipo, ancora_id: ancoraId, formato,
+        destinatario_tipo: destinatarioTipo, destinatario_id: destinatarioId,
       });
       // Extrai o nome do arquivo do cabeçalho Content-Disposition.
       const cd = resp.headers['content-disposition'] || '';
@@ -127,7 +128,7 @@ export function ModalGerar({ ancoraTipo, ancoraId, beneficiario, onFechar }) {
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onFechar}>Cancelar</button>
-          <button className="btn btn-outline" onClick={abrirEnviarEmail} disabled={gerando || carregando || !modelos.length}>
+          <button className="btn btn-outline" onClick={abrirEnviarEmail} disabled={ancoraTipo === 'acordo' || gerando || carregando || !modelos.length}>
             ✉️ Enviar por e-mail
           </button>
           <button className="btn btn-primary" onClick={gerar} disabled={gerando || carregando || !modelos.length}>

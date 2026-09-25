@@ -137,11 +137,15 @@ export function AuthProvider({ children }) {
       timer = setTimeout(() => { deslogar('inatividade'); }, limiteMs);
     };
     const eventos = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
-    eventos.forEach(ev => window.addEventListener(ev, reiniciar, { passive: true }));
+    // capture: true é necessário para "scroll": esse evento não sobe (bubble) até window,
+    // só a fase de CAPTURA alcança rolagem dentro de modais/tabelas com scroll próprio — sem
+    // isso, ler uma publicação longa ou rolar uma tabela interna não reiniciava o cronômetro
+    // e a pessoa era deslogada por "inatividade" mesmo estando ativa (auditoria 23/09).
+    eventos.forEach(ev => window.addEventListener(ev, reiniciar, { passive: true, capture: true }));
     reiniciar(); // arma o cronômetro ao logar
     return () => {
       clearTimeout(timer);
-      eventos.forEach(ev => window.removeEventListener(ev, reiniciar));
+      eventos.forEach(ev => window.removeEventListener(ev, reiniciar, { capture: true }));
     };
   }, [usuario, tempoInatividade]);
 

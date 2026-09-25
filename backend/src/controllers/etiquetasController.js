@@ -137,18 +137,32 @@ async function marcar(req, res) {
 
     const s = Number(slot);
     if (!s) {
-      await pool.execute(
-        `DELETE FROM ${cfg.tabela} WHERE ${cfg.coluna} = ? AND usuario_id = ?`,
-        [regId, req.usuario.id]
-      );
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+        await conn.execute(
+          `DELETE FROM ${cfg.tabela} WHERE ${cfg.coluna} = ? AND usuario_id = ?`,
+          [regId, req.usuario.id]
+        );
+        await conn.commit();
+      } catch (err) { await conn.rollback(); throw err; }
+      finally { conn.release(); }
       return sucesso(res, { slot: null });
     }
     if (s < 1 || s > 5) return erro(res, 'Cor de etiqueta inválida');
-    await pool.execute(
-      `INSERT INTO ${cfg.tabela} (${cfg.coluna}, usuario_id, slot) VALUES (?, ?, ?)
-       ON DUPLICATE KEY UPDATE slot = VALUES(slot)`,
-      [regId, req.usuario.id, s]
-    );
+    {
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+        await conn.execute(
+          `INSERT INTO ${cfg.tabela} (${cfg.coluna}, usuario_id, slot) VALUES (?, ?, ?)
+           ON DUPLICATE KEY UPDATE slot = VALUES(slot)`,
+          [regId, req.usuario.id, s]
+        );
+        await conn.commit();
+      } catch (err) { await conn.rollback(); throw err; }
+      finally { conn.release(); }
+    }
     return sucesso(res, { slot: s });
   } catch (err) {
     return erroInterno(res, err);

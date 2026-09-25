@@ -4,10 +4,11 @@
 -- Gerado em 31/08/2026 a partir do banco LOCAL (sistema_advocacia), via:
 --   mysqldump --no-data --databases --add-drop-database
 --             --routines --triggers --events sistema_advocacia
--- Contém 83 tabelas — SOMENTE A ESTRUTURA, sem nenhum dado.
+-- Contém 90 tabelas — SOMENTE A ESTRUTURA, sem nenhum dado.
 -- (79 do dump de 31/08/2026 + tipo_documento_pendencia, pendencia_documento,
 --  pendencia_documento_item e pendencia_documento_responsavel, do módulo
---  "Pendências de Documentos".)
+--  "Pendências de Documentos"; + acordo_parcela_multa, do módulo de multa
+--  por atraso de parcela, 23/09/2026.)
 -- O banco não possui procedures, triggers, views nem events.
 -- Os dados de partida (feriados, varas, tipos etc.) ficam em scripts/.
 --
@@ -67,6 +68,9 @@ CREATE TABLE `acordo` (
   `valor_total` decimal(15,2) NOT NULL,
   `qtd_parcelas` int NOT NULL,
   `data_primeira` date NOT NULL,
+  `beneficiario_cliente_tipo` varchar(10) DEFAULT NULL,
+  `beneficiario_cliente_id` int DEFAULT NULL,
+  `beneficiario_cliente_conta_id` int DEFAULT NULL,
   `status` varchar(20) NOT NULL DEFAULT 'ativo',
   `criado_por` int DEFAULT NULL,
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
@@ -105,14 +109,31 @@ CREATE TABLE `acordo_parcela` (
   `parceria_tipo` varchar(10) DEFAULT NULL,
   `parceria_percentual` decimal(5,2) DEFAULT NULL,
   `parceria_valor` decimal(15,2) DEFAULT NULL,
+  `multa_percentual` decimal(5,2) DEFAULT NULL,
   `status` varchar(15) NOT NULL DEFAULT 'pendente',
   `recebido_em` date DEFAULT NULL,
   `recebimento_forma_id` int DEFAULT NULL,
   `recebimento_identificacao` varchar(120) DEFAULT NULL,
+  `recebimento_conta_financeira_id` int DEFAULT NULL,
+  `recebimento_instituicao_origem_id` int DEFAULT NULL,
   `repasse_cliente_em` date DEFAULT NULL,
   `repasse_cliente_forma_id` int DEFAULT NULL,
+  `repasse_cliente_conta_financeira_id` int DEFAULT NULL,
+  `repasse_cliente_instituicao_destino_id` int DEFAULT NULL,
+  `repasse_cliente_tipo` varchar(10) DEFAULT NULL,
+  `repasse_cliente_pessoa_id` int DEFAULT NULL,
+  `repasse_cliente_conta_id` int DEFAULT NULL,
+  `repasse_cliente_destino_tipo` varchar(15) DEFAULT NULL,
+  `repasse_cliente_destino_snapshot` longtext,
+  `repasse_cliente_observacao` text,
   `repasse_parceiro_em` date DEFAULT NULL,
   `repasse_parceiro_forma_id` int DEFAULT NULL,
+  `repasse_parceiro_conta_financeira_id` int DEFAULT NULL,
+  `repasse_parceiro_instituicao_destino_id` int DEFAULT NULL,
+  `repasse_parceiro_conta_id` int DEFAULT NULL,
+  `repasse_parceiro_destino_tipo` varchar(15) DEFAULT NULL,
+  `repasse_parceiro_destino_snapshot` longtext,
+  `repasse_parceiro_observacao` text,
   `repasse_cliente_por` int DEFAULT NULL,
   `repasse_parceiro_por` int DEFAULT NULL,
   PRIMARY KEY (`id`),
@@ -123,13 +144,95 @@ CREATE TABLE `acordo_parcela` (
   KEY `fk_parcela_repcli_por` (`repasse_cliente_por`),
   KEY `fk_parcela_reppar_por` (`repasse_parceiro_por`),
   KEY `idx_parcela_vencimento` (`vencimento`),
+  KEY `idx_ap_receb_conta_financeira` (`recebimento_conta_financeira_id`),
+  KEY `idx_ap_repcli_conta_financeira` (`repasse_cliente_conta_financeira_id`),
+  KEY `idx_ap_reppar_conta_financeira` (`repasse_parceiro_conta_financeira_id`),
+  KEY `idx_ap_receb_instituicao_origem` (`recebimento_instituicao_origem_id`),
+  KEY `idx_ap_repcli_instituicao_destino` (`repasse_cliente_instituicao_destino_id`),
+  KEY `idx_ap_reppar_instituicao_destino` (`repasse_parceiro_instituicao_destino_id`),
+  CONSTRAINT `fk_ap_receb_conta_financeira` FOREIGN KEY (`recebimento_conta_financeira_id`) REFERENCES `conta_financeira` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `fk_ap_repcli_conta_financeira` FOREIGN KEY (`repasse_cliente_conta_financeira_id`) REFERENCES `conta_financeira` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `fk_ap_reppar_conta_financeira` FOREIGN KEY (`repasse_parceiro_conta_financeira_id`) REFERENCES `conta_financeira` (`id`) ON DELETE RESTRICT,
   CONSTRAINT `fk_parcela_acordo` FOREIGN KEY (`acordo_id`) REFERENCES `acordo` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_parcela_receb_forma` FOREIGN KEY (`recebimento_forma_id`) REFERENCES `forma_pagamento` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_parcela_repcli_forma` FOREIGN KEY (`repasse_cliente_forma_id`) REFERENCES `forma_pagamento` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_parcela_repcli_por` FOREIGN KEY (`repasse_cliente_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_parcela_reppar_forma` FOREIGN KEY (`repasse_parceiro_forma_id`) REFERENCES `forma_pagamento` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_parcela_reppar_por` FOREIGN KEY (`repasse_parceiro_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=184 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=194 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `acordo_parcela_multa`
+--
+
+DROP TABLE IF EXISTS `acordo_parcela_multa`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `acordo_parcela_multa` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `parcela_id` int NOT NULL,
+  `percentual_juiz` decimal(5,2) DEFAULT NULL,
+  `vencimento` date NOT NULL,
+  `valor_bruto` decimal(15,2) NOT NULL,
+  `honor_tipo` varchar(10) NOT NULL DEFAULT 'percent',
+  `honor_percentual` decimal(5,2) DEFAULT NULL,
+  `honor_valor` decimal(15,2) NOT NULL DEFAULT '0.00',
+  `valor_liquido` decimal(15,2) NOT NULL DEFAULT '0.00',
+  `repasse_cliente_habilitado` tinyint(1) NOT NULL DEFAULT '0',
+  `repasse_cliente_tipo` varchar(10) DEFAULT NULL,
+  `repasse_cliente_pessoa_id` int DEFAULT NULL,
+  `repasse_cliente_conta_id` int DEFAULT NULL,
+  `parceria_pessoa_tipo` varchar(20) DEFAULT NULL,
+  `parceria_pessoa_id` int DEFAULT NULL,
+  `parceria_tipo` varchar(10) DEFAULT NULL,
+  `parceria_percentual` decimal(5,2) DEFAULT NULL,
+  `parceria_valor` decimal(15,2) DEFAULT NULL,
+  `repasse_parceiro_habilitado` tinyint(1) NOT NULL DEFAULT '0',
+  `status` varchar(15) NOT NULL DEFAULT 'pendente',
+  `recebido_em` date DEFAULT NULL,
+  `recebimento_forma_id` int DEFAULT NULL,
+  `recebimento_identificacao` varchar(120) DEFAULT NULL,
+  `recebimento_conta_financeira_id` int DEFAULT NULL,
+  `repasse_cliente_em` date DEFAULT NULL,
+  `repasse_cliente_forma_id` int DEFAULT NULL,
+  `repasse_cliente_conta_financeira_id` int DEFAULT NULL,
+  `repasse_cliente_destino_tipo` varchar(15) DEFAULT NULL,
+  `repasse_cliente_destino_snapshot` longtext,
+  `repasse_cliente_observacao` text,
+  `repasse_cliente_por` int DEFAULT NULL,
+  `repasse_parceiro_em` date DEFAULT NULL,
+  `repasse_parceiro_forma_id` int DEFAULT NULL,
+  `repasse_parceiro_conta_financeira_id` int DEFAULT NULL,
+  `repasse_parceiro_conta_id` int DEFAULT NULL,
+  `repasse_parceiro_destino_tipo` varchar(15) DEFAULT NULL,
+  `repasse_parceiro_destino_snapshot` longtext,
+  `repasse_parceiro_observacao` text,
+  `repasse_parceiro_por` int DEFAULT NULL,
+  `criado_por` int DEFAULT NULL,
+  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_multa_parcela` (`parcela_id`),
+  KEY `fk_multa_receb_forma` (`recebimento_forma_id`),
+  KEY `fk_multa_repcli_forma` (`repasse_cliente_forma_id`),
+  KEY `fk_multa_reppar_forma` (`repasse_parceiro_forma_id`),
+  KEY `fk_multa_repcli_por` (`repasse_cliente_por`),
+  KEY `fk_multa_reppar_por` (`repasse_parceiro_por`),
+  KEY `idx_multa_receb_conta_financeira` (`recebimento_conta_financeira_id`),
+  KEY `idx_multa_repcli_conta_financeira` (`repasse_cliente_conta_financeira_id`),
+  KEY `idx_multa_reppar_conta_financeira` (`repasse_parceiro_conta_financeira_id`),
+  KEY `fk_multa_criado_por` (`criado_por`),
+  CONSTRAINT `fk_multa_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_multa_parcela` FOREIGN KEY (`parcela_id`) REFERENCES `acordo_parcela` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_multa_receb_conta_financeira` FOREIGN KEY (`recebimento_conta_financeira_id`) REFERENCES `conta_financeira` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `fk_multa_receb_forma` FOREIGN KEY (`recebimento_forma_id`) REFERENCES `forma_pagamento` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_multa_repcli_conta_financeira` FOREIGN KEY (`repasse_cliente_conta_financeira_id`) REFERENCES `conta_financeira` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `fk_multa_repcli_forma` FOREIGN KEY (`repasse_cliente_forma_id`) REFERENCES `forma_pagamento` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_multa_repcli_por` FOREIGN KEY (`repasse_cliente_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_multa_reppar_conta_financeira` FOREIGN KEY (`repasse_parceiro_conta_financeira_id`) REFERENCES `conta_financeira` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `fk_multa_reppar_forma` FOREIGN KEY (`repasse_parceiro_forma_id`) REFERENCES `forma_pagamento` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_multa_reppar_por` FOREIGN KEY (`repasse_parceiro_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -143,6 +246,7 @@ CREATE TABLE `advogados_freela` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(200) NOT NULL,
   `oab` varchar(30) DEFAULT NULL,
+  `profissao_id` int DEFAULT NULL,
   `email` varchar(150) DEFAULT NULL,
   `telefone` varchar(20) DEFAULT NULL,
   `cep` varchar(9) DEFAULT NULL,
@@ -156,6 +260,8 @@ CREATE TABLE `advogados_freela` (
   `criado_por` int DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `criado_por` (`criado_por`),
+  KEY `idx_freela_profissao` (`profissao_id`),
+  CONSTRAINT `fk_freela_profissao` FOREIGN KEY (`profissao_id`) REFERENCES `profissao` (`id`) ON DELETE SET NULL,
   CONSTRAINT `freela_ibfk_1` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -641,15 +747,108 @@ CREATE TABLE `conta_corrente` (
   `valor` decimal(15,2) NOT NULL,
   `origem` varchar(20) NOT NULL DEFAULT 'manual',
   `usuario_id` int NOT NULL,
+  `conta_financeira_id` int DEFAULT NULL,
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `processo_id` (`processo_id`),
   KEY `parcela_id` (`parcela_id`),
   KEY `usuario_id` (`usuario_id`),
+  KEY `idx_cc_conta_financeira` (`conta_financeira_id`),
+  CONSTRAINT `fk_cc_conta_financeira` FOREIGN KEY (`conta_financeira_id`) REFERENCES `conta_financeira` (`id`) ON DELETE RESTRICT,
   CONSTRAINT `fk_cc_parcela` FOREIGN KEY (`parcela_id`) REFERENCES `acordo_parcela` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_cc_processo` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_cc_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=43 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `conta_financeira`
+--
+
+DROP TABLE IF EXISTS `conta_financeira`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `conta_financeira` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `instituicao_financeira_id` int DEFAULT NULL,
+  `nome` varchar(120) NOT NULL,
+  `tipo` varchar(20) NOT NULL,
+  `agencia` varchar(20) DEFAULT NULL,
+  `numero` varchar(30) DEFAULT NULL,
+  `digito` varchar(5) DEFAULT NULL,
+  `chave_pix` varchar(150) DEFAULT NULL,
+  `observacao` text,
+  `principal` tinyint(1) NOT NULL DEFAULT '0',
+  `ativo` tinyint(1) NOT NULL DEFAULT '1',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_conta_financeira_nome` (`nome`),
+  KEY `idx_conta_financeira_instituicao` (`instituicao_financeira_id`),
+  CONSTRAINT `fk_conta_financeira_instituicao` FOREIGN KEY (`instituicao_financeira_id`) REFERENCES `instituicao_financeira` (`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `contas_bancarias_pf`
+--
+
+DROP TABLE IF EXISTS `contas_bancarias_pf`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `contas_bancarias_pf` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `pessoa_id` int NOT NULL,
+  `instituicao_financeira_id` int NOT NULL,
+  `tipo` varchar(20) NOT NULL COMMENT 'corrente ou poupanca',
+  `agencia` varchar(20) DEFAULT NULL,
+  `numero` varchar(30) DEFAULT NULL,
+  `digito` varchar(5) DEFAULT NULL,
+  `chave_pix` varchar(150) DEFAULT NULL,
+  `conta_terceiro` tinyint(1) NOT NULL DEFAULT '0' COMMENT '0 = conta da propria pessoa; 1 = conta de outra pessoa (autorizacao)',
+  `titular` varchar(200) NOT NULL,
+  `documento_titular` varchar(18) NOT NULL,
+  `observacao` text,
+  `principal` tinyint(1) NOT NULL DEFAULT '0',
+  `ativo` tinyint(1) NOT NULL DEFAULT '1',
+  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `pessoa_id` (`pessoa_id`),
+  KEY `idx_cbpf_instituicao` (`instituicao_financeira_id`),
+  CONSTRAINT `fk_cbpf_pessoa` FOREIGN KEY (`pessoa_id`) REFERENCES `pessoas_fisicas` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_cbpf_instituicao` FOREIGN KEY (`instituicao_financeira_id`) REFERENCES `instituicao_financeira` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `ck_cbpf_tipo` CHECK ((`tipo` in (_utf8mb4'corrente',_utf8mb4'poupanca')))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `contas_bancarias_pj`
+--
+
+DROP TABLE IF EXISTS `contas_bancarias_pj`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `contas_bancarias_pj` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `pessoa_id` int NOT NULL,
+  `instituicao_financeira_id` int NOT NULL,
+  `tipo` varchar(20) NOT NULL COMMENT 'corrente ou poupanca',
+  `agencia` varchar(20) DEFAULT NULL,
+  `numero` varchar(30) DEFAULT NULL,
+  `digito` varchar(5) DEFAULT NULL,
+  `chave_pix` varchar(150) DEFAULT NULL,
+  `conta_terceiro` tinyint(1) NOT NULL DEFAULT '0' COMMENT '0 = conta da propria empresa; 1 = conta de outra pessoa/empresa (autorizacao)',
+  `titular` varchar(200) NOT NULL,
+  `documento_titular` varchar(18) NOT NULL,
+  `observacao` text,
+  `principal` tinyint(1) NOT NULL DEFAULT '0',
+  `ativo` tinyint(1) NOT NULL DEFAULT '1',
+  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `pessoa_id` (`pessoa_id`),
+  KEY `idx_cbpj_instituicao` (`instituicao_financeira_id`),
+  CONSTRAINT `fk_cbpj_pessoa` FOREIGN KEY (`pessoa_id`) REFERENCES `pessoas_juridicas` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_cbpj_instituicao` FOREIGN KEY (`instituicao_financeira_id`) REFERENCES `instituicao_financeira` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `ck_cbpj_tipo` CHECK ((`tipo` in (_utf8mb4'corrente',_utf8mb4'poupanca')))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -789,6 +988,7 @@ DROP TABLE IF EXISTS `forma_pagamento`;
 CREATE TABLE `forma_pagamento` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(60) NOT NULL,
+  `uso_permitido` enum('financeira','especie','ambos') NOT NULL DEFAULT 'ambos',
   `ativo` tinyint(1) NOT NULL DEFAULT '1',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_forma_pagamento_nome_ativo` (`nome`,`ativo`)
@@ -827,6 +1027,22 @@ CREATE TABLE `historico_atendimento` (
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `historico_atendimento_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=40 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `instituicao_financeira`
+--
+
+DROP TABLE IF EXISTS `instituicao_financeira`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `instituicao_financeira` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `nome` varchar(100) NOT NULL,
+  `ativo` tinyint(1) NOT NULL DEFAULT '1',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_instituicao_financeira_nome` (`nome`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1182,7 +1398,7 @@ CREATE TABLE `pericia` (
   `id` int NOT NULL AUTO_INCREMENT,
   `processo_id` int NOT NULL,
   `tipo_pericia_id` int DEFAULT NULL,
-  `data` date NOT NULL,
+  `data` date DEFAULT NULL,
   `hora` time DEFAULT NULL,
   `local` varchar(300) DEFAULT NULL,
   `cep` varchar(9) DEFAULT NULL,
@@ -1195,6 +1411,7 @@ CREATE TABLE `pericia` (
   `perito_tipo` varchar(20) DEFAULT NULL,
   `perito_id` int DEFAULT NULL,
   `assistente_tecnico_id` int DEFAULT NULL,
+  `assistente_tecnico_freela_id` int DEFAULT NULL,
   `responsavel_id` int DEFAULT NULL,
   `responsavel_freela_id` int DEFAULT NULL,
   `status` varchar(20) NOT NULL DEFAULT 'agendada',
@@ -1209,6 +1426,7 @@ CREATE TABLE `pericia` (
   KEY `processo_id` (`processo_id`),
   KEY `tipo_pericia_id` (`tipo_pericia_id`),
   KEY `assistente_tecnico_id` (`assistente_tecnico_id`),
+  KEY `idx_pericia_assistente_freela` (`assistente_tecnico_freela_id`),
   KEY `criado_por` (`criado_por`),
   KEY `idx_per_data` (`data`),
   KEY `fk_pericia_responsavel` (`responsavel_id`),
@@ -1220,6 +1438,7 @@ CREATE TABLE `pericia` (
   CONSTRAINT `fk_pericia_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`),
   CONSTRAINT `pericia_ibfk_2` FOREIGN KEY (`tipo_pericia_id`) REFERENCES `tipo_pericia` (`id`),
   CONSTRAINT `pericia_ibfk_3` FOREIGN KEY (`assistente_tecnico_id`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `fk_pericia_assistente_freela` FOREIGN KEY (`assistente_tecnico_freela_id`) REFERENCES `advogados_freela` (`id`) ON DELETE SET NULL,
   CONSTRAINT `pericia_ibfk_4` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;

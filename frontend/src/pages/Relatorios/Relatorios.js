@@ -587,7 +587,7 @@ function TabelaResultado({ resultado, onRecarregar }) {
                 <td>{r.tipo_nome || '—'}</td>
                 <td>{formatarData(r.data)}</td>
                 <td>{r.hora?.slice(0,5) || '—'}</td>
-                <td>{r.modalidade === 'virtual' ? 'Virtual' : 'Presencial'}</td>
+                <td>{r.modalidade === 'virtual' ? 'Virtual' : r.modalidade === 'sem_comparecimento' ? 'Sem comparecimento' : 'Presencial'}</td>
               </tr>
             ))}
           </tbody>

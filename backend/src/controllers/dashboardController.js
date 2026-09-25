@@ -9,12 +9,35 @@ const { hojeBrasilia } = require('../utils/helpers');
 const { buscarAniversariantes } = require('./pessoasController');
 const { contarProcessosParados, JOIN_ULTIMA_ACAO } = require('./processosController');
 
+const PERIODOS_TAREFAS = Object.freeze({
+  hoje: 0,
+  '7_dias': 6,
+  '30_dias': 29,
+  todas: null,
+});
+
+// "todas" é uma opção válida mesmo tendo intervalo nulo. Por isso a validação
+// verifica a chave, em vez de usar ||, que a confundiria com uma opção inválida.
+function resolverPeriodoTarefas(valor) {
+  return Object.prototype.hasOwnProperty.call(PERIODOS_TAREFAS, valor)
+    ? valor
+    : '30_dias';
+}
+
 // GET /api/dashboard — Retorna todos os dados do dashboard
 async function buscarDados(req, res) {
   try {
     const userId = req.usuario.id;
     const hoje = hojeBrasilia();
     const amanha = hojeBrasilia(1);
+    const periodoTarefas = resolverPeriodoTarefas(req.query.periodo_tarefas);
+    const filtrarTarefasPorData = periodoTarefas !== 'todas';
+    const filtroPeriodoTarefas = filtrarTarefasPorData
+      ? 'AND t.data_vencimento >= ? AND t.data_vencimento <= DATE_ADD(?, INTERVAL ' + PERIODOS_TAREFAS[periodoTarefas] + ' DAY)'
+      : '';
+    const parametrosTarefasPendentes = filtrarTarefasPorData
+      ? [hoje, hoje, userId]
+      : [userId];
 
     // Executa todas as consultas em paralelo para máxima performance
     const [
@@ -60,8 +83,8 @@ async function buscarDados(req, res) {
         [hoje, userId]
       ),
 
-      // Tarefas pendentes: sem data OU com data de hoje até no MÁXIMO 3 MESES à frente.
-      // (O Dashboard não deve poluir com tarefas de 1-2 anos à frente; as sem data ficam.)
+      // Tarefas pendentes: o período é validado acima, sem interpolar entrada do usuário.
+      // "Todas" inclui também as tarefas sem vencimento; os demais filtros têm data real.
       // Traz o nome do responsável (mesma lógica da tela de Tarefas) para o Dashboard mostrar
       // "Para" corretamente; sem esse JOIN a coluna caía sempre em "Escritório".
       pool.execute(
@@ -70,11 +93,11 @@ async function buscarDados(req, res) {
          FROM tarefas t
          LEFT JOIN usuarios u ON t.atribuida_para = u.id
          WHERE t.concluida = 0
-           AND (t.data_vencimento IS NULL
-                OR (t.data_vencimento >= ? AND t.data_vencimento <= DATE_ADD(?, INTERVAL 3 MONTH)))
+           ${filtrarTarefasPorData ? 'AND t.data_vencimento IS NOT NULL' : ''}
+           ${filtroPeriodoTarefas}
            AND (t.atribuida_para = ? OR t.atribuida_para IS NULL)
          ORDER BY FIELD(t.prioridade,'urgente','normal','baixa'), t.data_vencimento ASC`,
-        [hoje, hoje, userId]
+        parametrosTarefasPendentes
       ),
 
       // Tarefas atrasadas
@@ -238,4 +261,4 @@ async function buscarDados(req, res) {
   }
 }
 
-module.exports = { buscarDados };
+module.exports = { buscarDados, resolverPeriodoTarefas };

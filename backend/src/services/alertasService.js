@@ -59,9 +59,16 @@ async function iniciarAlertas() {
   // Sem isso a tabela reset_tokens cresce indefinidamente
   cron.schedule('0 3 * * *', async () => {
     try {
-      const [r] = await pool.execute(
-        'DELETE FROM reset_tokens WHERE usado = 1 OR expires_at < NOW()'
-      );
+      const conn = await pool.getConnection();
+      let r;
+      try {
+        await conn.beginTransaction();
+        [r] = await conn.execute(
+          'DELETE FROM reset_tokens WHERE usado = 1 OR expires_at < NOW()'
+        );
+        await conn.commit();
+      } catch (err) { await conn.rollback(); throw err; }
+      finally { conn.release(); }
       if (r.affectedRows) console.log(`🧹 reset_tokens: ${r.affectedRows} token(s) antigo(s) removido(s)`);
     } catch (err) {
       console.error('Erro na limpeza de reset_tokens:', err.message);

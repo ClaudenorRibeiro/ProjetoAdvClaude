@@ -50,6 +50,16 @@
   border: 1px solid #fecaca;
 }
 
+.login-aguardando {
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-bottom: 16px;
+  border: 1px solid #bfdbfe;
+}
+
 .login-btn {
   width: 100%;
   padding: 11px;

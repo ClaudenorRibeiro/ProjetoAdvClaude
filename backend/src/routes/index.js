@@ -24,6 +24,19 @@ const loginLimiter = rateLimit({
   message: { ok: false, mensagem: 'Muitas tentativas de login para este usuário. Aguarde alguns minutos e tente novamente.' },
 });
 
+// Proteção contra força bruta em "esqueci a senha" — mesmo padrão do loginLimiter (chaveada
+// pelo login/e-mail digitado, não por IP). Sem isso, dava pra martelar a rota sem limite,
+// tanto pra tentar adivinhar logins existentes quanto pra spammar e-mail de redefinição
+// (auditoria 24/09, item 9).
+const esqueciSenhaLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => String(req.body?.loginOuEmail || req.ip || '').toLowerCase().trim(),
+  message: { ok: false, mensagem: 'Muitas tentativas. Aguarde alguns minutos e tente novamente.' },
+});
+
 // Proteção de custo da IA — aplicada DEPOIS da autenticação e chaveada pelo ID
 // do usuário, nunca pelo IP compartilhado do escritório. Cada usuário pode fazer
 // até 30 consultas em 10 minutos. As demais rotas do sistema não são afetadas.
@@ -48,6 +61,7 @@ const tarefasCtrl       = require('../controllers/tarefasController');
 const audienciasCtrl    = require('../controllers/audienciasController');
 const financeiroCtrl    = require('../controllers/financeiroController');
 const formaPagamentoCtrl = require('../controllers/formaPagamentoController');
+const instituicaoFinanceiraCtrl = require('../controllers/instituicaoFinanceiraController');
 const andamentoCtrl     = require('../controllers/andamentoController');
 const documentosCtrl    = require('../controllers/documentosController');
 const publicacoesCtrl   = require('../controllers/publicacoesController');
@@ -69,7 +83,7 @@ router.post('/auth/logout',             autenticar, authCtrl.logout);
 router.post('/auth/criar-admin',        authCtrl.criarPrimeiroAdmin);
 router.get('/auth/verificar',           autenticar, authCtrl.verificarToken);
 // Redefinição de senha via e-mail (rotas públicas — sem autenticação)
-router.post('/auth/esqueci-senha',      authCtrl.esqueciSenha);
+router.post('/auth/esqueci-senha',      esqueciSenhaLimiter, authCtrl.esqueciSenha);
 router.get('/auth/validar-token/:token',authCtrl.validarToken);
 router.post('/auth/redefinir-senha',    authCtrl.redefinirSenha);
 router.put('/auth/trocar-senha',        autenticar, authCtrl.trocarSenha);
@@ -97,7 +111,7 @@ router.get('/dashboard', autenticar, dashboardCtrl.buscarDados);
 // ---- PESSOAS ----
 // Aniversariantes (clientes PF) — rotas estáticas ANTES das de /:id.
 router.get('/pessoas/aniversariantes',         autenticar, verificarPermissao('relatorios','visualizar'), pessoasCtrl.listarAniversariantes);
-router.post('/pessoas/:id/parabens',           autenticar, pessoasCtrl.registrarParabens);
+router.post('/pessoas/:id/parabens',           autenticar, verificarPermissao('pessoas','alterar'), pessoasCtrl.registrarParabens);
 router.post('/pessoas/enviar-email',           autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.uploadAnexosEmail, pessoasCtrl.enviarEmailAvulso);
 router.post('/pessoas/registrar-zap',          autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.registrarEnvioZap);
 router.get('/pessoas/sms-ativo',               autenticar, pessoasCtrl.smsAtivo);
@@ -121,11 +135,11 @@ router.get('/pessoas/fisicas/:id',        autenticar, verificarPermissao('pessoa
 router.post('/pessoas/fisicas',           autenticar, verificarPermissao('pessoas','cadastrar'),  pessoasCtrl.criarFisica);
 router.put('/pessoas/fisicas/:id',        autenticar, verificarPermissao('pessoas','alterar'),    pessoasCtrl.atualizarFisica);
 router.delete('/pessoas/fisicas/:id',     autenticar, verificarPermissao('pessoas','excluir'),    pessoasCtrl.excluirFisica);
-router.post('/pessoas/fisicas/:id/historico', autenticar, pessoasCtrl.adicionarHistorico);
+router.post('/pessoas/fisicas/:id/historico', autenticar, verificarPermissao('pessoas','alterar'), pessoasCtrl.adicionarHistorico);
 // Anotações de atendimento (jurídica adicionar; editar/excluir por id da anotação — regra de dono+hoje/admin no controller)
-router.post('/pessoas/juridicas/:id/historico', autenticar, pessoasCtrl.adicionarHistorico);
-router.put('/pessoas/historico/:histId',    autenticar, pessoasCtrl.editarHistorico);
-router.delete('/pessoas/historico/:histId', autenticar, pessoasCtrl.excluirHistorico);
+router.post('/pessoas/juridicas/:id/historico', autenticar, verificarPermissao('pessoas','alterar'), pessoasCtrl.adicionarHistorico);
+router.put('/pessoas/historico/:histId',    autenticar, verificarPermissao('pessoas','alterar'), pessoasCtrl.editarHistorico);
+router.delete('/pessoas/historico/:histId', autenticar, verificarPermissao('pessoas','alterar'), pessoasCtrl.excluirHistorico);
 router.get('/pessoas/juridicas',          autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.listarJuridicas);
 router.get('/pessoas/juridicas/exportar', autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.exportarJuridicas);
 // Busca 1 empresa com telefones/e-mails (edição) — DEPOIS de /exportar para não capturar a palavra como id
@@ -172,12 +186,17 @@ router.get('/processos/pastas/:id',                 autenticar, verificarPermiss
 router.post('/processos',                           autenticar, verificarPermissao('processos','cadastrar'),  processosCtrl.criarProcesso);
 router.put('/processos/:id',                        autenticar, verificarPermissao('processos','alterar'),    processosCtrl.atualizarProcesso);
 router.delete('/processos/:id',                     autenticar, verificarPermissao('processos','excluir'),    processosCtrl.excluirProcesso);
+router.get('/processos/:id/historico',              autenticar, verificarPermissao('processos','visualizar'), processosCtrl.historicoProcesso);
 
 // ---- PRAZOS ----
 router.get('/prazos/tipos',       autenticar, prazosCtrl.buscarTipos);
 // Cadastro de novo tipo/subtipo direto na tela (botão "…") — rotas estáticas ANTES de /prazos/:id
 router.post('/prazos/tipos',      autenticar, verificarPermissao('prazos','cadastrar'), prazosCtrl.criarTipo);
+router.put('/prazos/tipos/:id',       autenticar, verificarPermissao('prazos','alterar'), prazosCtrl.editarTipo);
+router.delete('/prazos/tipos/:id',    autenticar, verificarPermissao('prazos','excluir'), prazosCtrl.excluirTipo);
 router.post('/prazos/subtipos',   autenticar, verificarPermissao('prazos','cadastrar'), prazosCtrl.criarSubtipo);
+router.put('/prazos/subtipos/:id',    autenticar, verificarPermissao('prazos','alterar'), prazosCtrl.editarSubtipo);
+router.delete('/prazos/subtipos/:id', autenticar, verificarPermissao('prazos','excluir'), prazosCtrl.excluirSubtipo);
 router.get('/prazos/calcular',      autenticar, prazosCtrl.calcularDataFinal);
 router.get('/prazos/calcular-dias', autenticar, prazosCtrl.calcularDias);
 router.get('/prazos/hoje',        autenticar, prazosCtrl.vencemHoje);
@@ -186,8 +205,8 @@ router.get('/prazos/usuarios',    autenticar, verificarPermissao('prazos','ver_t
 router.get('/prazos',             autenticar, verificarPermissao('prazos','visualizar'), prazosCtrl.listar);
 router.post('/prazos',            autenticar, verificarPermissao('prazos','cadastrar'),  prazosCtrl.criar);
 router.put('/prazos/:id/status',          autenticar, verificarPermissao('prazos','visualizar'), prazosCtrl.mudarStatus);
-router.put('/prazos/:id/fazendo',         autenticar, prazosCtrl.marcarFazendo);
-router.put('/prazos/:id/liberar-fazendo', autenticar, prazosCtrl.liberarFazendo);
+router.put('/prazos/:id/fazendo',         autenticar, verificarPermissao('prazos','visualizar'), prazosCtrl.marcarFazendo);
+router.put('/prazos/:id/liberar-fazendo', autenticar, verificarPermissao('prazos','visualizar'), prazosCtrl.liberarFazendo);
 // ATENÇÃO: rota estática /historico ANTES de /:id para o Express não capturar "historico" como id
 router.get('/prazos/:id/historico',       autenticar, verificarPermissao('prazos','historico'), prazosCtrl.buscarHistorico);
 router.put('/prazos/:id',                 autenticar, verificarPermissao('prazos','alterar'), prazosCtrl.editar);
@@ -249,6 +268,13 @@ router.put('/financeiro/lancamento/:id',                   autenticar, verificar
 router.get('/financeiro/lancamento/:id/historico',         autenticar, verificarPermissao('financeiro','visualizar'), financeiroCtrl.buscarHistoricoLancamento);
 router.delete('/financeiro/lancamento/:id',                autenticar, verificarPermissao('financeiro','excluir'),    financeiroCtrl.excluirLancamento);
 // Acordo + parcelas (previa ANTES de /acordo/:id para não casar :id='previa')
+router.get('/financeiro/processo/:processoId/beneficiarios', autenticar, verificarPermissao('financeiro','visualizar'), financeiroCtrl.listarBeneficiariosProcesso);
+router.get('/financeiro/beneficiario/contas', autenticar, verificarPermissao('financeiro','visualizar'), financeiroCtrl.listarContasBeneficiario);
+router.post('/financeiro/beneficiario/:tipo/:id/conta', autenticar, verificarPermissao('financeiro','alterar'), verificarPermissao('pessoas','alterar'), financeiroCtrl.criarContaBeneficiario);
+router.get('/financeiro/contas-escritorio', autenticar, verificarPermissao('financeiro','visualizar'), financeiroCtrl.listarContasEscritorio);
+router.post('/financeiro/contas-escritorio', autenticar, apenasAdmin, financeiroCtrl.salvarContaEscritorio);
+router.put('/financeiro/contas-escritorio/:id', autenticar, apenasAdmin, financeiroCtrl.salvarContaEscritorio);
+router.delete('/financeiro/contas-escritorio/:id', autenticar, apenasAdmin, financeiroCtrl.desativarContaEscritorio);
 router.get('/financeiro/processo/:processoId/acordos',     autenticar, verificarPermissao('financeiro','visualizar'), financeiroCtrl.listarAcordos);
 router.post('/financeiro/acordo/previa',                   autenticar, verificarPermissao('financeiro','cadastrar'),  financeiroCtrl.gerarPreviaParcelas);
 router.post('/financeiro/processo/:processoId/acordo',     autenticar, verificarPermissao('financeiro','cadastrar'),  financeiroCtrl.criarAcordo);
@@ -259,6 +285,14 @@ router.put('/financeiro/acordo/:id/cancelar',              autenticar, verificar
 // Baixa (recebimento de parcela)
 router.put('/financeiro/parcela/:id/pagar',                autenticar, verificarPermissao('financeiro','alterar'),    financeiroCtrl.pagarParcela);
 router.put('/financeiro/parcela/:id/desfazer',             autenticar, verificarPermissao('financeiro','alterar'),    financeiroCtrl.desfazerPagamento);
+// Multa por atraso da parcela (lançar/editar/remover/receber/desfazer + repasse dela)
+router.post('/financeiro/parcela/:id/multa',               autenticar, verificarPermissao('financeiro','cadastrar'),  financeiroCtrl.lancarMulta);
+router.put('/financeiro/parcela/:id/multa',                autenticar, verificarPermissao('financeiro','alterar'),    financeiroCtrl.editarMulta);
+router.delete('/financeiro/parcela/:id/multa',             autenticar, verificarPermissao('financeiro','excluir'),    financeiroCtrl.removerMulta);
+router.put('/financeiro/parcela/:id/multa/receber',        autenticar, verificarPermissao('financeiro','alterar'),    financeiroCtrl.receberMulta);
+router.put('/financeiro/parcela/:id/multa/desfazer',       autenticar, verificarPermissao('financeiro','alterar'),    financeiroCtrl.desfazerMulta);
+router.put('/financeiro/parcela/:id/multa/repasse',            autenticar, verificarPermissao('financeiro','alterar'), financeiroCtrl.registrarRepasseMulta);
+router.put('/financeiro/parcela/:id/multa/repasse/desfazer',   autenticar, verificarPermissao('financeiro','alterar'), financeiroCtrl.desfazerRepasseMulta);
 // Repasses ao cliente/parceiro (2º tempo) + worklist global de repasses pendentes
 router.get('/financeiro/repasses-pendentes',               autenticar, verificarPermissao('financeiro','visualizar'), financeiroCtrl.listarRepassesPendentes);
 router.get('/financeiro/repasses-concluidos',              autenticar, verificarPermissao('financeiro','visualizar'), financeiroCtrl.listarRepassesConcluidos);
@@ -275,6 +309,11 @@ router.get('/financeiro/formas-pagamento',        autenticar, verificarPermissao
 router.post('/financeiro/formas-pagamento',       autenticar, apenasAdmin, formaPagamentoCtrl.criar);
 router.put('/financeiro/formas-pagamento/:id',    autenticar, apenasAdmin, formaPagamentoCtrl.atualizar);
 router.delete('/financeiro/formas-pagamento/:id', autenticar, apenasAdmin, formaPagamentoCtrl.excluir);
+
+router.get('/financeiro/instituicoes-financeiras',        autenticar, verificarPermissao('financeiro','visualizar'), instituicaoFinanceiraCtrl.listar);
+router.post('/financeiro/instituicoes-financeiras',       autenticar, apenasAdmin, instituicaoFinanceiraCtrl.criar);
+router.put('/financeiro/instituicoes-financeiras/:id',    autenticar, apenasAdmin, instituicaoFinanceiraCtrl.atualizar);
+router.delete('/financeiro/instituicoes-financeiras/:id', autenticar, apenasAdmin, instituicaoFinanceiraCtrl.excluir);
 
 // ---- ANDAMENTO PROCESSUAL ----
 // Usa sub-módulo 'andamentos' — permissão granular independente do módulo 'processos'

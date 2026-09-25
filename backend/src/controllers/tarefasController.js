@@ -218,7 +218,7 @@ async function listar(req, res) {
       params.push(req.usuario.id, etqSlot);
     }
 
-    const limitInt  = parseInt(limite) || 30;
+    const limitInt  = Math.min(parseInt(limite) || 30, 100);
     const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
 
     const [rows] = await pool.execute(

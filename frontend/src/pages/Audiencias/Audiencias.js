@@ -42,6 +42,12 @@ const STATUS_LABEL = {
 // aposentados como status da audiência (o acordo agora é registrado no Financeiro).
 const STATUS_APOSENTADOS = ['adiada', 'acordo'];
 
+function rotuloModalidade(modalidade) {
+  if (modalidade === 'virtual') return 'Virtual';
+  if (modalidade === 'sem_comparecimento') return 'Sem comparecimento';
+  return 'Presencial';
+}
+
 // Alerta de data/hora no passado, respeitando o HORÁRIO e o fuso de Brasília.
 // data: 'YYYY-MM-DD', hora: 'HH:MM'. Retorna null quando está ok (futuro/agora) ou
 // { alerta, obs } quando o momento já passou. Diferencia data retroativa (dia anterior)
@@ -322,10 +328,9 @@ export default function Audiencias() {
                       <div style={{ fontSize: '17px', color: '#333', fontWeight: 700 }}>{a.hora?.slice(0, 5)}</div>
                     </td>
                     <td>
-                      {a.modalidade === 'virtual'
-                        ? <span className="badge badge-azul">Virtual</span>
-                        : <span className="badge badge-cinza">Presencial</span>
-                      }
+                      <span className={`badge ${a.modalidade === 'virtual' ? 'badge-azul' : 'badge-cinza'}`}>
+                        {rotuloModalidade(a.modalidade)}
+                      </span>
                     </td>
                     <td style={{ fontSize: '14px' }}>{a.responsavel_nome || '—'}</td>
                     <td>
@@ -347,8 +352,8 @@ export default function Audiencias() {
                           definicoes: etqDefs, slotAtual: a.etiqueta_pessoal,
                           onMarcar: (slot) => marcarEtq(a.id, slot)
                         }),
-                        // Registrar ata — só após o horário da audiência, em status pendente e com a permissão de ATA.
-                        { label: 'Registrar ata', icone: '📝', oculto: !((a.status === 'agendada' || a.status === 'adiada') && audienciaJaPassou(a.data, a.hora) && temPermissao('audiencias.ata', 'visualizar')), onClick: () => setModalAta(a) },
+                        // Registrar o resultado/ata só após o horário, em status pendente e com a permissão de ATA.
+                        { label: a.modalidade === 'sem_comparecimento' ? 'Registrar resultado' : 'Registrar ata', icone: '📝', oculto: !((a.status === 'agendada' || a.status === 'adiada') && audienciaJaPassou(a.data, a.hora) && temPermissao('audiencias.ata', 'visualizar')), onClick: () => setModalAta(a) },
                         { label: 'Gerar documento', icone: '📄', oculto: !temPermissao('documentos', 'cadastrar') || ['remarcada', 'cancelada'].includes(a.status), gerarDoc: { ancoraTipo: 'audiencia', ancoraId: a.id } },
                         { label: 'Cancelar', icone: '✖', oculto: !((a.status === 'agendada' || a.status === 'adiada') && temPermissao('audiencias', 'alterar')), onClick: () => setModalCancelar(a) },
                         { label: 'Remarcar', icone: '🔁', oculto: !((a.status === 'agendada' || a.status === 'adiada') && temPermissao('audiencias', 'alterar')), onClick: () => setModalRemarcar(a) },
@@ -356,7 +361,7 @@ export default function Audiencias() {
                         { label: 'Reverter status', icone: '↩️', oculto: !(a.status === 'realizada' && ehAdmin), onClick: () => setModalReverter(a) },
                         { label: 'Editar', icone: '✏️', oculto: !podeEditar(a), onClick: () => { setModalEditar(a); setModalEditarLeitura(false); } },
                         { label: 'Histórico', icone: '📋', onClick: () => setModalHistorico(a) },
-                        { label: 'Detalhes da ATA', icone: '📝', oculto: !a.tem_ata, onClick: () => setModalDetalhesAta(a) },
+                        { label: a.modalidade === 'sem_comparecimento' ? 'Detalhes do resultado' : 'Detalhes da ATA', icone: '📝', oculto: !a.tem_ata, onClick: () => setModalDetalhesAta(a) },
                         { label: 'Excluir', icone: '🗑️', perigo: true, oculto: !podeExcluir(a), onClick: () => setConfirmarExcluir(a) },
                       ]} />
                     </td>
@@ -574,11 +579,12 @@ export function ModalRemarcarAudiencia({ audiencia, onFechar, onContinuar }) {
 function ModalDetalhesAta({ audiencia, onFechar }) {
   const [dados, setDados] = useState(null);
   const [carregando, setCarregando] = useState(true);
+  const ehSemComparecimento = audiencia.modalidade === 'sem_comparecimento';
 
   useEffect(() => {
     audienciasAPI.detalhesAta(audiencia.id)
       .then(({ data }) => { if (data.ok) setDados(data.dados); })
-      .catch(() => toast.error('Não foi possível carregar os detalhes da ATA.'))
+      .catch(() => toast.error(ehSemComparecimento ? 'Não foi possível carregar os detalhes do resultado.' : 'Não foi possível carregar os detalhes da ATA.'))
       .finally(() => setCarregando(false));
   }, [audiencia.id]);
 
@@ -592,22 +598,22 @@ function ModalDetalhesAta({ audiencia, onFechar }) {
     <div className="modal-overlay">
       <div className="modal-box modal-grande" style={{ maxWidth: 820 }}>
         <div className="modal-header">
-          <h3>Detalhes da ATA — {formatarData(audiencia.data)} {audiencia.hora?.slice(0, 5)}</h3>
+          <h3>{ehSemComparecimento ? 'Detalhes do resultado' : 'Detalhes da ATA'} — {formatarData(audiencia.data)} {audiencia.hora?.slice(0, 5)}</h3>
           <button className="modal-fechar" onClick={onFechar}>✕</button>
         </div>
         <div className="modal-body">
           {carregando ? <div className="loading">Carregando...</div> : !dados ? (
-            <p className="lista-vazia">Não há detalhes disponíveis para esta ATA.</p>
+            <p className="lista-vazia">{ehSemComparecimento ? 'Não há resultado disponível para este ato.' : 'Não há detalhes disponíveis para esta ATA.'}</p>
           ) : <>
             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12, marginBottom: 14, fontSize: 13 }}>
               <div><strong>Processo:</strong> {dados.ata.processo_numero} &nbsp; <strong>Pasta:</strong> {String(dados.ata.pasta_numero || '').padStart(4, '0')}</div>
               <div style={{ marginTop: 5 }}><strong>Registrada por:</strong> {dados.ata.criado_por_nome || '—'} em {formatarDataHora(dados.ata.criado_em)}</div>
-              <div style={{ marginTop: 5 }}><strong>Advogado(a) acompanhante:</strong> {dados.ata.advogado_nome || 'Não informado'}</div>
-              {dados.ata.resultado && dados.ata.resultado !== 'realizada' && <div style={{ marginTop: 8 }}><strong>Resumo / termos:</strong><br />{dados.ata.resultado}</div>}
+              <div style={{ marginTop: 5 }}><strong>{ehSemComparecimento ? 'Responsável pelo acompanhamento:' : 'Advogado(a) acompanhante:'}</strong> {dados.ata.advogado_nome || 'Não informado'}</div>
+              {dados.ata.resultado && dados.ata.resultado !== 'realizada' && <div style={{ marginTop: 8 }}><strong>{ehSemComparecimento ? 'O que aconteceu no ato processual:' : 'Resumo / termos:'}</strong><br />{dados.ata.resultado}</div>}
               {dados.ata.observacoes && <div style={{ marginTop: 8 }}><strong>Observações:</strong><br />{dados.ata.observacoes}</div>}
             </div>
-            <h4 style={{ fontSize: 14, margin: '0 0 8px' }}>Registros e providências desta ATA</h4>
-            {dados.itens.length === 0 ? <p className="lista-vazia">Esta ATA não gerou registros vinculados.</p> : (
+            <h4 style={{ fontSize: 14, margin: '0 0 8px' }}>{ehSemComparecimento ? 'Providências geradas por este ato' : 'Registros e providências desta ATA'}</h4>
+            {dados.itens.length === 0 ? <p className="lista-vazia">{ehSemComparecimento ? 'Este ato não gerou providências vinculadas.' : 'Esta ATA não gerou registros vinculados.'}</p> : (
               <div style={{ display: 'grid', gap: 8 }}>
                 {dados.itens.map(item => <div key={item.id} style={{ border: '1px solid #dbeafe', background: '#eff6ff', borderRadius: 6, padding: '9px 11px' }}>
                   <strong style={{ color: '#1d4ed8', fontSize: 13 }}>{ROTULO[item.tipo] || item.tipo}</strong>
@@ -1169,6 +1175,7 @@ function ModalConfirmarSenhaDiaUtil({ descricao, onCancelar, onConfirmar }) {
 
 function CampoResponsaveis({ advogados, valores, onChange, disabled = false, onNovoFreela }) {
   const [aberto, setAberto] = useState(false);
+  const [busca, setBusca] = useState('');
   const seletorRef = useRef(null);
 
   useEffect(() => {
@@ -1184,8 +1191,8 @@ function CampoResponsaveis({ advogados, valores, onChange, disabled = false, onN
     onChange(valores.includes(valor) ? valores.filter(v => v !== valor) : [...valores, valor]);
   }
   const grupos = [
-    ['Advogados do escritório', advogados.filter(a => a.origem === 'usuario'), 'usuario'],
-    ['Freelancers', advogados.filter(a => a.origem === 'freela'), 'freela'],
+    ['Advogados do escritório', advogados.filter(a => a.origem === 'usuario' && a.nome?.toLowerCase().includes(busca.toLowerCase())), 'usuario'],
+    ['Freelancers', advogados.filter(a => a.origem === 'freela' && a.nome?.toLowerCase().includes(busca.toLowerCase())), 'freela'],
   ];
   const selecionados = advogados.filter(a => valores.includes(`${a.origem}:${a.id}`));
   const resumo = selecionados.length
@@ -1213,6 +1220,9 @@ function CampoResponsaveis({ advogados, valores, onChange, disabled = false, onN
           <span style={{ fontSize: '12px', color: '#64748b' }}>{valores.length ? `${valores.length} responsável(is) selecionado(s)` : 'Nenhum responsável selecionado'}</span>
           {onNovoFreela && <button type="button" onClick={() => { setAberto(false); onNovoFreela(); }} title="Cadastrar advogado freelancer" style={{ border: 0, background: 'none', color: '#2563eb', cursor: 'pointer', fontSize: '12px' }}>+ Freelancer</button>}
         </div>
+        <input className="form-control" aria-label="Pesquisar responsáveis pela condução"
+          value={busca} onChange={e => setBusca(e.target.value)}
+          placeholder="Pesquisar por nome..." style={{ marginBottom: '7px', fontSize: '13px' }} />
         {grupos.map(([titulo, lista, origem]) => lista.length > 0 && <div key={origem} style={{ marginTop: '7px' }}>
           <div style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>{titulo}</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px 12px' }}>
@@ -1293,6 +1303,17 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
   }
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
+
+  function alterarModalidade(modalidade) {
+    set('modalidade', modalidade);
+    if (modalidade === 'sem_comparecimento') {
+      set('plataforma_virtual', '');
+      set('link_virtual', '');
+      setVaraId(null);
+      setTestemunhas([]);
+      setTestemunhaPendente(false);
+    }
+  }
 
   // Busca processos por CNJ
   async function buscarProcessos(termo) {
@@ -1439,6 +1460,7 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
   // batia, então quem tinha só a permissão de "Tipos de audiência" (sem ser admin) não via
   // o botão de gerenciar tipos (auditoria 02/09, item 14).
   const podeTipos = temPermissao('audiencias.tipos', 'cadastrar') || temPermissao('audiencias.tipos', 'alterar');
+  const ehSemComparecimento = form.modalidade === 'sem_comparecimento';
 
   return (
     <div className="modal-overlay">
@@ -1530,26 +1552,28 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
             <div className="form-group">
               <label className="form-label">Modalidade</label>
               <select className="form-control" value={form.modalidade}
-                onChange={e => set('modalidade', e.target.value)}>
+                onChange={e => alterarModalidade(e.target.value)}>
                 <option value="presencial">Presencial</option>
                 <option value="virtual">Virtual (online)</option>
+                <option value="sem_comparecimento">Sem comparecimento</option>
               </select>
             </div>
             <div className="form-group">
-              <label className="form-label">Responsável pela condução</label>
+              <label className="form-label">{ehSemComparecimento ? 'Responsável pelo acompanhamento' : 'Responsável pela condução'}</label>
               <CampoResponsaveis advogados={advogados} valores={form.responsaveis || []}
                 onChange={v => set('responsaveis', v)} onNovoFreela={() => setModalNovoFreela(true)} />
             </div>
           </div>
 
-          {/* Local — vara responsável (presencial e virtual) */}
-          <CampoLocalVara
-            varas={varas}
-            foruns={foruns}
-            varaId={varaId}
-            onChange={setVaraId}
-            onRecarregarVaras={carregarVaras}
-          />
+          {!ehSemComparecimento && (
+            <CampoLocalVara
+              varas={varas}
+              foruns={foruns}
+              varaId={varaId}
+              onChange={setVaraId}
+              onRecarregarVaras={carregarVaras}
+            />
+          )}
 
           {/* Plataforma e Link — somente para audiências virtuais */}
           {form.modalidade === 'virtual' && (
@@ -1577,12 +1601,14 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
           </div>
 
           {/* Testemunhas — componente reutilizável com polo e cadastro rápido */}
-          <SecaoTestemunhas
-            processoId={form.processo_id}
-            testemunhas={testemunhas}
-            onChange={setTestemunhas}
-            onPendenteChange={setTestemunhaPendente}
-          />
+          {!ehSemComparecimento && (
+            <SecaoTestemunhas
+              processoId={form.processo_id}
+              testemunhas={testemunhas}
+              onChange={setTestemunhas}
+              onPendenteChange={setTestemunhaPendente}
+            />
+          )}
 
         </div>
         <div className="modal-footer">
@@ -1740,6 +1766,15 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
+  function alterarModalidade(modalidade) {
+    set('modalidade', modalidade);
+    if (modalidade === 'sem_comparecimento') {
+      set('plataforma_virtual', '');
+      set('link_virtual', '');
+      setVaraId(null);
+    }
+  }
+
   // ---- Validações de blur (iguais ao modal de criação) ----
   function validarDataBlur() {
     const passou = alertaMomentoPassado(form.data, form.hora);
@@ -1846,6 +1881,8 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
     );
   }
 
+  const ehSemComparecimento = form.modalidade === 'sem_comparecimento';
+
   return (
     <div className="modal-overlay">
       <div className={`modal-box modal-grande audiencia-detalhe ${leitura ? 'audiencia-leitura' : ''}`}>
@@ -1923,27 +1960,29 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
             <div className="form-group">
               <label className="form-label">Modalidade</label>
               <select className="form-control" value={form.modalidade} disabled={leitura}
-                onChange={e => set('modalidade', e.target.value)}>
+                onChange={e => alterarModalidade(e.target.value)}>
                 <option value="presencial">Presencial</option>
                 <option value="virtual">Virtual (online)</option>
+                <option value="sem_comparecimento">Sem comparecimento</option>
               </select>
             </div>
             <div className="form-group">
-              <label className="form-label">Responsável pela condução</label>
+              <label className="form-label">{ehSemComparecimento ? 'Responsável pelo acompanhamento' : 'Responsável pela condução'}</label>
               <CampoResponsaveis advogados={advogados} valores={form.responsaveis || []} disabled={leitura}
                 onChange={v => set('responsaveis', v)} onNovoFreela={() => setModalNovoFreela(true)} />
             </div>
           </div>
 
-          {/* Local — vara responsável (presencial e virtual) */}
-          <CampoLocalVara
-            varas={varas}
-            foruns={foruns}
-            varaId={varaId}
-            onChange={setVaraId}
-            onRecarregarVaras={recarregarVaras}
-            somenteLeitura={leitura}
-          />
+          {!ehSemComparecimento && (
+            <CampoLocalVara
+              varas={varas}
+              foruns={foruns}
+              varaId={varaId}
+              onChange={setVaraId}
+              onRecarregarVaras={recarregarVaras}
+              somenteLeitura={leitura}
+            />
+          )}
 
           {/* Plataforma e Link — somente para audiências virtuais */}
           {form.modalidade === 'virtual' && (
@@ -1970,14 +2009,19 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
               placeholder="Anotações da audiência (livre)." />
           </div>
 
-          {/* Testemunhas — componente reutilizável com polo e cadastro rápido */}
-          <SecaoTestemunhas
-            processoId={audiencia.processo_id}
-            testemunhas={testemunhas}
-            onChange={setTestemunhas}
-            somenteLeitura={leitura}
-            onPendenteChange={setTestemunhaPendente}
-          />
+          {ehSemComparecimento && testemunhas.length > 0 ? (
+            <div style={{ background: '#fff4e5', border: '1px solid #ffcf99', color: '#8a5300', padding: '8px 12px', borderRadius: 6, fontSize: 13 }}>
+              Esta audiência possui testemunhas vinculadas. Para usar a modalidade sem comparecimento, volte para presencial ou virtual, remova as testemunhas e salve antes de alterar a modalidade.
+            </div>
+          ) : !ehSemComparecimento && (
+            <SecaoTestemunhas
+              processoId={audiencia.processo_id}
+              testemunhas={testemunhas}
+              onChange={setTestemunhas}
+              somenteLeitura={leitura}
+              onPendenteChange={setTestemunhaPendente}
+            />
+          )}
 
         </div>
         <div className="modal-footer">
@@ -2050,8 +2094,8 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
 }
 
 // Modal para cadastrar freelancer rapidamente
-function ModalNovoFreela({ onFechar, onSalvo }) {
-  const [form, setForm] = useState({ nome: '', oab: '', email: '', telefone: '', cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '' });
+export function ModalNovoFreela({ onFechar, onSalvo, profissoes = [], exigirProfissao = false, titulo = 'Novo Freelancer' }) {
+  const [form, setForm] = useState({ nome: '', oab: '', profissao_id: '', email: '', telefone: '', cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '' });
   const [salvando, setSalvando] = useState(false);
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [erroCep, setErroCep] = useState('');
@@ -2086,6 +2130,7 @@ function ModalNovoFreela({ onFechar, onSalvo }) {
 
   async function salvar() {
     if (!form.nome.trim()) { setAviso('Informe o nome do freelancer.'); return; }
+    if (exigirProfissao && !form.profissao_id) { setAviso('Selecione a profissão do freelancer.'); return; }
     if (!form.email.trim()) { setAviso('Informe o e-mail do freelancer.'); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) { setAviso('Informe um e-mail válido.'); return; }
     setSalvando(true);
@@ -2101,7 +2146,7 @@ function ModalNovoFreela({ onFechar, onSalvo }) {
     <div className="modal-overlay" style={{ zIndex: 200 }}>
       <div className="modal-box" style={{ maxWidth: '500px' }}>
         <div className="modal-header">
-          <h3>Novo Advogado Freelancer</h3>
+          <h3>{titulo}</h3>
           <button className="modal-fechar" onClick={onFechar}>✕</button>
         </div>
         <div className="modal-body">
@@ -2122,6 +2167,13 @@ function ModalNovoFreela({ onFechar, onSalvo }) {
             <label className="form-label">E-mail *</label>
             <input className="form-control" type="email" placeholder="nome@exemplo.com"
               value={form.email} onChange={e => set('email', e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Profissão{exigirProfissao ? ' *' : ''}</label>
+            <select className="form-control" value={form.profissao_id} onChange={e => set('profissao_id', e.target.value)}>
+              <option value="">— Não informada —</option>
+              {profissoes.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+            </select>
           </div>
           <div className="grid-2">
             <div className="form-group">
@@ -2341,6 +2393,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos, onTiposChange })
   const [abrindoAcordo, setAbrindoAcordo] = useState(false);
   const [acordoRegistrado, setAcordoRegistrado] = useState(false); // marca que houve acordo (registro na ata)
   const [confirmarNovoAcordo, setConfirmarNovoAcordo] = useState(false);
+  const ehSemComparecimento = audiencia.modalidade === 'sem_comparecimento';
   // "O que teve nessa audiência?" — cada checkbox revela um recurso (antes oculto) e é gravado na ata.
   const [itens, setItens] = useState({
     prazo: false, pericia: false, acordo: false, nova_audiencia: false,
@@ -2514,14 +2567,20 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos, onTiposChange })
 
   async function salvar() {
     setAviso('');
+    if (ehSemComparecimento && !String(form.resultado_texto || '').trim()) {
+      setAviso('Descreva o que aconteceu no ato processual antes de registrar o resultado.');
+      return;
+    }
     // Testemunha(s) é complementar: não basta sozinha para concluir a ATA.
-    if (!['prazo', 'pericia', 'acordo', 'nova_audiencia', 'alvara', 'desistencia', 'retorno_autos'].some(k => itens[k])) {
+    if (!ehSemComparecimento && !['prazo', 'pericia', 'acordo', 'nova_audiencia', 'alvara', 'desistencia', 'retorno_autos'].some(k => itens[k])) {
       setAviso('Selecione ao menos um item da audiência além de testemunha(s) antes de registrar a ata.');
       return;
     }
     // "Ninguém" já é uma escolha válida, mas a ATA sempre exige uma escolha explícita.
     if (!advogadoSel) {
-      setAviso('Informe o advogado que acompanhou a audiência (ou selecione "Ninguém").');
+      setAviso(ehSemComparecimento
+        ? 'Informe o responsável pelo acompanhamento (ou selecione "Não informado").'
+        : 'Informe o advogado que acompanhou a audiência (ou selecione "Ninguém").');
       return;
     }
     if (itens.nova_audiencia && !novaAudienciaRascunho) {
@@ -2583,9 +2642,9 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos, onTiposChange })
     };
     try {
       await audienciasAPI.registrarAta(audiencia.id, payload);
-      toast.success('Ata registrada com sucesso!');
+      toast.success(ehSemComparecimento ? 'Resultado registrado com sucesso!' : 'Ata registrada com sucesso!');
       onFechar(true);
-    } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao registrar ata'); }
+    } catch (err) { setAviso(err.response?.data?.mensagem || 'Não foi possível registrar o resultado. Tente novamente.'); }
     finally { setSalvando(false); }
   }
 
@@ -2593,7 +2652,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos, onTiposChange })
     <div className="modal-overlay">
       <div className="modal-box modal-grande">
         <div className="modal-header">
-          <h3>Registrar Ata — {formatarData(audiencia.data)} {audiencia.hora?.slice(0, 5)}</h3>
+          <h3>{ehSemComparecimento ? 'Registrar resultado' : 'Registrar Ata'} — {formatarData(audiencia.data)} {audiencia.hora?.slice(0, 5)}</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
         </div>
         <div className="modal-body">
@@ -2605,12 +2664,12 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos, onTiposChange })
 
           {/* Advogado(a) que acompanhou a audiência — usuários advogados + freelas (com OAB); "(…)" cadastra novo */}
           <div className="form-group">
-            <label className="form-label obrigatorio">Advogado(a) que acompanhou a audiência</label>
+            <label className="form-label obrigatorio">{ehSemComparecimento ? 'Responsável pelo acompanhamento' : 'Advogado(a) que acompanhou a audiência'}</label>
             <div style={{ display: 'flex', gap: '6px' }}>
               <select className="form-control" value={advogadoSel}
                 onChange={e => { setAdvogadoSel(e.target.value); setAviso(''); }}>
                 <option value="">— Selecione —</option>
-                <option value="ninguem">Ninguém (a parte compareceu sozinha)</option>
+                <option value="ninguem">{ehSemComparecimento ? 'Não informado' : 'Ninguém (a parte compareceu sozinha)'}</option>
                 {advogados.filter(a => a.origem === 'usuario').length > 0 && (
                   <optgroup label="Advogados do escritório">
                     {advogados.filter(a => a.origem === 'usuario').map(a =>
@@ -2633,22 +2692,22 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos, onTiposChange })
           </div>
 
           <div className="form-group">
-            <label className="form-label">Resumo / Termos</label>
+            <label className={`form-label ${ehSemComparecimento ? 'obrigatorio' : ''}`}>{ehSemComparecimento ? 'O que aconteceu no ato processual?' : 'Resumo / Termos'}</label>
             <textarea className="form-control" rows={4} value={form.resultado_texto || ''}
               onChange={e => set('resultado_texto', e.target.value)}
-              onBlur={() => set('resultado_texto', toTitleCase(form.resultado_texto))}
-              placeholder="Descreva os principais pontos da audiência..." />
+              onBlur={() => { if (!ehSemComparecimento) set('resultado_texto', toTitleCase(form.resultado_texto)); }}
+              placeholder={ehSemComparecimento ? 'Descreva o resultado disponibilizado ou a baixa realizada...' : 'Descreva os principais pontos da audiência...'} />
           </div>
 
           {/* "O que teve nessa audiência?" — cada checkbox revela um recurso antes oculto e é gravado na ata */}
           <div className="form-group" style={{ marginTop: '12px' }}>
-            <label className="form-label">O que teve nessa audiência?</label>
+            <label className="form-label">{ehSemComparecimento ? 'Providências geradas por este ato' : 'O que teve nessa audiência?'}</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 18px', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#f8fafc' }}>
               {[
                 ['prazo', 'Prazo'], ['pericia', 'Perícia'], ['acordo', 'Acordo'],
                 ['nova_audiencia', 'Nova audiência'], ['alvara', 'Alvará'],
                 ['testemunha', 'Testemunha(s)'], ['desistencia', 'Desistência da Ação'], ['retorno_autos', 'Retornem aos autos'],
-              ].map(([k, rotulo]) => (
+              ].filter(([k]) => !ehSemComparecimento || k !== 'testemunha').map(([k, rotulo]) => (
                 <label key={k} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', cursor: 'pointer' }}>
                   <input type="checkbox" checked={itens[k]} onChange={() => toggleItem(k)} />
                   {rotulo}
@@ -2795,7 +2854,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos, onTiposChange })
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
           <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
-            {salvando ? 'Salvando...' : 'Registrar Ata'}
+            {salvando ? 'Salvando...' : ehSemComparecimento ? 'Registrar resultado' : 'Registrar Ata'}
           </button>
         </div>
       </div>

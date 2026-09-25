@@ -324,7 +324,7 @@ function montarFiltroPublicacoes(q, usuario, ehBuscadorFlag) {
 //          escopo ('todas' = tudo que o usuário pode ver | 'minhas' = só as direcionadas a ele).
 async function listar(req, res) {
   try {
-    const limitInt  = parseInt(req.query.limite) || 30;
+    const limitInt  = Math.min(parseInt(req.query.limite) || 30, 100);
     const offsetInt = ((parseInt(req.query.pagina) || 1) - 1) * limitInt;
 
     // Trava de 3 meses na pesquisa (defesa no servidor, além da tela).
@@ -807,27 +807,34 @@ async function tratar(req, res) {
     // BUSCADOR mexe no selo GLOBAL da publicação (comportamento de sempre).
     // NÃO-BUSCADOR (recebedor) mexe SÓ na linha DELE em publicacao_usuario.
     const buscador = await ehBuscador(req);
-    if (buscador) {
-      if (tratada) {
-        await pool.execute(
-          'UPDATE publicacoes SET tratada = 1, tratada_por = ?, tratada_em = NOW(), motivo_sem_acao = ? WHERE id = ?',
-          [req.usuario.id, semAcao ? motivo : null, id]
-        );
+    const conn = await pool.getConnection();
+    let r = null;
+    try {
+      await conn.beginTransaction();
+      if (buscador) {
+        if (tratada) {
+          await conn.execute(
+            'UPDATE publicacoes SET tratada = 1, tratada_por = ?, tratada_em = NOW(), motivo_sem_acao = ? WHERE id = ?',
+            [req.usuario.id, semAcao ? motivo : null, id]
+          );
+        } else {
+          await conn.execute(
+            'UPDATE publicacoes SET tratada = 0, tratada_por = NULL, tratada_em = NULL, motivo_sem_acao = NULL WHERE id = ?', [id]
+          );
+        }
       } else {
-        await pool.execute(
-          'UPDATE publicacoes SET tratada = 0, tratada_por = NULL, tratada_em = NULL, motivo_sem_acao = NULL WHERE id = ?', [id]
-        );
+        [r] = tratada
+          ? await conn.execute(
+              'UPDATE publicacao_usuario SET tratada = 1, tratada_por = ?, tratada_em = NOW(), motivo_sem_acao = ? WHERE publicacao_id = ? AND usuario_id = ?',
+              [req.usuario.id, semAcao ? motivo : null, id, req.usuario.id])
+          : await conn.execute(
+              'UPDATE publicacao_usuario SET tratada = 0, tratada_por = NULL, tratada_em = NULL, motivo_sem_acao = NULL WHERE publicacao_id = ? AND usuario_id = ?',
+              [id, req.usuario.id]);
       }
-    } else {
-      const [r] = tratada
-        ? await pool.execute(
-            'UPDATE publicacao_usuario SET tratada = 1, tratada_por = ?, tratada_em = NOW(), motivo_sem_acao = ? WHERE publicacao_id = ? AND usuario_id = ?',
-            [req.usuario.id, semAcao ? motivo : null, id, req.usuario.id])
-        : await pool.execute(
-            'UPDATE publicacao_usuario SET tratada = 0, tratada_por = NULL, tratada_em = NULL, motivo_sem_acao = NULL WHERE publicacao_id = ? AND usuario_id = ?',
-            [id, req.usuario.id]);
-      if (!r.affectedRows) return proibido(res, 'Esta publicação não está atribuída a você.');
-    }
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
+    if (!buscador && !r.affectedRows) return proibido(res, 'Esta publicação não está atribuída a você.');
     return sucesso(res, null, tratada ? 'Publicação marcada como tratada' : 'Publicação reaberta');
   } catch (err) {
     return erroInterno(res, err);
@@ -1215,10 +1222,16 @@ async function marcarLida(req, res) {
     if (!(await podeAcessarPublicacao(req, req.params.id))) {
       return proibido(res, 'Você não pode acessar esta publicação.');
     }
-    await pool.execute(
-      'INSERT IGNORE INTO publicacoes_lidas (publicacao_id, usuario_id) VALUES (?, ?)',
-      [req.params.id, req.usuario.id]
-    );
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        'INSERT IGNORE INTO publicacoes_lidas (publicacao_id, usuario_id) VALUES (?, ?)',
+        [req.params.id, req.usuario.id]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Publicação marcada como lida');
   } catch (err) {
     return erroInterno(res, err);

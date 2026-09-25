@@ -595,7 +595,7 @@ function EventoDetalhe({ evento }) {
     if (dados.pasta_titulo)    linhas.push(['Pasta', dados.pasta_titulo]);
     if (dados.tipo_nome)       linhas.push(['Tipo', dados.tipo_nome]);
     linhas.push(['Data', `${formatarData(String(dados.data).slice(0, 10))}${dados.hora ? ' ' + dados.hora.slice(0, 5) : ''}`]);
-    linhas.push(['Modalidade', dados.modalidade]);
+    linhas.push(['Modalidade', dados.modalidade === 'sem_comparecimento' ? 'Sem comparecimento' : dados.modalidade]);
     if (dados.local)           linhas.push(['Local', dados.local]);
     if (dados.link_virtual)    linhas.push(['Link', dados.link_virtual]);
   } else if (tipo === 'pericia') {

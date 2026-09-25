@@ -94,24 +94,24 @@ function montarComunicadoPericia(tipoEvento, pe, nomeCliente, escritorio) {
   const assunto = `${titulo}${pe.processo_numero ? ' — Proc. ' + pe.processo_numero : ''}`;
   const detalhes = tipoEvento === 'cancelada' ? '' : `
       <table style="width:100%;border-collapse:collapse;margin:12px 0">
-        <tr><td style="padding:6px;background:#f3f4f6;font-weight:bold;width:35%">Processo</td><td style="padding:6px">${pe.processo_numero || '—'}</td></tr>
-        <tr><td style="padding:6px;background:#f3f4f6;font-weight:bold">Tipo</td><td style="padding:6px">${pe.tipo_nome || 'Perícia'}</td></tr>
+        <tr><td style="padding:6px;background:#f3f4f6;font-weight:bold;width:35%">Processo</td><td style="padding:6px">${escaparHtml(pe.processo_numero || '—')}</td></tr>
+        <tr><td style="padding:6px;background:#f3f4f6;font-weight:bold">Tipo</td><td style="padding:6px">${escaparHtml(pe.tipo_nome || 'Perícia')}</td></tr>
         <tr><td style="padding:6px;background:#f3f4f6;font-weight:bold">Data</td><td style="padding:6px">${dataFmt}${horaFmt ? ' às ' + horaFmt : ''}</td></tr>
-        <tr><td style="padding:6px;background:#f3f4f6;font-weight:bold">Local</td><td style="padding:6px">${local || '—'}</td></tr>
-        ${pe.perito_nome ? `<tr><td style="padding:6px;background:#f3f4f6;font-weight:bold">Perito</td><td style="padding:6px">${pe.perito_nome}</td></tr>` : ''}
+        <tr><td style="padding:6px;background:#f3f4f6;font-weight:bold">Local</td><td style="padding:6px">${escaparHtml(local || '—')}</td></tr>
+        ${pe.perito_nome ? `<tr><td style="padding:6px;background:#f3f4f6;font-weight:bold">Perito</td><td style="padding:6px">${escaparHtml(pe.perito_nome)}</td></tr>` : ''}
       </table>
       <p>Por favor, compareça no dia e horário indicados. Em caso de dúvidas, entre em contato com o escritório.</p>`;
 
   const html = `
   <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
     <div style="background:${cor};padding:18px;text-align:center">
-      <h2 style="color:#fff;margin:0;font-size:18px">${escritorio || 'Escritório de Advocacia'}</h2>
+      <h2 style="color:#fff;margin:0;font-size:18px">${escaparHtml(escritorio || 'Escritório de Advocacia')}</h2>
     </div>
     <div style="padding:24px;color:#333">
-      <p>Prezado(a) <strong>${nomeCliente || 'cliente'}</strong>,</p>
+      <p>Prezado(a) <strong>${escaparHtml(nomeCliente || 'cliente')}</strong>,</p>
       <p>${intro}</p>
       ${detalhes}
-      <p style="margin-top:20px;color:#888;font-size:12px">Mensagem automática enviada por ${escritorio || 'seu escritório de advocacia'}.</p>
+      <p style="margin-top:20px;color:#888;font-size:12px">Mensagem automática enviada por ${escaparHtml(escritorio || 'seu escritório de advocacia')}.</p>
     </div>
   </div>`;
 
@@ -159,12 +159,18 @@ async function enviarComunicadoPericia(periciaId, tipoEvento, usuarioId) {
     }
     // Registro de negócio (sempre, mesmo em falha)
     try {
-      await pool.execute(
-        `INSERT INTO log_comunicacoes
-           (canal, destinatario, assunto, conteudo, enviado, erro_msg, tipo_pessoa, pessoa_id, processo_id, usuario_id)
-         VALUES ('email', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [c.email, assunto, html, ok ? 1 : 0, erroMsg, c.tipo_pessoa, c.pessoa_id, pe.processo_id, usuarioId || null]
-      );
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+        await conn.execute(
+          `INSERT INTO log_comunicacoes
+             (canal, destinatario, assunto, conteudo, enviado, erro_msg, tipo_pessoa, pessoa_id, processo_id, usuario_id)
+           VALUES ('email', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [c.email, assunto, html, ok ? 1 : 0, erroMsg, c.tipo_pessoa, c.pessoa_id, pe.processo_id, usuarioId || null]
+        );
+        await conn.commit();
+      } catch (err) { await conn.rollback(); throw err; }
+      finally { conn.release(); }
     } catch (e) {
       console.error('Erro ao gravar log_comunicacoes:', e.message);
     }
@@ -172,7 +178,13 @@ async function enviarComunicadoPericia(periciaId, tipoEvento, usuarioId) {
 
   // Marca o comunicado como enviado (agendamento/remarcação). Cancelamento não altera o flag.
   if (enviados > 0 && tipoEvento !== 'cancelada') {
-    await pool.execute('UPDATE pericia SET comunicado_enviado = 1 WHERE id = ?', [periciaId]);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE pericia SET comunicado_enviado = 1 WHERE id = ?', [periciaId]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
   }
 
   return { enviados, semCliente: false, semEmail: semEmailCount > 0, polo };
@@ -218,12 +230,26 @@ async function enviarEmailPeritoPericia(periciaId, modeloId, usuarioId) {
   try { await enviarEmail({ para: pericia.perito_email, assunto, html, destinatarioNome: pericia.perito_nome, mensagem: modelo.corpo }); enviado = true; }
   catch (err) { erroMsg = err.message; }
   try {
-    await pool.execute(`INSERT INTO log_comunicacoes
-      (canal, destinatario, assunto, conteudo, enviado, erro_msg, tipo_pessoa, pessoa_id, processo_id, usuario_id)
-      VALUES ('email', ?, ?, ?, ?, ?, 'fisica', ?, ?, ?)`,
-      [pericia.perito_email, assunto, html, enviado ? 1 : 0, erroMsg, pericia.perito_id, pericia.processo_id, usuarioId || null]);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(`INSERT INTO log_comunicacoes
+        (canal, destinatario, assunto, conteudo, enviado, erro_msg, tipo_pessoa, pessoa_id, processo_id, usuario_id)
+        VALUES ('email', ?, ?, ?, ?, ?, 'fisica', ?, ?, ?)`,
+        [pericia.perito_email, assunto, html, enviado ? 1 : 0, erroMsg, pericia.perito_id, pericia.processo_id, usuarioId || null]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
   } catch (e) { console.error('Erro ao registrar e-mail do perito:', e.message); }
-  if (enviado) await pool.execute('UPDATE pericia SET email_perito_enviado = 1 WHERE id = ?', [periciaId]);
+  if (enviado) {
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE pericia SET email_perito_enviado = 1 WHERE id = ?', [periciaId]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
+  }
   return { enviado, semEmail: false, semModelo: false };
 }
 

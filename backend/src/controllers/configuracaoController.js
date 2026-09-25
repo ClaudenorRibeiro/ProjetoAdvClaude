@@ -82,8 +82,14 @@ async function salvarLogo(req, res) {
     }
     // Monta a imagem no formato que o navegador exibe direto (data URI) e guarda no banco.
     const dataUri = `data:${mime};base64,${req.file.buffer.toString('base64')}`;
-    await pool.execute('UPDATE configuracoes_escritorio SET logo_base64 = ? LIMIT 1', [dataUri]);
-    await auditoria.registrar(req.usuario.id, 'configuracoes_escritorio', 'editar', 1);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE configuracoes_escritorio SET logo_base64 = ? LIMIT 1', [dataUri]);
+      await auditoria.registrar(req.usuario.id, 'configuracoes_escritorio', 'editar', 1, null, null, conn);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, { logo_base64: dataUri }, 'Logo atualizado com sucesso!');
   } catch (err) {
     return erroInterno(res, err);
@@ -93,8 +99,14 @@ async function salvarLogo(req, res) {
 // DELETE /api/configuracoes/logo — Remove o logo (volta ao padrão, que mostra o nome do escritório).
 async function removerLogo(req, res) {
   try {
-    await pool.execute('UPDATE configuracoes_escritorio SET logo_base64 = NULL LIMIT 1');
-    await auditoria.registrar(req.usuario.id, 'configuracoes_escritorio', 'editar', 1);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE configuracoes_escritorio SET logo_base64 = NULL LIMIT 1');
+      await auditoria.registrar(req.usuario.id, 'configuracoes_escritorio', 'editar', 1, null, null, conn);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, {}, 'Logo removido.');
   } catch (err) {
     return erroInterno(res, err);
@@ -156,7 +168,10 @@ async function atualizarEscritorio(req, res) {
 
     // INSERT se não existir registro, UPDATE se já existir (id=1 fixo)
     // Garante funcionamento mesmo em instalações novas sem registro inicial
-    await pool.execute(
+    const conn = await pool.getConnection();
+    try {
+    await conn.beginTransaction();
+    await conn.execute(
       `INSERT INTO configuracoes_escritorio
          (id, nome, cnpj_cpf, email, telefone,
           cep, logradouro, numero, bairro, cidade, estado,
@@ -196,6 +211,9 @@ async function atualizarEscritorio(req, res) {
         advogadoPrincipalId, oab_principal || null
       ]
     );
+    await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
 
     // Reagenda o cron de prazos caso o horário tenha mudado
     await reagendarCronPrazos();
@@ -224,8 +242,14 @@ async function salvarDocumentosMaiusculas(req, res) {
   try {
     const ativo = req.body && req.body.ativo ? 1 : 0;
     // Mesma abordagem do logo: atualiza a linha única do escritório (id=1).
-    await pool.execute('UPDATE configuracoes_escritorio SET documentos_maiusculas = ? LIMIT 1', [ativo]);
-    await auditoria.registrar(req.usuario.id, 'configuracoes_escritorio', 'editar', 1);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE configuracoes_escritorio SET documentos_maiusculas = ? LIMIT 1', [ativo]);
+      await auditoria.registrar(req.usuario.id, 'configuracoes_escritorio', 'editar', 1, null, null, conn);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(
       res,
       { documentos_maiusculas: !!ativo },
@@ -261,7 +285,13 @@ async function marcarSetupConcluido(req, res) {
       return erro(res, 'Cadastre pelo menos 1 advogado com número de OAB antes de concluir o setup');
     }
 
-    await pool.execute('UPDATE configuracoes_escritorio SET setup_concluido = 1');
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE configuracoes_escritorio SET setup_concluido = 1');
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Setup concluído! Sistema liberado para uso.');
   } catch (err) {
     return erroInterno(res, err);
@@ -413,15 +443,22 @@ async function criarUsuario(req, res) {
 
     const senhaHash = await bcrypt.hash(senha, 12);
 
-    const [result] = await pool.execute(
-      `INSERT INTO usuarios (nome, login, senha_hash, email, oab, tipo, nivel,
-        ver_todos_processos, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [nome.trim(), login.trim(), senhaHash, email || null, oab || null,
-       tipo || 'advogado', nv, ver_todos_processos ? 1 : 0, req.usuario.id]
-    );
+    const conn = await pool.getConnection();
+    let result;
+    try {
+      await conn.beginTransaction();
+      [result] = await conn.execute(
+        `INSERT INTO usuarios (nome, login, senha_hash, email, oab, tipo, nivel,
+          ver_todos_processos, criado_por)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [nome.trim(), login.trim(), senhaHash, email || null, oab || null,
+         tipo || 'advogado', nv, ver_todos_processos ? 1 : 0, req.usuario.id]
+      );
+      await auditoria.registrar(req.usuario.id, 'usuarios', 'criar', result.insertId, null, null, conn);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
 
-    await auditoria.registrar(req.usuario.id, 'usuarios', 'criar', result.insertId);
     return sucesso(res, { id: result.insertId }, 'Usuário criado com sucesso', 201);
   } catch (err) {
     // Rede de segurança da trava de unicidade do login (cadastros simultâneos do mesmo login).
@@ -441,27 +478,40 @@ async function atualizarUsuario(req, res) {
     if (!usuario.length) return naoEncontrado(res, 'Usuário não encontrado');
     if (usuario[0].nivel === 0) return erro(res, 'Não é possível alterar o superusuário por aqui', 403);
 
-    // Se foi enviada nova senha, valida e atualiza o hash
-    if (senha) {
-      const errSenha = validarSenha(senha);
-      if (errSenha) return erro(res, errSenha);
-      const novoHash = await bcrypt.hash(senha, 12);
-      await pool.execute(
-        'UPDATE usuarios SET senha_hash = ? WHERE id = ?', [novoHash, id]
-      );
-    }
-
+    // Valida TUDO antes de gravar qualquer coisa (nível e senha, se enviada).
     const nv = normalizarNivel(nivel);
     if (nv === null) return erro(res, 'Nível de usuário inválido. Escolha Administrador ou Comum.');
 
-    await pool.execute(
-      `UPDATE usuarios SET nome=?, email=?, oab=?, tipo=?, nivel=?, ativo=?, ver_todos_processos=?
-       WHERE id = ?`,
-      [nome, email || null, oab || null, tipo, nv,
-       ativo !== undefined ? ativo : 1, ver_todos_processos ? 1 : 0, id]
-    );
+    let novoHash = null;
+    if (senha) {
+      const errSenha = validarSenha(senha);
+      if (errSenha) return erro(res, errSenha);
+      novoHash = await bcrypt.hash(senha, 12);
+    }
 
-    await auditoria.registrar(req.usuario.id, 'usuarios', 'editar', id);
+    // As duas escritas (senha + demais dados) em UMA transação: se a segunda falhar por
+    // qualquer motivo (rede, e-mail duplicado, etc.), a senha não fica trocada sozinha.
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      if (novoHash) {
+        await conn.execute('UPDATE usuarios SET senha_hash = ? WHERE id = ?', [novoHash, id]);
+      }
+      await conn.execute(
+        `UPDATE usuarios SET nome=?, email=?, oab=?, tipo=?, nivel=?, ativo=?, ver_todos_processos=?
+         WHERE id = ?`,
+        [nome, email || null, oab || null, tipo, nv,
+         ativo !== undefined ? ativo : 1, ver_todos_processos ? 1 : 0, id]
+      );
+      await auditoria.registrar(req.usuario.id, 'usuarios', 'editar', id, null, null, conn);
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+
     return sucesso(res, null, 'Usuário atualizado');
   } catch (err) {
     return erroInterno(res, err);
@@ -670,10 +720,22 @@ async function redefinirSenhaAdmin(req, res) {
     if (rows[0].nivel === 0) return erro(res, 'Não é possível redefinir a senha do superusuário', 403);
 
     const hash = await bcrypt.hash(senha, 12);
-    await pool.execute('UPDATE usuarios SET senha_hash = ? WHERE id = ?', [hash, id]);
 
-    // Invalida eventuais tokens de reset pendentes deste usuário
-    await pool.execute('UPDATE reset_tokens SET usado = 1 WHERE usuario_id = ?', [id]);
+    // Grava o novo hash e invalida tokens de reset pendentes em uma única transação.
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      // sessao_atual = NULL derruba qualquer sessão aberta do usuário (mesma trava de
+      // "logou em outro aparelho") — senha redefinida pelo admin exige login de novo.
+      await conn.execute('UPDATE usuarios SET senha_hash = ?, sessao_atual = NULL WHERE id = ?', [hash, id]);
+      await conn.execute('UPDATE reset_tokens SET usado = 1 WHERE usuario_id = ?', [id]);
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
 
     return sucesso(res, null, 'Senha redefinida com sucesso');
   } catch (err) {
@@ -695,6 +757,120 @@ function horaServidor(req, res) {
   });
 }
 
+// Todas as colunas do banco que guardam usuarios.id (auditoria 24/09) — levantadas direto do
+// estrutura_banco.sql (101 com chave estrangeira) + 4 sem chave estrangeira, confirmadas no
+// código (gravam req.usuario.id): logs_auditoria.usuario_id, parabens_enviados.usuario_id,
+// audiencia_responsaveis.criado_por, audiencia_testemunhas.criado_por.
+// Regra nº1 do sistema: usuário referenciado em QUALQUER uma delas não pode ser excluído,
+// nem o rastro histórico (criado_por/alterado_por) — só "Desativar" (já existe na edição).
+const REFS_USUARIO = [
+  ["acordo", "alterado_por"],
+  ["acordo", "criado_por"],
+  ["acordo_parcela", "repasse_cliente_por"],
+  ["acordo_parcela", "repasse_parceiro_por"],
+  ["acordo_parcela_multa", "criado_por"],
+  ["acordo_parcela_multa", "repasse_cliente_por"],
+  ["acordo_parcela_multa", "repasse_parceiro_por"],
+  ["advogados_freela", "criado_por"],
+  ["agenda_compromisso", "concluido_por"],
+  ["agenda_compromisso", "delegado_para"],
+  ["agenda_compromisso", "usuario_id"],
+  ["andamento_processual", "criado_por"],
+  ["andamento_processual", "editado_por"],
+  ["ata_audiencia", "criado_por"],
+  ["ata_audiencia", "advogado_id"],
+  ["audiencia", "alterado_por"],
+  ["audiencia", "responsavel_id"],
+  ["audiencia", "criado_por"],
+  ["audiencia_responsaveis", "responsavel_id"],
+  ["audiencias_etiquetas", "usuario_id"],
+  ["auditoria_audiencia", "usuario_id"],
+  ["auditoria_conta_corrente", "usuario_id"],
+  ["auditoria_etiqueta_escritorio", "usuario_id"],
+  ["auditoria_parcela", "usuario_id"],
+  ["auditoria_pericia", "usuario_id"],
+  ["auditoria_prazo", "usuario_id"],
+  ["configuracoes_escritorio", "advogado_principal_id"],
+  ["conta_corrente", "usuario_id"],
+  ["etiquetas_definicoes", "usuario_id"],
+  ["feriados", "criado_por"],
+  ["historico_atendimento", "usuario_id"],
+  ["log_comunicacoes", "usuario_id"],
+  ["log_documentos_gerados", "usuario_id"],
+  ["log_publicacoes", "usuario_id"],
+  ["modelo_documento", "alterado_por"],
+  ["modelo_documento", "criado_por"],
+  ["notificacoes", "usuario_id"],
+  ["pastas_etiquetas", "usuario_id"],
+  ["pendencia_documento", "alterado_por"],
+  ["pendencia_documento", "criado_por"],
+  ["pendencia_documento", "resolvido_por"],
+  ["pendencia_documento_item", "recebido_por"],
+  ["pendencia_documento_responsavel", "criado_por"],
+  ["pendencia_documento_responsavel", "usuario_id"],
+  ["pericia", "alterado_por"],
+  ["pericia", "responsavel_id"],
+  ["pericia", "assistente_tecnico_id"],
+  ["pericia", "criado_por"],
+  ["pericias_etiquetas", "usuario_id"],
+  ["permissoes", "usuario_id"],
+  ["pessoas_avisos_idade", "criado_por"],
+  ["pessoas_fisicas", "alterado_por"],
+  ["pessoas_fisicas", "criado_por"],
+  ["pessoas_fisicas_etiquetas_escritorio", "marcado_por"],
+  ["pessoas_juridicas", "alterado_por"],
+  ["pessoas_juridicas", "criado_por"],
+  ["pessoas_juridicas_etiquetas_escritorio", "marcado_por"],
+  ["prazos_etiquetas", "usuario_id"],
+  ["prazos_processo", "fazendo_por"],
+  ["prazos_processo", "delegado_para"],
+  ["prazos_processo", "concluido_por"],
+  ["prazos_processo", "status_alterado_por"],
+  ["prazos_processo", "criado_por"],
+  ["processo_assunto", "criado_por"],
+  ["processo_perito", "criado_por"],
+  ["processos_etiquetas_escritorio", "marcado_por"],
+  ["publicacao_usuario", "usuario_id"],
+  ["publicacao_usuario", "atribuida_por"],
+  ["publicacao_usuario", "tratada_por"],
+  ["publicacoes", "direcionada_por"],
+  ["publicacoes", "importada_por"],
+  ["publicacoes", "tratada_por"],
+  ["publicacoes_etiquetas", "usuario_id"],
+  ["publicacoes_lidas", "usuario_id"],
+  ["reset_tokens", "usuario_id"],
+  ["tarefas", "atribuida_para"],
+  ["tarefas", "concluida_por"],
+  ["tarefas", "criado_por"],
+  ["tarefas_etiquetas", "usuario_id"],
+  ["tblassuntoproc", "criado_por"],
+  ["tblassuntoproc", "alterado_por"],
+  ["tblforum", "criado_por"],
+  ["tblforum", "alterado_por"],
+  ["tblinstanciaproc", "criado_por"],
+  ["tblinstanciaproc", "alterado_por"],
+  ["tblpasta", "criado_por"],
+  ["tblpasta", "alterado_por"],
+  ["tblproc", "responsavel_id"],
+  ["tblproc", "criado_por"],
+  ["tblproc", "alterado_por"],
+  ["tblstatusproc", "criado_por"],
+  ["tblstatusproc", "alterado_por"],
+  ["tbltipoproc", "criado_por"],
+  ["tbltipoproc", "alterado_por"],
+  ["tbltituloprocautor", "criado_por"],
+  ["tbltituloprocreu", "criado_por"],
+  ["tblvara", "criado_por"],
+  ["tblvara", "alterado_por"],
+  ["tipo_documento_pendencia", "alterado_por"],
+  ["tipo_documento_pendencia", "criado_por"],
+  ["usuarios", "criado_por"],
+  ["logs_auditoria", "usuario_id"],
+  ["parabens_enviados", "usuario_id"],
+  ["audiencia_responsaveis", "criado_por"],
+  ["audiencia_testemunhas", "criado_por"],
+];
+
 // DELETE /api/configuracoes/usuarios/:id — Exclui usuário
 async function excluirUsuario(req, res) {
   try {
@@ -704,7 +880,24 @@ async function excluirUsuario(req, res) {
     if (rows[0].nivel === 0) return erro(res, 'Não é possível excluir o superusuário', 403);
     if (parseInt(id) === req.usuario.id) return erro(res, 'Você não pode excluir seu próprio usuário', 403);
 
-    await pool.execute('DELETE FROM usuarios WHERE id = ?', [id]);
+    // Regra nº1 do sistema: não excluir usuário referenciado em NENHUM lugar do sistema —
+    // 1 única consulta (UNION ALL) cobrindo as 105 colunas que guardam usuarios.id.
+    const sqlUniao = REFS_USUARIO
+      .map(([tabela, coluna]) => `SELECT '${tabela}.${coluna}' AS ref, COUNT(*) AS total FROM \`${tabela}\` WHERE \`${coluna}\` = ?`)
+      .join(' UNION ALL ');
+    const [usos] = await pool.execute(sqlUniao, REFS_USUARIO.map(() => id));
+    const vinculos = usos.filter(u => u.total > 0).map(u => `${u.ref} (${u.total})`);
+    if (vinculos.length > 0) {
+      return erro(res, `Usuário não pode ser excluído pois está referenciado em: ${vinculos.join(', ')}. Use "Desativar" em vez de excluir.`);
+    }
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('DELETE FROM usuarios WHERE id = ?', [id]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, `Usuário "${rows[0].nome}" excluído com sucesso`);
   } catch (err) {
     if (err.code === 'ER_ROW_IS_REFERENCED_2') {
@@ -788,8 +981,14 @@ async function salvarModelosEmailPerito(req, res) {
     .map(m => ({ id: String(m.id || '').trim(), nome: String(m.nome || '').trim(), assunto: String(m.assunto || '').trim(), corpo: String(m.corpo || '').trim() }))
     .filter(m => m.id && m.nome && m.assunto && m.corpo);
   try {
-    await pool.execute('UPDATE configuracoes_escritorio SET modelos_email_perito = ? LIMIT 1', [JSON.stringify(modelos)]);
-    await auditoria.registrar(req.usuario.id, 'configuracoes_escritorio', 'editar', 1);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE configuracoes_escritorio SET modelos_email_perito = ? LIMIT 1', [JSON.stringify(modelos)]);
+      await auditoria.registrar(req.usuario.id, 'configuracoes_escritorio', 'editar', 1, null, null, conn);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, modelos, 'Modelos de e-mail atualizados com sucesso');
   } catch (err) {
     if (err.code === 'ER_BAD_FIELD_ERROR') return erro(res, 'A atualização do banco dos modelos de e-mail ainda não foi aplicada.', 409);

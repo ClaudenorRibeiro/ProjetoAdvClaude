@@ -70,10 +70,16 @@ async function contagem(req, res) {
 // PUT /api/notificacoes/marcar-lidas — Marca todas como lidas
 async function marcarLidas(req, res) {
   try {
-    await pool.execute(
-      'UPDATE notificacoes SET lida = 1 WHERE usuario_id = ?',
-      [req.usuario.id]
-    );
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        'UPDATE notificacoes SET lida = 1 WHERE usuario_id = ?',
+        [req.usuario.id]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Notificações lidas');
   } catch (err) {
     return erroInterno(res, err);

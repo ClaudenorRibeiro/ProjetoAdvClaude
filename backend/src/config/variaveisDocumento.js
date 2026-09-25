@@ -88,6 +88,7 @@ const CATALOGO = {
   pagamento: {
     label: 'Pagamento (recibos)',
     variaveis: [
+      { tag: 'beneficiario_nome',    descricao: 'Nome de quem recebeu o pagamento' },
       { tag: 'valor_pago',          descricao: 'Valor do recibo (líquido p/ cliente ou parceria p/ parceiro)' },
       { tag: 'valor_pago_extenso',  descricao: 'Valor do recibo por extenso' },
       { tag: 'valor_bruto',         descricao: 'Valor bruto da parcela' },
@@ -125,7 +126,7 @@ const CATALOGO = {
       { tag: 'bairro_audiencia',      descricao: 'Bairro do fórum' },
       { tag: 'cidade_audiencia',      descricao: 'Cidade do fórum' },
       { tag: 'estado_audiencia',      descricao: 'UF do fórum' },
-      { tag: 'modalidade_audiencia',  descricao: 'Modalidade (presencial/virtual)' },
+      { tag: 'modalidade_audiencia',  descricao: 'Modalidade (presencial, virtual ou sem comparecimento)' },
       { tag: 'link_audiencia',        descricao: 'Link da audiência virtual' },
       { tag: 'plataforma_audiencia',  descricao: 'Plataforma virtual (Zoom, etc.)' },
     ],

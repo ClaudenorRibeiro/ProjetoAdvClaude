@@ -19,7 +19,11 @@ export default function ModalCadastroRapidoParte({ tipo, onFechar, onSalvo }) {
   const [form, setForm]         = useState({});
   const [salvando, setSalvando] = useState(false);
   const [telefones, setTelefones] = useState([{ numero: '', tipo: '', principal: true }]);
-  const [emails, setEmails]       = useState([{ email: '', principal: true }]);
+  // Chave estável de lista para e-mail (nenhum tem id aqui, é sempre pessoa nova) — sem
+  // isso, remover o e-mail do meio da lista fazia o aviso "e-mail inválido" ficar preso ao
+  // índice antigo em vez de seguir a linha certa (auditoria 23/09, mesmo bug do ModalPessoa).
+  const proximaChaveEmailLocalRef = useRef(-1);
+  const [emails, setEmails]       = useState(() => [{ email: '', principal: true, _chaveLocal: proximaChaveEmailLocalRef.current-- }]);
   const [avisoDup, setAvisoDup]   = useState(''); // faixa interna: TODOS os avisos deste modal (nunca a notificação do canto)
   const overlayRef = useEscFechar(onFechar); // ESC fecha esta janelinha (só quando é a de cima)
   // Referências dos campos: o aviso precisa devolver o foco ao campo que causou o erro
@@ -181,7 +185,7 @@ export default function ModalCadastroRapidoParte({ tipo, onFechar, onSalvo }) {
           <h4 style={{margin:'16px 0 8px',color:'#555',fontSize:'13px',fontWeight:600}}>E-mails</h4>
           {emails.map((em, i) => (
             <LinhaEmail
-              key={i}
+              key={em._chaveLocal}
               email={em.email}
               index={i}
               refEmail={el => { refsEmail.current[i] = el; }}
@@ -189,7 +193,7 @@ export default function ModalCadastroRapidoParte({ tipo, onFechar, onSalvo }) {
               onRemove={() => { setAvisoDup(''); setEmails(t => t.filter((_,j) => j!==i)); }}
             />
           ))}
-          <button className="btn btn-outline" style={{fontSize:'12px'}} onClick={() => setEmails(e=>[...e,{email:'',principal:false}])}>
+          <button className="btn btn-outline" style={{fontSize:'12px'}} onClick={() => setEmails(e=>[...e,{email:'',principal:false,_chaveLocal:proximaChaveEmailLocalRef.current--}])}>
             + Adicionar e-mail
           </button>
         </div>

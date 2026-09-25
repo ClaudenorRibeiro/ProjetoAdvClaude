@@ -39,6 +39,7 @@ const MENU = [
       { path: '/controle/varas',  label: 'Varas',  icone: '🏢' },
       { path: '/controle/auxiliares', label: 'Auxiliares', icone: '🧰' },
       { path: '/controle/formas-pagamento', label: 'Formas de pagamento', icone: '💳' },
+      { path: '/controle/instituicoes-financeiras', label: 'Instituições financeiras', icone: '🏦' },
     ],
   },
   { path: '/configuracoes', label: 'Configurações', icone: '⚙️', modulo: null, apenasAdmin: true },

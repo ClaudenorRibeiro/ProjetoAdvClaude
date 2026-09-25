@@ -3,6 +3,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { prazosAPI, processosAPI } from '../../services/api';
 import { dataParaIsoLocal, formatarData, formatarDataHora, labelStatusPrazo, corPrazo, toTitleCase, hojeLocal } from '../../utils/formatters';
 import { toast } from 'react-toastify';
@@ -14,6 +15,8 @@ import ModalInfo from '../../components/ui/ModalInfo';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
 import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetasSubmenu, useEtiquetasPessoais } from '../../components/Etiquetas';
 import useEscFechar from '../../hooks/useEscFechar';
+import SelectPesquisavel from '../../components/ui/SelectPesquisavel';
+import SelectComCRUD from '../../components/ui/SelectComCRUD';
 
 // Status calculados pela data — concluido/cancelado são os únicos armazenados no banco
 // 'fazendo' é filtro auxiliar que mostra prazos ativos com alguém fazendo
@@ -45,6 +48,7 @@ function labelStatus(s) {
 }
 
 export default function Prazos() {
+  const navigate = useNavigate();
   const { temPermissao, usuario, ehAdmin } = useAuth();
   // Pode ver prazos de todos: admin/super OU usuário com a permissão prazos.ver_todos.
   // Só esses veem o dropdown "Responsável"; os demais ficam restritos aos próprios + escritório.
@@ -226,7 +230,11 @@ export default function Prazos() {
                   const ativo         = !['concluido','cancelado'].includes(p.status);
                   return (
                   <tr key={p.id} className={['concluido','cancelado'].includes(p.status) ? '' : corPrazo(p.dias_restantes)}>
-                    <td><NumeroProcessoCopiavel numero={p.processo_numero} /></td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <NumeroProcessoCopiavel numero={p.processo_numero}
+                        href={p.pasta_id ? `/processos/pasta/${p.pasta_id}` : undefined}
+                        onAbrir={p.pasta_id ? () => navigate(`/processos/pasta/${p.pasta_id}`) : undefined} />
+                    </td>
                     <td>{p.pasta_numero_fmt} — {p.pasta_titulo}</td>
                     <td>{p.subtipo_nome || p.descricao || '—'}</td>
                     <td>{formatarData(p.data_vencimento)}</td>
@@ -393,85 +401,6 @@ export function ModalCancelarPrazo({ prazo, onFechar }) {
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-// ============================================================
-// SELECT COM BOTÃO "…" — permite cadastrar um item novo (tipo ou
-// subtipo de prazo) direto na tela, sem sair do modal.
-// onSalvar(nome) cria o item no banco, recarrega a lista e devolve
-// o id do novo item, que é então auto-selecionado.
-// ============================================================
-function SelectComAdicao({ label, nomeEntidade, value, onChange, opcoes = [],
-                          placeholder = '— Selecione —', podeAdicionar = true,
-                          msgBloqueado = '', exemplo = '', onSalvar }) {
-  const [aberto, setAberto]     = useState(false);
-  const [novoNome, setNovoNome] = useState('');
-  const [salvando, setSalvando] = useState(false);
-
-  function alternar() {
-    if (!podeAdicionar) { if (msgBloqueado) toast.error(msgBloqueado); return; }
-    setAberto(v => !v);
-  }
-  function fechar() { setAberto(false); setNovoNome(''); }
-
-  async function salvar() {
-    if (!novoNome.trim()) return toast.error('Digite um nome para cadastrar');
-    setSalvando(true);
-    try {
-      const novoId = await onSalvar(novoNome.trim());
-      if (novoId) onChange(String(novoId)); // auto-seleciona o recém-criado
-      toast.success('Cadastrado com sucesso!');
-      fechar();
-    } catch (err) {
-      toast.error(err.response?.data?.mensagem || 'Erro ao cadastrar');
-    } finally {
-      setSalvando(false);
-    }
-  }
-
-  return (
-    <div className="form-group">
-      <label className="form-label">{label}</label>
-      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-        <select className="form-control" value={value} onChange={e => onChange(e.target.value)} style={{ flex: 1 }}>
-          <option value="">{placeholder}</option>
-          {opcoes.map(o => <option key={o.id} value={o.id}>{o.nome}</option>)}
-        </select>
-        {/* Botão "…" abre o mini-formulário para cadastrar um item novo */}
-        <button type="button" title={`Cadastrar ${nomeEntidade} que não está na lista`}
-          className="btn btn-outline"
-          style={{ padding: '6px 10px', fontSize: '15px', flexShrink: 0, lineHeight: 1 }}
-          onClick={alternar}>
-          …
-        </button>
-      </div>
-
-      {aberto && (
-        <div style={{ marginTop: '8px', padding: '10px 12px', background: '#f0f4ff',
-                      border: '1px solid #c5d0e6', borderRadius: '4px' }}>
-          <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: '#444' }}>
-            Novo {nomeEntidade}
-          </div>
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <input autoFocus className="form-control" placeholder={exemplo ? `Ex.: ${exemplo}` : ''}
-              value={novoNome} onChange={e => setNovoNome(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') salvar(); if (e.key === 'Escape') fechar(); }}
-              style={{ flex: 1 }} />
-            <button type="button" className="btn btn-primary"
-              style={{ fontSize: '12px', padding: '6px 14px', flexShrink: 0 }}
-              onClick={salvar} disabled={salvando}>
-              {salvando ? '...' : 'Salvar'}
-            </button>
-            <button type="button" className="btn btn-outline"
-              style={{ fontSize: '12px', padding: '6px 10px', flexShrink: 0 }}
-              onClick={fechar}>
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -708,7 +637,7 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
           </div>
           <div className="grid-2">
             <div ref={tipoWrapRef}>
-            <SelectComAdicao
+            <SelectComCRUD
               label="Tipo de prazo *"
               nomeEntidade="tipo de prazo"
               exemplo="Recurso"
@@ -716,15 +645,23 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
               value={form.tipo_prazo_id||''}
               onChange={v => set('tipo_prazo_id', v)}
               opcoes={tiposLocal.tipos}
-              onSalvar={async (nome) => {
+              onCriar={async (nome) => {
                 const { data } = await prazosAPI.criarTipo({ nome });
                 await recarregarTipos();
                 return data.dados.id;
               }}
+              onEditar={async (id, nome) => {
+                await prazosAPI.editarTipo(id, { nome });
+                await recarregarTipos();
+              }}
+              onExcluir={async (id) => {
+                await prazosAPI.excluirTipo(id);
+                await recarregarTipos();
+              }}
             />
             </div>
             <div ref={subtipoWrapRef}>
-            <SelectComAdicao
+            <SelectComCRUD
               label="Subtipo *"
               nomeEntidade="subtipo"
               exemplo="Apelação"
@@ -733,10 +670,18 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
               opcoes={subtiposFiltrados}
               podeAdicionar={!!form.tipo_prazo_id}
               msgBloqueado="Selecione primeiro o tipo de prazo"
-              onSalvar={async (nome) => {
+              onCriar={async (nome) => {
                 const { data } = await prazosAPI.criarSubtipo({ nome, tipo_prazo_id: form.tipo_prazo_id });
                 await recarregarTipos();
                 return data.dados.id;
+              }}
+              onEditar={async (id, nome) => {
+                await prazosAPI.editarSubtipo(id, { nome });
+                await recarregarTipos();
+              }}
+              onExcluir={async (id) => {
+                await prazosAPI.excluirSubtipo(id);
+                await recarregarTipos();
               }}
             />
             </div>
@@ -771,11 +716,13 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
           </div>
           <div className="form-group">
             <label className="form-label">Delegar para</label>
-            <select className="form-control" value={form.delegado_para||''}
-              onChange={e=>{ set('delegado_para',e.target.value); if(!e.target.value) setNotificarConclusao(false); }}>
-              <option value="">Escritório (sem responsável)</option>
-              {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
-            </select>
+            <SelectPesquisavel
+              ariaLabel="Delegar para"
+              className="form-control"
+              value={form.delegado_para || ''}
+              onChange={valor => { set('delegado_para', valor); if (!valor) setNotificarConclusao(false); }}
+              opcoes={[{ value: '', label: 'Escritório (sem responsável)' }, ...usuarios.map(u => ({ value: u.id, label: u.nome }))]}
+            />
           </div>
           {/* Aviso de conclusão: só faz sentido com um usuário responsável (não para "Escritório") */}
           <div className="form-group" style={{ marginTop: 4 }}>
@@ -934,20 +881,28 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
             </div>
           </div>
           <div className="grid-2">
-            <SelectComAdicao
+            <SelectComCRUD
               label="Tipo de prazo *"
               nomeEntidade="tipo de prazo"
               exemplo="Recurso"
               value={form.tipo_prazo_id}
               onChange={v => set('tipo_prazo_id', v)}
               opcoes={tiposLocal.tipos}
-              onSalvar={async (nome) => {
+              onCriar={async (nome) => {
                 const { data } = await prazosAPI.criarTipo({ nome });
                 await recarregarTipos();
                 return data.dados.id;
               }}
+              onEditar={async (id, nome) => {
+                await prazosAPI.editarTipo(id, { nome });
+                await recarregarTipos();
+              }}
+              onExcluir={async (id) => {
+                await prazosAPI.excluirTipo(id);
+                await recarregarTipos();
+              }}
             />
-            <SelectComAdicao
+            <SelectComCRUD
               label="Subtipo *"
               nomeEntidade="subtipo"
               exemplo="Apelação"
@@ -956,10 +911,18 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
               opcoes={subtiposFiltrados}
               podeAdicionar={!!form.tipo_prazo_id}
               msgBloqueado="Selecione primeiro o tipo de prazo"
-              onSalvar={async (nome) => {
+              onCriar={async (nome) => {
                 const { data } = await prazosAPI.criarSubtipo({ nome, tipo_prazo_id: form.tipo_prazo_id });
                 await recarregarTipos();
                 return data.dados.id;
+              }}
+              onEditar={async (id, nome) => {
+                await prazosAPI.editarSubtipo(id, { nome });
+                await recarregarTipos();
+              }}
+              onExcluir={async (id) => {
+                await prazosAPI.excluirSubtipo(id);
+                await recarregarTipos();
               }}
             />
           </div>
@@ -993,11 +956,13 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
           </div>
           <div className="form-group">
             <label className="form-label">Delegar para</label>
-            <select className="form-control" value={form.delegado_para}
-              onChange={e=>{ set('delegado_para',e.target.value); if(!e.target.value) setNotificarConclusao(false); }}>
-              <option value="">Escritório (sem responsável)</option>
-              {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
-            </select>
+            <SelectPesquisavel
+              ariaLabel="Delegar para"
+              className="form-control"
+              value={form.delegado_para}
+              onChange={valor => { set('delegado_para', valor); if (!valor) setNotificarConclusao(false); }}
+              opcoes={[{ value: '', label: 'Escritório (sem responsável)' }, ...usuarios.map(u => ({ value: u.id, label: u.nome }))]}
+            />
           </div>
           {/* Aviso de conclusão: só faz sentido com um usuário responsável (não para "Escritório") */}
           <div className="form-group" style={{ marginTop: 4 }}>

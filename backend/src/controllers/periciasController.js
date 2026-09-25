@@ -96,6 +96,14 @@ function parsarResponsavel(valor) {
   return { responsavel_id: null, responsavel_freela_id: null };
 }
 
+function parsarAssistente(valor) {
+  if (!valor) return { assistente_tecnico_id: null, assistente_tecnico_freela_id: null };
+  const [tipo, id] = String(valor).split(':');
+  if (tipo === 'usuario') return { assistente_tecnico_id: parseInt(id) || null, assistente_tecnico_freela_id: null };
+  if (tipo === 'freela') return { assistente_tecnico_id: null, assistente_tecnico_freela_id: parseInt(id) || null };
+  return { assistente_tecnico_id: null, assistente_tecnico_freela_id: null };
+}
+
 function montarEnderecoPartes(p) {
   const linha1 = [p.logradouro, p.numero].filter(Boolean).join(', ');
   const cidadeUf = [p.cidade, p.estado].filter(Boolean).join('/');
@@ -198,7 +206,7 @@ async function gravarLocaisReus(conn, periciaId, locaisReus) {
 async function listar(req, res) {
   try {
     const { processo_id, data_de, data_ate, assistente_id, status, pagina = 1, limite = 30 } = req.query;
-    const limitInt  = parseInt(limite) || 30;
+    const limitInt  = Math.min(parseInt(limite) || 30, 100);
     const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
     const params = [];
     let where = 'WHERE 1=1';
@@ -219,7 +227,7 @@ async function listar(req, res) {
     const [registros] = await pool.execute(`
       SELECT
         pe.id, pe.processo_id, pe.data, pe.hora, pe.local, pe.status,
-        pe.perito_tipo, pe.perito_id, pe.assistente_tecnico_id,
+        pe.perito_tipo, pe.perito_id, pe.assistente_tecnico_id, pe.assistente_tecnico_freela_id,
         pe.responsavel_id, pe.responsavel_freela_id,
         pe.comunicado_enviado, pe.criado_em,
         tp.nome  AS tipo_nome,
@@ -228,7 +236,7 @@ async function listar(req, res) {
           WHEN pe.perito_tipo = 'juridica' THEN pj.razao_social
           ELSE NULL
         END AS perito_nome,
-        u.nome   AS assistente_nome,
+        COALESCE(u.nome, CONCAT(af.nome, ' (freelancer)')) AS assistente_nome,
         -- Responsável pode ser usuário do sistema OU freelancer
         COALESCE(ur.nome, CONCAT(rf.nome, ' (freelancer)')) AS responsavel_nome,
         u2.nome  AS criado_por_nome,
@@ -243,6 +251,7 @@ async function listar(req, res) {
       LEFT JOIN pessoas_fisicas   pf ON pe.perito_tipo = 'fisica'   AND pe.perito_id = pf.id
       LEFT JOIN pessoas_juridicas pj ON pe.perito_tipo = 'juridica' AND pe.perito_id = pj.id
       LEFT JOIN usuarios u  ON pe.assistente_tecnico_id   = u.id
+      LEFT JOIN advogados_freela af ON pe.assistente_tecnico_freela_id = af.id
       LEFT JOIN usuarios ur ON pe.responsavel_id          = ur.id
       LEFT JOIN advogados_freela rf ON pe.responsavel_freela_id = rf.id
       LEFT JOIN usuarios u2 ON pe.criado_por = u2.id
@@ -275,7 +284,10 @@ async function buscar(req, res) {
           WHEN pe.perito_tipo = 'juridica' THEN pj.razao_social
           ELSE NULL
         END AS perito_nome,
-        u.nome  AS assistente_nome,
+        COALESCE(u.nome, CONCAT(af.nome, ' (freelancer)')) AS assistente_nome,
+        CASE WHEN pe.assistente_tecnico_id IS NOT NULL THEN CONCAT('usuario:', pe.assistente_tecnico_id)
+             WHEN pe.assistente_tecnico_freela_id IS NOT NULL THEN CONCAT('freela:', pe.assistente_tecnico_freela_id)
+             ELSE NULL END AS assistente_tecnico_valor,
         COALESCE(ur.nome, CONCAT(rf.nome, ' (freelancer)')) AS responsavel_nome,
         -- Valor pronto para o select de responsável no formulário de edição
         CASE
@@ -290,6 +302,7 @@ async function buscar(req, res) {
       LEFT JOIN pessoas_fisicas   pf ON pe.perito_tipo = 'fisica'   AND pe.perito_id = pf.id
       LEFT JOIN pessoas_juridicas pj ON pe.perito_tipo = 'juridica' AND pe.perito_id = pj.id
       LEFT JOIN usuarios u  ON pe.assistente_tecnico_id   = u.id
+      LEFT JOIN advogados_freela af ON pe.assistente_tecnico_freela_id = af.id
       LEFT JOIN usuarios ur ON pe.responsavel_id          = ur.id
       LEFT JOIN advogados_freela rf ON pe.responsavel_freela_id = rf.id
       LEFT JOIN tblproc pr ON pe.processo_id = pr.id
@@ -603,7 +616,7 @@ async function criar(req, res) {
   const {
     processo_id, tipo_pericia_id, data, hora,
     local, cep, logradouro, numero, complemento, bairro, cidade, estado,
-    perito_tipo, perito_id, assistente_tecnico_id,
+    perito_tipo, perito_id, assistente_tecnico_id: assistenteRaw,
     responsavel_id: responsavelRaw,
     locais_reus: locaisReusRaw = [],
     obs_auditoria   // texto enviado quando o usuário confirma data/dia incomum com senha
@@ -621,6 +634,7 @@ async function criar(req, res) {
   if (erroLocais) return erro(res, erroLocais);
 
   const { responsavel_id, responsavel_freela_id } = parsarResponsavel(responsavelRaw);
+  const { assistente_tecnico_id, assistente_tecnico_freela_id } = parsarAssistente(assistenteRaw);
 
   const conn = await pool.getConnection();
   try {
@@ -630,15 +644,15 @@ async function criar(req, res) {
       `INSERT INTO pericia
         (processo_id, tipo_pericia_id, data, hora,
          local, cep, logradouro, numero, complemento, bairro, cidade, estado,
-         perito_tipo, perito_id, assistente_tecnico_id,
+         perito_tipo, perito_id, assistente_tecnico_id, assistente_tecnico_freela_id,
          responsavel_id, responsavel_freela_id,
          status, criado_por)
-       VALUES (?,?,?,?, ?,?,?,?,?,?,?,?, ?,?,?, ?,?, 'agendada', ?)`,
+       VALUES (?,?,?,?, ?,?,?,?,?,?,?,?, ?,?,?,?, ?,?, 'agendada', ?)`,
       [
         processo_id, tipo_pericia_id || null, data, hora || null,
         local || null, cep || null, logradouro || null, numero || null,
         complemento || null, bairro || null, cidade || null, estado || null,
-        perito_id ? 'fisica' : null, perito_id || null, assistente_tecnico_id || null,
+        perito_id ? 'fisica' : null, perito_id || null, assistente_tecnico_id, assistente_tecnico_freela_id,
         responsavel_id, responsavel_freela_id,
         req.usuario.id
       ]
@@ -687,7 +701,7 @@ async function atualizar(req, res) {
   const {
     tipo_pericia_id, data, hora,
     local, cep, logradouro, numero, complemento, bairro, cidade, estado,
-    perito_tipo, perito_id, assistente_tecnico_id,
+    perito_tipo, perito_id, assistente_tecnico_id: assistenteRaw,
     responsavel_id: responsavelRaw,
     locais_reus: locaisReusRaw = []
   } = req.body;
@@ -695,6 +709,7 @@ async function atualizar(req, res) {
   if (!data) return erro(res, 'Data é obrigatória');
 
   const { responsavel_id, responsavel_freela_id } = parsarResponsavel(responsavelRaw);
+  const { assistente_tecnico_id, assistente_tecnico_freela_id } = parsarAssistente(assistenteRaw);
   const locaisReus = normalizarLocaisReus(locaisReusRaw);
 
   const conn = await pool.getConnection();
@@ -721,7 +736,7 @@ async function atualizar(req, res) {
       `UPDATE pericia SET
         tipo_pericia_id=?, data=?, hora=?,
         local=?, cep=?, logradouro=?, numero=?, complemento=?, bairro=?, cidade=?, estado=?,
-        perito_tipo=?, perito_id=?, assistente_tecnico_id=?,
+        perito_tipo=?, perito_id=?, assistente_tecnico_id=?, assistente_tecnico_freela_id=?,
         responsavel_id=?, responsavel_freela_id=?, status=?,
         alterado_por=?, alterado_em=NOW()
        WHERE id=?`,
@@ -729,7 +744,7 @@ async function atualizar(req, res) {
         tipo_pericia_id || null, data, hora || null,
         local || null, cep || null, logradouro || null, numero || null,
         complemento || null, bairro || null, cidade || null, estado || null,
-        perito_id ? 'fisica' : null, perito_id || null, assistente_tecnico_id || null,
+        perito_id ? 'fisica' : null, perito_id || null, assistente_tecnico_id, assistente_tecnico_freela_id,
         responsavel_id, responsavel_freela_id,
         existe[0].status === 'aguardando_data' ? 'agendada' : existe[0].status,
         req.usuario.id, req.params.id
@@ -896,14 +911,14 @@ async function remarcar(req, res) {
       `INSERT INTO pericia
         (processo_id, tipo_pericia_id, data, hora,
          local, cep, logradouro, numero, complemento, bairro, cidade, estado,
-         perito_tipo, perito_id, assistente_tecnico_id,
+         perito_tipo, perito_id, assistente_tecnico_id, assistente_tecnico_freela_id,
          responsavel_id, responsavel_freela_id,
          status, criado_por)
-       VALUES (?,?,?,?, ?,?,?,?,?,?,?,?, ?,?,?, ?,?, 'agendada', ?)`,
+       VALUES (?,?,?,?, ?,?,?,?,?,?,?,?, ?,?,?,?, ?,?, 'agendada', ?)`,
       [
         o.processo_id, o.tipo_pericia_id, nova_data, nova_hora || o.hora,
         o.local, o.cep, o.logradouro, o.numero, o.complemento, o.bairro, o.cidade, o.estado,
-        o.perito_tipo, o.perito_id, o.assistente_tecnico_id,
+        o.perito_tipo, o.perito_id, o.assistente_tecnico_id, o.assistente_tecnico_freela_id,
         o.responsavel_id, o.responsavel_freela_id,
         req.usuario.id
       ]
@@ -1020,7 +1035,14 @@ async function criarTipo(req, res) {
     );
     if (existe.length) return erro(res, 'Já existe um tipo com esse nome');
     // ativo tem DEFAULT 1 no banco — o tipo já nasce ativo
-    const [r] = await pool.execute('INSERT INTO tipo_pericia (nome) VALUES (?)', [nome.trim()]);
+    const conn = await pool.getConnection();
+    let r;
+    try {
+      await conn.beginTransaction();
+      [r] = await conn.execute('INSERT INTO tipo_pericia (nome) VALUES (?)', [nome.trim()]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, { id: r.insertId }, 'Tipo criado com sucesso', 201);
   } catch (e) {
     return erroInterno(res, e);
@@ -1039,7 +1061,13 @@ async function atualizarTipo(req, res) {
       [nome.trim(), id]
     );
     if (existe.length) return erro(res, 'Já existe um tipo com esse nome');
-    await pool.execute('UPDATE tipo_pericia SET nome = ? WHERE id = ?', [nome.trim(), id]);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE tipo_pericia SET nome = ? WHERE id = ?', [nome.trim(), id]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Tipo atualizado');
   } catch (e) {
     return erroInterno(res, e);
@@ -1053,7 +1081,13 @@ async function excluirTipo(req, res) {
     const { id } = req.params;
     const [uso] = await pool.execute('SELECT id FROM pericia WHERE tipo_pericia_id = ? LIMIT 1', [id]);
     if (uso.length) return erro(res, 'Tipo está em uso e não pode ser excluído');
-    await pool.execute('UPDATE tipo_pericia SET ativo = 0 WHERE id = ?', [id]);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE tipo_pericia SET ativo = 0 WHERE id = ?', [id]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Tipo removido');
   } catch (e) {
     return erroInterno(res, e);

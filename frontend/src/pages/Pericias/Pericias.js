@@ -6,6 +6,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { periciasAPI, processosAPI, pessoasAPI, audienciasAPI, authAPI, calendarioAPI } from '../../services/api';
 import { formatarData, formatarDataHora, hojeLocal, toTitleCase, mascaraCNJ } from '../../utils/formatters';
 import { toast } from 'react-toastify';
@@ -15,7 +16,10 @@ import MenuAcoes from '../../components/MenuAcoes';
 import { useAuth } from '../../context/AuthContext';
 import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetasSubmenu, useEtiquetasPessoais } from '../../components/Etiquetas';
 import { ModalPessoa } from '../Pessoas/Pessoas';
+import { ModalNovoFreela } from '../Audiencias/Audiencias';
 import useEscFechar from '../../hooks/useEscFechar';
+import SelectPesquisavel from '../../components/ui/SelectPesquisavel';
+import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
 
 // Cor/label do badge conforme o status
 function badgeStatus(status) {
@@ -44,6 +48,7 @@ function temEnderecoManual(form) {
 }
 
 export default function Pericias() {
+  const navigate = useNavigate();
   const { temPermissao } = useAuth();
   const [lista, setLista]         = useState([]);
   const { defs: etqDefs, marcar: marcarEtq } = useEtiquetasPessoais('pericias', lista, setLista);
@@ -231,7 +236,13 @@ export default function Pericias() {
                           )}
                         </td>
                       )}
-                      <td>{p.processo_numero || '—'}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        {p.processo_numero && p.pasta_id
+                          ? <NumeroProcessoCopiavel numero={p.processo_numero}
+                            href={`/processos/pasta/${p.pasta_id}`}
+                            onAbrir={() => navigate(`/processos/pasta/${p.pasta_id}`)} />
+                          : (p.processo_numero || '—')}
+                      </td>
                       <td style={{maxWidth:'220px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                         {/* Formato padrão do sistema: "0010 — Título" */}
                         {p.pasta_numero
@@ -355,6 +366,7 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
   const [advogados, setAdvogados] = useState([]);
   const [auxiliares, setAuxiliares] = useState({ profissoes: [] });
   const [modalPeritoRapido, setModalPeritoRapido] = useState(false);
+  const [modalAssistenteFreela, setModalAssistenteFreela] = useState(false);
   const [avisoPericia, setAvisoPericia] = useState('');
   const [reuPendenteSelecionado, setReuPendenteSelecionado] = useState('');
   const [modalCadastroReu, setModalCadastroReu] = useState(null);
@@ -382,6 +394,7 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
       carregarReusProcesso(processoInicial.processo_id);
     }
     if (pericia?.responsavel_valor) setForm(f => ({ ...f, responsavel_id: pericia.responsavel_valor }));
+    if (pericia?.assistente_tecnico_valor) setForm(f => ({ ...f, assistente_tecnico_id: pericia.assistente_tecnico_valor }));
   }, []); // eslint-disable-line
 
   async function carregarReusProcesso(processoId) {
@@ -673,11 +686,13 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
             <div className="form-group">
               <label className="form-label">Tipo de perícia</label>
               <div style={{display:'flex',gap:'6px'}}>
-                <select className="form-control" value={form.tipo_pericia_id||''}
-                  onChange={e => set('tipo_pericia_id', e.target.value)}>
-                  <option value="">— Selecione —</option>
-                  {tipos.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-                </select>
+                <SelectPesquisavel
+                  ariaLabel="Tipo de perícia"
+                  className="form-control"
+                  value={form.tipo_pericia_id || ''}
+                  onChange={valor => set('tipo_pericia_id', valor)}
+                  opcoes={[{ value: '', label: '— Selecione —' }, ...tipos.map(t => ({ value: t.id, label: t.nome }))]}
+                />
                 {podeTipos && (
                   <button type="button" title="Gerenciar tipos"
                     style={{padding:'0 10px',border:'1px solid #ddd',borderRadius:'6px',background:'#f8fafc',cursor:'pointer',fontSize:'16px',whiteSpace:'nowrap'}}
@@ -823,23 +838,22 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Responsável pela condução</label>
-              <select className="form-control" value={form.responsavel_id||''}
-                onChange={e => set('responsavel_id', e.target.value)}>
-                <option value="">Escritório</option>
-                {advogados.map(a => (
-                  <option key={`${a.origem}:${a.id}`} value={`${a.origem}:${a.id}`}>
-                    {a.nome}{a.origem === 'freela' ? ' (freelancer)' : ''}
-                  </option>
-                ))}
-              </select>
+              <SelectPesquisavel
+                ariaLabel="Responsável pela condução"
+                className="form-control"
+                value={form.responsavel_id || ''}
+                onChange={valor => set('responsavel_id', valor)}
+                opcoes={[{ value: '', label: 'Escritório' }, ...advogados.map(a => ({ value: `${a.origem}:${a.id}`, label: `${a.nome}${a.origem === 'freela' ? ' (freelancer)' : ''}` }))]}
+              />
             </div>
             <div className="form-group">
               <label className="form-label">Assistente técnico</label>
-              <select className="form-control" value={form.assistente_tecnico_id||''}
-                onChange={e => set('assistente_tecnico_id', e.target.value)}>
-                <option value="">— Não definido —</option>
-                {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
-              </select>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <SelectPesquisavel ariaLabel="Assistente técnico" className="form-control"
+                  value={form.assistente_tecnico_id || ''} onChange={valor => set('assistente_tecnico_id', valor)}
+                  opcoes={[{ value: '', label: '— Não definido —' }, ...usuarios.map(u => ({ value: `usuario:${u.id}`, label: u.nome })), ...advogados.filter(a => a.origem === 'freela').map(a => ({ value: `freela:${a.id}`, label: `${a.nome} (freelancer)` }))]} />
+                <button type="button" title="Cadastrar freelancer" className="btn btn-outline" style={{ padding: '0 10px' }} onClick={() => setModalAssistenteFreela(true)}>…</button>
+              </div>
             </div>
           </div>
 
@@ -847,21 +861,18 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
           <div className="form-group">
             <label className="form-label">Perito</label>
             {peritosProc.length > 0 ? (
-              <select className="form-control"
+              <SelectPesquisavel
+                ariaLabel="Perito"
+                className="form-control"
                 value={form.perito_id ? `fisica:${form.perito_id}` : ''}
-                onChange={e => {
-                  if (!e.target.value) { selecionarPerito('', ''); return; }
-                  const [tp, pid] = e.target.value.split(':');
+                onChange={valor => {
+                  if (!valor) { selecionarPerito('', ''); return; }
+                  const [tp, pid] = valor.split(':');
                   const sel = peritosProc.find(x => x.tipo_pessoa === tp && String(x.pessoa_id) === pid);
                   selecionarPerito(pid, sel ? sel.nome : '');
-                }}>
-                <option value="">— Selecione um perito do processo —</option>
-                {peritosProc.map(x => (
-                  <option key={`${x.tipo_pessoa}:${x.pessoa_id}`} value={`${x.tipo_pessoa}:${x.pessoa_id}`}>
-                    {x.nome}{x.telefone ? ` · ${x.telefone}` : ''}{x.email ? ` · ${x.email}` : ''}
-                  </option>
-                ))}
-              </select>
+                }}
+                opcoes={[{ value: '', label: '— Selecione um perito do processo —' }, ...peritosProc.map(x => ({ value: `${x.tipo_pessoa}:${x.pessoa_id}`, label: `${x.nome}${x.telefone ? ` · ${x.telefone}` : ''}${x.email ? ` · ${x.email}` : ''}` }))]}
+              />
             ) : (
               <small style={{color:'#888'}}>
                 Nenhum perito vinculado a este processo. Busque abaixo ou cadastre pelo botão "...".
@@ -911,6 +922,16 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
             setModalPeritoRapido(false);
           }}
         />
+      )}
+      {modalAssistenteFreela && (
+        <ModalNovoFreela titulo="Novo Freelancer — Assistente técnico" exigirProfissao profissoes={auxiliares.profissoes || []}
+          onFechar={() => setModalAssistenteFreela(false)}
+          onSalvo={async (novoId) => {
+            const r = await audienciasAPI.advogados();
+            if (r.data.ok) setAdvogados(r.data.dados || []);
+            set('assistente_tecnico_id', `freela:${novoId}`);
+            setModalAssistenteFreela(false);
+          }} />
       )}
 
       {modalCadastroReu && (

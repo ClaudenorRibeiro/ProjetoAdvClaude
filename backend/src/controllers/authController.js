@@ -125,18 +125,32 @@ async function login(req, res) {
       : crypto.randomBytes(24).toString('hex');
 
     // Atualiza o último acesso e grava a chave da sessão ativa (mesmo UPDATE — sem custo extra)
-    await pool.execute(
-      'UPDATE usuarios SET ultimo_acesso = NOW(), sessao_atual = ? WHERE id = ?',
-      [novaSessao, usuario.id]
-    );
+    {
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+        await conn.execute(
+          'UPDATE usuarios SET ultimo_acesso = NOW(), sessao_atual = ? WHERE id = ?',
+          [novaSessao, usuario.id]
+        );
+        await conn.commit();
+      } catch (err) { await conn.rollback(); throw err; }
+      finally { conn.release(); }
+    }
 
     // Registra o LOGIN no histórico de auditoria (aparece no "Histórico do usuário").
     // Blindado: se a gravação falhar por qualquer motivo, o login NÃO é interrompido.
     try {
-      await pool.execute(
-        "INSERT INTO logs_auditoria (usuario_id, tabela, acao, registro_id, descricao, criado_em) VALUES (?, 'acesso', 'login', NULL, 'Login no sistema', NOW())",
-        [usuario.id]
-      );
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+        await conn.execute(
+          "INSERT INTO logs_auditoria (usuario_id, tabela, acao, registro_id, descricao, criado_em) VALUES (?, 'acesso', 'login', NULL, 'Login no sistema', NOW())",
+          [usuario.id]
+        );
+        await conn.commit();
+      } catch (err) { await conn.rollback(); throw err; }
+      finally { conn.release(); }
     } catch (e) { /* auditoria nunca derruba o login */ }
 
     // Busca permissões do usuário (para montar o menu no frontend)
@@ -198,6 +212,13 @@ async function criarPrimeiroAdmin(req, res) {
       return erro(res, 'Administrador já cadastrado. Use a tela de usuários para criar novos.');
     }
 
+    // Trava permanente: uma vez concluído o setup do escritório (só um admin logado faz isso),
+    // esta rota pública nunca mais pode criar admin — mesmo que o(s) admin(s) sejam excluídos depois.
+    const [config] = await pool.execute('SELECT setup_concluido FROM configuracoes_escritorio LIMIT 1');
+    if (config[0]?.setup_concluido) {
+      return erro(res, 'Administrador já cadastrado. Use a tela de usuários para criar novos.');
+    }
+
     const { nome, login: loginAdmin, senha, email } = req.body;
     if (!nome || !loginAdmin || !senha) {
       return erro(res, 'Nome, login e senha são obrigatórios');
@@ -215,11 +236,18 @@ async function criarPrimeiroAdmin(req, res) {
 
     const senhaHash = await bcrypt.hash(senha, 12);
 
-    const [result] = await pool.execute(
-      `INSERT INTO usuarios (nome, login, senha_hash, email, tipo, nivel, ativo)
-       VALUES (?, ?, ?, ?, 'administrador', 1, 1)`,
-      [nome.trim(), loginAdmin.trim(), senhaHash, email || null]
-    );
+    const conn = await pool.getConnection();
+    let result;
+    try {
+      await conn.beginTransaction();
+      [result] = await conn.execute(
+        `INSERT INTO usuarios (nome, login, senha_hash, email, tipo, nivel, ativo)
+         VALUES (?, ?, ?, ?, 'administrador', 1, 1)`,
+        [nome.trim(), loginAdmin.trim(), senhaHash, email || null]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
 
     return sucesso(res, { id: result.insertId }, 'Administrador criado com sucesso', 201);
 
@@ -258,10 +286,16 @@ async function verificarToken(req, res) {
 async function salvarCoresAgenda(req, res) {
   try {
     const cores = parseCoresAgenda(req.body?.cores);
-    await pool.execute(
-      'UPDATE usuarios SET cores_agenda = ? WHERE id = ?',
-      [cores ? JSON.stringify(cores) : null, req.usuario.id]
-    );
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        'UPDATE usuarios SET cores_agenda = ? WHERE id = ?',
+        [cores ? JSON.stringify(cores) : null, req.usuario.id]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, { cores_agenda: cores }, cores ? 'Cores salvas' : 'Cores restauradas para o padrão');
   } catch (err) {
     return erroInterno(res, err);
@@ -273,10 +307,16 @@ async function salvarCoresAgenda(req, res) {
 async function salvarCoresMenu(req, res) {
   try {
     const cores = parseCoresMenu(req.body?.cores);
-    await pool.execute(
-      'UPDATE usuarios SET cores_menu = ? WHERE id = ?',
-      [cores ? JSON.stringify(cores) : null, req.usuario.id]
-    );
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        'UPDATE usuarios SET cores_menu = ? WHERE id = ?',
+        [cores ? JSON.stringify(cores) : null, req.usuario.id]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, { cores_menu: cores }, cores ? 'Cores salvas' : 'Cores restauradas para o padrão');
   } catch (err) {
     return erroInterno(res, err);
@@ -288,10 +328,16 @@ async function salvarCoresMenu(req, res) {
 async function salvarCorLinha(req, res) {
   try {
     const cor = parseCorLinha(req.body?.cor);
-    await pool.execute(
-      'UPDATE usuarios SET cor_linha = ? WHERE id = ?',
-      [cor, req.usuario.id]
-    );
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        'UPDATE usuarios SET cor_linha = ? WHERE id = ?',
+        [cor, req.usuario.id]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, { cor_linha: cor }, cor ? 'Cor salva' : 'Cor restaurada para o padrão');
   } catch (err) {
     return erroInterno(res, err);
@@ -303,10 +349,16 @@ async function salvarCorLinha(req, res) {
 async function salvarCorLinhaLida(req, res) {
   try {
     const cor = parseCorLinha(req.body?.cor);
-    await pool.execute(
-      'UPDATE usuarios SET cor_linha_lida = ? WHERE id = ?',
-      [cor, req.usuario.id]
-    );
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        'UPDATE usuarios SET cor_linha_lida = ? WHERE id = ?',
+        [cor, req.usuario.id]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, { cor_linha_lida: cor }, cor ? 'Cor salva' : 'Cor restaurada para o padrão');
   } catch (err) {
     return erroInterno(res, err);
@@ -327,10 +379,16 @@ async function salvarGoogleAgenda(req, res) {
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return erro(res, 'E-mail do Google inválido. Confira o endereço digitado.');
     }
-    await pool.execute(
-      'UPDATE usuarios SET google_agenda_ativo = ?, google_agenda_email = ? WHERE id = ?',
-      [ativo, email || null, req.usuario.id]
-    );
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        'UPDATE usuarios SET google_agenda_ativo = ?, google_agenda_email = ? WHERE id = ?',
+        [ativo, email || null, req.usuario.id]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, { google_agenda_ativo: ativo, google_agenda_email: email || null },
       ativo ? 'Envio para o Google Agenda ativado' : 'Envio para o Google Agenda desativado');
   } catch (err) {
@@ -344,10 +402,16 @@ async function salvarGoogleAgenda(req, res) {
 async function salvarPublicacoesEscopo(req, res) {
   try {
     const escopo = req.body?.escopo === 'minhas' ? 'minhas' : 'todas';
-    await pool.execute(
-      'UPDATE usuarios SET publicacoes_escopo = ? WHERE id = ?',
-      [escopo, req.usuario.id]
-    );
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        'UPDATE usuarios SET publicacoes_escopo = ? WHERE id = ?',
+        [escopo, req.usuario.id]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, { publicacoes_escopo: escopo }, 'Preferência salva');
   } catch (err) {
     return erroInterno(res, err);
@@ -371,24 +435,36 @@ async function esqueciSenha(req, res) {
     // Resposta genérica — não informa se o usuário existe (segurança)
     const MSG_GENERICA = 'Se o login ou e-mail estiver cadastrado, você receberá um e-mail com o link de redefinição.';
 
+    // Mesma resposta genérica para "não existe" e "existe mas sem e-mail" — uma mensagem
+    // diferente aqui revelaria que o login existe (auditoria 24/09, item 9).
     if (!rows.length) return sucesso(res, null, MSG_GENERICA);
 
     const usuario = rows[0];
     if (!usuario.email) {
-      return erro(res, 'Este usuário não possui e-mail cadastrado. Solicite ao administrador para redefinir sua senha.');
+      return sucesso(res, null, MSG_GENERICA);
     }
-
-    // Invalida tokens anteriores deste usuário
-    await pool.execute('UPDATE reset_tokens SET usado = 1 WHERE usuario_id = ?', [usuario.id]);
 
     // Gera token seguro (32 bytes = 64 hex chars)
     const token     = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
 
-    await pool.execute(
-      'INSERT INTO reset_tokens (usuario_id, token, expires_at) VALUES (?, ?, ?)',
-      [usuario.id, token, expiresAt]
-    );
+    // Invalida tokens anteriores e grava o novo em uma única transação — evita que o
+    // usuário fique sem token válido se a segunda escrita falhar isoladamente.
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE reset_tokens SET usado = 1 WHERE usuario_id = ?', [usuario.id]);
+      await conn.execute(
+        'INSERT INTO reset_tokens (usuario_id, token, expires_at) VALUES (?, ?, ?)',
+        [usuario.id, token, expiresAt]
+      );
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
 
     // Busca nome do escritório para o e-mail
     const [conf] = await pool.execute('SELECT nome FROM configuracoes_escritorio LIMIT 1');
@@ -451,7 +527,9 @@ async function redefinirSenha(req, res) {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
-      await conn.execute('UPDATE usuarios SET senha_hash = ? WHERE id = ?', [novoHash, usuario_id]);
+      // sessao_atual = NULL derruba qualquer sessão aberta (mesma trava de "logou em outro
+      // aparelho" do middleware) — senha trocada exige login de novo em todo lugar.
+      await conn.execute('UPDATE usuarios SET senha_hash = ?, sessao_atual = NULL WHERE id = ?', [novoHash, usuario_id]);
       await conn.execute('UPDATE reset_tokens SET usado = 1 WHERE id = ?',  [tokenId]);
       await conn.commit();
     } catch (err) {
@@ -493,7 +571,15 @@ async function trocarSenha(req, res) {
     if (!senhaCorreta) return erro(res, 'Senha atual incorreta');
 
     const novoHash = await bcrypt.hash(nova_senha, 12);
-    await pool.execute('UPDATE usuarios SET senha_hash = ? WHERE id = ?', [novoHash, req.usuario.id]);
+    // sessao_atual = NULL derruba qualquer sessão aberta (inclusive esta) — senha trocada
+    // exige login de novo em todo lugar, mesma trava de "logou em outro aparelho".
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE usuarios SET senha_hash = ?, sessao_atual = NULL WHERE id = ?', [novoHash, req.usuario.id]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
 
     return sucesso(res, null, 'Senha alterada com sucesso!');
   } catch (err) {
@@ -525,10 +611,16 @@ async function verificarSenha(req, res) {
 async function logout(req, res) {
   const descricao = req.body?.motivo === 'inatividade' ? 'Logout por inatividade' : 'Logout do sistema';
   try {
-    await pool.execute(
-      "INSERT INTO logs_auditoria (usuario_id, tabela, acao, registro_id, descricao, criado_em) VALUES (?, 'acesso', 'logout', NULL, ?, NOW())",
-      [req.usuario.id, descricao]
-    );
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        "INSERT INTO logs_auditoria (usuario_id, tabela, acao, registro_id, descricao, criado_em) VALUES (?, 'acesso', 'logout', NULL, ?, NOW())",
+        [req.usuario.id, descricao]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
   } catch (e) { /* não impede o logout do frontend */ }
   return sucesso(res, null, 'Logout registrado');
 }

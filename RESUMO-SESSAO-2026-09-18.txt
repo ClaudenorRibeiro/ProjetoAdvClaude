@@ -1,0 +1,160 @@
+RESUMO DA SESSÃO — 18/09/2026
+
+ESCOPO E REGRA DE SEGURANÇA
+- O banco LOCAL e os bancos AWS nunca foram acessados nem alterados automaticamente pelo Codex.
+- Todos os comandos SQL foram entregues para execução manual no HeidiSQL.
+- O usuário executou manualmente os scripts S1, S2, S3 e S4 no banco LOCAL.
+
+DIAGNÓSTICO INICIAL
+- A exportação local anterior não era um backup confiável: houve erro de tabelas inexistentes durante a exportação.
+- Foram verificadas, por consultas somente leitura no HeidiSQL LOCAL, as tabelas e colunas necessárias.
+- Antes da implantação, as tabelas financeiras novas e as colunas relacionadas ainda não existiam no LOCAL.
+- Foram confirmados os oito pré-requisitos: acordo, acordo_parcela, advogados_freela, conta_corrente, pericia, pessoas_fisicas, pessoas_juridicas e profissao.
+
+BANCO LOCAL — ALTERAÇÕES EXECUTADAS MANUALMENTE PELO USUÁRIO
+1. S1 - 2026-09-17_freelancer_assistente_tecnico.sql
+   - Vínculo de profissão para freelancer.
+   - Vínculo de assistente técnico freelancer em perícia.
+
+2. S2 - 2026-09-17_contas_financeiras.sql
+   - Catálogo de instituições financeiras.
+   - Contas do escritório e caixa em espécie.
+   - Vínculos de recebimento e repasse nas parcelas.
+
+3. S3 - 2026-09-17_contas_bancarias_pessoas.sql
+   - Múltiplas contas bancárias para pessoas físicas e jurídicas.
+   - Conta principal e conta de terceiro autorizado.
+
+4. S4 - 2026-09-18_destinos_financeiros_robustos.sql
+   - Observação nas contas bancárias de pessoas.
+   - Dados completos das contas do escritório.
+   - Beneficiário e conta padrão por acordo.
+   - Conta/destino individual por parcela e retrato histórico do destino do repasse.
+
+IMPORTANTE SOBRE O S4
+- A primeira versão usava sintaxe IF NOT EXISTS incompatível com o MySQL LOCAL.
+- Ela falhou antes de aplicar alterações e não deixou mudanças parciais.
+- O arquivo foi corrigido para sintaxe básica compatível com MySQL/MariaDB.
+- Os retratos históricos usam LONGTEXT contendo JSON gerado pelo sistema, em vez do tipo JSON dependente de versão.
+- Foi criado o arquivo S4 - 2026-09-18_verificar_pre-requisitos.sql, somente leitura.
+- No LOCAL, a verificação retornou APROVADO e o S4 corrigido foi executado.
+- A conferência posterior retornou 17 colunas esperadas, confirmando a conclusão do S4 local.
+
+RECURSOS IMPLEMENTADOS NO CÓDIGO
+- Cadastro de contas do escritório separado do cadastro de instituições financeiras.
+- Várias contas do mesmo banco para o escritório.
+- Dinheiro em espécie tratado como caixa físico do escritório.
+- Cadastro de várias contas por pessoa física ou jurídica, inclusive conta de terceiro autorizado com observação.
+- Beneficiário padrão e conta padrão no acordo/alvará.
+- Possibilidade de selecionar a conta efetiva no momento de cada repasse.
+- Validação no backend de que uma conta de destino pertence à pessoa selecionada e está ativa.
+- Registro do retrato da conta de destino no momento do repasse, preservando o histórico se a ficha da pessoa for alterada depois.
+- Recebimento e repasse exigem a seleção de uma conta/caixa ativo do escritório.
+- Contas removidas da ficha de uma pessoa são desativadas, não apagadas, preservando histórico.
+
+CAIXA FÍSICO — AJUSTE FINAL DESTA SESSÃO
+- Dinheiro em espécie não exibe Banco, Agência, Conta, Dígito ou PIX.
+- Ao mudar de conta bancária para espécie, os dados bancários são limpos automaticamente.
+- O backend também grava campos bancários como nulos para caixa em espécie, mesmo se uma chamada incorreta os enviar.
+- A interface não oferece desativação para caixa físico.
+- O backend impede desativar ou transformar em conta bancária o último caixa físico ativo do escritório.
+- O escritório, portanto, sempre mantém pelo menos um caixa físico ativo.
+
+VALIDAÇÕES EXECUTADAS SEM BANCO REAL
+- Backend: 34 testes aprovados.
+- Frontend: 41 testes aprovados.
+- Compilação do frontend concluída sem erro.
+- As alterações em banco não foram executadas pela bateria; os testes de integração que recriam banco isolado não foram executados nesta etapa.
+- Ainda falta validação manual completa pela interface usando o banco LOCAL.
+
+PRÓXIMOS PASSOS NO LOCAL
+1. Recarregar a página com Ctrl+F5 ou reiniciar frontend/backend local.
+2. Validar contas do escritório, incluindo banco, mais de uma conta do mesmo banco e caixa físico.
+3. Validar contas de uma pessoa física e de uma pessoa jurídica, incluindo conta de terceiro com observação.
+4. Validar acordo com beneficiário e conta padrão.
+5. Validar recebimento em conta do escritório e em caixa físico.
+6. Validar repasse para conta do beneficiário e confirmar que o histórico permanece após editar a ficha da pessoa.
+7. Não alterar AWS antes de aprovar esses testes locais.
+
+AWS E OUTRO COMPUTADOR
+- O arquivo S4 de verificação NÃO é uma migração. Ele apenas informa APROVADO ou BLOQUEADO.
+- Não executar os scripts S1, S2 e S3 cegamente em nenhuma AWS: primeiro é obrigatório confirmar o estado real da instância por consulta somente leitura.
+- Após confirmação de que a instância está no mesmo ponto inicial do LOCAL, a sequência será:
+  a) S1;
+  b) S2;
+  c) S3;
+  d) S4 - verificar pré-requisitos (somente leitura; deve retornar APROVADO);
+  e) S4 - destinos financeiros robustos (migração executada uma única vez).
+- Cada AWS e cada outro computador devem ser verificados e atualizados separadamente.
+- Se qualquer verificação retornar BLOQUEADO ou qualquer script gerar erro, interromper a sequência e analisar antes de prosseguir.
+
+PENDÊNCIAS
+- Teste manual completo dos fluxos financeiros no LOCAL.
+- Preparação de uma verificação inicial específica para AWS antes de S1/S2/S3, após a aprovação dos testes locais.
+- Migração das AWS somente após validação completa do LOCAL e autorização explícita do usuário.
+
+CORREÇÃO POSTERIOR À AUDITORIA (22/09/2026)
+- Corrigido no backend o desfazimento de recebimento: além de data, forma e identificação,
+  agora também limpa recebimento_conta_financeira_id da parcela. Isso evita que uma parcela
+  pendente mantenha indevidamente o vínculo com a conta/caixa de um recebimento desfeito.
+- Incluído teste de regressão para essa regra.
+- Validações executadas sem banco real: 35 testes do backend aprovados; testes do frontend
+  aprovados; compilação do frontend concluída sem erro.
+- Pendente manual no LOCAL: conferir controle_versao_banco antes de registrar as versões
+  históricas S1 a S4. Não executar nem reaplicar os scripts S1-S4 no LOCAL.
+
+MANUTENÇÃO FINANCEIRA POSTERIOR (22/09/2026)
+- O repasse agora atualiza imediatamente o extrato e o saldo da tela Por processo; antes a
+  aba Repasses atualizava apenas a própria lista, deixando o extrato visualmente desatualizado.
+- Cada repasse (cliente/parceiro) passou a ter observação opcional, separada e preservada no
+  histórico e na lista de repasses concluídos.
+- Pendente manual no LOCAL antes de usar a aba Repasses com o código novo: aplicar o bloco
+  estrutural nº 5 para criar repasse_cliente_observacao e repasse_parceiro_observacao.
+- No modal de repasse, há cadastro rápido de conta do beneficiário. Exige as permissões
+  Financeiro/alterar e Pessoas/alterar, salva somente a nova conta em transação e a seleciona
+  automaticamente para o repasse; não requer alteração estrutural adicional.
+
+REPASSE EM ESPÉCIE — MANUTENÇÃO POSTERIOR (22/09/2026)
+- O repasse agora permite dois destinos explícitos: conta bancária ou dinheiro em espécie,
+  entregue em mãos ao beneficiário.
+- Em mãos não é instituição financeira nem conta bancária do beneficiário. O fluxo oculta a
+  conta de destino, exige um caixa em espécie ativo do escritório e só disponibiliza formas de
+  pagamento classificadas como espécie.
+- O extrato cria a saída no caixa físico selecionado e o retrato histórico do repasse guarda
+  que a entrega ocorreu em mãos, preservando o beneficiário e sem inventar uma conta bancária.
+- O fluxo bancário existente continua separado e inalterado.
+- Pendente manual no LOCAL antes de usar repasse em mãos: aplicar o bloco estrutural nº 6 para
+  criar repasse_cliente_destino_tipo e repasse_parceiro_destino_tipo.
+- Validações sem banco real: 43 testes do backend, 41 testes do frontend e compilação de
+  produção do frontend concluídos sem erro.
+
+INICIALIZAÇÃO LOCAL — CORREÇÃO POSTERIOR (23/09/2026)
+- Identificada a causa do primeiro login falhar ocasionalmente: os atalhos abriam o frontend
+  após espera fixa de 3 segundos, enquanto o backend ainda aguardava a conexão inicial com o MySQL.
+- Os atalhos iniciar_pc_escrit.bat e iniciar_pc_casa.bat agora aguardam a resposta real da API
+  local antes de abrir o frontend; depois de 60 segundos, avisam para conferir o backend em vez
+  de abrir uma tela de login incapaz de conectar.
+- A tela de login também verifica a API a cada segundo enquanto ela inicia e mantém o botão
+  Entrar indisponível com aviso amigável até o sistema ficar pronto. Isso protege inicialização
+  manual e reinícios pontuais do backend.
+- Não houve alteração de banco, AWS ou dados. Validações: 41 testes do frontend e compilação
+  de produção concluídos sem erro.
+
+CONTA PADRÃO NO ACORDO — MANUTENÇÃO POSTERIOR (23/09/2026)
+- No modal compartilhado de Novo/Editar Acordo, o campo Conta padrão do beneficiário agora tem
+  o botão "..." ao lado. Com um beneficiário selecionado, ele reutiliza o cadastro rápido e
+  seguro de conta já usado no fluxo de repasses.
+- Ao cadastrar, a lista de contas é recarregada e a nova conta fica selecionada imediatamente
+  como conta padrão daquele acordo. Não altera dados já existentes, não cria estrutura no banco
+  e não modifica AWS.
+- O acesso continua protegido pelas permissões Financeiro/alterar e Pessoas/alterar.
+- Validação: compilação de produção do frontend concluída sem erro.
+
+ESTRUTURA PARA INSTÂNCIA NOVA — ATUALIZAÇÃO (23/09/2026)
+- O arquivo estrutura_banco.sql foi sincronizado com a estrutura financeira atual do LOCAL na
+  tabela forma_pagamento: incluiu uso_permitido (financeira, especie ou ambos).
+- Assim, uma AWS criada do zero já possui a classificação necessária para restringir Pix/TED às
+  instituições financeiras e Em Mãos ao dinheiro em espécie.
+- Não houve execução de SQL, alteração no banco LOCAL, alteração em AWS, dados ou código.
+- O arquivo permanece exclusivamente para instalação do zero e continua destrutivo por conter
+  DROP DATABASE; nunca deve ser usado para atualizar uma instância existente.

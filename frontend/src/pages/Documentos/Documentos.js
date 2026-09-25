@@ -16,10 +16,12 @@ import MenuAcoes from '../../components/MenuAcoes';
 
 // Rótulo amigável do "destino" do modelo (a que situação ele se aplica).
 function rotuloDestino(m) {
-  const mod = m.modalidade === 'virtual' ? 'Virtual' : (m.modalidade === 'presencial' ? 'Presencial' : '');
+  const mod = m.modalidade === 'virtual' ? 'Virtual' : (m.modalidade === 'presencial' ? 'Presencial' : (m.modalidade === 'sem_comparecimento' ? 'Sem comparecimento' : ''));
   switch (m.destino) {
     case 'recibo_cliente':  return { texto: 'Recibo: Cliente',  cor: 'badge-roxo' };
     case 'recibo_parceria': return { texto: 'Recibo: Parceria', cor: 'badge-roxo' };
+    case 'recibo_acordo_cliente':  return { texto: 'Recibo consolidado: Cliente',  cor: 'badge-roxo' };
+    case 'recibo_acordo_parceria': return { texto: 'Recibo consolidado: Parceria', cor: 'badge-roxo' };
     case 'multipessoas':    return { texto: 'Partes (autores/réus)', cor: 'badge-verde' };
     case 'audiencia': return { texto: `Audiência: ${m.tipo_audiencia_nome || '—'}${mod ? ' · ' + mod : ''}`, cor: 'badge-azul' };
     case 'pericia':   return { texto: `Perícia: ${m.tipo_pericia_nome || '—'}`, cor: 'badge-azul' };
@@ -692,6 +694,8 @@ function ModalModelo({ modelo, onFechar, onBaixar }) {
               <option value="multipessoas">Documento de partes (autores e réus)</option>
               <option value="recibo_cliente">Recibo de cliente</option>
               <option value="recibo_parceria">Recibo de parceria</option>
+              <option value="recibo_acordo_cliente">Recibo consolidado do acordo: cliente</option>
+              <option value="recibo_acordo_parceria">Recibo consolidado do acordo: parceria</option>
               <option value="audiencia">Comunicado de audiência</option>
               <option value="pericia">Documento de perícia</option>
               <option value="prazo">Documento de prazo</option>

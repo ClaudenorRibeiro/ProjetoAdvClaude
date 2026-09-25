@@ -45,9 +45,10 @@ function uploadModelo(req, res, next) {
 
 // Normaliza o "destino" do modelo (a que situação ele se aplica) e limpa a classificação
 // (tipo/modalidade) conforme o destino. Destinos: comum | recibo_cliente | recibo_parceria |
+// recibo_acordo_cliente | recibo_acordo_parceria |
 // audiencia (tipo+modalidade) | pericia (tipo) | prazo (subtipo).
 function normalizarDestino(body) {
-  const validos = ['comum', 'recibo_cliente', 'recibo_parceria', 'audiencia', 'pericia', 'prazo', 'multipessoas'];
+  const validos = ['comum', 'recibo_cliente', 'recibo_parceria', 'recibo_acordo_cliente', 'recibo_acordo_parceria', 'audiencia', 'pericia', 'prazo', 'multipessoas'];
   const destino = validos.includes(body.destino) ? body.destino : 'comum';
   const intOrNull = v => (v !== undefined && v !== null && v !== '' && !isNaN(parseInt(v, 10))) ? parseInt(v, 10) : null;
   const out = { destino, tipo_audiencia_id: null, modalidade: null, tipo_pericia_id: null, subtipo_prazo_id: null };
@@ -55,7 +56,7 @@ function normalizarDestino(body) {
   out.minutos_antes = Math.max(0, parseInt(body.minutos_antes, 10) || 0);
   if (destino === 'audiencia') {
     out.tipo_audiencia_id = intOrNull(body.tipo_audiencia_id);
-    out.modalidade = ['presencial', 'virtual'].includes(body.modalidade) ? body.modalidade : null;
+    out.modalidade = ['presencial', 'virtual', 'sem_comparecimento'].includes(body.modalidade) ? body.modalidade : null;
   } else if (destino === 'pericia') {
     out.tipo_pericia_id = intOrNull(body.tipo_pericia_id);
   } else if (destino === 'prazo') {
@@ -87,7 +88,11 @@ async function destinosOpcoes(req, res) {
     );
     return sucesso(res, {
       tipos_audiencia: tiposAud,
-      modalidades: [{ valor: 'presencial', nome: 'Presencial' }, { valor: 'virtual', nome: 'Virtual' }],
+      modalidades: [
+        { valor: 'presencial', nome: 'Presencial' },
+        { valor: 'virtual', nome: 'Virtual' },
+        { valor: 'sem_comparecimento', nome: 'Sem comparecimento' },
+      ],
       tipos_pericia: tiposPer,
       subtipos_prazo: subPrazo,
     });
@@ -190,22 +195,29 @@ async function criarModelo(req, res) {
     await s3Service.enviarArquivo(key, req.file.buffer, CONTENT_TYPE_DOCX);
 
     try {
-      const [result] = await pool.execute(
-        `INSERT INTO modelo_documento
-           (nome, descricao, destino, tipo_audiencia_id, modalidade, tipo_pericia_id, subtipo_prazo_id,
-            arquivo_s3_key, blocos_exigidos, variaveis_usadas, minutos_antes, criado_por)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          nome.trim(),
-          descricao && descricao.trim() ? descricao.trim() : null,
-          d.destino, d.tipo_audiencia_id, d.modalidade, d.tipo_pericia_id, d.subtipo_prazo_id,
-          key,
-          analise.blocos.join(',') || null,
-          analise.conhecidas.join(',') || null,
-          d.minutos_antes,
-          req.usuario.id,
-        ]
-      );
+      const conn = await pool.getConnection();
+      let result;
+      try {
+        await conn.beginTransaction();
+        [result] = await conn.execute(
+          `INSERT INTO modelo_documento
+             (nome, descricao, destino, tipo_audiencia_id, modalidade, tipo_pericia_id, subtipo_prazo_id,
+              arquivo_s3_key, blocos_exigidos, variaveis_usadas, minutos_antes, criado_por)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            nome.trim(),
+            descricao && descricao.trim() ? descricao.trim() : null,
+            d.destino, d.tipo_audiencia_id, d.modalidade, d.tipo_pericia_id, d.subtipo_prazo_id,
+            key,
+            analise.blocos.join(',') || null,
+            analise.conhecidas.join(',') || null,
+            d.minutos_antes,
+            req.usuario.id,
+          ]
+        );
+        await conn.commit();
+      } catch (err) { await conn.rollback(); throw err; }
+      finally { conn.release(); }
       // variaveis_desconhecidas vai como AVISO (não bloqueia) para a tela alertar o admin.
       return sucesso(res, {
         id: result.insertId,
@@ -253,20 +265,26 @@ async function atualizarModelo(req, res) {
       await s3Service.enviarArquivo(novaKey, req.file.buffer, CONTENT_TYPE_DOCX);
 
       try {
-        await pool.execute(
-          `UPDATE modelo_documento
-             SET nome=?, descricao=?, destino=?, tipo_audiencia_id=?, modalidade=?, tipo_pericia_id=?, subtipo_prazo_id=?,
-                 arquivo_s3_key=?, blocos_exigidos=?, variaveis_usadas=?, minutos_antes=?, alterado_por=?, alterado_em=NOW()
-           WHERE id=?`,
-          [
-            nome.trim(), desc, d.destino, d.tipo_audiencia_id, d.modalidade, d.tipo_pericia_id, d.subtipo_prazo_id,
-            novaKey,
-            analise.blocos.join(',') || null,
-            analise.conhecidas.join(',') || null,
-            d.minutos_antes,
-            req.usuario.id, id,
-          ]
-        );
+        const conn = await pool.getConnection();
+        try {
+          await conn.beginTransaction();
+          await conn.execute(
+            `UPDATE modelo_documento
+               SET nome=?, descricao=?, destino=?, tipo_audiencia_id=?, modalidade=?, tipo_pericia_id=?, subtipo_prazo_id=?,
+                   arquivo_s3_key=?, blocos_exigidos=?, variaveis_usadas=?, minutos_antes=?, alterado_por=?, alterado_em=NOW()
+             WHERE id=?`,
+            [
+              nome.trim(), desc, d.destino, d.tipo_audiencia_id, d.modalidade, d.tipo_pericia_id, d.subtipo_prazo_id,
+              novaKey,
+              analise.blocos.join(',') || null,
+              analise.conhecidas.join(',') || null,
+              d.minutos_antes,
+              req.usuario.id, id,
+            ]
+          );
+          await conn.commit();
+        } catch (err) { await conn.rollback(); throw err; }
+        finally { conn.release(); }
       } catch (dbErr) {
         await s3Service.excluirArquivo(novaKey).catch(() => {});
         throw dbErr;
@@ -278,13 +296,19 @@ async function atualizarModelo(req, res) {
       }
     } else {
       // Só metadados (mantém o arquivo atual).
-      await pool.execute(
-        `UPDATE modelo_documento
-           SET nome=?, descricao=?, destino=?, tipo_audiencia_id=?, modalidade=?, tipo_pericia_id=?, subtipo_prazo_id=?,
-               minutos_antes=?, alterado_por=?, alterado_em=NOW()
-         WHERE id=?`,
-        [nome.trim(), desc, d.destino, d.tipo_audiencia_id, d.modalidade, d.tipo_pericia_id, d.subtipo_prazo_id, d.minutos_antes, req.usuario.id, id]
-      );
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+        await conn.execute(
+          `UPDATE modelo_documento
+             SET nome=?, descricao=?, destino=?, tipo_audiencia_id=?, modalidade=?, tipo_pericia_id=?, subtipo_prazo_id=?,
+                 minutos_antes=?, alterado_por=?, alterado_em=NOW()
+           WHERE id=?`,
+          [nome.trim(), desc, d.destino, d.tipo_audiencia_id, d.modalidade, d.tipo_pericia_id, d.subtipo_prazo_id, d.minutos_antes, req.usuario.id, id]
+        );
+        await conn.commit();
+      } catch (err) { await conn.rollback(); throw err; }
+      finally { conn.release(); }
     }
 
     return sucesso(res, { variaveis_desconhecidas: desconhecidas }, 'Modelo atualizado');
@@ -296,10 +320,16 @@ async function atualizarModelo(req, res) {
 // PUT /api/documentos/modelos/:id/desativar — soft-delete (ativo=0). NUNCA apaga de verdade.
 async function desativarModelo(req, res) {
   try {
-    await pool.execute(
-      'UPDATE modelo_documento SET ativo=0, alterado_por=?, alterado_em=NOW() WHERE id=?',
-      [req.usuario.id, req.params.id]
-    );
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        'UPDATE modelo_documento SET ativo=0, alterado_por=?, alterado_em=NOW() WHERE id=?',
+        [req.usuario.id, req.params.id]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Modelo desativado');
   } catch (err) {
     return erroInterno(res, err);
@@ -309,10 +339,16 @@ async function desativarModelo(req, res) {
 // PUT /api/documentos/modelos/:id/reativar — volta um modelo desativado (ativo=1)
 async function reativarModelo(req, res) {
   try {
-    await pool.execute(
-      'UPDATE modelo_documento SET ativo=1, alterado_por=?, alterado_em=NOW() WHERE id=?',
-      [req.usuario.id, req.params.id]
-    );
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        'UPDATE modelo_documento SET ativo=1, alterado_por=?, alterado_em=NOW() WHERE id=?',
+        [req.usuario.id, req.params.id]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Modelo reativado');
   } catch (err) {
     return erroInterno(res, err);
@@ -332,7 +368,13 @@ async function excluirModelo(req, res) {
     if (!rows.length) return naoEncontrado(res, 'Modelo não encontrado');
 
     // Apaga do banco primeiro (a FK do log faz SET NULL automaticamente).
-    await pool.execute('DELETE FROM modelo_documento WHERE id = ?', [id]);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('DELETE FROM modelo_documento WHERE id = ?', [id]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
 
     // Remove o .docx do S3 (best-effort: se falhar, o registro já saiu — não desfaz a exclusão).
     if (rows[0].arquivo_s3_key) {
@@ -416,6 +458,13 @@ async function modelosParaGerar(req, res) {
         [destino]
       );
     }
+    if (ancora === 'acordo' && ancora_id) {
+      const destino = req.query.beneficiario === 'parceiro' ? 'recibo_acordo_parceria' : 'recibo_acordo_cliente';
+      [rows] = await pool.execute(
+        `SELECT id, nome FROM modelo_documento WHERE ativo = 1 AND destino = ? ORDER BY nome ASC`,
+        [destino]
+      );
+    }
     if (ancora === 'pessoa_fisica' || ancora === 'pessoa_juridica') {
       // Modelos "comum" cujos blocos exigidos cabem numa pessoa sozinha (só bloco cliente).
       const [todos] = await pool.execute(
@@ -443,7 +492,7 @@ async function modelosParaGerar(req, res) {
 // Preenche o modelo com os dados da âncora e devolve o arquivo EM MEMÓRIA.
 // NÃO grava log nem escreve na resposta (quem chama decide). Em falhas conhecidas
 // lança Error com .userMessage (e .naoEncontrado quando o modelo não existe).
-async function montarDocumento({ modelo_id, ancora_tipo, ancora_id, formato, usuario }) {
+async function montarDocumento({ modelo_id, ancora_tipo, ancora_id, formato, usuario, destinatario_tipo, destinatario_id }) {
   const fmt = formato === 'pdf' ? 'pdf' : 'docx';
 
   // Busca o modelo (ativo) e seu arquivo no S3.
@@ -456,7 +505,9 @@ async function montarDocumento({ modelo_id, ancora_tipo, ancora_id, formato, usu
   // Para recibos, o destino do modelo define se o valor é do cliente (líquido) ou do parceiro (repasse).
   // minutosAntes: opção do modelo para imprimir horário (audiência/perícia) X minutos antes do real (0 = real).
   const opcoes = {
-    tipoRecibo: modelo.destino === 'recibo_parceria' ? 'parceiro' : 'cliente',
+    tipoRecibo: ['recibo_parceria', 'recibo_acordo_parceria'].includes(modelo.destino) ? 'parceiro' : 'cliente',
+    destinatarioTipo: destinatario_tipo || null,
+    destinatarioId: destinatario_id || null,
     minutosAntes: Number(modelo.minutos_antes) || 0,
   };
 
@@ -493,19 +544,27 @@ async function montarDocumento({ modelo_id, ancora_tipo, ancora_id, formato, usu
 // Body: { modelo_id, ancora_tipo, ancora_id, formato }
 async function gerar(req, res) {
   try {
-    const { modelo_id, ancora_tipo, ancora_id, formato } = req.body;
+    const { modelo_id, ancora_tipo, ancora_id, formato, destinatario_tipo, destinatario_id } = req.body;
     if (!modelo_id) return erro(res, 'Modelo é obrigatório');
     if (!ancora_tipo || !ancora_id) return erro(res, 'Origem do documento (âncora) é obrigatória');
 
-    const doc = await montarDocumento({ modelo_id, ancora_tipo, ancora_id, formato, usuario: req.usuario });
+    const doc = await montarDocumento({ modelo_id, ancora_tipo, ancora_id, formato, usuario: req.usuario, destinatario_tipo, destinatario_id });
 
     // Registra o log de documento GERADO (só o download registra aqui).
-    await pool.execute(
-      `INSERT INTO log_documentos_gerados
-         (modelo_id, modelo_nome, formato, ancora_tipo, ancora_id, referencia, nome_arquivo, usuario_id, usuario_nome)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [doc.modeloId, doc.modeloNome, doc.formato, ancora_tipo, ancora_id, doc.referencia, doc.nomeArquivo, req.usuario.id, req.usuario.nome]
-    );
+    {
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+        await conn.execute(
+          `INSERT INTO log_documentos_gerados
+             (modelo_id, modelo_nome, formato, ancora_tipo, ancora_id, referencia, nome_arquivo, usuario_id, usuario_nome)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [doc.modeloId, doc.modeloNome, doc.formato, ancora_tipo, ancora_id, doc.referencia, doc.nomeArquivo, req.usuario.id, req.usuario.nome]
+        );
+        await conn.commit();
+      } catch (err) { await conn.rollback(); throw err; }
+      finally { conn.release(); }
+    }
 
     res.setHeader('Content-Type', doc.contentType);
     res.setHeader('Content-Disposition', `attachment; filename="${doc.nomeArquivo}"`);
@@ -651,12 +710,20 @@ async function gerarMultipessoas(req, res) {
     const nomeArquivo = montarNomeArquivo(modelo.nome, ctx.clienteNome, '', fmt);
 
     // Log: documento "multipessoas" não tem registro-âncora (ancora_id fica NULL).
-    await pool.execute(
-      `INSERT INTO log_documentos_gerados
-         (modelo_id, modelo_nome, formato, ancora_tipo, ancora_id, referencia, nome_arquivo, usuario_id, usuario_nome)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [modelo.id, modelo.nome, fmt, 'multipessoas', null, ctx.referencia || null, nomeArquivo, req.usuario.id, req.usuario.nome]
-    );
+    {
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+        await conn.execute(
+          `INSERT INTO log_documentos_gerados
+             (modelo_id, modelo_nome, formato, ancora_tipo, ancora_id, referencia, nome_arquivo, usuario_id, usuario_nome)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [modelo.id, modelo.nome, fmt, 'multipessoas', null, ctx.referencia || null, nomeArquivo, req.usuario.id, req.usuario.nome]
+        );
+        await conn.commit();
+      } catch (err) { await conn.rollback(); throw err; }
+      finally { conn.release(); }
+    }
 
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`);
@@ -719,7 +786,8 @@ async function prepararLote(req, res) {
         const chave = `${r.tipo_audiencia_id || ''}|${r.modalidade || ''}`;
         if (!grupos.has(chave)) {
           const modal = r.modalidade === 'virtual' ? 'Virtual'
-                      : r.modalidade === 'presencial' ? 'Presencial' : 'Sem modalidade';
+                      : r.modalidade === 'presencial' ? 'Presencial'
+                      : r.modalidade === 'sem_comparecimento' ? 'Sem comparecimento' : 'Sem modalidade';
           grupos.set(chave, {
             chave,
             rotulo: `${r.tipo_nome || 'Sem tipo'} — ${modal}`,
@@ -866,7 +934,7 @@ async function gerarLote(req, res) {
 async function historicoDocumentos(req, res) {
   try {
     const { de, ate } = req.query;
-    const limitInt  = parseInt(req.query.limite) || 50;                 // 50 por página
+    const limitInt  = Math.min(parseInt(req.query.limite) || 50, 100);  // 50 por página, teto 100
     const offsetInt = ((parseInt(req.query.pagina) || 1) - 1) * limitInt;
     const cond = [];
     const params = [];

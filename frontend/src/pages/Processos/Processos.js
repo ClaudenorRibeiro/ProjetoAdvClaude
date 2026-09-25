@@ -7,7 +7,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { processosAPI, pessoasAPI, etiquetasAPI } from '../../services/api';
 import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetasSubmenu } from '../../components/Etiquetas';
-import { formatarNumeroPasta, mascaraCNJ, toTitleCase } from '../../utils/formatters';
+import { formatarNumeroPasta, mascaraCNJ, toTitleCase, formatarDataHora } from '../../utils/formatters';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
@@ -15,6 +15,7 @@ import MenuAcoes from '../../components/MenuAcoes';
 import useEscFechar from '../../hooks/useEscFechar';
 import { buscarEnderecoPorCep } from '../../utils/cep';
 import ModalCadastroRapidoParte from '../../components/ModalCadastroRapidoParte';
+import SelectPesquisavel from '../../components/ui/SelectPesquisavel';
 
 function formatarCpfCnpjSelecao(valor, tipo) {
   const d = String(valor || '').replace(/\D/g, '');
@@ -950,16 +951,9 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Responsável pelo processo</label>
-              <select className="form-control"
-                value={form.responsavel_id || ''}
-                onChange={e => set('responsavel_id', e.target.value)}>
-                <option value="">— Não definido —</option>
-                {aux.usuarios?.map(u => (
-                  <option key={u.id} value={u.id}>
-                    {u.nome}{u.oab ? ` — OAB ${u.oab}` : ''}
-                  </option>
-                ))}
-              </select>
+              <SelectPesquisavel ariaLabel="Responsável pelo processo" className="form-control"
+                value={form.responsavel_id || ''} onChange={valor => set('responsavel_id', valor)}
+                opcoes={[{ value: '', label: '— Não definido —' }, ...(aux.usuarios || []).map(u => ({ value: u.id, label: `${u.nome}${u.oab ? ` — OAB ${u.oab}` : ''}` }))]} />
               <small style={{ color: '#888' }}>Advogado que cuida do processo no escritório.</small>
             </div>
             <div className="form-group">
@@ -1046,30 +1040,21 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
             <div className="form-group">
               <label className="form-label">Tipo</label>
               <div style={{ display: 'flex', gap: '4px' }}>
-                <select className="form-control" value={form.tipo_id} onChange={e => set('tipo_id', e.target.value)}>
-                  <option value="">— Selecione —</option>
-                  {aux.tipos?.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-                </select>
+                <SelectPesquisavel ariaLabel="Tipo do processo" className="form-control" value={form.tipo_id} onChange={valor => set('tipo_id', valor)} opcoes={[{ value: '', label: '— Selecione —' }, ...(aux.tipos || []).map(t => ({ value: t.id, label: t.nome }))]} />
                 {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('tipos')}>…</button>}
               </div>
             </div>
             <div className="form-group">
               <label className="form-label">Status</label>
               <div style={{ display: 'flex', gap: '4px' }}>
-                <select className="form-control" value={form.status_id} onChange={e => set('status_id', e.target.value)}>
-                  <option value="">— Selecione —</option>
-                  {aux.status?.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
-                </select>
+                <SelectPesquisavel ariaLabel="Status do processo" className="form-control" value={form.status_id} onChange={valor => set('status_id', valor)} opcoes={[{ value: '', label: '— Selecione —' }, ...(aux.status || []).map(s => ({ value: s.id, label: s.nome }))]} />
                 {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('status')}>…</button>}
               </div>
             </div>
             <div className="form-group">
               <label className="form-label">Instância</label>
               <div style={{ display: 'flex', gap: '4px' }}>
-                <select className="form-control" value={form.instancia_id} onChange={e => set('instancia_id', e.target.value)}>
-                  <option value="">— Selecione —</option>
-                  {aux.instancias?.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
-                </select>
+                <SelectPesquisavel ariaLabel="Instância" className="form-control" value={form.instancia_id} onChange={valor => set('instancia_id', valor)} opcoes={[{ value: '', label: '— Selecione —' }, ...(aux.instancias || []).map(i => ({ value: i.id, label: i.nome }))]} />
                 {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('instancias')}>…</button>}
               </div>
             </div>
@@ -1080,10 +1065,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
             <div className="form-group">
               <label className="form-label">Fórum</label>
               <div style={{ display: 'flex', gap: '4px' }}>
-                <select className="form-control" value={form.forum_id} onChange={e => mudarForum(e.target.value)}>
-                  <option value="">— Selecione —</option>
-                  {aux.foruns?.map(f => <option key={f.id} value={f.id}>{f.abrev_nome || f.nome}</option>)}
-                </select>
+                <SelectPesquisavel ariaLabel="Fórum" className="form-control" value={form.forum_id} onChange={mudarForum} opcoes={[{ value: '', label: '— Selecione —' }, ...(aux.foruns || []).map(f => ({ value: f.id, label: f.abrev_nome || f.nome }))]} />
                 {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('foruns')}>…</button>}
               </div>
             </div>
@@ -1681,11 +1663,9 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
             <div className="form-group">
               <label className="form-label">Vara</label>
               <div style={{ display: 'flex', gap: '4px' }}>
-                <select className="form-control" value={form.vara_id}
-                  onChange={e => set('vara_id', e.target.value)} disabled={leitura || !form.forum_id}>
-                  <option value="">{form.forum_id ? '— Selecione —' : '— Selecione o fórum primeiro —'}</option>
-                  {varasFiltradas.map(v => <option key={v.id} value={v.id}>{v.abrev_nome || v.nome}</option>)}
-                </select>
+                <SelectPesquisavel ariaLabel="Vara" className="form-control" value={form.vara_id}
+                  onChange={valor => set('vara_id', valor)} disabled={leitura || !form.forum_id}
+                  opcoes={[{ value: '', label: form.forum_id ? '— Selecione —' : '— Selecione o fórum primeiro —' }, ...varasFiltradas.map(v => ({ value: v.id, label: v.abrev_nome || v.nome }))]} />
                 {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('varas')}>…</button>}
               </div>
             </div>
@@ -1830,6 +1810,64 @@ export function ModalMotivoStatus({ anterior, novo, salvando, onCancelar, onSalv
           <button className="btn btn-primary" onClick={() => onSalvar(motivo)} disabled={salvando}>
             {salvando ? 'Salvando...' : 'Salvar com motivo'}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// MODAL: HISTÓRICO DO PROCESSO (quem fez, quando, o quê — sem "desfazer")
+// ============================================================
+const HISTORICO_PROCESSO_ACAO_LABEL = { criar: 'Cadastrou', editar: 'Editou', status: 'Mudou status', excluir: 'Excluiu' };
+const HISTORICO_PROCESSO_ACAO_COR   = { criar: '#16a34a', editar: '#2563eb', status: '#d97706', excluir: '#dc2626' };
+
+export function ModalHistoricoProcesso({ processo, onFechar }) {
+  const [registros, setRegistros] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const overlayRef = useEscFechar(onFechar);
+
+  useEffect(() => {
+    processosAPI.historicoProcesso(processo.id)
+      .then(r => { if (r.data.ok) setRegistros(r.data.dados); })
+      .catch(() => toast.error('Erro ao carregar histórico do processo'))
+      .finally(() => setCarregando(false));
+  }, [processo.id]);
+
+  return (
+    <div className="modal-overlay" ref={overlayRef}>
+      <div className="modal-box" style={{ maxWidth: '560px' }}>
+        <div className="modal-header">
+          <h3>Histórico — {processo.numProc || processo.NomeTituloProc || 'Processo'}</h3>
+          <button className="modal-fechar" onClick={onFechar}>✕</button>
+        </div>
+        <div className="modal-body">
+          {carregando ? <div className="loading">Carregando...</div> : (
+            registros.length === 0 ? <p className="lista-vazia">Nenhum registro de histórico</p> : (
+              <div className="tabela-wrapper" style={{ maxHeight: '420px', overflowY: 'auto' }}>
+                <table className="tabela">
+                  <thead><tr><th>Quando</th><th>Ação</th><th>Quem fez</th></tr></thead>
+                  <tbody>
+                    {registros.map(r => (
+                      <tr key={r.id}>
+                        <td style={{ whiteSpace: 'nowrap', fontSize: '12px' }}>{formatarDataHora(r.criado_em)}</td>
+                        <td>
+                          <span style={{ color: HISTORICO_PROCESSO_ACAO_COR[r.acao] || '#333', fontWeight: 600, fontSize: '12px' }}>
+                            {HISTORICO_PROCESSO_ACAO_LABEL[r.acao] || r.acao}
+                          </span>
+                          {r.descricao && <div style={{ fontSize: '11px', color: '#888' }}>{r.descricao}</div>}
+                        </td>
+                        <td style={{ fontSize: '12px' }}>{r.usuario_nome}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onFechar}>Fechar</button>
         </div>
       </div>
     </div>
@@ -2154,11 +2192,9 @@ export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtuali
                 {tipo === 'varas' && (
                   <div className="form-group" style={{ marginBottom: 0, flex: '1', minWidth: '140px' }}>
                     <label className="form-label" style={{ fontSize: '11px' }}>Fórum *</label>
-                    <select className="form-control" style={{ fontSize: '13px' }}
-                      value={forumId} onChange={e => setForumId(e.target.value)}>
-                      <option value="">— Selecione —</option>
-                      {foruns.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
-                    </select>
+                    <SelectPesquisavel ariaLabel="Fórum da vara" className="form-control"
+                      value={forumId} onChange={setForumId}
+                      opcoes={[{ value: '', label: '— Selecione —' }, ...foruns.map(f => ({ value: f.id, label: f.nome }))]} />
                   </div>
                 )}
 

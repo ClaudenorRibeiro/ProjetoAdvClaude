@@ -15,12 +15,17 @@
 
 const { pool } = require('../config/database');
 const { sucesso, erro, erroInterno } = require('../utils/response');
+const usosPermitidos = new Set(['financeira', 'especie', 'ambos']);
+
+function usoValido(uso) {
+  return usosPermitidos.has(uso) ? uso : null;
+}
 
 // GET /api/financeiro/formas-pagamento — lista as formas ativas (selects + gestão)
 async function listar(req, res) {
   try {
     const [rows] = await pool.execute(
-      'SELECT id, nome FROM forma_pagamento WHERE ativo = 1 ORDER BY nome'
+      'SELECT id, nome, uso_permitido FROM forma_pagamento WHERE ativo = 1 ORDER BY nome'
     );
     return sucesso(res, rows);
   } catch (e) {
@@ -31,8 +36,10 @@ async function listar(req, res) {
 // POST /api/financeiro/formas-pagamento — cria uma forma de pagamento
 async function criar(req, res) {
   try {
-    const { nome } = req.body;
+    const { nome, uso_permitido } = req.body;
     if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
+    const uso = usoValido(uso_permitido);
+    if (!uso) return erro(res, 'Informe onde esta forma pode ser usada.');
     // Confere ANTES de gravar, só para dar a mensagem cedo (evita a viagem ao banco
     // no caso comum). A trava que garante isso de verdade — mesmo com duas gravações
     // simultâneas — é o índice único (nome, ativo) no banco; ver catch abaixo.
@@ -40,7 +47,14 @@ async function criar(req, res) {
       'SELECT id FROM forma_pagamento WHERE nome = ? AND ativo = 1 LIMIT 1', [nome.trim()]
     );
     if (existe.length) return erro(res, 'Já existe uma forma de pagamento com esse nome');
-    const [r] = await pool.execute('INSERT INTO forma_pagamento (nome) VALUES (?)', [nome.trim()]);
+    const conn = await pool.getConnection();
+    let r;
+    try {
+      await conn.beginTransaction();
+      [r] = await conn.execute('INSERT INTO forma_pagamento (nome, uso_permitido) VALUES (?, ?)', [nome.trim(), uso]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, { id: r.insertId }, 'Forma de pagamento criada', 201);
   } catch (e) {
     if (e.code === 'ER_DUP_ENTRY') return erro(res, 'Já existe uma forma de pagamento com esse nome');
@@ -52,14 +66,22 @@ async function criar(req, res) {
 async function atualizar(req, res) {
   try {
     const { id } = req.params;
-    const { nome } = req.body;
+    const { nome, uso_permitido } = req.body;
     if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
+    const uso = usoValido(uso_permitido);
+    if (!uso) return erro(res, 'Informe onde esta forma pode ser usada.');
     // Duplicidade ignorando o próprio registro (mesma observação do criar acima)
     const [existe] = await pool.execute(
       'SELECT id FROM forma_pagamento WHERE nome = ? AND ativo = 1 AND id <> ? LIMIT 1', [nome.trim(), id]
     );
     if (existe.length) return erro(res, 'Já existe uma forma de pagamento com esse nome');
-    await pool.execute('UPDATE forma_pagamento SET nome = ? WHERE id = ?', [nome.trim(), id]);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE forma_pagamento SET nome = ?, uso_permitido = ? WHERE id = ?', [nome.trim(), uso, id]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Forma de pagamento atualizada');
   } catch (e) {
     if (e.code === 'ER_DUP_ENTRY') return erro(res, 'Já existe uma forma de pagamento com esse nome');
@@ -71,8 +93,14 @@ async function atualizar(req, res) {
 // Não bloqueia em uso: a linha continua existindo e resolvendo o nome no histórico.
 async function excluir(req, res) {
   try {
-    await pool.execute('UPDATE forma_pagamento SET ativo = 0 WHERE id = ?', [req.params.id]);
-    return sucesso(res, null, 'Forma de pagamento removida');
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE forma_pagamento SET ativo = 0 WHERE id = ?', [req.params.id]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
+    return sucesso(res, null, 'Forma de pagamento desativada');
   } catch (e) {
     return erroInterno(res, e);
   }
