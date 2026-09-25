@@ -18,6 +18,19 @@ verifica na fonte, ou pede para o usuário verificar e espera a resposta.
 Diante de qualquer incerteza, dizer explicitamente "não tenho certeza,
 preciso confirmar" antes de prosseguir.
 
+**Erro real já cometido (25/09/2026), para nunca repetir:** uma auditoria
+listou "achados" com base no resumo de agentes/relatórios, sem reler o
+código atual linha por linha antes de apresentar como fato. Dois desses
+itens ("achados confirmados") eram, na verdade, falsos alarmes — o código
+já tratava o problema corretamente — porque o código tinha mudado (o
+usuário mesclou um commit grande dele por cima) depois que o achado foi
+gerado. Regra permanente: um relatório de auditoria (seu ou de um agente)
+**expira no instante em que o código muda**. Antes de apresentar qualquer
+"achado" ou item de lista como fato ao usuário — inclusive itens já
+listados antes numa conversa — reler o trecho exato no arquivo atual.
+Nunca reciclar a conclusão de uma auditoria anterior sem reconferir contra
+o código de agora.
+
 ## 1. Nunca codar sem autorização prévia
 
 - A IA nunca escreve/altera código sem autorização explícita do usuário
