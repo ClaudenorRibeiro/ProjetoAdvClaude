@@ -1480,6 +1480,16 @@ async function excluir(req, res) {
 
     await conn.beginTransaction();
 
+    // Se esta audiência nasceu como "nova audiência" a partir da Ata de OUTRA
+    // audiência, desvincula o item daquela Ata (mantém o histórico, só remove a
+    // referência a um registro que vai deixar de existir). A ata_audiencia_itens da
+    // PRÓPRIA audiência (se ela tiver ata) já sai junto no DELETE de ata_audiencia
+    // abaixo, por ON DELETE CASCADE.
+    await conn.execute(
+      "UPDATE ata_audiencia_itens SET registro_id = NULL WHERE tipo = 'nova_audiencia' AND registro_id = ?",
+      [id]
+    );
+
     // Remove testemunhas vinculadas
     await conn.execute('DELETE FROM audiencia_testemunhas WHERE audiencia_id = ?', [id]);
 

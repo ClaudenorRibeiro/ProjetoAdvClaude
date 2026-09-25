@@ -962,6 +962,12 @@ async function excluir(req, res) {
 
     await conn.beginTransaction();
     await conn.execute('DELETE FROM auditoria_pericia WHERE pericia_id = ?', [id]);
+    // Se esta perícia nasceu de uma Ata de audiência, desvincula o item (mantém o
+    // histórico da Ata, só remove a referência a um registro que vai deixar de existir).
+    await conn.execute(
+      "UPDATE ata_audiencia_itens SET registro_id = NULL WHERE tipo = 'pericia' AND registro_id = ?",
+      [id]
+    );
     await conn.execute('DELETE FROM pericia WHERE id = ?', [id]);
     await conn.commit();
     // Excluída → sai da agenda do Google do responsável (casa pelo mesmo UID).

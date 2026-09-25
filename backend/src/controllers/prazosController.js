@@ -636,13 +636,19 @@ async function excluir(req, res) {
 
     // 1) Tarefa tem vida própria: apenas DESVINCULA do prazo (não apaga a tarefa)
     await conn.execute('UPDATE tarefas SET prazo_id = NULL WHERE prazo_id = ?', [id]);
-    // 2) Notificações daquele prazo deixam de fazer sentido — removidas
+    // 2) Se este prazo nasceu de uma Ata de audiência, desvincula o item da Ata
+    // (mantém o histórico da Ata, só remove a referência a um registro que vai deixar de existir)
+    await conn.execute(
+      "UPDATE ata_audiencia_itens SET registro_id = NULL WHERE tipo = 'prazo' AND registro_id = ?",
+      [id]
+    );
+    // 3) Notificações daquele prazo deixam de fazer sentido — removidas
     await conn.execute('DELETE FROM notificacoes WHERE prazo_id = ?', [id]);
-    // 3) Histórico do prazo é removido junto com ele
+    // 4) Histórico do prazo é removido junto com ele
     await conn.execute('DELETE FROM auditoria_prazo WHERE prazo_id = ?', [id]);
-    // 4) Por fim, o próprio prazo
+    // 5) Por fim, o próprio prazo
     await conn.execute('DELETE FROM prazos_processo WHERE id = ?', [id]);
-    // 5) Auditoria geral participa da MESMA transação (falha aqui faz rollback de tudo)
+    // 6) Auditoria geral participa da MESMA transação (falha aqui faz rollback de tudo)
     await auditoria.registrar(req.usuario.id, 'prazos_processo', 'excluir', id, null, null, conn);
 
     await conn.commit();

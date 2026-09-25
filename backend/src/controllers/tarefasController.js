@@ -486,6 +486,14 @@ async function excluir(req, res) {
   try {
     await conn.beginTransaction();
 
+    // Se esta tarefa nasceu de um Alvará/Desistência registrado numa Ata de audiência,
+    // desvincula o item da Ata (mantém o histórico, só remove a referência a um
+    // registro que vai deixar de existir).
+    await conn.execute(
+      "UPDATE ata_audiencia_itens SET registro_id = NULL WHERE tipo IN ('tarefa_alvara', 'tarefa_desistencia') AND registro_id = ?",
+      [id]
+    );
+
     await conn.execute('DELETE FROM tarefas WHERE id = ?', [id]);
     await auditoria.registrar(req.usuario.id, 'tarefas', 'excluir', id, null, null, conn);
 
