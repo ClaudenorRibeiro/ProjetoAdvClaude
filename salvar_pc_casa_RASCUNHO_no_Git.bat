@@ -9,7 +9,7 @@
 :: Duplo clique para rodar
 :: ============================================================
 
-set BRANCH_RASCUNHO=claude/festive-euler-9j264b
+set BRANCH_RASCUNHO=rascunho
 
 cd /d "%~dp0"
 
