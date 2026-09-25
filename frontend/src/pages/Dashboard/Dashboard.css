@@ -66,6 +66,34 @@
   margin-top: 12px;
 }
 
+.card-titulo-com-filtros {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.filtros-tarefas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.filtro-tarefa {
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 5px 8px;
+}
+
+.filtro-tarefa:hover { border-color: #2563eb; color: #1d4ed8; }
+.filtro-tarefa.ativo { background: #2563eb; border-color: #2563eb; color: #fff; }
+
 /* Audiências sem ata */
 .lista-sem-ata { display: flex; flex-direction: column; gap: 10px; }
 
@@ -96,4 +124,5 @@
   .dashboard-contadores { grid-template-columns: repeat(2, 1fr); }
   .dashboard-saudacao { font-size: 18px; }
   .contador-valor { font-size: 22px; }
+  .card-titulo-com-filtros { align-items: flex-start; flex-direction: column; }
 }

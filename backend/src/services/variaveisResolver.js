@@ -51,6 +51,7 @@ const ALCANCE = {
   audiencia: ['cliente', 'processo', 'audiencia'],
   pericia:   ['cliente', 'processo', 'pericia'],
   pagamento: ['cliente', 'processo', 'pagamento'],
+  acordo:    ['cliente', 'processo', 'pagamento'],
 };
 
 function blocosAlcancados(ancoraTipo) {
@@ -610,6 +611,7 @@ async function resolverPagamento(parcelaId, usuario, opcoes = {}) {
   const dataRepasse  = ehParceiro ? p.repasse_parceiro_em : p.repasse_cliente_em;
 
   const blocoPagamento = {
+    beneficiario_nome:  ehParceiro ? (p.parceria_nome || '') : '',
     valor_pago:         moedaBR(valorPago),
     valor_pago_extenso: valorPorExtenso(valorPago),
     valor_bruto:        moedaBR(p.valor_bruto),
@@ -642,6 +644,60 @@ async function resolverPagamento(parcelaId, usuario, opcoes = {}) {
     clienteNome: proc ? proc.clienteNome : '',
     numProcDigitos: proc ? proc.numProcDigitos : '',
     referencia: refPartes.join(' · ').slice(0, 300),
+  };
+}
+
+// ---- Acordo (RECIBO CONSOLIDADO por destinatário) ----
+// Reúne somente os repasses já feitos ao destinatário escolhido; cliente e parceiro
+// nunca são misturados no mesmo documento.
+async function resolverAcordo(acordoId, usuario, opcoes = {}) {
+  const tipoRecibo = opcoes.tipoRecibo === 'parceiro' ? 'parceiro' : 'cliente';
+  const pessoaTipo = opcoes.destinatarioTipo;
+  const pessoaId = Number(opcoes.destinatarioId);
+  if (!['fisica', 'juridica'].includes(pessoaTipo) || !pessoaId) return null;
+
+  const [acordos] = await pool.execute('SELECT * FROM acordo WHERE id = ? LIMIT 1', [acordoId]);
+  if (!acordos.length) return null;
+  const acordo = acordos[0];
+  const [parcelas] = await pool.execute(
+    `SELECT ap.* FROM acordo_parcela ap WHERE ap.acordo_id = ? ORDER BY ap.numero ASC`, [acordoId]
+  );
+  const selecionadas = parcelas.filter(p => {
+    if (tipoRecibo === 'cliente') {
+      return p.repasse_cliente_em && p.repasse_cliente_tipo === pessoaTipo && Number(p.repasse_cliente_pessoa_id) === pessoaId;
+    }
+    return p.repasse_parceiro_em && p.parceria_pessoa_tipo === pessoaTipo && Number(p.parceria_pessoa_id) === pessoaId;
+  });
+  if (!selecionadas.length) return null;
+
+  const tabela = pessoaTipo === 'juridica' ? 'pessoas_juridicas' : 'pessoas_fisicas';
+  const campoNome = pessoaTipo === 'juridica' ? 'razao_social' : 'nome';
+  const [pessoas] = await pool.execute(`SELECT ${campoNome} AS nome FROM ${tabela} WHERE id = ? LIMIT 1`, [pessoaId]);
+  if (!pessoas.length) return null;
+  const valorPago = selecionadas.reduce((soma, p) => soma + Number(tipoRecibo === 'cliente' ? p.valor_liquido : p.parceria_valor || 0), 0);
+  const datas = selecionadas.map(p => tipoRecibo === 'cliente' ? p.repasse_cliente_em : p.repasse_parceiro_em).filter(Boolean).sort();
+  const proc = await blocoProcessoECliente(acordo.processo_id);
+  const esc = await blocoEscritorio(usuario);
+  const blocoPagamento = {
+    beneficiario_nome: pessoas[0].nome,
+    valor_pago: moedaBR(valorPago),
+    valor_pago_extenso: valorPorExtenso(valorPago),
+    valor_bruto: moedaBR(selecionadas.reduce((soma, p) => soma + Number(p.valor_bruto || 0), 0)),
+    valor_honorario: moedaBR(selecionadas.reduce((soma, p) => soma + Number(p.honor_valor || 0), 0)),
+    valor_liquido: moedaBR(selecionadas.reduce((soma, p) => soma + Number(p.valor_liquido || 0), 0)),
+    valor_parceria: moedaBR(selecionadas.reduce((soma, p) => soma + Number(p.parceria_valor || 0), 0)),
+    data_pagamento: dataBR(datas[datas.length - 1]),
+    numero_parcela: selecionadas.map(p => p.numero).join(', '),
+    total_parcelas: String(parcelas.length),
+    descricao_acordo: acordo.descricao || '',
+    valor_total_acordo: moedaBR(acordo.valor_total),
+  };
+  const dados = { ...(proc ? proc.dados : {}), ...blocoPagamento, ...esc };
+  return {
+    dados,
+    clienteNome: pessoas[0].nome,
+    numProcDigitos: proc ? proc.numProcDigitos : '',
+    referencia: `Recibo consolidado ${tipoRecibo} — ${pessoas[0].nome} · parcelas ${blocoPagamento.numero_parcela}`.slice(0, 300),
   };
 }
 
@@ -853,6 +909,7 @@ async function resolver(ancoraTipo, ancoraId, usuario, opcoes = {}) {
   else if (ancoraTipo === 'pericia')          ctx = await resolverPericia(ancoraId, usuario, opcoes);
   else if (ancoraTipo === 'prazo')            ctx = await resolverPrazo(ancoraId, usuario);
   else if (ancoraTipo === 'pagamento')        ctx = await resolverPagamento(ancoraId, usuario, opcoes);
+  else if (ancoraTipo === 'acordo')           ctx = await resolverAcordo(ancoraId, usuario, opcoes);
   else if (ancoraTipo === 'pessoa_fisica')    ctx = await resolverPessoa('fisica', ancoraId, usuario);
   else if (ancoraTipo === 'pessoa_juridica')  ctx = await resolverPessoa('juridica', ancoraId, usuario);
   // CAIXA ALTA nos nomes das partes, se o escritório ligou a opção.

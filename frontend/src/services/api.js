@@ -110,7 +110,7 @@ export const etiquetasAPI = {
 // DASHBOARD
 // ============================================================
 export const dashboardAPI = {
-  buscarDados: () => api.get('/dashboard'),
+  buscarDados: (params) => api.get('/dashboard', { params }),
 };
 
 // ============================================================
@@ -187,6 +187,7 @@ export const processosAPI = {
   criarProcesso:     (dados) => api.post('/processos', dados),
   atualizarProcesso: (id, dados) => api.put(`/processos/${id}`, dados),
   excluirProcesso:   (id) => api.delete(`/processos/${id}`),
+  historicoProcesso: (id) => api.get(`/processos/${id}/historico`),
   // Auxiliares (leitura)
   auxiliares:        () => api.get('/processos/auxiliares'),
   // Relatório: processos parados (risco de prescrição). Sem `dias`, usa o valor configurado.
@@ -226,7 +227,11 @@ export const prazosAPI = {
   tipos:            ()          => api.get('/prazos/tipos'),
   usuariosFiltro:   ()          => api.get('/prazos/usuarios'),
   criarTipo:        (dados)     => api.post('/prazos/tipos', dados),
+  editarTipo:       (id, dados) => api.put(`/prazos/tipos/${id}`, dados),
+  excluirTipo:      (id)        => api.delete(`/prazos/tipos/${id}`),
   criarSubtipo:     (dados)     => api.post('/prazos/subtipos', dados),
+  editarSubtipo:    (id, dados) => api.put(`/prazos/subtipos/${id}`, dados),
+  excluirSubtipo:   (id)        => api.delete(`/prazos/subtipos/${id}`),
   vencemHoje:       ()          => api.get('/prazos/hoje'),
   // Calcula data final consultando o calendário real do banco (inclui feriados)
   calcularDataFinal: (data_inicio, quantidade, tipo_dias) =>
@@ -311,12 +316,27 @@ export const financeiroAPI = {
   previaParcelas:  (dados) => api.post('/financeiro/acordo/previa', dados),
   criarAcordo:     (processoId, dados) => api.post(`/financeiro/processo/${processoId}/acordo`, dados),
   buscarAcordo:    (id) => api.get(`/financeiro/acordo/${id}`),
+  beneficiariosProcesso: (processoId) => api.get(`/financeiro/processo/${processoId}/beneficiarios`),
+  contasBeneficiario: (tipo, pessoaId) => api.get('/financeiro/beneficiario/contas', { params: { tipo, pessoa_id: pessoaId } }),
+  criarContaBeneficiario: (tipo, pessoaId, dados) => api.post(`/financeiro/beneficiario/${tipo}/${pessoaId}/conta`, dados),
+  contasEscritorio: () => api.get('/financeiro/contas-escritorio'),
+  criarContaEscritorio: (dados) => api.post('/financeiro/contas-escritorio', dados),
+  atualizarContaEscritorio: (id, dados) => api.put(`/financeiro/contas-escritorio/${id}`, dados),
+  desativarContaEscritorio: (id) => api.delete(`/financeiro/contas-escritorio/${id}`),
   atualizarAcordo: (id, dados) => api.put(`/financeiro/acordo/${id}`, dados),
   excluirAcordo:   (id) => api.delete(`/financeiro/acordo/${id}`),
   cancelarAcordo:  (id, dados) => api.put(`/financeiro/acordo/${id}/cancelar`, dados),
   // Baixa
   pagarParcela:    (id, dados) => api.put(`/financeiro/parcela/${id}/pagar`, dados),
   desfazerParcela: (id) => api.put(`/financeiro/parcela/${id}/desfazer`),
+  // Multa por atraso da parcela
+  lancarMulta:          (id, dados) => api.post(`/financeiro/parcela/${id}/multa`, dados),
+  editarMulta:          (id, dados) => api.put(`/financeiro/parcela/${id}/multa`, dados),
+  removerMulta:         (id) => api.delete(`/financeiro/parcela/${id}/multa`),
+  receberMulta:         (id, dados) => api.put(`/financeiro/parcela/${id}/multa/receber`, dados),
+  desfazerMulta:        (id) => api.put(`/financeiro/parcela/${id}/multa/desfazer`),
+  registrarRepasseMulta:(id, dados) => api.put(`/financeiro/parcela/${id}/multa/repasse`, dados),
+  desfazerRepasseMulta: (id, tipo) => api.put(`/financeiro/parcela/${id}/multa/repasse/desfazer`, { tipo }),
   // Histórico da parcela
   historicoParcela: (id) => api.get(`/financeiro/parcela/${id}/historico`),
   // Histórico do lançamento da conta corrente
@@ -334,6 +354,11 @@ export const financeiroAPI = {
   criarFormaPagamento:    (dados) => api.post('/financeiro/formas-pagamento', dados),
   atualizarFormaPagamento:(id, dados) => api.put(`/financeiro/formas-pagamento/${id}`, dados),
   excluirFormaPagamento:  (id) => api.delete(`/financeiro/formas-pagamento/${id}`),
+  // Instituições financeiras (bancos) — cadastro no Controle + select das contas bancárias
+  instituicoesFinanceiras:        () => api.get('/financeiro/instituicoes-financeiras'),
+  criarInstituicaoFinanceira:     (dados) => api.post('/financeiro/instituicoes-financeiras', dados),
+  atualizarInstituicaoFinanceira: (id, dados) => api.put(`/financeiro/instituicoes-financeiras/${id}`, dados),
+  excluirInstituicaoFinanceira:   (id) => api.delete(`/financeiro/instituicoes-financeiras/${id}`),
 };
 
 // ============================================================
@@ -370,7 +395,7 @@ export const documentosAPI = {
   // Opções para o "destino" do modelo (tipos de audiência/perícia, subtipos de prazo)
   destinosOpcoes:   () => api.get('/documentos/destinos-opcoes'),
   // Geração de documentos a partir de uma âncora (audiência, processo, etc.)
-  modelosParaGerar: (ancora, ancoraId, beneficiario) => api.get('/documentos/modelos-gerar', { params: { ancora, ancora_id: ancoraId, beneficiario } }),
+  modelosParaGerar: (ancora, ancoraId, beneficiario, destinatarioTipo, destinatarioId) => api.get('/documentos/modelos-gerar', { params: { ancora, ancora_id: ancoraId, beneficiario, destinatario_tipo: destinatarioTipo, destinatario_id: destinatarioId } }),
   gerar:            (dados) => api.post('/documentos/gerar', dados, { responseType: 'blob' }),
   // Quem naturalmente recebe o documento (pessoa da âncora ou cliente do processo) — { nome, emails[], ... }
   destinatarioSugerido: (ancora_tipo, ancora_id) => api.get('/documentos/destinatario-sugerido', { params: { ancora_tipo, ancora_id } }),

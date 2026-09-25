@@ -13,13 +13,14 @@ import './Dashboard.css';
 export default function Dashboard() {
   const [dados, setDados]         = useState(null);
   const [carregando, setCarregando] = useState(true);
+  const [periodoTarefas, setPeriodoTarefas] = useState('30_dias');
 
-  useEffect(() => { carregarDados(); }, []);
+  useEffect(() => { carregarDados(periodoTarefas); }, [periodoTarefas]);
 
-  async function carregarDados() {
+  async function carregarDados(periodo = periodoTarefas) {
     try {
       setCarregando(true);
-      const { data } = await dashboardAPI.buscarDados();
+      const { data } = await dashboardAPI.buscarDados({ periodo_tarefas: periodo });
       if (data.ok) setDados(data.dados);
     } catch (err) {
       console.error('Erro ao carregar dashboard:', err);
@@ -78,7 +79,10 @@ export default function Dashboard() {
 
           {/* Tarefas pendentes */}
           <div className="card">
-            <div className="card-titulo">✅ Tarefas pendentes ({dados.tarefas_pendentes.length})</div>
+            <div className="card-titulo card-titulo-com-filtros">
+              <span>✅ Tarefas pendentes ({dados.tarefas_pendentes.length})</span>
+              <FiltrosTarefas periodoSelecionado={periodoTarefas} onSelecionar={setPeriodoTarefas} />
+            </div>
             {dados.tarefas_pendentes.length === 0
               ? <p className="lista-vazia">Nenhuma tarefa pendente</p>
               : <TabelaTarefas tarefas={dados.tarefas_pendentes} />
@@ -202,6 +206,31 @@ function CardContador({ titulo, valor, cor, link }) {
   );
 }
 
+export function FiltrosTarefas({ periodoSelecionado, onSelecionar }) {
+  const opcoes = [
+    { valor: 'hoje', rotulo: 'Hoje' },
+    { valor: '7_dias', rotulo: '7 dias' },
+    { valor: '30_dias', rotulo: '30 dias' },
+    { valor: 'todas', rotulo: 'Todas' },
+  ];
+
+  return (
+    <div className="filtros-tarefas" role="group" aria-label="Período das tarefas pendentes">
+      {opcoes.map(({ valor, rotulo }) => (
+        <button
+          key={valor}
+          type="button"
+          className={`filtro-tarefa${periodoSelecionado === valor ? ' ativo' : ''}`}
+          onClick={() => onSelecionar(valor)}
+          aria-pressed={periodoSelecionado === valor}
+        >
+          {rotulo}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // Componente: tabela de prazos
 function TabelaPrazos({ prazos, mostrarAtraso }) {
   return (
@@ -276,7 +305,7 @@ function TabelaAudiencias({ audiencias }) {
               <td>{a.hora}</td>
               <td>{a.tipo || '—'}</td>
               <td><Link to={`/processos/pasta/${a.pasta_id}?aba=audiencias`}>{a.processo_numero || '—'}</Link></td>
-              <td><span className={`badge ${a.modalidade === 'virtual' ? 'badge-azul' : 'badge-cinza'}`}>{a.modalidade}</span></td>
+              <td><span className={`badge ${a.modalidade === 'virtual' ? 'badge-azul' : 'badge-cinza'}`}>{a.modalidade === 'sem_comparecimento' ? 'Sem comparecimento' : a.modalidade}</span></td>
             </tr>
           ))}
         </tbody>

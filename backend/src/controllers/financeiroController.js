@@ -26,6 +26,256 @@ function erroValidacaoFinanceiro(mensagem) {
   return err;
 }
 
+const tiposPessoa = new Set(['fisica', 'juridica']);
+const tabelaContaPessoa = (tipo) => tipo === 'juridica' ? 'contas_bancarias_pj' : 'contas_bancarias_pf';
+const tabelaPessoa = (tipo) => tipo === 'juridica' ? 'pessoas_juridicas' : 'pessoas_fisicas';
+const campoNomePessoa = (tipo) => tipo === 'juridica' ? 'razao_social' : 'nome';
+
+function inteiroPositivo(valor) {
+  const n = Number.parseInt(valor, 10);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+function normalizarDigitoConta(valor) {
+  const digito = String(valor ?? '').trim();
+  if (digito.length > 4) throw erroValidacaoFinanceiro('O dígito da conta pode ter no máximo 4 caracteres.');
+  return digito || null;
+}
+
+// Uma cópia do destino é guardada no momento do pagamento. Assim, renomear banco,
+// trocar a conta principal ou editar a ficha da pessoa nunca reescreve um pagamento já feito.
+async function resolverContaPessoa(conn, tipo, pessoaId, contaId) {
+  if (!tiposPessoa.has(tipo) || !inteiroPositivo(pessoaId) || !inteiroPositivo(contaId)) {
+    throw erroValidacaoFinanceiro('Informe a pessoa e a conta bancária de destino.');
+  }
+  const tabela = tabelaContaPessoa(tipo);
+  const [rows] = await conn.execute(
+    `SELECT cb.id, cb.tipo, cb.agencia, cb.numero, cb.digito, cb.chave_pix, cb.titular, cb.documento_titular,
+            cb.conta_terceiro, cb.observacao, ifin.nome AS instituicao_nome
+       FROM ${tabela} cb JOIN instituicao_financeira ifin ON ifin.id=cb.instituicao_financeira_id
+      WHERE cb.id=? AND cb.pessoa_id=? AND cb.ativo=1 LIMIT 1`, [contaId, pessoaId]
+  );
+  if (!rows.length) throw erroValidacaoFinanceiro('A conta escolhida não está ativa ou não pertence à pessoa indicada.');
+  return rows[0];
+}
+
+async function resolverContaEscritorio(conn, contaId) {
+  const id = inteiroPositivo(contaId);
+  if (!id) throw erroValidacaoFinanceiro('Informe a conta ou o caixa em espécie do escritório.');
+  const [rows] = await conn.execute(
+    `SELECT cf.*, ifin.nome AS instituicao_nome FROM conta_financeira cf
+       LEFT JOIN instituicao_financeira ifin ON ifin.id=cf.instituicao_financeira_id
+      WHERE cf.id=? AND cf.ativo=1 LIMIT 1`, [id]
+  );
+  if (!rows.length) throw erroValidacaoFinanceiro('A conta ou caixa do escritório não está ativo.');
+  return rows[0];
+}
+
+async function resolverFormaPagamento(conn, formaId, tipoConta) {
+  const id = inteiroPositivo(formaId);
+  if (!id) throw erroValidacaoFinanceiro('Informe a forma de recebimento ou pagamento.');
+  const [rows] = await conn.execute(
+    'SELECT id, nome, uso_permitido FROM forma_pagamento WHERE id=? AND ativo=1 FOR UPDATE', [id]
+  );
+  if (!rows.length) throw erroValidacaoFinanceiro('A forma escolhida não está ativa.');
+  const usoNecessario = tipoConta === 'especie' ? 'especie' : 'financeira';
+  if (rows[0].uso_permitido !== 'ambos' && rows[0].uso_permitido !== usoNecessario) {
+    throw erroValidacaoFinanceiro('Esta forma não é compatível com a conta ou caixa selecionado.');
+  }
+  return rows[0];
+}
+
+async function listarContasEscritorio(req, res) {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT cf.*, ifin.nome AS instituicao_nome FROM conta_financeira cf
+       LEFT JOIN instituicao_financeira ifin ON ifin.id=cf.instituicao_financeira_id
+       WHERE cf.ativo=1 ORDER BY cf.principal DESC, cf.tipo ASC, ifin.nome ASC, cf.nome ASC`
+    );
+    return sucesso(res, rows);
+  } catch (err) { return erroInterno(res, err); }
+}
+
+async function salvarContaEscritorio(req, res) {
+  const id = inteiroPositivo(req.params.id);
+  const { instituicao_financeira_id, nome, tipo, agencia, numero, digito, chave_pix, observacao, principal } = req.body;
+  const tipoConta = tipo === 'especie' ? 'especie' : 'bancaria';
+  if (!String(nome || '').trim()) return erro(res, 'Dê um nome para identificar esta conta ou caixa.');
+  const instituicaoId = inteiroPositivo(instituicao_financeira_id);
+  if (tipoConta === 'bancaria' && !instituicaoId) return erro(res, 'Escolha a instituição financeira da conta bancária.');
+  let digitoNormalizado;
+  try {
+    digitoNormalizado = tipoConta === 'bancaria' ? normalizarDigitoConta(digito) : null;
+  } catch (err) {
+    if (err.codigoValidacaoFinanceiro) return erro(res, err.message, 422);
+    return erroInterno(res, err);
+  }
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    if (tipoConta === 'bancaria') {
+      const [banco] = await conn.execute('SELECT id FROM instituicao_financeira WHERE id=? AND ativo=1', [instituicaoId]);
+      if (!banco.length) throw erroValidacaoFinanceiro('A instituição financeira escolhida não está ativa.');
+    }
+    let contaId = id;
+    const dadosBancarios = tipoConta === 'bancaria'
+      ? [agencia || null, numero || null, digitoNormalizado, chave_pix || null]
+      : [null, null, null, null];
+    const valores = [tipoConta === 'bancaria' ? instituicaoId : null, String(nome).trim(), tipoConta,
+      ...dadosBancarios, observacao ? String(observacao).trim() : null, principal ? 1 : 0];
+    if (id) {
+      const [existentes] = await conn.execute('SELECT tipo, ativo FROM conta_financeira WHERE id=? FOR UPDATE', [id]);
+      if (!existentes.length) { await conn.rollback(); return naoEncontrado(res, 'Conta do escritório não encontrada'); }
+      if (existentes[0].tipo === 'especie' && existentes[0].ativo && tipoConta !== 'especie') {
+        const [outrosCaixas] = await conn.execute('SELECT id FROM conta_financeira WHERE tipo=\'especie\' AND ativo=1 AND id<>? FOR UPDATE', [id]);
+        if (!outrosCaixas.length) throw erroValidacaoFinanceiro('O escritório precisa manter ao menos um caixa físico ativo.');
+      }
+      const [r] = await conn.execute(`UPDATE conta_financeira SET instituicao_financeira_id=?, nome=?, tipo=?, agencia=?, numero=?, digito=?, chave_pix=?, observacao=?, principal=?, ativo=1 WHERE id=?`, [...valores, id]);
+      if (!r.affectedRows) { await conn.rollback(); return naoEncontrado(res, 'Conta do escritório não encontrada'); }
+    } else {
+      const [r] = await conn.execute(`INSERT INTO conta_financeira (instituicao_financeira_id,nome,tipo,agencia,numero,digito,chave_pix,observacao,principal) VALUES (?,?,?,?,?,?,?,?,?)`, valores);
+      contaId = r.insertId;
+    }
+    if (principal) await conn.execute('UPDATE conta_financeira SET principal=0 WHERE id<>?', [contaId]);
+    await conn.commit();
+    return sucesso(res, { id: contaId }, id ? 'Conta atualizada' : 'Conta cadastrada', id ? 200 : 201);
+  } catch (err) {
+    await conn.rollback();
+    if (err.codigoValidacaoFinanceiro) return erro(res, err.message, 422);
+    if (err.code === 'ER_DUP_ENTRY') return erro(res, 'Já existe uma conta do escritório com esse nome.');
+    return erroInterno(res, err);
+  } finally { conn.release(); }
+}
+
+async function desativarContaEscritorio(req, res) {
+  const id = inteiroPositivo(req.params.id);
+  if (!id) return erro(res, 'Conta inválida');
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [existentes] = await conn.execute('SELECT tipo FROM conta_financeira WHERE id=? AND ativo=1 FOR UPDATE', [id]);
+    if (!existentes.length) { await conn.rollback(); return naoEncontrado(res, 'Conta do escritório não encontrada ou já está inativa'); }
+    if (existentes[0].tipo === 'especie') {
+      const [caixasAtivos] = await conn.execute('SELECT id FROM conta_financeira WHERE tipo=\'especie\' AND ativo=1 FOR UPDATE');
+      if (caixasAtivos.length <= 1) throw erroValidacaoFinanceiro('O caixa físico do escritório não pode ser desativado.');
+    }
+    await conn.execute('UPDATE conta_financeira SET ativo=0, principal=0 WHERE id=?', [id]);
+    await conn.commit();
+    return sucesso(res, null, 'Conta desativada. O histórico foi preservado.');
+  } catch (err) {
+    await conn.rollback();
+    if (err.codigoValidacaoFinanceiro) return erro(res, err.message, 422);
+    return erroInterno(res, err);
+  } finally { conn.release(); }
+}
+
+async function listarBeneficiariosProcesso(req, res) {
+  const processoId = inteiroPositivo(req.params.processoId);
+  if (!processoId) return erro(res, 'Processo inválido');
+  try {
+    const [rows] = await pool.execute(
+      `SELECT DISTINCT 'fisica' AS tipo, pf.id, pf.nome AS nome FROM pessoas_fisicas pf
+         JOIN (SELECT pessoa_id FROM tbltituloprocautor WHERE proc_id=? AND tipo_pessoa='fisica'
+               UNION SELECT pessoa_id FROM tbltituloprocreu WHERE proc_id=? AND tipo_pessoa='fisica') x ON x.pessoa_id=pf.id
+       UNION
+       SELECT DISTINCT 'juridica' AS tipo, pj.id, pj.razao_social AS nome FROM pessoas_juridicas pj
+         JOIN (SELECT pessoa_id FROM tbltituloprocautor WHERE proc_id=? AND tipo_pessoa='juridica'
+               UNION SELECT pessoa_id FROM tbltituloprocreu WHERE proc_id=? AND tipo_pessoa='juridica') x ON x.pessoa_id=pj.id
+       ORDER BY nome`, [processoId, processoId, processoId, processoId]
+    );
+    return sucesso(res, rows);
+  } catch (err) { return erroInterno(res, err); }
+}
+
+async function listarContasBeneficiario(req, res) {
+  const tipo = req.query.tipo;
+  const pessoaId = inteiroPositivo(req.query.pessoa_id);
+  if (!tiposPessoa.has(tipo) || !pessoaId) return erro(res, 'Beneficiário inválido');
+  try {
+    const tabela = tabelaContaPessoa(tipo);
+    const [rows] = await pool.execute(
+      `SELECT cb.*, ifin.nome AS instituicao_nome FROM ${tabela} cb
+       JOIN instituicao_financeira ifin ON ifin.id=cb.instituicao_financeira_id
+       WHERE cb.pessoa_id=? AND cb.ativo=1 ORDER BY cb.principal DESC, cb.id`, [pessoaId]
+    );
+    return sucesso(res, rows);
+  } catch (err) { return erroInterno(res, err); }
+}
+
+// POST /api/financeiro/beneficiario/:tipo/:id/conta — cadastro rápido durante o repasse.
+// Cria (ou reativa, se for a mesma conta) sem regravar a ficha, telefones ou outras contas da pessoa.
+async function criarContaBeneficiario(req, res) {
+  const tipo = req.params.tipo;
+  const pessoaId = inteiroPositivo(req.params.id);
+  const tabela = tiposPessoa.has(tipo) ? tabelaContaPessoa(tipo) : null;
+  if (!tabela || !pessoaId) return erro(res, 'Beneficiário inválido.');
+
+  const { instituicao_financeira_id, tipo_conta, agencia, numero, digito, chave_pix,
+    conta_terceiro, titular, documento_titular, observacao, principal } = req.body;
+  const instituicaoId = inteiroPositivo(instituicao_financeira_id);
+  if (!instituicaoId) return erro(res, 'Escolha a instituição financeira.');
+  let digitoNormalizado;
+  try { digitoNormalizado = normalizarDigitoConta(digito); }
+  catch (err) { return erro(res, err.message); }
+  const observacaoNormalizada = String(observacao || '').trim();
+  if (observacaoNormalizada.length > 1000) return erro(res, 'A observação da conta pode ter no máximo 1.000 caracteres.');
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [pessoas] = await conn.execute(
+      tipo === 'juridica'
+        ? 'SELECT razao_social AS nome, cnpj AS documento FROM pessoas_juridicas WHERE id=? FOR UPDATE'
+        : 'SELECT nome, cpf AS documento FROM pessoas_fisicas WHERE id=? FOR UPDATE',
+      [pessoaId]
+    );
+    if (!pessoas.length) { await conn.rollback(); return naoEncontrado(res, 'Beneficiário não encontrado.'); }
+    const [instituicoes] = await conn.execute('SELECT id FROM instituicao_financeira WHERE id=? AND ativo=1 FOR UPDATE', [instituicaoId]);
+    if (!instituicoes.length) { await conn.rollback(); return erro(res, 'A instituição financeira escolhida não está ativa.'); }
+
+    const terceiro = conta_terceiro ? 1 : 0;
+    const titularConta = terceiro ? String(titular || '').trim() : String(pessoas[0].nome || '').trim();
+    const documentoConta = terceiro ? String(documento_titular || '').replace(/\D/g, '') : String(pessoas[0].documento || '').replace(/\D/g, '');
+    if (!titularConta || !documentoConta) {
+      await conn.rollback();
+      return erro(res, 'O beneficiário precisa ter CPF/CNPJ cadastrado ou a conta deve ser marcada como de terceiro com titular e documento.');
+    }
+    const tipoConta = tipo_conta === 'poupanca' ? 'poupanca' : 'corrente';
+    const valores = [instituicaoId, tipoConta, agencia || null, numero || null, digitoNormalizado, chave_pix || null,
+      terceiro, titularConta, documentoConta, observacaoNormalizada || null, principal ? 1 : 0];
+    const [iguais] = await conn.execute(
+      `SELECT id FROM ${tabela}
+        WHERE pessoa_id=? AND instituicao_financeira_id=? AND tipo=?
+          AND COALESCE(agencia,'')=COALESCE(?,'') AND COALESCE(numero,'')=COALESCE(?,'')
+          AND COALESCE(digito,'')=COALESCE(?,'') AND COALESCE(chave_pix,'')=COALESCE(?,'')
+        LIMIT 1 FOR UPDATE`,
+      [pessoaId, instituicaoId, tipoConta, agencia || null, numero || null, digitoNormalizado, chave_pix || null]
+    );
+    let contaId;
+    if (iguais.length) {
+      contaId = iguais[0].id;
+      await conn.execute(`UPDATE ${tabela} SET ativo=1, principal=? WHERE id=? AND pessoa_id=?`, [principal ? 1 : 0, contaId, pessoaId]);
+    } else {
+      const [nova] = await conn.execute(
+        `INSERT INTO ${tabela} (pessoa_id,instituicao_financeira_id,tipo,agencia,numero,digito,chave_pix,conta_terceiro,titular,documento_titular,observacao,principal)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [pessoaId, ...valores]
+      );
+      contaId = nova.insertId;
+    }
+    if (principal) await conn.execute(`UPDATE ${tabela} SET principal=0 WHERE pessoa_id=? AND id<>?`, [pessoaId, contaId]);
+    await auditoria.registrar(req.usuario.id, 'conta_bancaria', 'criar', contaId, null, { pessoa_tipo: tipo, pessoa_id: pessoaId }, conn);
+    await conn.commit();
+    return sucesso(res, { id: contaId }, 'Conta do beneficiário cadastrada.', 201);
+  } catch (err) {
+    await conn.rollback();
+    if (err.codigoValidacaoFinanceiro) return erro(res, err.message);
+    return erroInterno(res, err);
+  } finally {
+    conn.release();
+  }
+}
+
 // Soma N meses a uma data 'YYYY-MM-DD', mantendo o dia (com clamp no último dia do mês).
 function somarMeses(dataStr, n) {
   const [y, m, d] = String(dataStr).slice(0, 10).split('-').map(Number);
@@ -174,9 +424,9 @@ async function editarLancamento(req, res) {
     await conn.beginTransaction();
     const [rows] = await conn.execute('SELECT * FROM conta_corrente WHERE id = ?', [id]);
     if (!rows.length) { await conn.rollback(); return naoEncontrado(res, 'Lançamento não encontrado'); }
-    if (rows[0].origem === 'acordo') {
+    if (rows[0].origem !== 'manual') {
       await conn.rollback();
-      return erro(res, 'Este lançamento veio de uma parcela de acordo. Desfaça o recebimento da parcela para alterá-lo.');
+      return erro(res, 'Este lançamento veio de uma parcela de acordo. Desfaça o recebimento (ou o repasse) da parcela para alterá-lo.');
     }
     const novo = { data: data || rows[0].data, descricao: descricao.trim(), tipo, valor: round2(valor) };
     // Registra no histórico cada campo que mudou (campo a campo, De → Para)
@@ -208,9 +458,9 @@ async function excluirLancamento(req, res) {
     await conn.beginTransaction();
     const [rows] = await conn.execute('SELECT * FROM conta_corrente WHERE id = ?', [id]);
     if (!rows.length) { await conn.rollback(); return naoEncontrado(res, 'Lançamento não encontrado'); }
-    if (rows[0].origem === 'acordo') {
+    if (rows[0].origem !== 'manual') {
       await conn.rollback();
-      return erro(res, 'Este lançamento veio de uma parcela de acordo. Desfaça o recebimento da parcela para removê-lo.');
+      return erro(res, 'Este lançamento veio de uma parcela de acordo. Desfaça o recebimento (ou o repasse) da parcela para removê-lo.');
     }
     await conn.execute('DELETE FROM conta_corrente WHERE id = ?', [id]);
     await auditoria.registrar(req.usuario.id, 'conta_corrente', 'excluir', id, rows[0], null, conn);
@@ -255,7 +505,7 @@ async function listarAcordos(req, res) {
 // SEM salvar. Alimenta o modal editável. Body: { valor_total, qtd_parcelas, data_primeira, honor_percentual }
 async function gerarPreviaParcelas(req, res) {
   try {
-    const { valor_total, qtd_parcelas, data_primeira, honor_percentual } = req.body;
+    const { valor_total, qtd_parcelas, data_primeira, honor_percentual, multa_percentual } = req.body;
     const total = round2(valor_total);
     const qtd = parseInt(qtd_parcelas, 10);
     if (!total || total <= 0) return erro(res, 'Valor total deve ser maior que zero');
@@ -263,6 +513,9 @@ async function gerarPreviaParcelas(req, res) {
     if (!data_primeira)       return erro(res, 'Data da primeira parcela é obrigatória');
 
     const pct = honor_percentual != null && honor_percentual !== '' ? Number(honor_percentual) : 30; // padrão 30%
+    // Multa por atraso: sem valor padrão (nem todo acordo tem cláusula de multa judicial) —
+    // só entra na parcela se o usuário informar algo no cabeçalho do acordo.
+    const multaPct = multa_percentual != null && multa_percentual !== '' ? Number(multa_percentual) : null;
 
     // Divide o total: todas iguais (round2) e a ÚLTIMA absorve a diferença de centavos
     const base = round2(total / qtd);
@@ -273,7 +526,7 @@ async function gerarPreviaParcelas(req, res) {
       const calc = calcularValoresParcela({
         valor_bruto: bruto, honor_tipo: 'percent', honor_percentual: pct,
       }, `Parcela ${i + 1}`);
-      parcelas.push({ numero: i + 1, vencimento: venc, status: 'pendente', ...calc });
+      parcelas.push({ numero: i + 1, vencimento: venc, status: 'pendente', multa_percentual: multaPct, ...calc });
     }
     return sucesso(res, { valor_total: total, qtd_parcelas: qtd, parcelas });
   } catch (err) {
@@ -285,7 +538,8 @@ async function gerarPreviaParcelas(req, res) {
 // POST /api/financeiro/processo/:processoId/acordo — cria acordo + parcelas (tabela já editada)
 async function criarAcordo(req, res) {
   const { processoId } = req.params;
-  const { descricao, valor_total, qtd_parcelas, data_primeira, parcelas, tipo } = req.body;
+  const { descricao, valor_total, qtd_parcelas, data_primeira, parcelas, tipo,
+    beneficiario_cliente_tipo, beneficiario_cliente_id, beneficiario_cliente_conta_id } = req.body;
   const tipoAcordo = tipo === 'alvara' ? 'alvara' : 'acordo';   // mesma estrutura serve a acordo e alvará
 
   if (!Array.isArray(parcelas) || !parcelas.length) return erro(res, 'Informe as parcelas');
@@ -294,14 +548,22 @@ async function criarAcordo(req, res) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    let destinoCliente = null;
+    if (beneficiario_cliente_tipo || beneficiario_cliente_id || beneficiario_cliente_conta_id) {
+      destinoCliente = await resolverContaPessoa(conn, beneficiario_cliente_tipo, beneficiario_cliente_id, beneficiario_cliente_conta_id);
+    }
     const [a] = await conn.execute(
-      `INSERT INTO acordo (processo_id, tipo, descricao, valor_total, qtd_parcelas, data_primeira, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO acordo (processo_id, tipo, descricao, valor_total, qtd_parcelas, data_primeira, criado_por,
+        beneficiario_cliente_tipo, beneficiario_cliente_id, beneficiario_cliente_conta_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [processoId, tipoAcordo, descricao || null, round2(valor_total), parseInt(qtd_parcelas, 10) || parcelas.length,
-       data_primeira || parcelas[0].vencimento, req.usuario.id]
+       data_primeira || parcelas[0].vencimento, req.usuario.id,
+       destinoCliente ? beneficiario_cliente_tipo : null, destinoCliente ? beneficiario_cliente_id : null, destinoCliente ? beneficiario_cliente_conta_id : null]
     );
     const acordoId = a.insertId;
-    await inserirParcelas(conn, acordoId, parcelas, req.usuario.id, valor_total);
+    await inserirParcelas(conn, acordoId, parcelas, req.usuario.id, valor_total, destinoCliente ? {
+      tipo: beneficiario_cliente_tipo, pessoaId: beneficiario_cliente_id, contaId: beneficiario_cliente_conta_id,
+    } : null);
     await auditoria.registrar(req.usuario.id, 'acordo', 'criar', acordoId, null, null, conn);
     await conn.commit();
     return sucesso(res, { id: acordoId }, 'Acordo criado com sucesso', 201);
@@ -383,7 +645,7 @@ function fmtCC(campo, v) {
 // Insere a lista de parcelas (recalculando os valores no backend — nunca confia na conta do front).
 // Registra o evento 'criada' no histórico de cada parcela. Antes de gravar qualquer coisa,
 // confere que a soma dos valores brutos bate EXATAMENTE com o valor total do acordo.
-async function inserirParcelas(conn, acordoId, parcelas, usuarioId, valorTotal) {
+async function inserirParcelas(conn, acordoId, parcelas, usuarioId, valorTotal, destinoCliente = null) {
   const calculadas = parcelas.map((p, i) => calcularValoresParcela(p, `Parcela ${p.numero || (i + 1)}`));
   const soma = round2(calculadas.reduce((s, v) => s + v.valor_bruto, 0));
   if (round2(valorTotal) !== soma) {
@@ -392,15 +654,27 @@ async function inserirParcelas(conn, acordoId, parcelas, usuarioId, valorTotal) 
   for (let i = 0; i < parcelas.length; i++) {
     const p = parcelas[i];
     const v = calculadas[i];
+    const multaPct = p.multa_percentual != null && p.multa_percentual !== '' ? Number(p.multa_percentual) : null;
+    // O servidor recalcula tudo, mas este campo vinha direto do corpo da requisição sem
+    // conferir contra a lista de tipos válidos (auditoria 24/09, item 9 — S7 corrigiu dado
+    // antigo gravado antes desta trava existir).
+    const repasseClienteTipo = p.repasse_cliente_tipo || destinoCliente?.tipo || null;
+    if (repasseClienteTipo && !tiposPessoa.has(repasseClienteTipo)) {
+      throw erroValidacaoFinanceiro(`Tipo de beneficiário do repasse inválido na parcela ${p.numero || (i + 1)}.`);
+    }
     const [r] = await conn.execute(
       `INSERT INTO acordo_parcela
         (acordo_id, numero, vencimento, valor_bruto, honor_tipo, honor_percentual, honor_valor,
          valor_liquido, observacao, parceria_pessoa_tipo, parceria_pessoa_id, parceria_tipo,
-         parceria_percentual, parceria_valor, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendente')`,
+         parceria_percentual, parceria_valor, multa_percentual, repasse_cliente_tipo, repasse_cliente_pessoa_id,
+         repasse_cliente_conta_id, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendente')`,
       [acordoId, p.numero || (i + 1), p.vencimento,
        v.valor_bruto, v.honor_tipo, v.honor_percentual, v.honor_valor, v.valor_liquido, v.observacao,
-       v.parceria_pessoa_tipo, v.parceria_pessoa_id, v.parceria_tipo, v.parceria_percentual, v.parceria_valor]
+       v.parceria_pessoa_tipo, v.parceria_pessoa_id, v.parceria_tipo, v.parceria_percentual, v.parceria_valor, multaPct,
+       repasseClienteTipo,
+       p.repasse_cliente_pessoa_id || destinoCliente?.pessoaId || null,
+       p.repasse_cliente_conta_id || destinoCliente?.contaId || null]
     );
     await logParcela(conn, r.insertId, usuarioId, 'criada', null, null, `Parcela ${p.numero || (i + 1)} criada`);
   }
@@ -423,6 +697,24 @@ async function buscarAcordo(req, res) {
        FROM acordo_parcela ap WHERE ap.acordo_id = ? ORDER BY ap.numero ASC`,
       [id]
     );
+    // Multa por atraso: no máximo uma por parcela — carregada à parte e aninhada em
+    // `parcela.multa` (evita colidir nomes de coluna com a própria acordo_parcela).
+    if (parcelas.length) {
+      const ph = parcelas.map(() => '?').join(',');
+      const [multas] = await pool.execute(
+        `SELECT m.*,
+                CASE m.parceria_pessoa_tipo
+                  WHEN 'fisica'   THEN (SELECT pf.nome         FROM pessoas_fisicas   pf WHERE pf.id = m.parceria_pessoa_id)
+                  WHEN 'juridica' THEN (SELECT pj.razao_social FROM pessoas_juridicas pj WHERE pj.id = m.parceria_pessoa_id)
+                  ELSE NULL
+                END AS parceria_nome,
+                (SELECT fp.nome FROM forma_pagamento fp WHERE fp.id = m.recebimento_forma_id) AS recebimento_forma_nome
+         FROM acordo_parcela_multa m WHERE m.parcela_id IN (${ph})`,
+        parcelas.map(p => p.id)
+      );
+      const multaPorParcela = new Map(multas.map(m => [m.parcela_id, m]));
+      for (const p of parcelas) p.multa = multaPorParcela.get(p.id) || null;
+    }
     return sucesso(res, { ...acordo[0], parcelas });
   } catch (err) {
     return erroInterno(res, err);
@@ -430,10 +722,11 @@ async function buscarAcordo(req, res) {
 }
 
 // PUT /api/financeiro/acordo/:id — atualiza acordo + regrava parcelas.
-// Bloqueado se houver parcela já recebida (desfaça o recebimento antes).
+// Parcelas já recebidas são imutáveis; as pendentes do mesmo acordo continuam editáveis.
 async function atualizarAcordo(req, res) {
   const { id } = req.params;
-  const { descricao, valor_total, qtd_parcelas, data_primeira, parcelas } = req.body;
+  const { descricao, valor_total, qtd_parcelas, data_primeira, parcelas,
+    beneficiario_cliente_tipo, beneficiario_cliente_id, beneficiario_cliente_conta_id } = req.body;
   if (!Array.isArray(parcelas) || !parcelas.length) return erro(res, 'Informe as parcelas do acordo');
 
   const conn = await pool.getConnection();
@@ -442,12 +735,19 @@ async function atualizarAcordo(req, res) {
     const [ac] = await conn.execute('SELECT id FROM acordo WHERE id = ?', [id]);
     if (!ac.length) { await conn.rollback(); return naoEncontrado(res, 'Acordo não encontrado'); }
 
-    const [pagas] = await conn.execute(
-      `SELECT COUNT(*) AS n FROM acordo_parcela WHERE acordo_id = ? AND status = 'pago'`, [id]
-    );
-    if (pagas[0].n > 0) {
-      await conn.rollback();
-      return erro(res, 'Há parcelas já recebidas. Desfaça os recebimentos antes de editar o acordo.');
+    let destinoCliente = null;
+    if (beneficiario_cliente_tipo || beneficiario_cliente_id || beneficiario_cliente_conta_id) {
+      // resolverContaPessoa só CONFIRMA que a conta existe/está ativa — o retorno dela traz
+      // o tipo da CONTA (corrente/poupança), não o tipo da PESSOA. Por isso o objeto usado
+      // daqui pra baixo (e passado às parcelas) é reconstruído com os dados do próprio
+      // formulário, exatamente como já era feito em criarAcordo (auditoria 23/09: aqui
+      // faltava essa reconstrução — uma parcela nova sem repasse_cliente_tipo/pessoa_id
+      // próprios acabava herdando o tipo de conta em vez do tipo de pessoa, e a pessoa
+      // ficava null porque resolverContaPessoa nem devolve esse campo).
+      await resolverContaPessoa(conn, beneficiario_cliente_tipo, beneficiario_cliente_id, beneficiario_cliente_conta_id);
+      destinoCliente = {
+        tipo: beneficiario_cliente_tipo, pessoaId: beneficiario_cliente_id, contaId: beneficiario_cliente_conta_id,
+      };
     }
 
     // Recalcula e valida TODAS as parcelas antes de gravar qualquer coisa — inclusive que a
@@ -461,19 +761,37 @@ async function atualizarAcordo(req, res) {
 
     await conn.execute(
       `UPDATE acordo SET descricao = ?, valor_total = ?, qtd_parcelas = ?, data_primeira = ?,
+              beneficiario_cliente_tipo=?, beneficiario_cliente_id=?, beneficiario_cliente_conta_id=?,
               alterado_por = ?, alterado_em = NOW() WHERE id = ?`,
       [descricao || null, round2(valor_total), parseInt(qtd_parcelas, 10) || parcelas.length,
-       data_primeira || parcelas[0].vencimento, req.usuario.id, id]
+       data_primeira || parcelas[0].vencimento,
+       destinoCliente ? beneficiario_cliente_tipo : null, destinoCliente ? beneficiario_cliente_id : null,
+       destinoCliente ? beneficiario_cliente_conta_id : null, req.usuario.id, id]
     );
 
-    // Diff das parcelas — MANTÉM os IDs p/ preservar o histórico de cada parcela:
-    //  existente sem correspondente no payload → DELETE (histórico cai por cascade)
-    //  payload com id existente → UPDATE + registra cada campo alterado
-    //  payload sem id → INSERT (parcela nova) + registra 'criada'
-    const [existentes] = await conn.execute('SELECT * FROM acordo_parcela WHERE acordo_id = ?', [id]);
+    // Diff das parcelas — MANTÉM os IDs p/ preservar o histórico de cada parcela.
+    // As recebidas ficam travadas na própria transação: não podem ser apagadas, alteradas
+    // nem substituídas por uma chamada direta à API. As pendentes seguem normalmente editáveis.
+    const [existentes] = await conn.execute('SELECT * FROM acordo_parcela WHERE acordo_id = ? FOR UPDATE', [id]);
     const incomingIds = parcelas.filter(p => p.id).map(p => Number(p.id));
+    for (const ex of existentes.filter(p => p.status === 'pago')) {
+      const indice = parcelas.findIndex(p => Number(p.id) === Number(ex.id));
+      if (indice < 0) {
+        await conn.rollback();
+        return erro(res, `A parcela ${ex.numero} já foi recebida e não pode ser removida do acordo.`, 422);
+      }
+      const enviada = parcelas[indice];
+      const calculada = calculadas[indice];
+      const nova = { ...calculada, numero: enviada.numero || (indice + 1), vencimento: enviada.vencimento };
+      const camposImutaveis = ['numero', 'vencimento', 'valor_bruto', 'honor_tipo', 'honor_percentual', 'honor_valor', 'observacao',
+        'parceria_pessoa_tipo', 'parceria_pessoa_id', 'parceria_tipo', 'parceria_percentual', 'parceria_valor'];
+      if (camposImutaveis.some(campo => normCmp(campo, ex[campo]) !== normCmp(campo, nova[campo]))) {
+        await conn.rollback();
+        return erro(res, `A parcela ${ex.numero} já foi recebida e não pode ser alterada.`, 422);
+      }
+    }
     for (const ex of existentes) {
-      if (!incomingIds.includes(Number(ex.id))) await conn.execute('DELETE FROM acordo_parcela WHERE id = ?', [ex.id]);
+      if (!incomingIds.includes(Number(ex.id)) && ex.status !== 'pago') await conn.execute('DELETE FROM acordo_parcela WHERE id = ?', [ex.id]);
     }
 
     for (let i = 0; i < parcelas.length; i++) {
@@ -482,6 +800,7 @@ async function atualizarAcordo(req, res) {
       const numero = p.numero || (i + 1);
       const ex = p.id ? existentes.find(e => Number(e.id) === Number(p.id)) : null;
       if (ex) {
+        if (ex.status === 'pago') continue;
         const novo = { ...v, vencimento: p.vencimento };
         for (const [k, label] of CAMPOS_HIST) {
           if (normCmp(k, ex[k]) !== normCmp(k, novo[k])) {
@@ -494,22 +813,38 @@ async function atualizarAcordo(req, res) {
           const novoNome  = await resolverNomePessoa(conn, v.parceria_pessoa_tipo, v.parceria_pessoa_id);
           await logParcela(conn, ex.id, req.usuario.id, 'editada', 'Parceiro', antesNome || '—', novoNome || '—');
         }
+        const multaPct = p.multa_percentual != null && p.multa_percentual !== '' ? Number(p.multa_percentual) : null;
+        const repasseClienteTipoEdit = p.repasse_cliente_tipo || destinoCliente?.tipo || null;
+        if (repasseClienteTipoEdit && !tiposPessoa.has(repasseClienteTipoEdit)) {
+          throw erroValidacaoFinanceiro(`Tipo de beneficiário do repasse inválido na parcela ${numero}.`);
+        }
         await conn.execute(
           `UPDATE acordo_parcela SET numero=?, vencimento=?, valor_bruto=?, honor_tipo=?, honor_percentual=?,
              honor_valor=?, valor_liquido=?, observacao=?, parceria_pessoa_tipo=?, parceria_pessoa_id=?,
-             parceria_tipo=?, parceria_percentual=?, parceria_valor=? WHERE id=?`,
+             parceria_tipo=?, parceria_percentual=?, parceria_valor=?, multa_percentual=?, repasse_cliente_tipo=?,
+             repasse_cliente_pessoa_id=?, repasse_cliente_conta_id=? WHERE id=?`,
           [numero, p.vencimento, v.valor_bruto, v.honor_tipo, v.honor_percentual, v.honor_valor, v.valor_liquido,
            v.observacao, v.parceria_pessoa_tipo, v.parceria_pessoa_id, v.parceria_tipo, v.parceria_percentual,
-           v.parceria_valor, ex.id]
+           v.parceria_valor, multaPct, repasseClienteTipoEdit,
+           p.repasse_cliente_pessoa_id || destinoCliente?.pessoaId || null,
+           p.repasse_cliente_conta_id || destinoCliente?.contaId || null, ex.id]
         );
       } else {
+        const multaPct = p.multa_percentual != null && p.multa_percentual !== '' ? Number(p.multa_percentual) : null;
+        const repasseClienteTipoNovo = p.repasse_cliente_tipo || destinoCliente?.tipo || null;
+        if (repasseClienteTipoNovo && !tiposPessoa.has(repasseClienteTipoNovo)) {
+          throw erroValidacaoFinanceiro(`Tipo de beneficiário do repasse inválido na parcela ${numero}.`);
+        }
         const [r] = await conn.execute(
           `INSERT INTO acordo_parcela (acordo_id, numero, vencimento, valor_bruto, honor_tipo, honor_percentual,
              honor_valor, valor_liquido, observacao, parceria_pessoa_tipo, parceria_pessoa_id, parceria_tipo,
-             parceria_percentual, parceria_valor, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendente')`,
+             parceria_percentual, parceria_valor, multa_percentual, repasse_cliente_tipo, repasse_cliente_pessoa_id,
+             repasse_cliente_conta_id, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendente')`,
           [id, numero, p.vencimento, v.valor_bruto, v.honor_tipo, v.honor_percentual, v.honor_valor, v.valor_liquido,
-           v.observacao, v.parceria_pessoa_tipo, v.parceria_pessoa_id, v.parceria_tipo, v.parceria_percentual, v.parceria_valor]
+           v.observacao, v.parceria_pessoa_tipo, v.parceria_pessoa_id, v.parceria_tipo, v.parceria_percentual, v.parceria_valor, multaPct,
+           repasseClienteTipoNovo, p.repasse_cliente_pessoa_id || destinoCliente?.pessoaId || null,
+           p.repasse_cliente_conta_id || destinoCliente?.contaId || null]
         );
         await logParcela(conn, r.insertId, req.usuario.id, 'criada', null, null, `Parcela ${numero} criada`);
       }
@@ -544,6 +879,19 @@ async function excluirAcordo(req, res) {
     if (pagas[0].n > 0) {
       await conn.rollback();
       return erro(res, 'Há parcelas já recebidas. Desfaça os recebimentos antes de excluir o acordo.');
+    }
+    // Uma multa pode ser lançada e recebida (dinheiro já entrou, lançamento real na conta
+    // corrente) mesmo com a parcela dela ainda pendente — sem esta checagem, excluir o
+    // acordo apagaria a multa em cascata e deixaria esse lançamento sem dono (parcela_id
+    // vira NULL) e sem jeito de desfazer, órfão pra sempre no extrato do processo.
+    const [multasAtivas] = await conn.execute(
+      `SELECT COUNT(*) AS n FROM acordo_parcela_multa m
+       JOIN acordo_parcela ap ON ap.id = m.parcela_id
+       WHERE ap.acordo_id = ? AND m.status IN ('pendente','pago')`, [id]
+    );
+    if (multasAtivas[0].n > 0) {
+      await conn.rollback();
+      return erro(res, 'Há multa lançada e/ou recebida em alguma parcela deste acordo. Receba (ou remova) e desfaça o recebimento da multa antes de excluir o acordo.');
     }
     await conn.execute('DELETE FROM acordo WHERE id = ?', [id]); // CASCADE remove as parcelas
     await auditoria.registrar(req.usuario.id, 'acordo', 'excluir', id, ac[0], null, conn);
@@ -595,10 +943,17 @@ async function cancelarAcordo(req, res) {
 }
 
 // ============================================================
-// BAIXA — recebimento de parcela vira lançamento(s) na conta corrente
-// Modelo "P&L do escritório": ENTRADA = honorário (sempre, mesmo R$ 0); SAÍDA = repasse da parceria (se houver).
-// O bruto e o líquido do cliente NÃO entram na conta corrente (ficam na parcela p/ relatórios).
+// BAIXA E REPASSES — a conta corrente espelha o dinheiro REAL que entra e sai do escritório.
+// Receber parcela gera entrada do valor bruto. Repassar cliente/parceiro gera sua própria
+// saída, na data e conta/caixa efetivamente usados. Honorário é o saldo que sobra do ciclo.
 // ============================================================
+
+const ORIGEM_RECEBIMENTO = 'recebimento';
+const ORIGEM_REPASSE_CLIENTE = 'rep_cliente';
+const ORIGEM_REPASSE_PARCEIRO = 'rep_parceiro';
+const ORIGEM_MULTA = 'multa';
+const ORIGEM_MULTA_REP_CLIENTE = 'multa_rep_cli';
+const ORIGEM_MULTA_REP_PARCEIRO = 'multa_rep_par';
 
 // Resolve o nome da pessoa (PF razão/nome ou PJ razão social) — usado na descrição do repasse de parceria
 async function resolverNomePessoa(conn, tipo, pessoaId) {
@@ -611,11 +966,11 @@ async function resolverNomePessoa(conn, tipo, pessoaId) {
 }
 
 // PUT /api/financeiro/parcela/:id/pagar — registra o RECEBIMENTO do réu (réu → escritório).
-// Captura a data, a forma de pagamento e a identificação no extrato. A conta corrente
-// continua igual: lança o honorário (entrada) e o repasse da parceria (saída).
+// Captura a data, a forma de pagamento e a identificação no extrato e registra a entrada
+// integral do valor bruto. Os repasses são etapas separadas, feitas somente quando pagos.
 async function pagarParcela(req, res) {
   const { id } = req.params;
-  const { recebido_em, recebimento_forma_id, recebimento_identificacao } = req.body;
+  const { recebido_em, recebimento_forma_id, recebimento_identificacao, recebimento_conta_financeira_id } = req.body;
   // Normaliza os campos do recebimento (forma é opcional no backend; a tela exige)
   const formaId = (recebimento_forma_id != null && recebimento_forma_id !== '' && !isNaN(parseInt(recebimento_forma_id, 10)))
     ? parseInt(recebimento_forma_id, 10) : null;
@@ -638,7 +993,17 @@ async function pagarParcela(req, res) {
     if (parc.status === 'pago')      { await conn.rollback(); return erro(res, 'Parcela já está recebida'); }
     if (parc.status === 'cancelada') { await conn.rollback(); return erro(res, 'Esta parcela está cancelada e não pode ser recebida.'); }
 
+    // Multa lançada e ainda não recebida trava o recebimento da parcela — evita que o
+    // recebimento da parcela "esconda" uma multa em aberto (auditoria 23/09).
+    const [multaPend] = await conn.execute(`SELECT status FROM acordo_parcela_multa WHERE parcela_id = ?`, [id]);
+    if (multaPend.length && multaPend[0].status === 'pendente') {
+      await conn.rollback();
+      return erro(res, 'Existe uma multa lançada nesta parcela e ainda não recebida. Receba (ou remova) a multa antes de receber a parcela.');
+    }
+
     const dataPg = recebido_em || hojeBrasilia();
+    const contaEscritorio = await resolverContaEscritorio(conn, recebimento_conta_financeira_id);
+    const formaPagamento = await resolverFormaPagamento(conn, formaId, contaEscritorio.tipo);
 
     // Número do acordo na ordem de criação DENTRO do processo (1, 2, 3...).
     // Derivado do próprio id (auto_increment): conta quantos acordos do processo foram criados até este.
@@ -650,36 +1015,24 @@ async function pagarParcela(req, res) {
     const numeroAcordo = accNum[0].n;
     const palavraAcordo = parc.acordo_tipo === 'alvara' ? 'alvará' : 'acordo';  // texto na conta corrente
 
-    // ENTRADA = honorário do escritório. Lançada SEMPRE (mesmo R$ 0), pois registra que não houve
-    // honorário naquela parcela; a observação da parcela explica o motivo.
-    const honor = Number(parc.honor_valor) || 0;
-    const descHonor = `Honor - parc ${parc.numero}/${parc.total_parcelas} do ${palavraAcordo} ${numeroAcordo}` + (parc.observacao ? ` (${parc.observacao})` : '');
+    // ENTRADA = valor efetivamente recebido pelo escritório. Honorário, cliente e parceiro
+    // são apurados pelo ciclo completo; nenhum repasse é lançado antes de ser confirmado.
+    const bruto = Number(parc.valor_bruto) || 0;
+    const descRecebimento = `Recebimento — parc ${parc.numero}/${parc.total_parcelas} do ${palavraAcordo} ${numeroAcordo}` + (parc.observacao ? ` (${parc.observacao})` : '');
     await conn.execute(
-      `INSERT INTO conta_corrente (processo_id, parcela_id, data, descricao, tipo, valor, origem, usuario_id)
-       VALUES (?, ?, ?, ?, 'entrada', ?, 'acordo', ?)`,
-      [parc.processo_id, id, dataPg, descHonor, honor, req.usuario.id]
+      `INSERT INTO conta_corrente (processo_id, parcela_id, data, descricao, tipo, valor, origem, usuario_id, conta_financeira_id)
+       VALUES (?, ?, ?, ?, 'entrada', ?, ?, ?, ?)`,
+      [parc.processo_id, id, dataPg, descRecebimento, bruto, ORIGEM_RECEBIMENTO, req.usuario.id, contaEscritorio.id]
     );
-
-    // SAÍDA = repasse da parceria (só quando há parceiro e valor > 0)
-    const parceria = Number(parc.parceria_valor) || 0;
-    if (parc.parceria_pessoa_id && parceria > 0) {
-      const nomeParceiro = await resolverNomePessoa(conn, parc.parceria_pessoa_tipo, parc.parceria_pessoa_id);
-      await conn.execute(
-        `INSERT INTO conta_corrente (processo_id, parcela_id, data, descricao, tipo, valor, origem, usuario_id)
-         VALUES (?, ?, ?, ?, 'saida', ?, 'acordo', ?)`,
-        [parc.processo_id, id, dataPg,
-         `Repasse parceria${nomeParceiro ? ' ' + nomeParceiro : ''} — parc ${parc.numero}/${parc.total_parcelas} do ${palavraAcordo} ${numeroAcordo}`,
-         parceria, req.usuario.id]
-      );
-    }
 
     await conn.execute(
       `UPDATE acordo_parcela
-         SET status = 'pago', recebido_em = ?, recebimento_forma_id = ?, recebimento_identificacao = ?
+         SET status = 'pago', recebido_em = ?, recebimento_forma_id = ?, recebimento_identificacao = ?,
+             recebimento_conta_financeira_id = ?
        WHERE id = ?`,
-      [dataPg, formaId, identificacao, id]
+      [dataPg, formaId, identificacao, contaEscritorio.id, id]
     );
-    await logParcela(conn, id, req.usuario.id, 'recebida', null, null, `Recebida em ${String(dataPg).slice(0,10).split('-').reverse().join('/')}`);
+    await logParcela(conn, id, req.usuario.id, 'recebida', null, null, `Recebida em ${String(dataPg).slice(0,10).split('-').reverse().join('/')} — ${contaEscritorio.nome} (${formaPagamento.nome})`);
     await auditoria.registrar(req.usuario.id, 'acordo_parcela', 'pagar', id, null, null, conn);
     await conn.commit();
     return sucesso(res, null, 'Parcela recebida');
@@ -697,7 +1050,10 @@ async function desfazerPagamento(req, res) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [rows] = await conn.execute('SELECT * FROM acordo_parcela WHERE id = ?', [id]);
+    // FOR UPDATE: mesma trava usada em pagarParcela — sem ela, dois "desfazer" simultâneos
+    // na mesma parcela liam status='pago' ao mesmo tempo e ambos tentavam apagar o mesmo
+    // lançamento da conta corrente.
+    const [rows] = await conn.execute('SELECT * FROM acordo_parcela WHERE id = ? FOR UPDATE', [id]);
     if (!rows.length) { await conn.rollback(); return naoEncontrado(res, 'Parcela não encontrada'); }
     const parc = rows[0];
     if (parc.status !== 'pago') { await conn.rollback(); return erro(res, 'Parcela não está recebida'); }
@@ -707,12 +1063,23 @@ async function desfazerPagamento(req, res) {
       await conn.rollback();
       return erro(res, 'Desfaça os repasses (cliente/parceiro) antes de desfazer o recebimento');
     }
+    // Multa já recebida trava o desfazer do recebimento da parcela: sem essa trava, o
+    // DELETE FROM conta_corrente abaixo (que filtra só por parcela_id) apagaria também o
+    // lançamento da multa sem resetar o status dela, deixando-a "recebida" sem lançamento
+    // nenhum no extrato (auditoria 23/09).
+    const [multaAtiva] = await conn.execute(`SELECT status FROM acordo_parcela_multa WHERE parcela_id = ?`, [id]);
+    if (multaAtiva.length && multaAtiva[0].status === 'pago') {
+      await conn.rollback();
+      return erro(res, 'Desfaça o recebimento da multa antes de desfazer o recebimento da parcela.');
+    }
 
-    // Remove TODOS os lançamentos gerados por esta parcela (entrada do honorário + eventual saída da parceria)
+    // Sem repasses ativos, todos os lançamentos vinculados à parcela pertencem ao recebimento
+    // (inclusive lançamentos do modelo antigo, caso esta parcela seja desfeita manualmente).
     await conn.execute('DELETE FROM conta_corrente WHERE parcela_id = ?', [id]);
     await conn.execute(
       `UPDATE acordo_parcela
-         SET status = 'pendente', recebido_em = NULL, recebimento_forma_id = NULL, recebimento_identificacao = NULL
+         SET status = 'pendente', recebido_em = NULL, recebimento_forma_id = NULL,
+             recebimento_identificacao = NULL, recebimento_conta_financeira_id = NULL
        WHERE id = ?`, [id]
     );
     await logParcela(conn, id, req.usuario.id, 'recebimento-desfeito', null, null, 'Recebimento desfeito');
@@ -748,52 +1115,100 @@ async function buscarHistoricoParcela(req, res) {
 
 // ============================================================
 // REPASSES — pagamento do escritório ao cliente e/ou ao parceiro.
-// Acontecem DEPOIS do recebimento do réu, em datas e formas independentes
-// (cliente e parceiro podem ser repassados em momentos/ordens diferentes).
-// NÃO tocam na conta corrente: o resultado do escritório (honorário/parceria)
-// já foi lançado no recebimento; aqui só registramos o pagamento ao beneficiário.
+// Acontecem depois do recebimento, em datas, contas e formas independentes, e cada um
+// cria sua própria saída na conta corrente. A ordem entre cliente e parceiro é livre.
 // ============================================================
 
 // Mapa controlado tipo -> colunas (evita repetição e blinda contra injeção:
 // os nomes de coluna saem SEMPRE deste whitelist, nunca do req).
 const COLS_REPASSE = {
-  cliente:  { em: 'repasse_cliente_em',  forma: 'repasse_cliente_forma_id',  por: 'repasse_cliente_por',  rotulo: 'cliente' },
-  parceiro: { em: 'repasse_parceiro_em', forma: 'repasse_parceiro_forma_id', por: 'repasse_parceiro_por', rotulo: 'parceiro' },
+  cliente:  { em: 'repasse_cliente_em',  forma: 'repasse_cliente_forma_id',  por: 'repasse_cliente_por',  contaEscritorio: 'repasse_cliente_conta_financeira_id', contaDestino: 'repasse_cliente_conta_id', destinoTipo: 'repasse_cliente_destino_tipo', snapshot: 'repasse_cliente_destino_snapshot', observacao: 'repasse_cliente_observacao', rotulo: 'cliente' },
+  parceiro: { em: 'repasse_parceiro_em', forma: 'repasse_parceiro_forma_id', por: 'repasse_parceiro_por', contaEscritorio: 'repasse_parceiro_conta_financeira_id', contaDestino: 'repasse_parceiro_conta_id', destinoTipo: 'repasse_parceiro_destino_tipo', snapshot: 'repasse_parceiro_destino_snapshot', observacao: 'repasse_parceiro_observacao', rotulo: 'parceiro' },
 };
 
 // PUT /api/financeiro/parcela/:id/repasse — registra o repasse ao cliente OU ao parceiro.
-// Body: { tipo: 'cliente'|'parceiro', data, forma_id }
+// Body: { tipo: 'cliente'|'parceiro', data, forma_id, observacao }
 async function registrarRepasse(req, res) {
   const { id } = req.params;
-  const { tipo, data, forma_id } = req.body;
+  const { tipo, data, forma_id, conta_financeira_id, conta_bancaria_id, beneficiario_tipo, beneficiario_id, destino_tipo, observacao } = req.body;
   const cfg = COLS_REPASSE[tipo];
   if (!cfg) return erro(res, 'Tipo de repasse inválido');
 
   const dataRep = data || hojeBrasilia();
   const formaId = (forma_id != null && forma_id !== '' && !isNaN(parseInt(forma_id, 10))) ? parseInt(forma_id, 10) : null;
+  const observacaoRepasse = String(observacao || '').trim();
+  if (observacaoRepasse.length > 1000) return erro(res, 'A observação do repasse pode ter no máximo 1.000 caracteres.');
 
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [rows] = await conn.execute('SELECT * FROM acordo_parcela WHERE id = ?', [id]);
+    const [rows] = await conn.execute(
+      `SELECT ap.*, a.processo_id, a.tipo AS acordo_tipo,
+              (SELECT COUNT(*) FROM acordo_parcela x WHERE x.acordo_id = ap.acordo_id) AS total_parcelas
+         FROM acordo_parcela ap JOIN acordo a ON a.id = ap.acordo_id
+        WHERE ap.id = ? FOR UPDATE`, [id]
+    );
     if (!rows.length) { await conn.rollback(); return naoEncontrado(res, 'Parcela não encontrada'); }
     const parc = rows[0];
     if (parc.status !== 'pago') { await conn.rollback(); return erro(res, 'Registre o recebimento do réu antes de repassar'); }
     if (tipo === 'parceiro' && !parc.parceria_pessoa_id) { await conn.rollback(); return erro(res, 'Esta parcela não tem parceria'); }
     if (parc[cfg.em]) { await conn.rollback(); return erro(res, `Repasse ao ${cfg.rotulo} já registrado`); }
+    const valorRepasse = tipo === 'cliente' ? Number(parc.valor_liquido) : Number(parc.parceria_valor);
+    if (valorRepasse <= 0) { await conn.rollback(); return erro(res, `Não há valor de repasse ao ${cfg.rotulo} nesta parcela.`); }
 
-    await conn.execute(`UPDATE acordo_parcela SET ${cfg.em} = ?, ${cfg.forma} = ?, ${cfg.por} = ? WHERE id = ?`,
-      [dataRep, formaId, req.usuario.id, id]);
+    const tipoDestino = destino_tipo === 'em_maos' ? 'em_maos' : 'bancaria';
+    const contaEscritorio = await resolverContaEscritorio(conn, conta_financeira_id);
+    const tipoContaDestino = tipoDestino === 'em_maos' ? 'especie' : 'bancaria';
+    const formaPagamento = await resolverFormaPagamento(conn, formaId, tipoContaDestino);
+    if (formaPagamento.uso_permitido !== 'ambos' && formaPagamento.uso_permitido !== (tipoDestino === 'em_maos' ? 'especie' : 'financeira')) {
+      throw erroValidacaoFinanceiro(tipoDestino === 'em_maos'
+        ? 'O repasse em mãos exige uma forma de pagamento disponível para dinheiro em espécie.'
+        : 'O repasse para conta bancária exige uma forma de pagamento disponível para instituição financeira.');
+    }
+    const destinoTipo = tipo === 'cliente' ? (beneficiario_tipo || parc.repasse_cliente_tipo) : parc.parceria_pessoa_tipo;
+    const destinoPessoa = tipo === 'cliente' ? (beneficiario_id || parc.repasse_cliente_pessoa_id) : parc.parceria_pessoa_id;
+    if (!tiposPessoa.has(destinoTipo) || !inteiroPositivo(destinoPessoa)) {
+      throw erroValidacaoFinanceiro('Informe o beneficiário do repasse.');
+    }
+    const destinoConta = tipoDestino === 'bancaria' ? (conta_bancaria_id || parc[cfg.contaDestino]) : null;
+    const contaDestino = tipoDestino === 'bancaria'
+      ? await resolverContaPessoa(conn, destinoTipo, destinoPessoa, destinoConta)
+      : null;
+    const nomeBeneficiario = tipo === 'parceiro'
+      ? await resolverNomePessoa(conn, parc.parceria_pessoa_tipo, parc.parceria_pessoa_id)
+      : await resolverNomePessoa(conn, destinoTipo, destinoPessoa);
+    const snapshot = tipoDestino === 'bancaria'
+      ? JSON.stringify({ tipo: destinoTipo, pessoa_id: Number(destinoPessoa), conta_id: contaDestino.id,
+        titular: contaDestino.titular, documento_titular: contaDestino.documento_titular,
+        instituicao: contaDestino.instituicao_nome, agencia: contaDestino.agencia, numero: contaDestino.numero,
+        digito: contaDestino.digito, chave_pix: contaDestino.chave_pix, conta_terceiro: !!contaDestino.conta_terceiro,
+        observacao: contaDestino.observacao || null })
+      : JSON.stringify({ tipo: destinoTipo, pessoa_id: Number(destinoPessoa), titular: nomeBeneficiario, destino: 'em_maos' });
+    await conn.execute(`UPDATE acordo_parcela SET ${cfg.em} = ?, ${cfg.forma} = ?, ${cfg.por} = ?,
+      ${cfg.contaEscritorio} = ?, ${cfg.contaDestino} = ?, ${cfg.destinoTipo} = ?, ${cfg.snapshot} = ?, ${cfg.observacao} = ? WHERE id = ?`,
+      [dataRep, formaId, req.usuario.id, contaEscritorio.id, contaDestino ? contaDestino.id : null, tipoDestino, snapshot, observacaoRepasse || null, id]);
+
+    const [accNum] = await conn.execute(
+      'SELECT COUNT(*) AS n FROM acordo WHERE processo_id = ? AND tipo = ? AND id <= ?',
+      [parc.processo_id, parc.acordo_tipo, parc.acordo_id]
+    );
+    const numeroAcordo = accNum[0].n;
+    const palavraAcordo = parc.acordo_tipo === 'alvara' ? 'alvará' : 'acordo';
+    const nomeDestino = nomeBeneficiario || (tipo === 'cliente' ? 'cliente' : 'parceiro');
+    const origemLancamento = tipo === 'cliente' ? ORIGEM_REPASSE_CLIENTE : ORIGEM_REPASSE_PARCEIRO;
+    await conn.execute(
+      `INSERT INTO conta_corrente (processo_id, parcela_id, data, descricao, tipo, valor, origem, usuario_id, conta_financeira_id)
+       VALUES (?, ?, ?, ?, 'saida', ?, ?, ?, ?)`,
+      [parc.processo_id, id, dataRep,
+      `Repasse da parcela ao ${tipo === 'cliente' ? 'cliente' : 'parceiro'} ${nomeDestino}${tipoDestino === 'em_maos' ? ' — em mãos' : ''} — parc ${parc.numero}/${parc.total_parcelas} do ${palavraAcordo} ${numeroAcordo}`,
+       valorRepasse, origemLancamento, req.usuario.id, contaEscritorio.id]
+    );
 
     // Resolve o nome da forma para gravar legível no histórico (regra: nomes na escrita)
-    let formaNome = '';
-    if (formaId) {
-      const [f] = await conn.execute('SELECT nome FROM forma_pagamento WHERE id = ?', [formaId]);
-      formaNome = f.length ? f[0].nome : '';
-    }
+    const formaNome = formaPagamento.nome;
     const dataBR = String(dataRep).slice(0, 10).split('-').reverse().join('/');
     await logParcela(conn, id, req.usuario.id, `repasse-${cfg.rotulo}`, null, null,
-      `Repasse ao ${cfg.rotulo} em ${dataBR}${formaNome ? ' (' + formaNome + ')' : ''}`);
+      `Repasse ao ${cfg.rotulo} em ${dataBR}${formaNome ? ' (' + formaNome + ')' : ''}${tipoDestino === 'em_maos' ? ' — entregue em mãos' : ''} — ${contaEscritorio.nome}${observacaoRepasse ? ' — Obs.: ' + observacaoRepasse : ''}`);
     await auditoria.registrar(req.usuario.id, 'acordo_parcela', `repasse-${cfg.rotulo}`, id, null, null, conn);
     await conn.commit();
     return sucesso(res, null, `Repasse ao ${cfg.rotulo} registrado`);
@@ -816,11 +1231,14 @@ async function desfazerRepasse(req, res) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [rows] = await conn.execute('SELECT * FROM acordo_parcela WHERE id = ?', [id]);
+    const [rows] = await conn.execute('SELECT * FROM acordo_parcela WHERE id = ? FOR UPDATE', [id]);
     if (!rows.length) { await conn.rollback(); return naoEncontrado(res, 'Parcela não encontrada'); }
     if (!rows[0][cfg.em]) { await conn.rollback(); return erro(res, `Não há repasse ao ${cfg.rotulo} para desfazer`); }
 
-    await conn.execute(`UPDATE acordo_parcela SET ${cfg.em} = NULL, ${cfg.forma} = NULL, ${cfg.por} = NULL WHERE id = ?`, [id]);
+    const origemLancamento = tipo === 'cliente' ? ORIGEM_REPASSE_CLIENTE : ORIGEM_REPASSE_PARCEIRO;
+    await conn.execute('DELETE FROM conta_corrente WHERE parcela_id=? AND origem=?', [id, origemLancamento]);
+    await conn.execute(`UPDATE acordo_parcela SET ${cfg.em}=NULL, ${cfg.forma}=NULL, ${cfg.por}=NULL,
+      ${cfg.contaEscritorio}=NULL, ${cfg.contaDestino}=NULL, ${cfg.destinoTipo}=NULL, ${cfg.snapshot}=NULL, ${cfg.observacao}=NULL WHERE id=?`, [id]);
     await logParcela(conn, id, req.usuario.id, `repasse-${cfg.rotulo}-desfeito`, null, null, `Repasse ao ${cfg.rotulo} desfeito`);
     // logs_auditoria.acao é varchar(20): manter a ação global curta (o detalhe vai no histórico da parcela acima)
     await auditoria.registrar(req.usuario.id, 'acordo_parcela', 'desfazer-repasse', id, null, null, conn);
@@ -834,14 +1252,386 @@ async function desfazerRepasse(req, res) {
   }
 }
 
+// ============================================================
+// MULTA POR ATRASO — nasce presa a UMA parcela (parcela_id é UNIQUE em
+// acordo_parcela_multa). Segue o mesmo ciclo em 2 tempos que a parcela: lançar
+// (percentual + valor + vencimento, sem tocar na conta corrente) -> receber (só
+// aqui nasce a entrada, separada, no extrato) -> repasse ao cliente/parceiro
+// (opcional, exatamente como o repasse de uma parcela normal). Honorário e
+// parceria usam o MESMO honor_tipo/percentual e parceria_tipo/percentual já
+// configurados na parcela — não se pede de novo (auditoria 23/09).
+// Enquanto a multa está lançada e não recebida, o "Receber" da PARCELA fica
+// bloqueado (ver pagarParcela); enquanto a multa está recebida, o "Desfazer
+// recebimento" da PARCELA também fica bloqueado (ver desfazerPagamento).
+// ============================================================
+
+async function buscarMultaDaParcela(conn, parcelaId, forUpdate = false) {
+  const [rows] = await conn.execute(
+    `SELECT * FROM acordo_parcela_multa WHERE parcela_id = ?${forUpdate ? ' FOR UPDATE' : ''}`, [parcelaId]
+  );
+  return rows[0] || null;
+}
+
+// Recalcula honorário/líquido/parceria da multa herdando o honor_tipo/percentual e
+// parceria_tipo/percentual JÁ GRAVADOS nesta parcela — nunca aceita esses percentuais
+// vindos do corpo da requisição (evita que a multa seja calculada com regra diferente
+// da própria parcela que a originou).
+function calcularValoresMulta(parc, body, rotulo) {
+  if (!body.vencimento) throw erroValidacaoFinanceiro(`${rotulo}: informe a data em que a multa deve ser paga.`);
+  const repasseCliente = !!body.repasse_cliente_habilitado;
+  const repasseParceiro = !!body.repasse_parceiro_habilitado;
+  if (repasseParceiro && !parc.parceria_pessoa_id) {
+    throw erroValidacaoFinanceiro(`${rotulo}: esta parcela não tem parceria — não é possível habilitar o repasse ao parceiro.`);
+  }
+  const calc = calcularValoresParcela({
+    valor_bruto: body.valor_bruto, honor_tipo: parc.honor_tipo, honor_percentual: parc.honor_percentual, honor_valor: parc.honor_valor,
+    parceria_pessoa_id: repasseParceiro ? parc.parceria_pessoa_id : null, parceria_pessoa_tipo: parc.parceria_pessoa_tipo,
+    parceria_tipo: parc.parceria_tipo, parceria_percentual: parc.parceria_percentual, parceria_valor: parc.parceria_valor,
+  }, rotulo);
+  return {
+    percentual_juiz: body.percentual_juiz != null && body.percentual_juiz !== '' ? Number(body.percentual_juiz) : null,
+    vencimento: body.vencimento, valor_bruto: calc.valor_bruto,
+    honor_tipo: calc.honor_tipo, honor_percentual: calc.honor_percentual, honor_valor: calc.honor_valor, valor_liquido: calc.valor_liquido,
+    repasse_cliente_habilitado: repasseCliente ? 1 : 0,
+    repasse_cliente_tipo: repasseCliente ? (parc.repasse_cliente_tipo || null) : null,
+    repasse_cliente_pessoa_id: repasseCliente ? (parc.repasse_cliente_pessoa_id || null) : null,
+    repasse_cliente_conta_id: repasseCliente ? (parc.repasse_cliente_conta_id || null) : null,
+    parceria_pessoa_tipo: calc.parceria_pessoa_tipo, parceria_pessoa_id: calc.parceria_pessoa_id,
+    parceria_tipo: calc.parceria_tipo, parceria_percentual: calc.parceria_percentual, parceria_valor: calc.parceria_valor,
+    repasse_parceiro_habilitado: repasseParceiro ? 1 : 0,
+  };
+}
+
+// POST /api/financeiro/parcela/:id/multa — lança a multa desta parcela (ainda não vai para o extrato).
+// Body: { percentual_juiz, valor_bruto, vencimento, repasse_cliente_habilitado, repasse_parceiro_habilitado }
+async function lancarMulta(req, res) {
+  const { id } = req.params;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [rows] = await conn.execute('SELECT * FROM acordo_parcela WHERE id = ? FOR UPDATE', [id]);
+    if (!rows.length) { await conn.rollback(); return naoEncontrado(res, 'Parcela não encontrada'); }
+    const parc = rows[0];
+    if (parc.status !== 'pendente') { await conn.rollback(); return erro(res, 'Só é possível lançar multa em uma parcela ainda não recebida.'); }
+    if (await buscarMultaDaParcela(conn, id)) { await conn.rollback(); return erro(res, 'Já existe uma multa lançada para esta parcela. Edite ou remova a existente.'); }
+
+    const v = calcularValoresMulta(parc, req.body, 'A multa');
+    const [r] = await conn.execute(
+      `INSERT INTO acordo_parcela_multa
+        (parcela_id, percentual_juiz, vencimento, valor_bruto, honor_tipo, honor_percentual, honor_valor, valor_liquido,
+         repasse_cliente_habilitado, repasse_cliente_tipo, repasse_cliente_pessoa_id, repasse_cliente_conta_id,
+         parceria_pessoa_tipo, parceria_pessoa_id, parceria_tipo, parceria_percentual, parceria_valor,
+         repasse_parceiro_habilitado, status, criado_por)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendente', ?)`,
+      [id, v.percentual_juiz, v.vencimento, v.valor_bruto, v.honor_tipo, v.honor_percentual, v.honor_valor, v.valor_liquido,
+       v.repasse_cliente_habilitado, v.repasse_cliente_tipo, v.repasse_cliente_pessoa_id, v.repasse_cliente_conta_id,
+       v.parceria_pessoa_tipo, v.parceria_pessoa_id, v.parceria_tipo, v.parceria_percentual, v.parceria_valor,
+       v.repasse_parceiro_habilitado, req.usuario.id]
+    );
+    const dataBR = String(v.vencimento).slice(0, 10).split('-').reverse().join('/');
+    await logParcela(conn, id, req.usuario.id, 'multa-lancada', null, null, `Multa lançada: ${fmtReal(v.valor_bruto)} — vencimento ${dataBR}`);
+    await auditoria.registrar(req.usuario.id, 'acordo_parcela', 'multa-lancar', id, null, null, conn);
+    await conn.commit();
+    return sucesso(res, { id: r.insertId }, 'Multa lançada', 201);
+  } catch (err) {
+    await conn.rollback();
+    if (err.codigoValidacaoFinanceiro) return erro(res, err.message, 422);
+    return erroInterno(res, err);
+  } finally {
+    conn.release();
+  }
+}
+
+// PUT /api/financeiro/parcela/:id/multa — edita a multa (só enquanto ainda não foi recebida).
+async function editarMulta(req, res) {
+  const { id } = req.params;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [rows] = await conn.execute('SELECT * FROM acordo_parcela WHERE id = ? FOR UPDATE', [id]);
+    if (!rows.length) { await conn.rollback(); return naoEncontrado(res, 'Parcela não encontrada'); }
+    const parc = rows[0];
+    const multa = await buscarMultaDaParcela(conn, id, true);
+    if (!multa) { await conn.rollback(); return naoEncontrado(res, 'Esta parcela não tem multa lançada'); }
+    if (multa.status !== 'pendente') { await conn.rollback(); return erro(res, 'A multa já foi recebida e não pode mais ser editada.'); }
+
+    const v = calcularValoresMulta(parc, req.body, 'A multa');
+    await conn.execute(
+      `UPDATE acordo_parcela_multa SET percentual_juiz=?, vencimento=?, valor_bruto=?, honor_tipo=?, honor_percentual=?,
+         honor_valor=?, valor_liquido=?, repasse_cliente_habilitado=?, repasse_cliente_tipo=?, repasse_cliente_pessoa_id=?,
+         repasse_cliente_conta_id=?, parceria_pessoa_tipo=?, parceria_pessoa_id=?, parceria_tipo=?, parceria_percentual=?,
+         parceria_valor=?, repasse_parceiro_habilitado=? WHERE parcela_id=?`,
+      [v.percentual_juiz, v.vencimento, v.valor_bruto, v.honor_tipo, v.honor_percentual, v.honor_valor, v.valor_liquido,
+       v.repasse_cliente_habilitado, v.repasse_cliente_tipo, v.repasse_cliente_pessoa_id, v.repasse_cliente_conta_id,
+       v.parceria_pessoa_tipo, v.parceria_pessoa_id, v.parceria_tipo, v.parceria_percentual, v.parceria_valor,
+       v.repasse_parceiro_habilitado, id]
+    );
+    const dataBR = String(v.vencimento).slice(0, 10).split('-').reverse().join('/');
+    await logParcela(conn, id, req.usuario.id, 'multa-editada', null, null, `Multa editada: ${fmtReal(v.valor_bruto)} — vencimento ${dataBR}`);
+    await auditoria.registrar(req.usuario.id, 'acordo_parcela', 'multa-editar', id, null, null, conn);
+    await conn.commit();
+    return sucesso(res, null, 'Multa atualizada');
+  } catch (err) {
+    await conn.rollback();
+    if (err.codigoValidacaoFinanceiro) return erro(res, err.message, 422);
+    return erroInterno(res, err);
+  } finally {
+    conn.release();
+  }
+}
+
+// DELETE /api/financeiro/parcela/:id/multa — remove a multa (só enquanto ainda não foi recebida).
+async function removerMulta(req, res) {
+  const { id } = req.params;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const multa = await buscarMultaDaParcela(conn, id, true);
+    if (!multa) { await conn.rollback(); return naoEncontrado(res, 'Esta parcela não tem multa lançada'); }
+    if (multa.status !== 'pendente') { await conn.rollback(); return erro(res, 'Desfaça o recebimento da multa antes de removê-la.'); }
+    await conn.execute('DELETE FROM acordo_parcela_multa WHERE parcela_id = ?', [id]);
+    await logParcela(conn, id, req.usuario.id, 'multa-removida', null, null, 'Multa removida');
+    await auditoria.registrar(req.usuario.id, 'acordo_parcela', 'multa-remover', id, multa, null, conn);
+    await conn.commit();
+    return sucesso(res, null, 'Multa removida');
+  } catch (err) {
+    await conn.rollback();
+    return erroInterno(res, err);
+  } finally {
+    conn.release();
+  }
+}
+
+// PUT /api/financeiro/parcela/:id/multa/receber — registra o recebimento da multa: só agora
+// nasce a entrada (separada da entrada da parcela) na conta corrente.
+async function receberMulta(req, res) {
+  const { id } = req.params;
+  const { recebido_em, recebimento_forma_id, recebimento_identificacao, recebimento_conta_financeira_id } = req.body;
+  const formaId = (recebimento_forma_id != null && recebimento_forma_id !== '' && !isNaN(parseInt(recebimento_forma_id, 10)))
+    ? parseInt(recebimento_forma_id, 10) : null;
+  const identificacao = (recebimento_identificacao && String(recebimento_identificacao).trim())
+    ? String(recebimento_identificacao).trim() : null;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [rows] = await conn.execute(
+      `SELECT m.*, ap.numero, a.processo_id, a.tipo AS acordo_tipo, a.id AS acordo_id,
+              (SELECT COUNT(*) FROM acordo_parcela x WHERE x.acordo_id = ap.acordo_id) AS total_parcelas
+       FROM acordo_parcela_multa m
+       JOIN acordo_parcela ap ON ap.id = m.parcela_id
+       JOIN acordo a ON a.id = ap.acordo_id
+       WHERE m.parcela_id = ? FOR UPDATE`, [id]
+    );
+    if (!rows.length) { await conn.rollback(); return naoEncontrado(res, 'Esta parcela não tem multa lançada'); }
+    const multa = rows[0];
+    if (multa.status === 'pago') { await conn.rollback(); return erro(res, 'A multa já está recebida'); }
+
+    const dataPg = recebido_em || hojeBrasilia();
+    const contaEscritorio = await resolverContaEscritorio(conn, recebimento_conta_financeira_id);
+    const formaPagamento = await resolverFormaPagamento(conn, formaId, contaEscritorio.tipo);
+
+    const [accNum] = await conn.execute(
+      'SELECT COUNT(*) AS n FROM acordo WHERE processo_id = ? AND tipo = ? AND id <= ?',
+      [multa.processo_id, multa.acordo_tipo, multa.acordo_id]
+    );
+    const numeroAcordo = accNum[0].n;
+    const palavraAcordo = multa.acordo_tipo === 'alvara' ? 'alvará' : 'acordo';
+    const descRecebimento = `Multa por atraso — parc ${multa.numero}/${multa.total_parcelas} do ${palavraAcordo} ${numeroAcordo}`;
+    await conn.execute(
+      `INSERT INTO conta_corrente (processo_id, parcela_id, data, descricao, tipo, valor, origem, usuario_id, conta_financeira_id)
+       VALUES (?, ?, ?, ?, 'entrada', ?, ?, ?, ?)`,
+      [multa.processo_id, id, dataPg, descRecebimento, Number(multa.valor_bruto), ORIGEM_MULTA, req.usuario.id, contaEscritorio.id]
+    );
+    await conn.execute(
+      `UPDATE acordo_parcela_multa
+         SET status = 'pago', recebido_em = ?, recebimento_forma_id = ?, recebimento_identificacao = ?,
+             recebimento_conta_financeira_id = ?
+       WHERE parcela_id = ?`,
+      [dataPg, formaId, identificacao, contaEscritorio.id, id]
+    );
+    await logParcela(conn, id, req.usuario.id, 'multa-recebida', null, null,
+      `Multa recebida em ${String(dataPg).slice(0,10).split('-').reverse().join('/')} — ${contaEscritorio.nome} (${formaPagamento.nome})`);
+    await auditoria.registrar(req.usuario.id, 'acordo_parcela', 'multa-pagar', id, null, null, conn);
+    await conn.commit();
+    return sucesso(res, null, 'Multa recebida');
+  } catch (err) {
+    await conn.rollback();
+    if (err.codigoValidacaoFinanceiro) return erro(res, err.message, 422);
+    return erroInterno(res, err);
+  } finally {
+    conn.release();
+  }
+}
+
+// PUT /api/financeiro/parcela/:id/multa/desfazer — desfaz o recebimento da multa.
+async function desfazerMulta(req, res) {
+  const { id } = req.params;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const multa = await buscarMultaDaParcela(conn, id, true);
+    if (!multa) { await conn.rollback(); return naoEncontrado(res, 'Esta parcela não tem multa lançada'); }
+    if (multa.status !== 'pago') { await conn.rollback(); return erro(res, 'A multa não está recebida'); }
+    if (multa.repasse_cliente_em || multa.repasse_parceiro_em) {
+      await conn.rollback();
+      return erro(res, 'Desfaça os repasses da multa (cliente/parceiro) antes de desfazer o recebimento dela');
+    }
+    await conn.execute(`DELETE FROM conta_corrente WHERE parcela_id = ? AND origem = ?`, [id, ORIGEM_MULTA]);
+    await conn.execute(
+      `UPDATE acordo_parcela_multa
+         SET status = 'pendente', recebido_em = NULL, recebimento_forma_id = NULL,
+             recebimento_identificacao = NULL, recebimento_conta_financeira_id = NULL
+       WHERE parcela_id = ?`, [id]
+    );
+    await logParcela(conn, id, req.usuario.id, 'multa-recebimento-desfeito', null, null, 'Recebimento da multa desfeito');
+    await auditoria.registrar(req.usuario.id, 'acordo_parcela', 'multa-desfazer', id, multa, null, conn);
+    await conn.commit();
+    return sucesso(res, null, 'Recebimento da multa desfeito');
+  } catch (err) {
+    await conn.rollback();
+    return erroInterno(res, err);
+  } finally {
+    conn.release();
+  }
+}
+
+// PUT /api/financeiro/parcela/:id/multa/repasse — repassa a multa ao cliente OU ao parceiro
+// (só depois de recebida). Mesma mecânica de registrarRepasse, aplicada à multa da parcela.
+async function registrarRepasseMulta(req, res) {
+  const { id } = req.params;
+  const { tipo, data, forma_id, conta_financeira_id, conta_bancaria_id, beneficiario_tipo, beneficiario_id, destino_tipo, observacao } = req.body;
+  const cfg = COLS_REPASSE[tipo];
+  if (!cfg) return erro(res, 'Tipo de repasse inválido');
+
+  const dataRep = data || hojeBrasilia();
+  const formaId = (forma_id != null && forma_id !== '' && !isNaN(parseInt(forma_id, 10))) ? parseInt(forma_id, 10) : null;
+  const observacaoRepasse = String(observacao || '').trim();
+  if (observacaoRepasse.length > 1000) return erro(res, 'A observação do repasse pode ter no máximo 1.000 caracteres.');
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [rows] = await conn.execute(
+      `SELECT m.*, ap.numero, a.processo_id, a.tipo AS acordo_tipo, a.id AS acordo_id,
+              (SELECT COUNT(*) FROM acordo_parcela x WHERE x.acordo_id = ap.acordo_id) AS total_parcelas
+       FROM acordo_parcela_multa m
+       JOIN acordo_parcela ap ON ap.id = m.parcela_id
+       JOIN acordo a ON a.id = ap.acordo_id
+       WHERE m.parcela_id = ? FOR UPDATE`, [id]
+    );
+    if (!rows.length) { await conn.rollback(); return naoEncontrado(res, 'Esta parcela não tem multa lançada'); }
+    const multa = rows[0];
+    if (multa.status !== 'pago') { await conn.rollback(); return erro(res, 'Registre o recebimento da multa antes de repassar'); }
+    if (tipo === 'cliente' && !multa.repasse_cliente_habilitado) { await conn.rollback(); return erro(res, 'Esta multa não está habilitada para repasse ao cliente'); }
+    if (tipo === 'parceiro' && (!multa.repasse_parceiro_habilitado || !multa.parceria_pessoa_id)) { await conn.rollback(); return erro(res, 'Esta multa não está habilitada para repasse ao parceiro'); }
+    if (multa[cfg.em]) { await conn.rollback(); return erro(res, `Repasse da multa ao ${cfg.rotulo} já registrado`); }
+    const valorRepasse = tipo === 'cliente' ? Number(multa.valor_liquido) : Number(multa.parceria_valor);
+    if (valorRepasse <= 0) { await conn.rollback(); return erro(res, `Não há valor de repasse ao ${cfg.rotulo} nesta multa.`); }
+
+    const tipoDestino = destino_tipo === 'em_maos' ? 'em_maos' : 'bancaria';
+    const contaEscritorio = await resolverContaEscritorio(conn, conta_financeira_id);
+    const tipoContaDestino = tipoDestino === 'em_maos' ? 'especie' : 'bancaria';
+    const formaPagamento = await resolverFormaPagamento(conn, formaId, tipoContaDestino);
+    if (formaPagamento.uso_permitido !== 'ambos' && formaPagamento.uso_permitido !== (tipoDestino === 'em_maos' ? 'especie' : 'financeira')) {
+      throw erroValidacaoFinanceiro(tipoDestino === 'em_maos'
+        ? 'O repasse em mãos exige uma forma de pagamento disponível para dinheiro em espécie.'
+        : 'O repasse para conta bancária exige uma forma de pagamento disponível para instituição financeira.');
+    }
+    const destinoTipo = tipo === 'cliente' ? (beneficiario_tipo || multa.repasse_cliente_tipo) : multa.parceria_pessoa_tipo;
+    const destinoPessoa = tipo === 'cliente' ? (beneficiario_id || multa.repasse_cliente_pessoa_id) : multa.parceria_pessoa_id;
+    if (!tiposPessoa.has(destinoTipo) || !inteiroPositivo(destinoPessoa)) {
+      throw erroValidacaoFinanceiro('Informe o beneficiário do repasse.');
+    }
+    const destinoConta = tipoDestino === 'bancaria' ? (conta_bancaria_id || multa[cfg.contaDestino]) : null;
+    const contaDestino = tipoDestino === 'bancaria'
+      ? await resolverContaPessoa(conn, destinoTipo, destinoPessoa, destinoConta)
+      : null;
+    const nomeBeneficiario = tipo === 'parceiro'
+      ? await resolverNomePessoa(conn, multa.parceria_pessoa_tipo, multa.parceria_pessoa_id)
+      : await resolverNomePessoa(conn, destinoTipo, destinoPessoa);
+    const snapshot = tipoDestino === 'bancaria'
+      ? JSON.stringify({ tipo: destinoTipo, pessoa_id: Number(destinoPessoa), conta_id: contaDestino.id,
+        titular: contaDestino.titular, documento_titular: contaDestino.documento_titular,
+        instituicao: contaDestino.instituicao_nome, agencia: contaDestino.agencia, numero: contaDestino.numero,
+        digito: contaDestino.digito, chave_pix: contaDestino.chave_pix, conta_terceiro: !!contaDestino.conta_terceiro,
+        observacao: contaDestino.observacao || null })
+      : JSON.stringify({ tipo: destinoTipo, pessoa_id: Number(destinoPessoa), titular: nomeBeneficiario, destino: 'em_maos' });
+    await conn.execute(`UPDATE acordo_parcela_multa SET ${cfg.em} = ?, ${cfg.forma} = ?, ${cfg.por} = ?,
+      ${cfg.contaEscritorio} = ?, ${cfg.contaDestino} = ?, ${cfg.destinoTipo} = ?, ${cfg.snapshot} = ?, ${cfg.observacao} = ? WHERE parcela_id = ?`,
+      [dataRep, formaId, req.usuario.id, contaEscritorio.id, contaDestino ? contaDestino.id : null, tipoDestino, snapshot, observacaoRepasse || null, id]);
+
+    const [accNum] = await conn.execute(
+      'SELECT COUNT(*) AS n FROM acordo WHERE processo_id = ? AND tipo = ? AND id <= ?',
+      [multa.processo_id, multa.acordo_tipo, multa.acordo_id]
+    );
+    const numeroAcordo = accNum[0].n;
+    const palavraAcordo = multa.acordo_tipo === 'alvara' ? 'alvará' : 'acordo';
+    const nomeDestino = nomeBeneficiario || (tipo === 'cliente' ? 'cliente' : 'parceiro');
+    const origemLancamento = tipo === 'cliente' ? ORIGEM_MULTA_REP_CLIENTE : ORIGEM_MULTA_REP_PARCEIRO;
+    await conn.execute(
+      `INSERT INTO conta_corrente (processo_id, parcela_id, data, descricao, tipo, valor, origem, usuario_id, conta_financeira_id)
+       VALUES (?, ?, ?, ?, 'saida', ?, ?, ?, ?)`,
+      [multa.processo_id, id, dataRep,
+      `Repasse da multa ao ${tipo === 'cliente' ? 'cliente' : 'parceiro'} ${nomeDestino}${tipoDestino === 'em_maos' ? ' — em mãos' : ''} — parc ${multa.numero}/${multa.total_parcelas} do ${palavraAcordo} ${numeroAcordo}`,
+       valorRepasse, origemLancamento, req.usuario.id, contaEscritorio.id]
+    );
+
+    const formaNome = formaPagamento.nome;
+    const dataBR = String(dataRep).slice(0, 10).split('-').reverse().join('/');
+    await logParcela(conn, id, req.usuario.id, `multa-rep-${cfg.rotulo}`, null, null,
+      `Repasse da multa ao ${cfg.rotulo} em ${dataBR}${formaNome ? ' (' + formaNome + ')' : ''}${tipoDestino === 'em_maos' ? ' — entregue em mãos' : ''} — ${contaEscritorio.nome}${observacaoRepasse ? ' — Obs.: ' + observacaoRepasse : ''}`);
+    await auditoria.registrar(req.usuario.id, 'acordo_parcela', `multa-rep-${tipo === 'cliente' ? 'cli' : 'par'}`, id, null, null, conn);
+    await conn.commit();
+    return sucesso(res, null, `Repasse da multa ao ${cfg.rotulo} registrado`);
+  } catch (err) {
+    await conn.rollback();
+    if (err.codigoValidacaoFinanceiro) return erro(res, err.message, 422);
+    return erroInterno(res, err);
+  } finally {
+    conn.release();
+  }
+}
+
+// PUT /api/financeiro/parcela/:id/multa/repasse/desfazer — desfaz o repasse da multa ao cliente OU ao parceiro.
+async function desfazerRepasseMulta(req, res) {
+  const { id } = req.params;
+  const { tipo } = req.body;
+  const cfg = COLS_REPASSE[tipo];
+  if (!cfg) return erro(res, 'Tipo de repasse inválido');
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const multa = await buscarMultaDaParcela(conn, id, true);
+    if (!multa) { await conn.rollback(); return naoEncontrado(res, 'Esta parcela não tem multa lançada'); }
+    if (!multa[cfg.em]) { await conn.rollback(); return erro(res, `Não há repasse da multa ao ${cfg.rotulo} para desfazer`); }
+
+    const origemLancamento = tipo === 'cliente' ? ORIGEM_MULTA_REP_CLIENTE : ORIGEM_MULTA_REP_PARCEIRO;
+    await conn.execute('DELETE FROM conta_corrente WHERE parcela_id=? AND origem=?', [id, origemLancamento]);
+    await conn.execute(`UPDATE acordo_parcela_multa SET ${cfg.em}=NULL, ${cfg.forma}=NULL, ${cfg.por}=NULL,
+      ${cfg.contaEscritorio}=NULL, ${cfg.contaDestino}=NULL, ${cfg.destinoTipo}=NULL, ${cfg.snapshot}=NULL, ${cfg.observacao}=NULL WHERE parcela_id=?`, [id]);
+    await logParcela(conn, id, req.usuario.id, `multa-rep-${cfg.rotulo}-desfeito`, null, null, `Repasse da multa ao ${cfg.rotulo} desfeito`);
+    await auditoria.registrar(req.usuario.id, 'acordo_parcela', `multa-rep-${tipo === 'cliente' ? 'cli' : 'par'}-des`, id, null, null, conn);
+    await conn.commit();
+    return sucesso(res, null, `Repasse da multa ao ${cfg.rotulo} desfeito`);
+  } catch (err) {
+    await conn.rollback();
+    return erroInterno(res, err);
+  } finally {
+    conn.release();
+  }
+}
+
 // GET /api/financeiro/repasses-pendentes — worklist GLOBAL: parcelas já recebidas do réu
-// que ainda têm repasse pendente (ao cliente e/ou ao parceiro).
+// que ainda têm repasse pendente (ao cliente e/ou ao parceiro), + multas recebidas na mesma situação.
 async function listarRepassesPendentes(req, res) {
   try {
     const [rows] = await pool.execute(
       `SELECT ap.id, ap.numero, ap.recebido_em, ap.valor_liquido,
-              ap.parceria_pessoa_id, ap.parceria_valor,
+              ap.parceria_pessoa_tipo, ap.parceria_pessoa_id, ap.parceria_valor,
+              ap.repasse_cliente_tipo, ap.repasse_cliente_pessoa_id, ap.repasse_cliente_conta_id,
               ap.repasse_cliente_em, ap.repasse_parceiro_em,
+              ap.repasse_cliente_destino_tipo, ap.repasse_parceiro_destino_tipo,
               CASE ap.parceria_pessoa_tipo
                 WHEN 'fisica'   THEN (SELECT pf.nome         FROM pessoas_fisicas   pf WHERE pf.id = ap.parceria_pessoa_id)
                 WHEN 'juridica' THEN (SELECT pj.razao_social FROM pessoas_juridicas pj WHERE pj.id = ap.parceria_pessoa_id)
@@ -862,19 +1652,47 @@ async function listarRepassesPendentes(req, res) {
          )
        ORDER BY ap.recebido_em ASC, p.numProc ASC, ap.numero ASC`
     );
-    return sucesso(res, rows);
+    const [multaRows] = await pool.execute(
+      `SELECT m.parcela_id AS id, ap.numero, m.recebido_em, m.valor_liquido,
+              m.parceria_pessoa_tipo, m.parceria_pessoa_id, m.parceria_valor,
+              m.repasse_cliente_tipo, m.repasse_cliente_pessoa_id, m.repasse_cliente_conta_id,
+              m.repasse_cliente_em, m.repasse_parceiro_em,
+              m.repasse_cliente_destino_tipo, m.repasse_parceiro_destino_tipo,
+              CASE m.parceria_pessoa_tipo
+                WHEN 'fisica'   THEN (SELECT pf.nome         FROM pessoas_fisicas   pf WHERE pf.id = m.parceria_pessoa_id)
+                WHEN 'juridica' THEN (SELECT pj.razao_social FROM pessoas_juridicas pj WHERE pj.id = m.parceria_pessoa_id)
+                ELSE NULL
+              END AS parceria_nome,
+              a.processo_id, a.tipo AS acordo_tipo,
+              (SELECT COUNT(*) FROM acordo_parcela ap2 WHERE ap2.acordo_id = ap.acordo_id) AS total_parcelas,
+              (SELECT COUNT(*) FROM acordo a2 WHERE a2.processo_id = a.processo_id AND a2.tipo = a.tipo AND a2.id <= a.id) AS numero_acordo,
+              p.numProc, p.NomeTituloProc, pa.numPasta
+       FROM acordo_parcela_multa m
+       JOIN acordo_parcela ap ON ap.id = m.parcela_id
+       JOIN acordo a    ON ap.acordo_id = a.id
+       JOIN tblproc p   ON a.processo_id = p.id
+       JOIN tblpasta pa ON p.pasta_id = pa.id
+       WHERE m.status = 'pago'
+         AND (
+           (m.repasse_cliente_habilitado = 1 AND m.valor_liquido > 0 AND m.repasse_cliente_em IS NULL)
+           OR (m.repasse_parceiro_habilitado = 1 AND m.parceria_pessoa_id IS NOT NULL AND m.repasse_parceiro_em IS NULL)
+         )
+       ORDER BY m.recebido_em ASC, p.numProc ASC, ap.numero ASC`
+    );
+    return sucesso(res, [...rows.map(r => ({ ...r, origem: 'parcela' })), ...multaRows.map(r => ({ ...r, origem: 'multa' }))]);
   } catch (err) {
     return erroInterno(res, err);
   }
 }
 
-// GET /api/financeiro/repasses-concluidos — repasses JÁ FEITOS (consulta/desfazer/histórico).
-// Traz a data, a forma de pagamento e quem fez cada repasse. LIMIT defensivo.
+// GET /api/financeiro/repasses-concluidos — repasses JÁ FEITOS (consulta/desfazer/histórico),
+// da parcela e da multa. Traz a data, a forma de pagamento e quem fez cada repasse. LIMIT defensivo.
 async function listarRepassesConcluidos(req, res) {
   try {
     const [rows] = await pool.execute(
       `SELECT ap.id, ap.numero, ap.valor_liquido, ap.parceria_pessoa_id, ap.parceria_valor,
               ap.repasse_cliente_em, ap.repasse_parceiro_em,
+              ap.repasse_cliente_observacao, ap.repasse_parceiro_observacao,
               CASE ap.parceria_pessoa_tipo
                 WHEN 'fisica'   THEN (SELECT pf.nome         FROM pessoas_fisicas   pf WHERE pf.id = ap.parceria_pessoa_id)
                 WHEN 'juridica' THEN (SELECT pj.razao_social FROM pessoas_juridicas pj WHERE pj.id = ap.parceria_pessoa_id)
@@ -899,7 +1717,36 @@ async function listarRepassesConcluidos(req, res) {
                 p.numProc ASC, ap.numero ASC
        LIMIT 300`
     );
-    return sucesso(res, rows);
+    const [multaRows] = await pool.execute(
+      `SELECT m.parcela_id AS id, ap.numero, m.valor_liquido, m.parceria_pessoa_id, m.parceria_valor,
+              m.repasse_cliente_em, m.repasse_parceiro_em,
+              m.repasse_cliente_observacao, m.repasse_parceiro_observacao,
+              CASE m.parceria_pessoa_tipo
+                WHEN 'fisica'   THEN (SELECT pf.nome         FROM pessoas_fisicas   pf WHERE pf.id = m.parceria_pessoa_id)
+                WHEN 'juridica' THEN (SELECT pj.razao_social FROM pessoas_juridicas pj WHERE pj.id = m.parceria_pessoa_id)
+                ELSE NULL
+              END AS parceria_nome,
+              (SELECT fp.nome FROM forma_pagamento fp WHERE fp.id = m.repasse_cliente_forma_id)  AS repasse_cliente_forma_nome,
+              (SELECT fp.nome FROM forma_pagamento fp WHERE fp.id = m.repasse_parceiro_forma_id) AS repasse_parceiro_forma_nome,
+              uc.nome AS repasse_cliente_por_nome,
+              up.nome AS repasse_parceiro_por_nome,
+              a.processo_id, a.tipo AS acordo_tipo,
+              (SELECT COUNT(*) FROM acordo_parcela ap2 WHERE ap2.acordo_id = ap.acordo_id) AS total_parcelas,
+              (SELECT COUNT(*) FROM acordo a2 WHERE a2.processo_id = a.processo_id AND a2.tipo = a.tipo AND a2.id <= a.id) AS numero_acordo,
+              p.numProc, p.NomeTituloProc, pa.numPasta
+       FROM acordo_parcela_multa m
+       JOIN acordo_parcela ap ON ap.id = m.parcela_id
+       JOIN acordo a    ON ap.acordo_id = a.id
+       JOIN tblproc p   ON a.processo_id = p.id
+       JOIN tblpasta pa ON p.pasta_id = pa.id
+       LEFT JOIN usuarios uc ON m.repasse_cliente_por  = uc.id
+       LEFT JOIN usuarios up ON m.repasse_parceiro_por = up.id
+       WHERE m.repasse_cliente_em IS NOT NULL OR m.repasse_parceiro_em IS NOT NULL
+       ORDER BY GREATEST(COALESCE(m.repasse_cliente_em,'1900-01-01'), COALESCE(m.repasse_parceiro_em,'1900-01-01')) DESC,
+                p.numProc ASC, ap.numero ASC
+       LIMIT 300`
+    );
+    return sucesso(res, [...rows.map(r => ({ ...r, origem: 'parcela' })), ...multaRows.map(r => ({ ...r, origem: 'multa' }))]);
   } catch (err) {
     return erroInterno(res, err);
   }
@@ -975,7 +1822,7 @@ function montarFiltroConsulta(q) {
 async function consultarFinanceiro(req, res) {
   try {
     const { where, params } = montarFiltroConsulta(req.query);
-    const limitInt  = parseInt(req.query.limite) || 50;
+    const limitInt  = Math.min(parseInt(req.query.limite) || 50, 100);
     const offsetInt = ((parseInt(req.query.pagina) || 1) - 1) * limitInt;
 
     const [rows] = await pool.execute(
@@ -1084,12 +1931,16 @@ async function buscarHistoricoLancamento(req, res) {
 }
 
 module.exports = {
+  // contas e destinos financeiros
+  listarContasEscritorio, salvarContaEscritorio, desativarContaEscritorio, listarBeneficiariosProcesso, listarContasBeneficiario, criarContaBeneficiario,
   // conta corrente
   buscarContaCorrente, lancar, editarLancamento, excluirLancamento,
   // acordo
   listarAcordos, gerarPreviaParcelas, criarAcordo, buscarAcordo, atualizarAcordo, excluirAcordo, cancelarAcordo,
   // baixa (recebimento do réu)
   pagarParcela, desfazerPagamento,
+  // multa por atraso (lançar/editar/remover/receber/desfazer + repasse dela)
+  lancarMulta, editarMulta, removerMulta, receberMulta, desfazerMulta, registrarRepasseMulta, desfazerRepasseMulta,
   // repasses (ao cliente / parceiro) + worklists
   registrarRepasse, desfazerRepasse, listarRepassesPendentes, listarRepassesConcluidos,
   // consulta / relatório

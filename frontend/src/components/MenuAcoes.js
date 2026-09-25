@@ -22,6 +22,8 @@ import { ModalGerar } from './GerarDocumento';
 // Um item pode ser uma ação comum { label, onClick } ou "Gerar documento":
 //   { label:'Gerar documento', icone:'📄', gerarDoc:{ ancoraTipo, ancoraId, beneficiario? } }
 // Nesse caso o próprio menu abre o ModalGerar (sem precisar de estado na tela).
+// Um item também pode virar SUBMENU: { label, icone, submenu:[{ label, icone?, onClick } | { label, icone?, gerarDoc }] }
+// — cada opção do submenu aceita tanto onClick quanto gerarDoc, igual ao item de fora.
 export default function MenuAcoes({ itens = [], titulo = 'Mais ações' }) {
   const visiveis = itens.filter(it => it && !it.oculto);
   const [pos, setPos] = useState(null); // { top, left } quando aberto; null quando fechado
@@ -143,7 +145,7 @@ export default function MenuAcoes({ itens = [], titulo = 'Mais ações' }) {
                         boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: '6px' }}>
                       {subVis.map((s, j) => (
                         <button key={j} type="button"
-                          onClick={() => { setPos(null); s.onClick(); }}
+                          onClick={() => { setPos(null); if (s.gerarDoc) { setDocCtx(s.gerarDoc); } else { s.onClick(); } }}
                           style={{ display: 'flex', gap: '8px', alignItems: 'center', width: '100%', textAlign: 'left',
                             background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', padding: '8px 10px',
                             borderRadius: '6px', color: s.perigo ? '#dc2626' : '#334155', whiteSpace: 'nowrap' }}

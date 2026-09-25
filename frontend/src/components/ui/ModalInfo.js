@@ -21,6 +21,7 @@ export default function ModalInfo({
   mensagem,
   textoBotao = 'Entendi',
   tipo       = 'aviso',
+  zIndex,
   onFechar,
 }) {
   const btnRef = useRef(null);
@@ -42,7 +43,7 @@ export default function ModalInfo({
   const cfg = CONFIG[tipo] || CONFIG.aviso;
 
   return (
-    <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) onFechar(); }}>
+    <div className="modal-overlay" style={zIndex ? { zIndex } : undefined} onMouseDown={e => { if (e.target === e.currentTarget) onFechar(); }}>
       <div className="modal-box" style={{
         maxWidth: '420px', padding: 0, overflow: 'hidden',
         borderRadius: '12px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)',

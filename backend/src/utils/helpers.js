@@ -94,6 +94,20 @@ function formatarNumeroPasta(numero) {
   return String(numero).padStart(4, '0');
 }
 
+// Converte texto em formato de moeda brasileira ("1.000,00") para número (1000).
+// Espelha o parseMoeda do frontend (utils/formatters.js) para os dois lados lerem
+// o mesmo valor do mesmo jeito. Só reconhece como moeda quando há vírgula no texto
+// (evita confundir com número de pasta/CNJ, que usam ponto e traço mas nunca vírgula).
+// Devolve null quando o texto não é uma busca por valor.
+function parseMoeda(texto) {
+  if (texto === null || texto === undefined || texto === '') return null;
+  const str = String(texto);
+  if (!str.includes(',')) return null;
+  const limpo = str.replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, '');
+  const valor = parseFloat(limpo);
+  return Number.isFinite(valor) && valor > 0 ? valor : null;
+}
+
 module.exports = {
   formatarCPF,
   formatarCNPJ,
@@ -107,4 +121,5 @@ module.exports = {
   bloqueiaAgendarPassado,
   truncar,
   formatarNumeroPasta,
+  parseMoeda,
 };

@@ -103,13 +103,20 @@ async function liberarFazendoExpirados() {
   try {
     const [cfg] = await pool.execute('SELECT prazo_fazendo_timeout FROM configuracoes_escritorio LIMIT 1');
     const timeout = cfg[0]?.prazo_fazendo_timeout || 60;
-    const [result] = await pool.execute(
-      `UPDATE prazos_processo
-         SET fazendo_por = NULL, fazendo_desde = NULL, status_antes_fazendo = NULL
-       WHERE fazendo_por IS NOT NULL
-         AND TIMESTAMPDIFF(MINUTE, fazendo_desde, NOW()) >= ?`,
-      [timeout]
-    );
+    const conn = await pool.getConnection();
+    let result;
+    try {
+      await conn.beginTransaction();
+      [result] = await conn.execute(
+        `UPDATE prazos_processo
+           SET fazendo_por = NULL, fazendo_desde = NULL, status_antes_fazendo = NULL
+         WHERE fazendo_por IS NOT NULL
+           AND TIMESTAMPDIFF(MINUTE, fazendo_desde, NOW()) >= ?`,
+        [timeout]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     if (result.affectedRows > 0) {
       console.log(`⏰ ${result.affectedRows} prazo(s) "Fazendo" expirado(s) liberado(s)`);
     }
@@ -195,7 +202,7 @@ async function listar(req, res) {
       params.push(req.usuario.id, etqSlot);
     }
 
-    const limitInt  = parseInt(limite) || 30;
+    const limitInt  = Math.min(parseInt(limite) || 30, 100);
     const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
 
     const [rows] = await pool.execute(
@@ -209,6 +216,7 @@ async function listar(req, res) {
               ps.nome AS subtipo_nome, tp.nome AS tipo_prazo_nome,
               u.nome AS responsavel_nome,
               pr.numProc AS processo_numero,
+              pa.id AS pasta_id,
               pr.NomeTituloProc AS pasta_titulo, LPAD(pa.numPasta, 4, '0') AS pasta_numero_fmt,
               DATEDIFF(pp.data_vencimento, CURDATE()) AS dias_restantes,
               CASE
@@ -283,19 +291,25 @@ async function criar(req, res) {
       return erro(res, 'A data final é obrigatória. Informe a data final ou a quantidade de dias.');
     }
 
-    const [result] = await pool.execute(
-      `INSERT INTO prazos_processo
-         (processo_id, subtipo_id, descricao, data_inicio, quantidade, tipo_dias,
-          data_vencimento, delegado_para, criado_por, publicacao_id, notificar_conclusao)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        processo_id, subtipo_id || null, descricao || null, data_inicio,
-        quantidade || null, tipo_dias || 'uteis', data_vencimento,
-        delegado_para || null, req.usuario.id, publicacao_id || null, notificar_conclusao ? 1 : 0
-      ]
-    );
-
-    await auditoria.registrar(req.usuario.id, 'prazos_processo', 'criar', result.insertId);
+    const conn = await pool.getConnection();
+    let result;
+    try {
+      await conn.beginTransaction();
+      [result] = await conn.execute(
+        `INSERT INTO prazos_processo
+           (processo_id, subtipo_id, descricao, data_inicio, quantidade, tipo_dias,
+            data_vencimento, delegado_para, criado_por, publicacao_id, notificar_conclusao)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          processo_id, subtipo_id || null, descricao || null, data_inicio,
+          quantidade || null, tipo_dias || 'uteis', data_vencimento,
+          delegado_para || null, req.usuario.id, publicacao_id || null, notificar_conclusao ? 1 : 0
+        ]
+      );
+      await auditoria.registrar(req.usuario.id, 'prazos_processo', 'criar', result.insertId, null, null, conn);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
 
     // Notifica o usuário delegado imediatamente (se for diferente de quem criou)
     if (delegado_para && parseInt(delegado_para) !== req.usuario.id) {
@@ -350,7 +364,7 @@ async function mudarStatus(req, res) {
   }
 
   const [antes] = await pool.execute(
-    `SELECT pp.status, pp.fazendo_por, pp.notificar_conclusao, pp.criado_por, pp.delegado_para,
+    `SELECT pp.status, pp.fazendo_por, pp.notificar_conclusao, pp.criado_por, pp.delegado_para, pp.processo_id,
             COALESCE(ps.nome, pp.descricao, 'Prazo') AS rotulo
        FROM prazos_processo pp
        LEFT JOIN prazo_subtipo ps ON pp.subtipo_id = ps.id
@@ -381,6 +395,16 @@ async function mudarStatus(req, res) {
           WHERE id = ?`,
         [req.usuario.id, req.usuario.id, id]
       );
+
+      // Registra a conclusão como andamento do processo (mesma tabela/regras da aba
+      // "Andamentos" — fonte='manual' para aparecer com o autor e ficar editável/excluível
+      // igual a qualquer lançamento manual).
+      const [andResult] = await conn.execute(
+        `INSERT INTO andamento_processual (processo_id, data, descricao, fonte, criado_por)
+         VALUES (?, ?, ?, 'manual', ?)`,
+        [antes[0].processo_id, hojeBrasilia(), `Prazo concluído: ${antes[0].rotulo}`, req.usuario.id]
+      );
+      await auditoria.registrar(req.usuario.id, 'andamento_processual', 'criar', andResult.insertId, null, null, conn);
     } else {
       await conn.execute(
         `UPDATE prazos_processo
@@ -460,9 +484,16 @@ async function criarTipo(req, res) {
     );
     if (dup.length > 0) return erro(res, `"${nomeNormalizado}" já está cadastrado como tipo de prazo`);
 
-    const [result] = await pool.execute(
-      'INSERT INTO tipo_prazo (nome) VALUES (?)', [nomeNormalizado]
-    );
+    const conn = await pool.getConnection();
+    let result;
+    try {
+      await conn.beginTransaction();
+      [result] = await conn.execute(
+        'INSERT INTO tipo_prazo (nome) VALUES (?)', [nomeNormalizado]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, { id: result.insertId, nome: nomeNormalizado }, 'Tipo de prazo cadastrado', 201);
   } catch (err) {
     return erroInterno(res, err);
@@ -491,13 +522,145 @@ async function criarSubtipo(req, res) {
     );
     if (dup.length > 0) return erro(res, `"${nomeNormalizado}" já está cadastrado neste tipo`);
 
-    const [result] = await pool.execute(
-      'INSERT INTO prazo_subtipo (tipo_prazo_id, nome) VALUES (?, ?)',
-      [tipo_prazo_id, nomeNormalizado]
-    );
+    const conn = await pool.getConnection();
+    let result;
+    try {
+      await conn.beginTransaction();
+      [result] = await conn.execute(
+        'INSERT INTO prazo_subtipo (tipo_prazo_id, nome) VALUES (?, ?)',
+        [tipo_prazo_id, nomeNormalizado]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res,
       { id: result.insertId, nome: nomeNormalizado, tipo_prazo_id: Number(tipo_prazo_id) },
       'Subtipo cadastrado', 201);
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// PUT /api/prazos/tipos/:id — Renomeia um TIPO de prazo (dedup pelo nome, ignorando ele mesmo)
+async function editarTipo(req, res) {
+  try {
+    const { id } = req.params;
+    const { nome } = req.body;
+    if (!nome?.trim()) return erro(res, 'Nome do tipo é obrigatório');
+
+    const [tipoRow] = await pool.execute('SELECT id FROM tipo_prazo WHERE id = ?', [id]);
+    if (!tipoRow.length) return naoEncontrado(res, 'Tipo de prazo não encontrado');
+
+    const nomeTrimmed     = nome.trim();
+    const nomeNormalizado = nomeTrimmed.charAt(0).toUpperCase() + nomeTrimmed.slice(1);
+
+    const [dup] = await pool.execute(
+      'SELECT id FROM tipo_prazo WHERE LOWER(nome) = LOWER(?) AND id <> ?', [nomeNormalizado, id]
+    );
+    if (dup.length > 0) return erro(res, `"${nomeNormalizado}" já está cadastrado como tipo de prazo`);
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE tipo_prazo SET nome = ? WHERE id = ?', [nomeNormalizado, id]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
+    return sucesso(res, { id: Number(id), nome: nomeNormalizado }, 'Tipo de prazo atualizado');
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// DELETE /api/prazos/tipos/:id — Só permite excluir (soft-delete via ativo=0) se não
+// houver nenhum subtipo ATIVO sob esse tipo (subtipo já excluído não conta como uso).
+async function excluirTipo(req, res) {
+  try {
+    const { id } = req.params;
+    const [tipoRow] = await pool.execute('SELECT id FROM tipo_prazo WHERE id = ?', [id]);
+    if (!tipoRow.length) return naoEncontrado(res, 'Tipo de prazo não encontrado');
+
+    const [[{ total }]] = await pool.execute(
+      'SELECT COUNT(*) AS total FROM prazo_subtipo WHERE tipo_prazo_id = ? AND ativo = 1', [id]
+    );
+    if (total > 0) {
+      return erro(res, `Não é possível excluir: existe(m) ${total} subtipo(s) cadastrado(s) neste tipo. Exclua os subtipos primeiro.`);
+    }
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE tipo_prazo SET ativo = 0 WHERE id = ?', [id]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
+    return sucesso(res, null, 'Tipo de prazo excluído');
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// PUT /api/prazos/subtipos/:id — Renomeia um SUBTIPO (dedup dentro do mesmo tipo, ignorando ele mesmo)
+async function editarSubtipo(req, res) {
+  try {
+    const { id } = req.params;
+    const { nome } = req.body;
+    if (!nome?.trim()) return erro(res, 'Nome do subtipo é obrigatório');
+
+    const [subtipoRow] = await pool.execute('SELECT id, tipo_prazo_id FROM prazo_subtipo WHERE id = ?', [id]);
+    if (!subtipoRow.length) return naoEncontrado(res, 'Subtipo não encontrado');
+
+    const nomeTrimmed     = nome.trim();
+    const nomeNormalizado = nomeTrimmed.charAt(0).toUpperCase() + nomeTrimmed.slice(1);
+
+    const [dup] = await pool.execute(
+      'SELECT id FROM prazo_subtipo WHERE tipo_prazo_id = ? AND LOWER(nome) = LOWER(?) AND id <> ?',
+      [subtipoRow[0].tipo_prazo_id, nomeNormalizado, id]
+    );
+    if (dup.length > 0) return erro(res, `"${nomeNormalizado}" já está cadastrado neste tipo`);
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE prazo_subtipo SET nome = ? WHERE id = ?', [nomeNormalizado, id]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
+    return sucesso(res, { id: Number(id), nome: nomeNormalizado }, 'Subtipo atualizado');
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// DELETE /api/prazos/subtipos/:id — Só permite excluir (soft-delete via ativo=0) se
+// não houver prazo lançado com esse subtipo nem modelo de documento configurado com ele.
+async function excluirSubtipo(req, res) {
+  try {
+    const { id } = req.params;
+    const [subtipoRow] = await pool.execute('SELECT id FROM prazo_subtipo WHERE id = ?', [id]);
+    if (!subtipoRow.length) return naoEncontrado(res, 'Subtipo não encontrado');
+
+    const [[{ totalPrazos }]] = await pool.execute(
+      'SELECT COUNT(*) AS totalPrazos FROM prazos_processo WHERE subtipo_id = ?', [id]
+    );
+    if (totalPrazos > 0) {
+      return erro(res, `Não é possível excluir: este subtipo está em uso em ${totalPrazos} prazo(s) já lançado(s).`);
+    }
+    const [[{ totalModelos }]] = await pool.execute(
+      'SELECT COUNT(*) AS totalModelos FROM modelo_documento WHERE subtipo_prazo_id = ?', [id]
+    );
+    if (totalModelos > 0) {
+      return erro(res, `Não é possível excluir: este subtipo está em uso em ${totalModelos} modelo(s) de documento.`);
+    }
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE prazo_subtipo SET ativo = 0 WHERE id = ?', [id]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
+    return sucesso(res, null, 'Subtipo excluído');
   } catch (err) {
     return erroInterno(res, err);
   }
@@ -578,17 +741,22 @@ async function editar(req, res) {
       return erro(res, 'A data final é obrigatória. Informe a data final ou a quantidade de dias.');
     }
 
-    await pool.execute(
-      `UPDATE prazos_processo
-         SET subtipo_id = ?, descricao = ?, data_inicio = ?, quantidade = ?,
-             tipo_dias = ?, data_vencimento = ?, delegado_para = ?, notificar_conclusao = ?
-       WHERE id = ?`,
-      [subtipo_id || null, descricao || null, data_inicio,
-       quantidade || null, tipo_dias || 'uteis', data_vencimento,
-       delegado_para || null, (notificar_conclusao && delegado_para) ? 1 : 0, id]
-    );
-
-    await auditoria.registrar(req.usuario.id, 'prazos_processo', 'editar', id);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        `UPDATE prazos_processo
+           SET subtipo_id = ?, descricao = ?, data_inicio = ?, quantidade = ?,
+               tipo_dias = ?, data_vencimento = ?, delegado_para = ?, notificar_conclusao = ?
+         WHERE id = ?`,
+        [subtipo_id || null, descricao || null, data_inicio,
+         quantidade || null, tipo_dias || 'uteis', data_vencimento,
+         delegado_para || null, (notificar_conclusao && delegado_para) ? 1 : 0, id]
+      );
+      await auditoria.registrar(req.usuario.id, 'prazos_processo', 'editar', id, null, null, conn);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     // Reflete no Google. Se o delegado mudou, migra (cancela no antigo, cria no novo);
     // vazio/escritório = id nulo e o envio é ignorado.
     const seq = Math.floor(Date.now() / 1000);
@@ -862,4 +1030,4 @@ async function listarUsuariosFiltro(req, res) {
   }
 }
 
-module.exports = { listar, criar, editar, excluir, mudarStatus, buscarTipos, criarTipo, criarSubtipo, vencemHoje, calcularDataFinal, calcularDias, marcarFazendo, liberarFazendo, liberarFazendoExpirados, buscarHistorico, listarUsuariosFiltro };
+module.exports = { listar, criar, editar, excluir, mudarStatus, buscarTipos, criarTipo, editarTipo, excluirTipo, criarSubtipo, editarSubtipo, excluirSubtipo, vencemHoje, calcularDataFinal, calcularDias, marcarFazendo, liberarFazendo, liberarFazendoExpirados, buscarHistorico, listarUsuariosFiltro };

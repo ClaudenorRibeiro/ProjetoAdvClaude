@@ -185,6 +185,14 @@ export function mascaraCNPJ(value) {
     .replace(/(\d{2})\.(\d{3})\.(\d{3})\/(\d{4})(\d)/, '$1.$2.$3/$4-$5');
 }
 
+// Máscara ADAPTATIVA para um campo único que aceita CPF OU CNPJ (ex.: documento do
+// titular de uma conta bancária de terceiro, que pode ser pessoa física ou empresa).
+// Até 11 dígitos usa a máscara de CPF; a partir do 12º dígito passa para CNPJ.
+export function mascaraDocumento(value) {
+  const limpo = String(value || '').replace(/\D/g, '');
+  return limpo.length > 11 ? mascaraCNPJ(value) : mascaraCPF(value);
+}
+
 // Valida CNPJ usando o algoritmo oficial dos dígitos verificadores
 // Rejeita CNPJs com todos os dígitos iguais (00.000.000/0000-00 etc)
 export function validarCNPJ(cnpj) {

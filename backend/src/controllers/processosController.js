@@ -7,6 +7,7 @@
 const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
+const { parseMoeda } = require('../utils/helpers');
 
 // Confere que TODA parte (autor/réu/perito) enviada aponta para uma pessoa que
 // existe e está ativa. tbltituloproc* e processo_perito são polimórficos SEM
@@ -70,7 +71,7 @@ async function sugerirNumeroPasta(req, res) {
 async function listarPastas(req, res) {
   try {
     const { busca, pagina = 1, limite = 20, etiqueta, etiquetaEscritorio, assuntos } = req.query;
-    const limitInt  = parseInt(limite) || 20;
+    const limitInt  = Math.min(parseInt(limite) || 20, 100);
     const offsetInt = (parseInt(pagina) - 1) * limitInt;
     const params = [];
     let where = 'WHERE 1=1';
@@ -83,8 +84,17 @@ async function listarPastas(req, res) {
       const buscaDigitos = busca.replace(/\D/g, '');
       const bL = `%${busca}%`;
       const bD = buscaDigitos.length >= 3 ? `%${buscaDigitos}%` : bL;
+      // Busca por VALOR em dinheiro (ex.: "1.000,00") — só reconhece quando há vírgula no
+      // texto, pra não confundir com número de pasta/CNJ. Casamento EXATO (a decimal(15,2)
+      // vira string com 2 casas pra comparar sem erro de ponto flutuante). Quando não é uma
+      // busca por valor, fica null e as comparações abaixo nunca dão match (nunca acontece
+      // "= NULL" em SQL).
+      const valorMoeda = parseMoeda(busca);
+      const valorBuscaStr = valorMoeda !== null ? valorMoeda.toFixed(2) : null;
 
-      // Busca em: nº pasta, título, nº CNJ, protocolo e TODOS os polos (autores e réus, físicos e jurídicos)
+      // Busca em: nº pasta, título, nº CNJ, protocolo, TODOS os polos (autores e réus, físicos
+      // e jurídicos) e, quando o texto for um valor em dinheiro, parcela (acordo/alvará) ou
+      // lançamento (entrada/saída) do processo com esse valor exato.
       where += ` AND (
         LPAD(pa.numPasta, 4, '0') LIKE ?
         OR EXISTS (
@@ -123,6 +133,17 @@ async function listarPastas(req, res) {
               AND (pj.razao_social LIKE ? OR pj.nome_fantasia LIKE ? OR pj.cnpj LIKE ?
                    OR EXISTS (SELECT 1 FROM telefones_pj t WHERE t.pessoa_id = pj.id AND t.numero LIKE ?))
             )
+            -- Valor exato em parcela de acordo/alvará (mesma tabela, "tipo" que distingue)
+            OR EXISTS (
+              SELECT 1 FROM acordo ac2
+              JOIN acordo_parcela apc2 ON apc2.acordo_id = ac2.id
+              WHERE ac2.processo_id = p.id AND apc2.valor_bruto = ?
+            )
+            -- Valor exato em lançamento (entrada/saída) da conta corrente
+            OR EXISTS (
+              SELECT 1 FROM conta_corrente cc2
+              WHERE cc2.processo_id = p.id AND cc2.valor = ?
+            )
           )
         )
       )`;
@@ -132,8 +153,25 @@ async function listarPastas(req, res) {
         bL, bD, bD,      // autor físico:   nome, cpf, telefone
         bL, bL, bD, bD,  // autor jurídico: razao_social, nome_fantasia, cnpj, telefone
         bL, bD, bD,      // réu físico:     nome, cpf, telefone
-        bL, bL, bD, bD   // réu jurídico:   razao_social, nome_fantasia, cnpj, telefone
+        bL, bL, bD, bD,  // réu jurídico:   razao_social, nome_fantasia, cnpj, telefone
+        valorBuscaStr,   // valor exato — parcela (acordo/alvará)
+        valorBuscaStr    // valor exato — lançamento (conta corrente)
       );
+    }
+
+    // Filtro exclusivo do Financeiro: só pastas com pelo menos um processo que já teve
+    // alguma movimentação (lançamento na conta corrente OU acordo/alvará criado). As outras
+    // telas que reaproveitam esta mesma busca (Perícias, Prazos, Processos, Relatórios,
+    // Tarefas) nunca mandam este parâmetro, então continuam vendo todas as pastas, sem
+    // nenhuma mudança de comportamento pra elas.
+    if (['1', 'true', 'sim'].includes(String(req.query.apenasComFinanceiro || '').toLowerCase())) {
+      where += ` AND EXISTS (
+        SELECT 1 FROM tblproc p4 WHERE p4.pasta_id = pa.id AND p4.ativo = 1
+        AND (
+          EXISTS (SELECT 1 FROM conta_corrente cc4 WHERE cc4.processo_id = p4.id)
+          OR EXISTS (SELECT 1 FROM acordo ac4 WHERE ac4.processo_id = p4.id)
+        )
+      )`;
     }
 
     const assuntoIds = String(assuntos || '')
@@ -682,6 +720,26 @@ async function excluirProcesso(req, res) {
   }
 }
 
+// GET /api/processos/:id/historico — Histórico de ações deste processo (quem fez, quando, o quê)
+async function historicoProcesso(req, res) {
+  const { id } = req.params;
+  try {
+    const [rows] = await pool.execute(
+      `SELECT l.id, l.acao, l.descricao, l.criado_em,
+              COALESCE(u.nome, 'Usuário removido') AS usuario_nome
+         FROM logs_auditoria l
+         LEFT JOIN usuarios u ON u.id = l.usuario_id
+        WHERE l.tabela = 'tblproc' AND l.registro_id = ?
+        ORDER BY l.criado_em DESC
+        LIMIT 500`,
+      [id]
+    );
+    return sucesso(res, rows);
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
 // PUT /api/processos/:id — Atualiza processo
 async function atualizarProcesso(req, res) {
   const { id } = req.params;
@@ -908,14 +966,18 @@ async function _atualizarAuxSimples(req, res, tabela) {
   const { id } = req.params;
   const { nome } = req.body;
   if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
+  const conn = await pool.getConnection();
   try {
-    const [r] = await pool.execute(
+    await conn.beginTransaction();
+    const [r] = await conn.execute(
       `UPDATE ${tabela} SET nome=?, alterado_por=?, alterado_em=NOW() WHERE id=? AND ativo=1`,
       [nome.trim(), req.usuario.id, id]
     );
+    await conn.commit();
     if (!r.affectedRows) return naoEncontrado(res, 'Registro não encontrado');
     return sucesso(res, { id: parseInt(id), nome: nome.trim() }, 'Atualizado com sucesso');
-  } catch (err) { return erroInterno(res, err); }
+  } catch (err) { await conn.rollback(); return erroInterno(res, err); }
+  finally { conn.release(); }
 }
 
 // Exclui (soft) uma tabela auxiliar — bloqueia se estiver em uso
@@ -927,11 +989,17 @@ async function _excluirAuxSimples(req, res, tabela, colunaUso) {
     );
     if (uso[0].total > 0)
       return erro(res, `Não é possível excluir — este registro está vinculado a ${uso[0].total} processo(s) ativo(s)`);
-    await pool.execute(
-      `UPDATE ${tabela} SET ativo=0, alterado_por=?, alterado_em=NOW() WHERE id=?`,
-      [req.usuario.id, id]
-    );
-    await auditoria.registrar(req.usuario.id, tabela, 'excluir', id);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        `UPDATE ${tabela} SET ativo=0, alterado_por=?, alterado_em=NOW() WHERE id=?`,
+        [req.usuario.id, id]
+      );
+      await auditoria.registrar(req.usuario.id, tabela, 'excluir', id, null, null, conn);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Excluído com sucesso');
   } catch (err) { return erroInterno(res, err); }
 }
@@ -941,23 +1009,30 @@ async function criarForum(req, res) {
   try {
     const { abrev_nome, nome, cep, logradouro, num_end, compl_end, bairro, cidade, uf } = req.body;
     if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
-    const [r] = await pool.execute(
-      `INSERT INTO tblforum
-         (abrev_nome, nome, cep, logradouro, num_end, compl_end, bairro, cidade, uf, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        abrev_nome?.trim()               || null,
-        nome.trim(),
-        cep?.replace(/\D/g, '')          || null,
-        logradouro?.trim()               || null,
-        num_end?.trim()                  || null,
-        compl_end?.trim()                || null,
-        bairro?.trim()                   || null,
-        cidade?.trim()                   || null,
-        uf?.toUpperCase().slice(0, 2)    || null,
-        req.usuario.id,
-      ]
-    );
+    const conn = await pool.getConnection();
+    let r;
+    try {
+      await conn.beginTransaction();
+      [r] = await conn.execute(
+        `INSERT INTO tblforum
+           (abrev_nome, nome, cep, logradouro, num_end, compl_end, bairro, cidade, uf, criado_por)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          abrev_nome?.trim()               || null,
+          nome.trim(),
+          cep?.replace(/\D/g, '')          || null,
+          logradouro?.trim()               || null,
+          num_end?.trim()                  || null,
+          compl_end?.trim()                || null,
+          bairro?.trim()                   || null,
+          cidade?.trim()                   || null,
+          uf?.toUpperCase().slice(0, 2)    || null,
+          req.usuario.id,
+        ]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, { id: r.insertId, nome: nome.trim(), abrev_nome: abrev_nome?.trim() || null }, 'Fórum criado com sucesso', 201);
   } catch (err) {
     return erroInterno(res, err);
@@ -969,21 +1044,28 @@ async function criarVara(req, res) {
   try {
     const { abrev_nome, nome, forum_id, codVaraNoProc, compl_end, tel, email } = req.body;
     if (!nome?.trim() || !forum_id) return erro(res, 'Nome e fórum são obrigatórios');
-    const [r] = await pool.execute(
-      `INSERT INTO tblvara
-         (abrev_nome, nome, forum_id, codVaraNoProc, compl_end, tel, email, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        abrev_nome?.trim()    || null,
-        nome.trim(),
-        forum_id,
-        codVaraNoProc?.trim() || null,
-        compl_end?.trim()     || null,
-        tel?.trim()           || null,
-        email?.trim()         || null,
-        req.usuario.id,
-      ]
-    );
+    const conn = await pool.getConnection();
+    let r;
+    try {
+      await conn.beginTransaction();
+      [r] = await conn.execute(
+        `INSERT INTO tblvara
+           (abrev_nome, nome, forum_id, codVaraNoProc, compl_end, tel, email, criado_por)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          abrev_nome?.trim()    || null,
+          nome.trim(),
+          forum_id,
+          codVaraNoProc?.trim() || null,
+          compl_end?.trim()     || null,
+          tel?.trim()           || null,
+          email?.trim()         || null,
+          req.usuario.id,
+        ]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, { id: r.insertId, nome: nome.trim(), abrev_nome: abrev_nome?.trim() || null }, 'Vara criada com sucesso', 201);
   } catch (err) {
     return erroInterno(res, err);
@@ -995,10 +1077,17 @@ async function criarTipo(req, res) {
   try {
     const { nome } = req.body;
     if (!nome) return erro(res, 'Nome é obrigatório');
-    const [r] = await pool.execute(
-      'INSERT INTO tbltipoproc (nome, criado_por) VALUES (?, ?)',
-      [nome.trim(), req.usuario.id]
-    );
+    const conn = await pool.getConnection();
+    let r;
+    try {
+      await conn.beginTransaction();
+      [r] = await conn.execute(
+        'INSERT INTO tbltipoproc (nome, criado_por) VALUES (?, ?)',
+        [nome.trim(), req.usuario.id]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, { id: r.insertId, nome: nome.trim() }, 'Tipo criado com sucesso', 201);
   } catch (err) {
     return erroInterno(res, err);
@@ -1010,10 +1099,17 @@ async function criarStatusProc(req, res) {
   try {
     const { nome } = req.body;
     if (!nome) return erro(res, 'Nome é obrigatório');
-    const [r] = await pool.execute(
-      'INSERT INTO tblstatusproc (nome, criado_por) VALUES (?, ?)',
-      [nome.trim(), req.usuario.id]
-    );
+    const conn = await pool.getConnection();
+    let r;
+    try {
+      await conn.beginTransaction();
+      [r] = await conn.execute(
+        'INSERT INTO tblstatusproc (nome, criado_por) VALUES (?, ?)',
+        [nome.trim(), req.usuario.id]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, { id: r.insertId, nome: nome.trim() }, 'Status criado com sucesso', 201);
   } catch (err) {
     return erroInterno(res, err);
@@ -1025,10 +1121,17 @@ async function criarInstancia(req, res) {
   try {
     const { nome } = req.body;
     if (!nome) return erro(res, 'Nome é obrigatório');
-    const [r] = await pool.execute(
-      'INSERT INTO tblinstanciaproc (nome, criado_por) VALUES (?, ?)',
-      [nome.trim(), req.usuario.id]
-    );
+    const conn = await pool.getConnection();
+    let r;
+    try {
+      await conn.beginTransaction();
+      [r] = await conn.execute(
+        'INSERT INTO tblinstanciaproc (nome, criado_por) VALUES (?, ?)',
+        [nome.trim(), req.usuario.id]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, { id: r.insertId, nome: nome.trim() }, 'Instância criada com sucesso', 201);
   } catch (err) {
     return erroInterno(res, err);
@@ -1040,10 +1143,17 @@ async function criarAssuntoProc(req, res) {
   try {
     const { nome } = req.body;
     if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
-    const [r] = await pool.execute(
-      'INSERT INTO tblassuntoproc (nome, criado_por) VALUES (?, ?)',
-      [nome.trim(), req.usuario.id]
-    );
+    const conn = await pool.getConnection();
+    let r;
+    try {
+      await conn.beginTransaction();
+      [r] = await conn.execute(
+        'INSERT INTO tblassuntoproc (nome, criado_por) VALUES (?, ?)',
+        [nome.trim(), req.usuario.id]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, { id: r.insertId, nome: nome.trim() }, 'Assunto criado com sucesso', 201);
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') return erro(res, 'Já existe um assunto cadastrado com este nome');
@@ -1056,8 +1166,10 @@ async function atualizarForum(req, res) {
   const { id } = req.params;
   const { abrev_nome, nome, cep, logradouro, num_end, compl_end, bairro, cidade, uf } = req.body;
   if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
+  const conn = await pool.getConnection();
   try {
-    const [r] = await pool.execute(
+    await conn.beginTransaction();
+    const [r] = await conn.execute(
       `UPDATE tblforum SET
          abrev_nome=?, nome=?, cep=?, logradouro=?, num_end=?,
          compl_end=?, bairro=?, cidade=?, uf=?,
@@ -1077,9 +1189,11 @@ async function atualizarForum(req, res) {
         id,
       ]
     );
+    await conn.commit();
     if (!r.affectedRows) return naoEncontrado(res, 'Fórum não encontrado');
     return sucesso(res, { id: parseInt(id), nome: nome.trim(), abrev_nome: abrev_nome?.trim() || null }, 'Fórum atualizado');
-  } catch (err) { return erroInterno(res, err); }
+  } catch (err) { await conn.rollback(); return erroInterno(res, err); }
+  finally { conn.release(); }
 }
 async function excluirForum(req, res) {
   const { id } = req.params;
@@ -1096,8 +1210,14 @@ async function excluirForum(req, res) {
         { varas: varas.map(v => v.nome) }
       );
     }
-    await pool.execute('UPDATE tblforum SET ativo=0, alterado_por=?, alterado_em=NOW() WHERE id=?', [req.usuario.id, id]);
-    await auditoria.registrar(req.usuario.id, 'tblforum', 'excluir', id);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE tblforum SET ativo=0, alterado_por=?, alterado_em=NOW() WHERE id=?', [req.usuario.id, id]);
+      await auditoria.registrar(req.usuario.id, 'tblforum', 'excluir', id, null, null, conn);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Fórum excluído');
   } catch (err) { return erroInterno(res, err); }
 }
@@ -1107,8 +1227,10 @@ async function atualizarVara(req, res) {
   const { id } = req.params;
   const { abrev_nome, nome, forum_id, codVaraNoProc, compl_end, tel, email } = req.body;
   if (!nome?.trim() || !forum_id) return erro(res, 'Nome e fórum são obrigatórios');
+  const conn = await pool.getConnection();
   try {
-    const [r] = await pool.execute(
+    await conn.beginTransaction();
+    const [r] = await conn.execute(
       `UPDATE tblvara SET
          abrev_nome=?, nome=?, forum_id=?, codVaraNoProc=?,
          compl_end=?, tel=?, email=?,
@@ -1126,9 +1248,11 @@ async function atualizarVara(req, res) {
         id,
       ]
     );
+    await conn.commit();
     if (!r.affectedRows) return naoEncontrado(res, 'Vara não encontrada');
     return sucesso(res, { id: parseInt(id), nome: nome.trim(), abrev_nome: abrev_nome?.trim() || null }, 'Vara atualizada');
-  } catch (err) { return erroInterno(res, err); }
+  } catch (err) { await conn.rollback(); return erroInterno(res, err); }
+  finally { conn.release(); }
 }
 async function excluirVara(req, res) {
   const { id } = req.params;
@@ -1157,11 +1281,17 @@ async function excluirVara(req, res) {
         `Não é possível excluir esta vara — ela está vinculada a ${audienciasVara[0].total} audiência(s). Altere a vara dessas audiências antes de excluir.`
       );
     }
-    await pool.execute(
-      'UPDATE tblvara SET ativo=0, alterado_por=?, alterado_em=NOW() WHERE id=?',
-      [req.usuario.id, id]
-    );
-    await auditoria.registrar(req.usuario.id, 'tblvara', 'excluir', id);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        'UPDATE tblvara SET ativo=0, alterado_por=?, alterado_em=NOW() WHERE id=?',
+        [req.usuario.id, id]
+      );
+      await auditoria.registrar(req.usuario.id, 'tblvara', 'excluir', id, null, null, conn);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Vara excluída com sucesso');
   } catch (err) { return erroInterno(res, err); }
 }
@@ -1178,17 +1308,21 @@ async function atualizarAssuntoProc(req, res) {
   const { id } = req.params;
   const { nome } = req.body;
   if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
+  const conn = await pool.getConnection();
   try {
-    const [r] = await pool.execute(
+    await conn.beginTransaction();
+    const [r] = await conn.execute(
       'UPDATE tblassuntoproc SET nome=?, alterado_por=?, alterado_em=NOW() WHERE id=? AND ativo=1',
       [nome.trim(), req.usuario.id, id]
     );
+    await conn.commit();
     if (!r.affectedRows) return naoEncontrado(res, 'Assunto não encontrado');
     return sucesso(res, { id: parseInt(id), nome: nome.trim() }, 'Assunto atualizado');
   } catch (err) {
+    await conn.rollback();
     if (err.code === 'ER_DUP_ENTRY') return erro(res, 'Já existe um assunto cadastrado com este nome');
     return erroInterno(res, err);
-  }
+  } finally { conn.release(); }
 }
 
 async function excluirAssuntoProc(req, res) {
@@ -1362,6 +1496,7 @@ module.exports = {
   criarProcesso,
   atualizarProcesso,
   excluirProcesso,
+  historicoProcesso,
   buscarAuxiliares,
   // Fórum
   criarForum, atualizarForum, excluirForum,

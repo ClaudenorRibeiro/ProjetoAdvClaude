@@ -3,7 +3,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { tarefasAPI, processosAPI } from '../../services/api';
 import { formatarData, formatarDataHora, labelPrioridade, toTitleCase, mascaraCNJ } from '../../utils/formatters';
 import { toast } from 'react-toastify';
@@ -13,6 +13,7 @@ import ModalInfo from '../../components/ui/ModalInfo';
 import useEscFechar from '../../hooks/useEscFechar';
 import MenuAcoes from '../../components/MenuAcoes';
 import ModalLerPublicacao from '../../components/ModalLerPublicacao';
+import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
 import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetasSubmenu, useEtiquetasPessoais } from '../../components/Etiquetas';
 
 const PRIORIDADE_COR = { urgente: 'badge-vermelho', normal: 'badge-laranja', baixa: 'badge-verde' };
@@ -72,6 +73,7 @@ export default function Tarefas() {
   const [tarefaHistorico, setTarefaHistorico] = useState(null);
   const [tarefaVerPub, setTarefaVerPub]       = useState(null); // publicacao_id p/ ler a publicação de origem
   const location = useLocation();
+  const navigate = useNavigate();
   const [novaData, setNovaData] = useState(''); // data pré-preenchida vinda da Agenda (deep-link)
 
   // Deep-link da Agenda: /tarefas?nova=1&data=YYYY-MM-DD abre o modal de nova tarefa já com a data
@@ -173,10 +175,17 @@ export default function Tarefas() {
       );
     }
     if (tipo === 'processo') {
+      const href = `/processos/pasta/${t.pasta_do_processo_id}?aba=tarefas&processo=${t.processo_id}`;
+      if (t.processo_numero) {
+        return (
+          <NumeroProcessoCopiavel numero={t.processo_numero}
+            href={href}
+            onAbrir={() => navigate(href)} />
+        );
+      }
       return (
-        <Link to={`/processos/pasta/${t.pasta_do_processo_id}?aba=tarefas&processo=${t.processo_id}`}
-          style={{ fontSize: '13px', fontFamily: 'monospace' }}>
-          {t.processo_numero || `Processo ${t.processo_id}`}
+        <Link to={href} style={{ fontSize: '13px', fontFamily: 'monospace' }}>
+          Processo {t.processo_id}
         </Link>
       );
     }
@@ -296,7 +305,7 @@ export default function Tarefas() {
                         {t.titulo}
                       </strong>
                       {t.descricao && (
-                        <div style={{ fontSize: '12px', color: '#888', marginTop: '2px' }}>
+                        <div style={{ fontSize: '13px', color: '#555', marginTop: '2px' }}>
                           {t.descricao}
                         </div>
                       )}
@@ -315,7 +324,7 @@ export default function Tarefas() {
                       )}
                     </td>
                     <td>{t.atribuida_para_nome || 'Escritório'}</td>
-                    <td>{renderVinculo(t)}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{renderVinculo(t)}</td>
                     <td style={{ textAlign: 'center' }}>
                       <EtiquetaCelula slot={t.etiqueta_pessoal} definicoes={etqDefs} />
                     </td>

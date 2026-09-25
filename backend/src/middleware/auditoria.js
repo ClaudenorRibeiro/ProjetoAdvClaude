@@ -28,6 +28,7 @@ const DESCRICAO_MAPA = {
   tblvara:              { coluna: 'nome',         prefixo: 'Vara: ' },
   usuarios:             { coluna: 'nome',         prefixo: 'Usuário: ' },
   pendencia_documento:  { coluna: 'observacao',   prefixo: 'Pendência de documentos: ' },
+  instituicao_financeira: { coluna: 'nome',       prefixo: 'Banco: ' },
 };
 
 // Descrições fixas (não dependem de um registro específico)

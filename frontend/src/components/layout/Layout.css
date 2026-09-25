@@ -884,11 +884,16 @@ body {
   border-bottom: 2px solid transparent;
   cursor: pointer;
   margin-bottom: -2px;
-  transition: color 0.15s, border-color 0.15s;
+  transform-origin: center bottom;
+  transition: color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
 
 .aba-btn:hover {
   color: #1a56db;
+  /* Mesmo destaque visual do menu lateral, sem deslocar as demais abas. */
+  transform: scale(1.4);
+  position: relative;
+  z-index: 1;
 }
 
 .aba-btn.ativa {

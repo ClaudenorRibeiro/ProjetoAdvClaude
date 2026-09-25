@@ -17,6 +17,7 @@ export default function FormasPagamento() {
   const [modal,      setModal]      = useState(false);
   const [editando,   setEditando]   = useState(null);  // forma em edição (ou null = nova)
   const [nome,       setNome]       = useState('');
+  const [usoPermitido, setUsoPermitido] = useState('financeira');
   const [salvando,   setSalvando]   = useState(false);
   const [confirmar,  setConfirmar]  = useState(null);
 
@@ -34,9 +35,9 @@ export default function FormasPagamento() {
     }
   }
 
-  function abrirNovo()        { setEditando(null); setNome(''); setModal(true); }
-  function abrirEditar(f)     { setEditando(f); setNome(f.nome || ''); setModal(true); }
-  function fecharModal()      { setModal(false); setEditando(null); setNome(''); }
+  function abrirNovo()        { setEditando(null); setNome(''); setUsoPermitido('financeira'); setModal(true); }
+  function abrirEditar(f)     { setEditando(f); setNome(f.nome || ''); setUsoPermitido(f.uso_permitido || 'financeira'); setModal(true); }
+  function fecharModal()      { setModal(false); setEditando(null); setNome(''); setUsoPermitido('financeira'); }
 
   async function salvar(e) {
     e.preventDefault();
@@ -44,10 +45,10 @@ export default function FormasPagamento() {
     setSalvando(true);
     try {
       if (editando) {
-        await financeiroAPI.atualizarFormaPagamento(editando.id, { nome: nome.trim() });
+        await financeiroAPI.atualizarFormaPagamento(editando.id, { nome: nome.trim(), uso_permitido: usoPermitido });
         toast.success('Forma de pagamento atualizada!');
       } else {
-        await financeiroAPI.criarFormaPagamento({ nome: nome.trim() });
+        await financeiroAPI.criarFormaPagamento({ nome: nome.trim(), uso_permitido: usoPermitido });
         toast.success('Forma de pagamento criada!');
       }
       fecharModal();
@@ -61,14 +62,14 @@ export default function FormasPagamento() {
 
   function excluir(f) {
     setConfirmar({
-      titulo: 'Excluir forma de pagamento',
-      mensagem: `Excluir "${f.nome}"? Ela deixará de aparecer nas listas, mas os lançamentos e recibos antigos continuam exibindo o nome.`,
-      textoBotao: '🗑️ Excluir',
-      tipo: 'perigo',
+      titulo: 'Desativar forma de pagamento',
+      mensagem: `Desativar "${f.nome}"? O ID e os registros antigos serão preservados, mas a forma não aparecerá em novos recebimentos ou repasses.`,
+      textoBotao: 'Desativar',
+      tipo: 'aviso',
       acao: async () => {
         try {
           await financeiroAPI.excluirFormaPagamento(f.id);
-          toast.success('Forma de pagamento removida!');
+          toast.success('Forma de pagamento desativada!');
           carregar();
         } catch (err) {
           toast.error(err.response?.data?.mensagem || 'Erro ao excluir');
@@ -102,6 +103,7 @@ export default function FormasPagamento() {
               <thead>
                 <tr>
                   <th>Nome</th>
+                  <th>Disponível em</th>
                   <th style={{ width: 60 }}>Ações</th>
                 </tr>
               </thead>
@@ -109,10 +111,11 @@ export default function FormasPagamento() {
                 {formas.map(f => (
                   <tr key={f.id}>
                     <td>{f.nome}</td>
+                    <td>{f.uso_permitido === 'especie' ? 'Dinheiro em espécie' : f.uso_permitido === 'ambos' ? 'Conta financeira e espécie' : 'Instituição financeira'}</td>
                     <td>
                       <MenuAcoes itens={[
                         { label: 'Editar',  icone: '✏️', onClick: () => abrirEditar(f) },
-                        { label: 'Excluir', icone: '🗑️', perigo: true, onClick: () => excluir(f) },
+                        { label: 'Desativar', icone: '⏸️', onClick: () => excluir(f) },
                       ]} />
                     </td>
                   </tr>
@@ -137,6 +140,14 @@ export default function FormasPagamento() {
                   <label className="form-label obrigatorio">Nome</label>
                   <input className="form-control" placeholder="Ex.: PIX, TED, Dinheiro, Cheque, Cartão..."
                     value={nome} onChange={e => setNome(e.target.value)} autoFocus />
+                </div>
+                <div className="form-group">
+                  <label className="form-label obrigatorio">Disponível em</label>
+                  <select className="form-control" value={usoPermitido} onChange={e => setUsoPermitido(e.target.value)}>
+                    <option value="financeira">Somente instituição financeira</option>
+                    <option value="especie">Somente dinheiro em espécie</option>
+                    <option value="ambos">Instituição financeira e dinheiro em espécie</option>
+                  </select>
                 </div>
               </div>
               <div className="modal-footer">

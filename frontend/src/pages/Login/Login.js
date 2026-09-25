@@ -15,6 +15,7 @@ export default function Login() {
   const [erro, setErro]       = useState('');
   const [aviso, setAviso]     = useState(''); // aviso amigável (ex.: sessão aberta em outro dispositivo)
   const [carregando, setCarregando] = useState(false);
+  const [apiPronta, setApiPronta] = useState(false);
   const [nomeEscritorio, setNomeEscritorio] = useState('Sistema de Advocacia');
   const [logoEscritorio, setLogoEscritorio] = useState(null);
   const { logar }   = useAuth();
@@ -27,12 +28,23 @@ export default function Login() {
   }, []);
 
   useEffect(() => {
-    api.get('/public/info')
-      .then(r => {
+    let ativa = true;
+    let novaTentativa;
+
+    async function verificarApi() {
+      try {
+        const r = await api.get('/public/info');
+        if (!ativa) return;
         if (r.data.ok && r.data.dados?.nome) setNomeEscritorio(r.data.dados.nome);
         if (r.data.ok && r.data.dados?.logo_base64) setLogoEscritorio(r.data.dados.logo_base64);
-      })
-      .catch(() => {}); // falha silenciosa — mantém o fallback
+        setApiPronta(true);
+      } catch {
+        if (ativa) novaTentativa = setTimeout(verificarApi, 1000);
+      }
+    }
+
+    verificarApi();
+    return () => { ativa = false; clearTimeout(novaTentativa); };
   }, []);
 
   // Estado do modal "Esqueci minha senha"
@@ -62,6 +74,7 @@ export default function Login() {
     e.preventDefault();
     setErro('');
 
+    if (!apiPronta) return;
     if (!login || !senha) {
       setErro('Preencha o login e a senha');
       return;
@@ -102,6 +115,7 @@ export default function Login() {
             </div>
           )}
           {erro && <div className="login-erro">{erro}</div>}
+          {!apiPronta && <div className="login-aguardando">Preparando o sistema. Aguarde um instante.</div>}
 
           <div className="form-group">
             <label className="form-label">Login</label>
@@ -155,9 +169,9 @@ export default function Login() {
           <button
             type="submit"
             className="btn btn-primary login-btn"
-            disabled={carregando}
+            disabled={carregando || !apiPronta}
           >
-            {carregando ? 'Entrando...' : 'Entrar'}
+            {carregando ? 'Entrando...' : !apiPronta ? 'Preparando sistema...' : 'Entrar'}
           </button>
 
           <div style={{ textAlign: 'center', marginTop: '16px' }}>

@@ -130,12 +130,19 @@ async function criar(req, res) {
     if (bloqueiaAgendarPassado(req.usuario, d.data)) {
       return erro(res, 'Apenas o administrador pode agendar compromisso com data anterior a hoje. Escolha uma data a partir de hoje.');
     }
-    const [r] = await pool.execute(
-      `INSERT INTO agenda_compromisso
-         (usuario_id, delegado_para, titulo, descricao, data, hora_inicio, hora_fim, dia_todo, escritorio, publicacao_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [req.usuario.id, d.delegado_para, d.titulo, d.descricao, d.data, d.hora_inicio, d.hora_fim, d.dia_todo, d.escritorio, d.publicacao_id]
-    );
+    const conn = await pool.getConnection();
+    let r;
+    try {
+      await conn.beginTransaction();
+      [r] = await conn.execute(
+        `INSERT INTO agenda_compromisso
+           (usuario_id, delegado_para, titulo, descricao, data, hora_inicio, hora_fim, dia_todo, escritorio, publicacao_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [req.usuario.id, d.delegado_para, d.titulo, d.descricao, d.data, d.hora_inicio, d.hora_fim, d.dia_todo, d.escritorio, d.publicacao_id]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     // Empurra para o Google Agenda do dono (se ele ativou). Segundo plano, sem travar a resposta.
     const donoId = d.delegado_para || req.usuario.id;
     enviarCompromissoParaGoogle(donoId, r.insertId, d);
@@ -159,12 +166,18 @@ async function atualizar(req, res) {
     if (bloqueiaAgendarPassado(req.usuario, d.data)) {
       return erro(res, 'Apenas o administrador pode agendar compromisso com data anterior a hoje. Escolha uma data a partir de hoje.');
     }
-    await pool.execute(
-      `UPDATE agenda_compromisso
-         SET titulo=?, descricao=?, data=?, hora_inicio=?, hora_fim=?, dia_todo=?, escritorio=?, delegado_para=?, alterado_em=NOW()
-       WHERE id=?`,
-      [d.titulo, d.descricao, d.data, d.hora_inicio, d.hora_fim, d.dia_todo, d.escritorio, d.delegado_para, id]
-    );
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        `UPDATE agenda_compromisso
+           SET titulo=?, descricao=?, data=?, hora_inicio=?, hora_fim=?, dia_todo=?, escritorio=?, delegado_para=?, alterado_em=NOW()
+         WHERE id=?`,
+        [d.titulo, d.descricao, d.data, d.hora_inicio, d.hora_fim, d.dia_todo, d.escritorio, d.delegado_para, id]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     // Reflete no Google (2º plano). O criador (usuario_id) não muda na edição; o dono é
     // o delegado (ou o criador). Se o dono MUDOU, cancela no antigo e cria no novo — senão,
     // atualiza o mesmo evento no dono atual. SEQUENCE = horário atual (sempre crescente).
@@ -193,7 +206,13 @@ async function excluir(req, res) {
     );
     if (!rows.length) return naoEncontrado(res, 'Compromisso não encontrado');
     if (!podeMexer(rows[0], req.usuario)) return erro(res, 'Você não tem permissão para excluir este compromisso');
-    await pool.execute('DELETE FROM agenda_compromisso WHERE id = ?', [id]);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('DELETE FROM agenda_compromisso WHERE id = ?', [id]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     // Remove da agenda do Google do dono (2º plano). Cancelamento casa pelo mesmo UID.
     const donoId = rows[0].delegado_para || rows[0].usuario_id;
     enviarCompromissoParaGoogle(donoId, id, rows[0], true, Math.floor(Date.now() / 1000));
@@ -215,15 +234,29 @@ async function darBaixa(req, res) {
     if (!podeMexer(rows[0], req.usuario)) return erro(res, 'Você não tem permissão para dar baixa neste compromisso');
 
     if (Number(rows[0].concluido) === 1) {
-      await pool.execute(
-        'UPDATE agenda_compromisso SET concluido=0, concluido_por=NULL, concluido_em=NULL WHERE id=?', [id]
-      );
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+        await conn.execute(
+          'UPDATE agenda_compromisso SET concluido=0, concluido_por=NULL, concluido_em=NULL WHERE id=?', [id]
+        );
+        await conn.commit();
+      } catch (err) { await conn.rollback(); throw err; }
+      finally { conn.release(); }
       return sucesso(res, null, 'Compromisso reaberto');
     }
-    await pool.execute(
-      'UPDATE agenda_compromisso SET concluido=1, concluido_por=?, concluido_em=NOW() WHERE id=?',
-      [req.usuario.id, id]
-    );
+    {
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+        await conn.execute(
+          'UPDATE agenda_compromisso SET concluido=1, concluido_por=?, concluido_em=NOW() WHERE id=?',
+          [req.usuario.id, id]
+        );
+        await conn.commit();
+      } catch (err) { await conn.rollback(); throw err; }
+      finally { conn.release(); }
+    }
     return sucesso(res, null, 'Compromisso concluído');
   } catch (e) {
     return erroInterno(res, e);

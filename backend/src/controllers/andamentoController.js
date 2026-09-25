@@ -50,13 +50,19 @@ async function criar(req, res) {
 
     const dataAndamento = data || hojeBrasilia();
 
-    const [result] = await pool.execute(
-      `INSERT INTO andamento_processual (processo_id, data, descricao, fonte, criado_por)
-       VALUES (?, ?, ?, 'manual', ?)`,
-      [processoId, dataAndamento, descricao.trim(), req.usuario.id]
-    );
-
-    await auditoria.registrar(req.usuario.id, 'andamento_processual', 'criar', result.insertId);
+    const conn = await pool.getConnection();
+    let result;
+    try {
+      await conn.beginTransaction();
+      [result] = await conn.execute(
+        `INSERT INTO andamento_processual (processo_id, data, descricao, fonte, criado_por)
+         VALUES (?, ?, ?, 'manual', ?)`,
+        [processoId, dataAndamento, descricao.trim(), req.usuario.id]
+      );
+      await auditoria.registrar(req.usuario.id, 'andamento_processual', 'criar', result.insertId, null, null, conn);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, { id: result.insertId }, 'Andamento registrado com sucesso', 201);
   } catch (err) {
     return erroInterno(res, err);
@@ -75,13 +81,18 @@ async function editar(req, res) {
       return erro(res, 'Este andamento veio do CNJ (DataJud) e não pode ser editado.');
     }
 
-    await pool.execute(
-      `UPDATE andamento_processual SET data=?, descricao=?, editado_por=?, editado_em=NOW()
-       WHERE id = ?`,
-      [data || antes[0].data, descricao.trim(), req.usuario.id, id]
-    );
-
-    await auditoria.registrar(req.usuario.id, 'andamento_processual', 'editar', id, antes[0]);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        `UPDATE andamento_processual SET data=?, descricao=?, editado_por=?, editado_em=NOW()
+         WHERE id = ?`,
+        [data || antes[0].data, descricao.trim(), req.usuario.id, id]
+      );
+      await auditoria.registrar(req.usuario.id, 'andamento_processual', 'editar', id, antes[0], null, conn);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Andamento atualizado');
   } catch (err) {
     return erroInterno(res, err);
@@ -98,8 +109,14 @@ async function excluir(req, res) {
       return erro(res, 'Este andamento veio do CNJ (DataJud) e não pode ser excluído.');
     }
 
-    await pool.execute('DELETE FROM andamento_processual WHERE id = ?', [id]);
-    await auditoria.registrar(req.usuario.id, 'andamento_processual', 'excluir', id, antes[0]);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('DELETE FROM andamento_processual WHERE id = ?', [id]);
+      await auditoria.registrar(req.usuario.id, 'andamento_processual', 'excluir', id, antes[0], null, conn);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Andamento excluído');
   } catch (err) {
     return erroInterno(res, err);
@@ -167,7 +184,13 @@ async function sincronizar(req, res) {
 
     // Tribunal não coberto por esta versão: marca o dia (é determinístico) e devolve.
     if (!resultado.suportado) {
-      await pool.execute('UPDATE tblproc SET datajud_sincronizado_em = ? WHERE id = ?', [nowBR, processoId]);
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+        await conn.execute('UPDATE tblproc SET datajud_sincronizado_em = ? WHERE id = ?', [nowBR, processoId]);
+        await conn.commit();
+      } catch (err) { await conn.rollback(); throw err; }
+      finally { conn.release(); }
       return sucesso(res, { andamentos: await buscarAndamentos(processoId), aviso: '',
         datajud: { tipo: 'nao_suportado', mensagem: 'O tribunal deste processo ainda não é coberto pela sincronização automática.' } });
     }
@@ -229,7 +252,13 @@ async function sincronizar(req, res) {
       }
     } else {
       // Sem movimentos: ainda assim marca o dia para não repetir a consulta.
-      await pool.execute('UPDATE tblproc SET datajud_sincronizado_em = ? WHERE id = ?', [nowBR, processoId]);
+      const conn2 = await pool.getConnection();
+      try {
+        await conn2.beginTransaction();
+        await conn2.execute('UPDATE tblproc SET datajud_sincronizado_em = ? WHERE id = ?', [nowBR, processoId]);
+        await conn2.commit();
+      } catch (err) { await conn2.rollback(); throw err; }
+      finally { conn2.release(); }
     }
 
     // Status final: consultou e achou X registros, ou consultou e não achou nada.

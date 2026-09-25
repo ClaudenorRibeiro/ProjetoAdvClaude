@@ -679,10 +679,17 @@ async function criarTipo(req, res) {
       'SELECT id FROM tipo_documento_pendencia WHERE nome = ? LIMIT 1', [nome]
     );
     if (existe.length) return erro(res, 'Já existe um documento com esse nome');
-    const [r] = await pool.execute(
-      'INSERT INTO tipo_documento_pendencia (nome, criado_por) VALUES (?, ?)',
-      [nome, req.usuario.id]
-    );
+    const conn = await pool.getConnection();
+    let r;
+    try {
+      await conn.beginTransaction();
+      [r] = await conn.execute(
+        'INSERT INTO tipo_documento_pendencia (nome, criado_por) VALUES (?, ?)',
+        [nome, req.usuario.id]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, { id: r.insertId }, 'Documento cadastrado', 201);
   } catch (e) {
     return erroInterno(res, e);
@@ -707,10 +714,16 @@ async function atualizarTipo(req, res) {
       [nome, req.params.id]
     );
     if (existe.length) return erro(res, 'Já existe um documento com esse nome');
-    await pool.execute(
-      'UPDATE tipo_documento_pendencia SET nome = ?, alterado_por = ?, alterado_em = NOW() WHERE id = ?',
-      [nome, req.usuario.id, req.params.id]
-    );
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        'UPDATE tipo_documento_pendencia SET nome = ?, alterado_por = ?, alterado_em = NOW() WHERE id = ?',
+        [nome, req.usuario.id, req.params.id]
+      );
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Documento atualizado');
   } catch (e) {
     return erroInterno(res, e);
@@ -729,7 +742,13 @@ async function excluirTipo(req, res) {
     if (uso.length) {
       return erro(res, 'Este documento está em uso em uma ou mais pendências e não pode ser renomeado nem excluído.');
     }
-    await pool.execute('DELETE FROM tipo_documento_pendencia WHERE id = ?', [req.params.id]);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('DELETE FROM tipo_documento_pendencia WHERE id = ?', [req.params.id]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
     return sucesso(res, null, 'Documento excluído da lista');
   } catch (e) {
     return erroInterno(res, e);

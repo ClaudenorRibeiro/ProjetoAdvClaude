@@ -12,7 +12,7 @@ import { formatarData, formatarNumeroPasta, formatarMoeda, labelStatusPrazo, cor
 // Janelas de contato/ficha reutilizadas da tela de Pessoas (painel "Partes do processo")
 import { ModalPessoa, ModalEnviarEmail, ModalEnviarSMS, ModalEscolherWhatsapp, ModalCopiarTelefone, ModalCopiarEmail, ModalAnotacoes, soNumeroLocal, copiarParaAreaTransferencia } from '../Pessoas/Pessoas';
 import { linkWhatsApp } from '../../utils/whatsapp';
-import { ModalNovoProcesso, ModalEditarProcesso, ModalMotivoStatus } from './Processos';
+import { ModalNovoProcesso, ModalEditarProcesso, ModalMotivoStatus, ModalHistoricoProcesso } from './Processos';
 import { ModalNovoPrazo, ModalCancelarPrazo, ModalEditarPrazo } from '../Prazos/Prazos';
 import { ModalTarefa, ModalHistoricoTarefa } from '../Tarefas/Tarefas';
 import { ModalNovaAudiencia, ModalEditarAudiencia, ModalCancelarAudiencia, ModalRemarcarAudiencia, ModalHistoricoAudiencia, ModalRegistrarAta } from '../Audiencias/Audiencias';
@@ -58,6 +58,7 @@ export default function PastaDetalhe() {
   const [catEscritorio, setCatEscritorio] = useState([]);
   const podeEtiquetarEscritorio = temPermissao('processos.etiqueta_escritorio', 'alterar');
   const [historicoEtiquetaAberto, setHistoricoEtiquetaAberto] = useState(null); // { modulo, registroId } | null
+  const [historicoProcessoAberto, setHistoricoProcessoAberto] = useState(null); // processo | null
   // Quando a etiqueta que está sendo aplicada tem status vinculado, abrimos antes o
   // MESMO modal "Motivo da mudança de status" do Editar Processo (informar o motivo é
   // opcional). null = fechado. { procId, slot, anterior, novo }
@@ -120,9 +121,18 @@ export default function PastaDetalhe() {
   const [andamentos, setAndamentos]       = useState([]);
   const [avisoAndamentos, setAvisoAndamentos] = useState(''); // faixa amigável (falha do DataJud)
   const [statusDataJud, setStatusDataJud]     = useState(''); // linha fixa: resultado da última consulta
+  const [soEscritorio, setSoEscritorio]       = useState(false); // filtro: esconde os andamentos baixados do DataJud
   const [consultandoDataJud, setConsultandoDataJud] = useState(false); // overlay "Consultando o DataJud…"
   const consultaAbortRef = useRef(null);   // permite "Parar consulta" (cancela a requisição)
   const interrompidoRef  = useRef(false);  // marca que o usuário parou a consulta
+  // Guarda contra resposta desatualizada: trocar de processo/filtro rápido pode fazer uma
+  // busca antiga responder DEPOIS da mais nova. Cada carregarX incrementa a própria sequência
+  // ao iniciar e só aplica o resultado se ainda for a chamada mais recente (auditoria 23/09).
+  const prazosSeqRef     = useRef(0);
+  const tarefasSeqRef    = useRef(0);
+  const audienciasSeqRef = useRef(0);
+  const periciasSeqRef   = useRef(0);
+  const financeiroSeqRef = useRef(0);
   const [prazos, setPrazos]               = useState([]);
   const [tarefas, setTarefas]             = useState([]);
   // Filtros da aba Tarefas (dentro da pasta) — espelham a tela de Tarefas, MENOS "Número do Processo".
@@ -308,6 +318,7 @@ export default function PastaDetalhe() {
   }
 
   async function carregarPrazos() {
+    const minhaSeq = ++prazosSeqRef.current;
     const ids = idsParaBuscar();
     try {
       // Aplica os filtros da aba (status/responsável/datas/encerrados) a cada processo do escopo.
@@ -315,6 +326,7 @@ export default function PastaDetalhe() {
       const resultados = await Promise.all(
         ids.map(pid => prazosAPI.listar({ processo_id: pid, ...filtrosPrazo, limite: 50 }))
       );
+      if (minhaSeq !== prazosSeqRef.current) return; // já saiu outra busca de prazos depois desta
       const todos = resultados.flatMap(r => r.data.ok ? r.data.dados.registros : []);
       setPrazos(todos);
     } catch { toast.error('Erro ao carregar prazos'); }
@@ -379,11 +391,13 @@ export default function PastaDetalhe() {
   }
 
   async function carregarTarefas() {
+    const minhaSeq = ++tarefasSeqRef.current;
     const ids = idsParaBuscar();
     try {
       const resultados = await Promise.all(
         ids.map(pid => tarefasAPI.listar({ processo_id: pid, ...filtrosTarefa, limite: 100 }))
       );
+      if (minhaSeq !== tarefasSeqRef.current) return; // já saiu outra busca de tarefas depois desta
       const todos = resultados.flatMap(r => r.data.ok ? r.data.dados.registros : []);
       setTarefas(todos);
     } catch {}
@@ -403,6 +417,7 @@ export default function PastaDetalhe() {
   }
 
   async function carregarAudiencias() {
+    const minhaSeq = ++audienciasSeqRef.current;
     const ids = idsParaBuscar();
     try {
       // Carrega audiências e tipos em paralelo (tipos necessários para o modal de edição)
@@ -410,6 +425,7 @@ export default function PastaDetalhe() {
         Promise.all(ids.map(pid => audienciasAPI.listar({ processo_id: pid, limite: 50 }))),
         tiposAudiencia.length ? Promise.resolve(null) : audienciasAPI.tipos(),
       ]);
+      if (minhaSeq !== audienciasSeqRef.current) return; // já saiu outra busca de audiências depois desta
       const todos = resultados.flatMap(r => r.data.ok ? r.data.dados.registros : []);
       // "Agendada" sempre no topo; dentro de cada grupo, por data/hora crescente (igual à tela principal de Audiências)
       todos.sort((a, b) => {
@@ -421,6 +437,18 @@ export default function PastaDetalhe() {
       setAudiencias(todos);
       if (tiposResp?.data?.ok) setTiposAudiencia(tiposResp.data.dados);
     } catch {}
+  }
+
+  // Os modais de audiência alteram o catálogo de tipos, mas não devolvem a lista
+  // atualizada. Reconsulta a fonte antes de atualizar o estado: passar o setter
+  // diretamente faria React gravar `undefined` quando o modal chama sem argumento.
+  async function recarregarTiposAudiencia() {
+    try {
+      const resposta = await audienciasAPI.tipos();
+      if (resposta.data?.ok) setTiposAudiencia(resposta.data.dados || []);
+    } catch {
+      // O modal já mostra a falha da operação; preserva a lista atual para a tela não quebrar.
+    }
   }
 
   // Mesmas regras da tela de Audiências — editar: não pode se cancelada/remarcada; com ata só admin
@@ -461,6 +489,7 @@ export default function PastaDetalhe() {
 
   // ---- Perícias (mesmo padrão da aba Audiências: busca por processo do filtro) ----
   async function carregarPericias() {
+    const minhaSeq = ++periciasSeqRef.current;
     const ids = idsParaBuscar();
     try {
       // Perícias dos processos filtrados + tipos (para o modal) em paralelo
@@ -468,6 +497,7 @@ export default function PastaDetalhe() {
         Promise.all(ids.map(pid => periciasAPI.listar({ processo_id: pid, limite: 50 }))),
         tiposPericia.length ? Promise.resolve(null) : periciasAPI.tipos(),
       ]);
+      if (minhaSeq !== periciasSeqRef.current) return; // já saiu outra busca de perícias depois desta
       const todos = resultados.flatMap(r => r.data.ok ? r.data.dados.registros : []);
       // Mais recentes primeiro (mesma ordenação da aba de audiências)
       todos.sort((a, b) => new Date(b.data + 'T' + (b.hora || '00:00')) - new Date(a.data + 'T' + (a.hora || '00:00')));
@@ -531,6 +561,7 @@ export default function PastaDetalhe() {
 
   // Financeiro é POR PROCESSO: precisa de um processo específico selecionado no filtro
   async function carregarFinanceiro() {
+    const minhaSeq = ++financeiroSeqRef.current;
     const procId = processoFiltro !== 'todos' ? parseInt(processoFiltro) : null;
     if (!procId) { setContaCorrente(null); setAcordosFin([]); return; }
     try {
@@ -538,6 +569,7 @@ export default function PastaDetalhe() {
         financeiroAPI.buscarConta(procId, {}),
         financeiroAPI.listarAcordos(procId),
       ]);
+      if (minhaSeq !== financeiroSeqRef.current) return; // já saiu outra busca financeira depois desta
       if (c.data.ok) setContaCorrente(c.data.dados);
       if (a.data.ok) setAcordosFin(a.data.dados);
     } catch {}
@@ -653,6 +685,10 @@ export default function PastaDetalhe() {
       ))}
     </select>
   );
+
+  // "Mostrar somente do escritório" esconde os andamentos baixados do DataJud (fonte='datajud'),
+  // deixando só os registrados por usuários (manuais + os gerados ao concluir um prazo).
+  const andamentosExibidos = soEscritorio ? andamentos.filter(a => a.fonte !== 'datajud') : andamentos;
 
   return (
     <div>
@@ -830,6 +866,8 @@ export default function PastaDetalhe() {
                           { label: 'Excluir', icone: '🗑️', perigo: true,
                             oculto: !temPermissao('processos','excluir'),
                             onClick: () => excluirProcesso(pr.id) },
+                          { label: 'Histórico', icone: '📋',
+                            onClick: () => setHistoricoProcessoAberto(pr) },
                           itemEtiquetaEscritorioSubmenu({
                             definicoes: catEscritorio, slotAtual: pr.etiqueta_escritorio,
                             podeAplicar: podeEtiquetarEscritorio,
@@ -856,6 +894,13 @@ export default function PastaDetalhe() {
             registroId={historicoEtiquetaAberto.registroId}
             catalogo={catEscritorio}
             onFechar={() => setHistoricoEtiquetaAberto(null)}
+          />
+        )}
+
+        {historicoProcessoAberto && (
+          <ModalHistoricoProcesso
+            processo={historicoProcessoAberto}
+            onFechar={() => setHistoricoProcessoAberto(null)}
           />
         )}
 
@@ -890,6 +935,10 @@ export default function PastaDetalhe() {
                   + Novo Andamento
                 </button>
               )}
+              <label style={{ display:'flex', alignItems:'center', gap:'6px', cursor:'pointer', userSelect:'none', fontSize:'13px', color:'#555' }}>
+                <input type="checkbox" checked={soEscritorio} onChange={e => setSoEscritorio(e.target.checked)} />
+                Mostrar somente do escritório
+              </label>
             </div>
             {avisoAndamentos && (
               <div style={{ background:'#fff4e5', border:'1px solid #ffcf99', color:'#8a5300',
@@ -914,8 +963,8 @@ export default function PastaDetalhe() {
                   </tr>
                 </thead>
                 <tbody>
-                  {andamentos.map(a => (
-                    <tr key={a.id}>
+                  {andamentosExibidos.map(a => (
+                    <tr key={a.id} style={{ background: a.fonte === 'datajud' ? '#f8fafc' : '#eff6ff' }}>
                       <td style={{ whiteSpace: 'nowrap' }}>{formatarData(a.data)}</td>
                       <td style={{ maxWidth: '400px' }}>{a.descricao}</td>
                       <td>
@@ -944,7 +993,13 @@ export default function PastaDetalhe() {
                   ))}
                 </tbody>
               </table>
-              {andamentos.length === 0 && <p className="lista-vazia">Nenhum andamento registrado</p>}
+              {andamentosExibidos.length === 0 && (
+                <p className="lista-vazia">
+                  {soEscritorio && andamentos.length > 0
+                    ? 'Nenhum andamento do escritório registrado'
+                    : 'Nenhum andamento registrado'}
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -1124,9 +1179,9 @@ export default function PastaDetalhe() {
             abrir com o campo de processo livre, como sempre foi. */}
         {modalNovaAudiencia && (
           <ModalNovaAudiencia
-            tipos={tiposAudiencia}
+            tipos={tiposAudiencia || []}
             remarcacao={remarcacaoEmCadastro}
-            onTiposChange={setTiposAudiencia}
+            onTiposChange={recarregarTiposAudiencia}
             processoInicial={!remarcacaoEmCadastro && processoSelecionado ? { ...processoSelecionado, numPasta: pasta.numPasta } : null}
             onFechar={(reload) => { setModalNovaAudiencia(false); setRemarcacaoEmCadastro(null); if (reload) carregarAudiencias(); }}
           />
@@ -1134,10 +1189,10 @@ export default function PastaDetalhe() {
         {audienciaEditando && (
           <ModalEditarAudiencia
             audiencia={audienciaEditando}
-            tipos={tiposAudiencia}
+            tipos={tiposAudiencia || []}
             somenteLeitura={audienciaEmLeitura}
             podeEditar={podeEditarAud(audienciaEditando)}
-            onTiposChange={setTiposAudiencia}
+            onTiposChange={recarregarTiposAudiencia}
             onFechar={(reload) => { setAudienciaEditando(null); setAudienciaEmLeitura(false); if (reload) carregarAudiencias(); }}
           />
         )}
@@ -1363,7 +1418,7 @@ export default function PastaDetalhe() {
                         onClick={() => { setAudienciaEditando(a); setAudienciaEmLeitura(true); }}>
                         <td>{a.tipo_nome || '—'}</td>
                         <td>{formatarData(a.data)} {a.hora?.slice(0, 5)}</td>
-                        <td>{a.modalidade === 'virtual' ? 'Virtual' : 'Presencial'}</td>
+                        <td>{a.modalidade === 'virtual' ? 'Virtual' : a.modalidade === 'sem_comparecimento' ? 'Sem comparecimento' : 'Presencial'}</td>
                         <td>
                           {varaTexto || a.local || '—'}
                           {a.modalidade === 'virtual' && (a.plataforma_virtual || a.link_virtual) && (
@@ -1515,7 +1570,7 @@ export default function PastaDetalhe() {
                     </thead>
                     <tbody>
                       {(contaCorrente.lancamentos || []).map(l => {
-                        const ehAcordo = l.origem === 'acordo';
+                        const ehAcordo = l.origem !== 'manual';
                         return (
                           <tr key={l.id}>
                             <td style={{ whiteSpace: 'nowrap' }}>{formatarData(l.data)}</td>
