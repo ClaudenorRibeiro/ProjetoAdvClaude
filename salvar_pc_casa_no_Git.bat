@@ -45,12 +45,27 @@ if "%DESCRICAO%"=="" set DESCRICAO=atualizacao
 :: a regra de estes scripts NUNCA baixarem nada do Git (sem pull/fetch).
 git commit -m "%PREFIXO% - %DESCRICAO%"
 git push --force origin main
+set PUSH_OK=%errorlevel%
 
-if %errorlevel%==0 (
+:: Marca esta versao com uma etiqueta (tag), para poder voltar a ela se precisar.
+:: Depois, mantem so as 10 etiquetas mais recentes, apagando as mais antigas
+:: (local e no GitHub) - assim voce sempre tem as ultimas 10 versoes salvas.
+if %PUSH_OK%==0 (
+    git tag "v-%PREFIXO%"
+    git push origin "v-%PREFIXO%" >nul 2>&1
+
+    for /f "skip=10" %%t in ('git tag --list "v-*" --sort=-creatordate') do (
+        git tag -d %%t >nul 2>&1
+        git push origin :refs/tags/%%t >nul 2>&1
+    )
+)
+
+if %PUSH_OK%==0 (
     echo.
     echo ============================================================
     echo  Salvo e enviado para o GitHub com sucesso!
     echo  Commit: %PREFIXO% -- %DESCRICAO%
+    echo  Versao marcada: v-%PREFIXO% ^(guardada entre as 10 mais recentes^)
     echo ============================================================
 ) else (
     echo.
