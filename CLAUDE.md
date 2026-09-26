@@ -52,6 +52,12 @@ o código de agora.
   não duplicar lógica.
 - Nunca explicar respostas colando trechos de código no chat (o usuário
   não lê código) — explicar em linguagem simples o que foi/será feito.
+- **O usuário só usa o Prompt de Comando (cmd.exe) no Windows — nunca
+  PowerShell.** Sempre que for preciso pedir para ele rodar algo no
+  terminal do PC local (ex.: `git status`), dar o comando/instrução em
+  formato cmd (ex.: abrir a pasta no Explorador de Arquivos, digitar `cmd`
+  na barra de endereço e Enter para abrir o Prompt de Comando ali; nunca
+  sugerir "Abrir janela do PowerShell aqui" nem sintaxe de PowerShell).
 
 ## 2. Git — fluxo de branches
 
