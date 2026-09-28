@@ -136,7 +136,7 @@ async function atualizarEscritorio(req, res) {
       prazo_fazendo_timeout, dias_audiencia_sem_adv,
       titulo_aba, mensagem_aniversario, tempo_inatividade_min,
       ata_advogado_obrigatorio,
-      advogado_principal_id, oab_principal
+      advogado_principal_id
     } = req.body;
 
     if (!nome) return erro(res, 'Nome do escritório é obrigatório');
@@ -179,8 +179,8 @@ async function atualizarEscritorio(req, res) {
           alerta_atrasado_ativo, alerta_emails,
           dias_alerta_audiencia, dias_alerta_pericia, dias_sem_movimentacao, dias_processo_parado,
           prazo_fazendo_timeout, dias_audiencia_sem_adv, titulo_aba, mensagem_aniversario, tempo_inatividade_min,
-          ata_advogado_obrigatorio, advogado_principal_id, oab_principal, setup_concluido)
-       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+          ata_advogado_obrigatorio, advogado_principal_id, setup_concluido)
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
        ON DUPLICATE KEY UPDATE
          nome=VALUES(nome), cnpj_cpf=VALUES(cnpj_cpf), email=VALUES(email), telefone=VALUES(telefone),
          cep=VALUES(cep), logradouro=VALUES(logradouro), numero=VALUES(numero),
@@ -196,7 +196,6 @@ async function atualizarEscritorio(req, res) {
          tempo_inatividade_min=VALUES(tempo_inatividade_min),
          ata_advogado_obrigatorio=VALUES(ata_advogado_obrigatorio),
          advogado_principal_id=VALUES(advogado_principal_id),
-         oab_principal=VALUES(oab_principal),
          setup_concluido=1`,
       [
         nome, cnpj_cpf || null, email || null, telefone || null,
@@ -208,7 +207,7 @@ async function atualizarEscritorio(req, res) {
         parseInt(prazo_fazendo_timeout) || 60, parseInt(dias_audiencia_sem_adv) || 7,
         titulo_aba || null, mensagem_aniversario || null, tempoInat,
         ata_advogado_obrigatorio ? 1 : 0,
-        advogadoPrincipalId, oab_principal || null
+        advogadoPrincipalId
       ]
     );
     await conn.commit();
@@ -854,6 +853,8 @@ const REFS_USUARIO = [
   ["tblproc", "responsavel_id"],
   ["tblproc", "criado_por"],
   ["tblproc", "alterado_por"],
+  ["processo_oabs", "usuario_id"],
+  ["processo_oabs", "criado_por"],
   ["tblstatusproc", "criado_por"],
   ["tblstatusproc", "alterado_por"],
   ["tbltipoproc", "criado_por"],

@@ -519,30 +519,19 @@ function TabEscritorio() {
       </div>
 
       <h4 style={{margin:'20px 0 12px',fontSize:'13px',fontWeight:600,color:'#555'}}>Padrão para novos processos</h4>
-      <div className="grid-2">
-        <div className="form-group">
-          <label className="form-label">Advogado principal do escritório</label>
-          <select className="form-control" value={form.advogado_principal_id || ''}
-            onChange={e => set('advogado_principal_id', e.target.value)}
-            disabled={!ehSuper}>
-            <option value="">— Não definido —</option>
-            {usuariosOrdenados.map(u => (
-              <option key={u.id} value={u.id}>
-                {u.nome}{u.oab ? ` — OAB ${u.oab}` : ''}
-              </option>
-            ))}
-          </select>
-          <small style={{color:'#888'}}>Será usado como responsável padrão ao criar processo novo.</small>
-        </div>
-        <div className="form-group">
-          <label className="form-label">OAB principal do escritório</label>
-          <input className="form-control" value={form.oab_principal || ''}
-            onChange={e => set('oab_principal', e.target.value)}
-            placeholder="Ex: 222418/SP"
-            maxLength={30}
-            disabled={!ehSuper} />
-          <small style={{color:'#888'}}>Será usada como OAB padrão do processo novo.</small>
-        </div>
+      <div className="form-group">
+        <label className="form-label">Advogado principal do escritório</label>
+        <select className="form-control" value={form.advogado_principal_id || ''}
+          onChange={e => set('advogado_principal_id', e.target.value)}
+          disabled={!ehSuper}>
+          <option value="">— Não definido —</option>
+          {usuariosOrdenados.map(u => (
+            <option key={u.id} value={u.id}>
+              {u.nome}{u.oab ? ` — OAB ${u.oab}` : ''}
+            </option>
+          ))}
+        </select>
+        <small style={{color:'#888'}}>Será usado como responsável padrão e já entra na lista de OABs ao criar um processo novo.</small>
       </div>
 
       <h4 style={{margin:'20px 0 12px',fontSize:'13px',fontWeight:600,color:'#555'}}>Alertas de prazos — e-mail coletivo</h4>

@@ -28,7 +28,7 @@ const TABELAS_LIMPAR = [
   'parabens_enviados',
   // Processos
   'tblpasta', 'tblproc', 'tbltituloprocautor', 'tbltituloprocreu',
-  'processo_perito', 'processo_assunto', 'andamento_processual',
+  'processo_perito', 'processo_assunto', 'processo_oabs', 'andamento_processual',
   // Prazos / Tarefas / Agenda
   'prazos_processo', 'auditoria_prazo', 'tarefas', 'agenda_compromisso',
   // Audiências

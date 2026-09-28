@@ -1772,6 +1772,29 @@ CREATE TABLE `processo_assunto` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `processo_oabs`
+--
+
+DROP TABLE IF EXISTS `processo_oabs`;
+CREATE TABLE `processo_oabs` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `processo_id` int NOT NULL,
+  `usuario_id` int DEFAULT NULL,
+  `freela_id` int DEFAULT NULL,
+  `criado_por` int NOT NULL,
+  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_processo_oab_usuario` (`processo_id`,`usuario_id`),
+  UNIQUE KEY `uq_processo_oab_freela` (`processo_id`,`freela_id`),
+  KEY `idx_po_usuario` (`usuario_id`),
+  KEY `idx_po_freela` (`freela_id`),
+  CONSTRAINT `fk_po_processo` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_po_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `fk_po_freela` FOREIGN KEY (`freela_id`) REFERENCES `advogados_freela` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `chk_po_um_dono` CHECK ((`usuario_id` IS NULL) <> (`freela_id` IS NULL))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+--
 -- Table structure for table `processo_perito`
 --
 

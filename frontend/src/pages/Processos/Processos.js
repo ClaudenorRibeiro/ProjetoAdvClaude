@@ -397,6 +397,70 @@ function SeletorAssuntos({ assuntos = [], selecionados = [], onChange, podeGeren
 }
 
 // ============================================================
+// SELETOR DE OABs DO PROCESSO
+// ------------------------------------------------------------
+// Lista de pessoas donas de uma OAB vinculadas ao processo. Cada pessoa
+// pode ser um usuário do sistema OU um advogado avulso (cadastro sem
+// login, reaproveitado de Audiências/Perícias) — `opcoes` já vem com os
+// dois grupos misturados, cada item com { origem: 'usuario'|'freela', id,
+// nome, oab }. Reaproveitado em ModalNovoProcesso e ModalEditarProcesso.
+// ============================================================
+function SeletorOabsProcesso({ oabs = [], onChange, opcoes = [], somenteLeitura = false }) {
+  const [selecionado, setSelecionado] = useState('');
+
+  function adicionar() {
+    if (somenteLeitura || !selecionado) return;
+    const [origem, idStr] = selecionado.split(':');
+    const id = Number(idStr);
+    if (oabs.some(o => o.tipo === origem && o.id === id)) {
+      toast.warn('Essa OAB já foi adicionada');
+      return;
+    }
+    const pessoa = opcoes.find(o => o.origem === origem && o.id === id);
+    if (!pessoa) return;
+    onChange([...oabs, { tipo: origem, id, nome: pessoa.nome, oab: pessoa.oab || '' }]);
+    setSelecionado('');
+  }
+
+  function remover(index) {
+    if (somenteLeitura) return;
+    onChange(oabs.filter((_, i) => i !== index));
+  }
+
+  return (
+    <div className="form-group">
+      <label className="form-label">OAB(s) do processo</label>
+      {!somenteLeitura && (
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
+          <select className="form-control" value={selecionado} onChange={e => setSelecionado(e.target.value)}>
+            <option value="">— Selecione um advogado —</option>
+            {opcoes.map(o => (
+              <option key={`${o.origem}:${o.id}`} value={`${o.origem}:${o.id}`}>
+                {o.nome}{o.oab ? ` — OAB ${o.oab}` : ''}{o.origem === 'freela' ? ' (avulso)' : ''}
+              </option>
+            ))}
+          </select>
+          <button type="button" className="btn btn-outline" style={{ padding: '0 12px', flexShrink: 0 }} onClick={adicionar}>+ Adicionar</button>
+        </div>
+      )}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '28px' }}>
+        {oabs.map((o, i) => (
+          <span key={`${o.tipo}:${o.id}`} style={{ background: '#fef3c7', color: '#92400e', borderRadius: '20px', padding: '4px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            {o.nome}{o.oab ? ` — OAB ${o.oab}` : ''}
+            {!somenteLeitura && (
+              <button onClick={() => remover(i)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#92400e', fontWeight: 'bold', padding: '0', lineHeight: '1', fontSize: '14px' }}>×</button>
+            )}
+          </span>
+        ))}
+        {oabs.length === 0 && <span style={{ color: '#ccc', fontSize: '13px' }}>Nenhuma OAB adicionada</span>}
+      </div>
+      <small style={{ color: '#888' }}>Advogado(s) responsável(is) pela OAB sob a qual o processo foi distribuído.</small>
+    </div>
+  );
+}
+
+// ============================================================
 // MODAL DE NOVO PROCESSO
 // Usado tanto em Processos.js (cria pasta + processo)
 // quanto em PastaDetalhe.js (cria só processo na pasta existente)
@@ -432,13 +496,14 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
     // com a geração de documentos, que já assume o autor quando o polo não vem definido.
     cliente_polo: 'autor',
     responsavel_id: '',
-    oab_processo: '',
   });
 
   // Partes do processo
   const [autores, setAutores] = useState([]);
   const [reus, setReus]       = useState([]);
   const [peritos, setPeritos] = useState([]);   // peritos vinculados ao processo (opcional)
+  const [oabs, setOabs]       = useState([]);   // OABs vinculadas ao processo (opcional)
+  const [advogadosDisponiveis, setAdvogadosDisponiveis] = useState([]); // usuários + avulsos, p/ SeletorOabsProcesso
 
   // Checkbox "Novas Partes" — quando false, partes bloqueadas vindas do processoBase
   const [novasPartes, setNovasPartes] = useState(false);
@@ -507,13 +572,23 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
       if (statusPadrao) setForm(f => ({ ...f, status_id: String(statusPadrao.id) }));
       const instanciaPadrao = dados.instancias.find(i => i.nome.startsWith('1'));
       if (instanciaPadrao) setForm(f => ({ ...f, instancia_id: String(instanciaPadrao.id) }));
-      // Padrões do escritório (Responsável / OAB do processo) — vêm na MESMA resposta
-      // de auxiliares (rota aberta a qualquer usuário logado), não mais pela rota de admin.
+      // Padrão do escritório (Responsável) — vem na MESMA resposta de auxiliares
+      // (rota aberta a qualquer usuário logado), não mais pela rota de admin.
       setForm(f => ({
         ...f,
         responsavel_id: dados.advogado_principal_id ? String(dados.advogado_principal_id) : '',
-        oab_processo: dados.oab_principal || '',
       }));
+      // Lista combinada de usuários + advogados avulsos, para o seletor de OABs.
+      const opcoes = [
+        ...(dados.usuarios || []).map(u => ({ origem: 'usuario', id: u.id, nome: u.nome, oab: u.oab })),
+        ...(dados.advogados_freela || []).map(f => ({ origem: 'freela', id: f.id, nome: f.nome, oab: f.oab })),
+      ];
+      setAdvogadosDisponiveis(opcoes);
+      // Pré-adiciona o Advogado principal do escritório como primeira OAB do processo novo.
+      if (dados.advogado_principal_id) {
+        const principal = opcoes.find(o => o.origem === 'usuario' && o.id === dados.advogado_principal_id);
+        if (principal) setOabs([{ tipo: 'usuario', id: principal.id, nome: principal.nome, oab: principal.oab || '' }]);
+      }
     });
     if (!pastaId) {
       processosAPI.sugerirPasta().then(r => {
@@ -708,7 +783,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
         assuntos:          assuntosSelecionados,
         cliente_polo:      form.cliente_polo || null,
         responsavel_id:    form.responsavel_id || null,
-        oab_processo:      form.oab_processo || null,
+        oabs:              oabs.map(o => ({ tipo: o.tipo, id: o.id })),
       };
       const { data } = await processosAPI.criarProcesso(payload);
       toast.success('Processo criado com sucesso!');
@@ -948,24 +1023,16 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
           </div>
 
           {/* === RESPONSABILIDADE DO PROCESSO === */}
-          <div className="grid-2">
-            <div className="form-group">
-              <label className="form-label">Responsável pelo processo</label>
-              <SelectPesquisavel ariaLabel="Responsável pelo processo" className="form-control"
-                value={form.responsavel_id || ''} onChange={valor => set('responsavel_id', valor)}
-                opcoes={[{ value: '', label: '— Não definido —' }, ...(aux.usuarios || []).map(u => ({ value: u.id, label: `${u.nome}${u.oab ? ` — OAB ${u.oab}` : ''}` }))]} />
-              <small style={{ color: '#888' }}>Advogado que cuida do processo no escritório.</small>
-            </div>
-            <div className="form-group">
-              <label className="form-label">OAB do processo</label>
-              <input className="form-control"
-                value={form.oab_processo || ''}
-                onChange={e => set('oab_processo', e.target.value)}
-                placeholder="Ex: 222418/SP"
-                maxLength={30} />
-              <small style={{ color: '#888' }}>OAB vinculada/pertencente ao processo.</small>
-            </div>
+          <div className="form-group">
+            <label className="form-label">Responsável pelo processo</label>
+            <SelectPesquisavel ariaLabel="Responsável pelo processo" className="form-control"
+              value={form.responsavel_id || ''} onChange={valor => set('responsavel_id', valor)}
+              opcoes={[{ value: '', label: '— Não definido —' }, ...(aux.usuarios || []).map(u => ({ value: u.id, label: `${u.nome}${u.oab ? ` — OAB ${u.oab}` : ''}` }))]} />
+            <small style={{ color: '#888' }}>Advogado que cuida do processo no escritório.</small>
           </div>
+
+          {/* === OAB(s) DO PROCESSO === */}
+          <SeletorOabsProcesso oabs={oabs} onChange={setOabs} opcoes={advogadosDisponiveis} />
 
           {/* === PERITOS DO PROCESSO (opcional) === */}
           <div className="form-group">
@@ -1200,7 +1267,6 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
     observacoes: processo.observacoes || '',
     cliente_polo: processo.cliente_polo || '',   // 'autor' | 'reu' | '' — cliente do escritório
     responsavel_id: processo.responsavel_id ? String(processo.responsavel_id) : '',
-    oab_processo: processo.oab_processo || '',
   });
 
   // Partes — pré-preenchidas do processo existente
@@ -1216,6 +1282,10 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
   const [assuntosSelecionados, setAssuntosSelecionados] = useState(
     (processo.assuntos || []).map(a => a.assunto_id)
   );
+  const [oabs, setOabs] = useState(
+    (processo.oabs || []).map(o => ({ tipo: o.tipo, id: o.pessoa_id, nome: o.nome, oab: o.oab }))
+  );
+  const [advogadosDisponiveis, setAdvogadosDisponiveis] = useState([]); // usuários + avulsos, p/ SeletorOabsProcesso
 
   // Busca de pessoas
   const [tipoAutor, setTipoAutor]     = useState('fisica');
@@ -1248,6 +1318,11 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
       } else {
         setVarasFiltradas(dados.varas);
       }
+      // Lista combinada de usuários + advogados avulsos, para o seletor de OABs.
+      setAdvogadosDisponiveis([
+        ...(dados.usuarios || []).map(u => ({ origem: 'usuario', id: u.id, nome: u.nome, oab: u.oab })),
+        ...(dados.advogados_freela || []).map(f => ({ origem: 'freela', id: f.id, nome: f.nome, oab: f.oab })),
+      ]);
     });
   }, []); // eslint-disable-line
 
@@ -1339,7 +1414,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
       assuntos:          assuntosSelecionados,
       cliente_polo:      form.cliente_polo || null,
       responsavel_id:    form.responsavel_id || null,
-      oab_processo:      form.oab_processo || null,
+      oabs:              oabs.map(o => ({ tipo: o.tipo, id: o.id })),
       motivo_status:     motivoStatus?.trim() || null,
     };
   }
@@ -1520,31 +1595,23 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
           </div>
 
           {/* === RESPONSABILIDADE DO PROCESSO === */}
-          <div className="grid-2">
-            <div className="form-group">
-              <label className="form-label">Responsável pelo processo</label>
-              <select className="form-control"
-                value={form.responsavel_id || ''}
-                onChange={e => set('responsavel_id', e.target.value)}>
-                <option value="">— Não definido —</option>
-                {aux.usuarios?.map(u => (
-                  <option key={u.id} value={u.id}>
-                    {u.nome}{u.oab ? ` — OAB ${u.oab}` : ''}
-                  </option>
-                ))}
-              </select>
-              <small style={{ color: '#888' }}>Advogado que cuida do processo no escritório.</small>
-            </div>
-            <div className="form-group">
-              <label className="form-label">OAB do processo</label>
-              <input className="form-control"
-                value={form.oab_processo || ''}
-                onChange={e => set('oab_processo', e.target.value)}
-                placeholder="Ex: 222418/SP"
-                maxLength={30} />
-              <small style={{ color: '#888' }}>OAB vinculada/pertencente ao processo.</small>
-            </div>
+          <div className="form-group">
+            <label className="form-label">Responsável pelo processo</label>
+            <select className="form-control"
+              value={form.responsavel_id || ''}
+              onChange={e => set('responsavel_id', e.target.value)}>
+              <option value="">— Não definido —</option>
+              {aux.usuarios?.map(u => (
+                <option key={u.id} value={u.id}>
+                  {u.nome}{u.oab ? ` — OAB ${u.oab}` : ''}
+                </option>
+              ))}
+            </select>
+            <small style={{ color: '#888' }}>Advogado que cuida do processo no escritório.</small>
           </div>
+
+          {/* === OAB(s) DO PROCESSO === */}
+          <SeletorOabsProcesso oabs={oabs} onChange={setOabs} opcoes={advogadosDisponiveis} somenteLeitura={leitura} />
 
           {/* === PERITOS DO PROCESSO (opcional) === */}
           <div className="form-group">

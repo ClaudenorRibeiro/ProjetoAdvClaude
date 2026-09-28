@@ -1769,12 +1769,13 @@ async function excluirFreela(req, res) {
 
     // Regra nº1 do sistema: não excluir registro em uso em lugar nenhum, mesmo o uso mais
     // simples. Confere TODOS os pontos onde o freelancer pode estar referenciado.
-    const [[audienciaResp], [ataAdvogado], [audienciaRespon], [periciaResp], [periciaAssist]] = await Promise.all([
+    const [[audienciaResp], [ataAdvogado], [audienciaRespon], [periciaResp], [periciaAssist], [processoOabs]] = await Promise.all([
       pool.execute('SELECT COUNT(*) AS total FROM audiencia WHERE responsavel_freela_id = ?', [id]),
       pool.execute('SELECT COUNT(*) AS total FROM ata_audiencia WHERE advogado_freela_id = ?', [id]),
       pool.execute('SELECT COUNT(*) AS total FROM audiencia_responsaveis WHERE responsavel_freela_id = ?', [id]),
       pool.execute('SELECT COUNT(*) AS total FROM pericia WHERE responsavel_freela_id = ?', [id]),
       pool.execute('SELECT COUNT(*) AS total FROM pericia WHERE assistente_tecnico_freela_id = ?', [id]),
+      pool.execute('SELECT COUNT(*) AS total FROM processo_oabs WHERE freela_id = ?', [id]),
     ]);
 
     const vinculos = [];
@@ -1783,6 +1784,7 @@ async function excluirFreela(req, res) {
     if (audienciaRespon[0].total > 0) vinculos.push(`${audienciaRespon[0].total} audiência(s) na lista de responsáveis`);
     if (periciaResp[0].total > 0)    vinculos.push(`${periciaResp[0].total} perícia(s) como responsável`);
     if (periciaAssist[0].total > 0)  vinculos.push(`${periciaAssist[0].total} perícia(s) como assistente técnico`);
+    if (processoOabs[0].total > 0)   vinculos.push(`${processoOabs[0].total} processo(s) na lista de OABs`);
 
     if (vinculos.length > 0) {
       return erro(res, `Freelancer não pode ser excluído pois está vinculado a: ${vinculos.join(', ')}`);

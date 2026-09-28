@@ -36,6 +36,40 @@ async function validarPartesExistem(conn, ...listas) {
   return null;
 }
 
+// Confere que toda OAB enviada aponta para um usuário (ativo) ou advogado
+// avulso que existe de verdade — mesma ideia de validarPartesExistem, mas
+// para processo_oabs (tabela liga a usuarios OU advogados_freela).
+async function validarOabsExistem(conn, oabs) {
+  const usuarioIds = new Set(), freelaIds = new Set();
+  for (const o of (oabs || [])) {
+    const tipo = o && o.tipo;
+    const id = Number(o && o.id);
+    if (!id || !['usuario', 'freela'].includes(tipo)) {
+      return 'Há uma OAB sem pessoa selecionada.';
+    }
+    (tipo === 'freela' ? freelaIds : usuarioIds).add(id);
+  }
+  if (usuarioIds.size) {
+    const arr = [...usuarioIds];
+    const [rows] = await conn.execute(
+      `SELECT id FROM usuarios WHERE ativo = 1 AND id IN (${arr.map(() => '?').join(',')})`, arr
+    );
+    if (rows.length !== arr.length) {
+      return 'Um dos usuários selecionados na lista de OABs não existe mais ou foi desativado. Recarregue a tela.';
+    }
+  }
+  if (freelaIds.size) {
+    const arr = [...freelaIds];
+    const [rows] = await conn.execute(
+      `SELECT id FROM advogados_freela WHERE id IN (${arr.map(() => '?').join(',')})`, arr
+    );
+    if (rows.length !== arr.length) {
+      return 'Um dos advogados avulsos selecionados na lista de OABs não existe mais. Recarregue a tela.';
+    }
+  }
+  return null;
+}
+
 // ============================================================
 // PASTAS
 // ============================================================
@@ -357,7 +391,7 @@ async function buscarPasta(req, res) {
 
     // Para cada processo, busca autores e réus em paralelo
     for (const proc of processos) {
-      const [autores, reus, peritos, assuntos] = await Promise.all([
+      const [autores, reus, peritos, assuntos, oabs] = await Promise.all([
         pool.execute(
           `SELECT ta.id, ta.tipo_pessoa, ta.pessoa_id,
                   CASE ta.tipo_pessoa
@@ -415,11 +449,25 @@ async function buscarPasta(req, res) {
            ORDER BY ap.nome`,
           [proc.id]
         ),
+        pool.execute(
+          `SELECT po.id,
+                  CASE WHEN po.usuario_id IS NOT NULL THEN 'usuario' ELSE 'freela' END AS tipo,
+                  COALESCE(po.usuario_id, po.freela_id) AS pessoa_id,
+                  CASE WHEN po.usuario_id IS NOT NULL
+                    THEN (SELECT u.nome FROM usuarios u WHERE u.id = po.usuario_id)
+                    ELSE (SELECT f.nome FROM advogados_freela f WHERE f.id = po.freela_id) END AS nome,
+                  CASE WHEN po.usuario_id IS NOT NULL
+                    THEN (SELECT u.oab FROM usuarios u WHERE u.id = po.usuario_id)
+                    ELSE (SELECT f.oab FROM advogados_freela f WHERE f.id = po.freela_id) END AS oab
+           FROM processo_oabs po WHERE po.processo_id = ?`,
+          [proc.id]
+        ),
       ]);
       proc.autores = autores[0];
       proc.reus    = reus[0];
       proc.peritos = peritos[0];
       proc.assuntos = assuntos[0];
+      proc.oabs    = oabs[0];
     }
 
     return sucesso(res, { ...pastas[0], processos });
@@ -493,7 +541,7 @@ async function criarProcesso(req, res) {
     assuntos = [],         // assuntos vinculados ao processo (opcional)
     cliente_polo,          // 'autor' ou 'reu' — qual polo é o cliente do escritório
     responsavel_id,
-    oab_processo,
+    oabs = [],             // OABs vinculadas ao processo: [{ tipo: 'usuario'|'freela', id }]
   } = req.body;
 
   if (!NomeTituloProc) return erro(res, 'Título do processo é obrigatório');
@@ -577,8 +625,8 @@ async function criarProcesso(req, res) {
     const [procResult] = await conn.execute(
       `INSERT INTO tblproc
          (pasta_id, numProc, protocolo, NomeTituloProc, cliente_polo, vara_id, tipo_id, status_id, instancia_id,
-          data_distribuicao, observacoes, responsavel_id, oab_processo, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          data_distribuicao, observacoes, responsavel_id, criado_por)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [pastaId,
        numProcLimpo,
        protocoloLimpo,
@@ -591,13 +639,14 @@ async function criarProcesso(req, res) {
        data_distribuicao || null,
        observacoes      || null,
        responsavelId,
-       oab_processo     || null,
        req.usuario.id]
     );
     const procId = procResult.insertId;
 
     const erroPartes = await validarPartesExistem(conn, autores, reus, peritos);
     if (erroPartes) { await conn.rollback(); return erro(res, erroPartes); }
+    const erroOabs = await validarOabsExistem(conn, oabs);
+    if (erroOabs) { await conn.rollback(); return erro(res, erroOabs); }
 
     // Insere autores (polo ativo)
     for (const autor of autores) {
@@ -628,6 +677,15 @@ async function criarProcesso(req, res) {
       await conn.execute(
         'INSERT INTO processo_assunto (processo_id, assunto_id, criado_por) VALUES (?, ?, ?)',
         [procId, assuntoId, req.usuario.id]
+      );
+    }
+
+    // Insere as OABs vinculadas ao processo (opcional)
+    for (const o of oabs) {
+      await conn.execute(
+        `INSERT INTO processo_oabs (processo_id, usuario_id, freela_id, criado_por)
+         VALUES (?, ?, ?, ?)`,
+        [procId, o.tipo === 'usuario' ? o.id : null, o.tipo === 'freela' ? o.id : null, req.usuario.id]
       );
     }
 
@@ -701,6 +759,7 @@ async function excluirProcesso(req, res) {
     await conn.execute('DELETE FROM tbltituloprocreu   WHERE proc_id = ?', [id]);
     await conn.execute('DELETE FROM processo_perito    WHERE proc_id = ?', [id]);
     await conn.execute('DELETE FROM processo_assunto   WHERE processo_id = ?', [id]);
+    await conn.execute('DELETE FROM processo_oabs      WHERE processo_id = ?', [id]);
     await conn.execute('DELETE FROM tblproc WHERE id = ?', [id]);
 
     // Auditoria na MESMA transação. Guarda o NÚMERO do processo: depois da exclusão
@@ -748,7 +807,7 @@ async function atualizarProcesso(req, res) {
     vara_id, tipo_id, status_id, instancia_id,
     data_distribuicao, observacoes,
     autores, reus, peritos, assuntos, cliente_polo,
-    responsavel_id, oab_processo,
+    responsavel_id, oabs,   // OABs vinculadas: [{ tipo: 'usuario'|'freela', id }]
     motivo_status,
   } = req.body;
 
@@ -815,7 +874,7 @@ async function atualizarProcesso(req, res) {
       `UPDATE tblproc SET
          numProc=?, protocolo=?, NomeTituloProc=?, cliente_polo=?,
          vara_id=?, tipo_id=?, status_id=?, instancia_id=?,
-         data_distribuicao=?, observacoes=?, responsavel_id=?, oab_processo=?,
+         data_distribuicao=?, observacoes=?, responsavel_id=?,
          alterado_por=?, alterado_em=NOW()
        WHERE id = ?`,
       [numProc          || null,
@@ -830,7 +889,6 @@ async function atualizarProcesso(req, res) {
        data_distribuicao || null,
        observacoes      || null,
        responsavelId,
-       oab_processo     || null,
        req.usuario.id,
        id]
     );
@@ -838,6 +896,10 @@ async function atualizarProcesso(req, res) {
     // Antes de substituir qualquer parte, confere que as pessoas enviadas existem.
     const erroPartes = await validarPartesExistem(conn, autores, reus, peritos);
     if (erroPartes) { await conn.rollback(); return erro(res, erroPartes); }
+    if (oabs !== undefined) {
+      const erroOabs = await validarOabsExistem(conn, oabs);
+      if (erroOabs) { await conn.rollback(); return erro(res, erroOabs); }
+    }
 
     // Substitui partes se enviadas
     if (autores !== undefined) {
@@ -876,6 +938,18 @@ async function atualizarProcesso(req, res) {
         await conn.execute(
           'INSERT INTO processo_assunto (processo_id, assunto_id, criado_por) VALUES (?, ?, ?)',
           [id, assuntoId, req.usuario.id]
+        );
+      }
+    }
+
+    // Substitui as OABs do processo se enviadas
+    if (oabs !== undefined) {
+      await conn.execute('DELETE FROM processo_oabs WHERE processo_id = ?', [id]);
+      for (const o of oabs) {
+        await conn.execute(
+          `INSERT INTO processo_oabs (processo_id, usuario_id, freela_id, criado_por)
+           VALUES (?, ?, ?, ?)`,
+          [id, o.tipo === 'usuario' ? o.id : null, o.tipo === 'freela' ? o.id : null, req.usuario.id]
         );
       }
     }
@@ -919,7 +993,7 @@ async function atualizarProcesso(req, res) {
 // GET /api/processos/auxiliares — Dados para selects do formulário
 async function buscarAuxiliares(req, res) {
   try {
-    const [foruns, varas, tipos, status, instancias, usuarios, assuntos, escritorio] = await Promise.all([
+    const [foruns, varas, tipos, status, instancias, usuarios, assuntos, escritorio, advogadosFreela] = await Promise.all([
       pool.execute('SELECT * FROM tblforum WHERE ativo=1 ORDER BY nome'),
       pool.execute(`SELECT v.*,
                            f.nome AS forum_nome, f.abrev_nome AS forum_abrev_nome,
@@ -933,10 +1007,14 @@ async function buscarAuxiliares(req, res) {
       pool.execute('SELECT * FROM tblinstanciaproc WHERE ativo=1 ORDER BY nome'),
       pool.execute("SELECT id, nome, tipo, oab FROM usuarios WHERE ativo=1 AND nivel > 0 ORDER BY tipo = 'advogado' DESC, nome"),
       pool.execute('SELECT * FROM tblassuntoproc WHERE ativo=1 ORDER BY nome'),
-      // Padrões do escritório para pré-preencher o "Responsável pelo processo" e a
-      // "OAB do processo" no Novo Processo. Vem por AQUI (rota de auxiliares, aberta a
-      // qualquer usuário logado) e NÃO pela rota /configuracoes/escritorio, que é só admin.
-      pool.execute('SELECT advogado_principal_id, oab_principal FROM configuracoes_escritorio LIMIT 1'),
+      // Padrão do escritório para pré-preencher o "Responsável pelo processo" (e, na
+      // tela, a lista de OABs) no Novo Processo. Vem por AQUI (rota de auxiliares,
+      // aberta a qualquer usuário logado) e NÃO pela rota /configuracoes/escritorio,
+      // que é só admin.
+      pool.execute('SELECT advogado_principal_id FROM configuracoes_escritorio LIMIT 1'),
+      // Advogados avulsos (sem login) — mesma lista já usada em Audiências/Perícias —
+      // para poder aparecer como opção na lista de OABs do processo.
+      pool.execute('SELECT id, nome, oab FROM advogados_freela ORDER BY nome'),
     ]);
 
     const cfg = escritorio[0][0] || {};
@@ -948,8 +1026,8 @@ async function buscarAuxiliares(req, res) {
       instancias: instancias[0],
       usuarios:  usuarios[0],
       assuntos:  assuntos[0],
+      advogados_freela: advogadosFreela[0],
       advogado_principal_id: cfg.advogado_principal_id || null,
-      oab_principal:         cfg.oab_principal || null,
     });
   } catch (err) {
     return erroInterno(res, err);
