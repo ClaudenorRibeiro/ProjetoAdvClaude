@@ -75,6 +75,46 @@ o código de agora.
   `v-DDMMYY-HHMM`, mantendo sempre as 10 mais recentes (local e remoto),
   para permitir voltar a uma versão anterior se algo quebrar.
 
+### 2.1 Scripts de sincronia PC ↔ GitHub (corrigido e testado em 28/09/2026)
+
+O fluxo real de trabalho do usuário é: a IA só trabalha no `rascunho` → o
+usuário baixa o rascunho pro PC (`salvar_RASCUNHO_do_GIT_no_pc.bat`) e
+testa → se estiver tudo certo, manda pra `main`
+(`salvar_pc_casa_no_Git.bat` / `salvar_pc_escrit_no_Git.bat`) → depois
+replica manualmente nas instâncias AWS.
+
+Havia um bug real nesse fluxo, corrigido nesta data: os scripts de mandar
+pra `main` só detectavam arquivo alterado na pasta. Se o usuário só
+baixasse o rascunho e testasse **sem mexer em nada**, a pasta ficava
+"limpa" (nada pendente pra commitar) e o script dizia "nenhuma alteração
+encontrada" e não enviava nada pra `main` no GitHub — mesmo a pasta já
+estando com o rascunho testado. Corrigido: agora os dois scripts de mandar
+pra `main` também comparam (só um `git fetch` de leitura, nunca aplicam
+nada sozinhos) a HEAD local com a `main` atual do GitHub, e enviam quando
+forem diferentes, mesmo sem arquivo pendente.
+
+O script de puxar o rascunho (`salvar_RASCUNHO_do_GIT_no_pc.bat`) também
+não garantia em qual branch local estava operando (aplicava o rascunho em
+cima de "qualquer branch que estivesse ativo" no PC). Corrigido: agora ele
+sempre força a pasta para o branch `main` antes de aplicar o rascunho por
+cima. **Não existe (e não deve ser criado) um branch local `rascunho` no
+PC do usuário** — `rascunho` só existe de verdade no GitHub; no PC, o
+`main` local apenas recebe temporariamente o conteúdo do rascunho para
+teste.
+
+Essa correção foi validada com testes reais num repositório Git isolado
+(4 cenários: puxar rascunho e mandar pra main sem mexer em mais nada,
+edição real seguida de envio, rodar o envio duas vezes seguidas sem nada
+novo, e puxar o rascunho estando em outro branch por engano) — não é
+suposição.
+
+**Isso é código, não opinião — e por isso pode expirar (regra 0):** antes
+de afirmar esse comportamento como fato numa sessão futura, reconferir o
+conteúdo atual dos 3 arquivos na raiz do projeto
+(`salvar_RASCUNHO_do_GIT_no_pc.bat`, `salvar_pc_casa_no_Git.bat`,
+`salvar_pc_escrit_no_Git.bat`), porque se algum deles for editado de novo
+depois desta data, esta descrição deixa de valer.
+
 ## 3. Banco de dados (MySQL)
 
 - O usuário só atualiza o banco **manualmente pelo HeidiSQL**. A IA nunca
