@@ -4,11 +4,12 @@
 -- Gerado em 31/08/2026 a partir do banco LOCAL (sistema_advocacia), via:
 --   mysqldump --no-data --databases --add-drop-database
 --             --routines --triggers --events sistema_advocacia
--- Contém 90 tabelas — SOMENTE A ESTRUTURA, sem nenhum dado.
+-- Contém 91 tabelas — SOMENTE A ESTRUTURA, sem nenhum dado.
 -- (79 do dump de 31/08/2026 + tipo_documento_pendencia, pendencia_documento,
 --  pendencia_documento_item e pendencia_documento_responsavel, do módulo
 --  "Pendências de Documentos"; + acordo_parcela_multa, do módulo de multa
---  por atraso de parcela, 23/09/2026.)
+--  por atraso de parcela, 23/09/2026; + processo_oabs, do módulo de
+--  múltiplas OABs por processo, 28/09/2026.)
 -- O banco não possui procedures, triggers, views nem events.
 -- Os dados de partida (feriados, varas, tipos etc.) ficam em scripts/.
 --
