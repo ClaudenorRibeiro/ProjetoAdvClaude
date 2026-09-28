@@ -65,8 +65,13 @@ o código de agora.
   quando o usuário disser explicitamente **"PODE SUBIR"**.
 - **`rascunho`**: branch fixa e permanente para trabalho em andamento. A
   IA pode enviar (push) livremente para ela, sem pedir autorização a cada
-  vez. É o destino padrão de qualquer commit desta IA e dos scripts locais
-  `salvar_pc_casa_RASCUNHO_no_Git.bat` / `salvar_pc_escrit_RASCUNHO_no_Git.bat`.
+  vez. É o destino padrão de qualquer commit desta IA.
+  (Existiram scripts locais `salvar_pc_casa_RASCUNHO_no_Git.bat` /
+  `salvar_pc_escrit_RASCUNHO_no_Git.bat`, que mandavam uma edição feita
+  manualmente pelo usuário no PC — sem passar pela IA — direto para o
+  rascunho. Excluídos em 28/09/2026 a pedido do usuário, por decisão dele
+  de nunca editar código diretamente no PC fora de uma sessão da IA. Se
+  algum dia precisar desse caminho de novo, terá que ser recriado.)
 - Os scripts `salvar_pc_casa_no_Git.bat` / `salvar_pc_escrit_no_Git.bat`
   (sem "RASCUNHO" no nome) enviam direto para `main` com `--force` — são
   de uso exclusivo e manual do usuário, quando ele decide oficializar uma
