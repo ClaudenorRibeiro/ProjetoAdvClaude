@@ -16,6 +16,16 @@ import useEscFechar from '../../hooks/useEscFechar';
 import { buscarEnderecoPorCep } from '../../utils/cep';
 import ModalCadastroRapidoParte from '../../components/ModalCadastroRapidoParte';
 import SelectPesquisavel from '../../components/ui/SelectPesquisavel';
+import { ModalNovoFreela } from '../Audiencias/Audiencias';
+
+// Lista combinada de usuários + advogados avulsos, para o seletor de OABs do processo.
+// Só entra quem já tem OAB cadastrada — sem OAB não pode ser "dono" da OAB do processo.
+function montarOpcoesAdvogados(dados) {
+  return [
+    ...(dados.usuarios || []).filter(u => u.oab).map(u => ({ origem: 'usuario', id: u.id, nome: u.nome, oab: u.oab })),
+    ...(dados.advogados_freela || []).filter(f => f.oab).map(f => ({ origem: 'freela', id: f.id, nome: f.nome, oab: f.oab })),
+  ];
+}
 
 function formatarCpfCnpjSelecao(valor, tipo) {
   const d = String(valor || '').replace(/\D/g, '');
@@ -405,8 +415,12 @@ function SeletorAssuntos({ assuntos = [], selecionados = [], onChange, podeGeren
 // dois grupos misturados, cada item com { origem: 'usuario'|'freela', id,
 // nome, oab }. Reaproveitado em ModalNovoProcesso e ModalEditarProcesso.
 // ============================================================
-function SeletorOabsProcesso({ oabs = [], onChange, opcoes = [], somenteLeitura = false }) {
+function SeletorOabsProcesso({ oabs = [], onChange, opcoes = [], onOpcoesAtualizadas, somenteLeitura = false }) {
   const [selecionado, setSelecionado] = useState('');
+  const [modalNovoFreela, setModalNovoFreela] = useState(false);
+
+  const doEscritorio = opcoes.filter(o => o.origem === 'usuario');
+  const avulsos      = opcoes.filter(o => o.origem === 'freela');
 
   function adicionar() {
     if (somenteLeitura || !selecionado) return;
@@ -427,6 +441,18 @@ function SeletorOabsProcesso({ oabs = [], onChange, opcoes = [], somenteLeitura 
     onChange(oabs.filter((_, i) => i !== index));
   }
 
+  // Depois de cadastrar um advogado avulso novo (sem login), recarrega a lista de
+  // opções (pra ele aparecer nas próximas adições também) e já adiciona ele agora.
+  async function freelaCriado(novoId) {
+    setModalNovoFreela(false);
+    const { data } = await processosAPI.auxiliares();
+    if (!data.ok) return;
+    const novasOpcoes = montarOpcoesAdvogados(data.dados);
+    onOpcoesAtualizadas?.(novasOpcoes);
+    const pessoa = novasOpcoes.find(o => o.origem === 'freela' && o.id === novoId);
+    if (pessoa) onChange([...oabs, { tipo: 'freela', id: pessoa.id, nome: pessoa.nome, oab: pessoa.oab || '' }]);
+  }
+
   return (
     <div className="form-group">
       <label className="form-label">OAB(s) do processo</label>
@@ -434,13 +460,25 @@ function SeletorOabsProcesso({ oabs = [], onChange, opcoes = [], somenteLeitura 
         <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
           <select className="form-control" value={selecionado} onChange={e => setSelecionado(e.target.value)}>
             <option value="">— Selecione um advogado —</option>
-            {opcoes.map(o => (
-              <option key={`${o.origem}:${o.id}`} value={`${o.origem}:${o.id}`}>
-                {o.nome}{o.oab ? ` — OAB ${o.oab}` : ''}{o.origem === 'freela' ? ' (avulso)' : ''}
-              </option>
-            ))}
+            {doEscritorio.length > 0 && (
+              <optgroup label="Advogados do escritório">
+                {doEscritorio.map(o => (
+                  <option key={`usuario:${o.id}`} value={`usuario:${o.id}`}>{o.nome} — OAB {o.oab}</option>
+                ))}
+              </optgroup>
+            )}
+            {avulsos.length > 0 && (
+              <optgroup label="Advogados avulsos">
+                {avulsos.map(o => (
+                  <option key={`freela:${o.id}`} value={`freela:${o.id}`}>{o.nome} — OAB {o.oab}</option>
+                ))}
+              </optgroup>
+            )}
           </select>
           <button type="button" className="btn btn-outline" style={{ padding: '0 12px', flexShrink: 0 }} onClick={adicionar}>+ Adicionar</button>
+          <button type="button" className="btn btn-outline" title="Cadastrar advogado avulso (não trabalha no escritório)"
+            style={{ padding: '0 12px', fontSize: '16px', flexShrink: 0 }}
+            onClick={() => setModalNovoFreela(true)}>…</button>
         </div>
       )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '28px' }}>
@@ -455,7 +493,13 @@ function SeletorOabsProcesso({ oabs = [], onChange, opcoes = [], somenteLeitura 
         ))}
         {oabs.length === 0 && <span style={{ color: '#ccc', fontSize: '13px' }}>Nenhuma OAB adicionada</span>}
       </div>
-      <small style={{ color: '#888' }}>Advogado(s) responsável(is) pela OAB sob a qual o processo foi distribuído.</small>
+      <small style={{ color: '#888' }}>Advogado(s) responsável(is) pela OAB sob a qual o processo foi distribuído. Só aparecem advogados com OAB já cadastrada.</small>
+
+      {modalNovoFreela && (
+        <ModalNovoFreela titulo="Novo advogado avulso (sem login no sistema)"
+          onFechar={() => setModalNovoFreela(false)}
+          onSalvo={freelaCriado} />
+      )}
     </div>
   );
 }
@@ -578,11 +622,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
         ...f,
         responsavel_id: dados.advogado_principal_id ? String(dados.advogado_principal_id) : '',
       }));
-      // Lista combinada de usuários + advogados avulsos, para o seletor de OABs.
-      const opcoes = [
-        ...(dados.usuarios || []).map(u => ({ origem: 'usuario', id: u.id, nome: u.nome, oab: u.oab })),
-        ...(dados.advogados_freela || []).map(f => ({ origem: 'freela', id: f.id, nome: f.nome, oab: f.oab })),
-      ];
+      const opcoes = montarOpcoesAdvogados(dados);
       setAdvogadosDisponiveis(opcoes);
       // Pré-adiciona o Advogado principal do escritório como primeira OAB do processo novo.
       if (dados.advogado_principal_id) {
@@ -1032,7 +1072,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
           </div>
 
           {/* === OAB(s) DO PROCESSO === */}
-          <SeletorOabsProcesso oabs={oabs} onChange={setOabs} opcoes={advogadosDisponiveis} />
+          <SeletorOabsProcesso oabs={oabs} onChange={setOabs} opcoes={advogadosDisponiveis} onOpcoesAtualizadas={setAdvogadosDisponiveis} />
 
           {/* === PERITOS DO PROCESSO (opcional) === */}
           <div className="form-group">
@@ -1318,11 +1358,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
       } else {
         setVarasFiltradas(dados.varas);
       }
-      // Lista combinada de usuários + advogados avulsos, para o seletor de OABs.
-      setAdvogadosDisponiveis([
-        ...(dados.usuarios || []).map(u => ({ origem: 'usuario', id: u.id, nome: u.nome, oab: u.oab })),
-        ...(dados.advogados_freela || []).map(f => ({ origem: 'freela', id: f.id, nome: f.nome, oab: f.oab })),
-      ]);
+      setAdvogadosDisponiveis(montarOpcoesAdvogados(dados));
     });
   }, []); // eslint-disable-line
 
@@ -1611,7 +1647,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
           </div>
 
           {/* === OAB(s) DO PROCESSO === */}
-          <SeletorOabsProcesso oabs={oabs} onChange={setOabs} opcoes={advogadosDisponiveis} somenteLeitura={leitura} />
+          <SeletorOabsProcesso oabs={oabs} onChange={setOabs} opcoes={advogadosDisponiveis} onOpcoesAtualizadas={setAdvogadosDisponiveis} somenteLeitura={leitura} />
 
           {/* === PERITOS DO PROCESSO (opcional) === */}
           <div className="form-group">
