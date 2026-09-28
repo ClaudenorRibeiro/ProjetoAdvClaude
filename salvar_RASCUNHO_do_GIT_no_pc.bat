@@ -5,6 +5,11 @@
 :: "rascunho" no GitHub - por exemplo, correcoes que o Claude
 :: enviou por la. Este script NUNCA envia nada para o GitHub,
 :: so recebe/atualiza sua pasta local.
+:: Sempre deixa a pasta IDENTICA ao que esta no rascunho: qualquer
+:: arquivo do sistema que estiver diferente ou faltando localmente
+:: e substituido/reposto automaticamente, sem avisar. Arquivos que
+:: nao fazem parte do sistema (nao rastreados pelo Git) nunca sao
+:: tocados.
 :: Funciona em qualquer PC, desde que este arquivo esteja
 :: dentro da pasta do sistema.
 :: Duplo clique para rodar
@@ -36,30 +41,6 @@ if exist ".git\index.lock" (
     )
 )
 
-:: So atualiza se a pasta estiver "limpa". Se voce tiver alguma alteracao
-:: sua ainda nao salva, o script para aqui - assim nada seu se perde ou
-:: se mistura sem querer com o que vem do GitHub.
-git diff --quiet
-set TEM_ALTERACAO_1=%errorlevel%
-git diff --cached --quiet
-set TEM_ALTERACAO_2=%errorlevel%
-if not %TEM_ALTERACAO_1%==0 goto :tem_alteracao
-if not %TEM_ALTERACAO_2%==0 goto :tem_alteracao
-goto :pode_atualizar
-
-:tem_alteracao
-echo.
-echo ============================================================
-echo  Voce tem alteracoes nesta pasta que ainda NAO foram salvas.
-echo  Para nao perder nada, primeiro rode o script de salvar
-echo  RASCUNHO ^(ou o script normal, se quiser oficializar^), e
-echo  so depois rode este aqui de novo.
-echo ============================================================
-echo.
-pause
-exit /b
-
-:pode_atualizar
 echo.
 echo Buscando as atualizacoes do rascunho no GitHub...
 git fetch origin %BRANCH_RASCUNHO%
@@ -74,17 +55,13 @@ if not %errorlevel%==0 (
     exit /b
 )
 
-git merge --no-edit origin/%BRANCH_RASCUNHO%
-set MERGE_OK=%errorlevel%
-
-if not %MERGE_OK%==0 (
+git reset --hard origin/%BRANCH_RASCUNHO%
+if not %errorlevel%==0 (
     echo.
     echo ============================================================
-    echo  Deu conflito ao atualizar. Nada foi perdido, mas a pasta
-    echo  ficou parada no meio da atualizacao. Peca ajuda ao Claude
-    echo  para resolver isso antes de tentar de novo.
+    echo  ERRO ao atualizar a pasta local. Peca ajuda ao Claude antes
+    echo  de tentar de novo.
     echo ============================================================
-    git merge --abort >nul 2>&1
     echo.
     pause
     exit /b
