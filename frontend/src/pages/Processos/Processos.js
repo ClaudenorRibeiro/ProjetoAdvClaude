@@ -416,15 +416,16 @@ function SeletorAssuntos({ assuntos = [], selecionados = [], onChange, podeGeren
 // nome, oab }. Reaproveitado em ModalNovoProcesso e ModalEditarProcesso.
 // ============================================================
 function SeletorOabsProcesso({ oabs = [], onChange, opcoes = [], onOpcoesAtualizadas, somenteLeitura = false }) {
-  const [selecionado, setSelecionado] = useState('');
   const [modalNovoFreela, setModalNovoFreela] = useState(false);
 
   const doEscritorio = opcoes.filter(o => o.origem === 'usuario');
   const avulsos      = opcoes.filter(o => o.origem === 'freela');
 
-  function adicionar() {
-    if (somenteLeitura || !selecionado) return;
-    const [origem, idStr] = selecionado.split(':');
+  // Escolher no select já adiciona na lista (sem precisar de um botão à parte) — mesmo
+  // padrão de autor/réu/perito nesta tela: clicar na opção já adiciona.
+  function adicionar(valor) {
+    if (somenteLeitura || !valor) return;
+    const [origem, idStr] = valor.split(':');
     const id = Number(idStr);
     if (oabs.some(o => o.tipo === origem && o.id === id)) {
       toast.warn('Essa OAB já foi adicionada');
@@ -433,7 +434,6 @@ function SeletorOabsProcesso({ oabs = [], onChange, opcoes = [], onOpcoesAtualiz
     const pessoa = opcoes.find(o => o.origem === origem && o.id === id);
     if (!pessoa) return;
     onChange([...oabs, { tipo: origem, id, nome: pessoa.nome, oab: pessoa.oab || '' }]);
-    setSelecionado('');
   }
 
   function remover(index) {
@@ -455,11 +455,11 @@ function SeletorOabsProcesso({ oabs = [], onChange, opcoes = [], onOpcoesAtualiz
 
   return (
     <div className="form-group">
-      <label className="form-label">OAB(s) do processo</label>
+      <label className="form-label">OAB(s) do processo — são as OABs que estão nos autos do processo</label>
       {!somenteLeitura && (
         <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
-          <select className="form-control" value={selecionado} onChange={e => setSelecionado(e.target.value)}>
-            <option value="">— Selecione um advogado —</option>
+          <select className="form-control" value="" onChange={e => adicionar(e.target.value)}>
+            <option value="">Selecione um ou mais advogados, a quem pertence o processo</option>
             {doEscritorio.length > 0 && (
               <optgroup label="Advogados do escritório">
                 {doEscritorio.map(o => (
@@ -475,7 +475,6 @@ function SeletorOabsProcesso({ oabs = [], onChange, opcoes = [], onOpcoesAtualiz
               </optgroup>
             )}
           </select>
-          <button type="button" className="btn btn-outline" style={{ padding: '0 12px', flexShrink: 0 }} onClick={adicionar}>+ Adicionar</button>
           <button type="button" className="btn btn-outline" title="Cadastrar advogado avulso (não trabalha no escritório)"
             style={{ padding: '0 12px', fontSize: '16px', flexShrink: 0 }}
             onClick={() => setModalNovoFreela(true)}>…</button>
