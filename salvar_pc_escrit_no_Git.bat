@@ -33,10 +33,25 @@ if exist ".git\index.lock" (
 :: --ignore-unmatch evita erro quando a pasta ja esta fora do git. Roda sempre, sem risco.
 git rm -r --cached --ignore-unmatch memory >nul 2>&1
 
-:: Verifica se tem alterações para salvar
+:: Verifica se tem alteracoes para salvar: arquivo mudado nesta pasta OU a HEAD
+:: local ja diferente da main que esta hoje no GitHub. Esse segundo caso acontece,
+:: por exemplo, depois de puxar o rascunho por cima desta pasta com o script
+:: "salvar_RASCUNHO_do_GIT_no_pc.bat": a pasta fica com o rascunho e sem nada
+:: "pendente" pra commitar, mas a main no GitHub ainda esta na versao antiga - e
+:: mesmo assim precisa enviar. O "fetch" abaixo e so LEITURA (busca so a
+:: informacao pra comparar); nao altera nada nesta pasta, entao continua valendo
+:: a regra de este script nunca dar pull.
 git add -A
+set HOUVE_ALTERACAO_ARQUIVO=1
 git diff --cached --quiet
-if %errorlevel%==0 (
+if %errorlevel%==0 set HOUVE_ALTERACAO_ARQUIVO=0
+
+git fetch origin main >nul 2>&1
+for /f "delims=" %%h in ('git rev-parse HEAD') do set HASH_LOCAL=%%h
+set HASH_MAIN_GITHUB=
+for /f "delims=" %%h in ('git rev-parse origin/main 2^>nul') do set HASH_MAIN_GITHUB=%%h
+
+if %HOUVE_ALTERACAO_ARQUIVO%==0 if "%HASH_LOCAL%"=="%HASH_MAIN_GITHUB%" (
     echo.
     echo Nenhuma alteracao encontrada. Nada foi salvo.
     echo.
@@ -56,16 +71,22 @@ for /f "tokens=1-2 delims=:" %%a in ("%time: =0%") do (
 )
 set PREFIXO=%DIA%%MES%%ANO:~2,2%-%HORA%%MIN%
 
-:: Pede descricao do que foi feito
+:: Pede descricao do que foi feito (so e usada se realmente houver commit novo)
 echo.
 set /p DESCRICAO="Descreva o que foi feito: "
 if "%DESCRICAO%"=="" set DESCRICAO=atualizacao
 
-:: Commit e push FORCADO para o GitHub.
+:: So cria um commit novo se a pasta realmente tiver arquivo alterado. Se a pasta
+:: ja estava limpa (ex.: acabou de puxar e testar o rascunho, sem mexer em nada),
+:: nao ha nada pra commitar - so envia pra main o que ja esta commitado aqui
+:: (o proprio rascunho testado).
+if %HOUVE_ALTERACAO_ARQUIVO%==1 git commit -m "%PREFIXO% - %DESCRICAO%"
+
+:: Push FORCADO para o GitHub.
 :: --force faz a SUA PASTA LOCAL SEMPRE PREVALECER: sobrescreve o GitHub com o que
-:: esta aqui, mesmo que o outro computador tenha enviado algo diferente. Combina com
-:: a regra de estes scripts NUNCA baixarem nada do Git (sem pull/fetch).
-git commit -m "%PREFIXO% - %DESCRICAO%"
+:: esta aqui, mesmo que o outro computador tenha enviado algo diferente. O fetch
+:: feito acima foi so de LEITURA (pra comparar) - continua a regra de este script
+:: nunca aplicar nada vindo do GitHub sozinho.
 git push --force origin main
 set PUSH_OK=%errorlevel%
 

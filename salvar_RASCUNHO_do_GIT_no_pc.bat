@@ -41,6 +41,18 @@ if exist ".git\index.lock" (
     )
 )
 
+:: Garante que esta pasta esteja sempre no branch "main" ANTES de puxar o
+:: rascunho por cima dele - independente de em qual branch ela estava antes
+:: (assim o resultado e sempre previsivel, em qualquer PC, sem depender de
+:: estado deixado por uma execucao anterior).
+git rev-parse --verify main >nul 2>&1
+if %errorlevel%==0 (
+    git checkout -f -q main
+) else (
+    git fetch origin main >nul 2>&1
+    git checkout -q -B main origin/main
+)
+
 echo.
 echo Buscando as atualizacoes do rascunho no GitHub...
 git fetch origin %BRANCH_RASCUNHO%
