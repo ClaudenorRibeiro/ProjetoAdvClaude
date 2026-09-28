@@ -40,5 +40,5 @@ test('aceita configuração isolada explícita', () => {
 test('preparação remove comandos capazes de apagar ou selecionar banco', () => {
   const sql = sqlSomenteEstruturaTeste();
   assert.doesNotMatch(sql, /DROP\s+DATABASE|CREATE\s+DATABASE|\bUSE\s+`/i);
-  assert.equal((sql.match(/^CREATE TABLE/gm) || []).length, 90);
+  assert.equal((sql.match(/^CREATE TABLE/gm) || []).length, 91);
 });
