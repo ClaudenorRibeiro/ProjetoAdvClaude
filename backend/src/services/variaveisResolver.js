@@ -626,6 +626,7 @@ async function resolverPagamento(parcelaId, usuario, opcoes = {}) {
     valor_pago_extenso: valorPorExtenso(valorPago),
     valor_bruto:        moedaBR(p.valor_bruto),
     valor_honorario:    moedaBR(p.honor_valor),
+    valor_honorario_extenso: valorPorExtenso(p.honor_valor),
     valor_liquido:      moedaBR(p.valor_liquido),
     valor_parceria:     moedaBR(p.parceria_valor || 0),
     forma_pagamento:    formaRepasse,             // ótica do recibo: a forma do repasse
@@ -694,6 +695,7 @@ async function resolverAcordo(acordoId, usuario, opcoes = {}) {
     valor_pago_extenso: valorPorExtenso(valorPago),
     valor_bruto: moedaBR(selecionadas.reduce((soma, p) => soma + Number(p.valor_bruto || 0), 0)),
     valor_honorario: moedaBR(selecionadas.reduce((soma, p) => soma + Number(p.honor_valor || 0), 0)),
+    valor_honorario_extenso: valorPorExtenso(selecionadas.reduce((soma, p) => soma + Number(p.honor_valor || 0), 0)),
     valor_liquido: moedaBR(selecionadas.reduce((soma, p) => soma + Number(p.valor_liquido || 0), 0)),
     valor_parceria: moedaBR(selecionadas.reduce((soma, p) => soma + Number(p.parceria_valor || 0), 0)),
     data_pagamento: dataBR(datas[datas.length - 1]),

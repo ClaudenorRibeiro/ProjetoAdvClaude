@@ -97,6 +97,7 @@ const CATALOGO = {
       { tag: 'valor_pago_extenso',  descricao: 'Valor do recibo por extenso' },
       { tag: 'valor_bruto',         descricao: 'Valor bruto da parcela' },
       { tag: 'valor_honorario',     descricao: 'Valor do honorário' },
+      { tag: 'valor_honorario_extenso', descricao: 'Valor do honorário por extenso' },
       { tag: 'valor_liquido',       descricao: 'Valor líquido (bruto − honorário)' },
       { tag: 'valor_parceria',      descricao: 'Valor do repasse de parceria' },
       { tag: 'forma_pagamento',     descricao: 'Forma do repasse (apelido de forma_repasse — ótica do recibo)' },
