@@ -295,6 +295,10 @@ function CatalogoVariaveis() {
             Escreva o modelo no Word usando estes marcadores. Clique para copiar.
             O sistema preenche automaticamente conforme a tela onde o documento for gerado.
           </p>
+          <p style={{ fontSize: '12px', color: '#666', margin: '-6px 0 14px' }}>
+            Para listar TODOS os telefones cadastrados do cliente (não só o principal), use no Word:{' '}
+            <code>{'{{#telefones}}{{numero}} - {{tipo}}{{/telefones}}'}</code>.
+          </p>
           <div className="grid-2">
             {Object.entries(catalogo).map(([chave, grupo]) => (
               <div key={chave} style={{ marginBottom: '12px' }}>

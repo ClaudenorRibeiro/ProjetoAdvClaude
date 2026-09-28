@@ -227,14 +227,22 @@ async function buscarPartesRegiao(processoId, tabela) {
 }
 
 // Monta as variáveis do bloco Cliente a partir de UMA parte (a principal).
-function blocoClienteDeParte(parte) {
+// Inclui os telefones ativos do cadastro, para o modelo listar todos com
+// {{#telefones}}{{numero}} - {{tipo}}{{/telefones}} (mesmo formato já usado
+// no "Documento de partes").
+async function blocoClienteDeParte(parte) {
   if (!parte) return {};
   const d = parte.d;
   const enderecoFull = montarEndereco(d.logradouro, d.numero, d.complemento, d.bairro, d.cidade, d.estado, d.cep);
+  const tabTel = parte.tipo === 'fisica' ? 'telefones_pf' : 'telefones_pj';
+  const [tels] = await pool.execute(
+    `SELECT numero, tipo FROM ${tabTel} WHERE pessoa_id = ? AND ativo = 1 ORDER BY principal DESC, id ASC`, [d.id]
+  );
   const comum = {
     endereco_cliente: enderecoFull,
     cep: d.cep || '', logradouro: d.logradouro || '', numero: d.numero || '',
     complemento: d.complemento || '', bairro: d.bairro || '', cidade: d.cidade || '', estado: d.estado || '',
+    telefones: tels.map(t => ({ numero: t.numero || '', tipo: t.tipo || '' })),
   };
   if (parte.tipo === 'fisica') {
     return {
@@ -301,6 +309,7 @@ async function blocoProcessoECliente(processoId) {
   // Autores e réus COMPLETOS e repetíveis (por POLO), para modelos com {{#autores}}/{{#reus}}.
   const autores = await buscarPartesRegiao(processoId, 'tbltituloprocautor');
   const reus    = await buscarPartesRegiao(processoId, 'tbltituloprocreu');
+  const clienteDados = await blocoClienteDeParte(clientePrincipal);
 
   const dados = {
     numero_processo: p.numProc || '',
@@ -324,7 +333,7 @@ async function blocoProcessoECliente(processoId) {
     data_distribuicao: dataBR(p.data_distribuicao),
     parte_adversa: adversos.map(a => a.nome).join(', '),
     parte_adversa_documento: adversos.map(a => a.documento).filter(Boolean).join(', '),
-    ...blocoClienteDeParte(clientePrincipal),
+    ...clienteDados,
     // Regiões repetíveis de partes (mesmo formato do "Documento de partes").
     autores,
     reus,
@@ -572,7 +581,8 @@ async function resolverPessoa(tipo, pessoaId, usuario) {
   if (!parte) return null;
 
   const esc = await blocoEscritorio(usuario);
-  const dados = { ...blocoClienteDeParte(parte), ...esc };
+  const clienteDados = await blocoClienteDeParte(parte);
+  const dados = { ...clienteDados, ...esc };
   return {
     dados,
     clienteNome: parte.nome || '',

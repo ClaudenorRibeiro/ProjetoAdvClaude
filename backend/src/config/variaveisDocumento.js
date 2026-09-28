@@ -58,6 +58,10 @@ const CATALOGO = {
       { tag: 'bairro',               descricao: 'Bairro' },
       { tag: 'cidade',               descricao: 'Cidade' },
       { tag: 'estado',               descricao: 'Estado (UF)' },
+      // Todos os telefones ativos do cliente, em sub-região repetível:
+      // {{#telefones}}{{numero}} - {{tipo}}{{/telefones}}. Dentro do laço, {{numero}}
+      // é o número do telefone (não o número do endereço) e {{tipo}} é o tipo cadastrado.
+      { tag: 'tipo',                 descricao: 'Tipo do telefone (dentro de {{#telefones}}…{{/telefones}})' },
     ],
   },
   processo: {
