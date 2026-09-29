@@ -19,8 +19,8 @@ function identificar(linha) {
   return m ? `${m[1].toUpperCase()} ${m[2]}` : null;
 }
 
-test('inventário contém todas as 293 rotas conhecidas', () => {
-  assert.equal(linhas.length, 293, 'mudou a quantidade de rotas: revise o contrato de segurança e atualize este teste');
+test('inventário contém todas as 294 rotas conhecidas', () => {
+  assert.equal(linhas.length, 294, 'mudou a quantidade de rotas: revise o contrato de segurança e atualize este teste');
 });
 
 test('não existem método e caminho duplicados', () => {
