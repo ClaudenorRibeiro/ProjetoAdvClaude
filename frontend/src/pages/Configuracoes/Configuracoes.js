@@ -7,7 +7,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { configuracaoAPI, manutencaoAPI, etiquetasAPI, processosAPI } from '../../services/api';
 import { EditorEtiquetasCinco, cincoLinhasEtiqueta, MODULOS_ETIQUETA_ESCRITORIO } from '../../components/Etiquetas';
-import { formatarData, formatarDataHora, hojeLocal, toTitleCase } from '../../utils/formatters';
+import { formatarData, formatarDataHora, hojeLocal, toTitleCase, mascaraTelefone } from '../../utils/formatters';
 import { UFS } from '../../utils/ufs';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
@@ -477,7 +477,7 @@ function TabEscritorio() {
         </div>
         <div className="form-group">
           <label className="form-label">Telefone</label>
-          <input className="form-control" value={form.telefone||''} onChange={e => set('telefone', e.target.value)}
+          <input className="form-control" value={form.telefone||''} onChange={e => set('telefone', mascaraTelefone(e.target.value))}
             placeholder="(11) 99999-9999" disabled={!ehSuper} />
         </div>
       </div>

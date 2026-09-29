@@ -619,11 +619,40 @@ async function criar(req, res) {
     perito_tipo, perito_id, assistente_tecnico_id: assistenteRaw,
     responsavel_id: responsavelRaw,
     locais_reus: locaisReusRaw = [],
-    obs_auditoria   // texto enviado quando o usuário confirma data/dia incomum com senha
+    obs_auditoria,  // texto enviado quando o usuário confirma data/dia incomum com senha
+    remarcar_pericia_id,  // (opcional) perícia agendada que esta nova substitui → vira "remarcada"
+    motivo_remarcacao,    // motivo obrigatório quando é remarcação
+    confirmar_nova        // (opcional) usuário confirmou que NÃO é remarcação, é outra perícia
   } = req.body;
 
   if (!processo_id) return erro(res, 'Processo é obrigatório');
   if (!data)        return erro(res, 'Data é obrigatória');
+
+  // Remarcação feita direto no cadastro: valida a perícia antiga ANTES de qualquer gravação.
+  let periciaRemarcada = null;
+  if (remarcar_pericia_id) {
+    const permitido = await temPermissaoBackend(req.usuario.id, req.usuario.nivel, 'pericias', 'alterar');
+    if (!permitido) return erro(res, 'Sem permissão para remarcar perícias', 403);
+    if (!String(motivo_remarcacao || '').trim()) return erro(res, 'Motivo da remarcação é obrigatório');
+    const [antiga] = await pool.execute('SELECT id, processo_id, tipo_pericia_id, status FROM pericia WHERE id = ?', [remarcar_pericia_id]);
+    if (!antiga.length) return naoEncontrado(res, 'Perícia a remarcar não encontrada');
+    if (antiga[0].status !== 'agendada') return erro(res, `Perícia com status "${antiga[0].status}" não pode ser remarcada`);
+    if (String(antiga[0].processo_id) !== String(processo_id)) return erro(res, 'A perícia a remarcar pertence a outro processo');
+    periciaRemarcada = antiga[0];
+  } else if (tipo_pericia_id && !confirmar_nova) {
+    // Aviso: já existe perícia AGENDADA do mesmo tipo neste processo → o front pergunta se é remarcação.
+    const [existentes] = await pool.execute(
+      `SELECT id, DATE_FORMAT(data, '%Y-%m-%d') AS data, TIME_FORMAT(hora, '%H:%i') AS hora
+         FROM pericia
+        WHERE processo_id = ? AND tipo_pericia_id = ? AND status = 'agendada'
+        ORDER BY data, hora`,
+      [processo_id, tipo_pericia_id]
+    );
+    if (existentes.length) {
+      return erro(res, 'Já existe perícia agendada deste tipo neste processo', 409,
+        { codigo: 'PERICIA_AGENDADA_EXISTENTE', pericias: existentes });
+    }
+  }
 
   const locaisReus = normalizarLocaisReus(locaisReusRaw);
   const erroLocais = await validarLocaisPericia({
@@ -676,14 +705,37 @@ async function criar(req, res) {
       );
     }
 
+    // Remarcação: a antiga vira "remarcada" na MESMA transação (tudo ou nada).
+    if (periciaRemarcada) {
+      await conn.execute(
+        `UPDATE pericia SET status = 'remarcada', motivo_status = ?, alterado_por = ?, alterado_em = NOW()
+         WHERE id = ? AND status = 'agendada'`,
+        [String(motivo_remarcacao).trim(), req.usuario.id, periciaRemarcada.id]
+      );
+      await conn.execute(
+        `INSERT INTO auditoria_pericia (pericia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
+         VALUES (?, 'status', 'agendada', 'remarcada', ?)`,
+        [periciaRemarcada.id, req.usuario.id]
+      );
+      await conn.execute(
+        `INSERT INTO auditoria_pericia (pericia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
+         VALUES (?, 'criacao', null, ?, ?)`,
+        [periciaId, `Criada por remarcação da perícia #${periciaRemarcada.id}`, req.usuario.id]
+      );
+    }
+
     await auditoria.registrar(req.usuario.id, 'pericia', 'criar', periciaId, null, null, conn);
 
     await conn.commit();
 
     // Comunicado automático ao cliente — best-effort (não derruba o cadastro se o e-mail falhar)
-    try { await enviarComunicadoPericia(periciaId, 'agendada', req.usuario.id); }
+    try { await enviarComunicadoPericia(periciaId, periciaRemarcada ? 'remarcada' : 'agendada', req.usuario.id); }
     catch (err) { console.error('Falha ao enviar comunicado da perícia:', err.message); }
 
+    // Remarcação: a antiga sai da agenda do Google; a nova (agendada) entra.
+    if (periciaRemarcada) {
+      sincronizarPericiaGoogle(periciaRemarcada.id, { cancelar: true, sequence: Math.floor(Date.now() / 1000) });
+    }
     // Nova perícia (agendada) → entra na agenda do Google do responsável (se usuário).
     sincronizarPericiaGoogle(periciaId, {});
     return sucesso(res, { id: periciaId }, 'Perícia criada com sucesso', 201);

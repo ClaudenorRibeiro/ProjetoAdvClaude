@@ -8,7 +8,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { periciasAPI, processosAPI, pessoasAPI, audienciasAPI, authAPI, calendarioAPI } from '../../services/api';
-import { formatarData, formatarDataHora, hojeLocal, toTitleCase, mascaraCNJ } from '../../utils/formatters';
+import { formatarData, formatarDataHora, hojeLocal, toTitleCase, mascaraCNJ, mascaraTelefone } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import ModalGerarLote from '../../components/GerarLote';
@@ -372,6 +372,8 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
   const [modalCadastroReu, setModalCadastroReu] = useState(null);
   // Confirmação de dia não útil com senha
   const [senhaDiaUtil, setSenhaDiaUtil] = useState(null);
+  // Aviso "já existe perícia agendada deste tipo" → { existentes: [{id,data,hora}], obs_auditoria }
+  const [periciaJaAgendada, setPericiaJaAgendada] = useState(null);
 
   useEffect(() => {
     processosAPI.auxiliares().then(r => {
@@ -610,10 +612,12 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
     await executarSalvar(null);
   }
 
-  async function executarSalvar(obs_auditoria) {
+  // `extra` (só na criação): { remarcar_pericia_id, motivo_remarcacao } ou { confirmar_nova: true }
+  async function executarSalvar(obs_auditoria, extra = {}) {
     setSalvando(true);
+    let payload = null;
     try {
-      const payload = {
+      payload = {
         ...form,
         responsavel_id: form.responsavel_id || null,
         locais_reus: locaisReus.map(r => ({ tipo_pessoa: r.tipo_pessoa, pessoa_id: r.pessoa_id })),
@@ -628,11 +632,19 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
         await periciasAPI.atualizar(pericia.id, payload);
         toast.success('Perícia atualizada!');
       } else {
-        await periciasAPI.criar(payload);
-        toast.success('Perícia criada!');
+        await periciasAPI.criar({ ...payload, ...extra });
+        toast.success(extra.remarcar_pericia_id ? 'Perícia remarcada e nova perícia criada!' : 'Perícia criada!');
       }
       onFechar(true);
-    } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao salvar'); }
+    } catch (err) {
+      const d = err.response?.data;
+      // Já existe perícia agendada do mesmo tipo neste processo → pergunta se é remarcação.
+      if (err.response?.status === 409 && d?.detalhes?.codigo === 'PERICIA_AGENDADA_EXISTENTE') {
+        setPericiaJaAgendada({ existentes: d.detalhes.pericias || [], obs_auditoria });
+      } else {
+        toast.error(d?.mensagem || 'Erro ao salvar');
+      }
+    }
     finally { setSalvando(false); }
   }
 
@@ -951,6 +963,17 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
         />
       )}
 
+      {/* Já existe perícia agendada do mesmo tipo neste processo → é remarcação? */}
+      {periciaJaAgendada && (
+        <ModalPericiaJaAgendada
+          existentes={periciaJaAgendada.existentes}
+          salvando={salvando}
+          onVoltar={() => setPericiaJaAgendada(null)}
+          onNaoERemarcacao={async () => { const obs = periciaJaAgendada.obs_auditoria; setPericiaJaAgendada(null); await executarSalvar(obs, { confirmar_nova: true }); }}
+          onRemarcacao={async (idAntiga, motivo) => { const obs = periciaJaAgendada.obs_auditoria; setPericiaJaAgendada(null); await executarSalvar(obs, { remarcar_pericia_id: idAntiga, motivo_remarcacao: motivo }); }}
+        />
+      )}
+
       {/* Gerenciar tipos de perícia (cadastrar/editar/excluir) — abre por cima */}
       {modalTipos && (
         <ModalGerenciarTipos
@@ -1065,7 +1088,7 @@ function ModalCadastroPeritoRapido({ profissoes, onFechar, onSalvo }) {
             <div className="form-group">
               <label className="form-label">Telefone principal</label>
               <input className="form-control" value={form.telefone}
-                onChange={e => set('telefone', e.target.value)} placeholder="(11) 99999-9999" />
+                onChange={e => set('telefone', mascaraTelefone(e.target.value))} placeholder="(11) 99999-9999" />
             </div>
             <div className="form-group">
               <label className="form-label">E-mail principal</label>
@@ -1205,6 +1228,76 @@ function ModalGerenciarTipos({ onFechar, onAtualizar }) {
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onFechar}>Fechar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// MODAL: JÁ EXISTE PERÍCIA AGENDADA DO MESMO TIPO NO PROCESSO
+// Pergunta se a nova é uma remarcação. Sim → pede o motivo e a antiga vira "Remarcada"
+// junto com o salvamento da nova; Não → salva como perícia adicional.
+// ============================================================
+function ModalPericiaJaAgendada({ existentes, salvando, onVoltar, onNaoERemarcacao, onRemarcacao }) {
+  const [remarcando, setRemarcando] = useState(false);
+  const [idAntiga, setIdAntiga] = useState(existentes[0]?.id);
+  const [motivo, setMotivo] = useState('');
+
+  function confirmarRemarcacao() {
+    if (!motivo.trim()) return toast.error('Informe o motivo da remarcação');
+    onRemarcacao(idAntiga, motivo.trim());
+  }
+
+  const rotulo = e => `${formatarData(e.data)}${e.hora ? ` ${e.hora}` : ''}`;
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 1100 }}>
+      <div className="modal-box" style={{ maxWidth: '480px' }}>
+        <div className="modal-header">
+          <h3>Já existe perícia agendada</h3>
+          <button className="modal-fechar" onClick={onVoltar}>✕</button>
+        </div>
+        <div className="modal-body">
+          <p style={{ fontSize: '14px', marginBottom: '12px' }}>
+            {existentes.length === 1
+              ? <>Este processo já tem uma perícia deste tipo agendada para <strong>{rotulo(existentes[0])}</strong>.</>
+              : 'Este processo já tem perícias deste tipo agendadas:'}
+            {' '}Esta nova perícia é uma <strong>remarcação</strong>?
+          </p>
+          {existentes.length > 1 && (
+            <div className="form-group">
+              {existentes.map(e => (
+                <label key={e.id} style={{ display: 'block', fontSize: '14px', marginBottom: '4px' }}>
+                  <input type="radio" name="pericia-antiga" checked={idAntiga === e.id}
+                    onChange={() => setIdAntiga(e.id)} /> {rotulo(e)}
+                </label>
+              ))}
+            </div>
+          )}
+          {remarcando && (
+            <div className="form-group">
+              <label className="form-label">Motivo da remarcação *</label>
+              <textarea className="form-control" rows={3} value={motivo} autoFocus
+                onChange={e => setMotivo(e.target.value)} placeholder="Descreva o motivo..." />
+              <small style={{ color: '#6b7280' }}>
+                A perícia antiga ficará como <strong>Remarcada</strong> quando a nova for salva.
+              </small>
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onVoltar} disabled={salvando}>Voltar</button>
+          {!remarcando ? (
+            <>
+              <button className="btn btn-outline" onClick={onNaoERemarcacao} disabled={salvando}>Não, é outra perícia</button>
+              <button className="btn btn-primary" onClick={() => setRemarcando(true)} disabled={salvando}>Sim, é remarcação</button>
+            </>
+          ) : (
+            <button className="btn btn-primary" onClick={confirmarRemarcacao} disabled={salvando}>
+              {salvando ? 'Salvando...' : 'Confirmar remarcação'}
+            </button>
+          )}
         </div>
       </div>
     </div>

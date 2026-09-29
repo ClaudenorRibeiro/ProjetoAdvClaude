@@ -7,6 +7,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { processosAPI } from '../../services/api';
+import { mascaraTelefone } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import MenuAcoes from '../../components/MenuAcoes';
@@ -321,6 +322,7 @@ export default function Varas() {
                         className="form-control"
                         placeholder="(11) 0000-0000"
                         {...campo('tel')}
+                        onChange={e => setForm(f => ({ ...f, tel: mascaraTelefone(e.target.value) }))}
                       />
                     </div>
                     <div className="form-group">

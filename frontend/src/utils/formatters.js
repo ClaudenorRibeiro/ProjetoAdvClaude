@@ -175,6 +175,17 @@ export function formatarTelefone(tel) {
   return tel;
 }
 
+// Aplica máscara de telefone durante a digitação (fixo ou celular, com DDD):
+//   "1120538881" → "(11) 2053-8881" | "11950487461" → "(11) 95048-7461"
+export function mascaraTelefone(value) {
+  const limpo = String(value || '').replace(/\D/g, '').slice(0, 11);
+  if (!limpo) return '';
+  if (limpo.length <= 2)  return `(${limpo}`;
+  if (limpo.length <= 6)  return `(${limpo.slice(0,2)}) ${limpo.slice(2)}`;
+  if (limpo.length <= 10) return `(${limpo.slice(0,2)}) ${limpo.slice(2,6)}-${limpo.slice(6)}`;
+  return                         `(${limpo.slice(0,2)}) ${limpo.slice(2,7)}-${limpo.slice(7)}`;
+}
+
 // Aplica máscara durante digitação: "12345678000195" → "12.345.678/0001-95"
 export function mascaraCNPJ(value) {
   const limpo = value.replace(/\D/g, '').slice(0, 14);
