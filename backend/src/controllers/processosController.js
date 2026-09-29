@@ -1377,8 +1377,48 @@ async function excluirVara(req, res) {
 // PUT/DELETE auxiliares — Tipo, Status, Instância (só nome)
 async function atualizarTipo(req, res)       { return _atualizarAuxSimples(req, res, 'tbltipoproc'); }
 async function excluirTipo(req, res)         { return _excluirAuxSimples(req, res, 'tbltipoproc', 'tipo_id'); }
-async function atualizarStatusProc(req, res) { return _atualizarAuxSimples(req, res, 'tblstatusproc'); }
-async function excluirStatusProc(req, res)   { return _excluirAuxSimples(req, res, 'tblstatusproc', 'status_id'); }
+// Uso de um status: processos ATIVOS que o usam + etiquetas do escritório ligadas a ele.
+async function _usoDoStatus(id) {
+  const [[proc]] = await pool.execute('SELECT COUNT(*) AS total FROM tblproc WHERE status_id = ? AND ativo = 1', [id]);
+  const [[etq]]  = await pool.execute('SELECT COUNT(*) AS total FROM etiquetas_escritorio_catalogo WHERE status_id = ?', [id]);
+  return { processos: proc.total, etiquetas: etq.total };
+}
+
+function _mensagemUsoStatus(acao, uso) {
+  const partes = [];
+  if (uso.processos) partes.push(`${uso.processos} processo(s) ativo(s)`);
+  if (uso.etiquetas) partes.push(`${uso.etiquetas} etiqueta(s) do escritório`);
+  return `Não é possível ${acao} — este status está em uso por ${partes.join(' e ')}`;
+}
+
+// PUT /api/processos/auxiliares/status/:id — só renomeia status que NÃO está em uso
+// (renomear um status em uso mudaria o significado dos processos e regras que dependem do nome,
+// como "Arquivado"). Mesmo nome (sem mudança) é aceito.
+async function atualizarStatusProc(req, res) {
+  try {
+    const { id } = req.params;
+    const nome = String(req.body.nome || '').trim();
+    if (!nome) return erro(res, 'Nome é obrigatório');
+
+    const [atual] = await pool.execute('SELECT nome FROM tblstatusproc WHERE id = ? AND ativo = 1', [id]);
+    if (!atual.length) return naoEncontrado(res, 'Registro não encontrado');
+    if (atual[0].nome === nome) return sucesso(res, { id: parseInt(id), nome }, 'Atualizado com sucesso');
+
+    const uso = await _usoDoStatus(id);
+    if (uso.processos || uso.etiquetas) return erro(res, _mensagemUsoStatus('renomear', uso));
+
+    return _atualizarAuxSimples(req, res, 'tblstatusproc');
+  } catch (err) { return erroInterno(res, err); }
+}
+
+// DELETE /api/processos/auxiliares/status/:id — bloqueia se houver processo ativo OU etiqueta ligada
+async function excluirStatusProc(req, res) {
+  try {
+    const uso = await _usoDoStatus(req.params.id);
+    if (uso.processos || uso.etiquetas) return erro(res, _mensagemUsoStatus('excluir', uso));
+    return _excluirAuxSimples(req, res, 'tblstatusproc', 'status_id');
+  } catch (err) { return erroInterno(res, err); }
+}
 async function atualizarInstancia(req, res)  { return _atualizarAuxSimples(req, res, 'tblinstanciaproc'); }
 async function excluirInstancia(req, res)    { return _excluirAuxSimples(req, res, 'tblinstanciaproc', 'instancia_id'); }
 
@@ -1513,6 +1553,15 @@ const JOIN_ULTIMA_ACAO = `
     GROUP BY processo_id
   ) ult ON ult.processo_id = pr.id`;
 
+// Status que significa "processo concluído". Processo ativo com esse status NÃO entra nas
+// estatísticas de processos parados (cartão, quadro do Dashboard e relatório). A comparação
+// ignora maiúsculas e acentos (collation do banco). Processo sem status continua contando.
+// Regra em UM lugar só: quem monta a lista de "parados" concatena este fragmento (alias `pr`).
+const STATUS_ARQUIVADO = 'Arquivado';
+const FILTRO_NAO_ARQUIVADO = `
+  AND NOT EXISTS (SELECT 1 FROM tblstatusproc sp_arq
+                   WHERE sp_arq.id = pr.status_id AND sp_arq.nome = '${STATUS_ARQUIVADO}')`;
+
 // Contagem usada no cartão do Dashboard. Usa o limite configurado (padrão 365).
 // Blindado: se por acaso a coluna `dias_processo_parado` ainda não existir (SQL não
 // rodado), NÃO derruba o Dashboard — apenas devolve 0. O cartão volta ao normal
@@ -1524,6 +1573,7 @@ async function contarProcessosParados() {
          FROM tblproc pr
          ${JOIN_ULTIMA_ACAO}
         WHERE pr.ativo = 1
+          ${FILTRO_NAO_ARQUIVADO}
           AND DATEDIFF(CURDATE(), DATE(COALESCE(ult.ultima, pr.criado_em)))
               >= (SELECT COALESCE(dias_processo_parado, 365) FROM configuracoes_escritorio LIMIT 1)`
     );
@@ -1553,6 +1603,7 @@ async function listarProcessosParados(req, res) {
          JOIN tblpasta pa ON pr.pasta_id = pa.id
          ${JOIN_ULTIMA_ACAO}
         WHERE pr.ativo = 1
+          ${FILTRO_NAO_ARQUIVADO}
           AND DATEDIFF(CURDATE(), DATE(COALESCE(ult.ultima, pr.criado_em))) >= ?
         ORDER BY dias_parado DESC`,
       [dias]
@@ -1592,5 +1643,5 @@ module.exports = {
   contarProcessosParados, listarProcessosParados,
   // Fragmento SQL da "última ação" — o Dashboard reusa no quadro
   // "Processos sem movimentação" para não duplicar a regra.
-  JOIN_ULTIMA_ACAO,
+  JOIN_ULTIMA_ACAO, FILTRO_NAO_ARQUIVADO,
 };
