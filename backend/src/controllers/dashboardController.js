@@ -7,7 +7,7 @@ const { pool } = require('../config/database');
 const { sucesso, erroInterno } = require('../utils/response');
 const { hojeBrasilia } = require('../utils/helpers');
 const { buscarAniversariantes } = require('./pessoasController');
-const { contarProcessosParados, JOIN_ULTIMA_ACAO, FILTRO_NAO_ARQUIVADO } = require('./processosController');
+const { contarProcessosParados, JOIN_ULTIMA_ACAO, FILTRO_NAO_ENCERRADO } = require('./processosController');
 
 const PERIODOS_TAREFAS = Object.freeze({
   hoje: 0,
@@ -214,7 +214,7 @@ async function buscarDados(req, res) {
          JOIN tblpasta pa ON pr.pasta_id = pa.id
          ${JOIN_ULTIMA_ACAO}
          WHERE pr.ativo = 1
-           ${FILTRO_NAO_ARQUIVADO}
+           ${FILTRO_NAO_ENCERRADO}
            AND DATEDIFF(CURDATE(), DATE(COALESCE(ult.ultima, pr.criado_em)))
                >= (SELECT COALESCE(dias_processo_parado, 365) FROM configuracoes_escritorio LIMIT 1)
          ORDER BY dias_sem_movimentacao DESC

@@ -11593,13 +11593,13 @@ INSERT IGNORE INTO `tblinstanciaproc` (`id`, `nome`, `ativo`, `criado_por`, `cri
 	(7, 'TRF', 1, NULL, '2026-05-26 00:58:04', NULL, NULL);
 
 -- tblstatusproc: 6 registros (1 bloco(s))
-INSERT IGNORE INTO `tblstatusproc` (`id`, `nome`, `ativo`, `criado_por`, `criado_em`, `alterado_por`, `alterado_em`) VALUES
-	(2, 'Suspenso', 1, NULL, '2026-05-26 00:58:03', 24, '2026-07-02 15:32:14'),
-	(3, 'Arquivado', 1, NULL, '2026-05-26 00:58:03', 24, '2026-07-02 15:32:18'),
-	(5, 'Recursal', 1, NULL, '2026-05-26 00:58:03', 24, '2026-07-02 15:32:24'),
-	(6, 'Execução', 1, NULL, '2026-05-26 00:58:03', 24, NULL),
-	(7, 'Conhecimento', 1, 24, '2026-05-27 13:56:16', 24, NULL),
-	(8, 'Acordo', 1, NULL, '2026-07-02 15:31:55', 24, NULL);
+INSERT IGNORE INTO `tblstatusproc` (`id`, `nome`, `encerra_processo`, `ativo`, `criado_por`, `criado_em`, `alterado_por`, `alterado_em`) VALUES
+	(2, 'Suspenso', 0, 1, NULL, '2026-05-26 00:58:03', 24, '2026-07-02 15:32:14'),
+	(3, 'Arquivado', 1, 1, NULL, '2026-05-26 00:58:03', 24, '2026-07-02 15:32:18'),
+	(5, 'Recursal', 0, 1, NULL, '2026-05-26 00:58:03', 24, '2026-07-02 15:32:24'),
+	(6, 'Execução', 0, 1, NULL, '2026-05-26 00:58:03', 24, NULL),
+	(7, 'Conhecimento', 0, 1, 24, '2026-05-27 13:56:16', 24, NULL),
+	(8, 'Acordo', 0, 1, NULL, '2026-07-02 15:31:55', 24, NULL);
 
 -- tbltipoproc: 6 registros (1 bloco(s))
 INSERT IGNORE INTO `tbltipoproc` (`id`, `nome`, `codTipoProc`, `ativo`, `criado_por`, `criado_em`, `alterado_por`, `alterado_em`) VALUES

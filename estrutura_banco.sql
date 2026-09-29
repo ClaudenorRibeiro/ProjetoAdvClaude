@@ -2208,6 +2208,7 @@ DROP TABLE IF EXISTS `tblstatusproc`;
 CREATE TABLE `tblstatusproc` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(100) NOT NULL,
+  `encerra_processo` tinyint(1) NOT NULL DEFAULT '0' COMMENT '1 = processo com este status está encerrado (ex.: Arquivado) e fica fora das estatísticas de processos parados',
   `ativo` tinyint(1) DEFAULT '1',
   `criado_por` int DEFAULT NULL,
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
