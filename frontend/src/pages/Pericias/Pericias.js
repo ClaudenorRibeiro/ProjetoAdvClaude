@@ -61,6 +61,7 @@ export default function Pericias() {
   // Modais de ação
   const [cancelando, setCancelando] = useState(null);  // perícia a cancelar
   const [remarcando, setRemarcando] = useState(null);  // perícia a remarcar
+  const [marcandoRemarcada, setMarcandoRemarcada] = useState(null); // perícia a marcar só como remarcada
   const [historicoDe, setHistoricoDe] = useState(null); // perícia p/ ver histórico
   const [confirmar, setConfirmar]   = useState(null);   // { titulo, mensagem, acao, ... }
   // Seleção para geração em lote (IDs das perícias marcadas) + modal do lote
@@ -269,6 +270,7 @@ export default function Pericias() {
                             { label: 'Gerar documento', icone: '📄', oculto: !temPermissao('documentos','cadastrar'), gerarDoc: { ancoraTipo: 'pericia', ancoraId: p.id } },
                             { label: aguardandoData ? 'Informar data' : 'Editar', icone: '✏️', oculto: !(agendada || aguardandoData), onClick: () => abrirEdicao(p) },
                             { label: 'Remarcar', icone: '🔁', oculto: !agendada, onClick: () => setRemarcando(p) },
+                            { label: 'Marcar como remarcada', icone: '↪️', oculto: !agendada, onClick: () => setMarcandoRemarcada(p) },
                             { label: 'Cancelar', icone: '✖', oculto: !agendada, onClick: () => setCancelando(p) },
                             { label: p.comunicado_enviado ? 'Reenviar comunicado' : 'Comunicar cliente', icone: '✉', oculto: !agendada, onClick: () => enviarComunicado(p.id) },
                             { label: 'Histórico', icone: '📋', onClick: () => setHistoricoDe(p) },
@@ -307,6 +309,10 @@ export default function Pericias() {
       {remarcando && (
         <ModalRemarcar pericia={remarcando}
           onFechar={(reload) => { setRemarcando(null); if(reload) carregar(); }} />
+      )}
+      {marcandoRemarcada && (
+        <ModalMarcarRemarcada pericia={marcandoRemarcada}
+          onFechar={(reload) => { setMarcandoRemarcada(null); if(reload) carregar(); }} />
       )}
       {historicoDe && (
         <ModalHistorico pericia={historicoDe} onFechar={() => setHistoricoDe(null)} />
@@ -1440,6 +1446,54 @@ export function ModalRemarcar({ pericia, onFechar }) {
           onConfirmar={async () => { setSenhaDiaUtil(null); await executar(); }}
         />
       )}
+    </div>
+  );
+}
+
+// ============================================================
+// MODAL: MARCAR COMO REMARCADA (só troca o status, com motivo — não cria perícia nova)
+// Para quando a nova perícia já foi cadastrada à mão.
+// ============================================================
+export function ModalMarcarRemarcada({ pericia, onFechar }) {
+  const [motivo, setMotivo] = useState('');
+  const [salvando, setSalvando] = useState(false);
+
+  async function confirmar() {
+    if (!motivo.trim()) return toast.error('Informe o motivo da remarcação');
+    setSalvando(true);
+    try {
+      await periciasAPI.marcarRemarcada(pericia.id, motivo.trim());
+      toast.success('Perícia marcada como remarcada');
+      onFechar(true);
+    } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao marcar como remarcada'); }
+    finally { setSalvando(false); }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box" style={{maxWidth:'480px'}}>
+        <div className="modal-header">
+          <h3>Marcar como remarcada</h3>
+          <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
+        </div>
+        <div className="modal-body">
+          <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '12px' }}>
+            Esta perícia ficará como <strong>Remarcada</strong> e sairá da agenda. <strong>Nenhuma perícia nova
+            é criada</strong> — use quando a nova já foi cadastrada.
+          </p>
+          <div className="form-group">
+            <label className="form-label">Motivo da remarcação *</label>
+            <textarea className="form-control" rows={3} value={motivo} autoFocus
+              onChange={e => setMotivo(e.target.value)} placeholder="Descreva o motivo..." />
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={() => onFechar(false)}>Voltar</button>
+          <button className="btn btn-primary" onClick={confirmar} disabled={salvando}>
+            {salvando ? 'Salvando...' : 'Marcar como remarcada'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

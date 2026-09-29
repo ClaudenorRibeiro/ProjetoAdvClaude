@@ -1010,6 +1010,53 @@ async function remarcar(req, res) {
   }
 }
 
+// PUT /api/pericias/:id/marcar-remarcada — só troca o status da perícia agendada para "remarcada"
+// (sem criar perícia nova). Para o caso em que a nova perícia já foi cadastrada à mão.
+// Transação: status + auditoria juntos. Body: { motivo }.
+async function marcarRemarcada(req, res) {
+  try {
+    const { id } = req.params;
+    const motivo = String(req.body.motivo || '').trim();
+
+    const permitido = await temPermissaoBackend(req.usuario.id, req.usuario.nivel, 'pericias', 'alterar');
+    if (!permitido) return erro(res, 'Sem permissão para alterar perícias', 403);
+    if (!motivo) return erro(res, 'Motivo da remarcação é obrigatório');
+
+    const [antes] = await pool.execute('SELECT status FROM pericia WHERE id = ?', [id]);
+    if (!antes.length) return naoEncontrado(res, 'Perícia não encontrada');
+    if (antes[0].status !== 'agendada') {
+      return erro(res, `Perícia com status "${antes[0].status}" não pode ser marcada como remarcada`);
+    }
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute(
+        `UPDATE pericia SET status = 'remarcada', motivo_status = ?, alterado_por = ?, alterado_em = NOW()
+         WHERE id = ? AND status = 'agendada'`,
+        [motivo, req.usuario.id, id]
+      );
+      await conn.execute(
+        `INSERT INTO auditoria_pericia (pericia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
+         VALUES (?, 'status', 'agendada', 'remarcada', ?)`,
+        [id, req.usuario.id]
+      );
+      await conn.commit();
+    } catch (e) {
+      await conn.rollback();
+      throw e;
+    } finally {
+      conn.release();
+    }
+
+    // Remarcada → sai da agenda do Google do responsável (a nova perícia já está lá).
+    sincronizarPericiaGoogle(id, { cancelar: true, sequence: Math.floor(Date.now() / 1000) });
+    return sucesso(res, null, 'Perícia marcada como remarcada');
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
 // DELETE /api/pericias/:id — Exclui perícia (canceladas/remarcadas são histórico e não podem)
 async function excluir(req, res) {
   const conn = await pool.getConnection();
@@ -1182,6 +1229,6 @@ async function enviarComunicado(req, res) {
 module.exports = {
   listar, buscar, criar, atualizar, tipos,
   criarTipo, atualizarTipo, excluirTipo,
-  reusDoProcesso, peritosDoProcesso, buscarPeritosParaAta, relatorioPeritos, marcarRealizada, cancelar, remarcar, excluir,
+  reusDoProcesso, peritosDoProcesso, buscarPeritosParaAta, relatorioPeritos, marcarRealizada, cancelar, remarcar, marcarRemarcada, excluir,
   buscarHistorico, enviarComunicado,
 };
