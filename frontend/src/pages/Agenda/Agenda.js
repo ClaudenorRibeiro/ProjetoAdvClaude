@@ -13,6 +13,7 @@ import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { prazosAPI, audienciasAPI, tarefasAPI, periciasAPI, agendaAPI, configuracaoAPI } from '../../services/api';
 import { formatarData } from '../../utils/formatters';
 import { coresEfetivas, corTextoPara } from '../../utils/coresAgenda';
+import { apareceNaAgenda, esmaecidoNaAgenda } from '../../utils/statusAgenda';
 import { useAuth } from '../../context/AuthContext';
 import { ModalTarefa } from '../Tarefas/Tarefas';
 import useEscFechar from '../../hooks/useEscFechar';
@@ -164,7 +165,7 @@ export default function Agenda() {
       if (filtros.audiencias) {
         promises.push(
           audienciasAPI.listar({ data_de, data_ate, limite: 200, ...(usuarioId && { responsavel_id: usuarioId }) })
-            .then(r => r.data.ok ? r.data.dados.registros.map(a => ({
+            .then(r => r.data.ok ? r.data.dados.registros.filter(a => apareceNaAgenda('audiencia', a.status)).map(a => ({
               id: `audiencia-${a.id}`,
               title: `⚖️ ${a.tipo_nome || 'Audiência'} — ${a.processo_numero || ''}`,
               // a.hora vem como 'HH:MM:SS' do banco → normaliza p/ 'HH:MM' (senão a data fica inválida)
@@ -181,7 +182,7 @@ export default function Agenda() {
       if (filtros.pericias) {
         promises.push(
           periciasAPI.listar({ data_de, data_ate, limite: 200, ...(usuarioId && { assistente_id: usuarioId }) })
-            .then(r => r.data.ok ? r.data.dados.registros.map(p => ({
+            .then(r => r.data.ok ? r.data.dados.registros.filter(p => apareceNaAgenda('pericia', p.status)).map(p => ({
               id: `pericia-${p.id}`,
               title: `🔬 ${p.tipo_nome || 'Perícia'} — ${p.processo_numero || ''}`,
               // p.hora vem como 'HH:MM:SS' do banco → normaliza p/ 'HH:MM' (senão a data fica inválida)
@@ -295,8 +296,10 @@ export default function Agenda() {
 
   // Estilo customizado por tipo de evento
   function eventPropGetter(evento) {
-    // Compromisso concluído (com baixa): fica esmaecido e riscado.
-    const concluido = evento.tipo === 'compromisso' && evento.dados?.concluido;
+    // Compromisso concluído (com baixa), perícia realizada e audiência realizada/acordo:
+    // ficam esmaecidos e riscados.
+    const concluido = (evento.tipo === 'compromisso' && evento.dados?.concluido)
+      || esmaecidoNaAgenda(evento.tipo, evento.dados?.status);
     return {
       style: {
         backgroundColor: cores[evento.tipo] || '#6b7280',
