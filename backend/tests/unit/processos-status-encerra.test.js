@@ -211,16 +211,22 @@ test('criar status já aceita a marcação "encerra o processo"', async () => {
   assert.equal(ins.params[1], 0, 'sem marcação, o padrão é NÃO encerrar');
 });
 
-test('script SQL da coluna é seguro (aditivo, repetível, com verificação prévia) e o schema foi atualizado', () => {
+test('schema e dados iniciais foram atualizados com a coluna "encerra_processo"', () => {
   const raiz = path.join(__dirname, '../../..');
-  const sql = fs.readFileSync(path.join(raiz, 'scripts/2026-09-29_status_encerra_processo.sql'), 'utf8');
-  assert.match(sql, /information_schema\.COLUMNS/);
-  assert.match(sql, /ADD COLUMN encerra_processo TINYINT\(1\) NOT NULL DEFAULT 0/);
-  assert.match(sql, /nome = ''Arquivado''/, 'marca os "Arquivado" já existentes');
-  assert.doesNotMatch(sql, /DROP\s+(TABLE|COLUMN)|DELETE\s+FROM|TRUNCATE/i);
   const schema = fs.readFileSync(path.join(raiz, 'estrutura_banco.sql'), 'utf8');
   const tabela = schema.slice(schema.indexOf('CREATE TABLE `tblstatusproc`'));
   assert.match(tabela.slice(0, 700), /`encerra_processo` tinyint\(1\) NOT NULL DEFAULT '0'/);
   const seed = fs.readFileSync(path.join(raiz, 'scripts/dados_iniciais.sql'), 'utf8');
   assert.match(seed, /\(3, 'Arquivado', 1, /, 'instalação nova já nasce com Arquivado marcado');
 });
+
+// A pasta scripts/ não vai para o Git (decisão do usuário): o script só é conferido quando existe no PC.
+const arquivoScript = path.join(__dirname, '../../../scripts/2026-09-29_status_encerra_processo.sql');
+test('script SQL da coluna é seguro (aditivo, repetível, com verificação prévia)',
+  { skip: !fs.existsSync(arquivoScript) && 'script local não está nesta máquina' }, () => {
+    const sql = fs.readFileSync(arquivoScript, 'utf8');
+    assert.match(sql, /information_schema\.COLUMNS/);
+    assert.match(sql, /ADD COLUMN encerra_processo TINYINT\(1\) NOT NULL DEFAULT 0/);
+    assert.match(sql, /nome = ''Arquivado''/, 'marca os "Arquivado" já existentes');
+    assert.doesNotMatch(sql, /DROP\s+(TABLE|COLUMN)|DELETE\s+FROM|TRUNCATE/i);
+  });
