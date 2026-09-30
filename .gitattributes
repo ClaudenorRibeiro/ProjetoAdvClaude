@@ -1,0 +1,19 @@
+# Garante que o código-fonte sempre use quebra de linha padrão Linux (LF),
+# tanto no repositório quanto ao baixar em qualquer PC (casa, escritório) ou
+# instância AWS — evita que testes que conferem o texto exato do código
+# quebrem só por causa da diferença de quebra de linha do Windows.
+* text=auto
+
+*.js   text eol=lf
+*.jsx  text eol=lf
+*.json text eol=lf
+*.sql  text eol=lf
+*.md   text eol=lf
+*.css  text eol=lf
+*.html text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+
+# Scripts .bat continuam no padrão do Windows (CRLF), que é o esperado pelo
+# cmd.exe.
+*.bat  text eol=crlf

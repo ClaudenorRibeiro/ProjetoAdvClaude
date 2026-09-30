@@ -88,7 +88,7 @@ test('ciclo financeiro registra o bruto ao receber e as saídas somente nos repa
   assert.match(controller, /const ORIGEM_REPASSE_CLIENTE = 'rep_cliente'/);
   assert.match(controller, /const ORIGEM_REPASSE_PARCEIRO = 'rep_parceiro'/);
   assert.match(controller, /descRecebimento/);
-  assert.match(controller, /tipo, valor, origem, usuario_id, conta_financeira_id\)\n       VALUES \(\?, \?, \?, \?, 'saida'/);
+  assert.match(controller, /tipo, valor, origem, usuario_id, conta_financeira_id\)\r?\n\s+VALUES \(\?, \?, \?, \?, 'saida'/);
   assert.match(controller, /DELETE FROM conta_corrente WHERE parcela_id=\? AND origem=\?/);
   assert.match(financeiroFront, /Falta repassar ao cliente/);
   assert.match(financeiroFront, /Falta repassar ao parceiro/);
