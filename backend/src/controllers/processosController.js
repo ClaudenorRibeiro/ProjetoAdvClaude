@@ -1175,20 +1175,21 @@ async function criarTipo(req, res) {
 // POST /api/processos/auxiliares/status (admin)
 async function criarStatusProc(req, res) {
   try {
-    const { nome } = req.body;
+    const nome = String(req.body.nome || '').trim();
     if (!nome) return erro(res, 'Nome é obrigatório');
+    const encerra = _paraFlag(req.body.encerra_processo) ?? 0;
     const conn = await pool.getConnection();
     let r;
     try {
       await conn.beginTransaction();
       [r] = await conn.execute(
-        'INSERT INTO tblstatusproc (nome, criado_por) VALUES (?, ?)',
-        [nome.trim(), req.usuario.id]
+        'INSERT INTO tblstatusproc (nome, encerra_processo, criado_por) VALUES (?, ?, ?)',
+        [nome, encerra, req.usuario.id]
       );
       await conn.commit();
     } catch (err) { await conn.rollback(); throw err; }
     finally { conn.release(); }
-    return sucesso(res, { id: r.insertId, nome: nome.trim() }, 'Status criado com sucesso', 201);
+    return sucesso(res, { id: r.insertId, nome, encerra_processo: encerra }, 'Status criado com sucesso', 201);
   } catch (err) {
     return erroInterno(res, err);
   }
@@ -1377,8 +1378,78 @@ async function excluirVara(req, res) {
 // PUT/DELETE auxiliares — Tipo, Status, Instância (só nome)
 async function atualizarTipo(req, res)       { return _atualizarAuxSimples(req, res, 'tbltipoproc'); }
 async function excluirTipo(req, res)         { return _excluirAuxSimples(req, res, 'tbltipoproc', 'tipo_id'); }
-async function atualizarStatusProc(req, res) { return _atualizarAuxSimples(req, res, 'tblstatusproc'); }
-async function excluirStatusProc(req, res)   { return _excluirAuxSimples(req, res, 'tblstatusproc', 'status_id'); }
+// Uso de um status: processos ATIVOS que o usam + etiquetas do escritório ligadas a ele.
+async function _usoDoStatus(id) {
+  const [[proc]] = await pool.execute('SELECT COUNT(*) AS total FROM tblproc WHERE status_id = ? AND ativo = 1', [id]);
+  const [[etq]]  = await pool.execute('SELECT COUNT(*) AS total FROM etiquetas_escritorio_catalogo WHERE status_id = ?', [id]);
+  return { processos: proc.total, etiquetas: etq.total };
+}
+
+function _mensagemUsoStatus(acao, uso) {
+  const partes = [];
+  if (uso.processos) partes.push(`${uso.processos} processo(s) ativo(s)`);
+  if (uso.etiquetas) partes.push(`${uso.etiquetas} etiqueta(s) do escritório`);
+  return `Não é possível ${acao} — este status está em uso por ${partes.join(' e ')}`;
+}
+
+// true/1/'1'/'true' -> 1 ; false/0/'0'/'false' -> 0 ; ausente (undefined/null/'') -> null (não mexe).
+function _paraFlag(v) {
+  if (v === undefined || v === null || v === '') return null;
+  return (v === true || v === 1 || v === '1' || v === 'true') ? 1 : 0;
+}
+
+// PUT /api/processos/auxiliares/status/:id
+//  - NOME: só renomeia status que NÃO está em uso (processo ativo ou etiqueta do escritório).
+//  - "Encerra o processo": pode ser alterado a qualquer momento (é a configuração da regra de
+//    estatísticas do escritório). Sem nenhuma mudança real, nada é gravado.
+async function atualizarStatusProc(req, res) {
+  let conn;
+  try {
+    const { id } = req.params;
+    const nome = String(req.body.nome || '').trim();
+    if (!nome) return erro(res, 'Nome é obrigatório');
+    const encerraEnviado = _paraFlag(req.body.encerra_processo);
+
+    const [atual] = await pool.execute('SELECT nome, encerra_processo FROM tblstatusproc WHERE id = ? AND ativo = 1', [id]);
+    if (!atual.length) return naoEncontrado(res, 'Registro não encontrado');
+
+    const mudouNome = atual[0].nome !== nome;
+    const encerraFinal = encerraEnviado ?? (atual[0].encerra_processo ? 1 : 0);
+    const mudouFlag = encerraFinal !== (atual[0].encerra_processo ? 1 : 0);
+    if (!mudouNome && !mudouFlag) return sucesso(res, { id: parseInt(id), nome, encerra_processo: encerraFinal }, 'Atualizado com sucesso');
+
+    if (mudouNome) {
+      const uso = await _usoDoStatus(id);
+      if (uso.processos || uso.etiquetas) return erro(res, _mensagemUsoStatus('renomear', uso));
+    }
+
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+    await conn.execute(
+      'UPDATE tblstatusproc SET nome = ?, encerra_processo = ?, alterado_por = ?, alterado_em = NOW() WHERE id = ? AND ativo = 1',
+      [nome, encerraFinal, req.usuario.id, id]
+    );
+    await auditoria.registrar(
+      req.usuario.id, 'tblstatusproc', 'alterar', id,
+      { nome: atual[0].nome, encerra_processo: atual[0].encerra_processo ? 1 : 0 },
+      { nome, encerra_processo: encerraFinal }, conn
+    );
+    await conn.commit();
+    return sucesso(res, { id: parseInt(id), nome, encerra_processo: encerraFinal }, 'Atualizado com sucesso');
+  } catch (err) {
+    if (conn) await conn.rollback();
+    return erroInterno(res, err);
+  } finally { if (conn) conn.release(); }
+}
+
+// DELETE /api/processos/auxiliares/status/:id — bloqueia se houver processo ativo OU etiqueta ligada
+async function excluirStatusProc(req, res) {
+  try {
+    const uso = await _usoDoStatus(req.params.id);
+    if (uso.processos || uso.etiquetas) return erro(res, _mensagemUsoStatus('excluir', uso));
+    return _excluirAuxSimples(req, res, 'tblstatusproc', 'status_id');
+  } catch (err) { return erroInterno(res, err); }
+}
 async function atualizarInstancia(req, res)  { return _atualizarAuxSimples(req, res, 'tblinstanciaproc'); }
 async function excluirInstancia(req, res)    { return _excluirAuxSimples(req, res, 'tblinstanciaproc', 'instancia_id'); }
 
@@ -1513,6 +1584,15 @@ const JOIN_ULTIMA_ACAO = `
     GROUP BY processo_id
   ) ult ON ult.processo_id = pr.id`;
 
+// Processo ativo cujo STATUS está marcado como "encerra o processo" (tblstatusproc.encerra_processo = 1;
+// ex.: Arquivado) NÃO entra nas estatísticas de processos parados (cartão, quadro do Dashboard e
+// relatório). Cada escritório escolhe, no cadastro de status, quais status encerram o processo —
+// o nome não importa. Processo sem status continua contando.
+// Regra em UM lugar só: quem monta a lista de "parados" concatena este fragmento (alias `pr`).
+const FILTRO_NAO_ENCERRADO = `
+  AND NOT EXISTS (SELECT 1 FROM tblstatusproc sp_enc
+                   WHERE sp_enc.id = pr.status_id AND sp_enc.encerra_processo = 1)`;
+
 // Contagem usada no cartão do Dashboard. Usa o limite configurado (padrão 365).
 // Blindado: se por acaso a coluna `dias_processo_parado` ainda não existir (SQL não
 // rodado), NÃO derruba o Dashboard — apenas devolve 0. O cartão volta ao normal
@@ -1524,6 +1604,7 @@ async function contarProcessosParados() {
          FROM tblproc pr
          ${JOIN_ULTIMA_ACAO}
         WHERE pr.ativo = 1
+          ${FILTRO_NAO_ENCERRADO}
           AND DATEDIFF(CURDATE(), DATE(COALESCE(ult.ultima, pr.criado_em)))
               >= (SELECT COALESCE(dias_processo_parado, 365) FROM configuracoes_escritorio LIMIT 1)`
     );
@@ -1553,6 +1634,7 @@ async function listarProcessosParados(req, res) {
          JOIN tblpasta pa ON pr.pasta_id = pa.id
          ${JOIN_ULTIMA_ACAO}
         WHERE pr.ativo = 1
+          ${FILTRO_NAO_ENCERRADO}
           AND DATEDIFF(CURDATE(), DATE(COALESCE(ult.ultima, pr.criado_em))) >= ?
         ORDER BY dias_parado DESC`,
       [dias]
@@ -1592,5 +1674,5 @@ module.exports = {
   contarProcessosParados, listarProcessosParados,
   // Fragmento SQL da "última ação" — o Dashboard reusa no quadro
   // "Processos sem movimentação" para não duplicar a regra.
-  JOIN_ULTIMA_ACAO,
+  JOIN_ULTIMA_ACAO, FILTRO_NAO_ENCERRADO,
 };

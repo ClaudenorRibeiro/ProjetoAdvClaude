@@ -17,7 +17,7 @@ import { ModalNovoPrazo, ModalCancelarPrazo, ModalEditarPrazo } from '../Prazos/
 import { ModalTarefa, ModalHistoricoTarefa } from '../Tarefas/Tarefas';
 import { ModalNovaAudiencia, ModalEditarAudiencia, ModalCancelarAudiencia, ModalRemarcarAudiencia, ModalHistoricoAudiencia, ModalRegistrarAta } from '../Audiencias/Audiencias';
 // Modais de perícia reutilizados da tela de Perícias (aba Perícias da pasta)
-import { ModalPericia, ModalCancelar as ModalCancelarPericia, ModalRemarcar as ModalRemarcarPericia, ModalHistorico as ModalHistoricoPericia } from '../Pericias/Pericias';
+import { ModalPericia, ModalCancelar as ModalCancelarPericia, ModalRemarcar as ModalRemarcarPericia, ModalMarcarRemarcada as ModalMarcarRemarcadaPericia, ModalHistorico as ModalHistoricoPericia } from '../Pericias/Pericias';
 // Componentes financeiros reutilizados da tela Financeiro (aba Financeiro da pasta — por processo)
 import { ModalLancamento as ModalLancamentoFin, ModalAcordo as ModalAcordoFin, AcordoBloco, ModalHistoricoLancamento } from '../Financeiro/Financeiro';
 import { useAuth } from '../../context/AuthContext';
@@ -187,6 +187,7 @@ export default function PastaDetalhe() {
   const [periciaEditando, setPericiaEditando]   = useState(null); // perícia sendo editada
   const [periciaCancelando, setPericiaCancelando] = useState(null); // perícia sendo cancelada
   const [periciaRemarcando, setPericiaRemarcando] = useState(null); // perícia sendo remarcada
+  const [periciaMarcandoRemarcada, setPericiaMarcandoRemarcada] = useState(null); // perícia só marcada como remarcada
   const [periciaHistorico, setPericiaHistorico]   = useState(null); // perícia com histórico aberto
 
   // Modal de confirmação reutilizável (substitui window.confirm)
@@ -1255,6 +1256,12 @@ export default function PastaDetalhe() {
             onFechar={(reload) => { setPericiaRemarcando(null); if (reload) carregarPericias(); }}
           />
         )}
+        {periciaMarcandoRemarcada && (
+          <ModalMarcarRemarcadaPericia
+            pericia={periciaMarcandoRemarcada}
+            onFechar={(reload) => { setPericiaMarcandoRemarcada(null); if (reload) carregarPericias(); }}
+          />
+        )}
         {periciaHistorico && (
           <ModalHistoricoPericia
             pericia={periciaHistorico}
@@ -1500,6 +1507,7 @@ export default function PastaDetalhe() {
                               { label: 'Gerar documento', icone: '📄', oculto: !temPermissao('documentos','cadastrar'), gerarDoc: { ancoraTipo: 'pericia', ancoraId: p.id } },
                               { label: 'Editar', icone: '✏️', oculto: !(agendada && temPermissao('pericias','alterar')), onClick: () => editarPericia(p) },
                               { label: 'Remarcar', icone: '🔁', oculto: !(agendada && temPermissao('pericias','alterar')), onClick: () => setPericiaRemarcando(p) },
+                              { label: 'Marcar como remarcada', icone: '↪️', oculto: !(agendada && temPermissao('pericias','alterar')), onClick: () => setPericiaMarcandoRemarcada(p) },
                               { label: 'Cancelar', icone: '✖', oculto: !(agendada && temPermissao('pericias','alterar')), onClick: () => setPericiaCancelando(p) },
                               { label: p.comunicado_enviado ? 'Reenviar comunicado' : 'Comunicar cliente', icone: '✉', oculto: !(agendada && temPermissao('pericias','alterar')), onClick: () => comunicarPericia(p.id) },
                               { label: 'Histórico', icone: '📋', onClick: () => setPericiaHistorico(p) },

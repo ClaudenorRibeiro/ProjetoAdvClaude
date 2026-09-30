@@ -1994,7 +1994,11 @@ const AUX_CONFIG = {
   },
   status: {
     titulo:  'Status de Processo',
-    campos:  [{ key: 'nome', label: 'Nome', required: true }],
+    campos:  [
+      { key: 'nome', label: 'Nome', required: true },
+      { key: 'encerra_processo', label: 'Encerra o processo', tipo: 'checkbox', fullWidth: true,
+        hint: 'ex.: Arquivado — processos com este status ficam fora das estatísticas de processos parados' },
+    ],
     criar:   (d) => processosAPI.criarStatus(d),
     atualizar:(id, d) => processosAPI.atualizarStatus(id, d),
     excluir: (id) => processosAPI.excluirStatus(id),
@@ -2061,7 +2065,7 @@ export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtuali
   const podeExcluir   = temPermissao(moduloPermissao, 'excluir');
 
   // Form de criação / edição
-  const formVazio = cfg.campos.reduce((acc, c) => ({ ...acc, [c.key]: '' }), {});
+  const formVazio = cfg.campos.reduce((acc, c) => ({ ...acc, [c.key]: c.tipo === 'checkbox' ? false : '' }), {});
   const [editando, setEditando]   = useState(null);  // null = modo criação, objeto = modo edição
   const [form, setForm]           = useState(formVazio);
   const [forumId, setForumId]     = useState('');    // só usado para varas
@@ -2085,7 +2089,7 @@ export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtuali
 
   function iniciarEdicao(item) {
     setEditando(item);
-    const f = cfg.campos.reduce((acc, c) => ({ ...acc, [c.key]: item[c.key] || '' }), {});
+    const f = cfg.campos.reduce((acc, c) => ({ ...acc, [c.key]: c.tipo === 'checkbox' ? !!Number(item[c.key]) : (item[c.key] || '') }), {});
     setForm(f);
     if (tipo === 'varas') setForumId(String(item.forum_id || ''));
     setErro('');
@@ -2211,6 +2215,12 @@ export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtuali
                           {item.nome}
                         </span>
                       )}
+                      {/* Status que encerra o processo (fica fora das estatísticas de parados) */}
+                      {tipo === 'status' && !!Number(item.encerra_processo) && (
+                        <span style={{ color: '#6b7280', marginLeft: '6px', fontSize: '11px' }}>
+                          · encerra o processo
+                        </span>
+                      )}
                       {/* Cidade/UF para fóruns */}
                       {tipo === 'foruns' && item.cidade && (
                         <span style={{ color: '#888', marginLeft: '6px', fontSize: '11px' }}>
@@ -2264,6 +2274,14 @@ export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtuali
                     flex: c.fullWidth ? '0 0 100%' : (c.style ? 'none' : '1'),
                     minWidth: c.fullWidth ? '100%' : '100px',
                   }}>
+                    {c.tipo === 'checkbox' ? (
+                      <label className="form-label" style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={!!form[c.key]}
+                          onChange={e => setForm(f => ({ ...f, [c.key]: e.target.checked }))} />
+                        {c.label}
+                        {c.hint && <span style={{ color: '#aaa', fontWeight: '400', marginLeft: '4px' }}>({c.hint})</span>}
+                      </label>
+                    ) : (<>
                     <label className="form-label" style={{ fontSize: '11px' }}>
                       {c.label}{c.required ? ' *' : ''}
                       {c.hint && <span style={{ color: '#aaa', fontWeight: '400', marginLeft: '4px' }}>({c.hint})</span>}
@@ -2287,6 +2305,7 @@ export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtuali
                     {c.key === 'cep' && erroCep && !buscandoCep && (
                       <small style={{ color: '#d97706', fontSize: '11px' }}>{erroCep}</small>
                     )}
+                    </>)}
                   </div>
                 ))}
 

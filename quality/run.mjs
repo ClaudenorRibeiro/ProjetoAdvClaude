@@ -109,7 +109,7 @@ function imprimirResumo() {
 
 try {
   preflight();
-  comando('npm', ['test'], 'backend', 'Backend: unidade, contratos e 293 rotas sem token');
+  comando('npm', ['test'], 'backend', 'Backend: unidade, contratos e 294 rotas sem token');
   comando(process.execPath, ['quality/check-backend-load.js'], '.', 'Backend: todos os módulos carregam');
   comando('npm', ['test'], 'frontend', 'Frontend: regras e formatadores');
   comando('npm', ['run', 'build'], 'frontend', 'Build de produção do frontend');

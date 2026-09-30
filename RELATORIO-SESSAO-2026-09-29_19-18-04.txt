@@ -1,0 +1,277 @@
+=======================================================================
+ RELATÓRIO DA SESSÃO — 29/09/2026 (gerado às 19:18)
+ Sistema de Advocacia — sessão da IA na nuvem (branch: rascunho)
+=======================================================================
+
+AVISO (regra 0 e item 6 do CLAUDE.md): este arquivo é uma FOTOGRAFIA do que
+foi feito nesta sessão, na data acima. Ele EXPIRA quando o código mudar.
+Antes de citar qualquer item como fato numa sessão futura, reconferir no
+código atual. Nada aqui foi enviado para a MAIN: tudo está só no rascunho.
+
+-----------------------------------------------------------------------
+ 1) O QUE FOI PEDIDO E O QUE FOI FEITO
+-----------------------------------------------------------------------
+
+1.1 MÁSCARA DE TELEFONE  (commit c9dcef2)
+  Pedido: colocar máscara no telefone do "Cadastrar perito" (print 1).
+  Feito:
+   - Criada UMA função de máscara (utils/formatters.js) que gera
+     (11) 97072-8882 (celular) ou (11) 2053-8881 (fixo).
+   - Aplicada em 3 campos que estavam sem máscara:
+       * Perícias > Cadastrar perito > Telefone principal
+       * Configurações > dados do escritório > Telefone
+       * Controle > Varas > Contato da vara > Telefone
+   - Não mexi nas máscaras que já existiam (Pessoas e Audiências).
+   - O telefone mascarado cabe nas colunas do banco (20 e 50 caracteres) e
+     segue o mesmo formato já guardado por Pessoas. Sem alteração de banco.
+  Observação: os registros ANTIGOS de telefone não foram padronizados
+  (ver pendências).
+
+1.2 AVISO "JÁ EXISTE PERÍCIA AGENDADA DO MESMO TIPO"  (commit c9dcef2)
+  Pedido: o sistema deveria avisar que já existia perícia técnica agendada
+  e perguntar se era remarcação (print 2).
+  Regra escolhida pelo usuário: olhar só o MESMO PROCESSO e o MESMO TIPO.
+  Feito:
+   - Ao salvar perícia nova, se já houver uma AGENDADA do mesmo tipo no
+     mesmo processo, o sistema pergunta se é remarcação:
+       * "Sim, é remarcação": pede o motivo; a antiga vira "Remarcada" e a
+         nova é criada, na MESMA transação (tudo ou nada); reaproveita o
+         aviso ao cliente de remarcação e atualiza a agenda do Google.
+       * "Não, é outra perícia": salva como perícia adicional.
+       * Se houver mais de uma agendada, o usuário escolhe qual remarca.
+   - A checagem fica no SERVIDOR (não depende só da tela). O servidor recusa
+     remarcar perícia de outro processo, que não esteja agendada, sem motivo
+     ou sem permissão de alterar perícias.
+   - Vale só para cadastro novo (não para editar perícia existente).
+   - Sem alteração de banco.
+
+1.3 OPÇÃO "MARCAR COMO REMARCADA"  (commit f73d869)
+  Contexto: eu havia afirmado que "bastava mudar o status manualmente" —
+  ISSO ESTAVA ERRADO (eu não tinha conferido). Não existia essa opção.
+  Feito: nova opção no menu (⋮) da perícia (tela Perícias e aba Perícias da
+  pasta do processo), só para perícia Agendada e para quem pode alterar:
+   - pede o motivo (obrigatório), troca só o status para Remarcada, grava no
+     Histórico e NÃO cria perícia nova;
+   - a perícia sai da agenda do Google do responsável;
+   - NÃO envia aviso ao cliente (não há data nova).
+   - Nova rota no servidor: PUT /pericias/:id/marcar-remarcada
+     (exige login e permissão de alterar perícias).
+   - Sem alteração de banco.
+
+1.4 AGENDA — PERÍCIAS/AUDIÊNCIAS REMARCADAS  (commit 924a40f)
+  Pedido: a perícia era 19/10 e foi remarcada para 20/10, mas as duas datas
+  ficaram na Agenda (prints 5 e 6); verificar audiências, prazos e tarefas.
+  Causa: a Agenda pedia a lista sem filtrar status.
+  Verificação: AUDIÊNCIAS tinham o mesmo problema; PRAZOS e TAREFAS não
+  (prazos escondem concluídos/cancelados; tarefas só as não concluídas).
+  Feito (só no frontend da Agenda), opção A escolhida pelo usuário:
+   - Perícias e audiências REMARCADAS ou CANCELADAS saem do calendário.
+   - Perícia REALIZADA e audiência REALIZADA/ACORDO continuam, ESMAECIDAS E
+     RISCADAS (mesmo visual de compromisso concluído).
+   - Agendadas e adiadas continuam normais. Prazos/tarefas/compromissos não
+     mudaram. O histórico continua nas telas de Perícias/Audiências/pasta.
+   - Nova função em utils/statusAgenda.js.
+
+1.5 PROCESSOS ARQUIVADOS FORA DAS ESTATÍSTICAS DE "PARADOS"
+    (commits eb8366f e b48f064)
+  Pedido: o quadro "Processos sem movimentação" do Dashboard (print 11) só
+  deve considerar processos ativos; arquivados são concluídos e não entram.
+  Também vale para o cartão "Processos parados" e o relatório de parados.
+  Verificação: antes só se olhava "ativo = 1"; o status não era considerado,
+  então processos arquivados apareciam.
+  Evolução:
+   - Primeira versão (opção A): filtrar pelo NOME "Arquivado" + trava para
+     só renomear/excluir status que não estejam em uso (processo ativo OU
+     etiqueta do escritório ligada). Commit eb8366f.
+   - Pergunta do usuário: como fica para escritórios/instâncias novas que
+     usam outro nome? Resposta: a opção A dependia do nome. O usuário
+     autorizou a OPÇÃO B (commit b48f064):
+       * Nova coluna tblstatusproc.encerra_processo (0/1).
+       * Tela: botão "…" ao lado do campo Status do processo > janela
+         "Status de Processo" > caixa "Encerra o processo". A lista mostra
+         "· encerra o processo" nos status marcados.
+       * A regra passou a olhar a MARCA, não o nome: vale para qualquer
+         nome. Processo sem status continua contando.
+       * A regra ficou em UM lugar só (usada pelo cartão, pelo quadro do
+         Dashboard e pelo relatório), então os números nunca divergem.
+       * Trava de nome mantida (só renomeia status sem uso). A marcação pode
+         ser trocada a qualquer momento e a troca vai para a auditoria.
+       * Excluir status agora também é bloqueado se houver etiqueta ligada.
+       * Novas instalações (scripts/dados_iniciais.sql) já nascem com
+         "Arquivado" marcado. estrutura_banco.sql foi atualizado.
+   - Os processos NÃO são alterados: a marca fica na linha do status.
+
+1.6 TESTES ADICIONADOS/AJUSTADOS  (commits 3c25de7, 2ac01e7, 2a95779 e nos
+    commits acima)
+   - Servidor (banco SIMULADO, sem MySQL):
+       * tests/unit/pericias-remarcacao.test.js  (16 testes): aviso de perícia
+         já agendada, remarcação no cadastro, "Marcar como remarcada", rota
+         registrada com permissão.
+       * tests/unit/processos-status-encerra.test.js (20 testes): parados
+         ignoram status que encerra (independe do nome), trava de renomear e
+         excluir, marcação alterável, criar status, schema e dados iniciais.
+   - Frontend:
+       * pages/Agenda/Agenda.status.test.js (7 testes)
+       * pages/Processos/Processos.statusEncerra.test.js (3 testes)
+   - tests/routes-contract.test.js: total de rotas 293 -> 294 (a rota nova
+     marcar-remarcada). Foi ajuste legítimo (contagem conferida no Git:
+     293 antes, 294 depois; a rota exige login e permissão). Também
+     atualizados os textos "293" em quality/run.mjs e quality/README.md.
+   - Conferi que os testes novos FALHAM quando quebro o código de propósito
+     e voltam a passar quando restauro.
+
+-----------------------------------------------------------------------
+ 2) ARQUIVOS ALTERADOS (principais)
+-----------------------------------------------------------------------
+  backend/src/controllers/periciasController.js   (aviso, remarcação no cadastro,
+                                                   marcarRemarcada)
+  backend/src/controllers/processosController.js  (regra de encerrado, status)
+  backend/src/controllers/dashboardController.js  (quadro usa a mesma regra)
+  backend/src/routes/index.js                     (rota marcar-remarcada)
+  frontend/src/utils/formatters.js                (mascaraTelefone)
+  frontend/src/utils/statusAgenda.js              (novo)
+  frontend/src/services/api.js                    (marcarRemarcada)
+  frontend/src/pages/Pericias/Pericias.js
+  frontend/src/pages/Processos/PastaDetalhe.js
+  frontend/src/pages/Processos/Processos.js
+  frontend/src/pages/Agenda/Agenda.js
+  frontend/src/pages/Configuracoes/Configuracoes.js
+  frontend/src/pages/Controle/Varas.js
+  estrutura_banco.sql  e  scripts/dados_iniciais.sql
+  testes (ver item 1.6) e quality/run.mjs, quality/README.md
+
+-----------------------------------------------------------------------
+ 3) RESULTADO DOS TESTES (na nuvem, no fim da sessão)
+-----------------------------------------------------------------------
+  Frontend: 53 testes passam, build de produção compila.
+  Servidor (unidade e contratos): 73 passam, 2 falham — as 2 antigas, que
+  procuram arquivos SQL que NÃO existem no repositório (a pasta /scripts/
+  é ignorada pelo Git por decisão do usuário):
+     - scripts/S1 - 2026-09-17_freelancer_assistente_tecnico.sql
+     - scripts/S4 - 2026-09-18_destinos_financeiros_robustos.sql
+  No PC do usuário elas passam (os arquivos existem lá).
+  A bateria do PC (TESTAR-SISTEMA.bat) acusou 293 != 294 rotas; corrigido
+  no commit 2ac01e7. Reexecutar para confirmar 5 de 5 etapas.
+  LIMITES: a nuvem não tem MySQL, então NÃO rodei os testes de integração
+  (banco _test). Nenhuma tela foi testada no navegador por mim.
+
+-----------------------------------------------------------------------
+ 4) SQL PARA O BANCO (obrigatório antes de subir o código novo)
+-----------------------------------------------------------------------
+  Arquivo local desta sessão: scripts/2026-09-29_status_encerra_processo.sql
+  (NÃO vai ao Git). O usuário já rodou no banco LOCAL (o print do HeidiSQL
+  mostrou a conferência; o log indicou "Registros afetados: 1" e
+  "Avisos: 1" — o aviso não foi identificado). Falta rodar na AWS.
+
+  ORDEM CORRETA: rodar o SQL ANTES de subir o código. Sem a coluna, o
+  Dashboard e o cadastro de status dão erro. Com o código antigo na AWS o
+  SQL é inofensivo (só acrescenta coluna com padrão 0).
+
+  Conteúdo do script (seguro para rodar mais de uma vez):
+
+  -- 1) Verificação prévia (só leitura)
+  SELECT COUNT(*) AS coluna_ja_existe
+    FROM information_schema.COLUMNS
+   WHERE TABLE_SCHEMA = DATABASE()
+     AND TABLE_NAME   = 'tblstatusproc'
+     AND COLUMN_NAME  = 'encerra_processo';
+
+  -- 2) Cria a coluna (só se ainda não existir)
+  SET @tem := (SELECT COUNT(*) FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tblstatusproc' AND COLUMN_NAME = 'encerra_processo');
+  SET @sql_coluna := IF(@tem = 0,
+    'ALTER TABLE tblstatusproc ADD COLUMN encerra_processo TINYINT(1) NOT NULL DEFAULT 0 COMMENT ''1 = processo com este status está encerrado (ex.: Arquivado) e fica fora das estatísticas de processos parados'' AFTER nome',
+    'SELECT ''coluna encerra_processo ja existe - nada a fazer'' AS aviso');
+  PREPARE stmt FROM @sql_coluna;
+  EXECUTE stmt;
+  DEALLOCATE PREPARE stmt;
+
+  -- 3) Marca os status chamados "Arquivado" que já existem (só na 1ª vez)
+  SET @sql_marca := IF(@tem = 0,
+    'UPDATE tblstatusproc SET encerra_processo = 1 WHERE nome = ''Arquivado'' AND ativo = 1',
+    'SELECT ''marcacao inicial ja feita antes - nada a fazer'' AS aviso');
+  PREPARE stmt FROM @sql_marca;
+  EXECUTE stmt;
+  DEALLOCATE PREPARE stmt;
+
+  -- 4) Conferência (só leitura)
+  SELECT id, nome, encerra_processo, ativo FROM tblstatusproc ORDER BY nome;
+
+  Consulta de conferência dos status (só leitura), útil na AWS ANTES:
+  SELECT sp.id, sp.nome, COUNT(pr.id) AS processos_ativos
+    FROM tblstatusproc sp
+    LEFT JOIN tblproc pr ON pr.status_id = sp.id AND pr.ativo = 1
+   WHERE sp.ativo = 1
+   GROUP BY sp.id, sp.nome
+   ORDER BY sp.nome;
+
+  No LOCAL, essa consulta mostrou: "Arquivado" com 4.660 processos ativos e
+  "Conhecimento" com 1.569; os demais status com 0 ou 1. O script marca
+  SÓ o nome exato "Arquivado". Outros status que devam encerrar o processo
+  precisam ser marcados na tela (botão "…" do Status > Editar).
+
+-----------------------------------------------------------------------
+ 5) OUTRAS OCORRÊNCIAS DA SESSÃO
+-----------------------------------------------------------------------
+  - Item de e-mail (vários destinatários e e-mail que não chegou): o
+    usuário mandou deixar para depois. Nada foi feito. Observação: no print
+    havia "contato@ antonio.adv.br" com espaço, o que já gera erro de
+    e-mail inválido. Causa da não entrega: NÃO SEI (precisa do log_emails).
+  - Telefones antigos: expliquei que cada tela grava o que recebe; Pessoas e
+    advogado avulso gravam com máscara; Configurações e Varas gravavam livre.
+    Nenhuma padronização de registros antigos foi feita.
+  - Prompt de cadastro em lote de pessoas (pasta Downloads do PC): não
+    executado aqui (a nuvem não enxerga o PC). Conferi a estrutura citada
+    contra o estrutura_banco.sql: nomes batem; o banco tem colunas a mais
+    (responsavel_id, parentesco_id em pessoas_fisicas; em_recuperacao_judicial
+    em pessoas_juridicas) que aceitam vazio/têm padrão, então não quebram.
+    Provavelmente foi colado aqui por engano (era para a sessão local).
+  - Tela de login presa em "Preparando o sistema": o usuário reiniciou o
+    servidor e voltou. Causa NÃO confirmada; não encontrei erro no código.
+    Se repetir, copiar as últimas linhas de erro da janela do servidor.
+  - npm audit (bateria do PC): backend 4 avisos (1 alta, 3 médias), frontend
+    2 médias. Só informativo; nada foi alterado.
+  - Sobre testes com banco de teste: as novas são com banco simulado; NÃO
+    substituem os de integração. Discutimos usar o Claude local para rodar a
+    bateria completa (com MySQL); o usuário decidiu "esquecer a bateria
+    por enquanto".
+
+-----------------------------------------------------------------------
+ 6) PENDÊNCIAS
+-----------------------------------------------------------------------
+  A) Teste manual do usuário (depois de baixar o rascunho):
+     1. Máscara de telefone (perito, Configurações, Varas).
+     2. Aviso de remarcação ao cadastrar perícia já agendada.
+     3. Opção "Marcar como remarcada" (tela Perícias e pasta do processo).
+     4. Agenda: remarcadas somem; realizadas esmaecidas e riscadas.
+     5. Dashboard: carrega sem erro; arquivados fora de "Processos sem
+        movimentação"; cartão "Processos parados" bate com a lista.
+     6. Status: "Arquivado" com a caixa marcada; testar um status novo
+        marcado; renomear status em uso deve ser recusado.
+  B) Rodar o SQL da seção 4 na AWS (todas as instâncias) ANTES de subir o
+     código, depois do teste local do Dashboard.
+  C) Só enviar para a MAIN com o "PODE SUBIR" do usuário.
+  D) Reexecutar TESTAR-SISTEMA.bat no PC (esperado 5 de 5 etapas).
+  E) Adiadas pelo usuário: e-mail com vários destinatários / e-mail que não
+     chegou; padronizar telefones antigos (depende de consultas nas tabelas
+     telefones_pf, telefones_pj, configuracoes_escritorio e tblvara);
+     testes de integração de perícia com banco _test; os 2 testes antigos
+     que dependem de SQL fora do Git (S1 e S4).
+  F) Detalhe em aberto: hoje a pergunta da remarcação aparece ANTES do aviso
+     "informe o local" no cadastro de perícia; pode ser invertido se preferir.
+
+-----------------------------------------------------------------------
+ 7) COMMITS DA SESSÃO (branch rascunho)
+-----------------------------------------------------------------------
+  c9dcef2  Máscara de telefone e aviso de remarcação ao cadastrar perícia
+  f73d869  Opção "Marcar como remarcada" na perícia
+  924a40f  Agenda: esconde remarcadas/canceladas; realizadas esmaecidas
+  3c25de7  Testes do servidor: aviso, remarcação no cadastro e marcar remarcada
+  2ac01e7  Teste de contrato de rotas: 293 -> 294
+  eb8366f  Arquivados fora das estatísticas de parados; trava de status
+  b48f064  Status: marcador "Encerra o processo" (opção B)
+  2a95779  Teste do status não depende do script SQL local
+
+=======================================================================
+ FIM DO RELATÓRIO
+=======================================================================
