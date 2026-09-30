@@ -5,13 +5,14 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay, startOfMonth, endOfMonth, isSameDay } from 'date-fns';
 import ptBR from 'date-fns/locale/pt-BR';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
 import { prazosAPI, audienciasAPI, tarefasAPI, periciasAPI, agendaAPI, configuracaoAPI } from '../../services/api';
-import { formatarData } from '../../utils/formatters';
+import { formatarData, formatarNumeroPasta } from '../../utils/formatters';
 import { coresEfetivas, corTextoPara } from '../../utils/coresAgenda';
 import { apareceNaAgenda, esmaecidoNaAgenda } from '../../utils/statusAgenda';
 import { useAuth } from '../../context/AuthContext';
@@ -602,6 +603,7 @@ function EventoDetalhe({ evento }) {
     if (dados.local)           linhas.push(['Local', dados.local]);
     if (dados.link_virtual)    linhas.push(['Link', dados.link_virtual]);
   } else if (tipo === 'pericia') {
+    if (dados.pasta_id) linhas.push(['Pasta', <Link to={`/processos/pasta/${dados.pasta_id}`}>{formatarNumeroPasta(dados.pasta_numero)}</Link>]);
     if (dados.processo_numero) linhas.push(['Processo', dados.processo_numero]);
     if (dados.tipo_nome)       linhas.push(['Tipo', dados.tipo_nome]);
     linhas.push(['Data', `${formatarData(String(dados.data).slice(0, 10))}${dados.hora ? ' ' + dados.hora.slice(0, 5) : ''}`]);

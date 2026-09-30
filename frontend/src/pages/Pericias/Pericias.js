@@ -380,6 +380,8 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
   const [senhaDiaUtil, setSenhaDiaUtil] = useState(null);
   // Aviso "já existe perícia agendada deste tipo" → { existentes: [{id,data,hora}], obs_auditoria }
   const [periciaJaAgendada, setPericiaJaAgendada] = useState(null);
+  // Confirmação "salvar sem perito" (perito não é obrigatório, mas exige confirmação explícita)
+  const [confirmarSemPerito, setConfirmarSemPerito] = useState(false);
 
   useEffect(() => {
     processosAPI.auxiliares().then(r => {
@@ -562,7 +564,7 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
     );
   }
 
-  async function salvar() {
+  async function salvar(confirmadoSemPerito = false) {
     if (!form.processo_id) return toast.error('Número do processo é obrigatório');
     if (!form.data)        return toast.error('Data é obrigatória');
     if (locaisReus.length === 0 && !temEnderecoManual(form)) {
@@ -574,6 +576,12 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
       return;
     }
     setAvisoPericia('');
+
+    // Perito não é obrigatório, mas sem ele exige confirmação explícita do usuário.
+    if (!form.perito_id && !confirmadoSemPerito) {
+      setConfirmarSemPerito(true);
+      return;
+    }
 
     // Regra (15/06): agendar perícia com data retroativa, fim de semana, feriado ou fora do
     // horário de expediente (08:00–18:00) SÓ é permitido com confirmação por senha do usuário.
@@ -925,7 +933,7 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+          <button className="btn btn-primary" onClick={() => salvar()} disabled={salvando}>
             {salvando ? 'Salvando...' : 'Salvar'}
           </button>
         </div>
@@ -957,6 +965,18 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
           tipo={modalCadastroReu.tipo}
           pessoa={modalCadastroReu.pessoa}
           onFechar={fecharCadastroReuPendente}
+        />
+      )}
+
+      {/* Confirmação "salvar sem perito" */}
+      {confirmarSemPerito && (
+        <ModalConfirmar
+          titulo="Perícia sem perito"
+          mensagem="Esta perícia será cadastrada sem os dados do perito. Deseja continuar?"
+          textoBotao="Sim, continuar"
+          tipo="aviso"
+          acao={async () => { setConfirmarSemPerito(false); await salvar(true); }}
+          onCancelar={() => setConfirmarSemPerito(false)}
         />
       )}
 
