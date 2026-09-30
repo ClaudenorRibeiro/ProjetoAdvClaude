@@ -325,7 +325,7 @@ async function criar(req, res) {
 async function concluir(req, res) {
   const { id } = req.params;
   const [exists] = await pool.execute(
-    'SELECT id, titulo, criado_por, notificar_conclusao, atribuida_para FROM tarefas WHERE id = ?', [id]
+    'SELECT id, titulo, processo_id, criado_por, notificar_conclusao, atribuida_para FROM tarefas WHERE id = ?', [id]
   );
   if (!exists.length) return naoEncontrado(res, 'Tarefa não encontrada');
   const tarefa = exists[0];
@@ -349,6 +349,20 @@ async function concluir(req, res) {
       [id, req.usuario.id]
     );
     await auditoria.registrar(req.usuario.id, 'tarefas', 'concluir', id, null, null, conn);
+
+    // Tarefa vinculada a um processo: registra a conclusão como andamento do processo
+    // (mesma tabela/regras da aba "Andamentos" — fonte='manual', editável/excluível como
+    // qualquer lançamento manual). Guarda o id gerado em tarefas.andamento_id para,
+    // se a tarefa for reaberta depois, apagar essa linha automaticamente.
+    if (tarefa.processo_id) {
+      const [andResult] = await conn.execute(
+        `INSERT INTO andamento_processual (processo_id, data, descricao, fonte, criado_por)
+         VALUES (?, ?, ?, 'manual', ?)`,
+        [tarefa.processo_id, hojeBrasilia(), `Tarefa concluída: ${tarefa.titulo}`, req.usuario.id]
+      );
+      await conn.execute('UPDATE tarefas SET andamento_id = ? WHERE id = ?', [andResult.insertId, id]);
+      await auditoria.registrar(req.usuario.id, 'andamento_processual', 'criar', andResult.insertId, null, null, conn);
+    }
 
     // Aviso no sino ao criador (só se ele pediu ao criar e não foi ele mesmo quem concluiu)
     if (tarefa.notificar_conclusao && tarefa.criado_por !== req.usuario.id) {
@@ -378,7 +392,7 @@ async function reabrir(req, res) {
   const { id } = req.params;
 
   const [exists] = await pool.execute(
-    'SELECT id, atribuida_para FROM tarefas WHERE id = ?', [id]
+    'SELECT id, atribuida_para, andamento_id FROM tarefas WHERE id = ?', [id]
   );
   if (!exists.length) return naoEncontrado(res, 'Tarefa não encontrada');
   if (!(await podeAgirNaTarefa(req, exists[0].atribuida_para))) {
@@ -390,9 +404,14 @@ async function reabrir(req, res) {
     await conn.beginTransaction();
 
     await conn.execute(
-      'UPDATE tarefas SET concluida = 0, concluida_por = NULL, concluida_em = NULL WHERE id = ?',
+      'UPDATE tarefas SET concluida = 0, concluida_por = NULL, concluida_em = NULL, andamento_id = NULL WHERE id = ?',
       [id]
     );
+    // Desfaz o andamento lançado automaticamente quando a tarefa foi concluída.
+    if (exists[0].andamento_id) {
+      await conn.execute('DELETE FROM andamento_processual WHERE id = ?', [exists[0].andamento_id]);
+      await auditoria.registrar(req.usuario.id, 'andamento_processual', 'excluir', exists[0].andamento_id, null, null, conn);
+    }
     await auditoria.registrar(req.usuario.id, 'tarefas', 'reabrir', id, null, null, conn);
 
     await conn.commit();
