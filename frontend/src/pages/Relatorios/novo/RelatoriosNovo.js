@@ -1,6 +1,6 @@
 // ============================================================
 // RELATÓRIOS (tela nova) — a "casca": carrega o catálogo e os relatórios do usuário
-// e alterna entre as telas (lista, construtor, resultado, limites). A lógica de cada tela
+// e alterna entre as telas (lista, construtor, resultado). O limite de relatórios fica em Configurações → Permissões. A lógica de cada tela
 // mora no seu próprio arquivo — este fica pequeno de propósito.
 // Em construção: por enquanto só o administrador enxerga (rota /meus-relatorios).
 // ============================================================
@@ -12,15 +12,14 @@ import ModalConfirmar from '../../../components/ui/ModalConfirmar';
 import ListaRelatorios from './ListaRelatorios';
 import Construtor, { mensagemDeErro } from './Construtor';
 import Resultado from './Resultado';
-import LimitesRelatorios from './LimitesRelatorios';
 
 export default function RelatoriosNovo() {
-  const { temPermissao, ehAdmin } = useAuth();
+  const { temPermissao } = useAuth();
   const podeCriar = temPermissao('relatorios.criar', 'cadastrar');
   const [catalogo, setCatalogo] = useState(null);
   const [lista, setLista] = useState({ modelos: [], limite: 0, criados: 0 });
   const [carregando, setCarregando] = useState(true);
-  // tela: { nome: 'lista' } | { nome: 'construtor', modelo, receita } | { nome: 'resultado', modelo, receita } | { nome: 'limites' }
+  // tela: { nome: 'lista' } | { nome: 'construtor', modelo, receita } | { nome: 'resultado', modelo, receita }
   const [tela, setTela] = useState({ nome: 'lista' });
   const [confirmar, setConfirmar] = useState(null);
 
@@ -60,11 +59,11 @@ export default function RelatoriosNovo() {
     <div>
       {tela.nome === 'lista' && (
         <ListaRelatorios modelos={lista.modelos} assuntos={catalogo.assuntos} limite={lista.limite} criados={lista.criados}
-          podeCriar={podeCriar} ehAdmin={ehAdmin}
+          podeCriar={podeCriar}
           onNovo={() => setTela({ nome: 'construtor', modelo: null, receita: null })}
           onAbrir={m => setTela({ nome: 'resultado', modelo: m, receita: m.receita })}
           onEditar={m => setTela({ nome: 'construtor', modelo: m, receita: m.receita })}
-          onDuplicar={duplicar} onExcluir={pedirExclusao} onLimites={() => setTela({ nome: 'limites' })} />
+          onDuplicar={duplicar} onExcluir={pedirExclusao} />
       )}
       {tela.nome === 'construtor' && (
         <Construtor catalogo={catalogo} modelo={tela.modelo} receitaInicial={tela.receita} podeSalvar={podeCriar}
@@ -75,7 +74,6 @@ export default function RelatoriosNovo() {
         <Resultado receita={tela.receita} modelo={tela.modelo} onVoltar={irParaLista}
           onEditar={(receita) => setTela({ nome: 'construtor', modelo: tela.modelo || tela.origem || null, receita })} />
       )}
-      {tela.nome === 'limites' && <LimitesRelatorios onVoltar={irParaLista} />}
 
       {confirmar && <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(null)} />}
     </div>

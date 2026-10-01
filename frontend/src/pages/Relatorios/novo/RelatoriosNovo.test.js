@@ -6,13 +6,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const api = vi.hoisted(() => ({
   catalogo: vi.fn(), listarModelos: vi.fn(), criarModelo: vi.fn(), atualizarModelo: vi.fn(), excluirModelo: vi.fn(),
-  duplicarModelo: vi.fn(), salvarPreferencias: vi.fn(), executar: vi.fn(), exportar: vi.fn(), obterLimites: vi.fn(), salvarLimites: vi.fn(),
+  duplicarModelo: vi.fn(), salvarPreferencias: vi.fn(), executar: vi.fn(), exportar: vi.fn(),
 }));
 vi.mock('../../../services/api', () => ({ relatoriosAPI: api }));
 vi.mock('react-toastify', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-const auth = vi.hoisted(() => ({ podeCriar: true, ehAdmin: true }));
+const auth = vi.hoisted(() => ({ podeCriar: true }));
 vi.mock('../../../context/AuthContext', () => ({
-  useAuth: () => ({ ehAdmin: auth.ehAdmin, temPermissao: (m) => (m === 'relatorios.criar' ? auth.podeCriar : true) }),
+  useAuth: () => ({ temPermissao: (m) => (m === 'relatorios.criar' ? auth.podeCriar : true) }),
 }));
 
 import RelatoriosNovo from './RelatoriosNovo';
@@ -47,7 +47,7 @@ function abrir() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  auth.podeCriar = true; auth.ehAdmin = true;
+  auth.podeCriar = true;
   api.catalogo.mockResolvedValue({ data: { dados: CATALOGO } });
   api.listarModelos.mockResolvedValue({ data: { dados: { modelos: [MODELO], limite: 10, criados: 1 } } });
   api.executar.mockResolvedValue({ data: { dados: RESULTADO } });
@@ -159,19 +159,5 @@ describe('Relatórios (tela nova)', () => {
     api.executar.mockRejectedValueOnce({ response: { data: { mensagem: 'Você não tem permissão para relatórios de Prazos.' } } });
     await user.click(screen.getByRole('button', { name: 'Próxima ›' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Você não tem permissão para relatórios de Prazos.');
-  });
-
-  it('administrador ajusta o limite padrão e o limite individual', async () => {
-    const user = userEvent.setup();
-    const limites = { padrao: 10, maximoPermitido: 500, usuarios: [{ id: 4, nome: 'Chefe', login: 'chefe', max_relatorios: null, criados: 2 }] };
-    api.obterLimites.mockResolvedValue({ data: { dados: limites } });
-    api.salvarLimites.mockResolvedValue({ data: { dados: { ...limites, padrao: 12, usuarios: [{ ...limites.usuarios[0], max_relatorios: 30 }] } } });
-    abrir();
-    await user.click(await screen.findByRole('button', { name: 'Limites por usuário' }));
-    const padrao = await screen.findByRole('spinbutton', { name: /Limite padrão/ });
-    await user.clear(padrao); await user.type(padrao, '12');
-    await user.type(screen.getByRole('spinbutton', { name: 'Limite de Chefe' }), '30');
-    await user.click(screen.getByRole('button', { name: 'Salvar limites' }));
-    await waitFor(() => expect(api.salvarLimites).toHaveBeenCalledWith({ padrao: 12, usuarios: { 4: 30 } }));
   });
 });

@@ -5,7 +5,7 @@ import React from 'react';
 import MenuAcoes from '../../../components/MenuAcoes';
 import { formatarDataHora } from '../../../utils/formatters';
 
-export default function ListaRelatorios({ modelos, assuntos, limite, criados, podeCriar, ehAdmin, onNovo, onAbrir, onEditar, onDuplicar, onExcluir, onLimites }) {
+export default function ListaRelatorios({ modelos, assuntos, limite, criados, podeCriar, onNovo, onAbrir, onEditar, onDuplicar, onExcluir }) {
   const cheio = criados >= limite;
   const rotuloAssunto = (chave) => assuntos.find(a => a.chave === chave)?.rotulo || chave;
 
@@ -14,7 +14,6 @@ export default function ListaRelatorios({ modelos, assuntos, limite, criados, po
       <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '12px' }}>
         <span style={{ color: '#374151' }}>Você usa <strong>{criados}</strong> de <strong>{limite}</strong> relatórios permitidos.</span>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
-          {ehAdmin && <button className="btn btn-secondary" onClick={onLimites}>Limites por usuário</button>}
           {podeCriar && <button className="btn btn-primary" disabled={cheio} title={cheio ? 'Limite atingido: exclua um relatório ou peça ao administrador' : ''} onClick={onNovo}>+ Novo relatório</button>}
         </span>
       </div>

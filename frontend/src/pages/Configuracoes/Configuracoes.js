@@ -11,6 +11,7 @@ import { formatarData, formatarDataHora, hojeLocal, toTitleCase, mascaraTelefone
 import { UFS } from '../../utils/ufs';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
+import LimitesRelatorios from './LimitesRelatorios';
 import MenuAcoes from '../../components/MenuAcoes';
 import { useAuth } from '../../context/AuthContext';
 
@@ -1130,13 +1131,16 @@ function TabPermissoes() {
 
   return (
     <div className="card">
-      <div className="form-group" style={{maxWidth:'320px',marginBottom:'20px'}}>
-        <label className="form-label">Selecionar usuário</label>
-        <select className="form-control" value={usuarioId}
-          onChange={e => setUsuarioId(e.target.value)}>
-          <option value="">— Selecione —</option>
-          {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome} ({u.login})</option>)}
-        </select>
+      <div style={{display:'flex',gap:'24px',alignItems:'flex-end',flexWrap:'wrap',marginBottom:'20px'}}>
+        <div className="form-group" style={{maxWidth:'320px',margin:0,flex:'0 1 320px'}}>
+          <label className="form-label">Selecionar usuário</label>
+          <select className="form-control" value={usuarioId}
+            onChange={e => setUsuarioId(e.target.value)}>
+            <option value="">— Selecione —</option>
+            {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome} ({u.login})</option>)}
+          </select>
+        </div>
+        <LimitesRelatorios usuarioId={usuarioId} />
       </div>
 
       {usuarioId && (
