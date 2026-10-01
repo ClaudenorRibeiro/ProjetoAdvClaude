@@ -6,6 +6,31 @@
 // ============================================================
 import React, { useEffect, useRef, useState } from 'react';
 
+// Copia um texto para a área de transferência (usa a API moderna e, se ela não
+// existir/for bloqueada, o método compatível). Devolve true/false — nunca lança.
+// Compartilhada pelo número copiável abaixo e pelo botão só-ícone (BotaoCopiarNumero).
+export async function copiarTexto(texto) {
+  try {
+    let copiou = false;
+    if (navigator.clipboard?.writeText && window.isSecureContext) {
+      try { await navigator.clipboard.writeText(texto); copiou = true; } catch { /* tenta o método compatível abaixo */ }
+    }
+    if (!copiou) {
+      const campo = document.createElement('textarea');
+      campo.value = texto;
+      campo.setAttribute('readonly', '');
+      campo.style.cssText = 'position:fixed;opacity:0;pointer-events:none;';
+      document.body.appendChild(campo);
+      campo.select();
+      copiou = document.execCommand('copy');
+      document.body.removeChild(campo);
+    }
+    return Boolean(copiou);
+  } catch {
+    return false;
+  }
+}
+
 export default function NumeroProcessoCopiavel({ numero, onAbrir, href }) {
   const [copiado, setCopiado] = useState(false);
   const [falhou, setFalhou]   = useState(false);
@@ -17,25 +42,10 @@ export default function NumeroProcessoCopiavel({ numero, onAbrir, href }) {
   if (!numero) return <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>—</span>;
 
   async function copiar() {
-    try {
-      let copiou = false;
-      if (navigator.clipboard?.writeText && window.isSecureContext) {
-        try { await navigator.clipboard.writeText(numero); copiou = true; } catch { /* tenta o método compatível abaixo */ }
-      }
-      if (!copiou) {
-        const campo = document.createElement('textarea');
-        campo.value = numero;
-        campo.setAttribute('readonly', '');
-        campo.style.cssText = 'position:fixed;opacity:0;pointer-events:none;';
-        document.body.appendChild(campo);
-        campo.select();
-        copiou = document.execCommand('copy');
-        document.body.removeChild(campo);
-      }
-      if (!copiou) throw new Error('Não foi possível copiar');
+    if (await copiarTexto(numero)) {
       clearTimeout(timerRef.current); setFalhou(false); setCopiado(true);
       timerRef.current = setTimeout(() => setCopiado(false), 1500);
-    } catch {
+    } else {
       clearTimeout(timerRef.current); setCopiado(false); setFalhou(true);
       timerRef.current = setTimeout(() => setFalhou(false), 2200);
     }
@@ -90,6 +100,37 @@ export default function NumeroProcessoCopiavel({ numero, onAbrir, href }) {
           {falhou ? 'Não foi possível copiar' : copiado ? 'Copiado!' : abreProcesso ? 'Use o ícone para copiar' : 'Copiar'}
         </span>
       )}
+    </span>
+  );
+}
+
+// Botão SÓ com o ícone ⧉, para listas onde o número já aparece dentro de um texto
+// maior (ex.: "Una — 1001412-69.2026.5.02.0040"). Copia o número e, por ~1,5s, troca
+// o ícone por ✓ (sem balão, para não ser cortado por áreas com rolagem). Usa <span
+// role="button"> porque pode ficar dentro de outro botão; não dispara o clique do pai.
+export function BotaoCopiarNumero({ numero }) {
+  const [estado, setEstado] = useState(null); // null | 'ok' | 'erro'
+  const timerRef = useRef(null);
+  useEffect(() => () => clearTimeout(timerRef.current), []);
+  if (!numero) return null;
+
+  async function copiar(event) {
+    event.stopPropagation();
+    event.preventDefault();
+    const ok = await copiarTexto(numero);
+    clearTimeout(timerRef.current);
+    setEstado(ok ? 'ok' : 'erro');
+    timerRef.current = setTimeout(() => setEstado(null), ok ? 1500 : 2200);
+  }
+
+  const rotulo = estado === 'ok' ? 'Copiado!' : estado === 'erro' ? 'Não foi possível copiar' : 'Copiar número do processo';
+  return (
+    <span role="button" tabIndex={0} onClick={copiar}
+      onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') copiar(event); }}
+      aria-label={`Copiar número ${numero}`} title={rotulo}
+      style={{ marginLeft: '6px', cursor: 'pointer', fontSize: '13px', lineHeight: 1, flexShrink: 0,
+               color: 'inherit', fontWeight: estado ? 700 : 400 }}>
+      {estado === 'ok' ? '✓' : estado === 'erro' ? '✗' : '⧉'}
     </span>
   );
 }

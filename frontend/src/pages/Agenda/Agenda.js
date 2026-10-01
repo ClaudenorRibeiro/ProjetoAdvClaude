@@ -5,7 +5,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay, startOfMonth, endOfMonth, isSameDay } from 'date-fns';
 import ptBR from 'date-fns/locale/pt-BR';
@@ -18,6 +18,7 @@ import { apareceNaAgenda, esmaecidoNaAgenda } from '../../utils/statusAgenda';
 import { useAuth } from '../../context/AuthContext';
 import { ModalTarefa } from '../Tarefas/Tarefas';
 import useEscFechar from '../../hooks/useEscFechar';
+import NumeroProcessoCopiavel, { BotaoCopiarNumero } from '../../components/NumeroProcessoCopiavel';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import ModalLerPublicacao from '../../components/ModalLerPublicacao';
@@ -412,7 +413,7 @@ export default function Agenda() {
       {diaLista && (
         <div className="modal-overlay" ref={diaListaRef}
           onMouseDown={e => { if (e.target === e.currentTarget) setDiaLista(null); }}>
-          <div className="modal-box" style={{ maxWidth: '540px' }}>
+          <div className="modal-box" style={{ maxWidth: '640px' }}>
             <div className="modal-header">
               <h3>Itens de {format(diaLista, 'dd/MM/yyyy')}</h3>
               <button className="modal-fechar" onClick={() => setDiaLista(null)}>✕</button>
@@ -434,7 +435,11 @@ export default function Agenda() {
                           opacity: st.opacity, textDecoration: st.textDecoration,
                           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px',
                         }}>
-                        <span style={{ textAlign: 'left', whiteSpace: 'normal', wordBreak: 'break-word' }}>{ev.title}</span>
+                        <span style={{ textAlign: 'left', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                          {ev.title}
+                          {/* Só audiência e perícia trazem o número do processo no título */}
+                          {(ev.tipo === 'audiencia' || ev.tipo === 'pericia') && <BotaoCopiarNumero numero={ev.dados?.processo_numero} />}
+                        </span>
                         {resp && (
                           <span style={{ flexShrink: 0, fontStyle: 'italic', opacity: 0.9, fontSize: '13px', whiteSpace: 'nowrap' }}>
                             {resp}
@@ -452,7 +457,7 @@ export default function Agenda() {
 
       {eventoSelecionado && (
         <div className="modal-overlay" ref={detalheEventoRef}>
-          <div className="modal-box modal-pequeno">
+          <div className="modal-box modal-pequeno" style={{ maxWidth: '520px' }}>
             <div className="modal-header">
               <h3 style={{textTransform:'capitalize'}}>{eventoSelecionado.tipo}</h3>
               <button className="modal-fechar" onClick={() => setEventoSelecionado(null)}>✕</button>
@@ -584,11 +589,18 @@ export default function Agenda() {
 // Detalhes do evento selecionado no calendário
 function EventoDetalhe({ evento }) {
   const { tipo, dados } = evento;
+  const navigate = useNavigate();
   const linhas = [];
+  // Número do processo com o ⧉ de copiar (mesmo componente das demais telas). O número abre a pasta.
+  const numeroProcesso = (numero, pastaId) => (
+    <NumeroProcessoCopiavel numero={numero}
+      href={pastaId ? `/processos/pasta/${pastaId}` : undefined}
+      onAbrir={pastaId ? () => navigate(`/processos/pasta/${pastaId}`) : undefined} />
+  );
 
   if (tipo === 'prazo') {
     if (dados.pasta_id) linhas.push(['Pasta', <Link to={`/processos/pasta/${dados.pasta_id}`}>{dados.pasta_numero_fmt}</Link>]);
-    if (dados.processo_numero) linhas.push(['Processo', dados.processo_numero]);
+    if (dados.processo_numero) linhas.push(['Processo', numeroProcesso(dados.processo_numero, dados.pasta_id)]);
     if (dados.pasta_titulo)    linhas.push(['Título do processo', dados.pasta_titulo]);
     if (dados.subtipo_nome)    linhas.push(['Tipo', dados.subtipo_nome]);
     if (dados.descricao)       linhas.push(['Descrição', dados.descricao]);
@@ -597,7 +609,7 @@ function EventoDetalhe({ evento }) {
     if (dados.responsavel_nome) linhas.push(['Responsável', dados.responsavel_nome]);
   } else if (tipo === 'audiencia') {
     if (dados.pasta_id) linhas.push(['Pasta', <Link to={`/processos/pasta/${dados.pasta_id}`}>{dados.pasta_numero_fmt}</Link>]);
-    if (dados.processo_numero) linhas.push(['Processo', dados.processo_numero]);
+    if (dados.processo_numero) linhas.push(['Processo', numeroProcesso(dados.processo_numero, dados.pasta_id)]);
     if (dados.pasta_titulo)    linhas.push(['Título do processo', dados.pasta_titulo]);
     if (dados.tipo_nome)       linhas.push(['Tipo', dados.tipo_nome]);
     linhas.push(['Data', `${formatarData(String(dados.data).slice(0, 10))}${dados.hora ? ' ' + dados.hora.slice(0, 5) : ''}`]);
@@ -606,7 +618,7 @@ function EventoDetalhe({ evento }) {
     if (dados.link_virtual)    linhas.push(['Link', dados.link_virtual]);
   } else if (tipo === 'pericia') {
     if (dados.pasta_id) linhas.push(['Pasta', <Link to={`/processos/pasta/${dados.pasta_id}`}>{formatarNumeroPasta(dados.pasta_numero)}</Link>]);
-    if (dados.processo_numero) linhas.push(['Processo', dados.processo_numero]);
+    if (dados.processo_numero) linhas.push(['Processo', numeroProcesso(dados.processo_numero, dados.pasta_id)]);
     if (dados.tipo_nome)       linhas.push(['Tipo', dados.tipo_nome]);
     linhas.push(['Data', `${formatarData(String(dados.data).slice(0, 10))}${dados.hora ? ' ' + dados.hora.slice(0, 5) : ''}`]);
     if (dados.local)           linhas.push(['Local', dados.local]);
@@ -618,7 +630,7 @@ function EventoDetalhe({ evento }) {
     const tarefaPastaId  = dados.pasta_do_processo_id || dados.pasta_id;
     const tarefaPastaFmt = dados.pasta_do_processo_fmt || dados.pasta_numero_fmt;
     if (tarefaPastaId && tarefaPastaFmt) linhas.push(['Pasta', <Link to={`/processos/pasta/${tarefaPastaId}`}>{tarefaPastaFmt}</Link>]);
-    if (dados.processo_numero)       linhas.push(['Processo', dados.processo_numero]);
+    if (dados.processo_numero)       linhas.push(['Processo', numeroProcesso(dados.processo_numero, tarefaPastaId)]);
     if (dados.descricao)       linhas.push(['Descrição', dados.descricao]);
     linhas.push(['Prioridade', dados.prioridade]);
     if (dados.data_vencimento) linhas.push(['Vencimento', formatarData(dados.data_vencimento)]);
