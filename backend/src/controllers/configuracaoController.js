@@ -917,15 +917,48 @@ async function historicoUsuario(req, res) {
     const [usuario] = await pool.execute('SELECT nome FROM usuarios WHERE id = ?', [id]);
     if (!usuario.length) return naoEncontrado(res, 'Usuário não encontrado');
 
-    let sql = `
-      SELECT id, tabela, acao, registro_id, descricao, criado_em
-      FROM logs_auditoria
-      WHERE usuario_id = ?`;
+    // Filtra e limita primeiro (derivada "l"); só então resolve o número da pasta.
+    let filtro = 'WHERE usuario_id = ?';
     const params = [id];
+    if (data_de) { filtro += ' AND DATE(criado_em) >= ?'; params.push(data_de); }
+    if (data_ate) { filtro += ' AND DATE(criado_em) <= ?'; params.push(data_ate); }
 
-    if (data_de) { sql += ' AND DATE(criado_em) >= ?'; params.push(data_de); }
-    if (data_ate) { sql += ' AND DATE(criado_em) <= ?'; params.push(data_ate); }
-    sql += ' ORDER BY criado_em DESC LIMIT 500';
+    // pasta_num: só leitura, calculada na hora (nada novo é gravado). Cada registro do
+    // log aponta, pelo nome da tabela, para algo ligado a um processo (ou direto a uma
+    // pasta); o processo aponta para a pasta. Se o registro foi excluído de vez, tenta
+    // o processo_id guardado em dados_antigos. Sem vínculo, fica NULL e a tela mostra "#id".
+    const sql = `
+      SELECT l.id, l.tabela, l.acao, l.registro_id, l.descricao, l.criado_em,
+             COALESCE(pa_direta.numPasta, pa_proc.numPasta) AS pasta_num
+        FROM (
+          SELECT id, tabela, acao, registro_id, descricao, dados_antigos, criado_em
+            FROM logs_auditoria
+            ${filtro}
+           ORDER BY criado_em DESC LIMIT 500
+        ) l
+        LEFT JOIN tarefas             t   ON l.tabela = 'tarefas'              AND t.id   = l.registro_id
+        LEFT JOIN prazos_processo     pz  ON l.tabela = 'prazos_processo'      AND pz.id  = l.registro_id
+        LEFT JOIN andamento_processual an ON l.tabela = 'andamento_processual' AND an.id = l.registro_id
+        LEFT JOIN audiencia           au  ON l.tabela = 'audiencia'            AND au.id  = l.registro_id
+        LEFT JOIN ata_audiencia       at_ ON l.tabela = 'ata_audiencia'        AND at_.id = l.registro_id
+        LEFT JOIN audiencia           au2 ON au2.id = at_.audiencia_id
+        LEFT JOIN pericia             pe  ON l.tabela = 'pericia'              AND pe.id  = l.registro_id
+        LEFT JOIN acordo              ac  ON l.tabela = 'acordo'               AND ac.id  = l.registro_id
+        LEFT JOIN acordo_parcela      ap  ON l.tabela = 'acordo_parcela'       AND ap.id  = l.registro_id
+        LEFT JOIN acordo              ac2 ON ac2.id = ap.acordo_id
+        LEFT JOIN conta_corrente      cc  ON l.tabela = 'conta_corrente'       AND cc.id  = l.registro_id
+        LEFT JOIN tblpasta            pa_direta ON pa_direta.id = CASE l.tabela
+                                                    WHEN 'tblpasta' THEN l.registro_id
+                                                    WHEN 'tarefas'  THEN t.pasta_id
+                                                  END
+        LEFT JOIN tblproc             pr  ON pr.id = COALESCE(
+                                                    CASE l.tabela WHEN 'tblproc' THEN l.registro_id END,
+                                                    t.processo_id, pz.processo_id, an.processo_id,
+                                                    au.processo_id, au2.processo_id, pe.processo_id,
+                                                    ac.processo_id, ac2.processo_id, cc.processo_id,
+                                                    CAST(JSON_UNQUOTE(JSON_EXTRACT(l.dados_antigos, '$.processo_id')) AS UNSIGNED))
+        LEFT JOIN tblpasta            pa_proc ON pa_proc.id = pr.pasta_id
+       ORDER BY l.criado_em DESC`;
 
     const [rows] = await pool.execute(sql, params);
     return sucesso(res, { usuario: usuario[0].nome, registros: rows });
