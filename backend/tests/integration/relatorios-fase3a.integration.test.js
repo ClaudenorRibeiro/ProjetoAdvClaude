@@ -13,7 +13,7 @@ carregarAmbienteTeste();
 const { criarApp } = require('../../src/app');
 const { pool } = require('../../src/config/database');
 
-let app; let admin; let usuario; let semPermissao;
+let app; let admin; let usuario; let semPermissao; let soRelatorios;
 const token = (id, nivel, sessao) => jwt.sign({ id, nome: `Teste ${id}`, nivel, tipo: 'advogado', sessao }, process.env.JWT_SECRET, { expiresIn: '1h' });
 const req = (t = admin) => ({
   get: p => request(app).get(p).set('Authorization', `Bearer ${t}`),
@@ -62,7 +62,12 @@ test.before(async () => {
                assistente_tecnico_freela_id, responsavel_id, responsavel_freela_id, cidade, criado_por) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
       [tipo, d, h, st, perito ? 'fisica' : null, perito, au, af, ru, rf, cidade]);
   }
+  // usuário que PODE usar relatórios, mas não tem os módulos deste arquivo
+  await sql(`INSERT INTO usuarios (id, nome, login, senha_hash, email, tipo, nivel, ativo, ver_todos_processos, sessao_atual, notif_email, google_agenda_ativo)
+             VALUES (5, 'So Relatorios', 'sorel', 'x', 'sorel@example.invalid', 'advogado', 2, 1, 0, 'sessao-so-rel', 0, 0)`);
+  await sql("INSERT INTO permissoes (usuario_id, modulo, submodulo, acao, permitido) VALUES (5, 'relatorios', NULL, 'visualizar', 1), (5, 'prazos', NULL, 'visualizar', 1)");
   app = criarApp();
+  soRelatorios = token(5, 2, 'sessao-so-rel');
   admin = token(1, 1, 'sessao-admin'); usuario = token(2, 2, 'sessao-usuario'); semPermissao = token(3, 2, 'sessao-sem-permissao');
 });
 test.after(async () => pool.end());
@@ -77,6 +82,12 @@ test('catálogo: audiências e perícias aparecem só para quem tem permissão n
   assert.ok(resp.opcoes.some(o => o.valor === 'u2') && resp.opcoes.some(o => o.valor === 'f1' && /freelancer/.test(o.rotulo)));
   assert.doesNotMatch(JSON.stringify(a.body), /ata_audiencia|a\.status|pe\.status|EXISTS/);   // nunca vaza SQL
   assert.equal((await req(usuario).get('/api/relatorios/catalogo')).status, 200);
+  const so = await req(soRelatorios).get('/api/relatorios/catalogo');
+  assert.equal(so.status, 200);
+  const chavesSo = so.body.dados.assuntos.map(x => x.chave);
+  for (const [assunto] of [['audiencias', 'audiencias'], ['pericias', 'pericias']]) assert.ok(!chavesSo.includes(assunto), `${assunto} não deveria aparecer`);
+  assert.ok(chavesSo.includes('prazos'));
+  for (const [assunto] of [['audiencias', 'audiencias'], ['pericias', 'pericias']]) assert.equal((await rodar(soRelatorios, { receita: receita(assunto) })).status, 403, assunto);
   assert.equal((await rodar(semPermissao, { receita: receita('audiencias') })).status, 403);
   assert.equal((await rodar(semPermissao, { receita: receita('pericias') })).status, 403);
 });

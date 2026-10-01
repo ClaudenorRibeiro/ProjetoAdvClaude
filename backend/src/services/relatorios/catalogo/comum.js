@@ -14,6 +14,12 @@ const responsavelMisto = (alias, usuario, freela) => ({
   chave: `CASE WHEN ${alias}.responsavel_id IS NOT NULL THEN CONCAT('u', ${alias}.responsavel_id) WHEN ${alias}.responsavel_freela_id IS NOT NULL THEN CONCAT('f', ${alias}.responsavel_freela_id) END`,
 });
 
+// Todos os usuários (ativos e inativos, estes marcados) — para assuntos sem a regra "ver todos"
+async function opcoesTodosUsuarios() {
+  const [usuarios] = await pool.execute('SELECT id, nome, ativo FROM usuarios ORDER BY nome');
+  return usuarios.map(u => ({ valor: String(u.id), rotulo: u.ativo ? u.nome : `${u.nome} (inativo)` }));
+}
+
 // Opções do filtro "responsável" para os assuntos acima (todos os usuários + freelancers)
 async function opcoesResponsaveisMistos() {
   const [usuarios] = await pool.execute('SELECT id, nome, ativo FROM usuarios ORDER BY nome');
@@ -26,4 +32,4 @@ async function opcoesResponsaveisMistos() {
 
 const opcoesLista = (rotulos) => () => Object.entries(rotulos).map(([valor, rotulo]) => ({ valor, rotulo }));
 
-module.exports = { PASTA_EXPR, responsavelMisto, opcoesResponsaveisMistos, opcoesLista };
+module.exports = { PASTA_EXPR, responsavelMisto, opcoesResponsaveisMistos, opcoesTodosUsuarios, opcoesLista };

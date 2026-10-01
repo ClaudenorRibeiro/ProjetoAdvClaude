@@ -11,6 +11,9 @@ const ASSUNTOS = {
   tarefas: require('./tarefas'),
   audiencias: require('./audiencias'),
   pericias: require('./pericias'),
+  processos: require('./processos'),
+  pessoas_fisicas: require('./pessoas_fisicas'),
+  pessoas_juridicas: require('./pessoas_juridicas'),
 };
 
 function obterAssunto(chave) {

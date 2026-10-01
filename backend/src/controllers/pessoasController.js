@@ -2370,5 +2370,7 @@ module.exports = {
   listarProfissoes, listarPessoasPorProfissao, criarProfissao, atualizarProfissao, excluirProfissao,
   processosDaPessoa, exportarFisicas, exportarJuridicas,
   listarAniversariantes, registrarParabens, buscarAniversariantes, uploadAnexosEmail, enviarEmailAvulso, registrarEnvioZap,
-  enviarSMS, smsAtivo
+  enviarSMS, smsAtivo,
+  // Regra de "cliente" (parte-cliente de processo ativo) — o catálogo de Relatórios reaproveita
+  SUB_CLIENTES_PF, PROX_ANIV,
 };
