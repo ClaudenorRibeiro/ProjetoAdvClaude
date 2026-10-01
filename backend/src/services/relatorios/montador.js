@@ -64,6 +64,7 @@ function montarConsulta(assunto, receita, ctx, { limite, offset }) {
     usar(campo);
     return `${campo.expr} AS \`${chave}\``;
   });
+  colunas.push(`${assunto.pk} AS \`__id\``);   // identifica a linha (para ações como "Parabenizar")
   if (assunto.linkPasta) {   // assuntos sem pasta (ex.: Pessoas) não têm link para abrir
     colunas.push(`${assunto.linkPasta.expr} AS \`__pasta_id\``);
     assunto.linkPasta.juncoes.forEach(j => juncoes.add(j));

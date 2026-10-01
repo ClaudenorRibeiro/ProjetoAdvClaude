@@ -111,6 +111,7 @@ router.get('/dashboard', autenticar, dashboardCtrl.buscarDados);
 // ---- PESSOAS ----
 // Aniversariantes (clientes PF) — rotas estáticas ANTES das de /:id.
 router.get('/pessoas/aniversariantes',         autenticar, verificarPermissao('relatorios','visualizar'), pessoasCtrl.listarAniversariantes);
+router.get('/pessoas/:id/parabens',            autenticar, verificarPermissao('pessoas','alterar'), pessoasCtrl.dadosParaParabens);
 router.post('/pessoas/:id/parabens',           autenticar, verificarPermissao('pessoas','alterar'), pessoasCtrl.registrarParabens);
 router.post('/pessoas/enviar-email',           autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.uploadAnexosEmail, pessoasCtrl.enviarEmailAvulso);
 router.post('/pessoas/registrar-zap',          autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.registrarEnvioZap);

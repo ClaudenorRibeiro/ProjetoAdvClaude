@@ -2108,10 +2108,13 @@ function montarMensagemParabens(template, nomeCliente, nomeEscritorio) {
 
 // Busca a lista de clientes aniversariantes conforme o filtro (usada pelo relatório e pelo dashboard).
 // Retorna registros já com a mensagem resolvida e o status "já parabenizado neste ano".
-async function buscarAniversariantes({ filtro = 'hoje', mes } = {}) {
+async function buscarAniversariantes({ filtro = 'hoje', mes, pessoaId } = {}) {
   let filtroData = '';
   const params = [];
-  if (filtro === 'semana') {
+  if (pessoaId) {   // uma pessoa só (menu ⋮ de qualquer relatório): sem filtro de data, mas continua só CLIENTE ativo com nascimento
+    filtroData = 'AND pf.id = ?';
+    params.push(Number(pessoaId));
+  } else if (filtro === 'semana') {
     filtroData = `AND ${PROX_ANIV} BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 6 DAY)`;
   } else if (filtro === 'mes') {
     filtroData = `AND MONTH(pf.data_nascimento) = ?`;
@@ -2177,6 +2180,17 @@ async function listarAniversariantes(req, res) {
   try {
     const registros = await buscarAniversariantes(req.query);
     return sucesso(res, { registros, total: registros.length });
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// GET /api/pessoas/:id/parabens — dados de UM cliente para parabenizar (mensagem pronta, telefone, e-mail, já enviados)
+async function dadosParaParabens(req, res) {
+  try {
+    const registros = await buscarAniversariantes({ pessoaId: req.params.id });
+    if (!registros.length) return naoEncontrado(res, 'Cliente não encontrado, inativo ou sem data de nascimento');
+    return sucesso(res, registros[0]);
   } catch (err) {
     return erroInterno(res, err);
   }
@@ -2369,7 +2383,7 @@ module.exports = {
   listarJuridicas, buscarJuridica, criarJuridica, atualizarJuridica, excluirJuridica, unificarJuridicas, buscarAuxiliares, buscarPorCPF, criarAuxiliar,
   listarProfissoes, listarPessoasPorProfissao, criarProfissao, atualizarProfissao, excluirProfissao,
   processosDaPessoa, exportarFisicas, exportarJuridicas,
-  listarAniversariantes, registrarParabens, buscarAniversariantes, uploadAnexosEmail, enviarEmailAvulso, registrarEnvioZap,
+  listarAniversariantes, dadosParaParabens, registrarParabens, buscarAniversariantes, uploadAnexosEmail, enviarEmailAvulso, registrarEnvioZap,
   enviarSMS, smsAtivo,
   // Regra de "cliente" (parte-cliente de processo ativo) — o catálogo de Relatórios reaproveita
   SUB_CLIENTES_PF, PROX_ANIV,

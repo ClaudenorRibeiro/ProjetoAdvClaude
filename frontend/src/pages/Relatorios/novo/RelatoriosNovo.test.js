@@ -64,7 +64,7 @@ describe('Relatórios (tela nova)', () => {
   it('lista os relatórios do usuário com o uso do limite', async () => {
     abrir();
     expect(await screen.findByText('Prazos da semana', { selector: 'button' })).toBeInTheDocument();
-    expect(screen.getByText(/de/, { selector: 'span' })).toHaveTextContent('Você usa 1 de 10 relatórios permitidos.');
+    expect(screen.getByText(/de/, { selector: 'span' })).toHaveTextContent('Você usa 1 de 10 relatórios pessoais permitidos.');
     expect(screen.getByRole('button', { name: '+ Novo relatório' })).toBeEnabled();
   });
 

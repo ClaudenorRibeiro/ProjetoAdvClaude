@@ -8,6 +8,11 @@ const { PASTA_EXPR, responsavelMisto, opcoesResponsaveisMistos, opcoesLista } = 
 
 const ROTULOS_STATUS = { aguardando_data: 'Aguardando data', agendada: 'Agendada', realizada: 'Realizada', remarcada: 'Remarcada', cancelada: 'Cancelada' };
 const resp = responsavelMisto('pe', 'ur', 'rf');
+// Contato principal do perito (pessoa física ou jurídica), igual ao relatório antigo de peritos
+const CONTATO_PERITO = (tabelaPf, tabelaPj, coluna) => `CASE pe.perito_tipo
+  WHEN 'fisica' THEN (SELECT x.${coluna} FROM ${tabelaPf} x WHERE x.pessoa_id = pe.perito_id AND x.ativo = 1 ORDER BY x.principal DESC, x.id ASC LIMIT 1)
+  WHEN 'juridica' THEN (SELECT x.${coluna} FROM ${tabelaPj} x WHERE x.pessoa_id = pe.perito_id AND x.ativo = 1 ORDER BY x.principal DESC, x.id ASC LIMIT 1)
+  ELSE NULL END`;
 
 module.exports = {
   chave: 'pericias',
@@ -42,6 +47,8 @@ module.exports = {
     status:           { rotulo: 'Status',              tipo: 'lista', expr: 'pe.status', rotulosValor: ROTULOS_STATUS, opcoes: opcoesLista(ROTULOS_STATUS) },
     motivo_status:    { rotulo: 'Motivo do status',    tipo: 'texto', expr: 'pe.motivo_status' },
     perito:           { rotulo: 'Perito',              tipo: 'texto', agrupavel: true, expr: 'COALESCE(pf.nome, pj.razao_social)', juncoes: ['pf', 'pj'] },
+    perito_telefone:  { rotulo: 'Telefone do perito',  tipo: 'texto', expr: CONTATO_PERITO('telefones_pf', 'telefones_pj', 'numero') },
+    perito_email:     { rotulo: 'E-mail do perito',    tipo: 'texto', expr: CONTATO_PERITO('emails_pf', 'emails_pj', 'email') },
     assistente:       { rotulo: 'Assistente técnico',  tipo: 'texto', agrupavel: true, expr: "COALESCE(ua.nome, CONCAT(af.nome, ' (freelancer)'))", juncoes: ['ua', 'af'] },
     responsavel:      { rotulo: 'Responsável',         tipo: 'lista', expr: resp.expr, exprFiltro: resp.chave, juncoes: ['ur', 'rf'], opcoes: opcoesResponsaveisMistos },
     local:            { rotulo: 'Local',               tipo: 'texto', expr: 'pe.local' },

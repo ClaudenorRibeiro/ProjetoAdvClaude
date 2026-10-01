@@ -26,7 +26,7 @@ function Passo({ numero, titulo, children }) {
   );
 }
 
-export default function Construtor({ catalogo, modelo, receitaInicial, podeSalvar, onVerResultado, onSalvo, onCancelar }) {
+export default function Construtor({ catalogo, modelo, receitaInicial, podeSalvar, podeSistema = false, onVerResultado, onSalvo, onCancelar }) {
   const [receita, setReceita] = useState(receitaInicial ? normalizarReceita(receitaInicial) : null);
   const [salvando, setSalvando] = useState(false);
   const [modalSalvar, setModalSalvar] = useState(false);
@@ -35,10 +35,10 @@ export default function Construtor({ catalogo, modelo, receitaInicial, podeSalva
 
   const set = (parcial) => setReceita(r => ({ ...r, ...parcial }));
 
-  async function salvar(nome, descricao) {
+  async function salvar(nome, descricao, escopo) {
     setSalvando(true);
     try {
-      const corpo = { nome, descricao, receita: limparReceita(assunto, receita) };
+      const corpo = { nome, descricao, receita: limparReceita(assunto, receita), ...(escopo ? { escopo } : {}) };
       const { data } = modelo ? await relatoriosAPI.atualizarModelo(modelo.id, corpo) : await relatoriosAPI.criarModelo(corpo);
       toast.success(data.mensagem || 'Relatório salvo');
       setModalSalvar(false);
@@ -82,7 +82,7 @@ export default function Construtor({ catalogo, modelo, receitaInicial, podeSalva
         <button className="btn btn-secondary" onClick={onCancelar}>Cancelar</button>
       </div>
 
-      {modalSalvar && <ModalSalvar editando={Boolean(modelo)} nomeInicial={modelo?.nome} descricaoInicial={modelo?.descricao}
+      {modalSalvar && <ModalSalvar editando={Boolean(modelo)} podeSistema={podeSistema} nomeInicial={modelo?.nome} descricaoInicial={modelo?.descricao}
         salvando={salvando} onSalvar={salvar} onCancelar={() => setModalSalvar(false)} />}
     </div>
   );

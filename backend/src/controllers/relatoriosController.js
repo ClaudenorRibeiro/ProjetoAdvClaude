@@ -8,7 +8,9 @@ const { sucesso, erro, erroInterno } = require('../utils/response');
 const L = require('../services/relatorios/limites');
 const { ErroRelatorio } = require('../services/relatorios/erros');
 const { criarContexto } = require('../services/relatorios/visibilidade');
-const { catalogoParaUsuario } = require('../services/relatorios/catalogo');
+const { catalogoParaUsuario, obterAssunto, assuntoPermitido, acoesDoAssunto } = require('../services/relatorios/catalogo');
+const compartilhamento = require('../services/relatorios/compartilhamento');
+const { instalarPadrao } = require('../services/relatorios/padrao');
 const { validarReceita } = require('../services/relatorios/validador');
 const { contar, executarPagina } = require('../services/relatorios/executor');
 const { exportarXlsx } = require('../services/relatorios/exportadores/xlsx');
@@ -49,13 +51,22 @@ async function catalogo(req, res) {
   catch (err) { return tratar(res, err); }
 }
 
-// GET /api/relatorios/modelos
+// GET /api/relatorios/modelos — meus + compartilhados comigo + do sistema.
+// "sem_acesso": o usuário não tem (mais) permissão no assunto; os do sistema nessa situação nem aparecem.
 async function listarModelos(req, res) {
-  try { return sucesso(res, await modelos.listarMeus(req.usuario.id)); }
-  catch (err) { return tratar(res, err); }
+  try {
+    const ctx = await criarContexto(req.usuario);
+    const dados = await modelos.listarMeus(req.usuario.id);
+    const marcados = dados.modelos.map(m => {
+      const assunto = obterAssunto(m.assunto);
+      // pode_editar: o meu (pessoal) ou, nos do sistema, o administrador. Compartilhado nunca.
+      return { ...m, sem_acesso: !(assunto && assuntoPermitido(ctx, assunto)), pode_editar: m.origem === 'sistema' ? ctx.ehAdmin : m.origem === 'proprio' };
+    });
+    return sucesso(res, { ...dados, modelos: marcados.filter(m => !(m.origem === 'sistema' && m.sem_acesso)) });
+  } catch (err) { return tratar(res, err); }
 }
 
-// POST /api/relatorios/modelos  { nome, descricao?, receita }
+// POST /api/relatorios/modelos  { nome, descricao?, receita, escopo?: 'pessoal' | 'sistema' (só administrador) }
 async function criarModelo(req, res) {
   try {
     const { receita } = await validarReceita(req.body?.receita, await criarContexto(req.usuario), { salvando: true });
@@ -84,6 +95,24 @@ async function duplicarModelo(req, res) {
   catch (err) { return tratar(res, err); }
 }
 
+// GET /api/relatorios/modelos/:id/compartilhamento  (dono) — quem já recebeu + colegas que podem receber
+async function consultarCompartilhamento(req, res) {
+  try { return sucesso(res, await compartilhamento.consultar(req.usuario, Number(req.params.id))); }
+  catch (err) { return tratar(res, err); }
+}
+
+// PUT /api/relatorios/modelos/:id/compartilhamento  (dono) { usuarios: [ids] } — define a lista inteira
+async function definirCompartilhamento(req, res) {
+  try { return sucesso(res, await compartilhamento.definir(req.usuario, Number(req.params.id), req.body?.usuarios), 'Compartilhamento atualizado'); }
+  catch (err) { return tratar(res, err); }
+}
+
+// DELETE /api/relatorios/modelos/:id/compartilhado-comigo — tira da minha lista um relatório que recebi
+async function sairDoCompartilhamento(req, res) {
+  try { await compartilhamento.sair(req.usuario, Number(req.params.id)); return sucesso(res, null, 'Relatório removido da sua lista'); }
+  catch (err) { return tratar(res, err); }
+}
+
 // PUT /api/relatorios/modelos/:id/preferencias  { linhas_por_pagina?, visao?, grafico? } (mescla com o que já estava)
 async function salvarPreferencias(req, res) {
   try { return sucesso(res, await modelos.salvarPreferencias(req.usuario, Number(req.params.id), req.body), 'Preferências salvas'); }
@@ -96,7 +125,7 @@ async function executar(req, res) {
   try {
     const ctx = await criarContexto(req.usuario);
     const { assunto, receita, modelo } = await resolverReceita(req, ctx);
-    const resposta = { receita, modelo: modelo ? { id: modelo.id, nome: modelo.nome } : null };
+    const resposta = { receita, modelo: modelo ? { id: modelo.id, nome: modelo.nome } : null, acoes: acoesDoAssunto(ctx, assunto) };
 
     if (req.body.grupo !== undefined && req.body.grupo !== null) {
       if (!receita.agrupar.length) throw new ErroRelatorio('Este relatório não tem grupos.');
@@ -182,6 +211,12 @@ async function exportar(req, res) {
   } catch (err) { return tratar(res, err); }
 }
 
+// POST /api/relatorios/sistema/padrao  (admin) — instala os relatórios padrão do escritório (sem duplicar)
+async function instalarRelatoriosPadrao(req, res) {
+  try { return sucesso(res, await instalarPadrao(req.usuario), 'Relatórios padrão conferidos'); }
+  catch (err) { return tratar(res, err); }
+}
+
 // GET /api/relatorios/limites  (admin)
 async function obterLimites(req, res) {
   try { return sucesso(res, await limitesAdmin.obterLimites()); }
@@ -197,4 +232,5 @@ async function salvarLimites(req, res) {
 module.exports = {
   catalogo, listarModelos, criarModelo, atualizarModelo, excluirModelo, duplicarModelo,
   salvarPreferencias, executar, exportar, obterLimites, salvarLimites,
+  consultarCompartilhamento, definirCompartilhamento, sairDoCompartilhamento, instalarRelatoriosPadrao,
 };

@@ -9,6 +9,7 @@ const { SUB_CLIENTES_PF, PROX_ANIV } = require('../../../controllers/pessoasCont
 
 const MESES = { 1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril', 5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto', 9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro' };
 const PRINCIPAL = (tabela, coluna) => `(SELECT x.${coluna} FROM ${tabela} x WHERE x.pessoa_id = pf.id AND x.ativo = 1 ORDER BY x.principal DESC, x.id ASC LIMIT 1)`;
+const PROX = PROX_ANIV.replace(/\s+/g, ' ').trim();
 const lookup = (tabela) => () => opcoesTabela(`SELECT id, nome FROM ${tabela} ORDER BY nome`);
 
 module.exports = {
@@ -24,6 +25,8 @@ module.exports = {
     { id: 'na',  sql: 'LEFT JOIN nacionalidade na ON na.id = pf.nacionalidade_id' },
     { id: 'uc',  sql: 'LEFT JOIN usuarios uc ON uc.id = pf.criado_por' },
   ],
+  // ações por linha (menu ⋮ do resultado): só aparecem para quem pode alterar Pessoas
+  acoes: [{ chave: 'parabenizar', permissao: { chave: 'pessoas', acao: 'alterar' } }],
   colunasPadrao: ['nome', 'cpf', 'data_nascimento', 'telefone', 'email', 'cidade'],
   ordemPadrao: [{ campo: 'nome', direcao: 'asc' }],
   visibilidade: () => ({ sql: 'pf.ativo = 1', params: [], juncoes: [] }),
@@ -36,7 +39,9 @@ module.exports = {
     mes_aniversario:  { rotulo: 'Mês do aniversário',  tipo: 'lista', expr: 'MONTH(pf.data_nascimento)', rotulosValor: MESES,
                         opcoes: opcoesLista(Object.fromEntries(Object.entries(MESES).map(([n, m]) => [String(n), m]))) },
     aniversario:      { rotulo: 'Dia/mês do aniversário', tipo: 'texto', agrupavel: true, expr: "DATE_FORMAT(pf.data_nascimento, '%d/%m')" },
-    proximo_aniversario: { rotulo: 'Próximo aniversário', tipo: 'data', expr: `IF(pf.data_nascimento IS NULL, NULL, ${PROX_ANIV.replace(/\s+/g, ' ').trim()})` },
+    proximo_aniversario: { rotulo: 'Próximo aniversário', tipo: 'data', expr: `IF(pf.data_nascimento IS NULL, NULL, ${PROX})` },
+    idade_completa:   { rotulo: 'Idade que completa', tipo: 'numero', expr: `(YEAR(${PROX}) - YEAR(pf.data_nascimento))` },
+    parabenizado:     { rotulo: 'Já parabenizado neste aniversário', tipo: 'booleano', expr: `EXISTS (SELECT 1 FROM parabens_enviados pb WHERE pb.pessoa_id = pf.id AND pb.ano = YEAR(${PROX}))` },
     estado_civil:     { rotulo: 'Estado civil',        tipo: 'lista', expr: 'ec.nome', exprFiltro: 'ec.id', juncoes: ['ec'], opcoes: lookup('estado_civil') },
     genero:           { rotulo: 'Gênero',              tipo: 'lista', expr: 'ge.nome', exprFiltro: 'ge.id', juncoes: ['ge'], opcoes: lookup('genero') },
     profissao:        { rotulo: 'Profissão',           tipo: 'lista', expr: 'pro.nome', exprFiltro: 'pro.id', juncoes: ['pro'], opcoes: lookup('profissao') },

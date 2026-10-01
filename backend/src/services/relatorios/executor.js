@@ -14,7 +14,7 @@ async function contar(assunto, receita, ctx) {
 
 // Converte o valor cru do banco para o que a tela/arquivo mostram
 function converterLinha(assunto, receita, linha) {
-  const saida = { __pasta_id: linha.__pasta_id ?? null };
+  const saida = { __pasta_id: linha.__pasta_id ?? null, __id: linha.__id ?? null };
   for (const chave of receita.colunas) {
     const campo = assunto.campos[chave];
     let v = linha[chave];

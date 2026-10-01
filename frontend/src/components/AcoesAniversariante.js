@@ -5,9 +5,11 @@
 //   "Parabenizar E-mail" → envia o e-mail pelo servidor e REGISTRA o envio.
 // Se o cliente já foi parabenizado neste ano, pede confirmação (ModalConfirmar) antes de reenviar.
 // Props: pessoa (registro do aniversariante) e onFeito() (recarrega a lista após registrar).
+//   Em vez de `pessoa`, pode vir buscarPessoa() (async): busca os dados só quando a pessoa clica numa ação
+//   (usado nos relatórios, cujas linhas só têm o identificador).
 // ============================================================
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import MenuAcoes from './MenuAcoes';
 import ModalConfirmar from './ui/ModalConfirmar';
 import { pessoasAPI } from '../services/api';
@@ -15,12 +17,19 @@ import { linkWhatsApp } from '../utils/whatsapp';
 import { toast } from 'react-toastify';
 import { formatarDataHora } from '../utils/formatters';
 
-export default function AcoesAniversariante({ pessoa, onFeito }) {
+export default function AcoesAniversariante({ pessoa: pessoaInicial, buscarPessoa, onFeito }) {
   const [confirmar, setConfirmar] = useState(null);
-  const primeiroNome = String(pessoa.nome || '').trim().split(/\s+/)[0] || pessoa.nome;
+  const carregada = useRef(null);   // dados buscados no clique no "⋮" (antes da escolha), para o WhatsApp não ser barrado como pop-up
+
+  function antecipar() {
+    if (pessoaInicial || !buscarPessoa || carregada.current) return;
+    const p = buscarPessoa();
+    p.catch(() => { carregada.current = null; });
+    carregada.current = p;
+  }
 
   // Executa de fato o parabéns (WhatsApp abre o wa.me e registra; E-mail envia e registra).
-  async function executar(canal) {
+  async function executar(canal, pessoa) {
     if (canal === 'whatsapp') {
       if (!pessoa.telefone) return toast.error('Este cliente não tem telefone cadastrado');
       const link = linkWhatsApp(pessoa.telefone, pessoa.mensagem);
@@ -45,7 +54,15 @@ export default function AcoesAniversariante({ pessoa, onFeito }) {
   }
 
   // Se já foi parabenizado neste ano, abre o modal padrão de confirmação; senão, executa direto.
-  function parabenizar(canal) {
+  async function parabenizar(canal) {
+    let pessoa = pessoaInicial;
+    if (!pessoa && buscarPessoa) {
+      try { pessoa = await (carregada.current || buscarPessoa()); }
+      catch (err) { return toast.error(err.response?.data?.mensagem || 'Não foi possível carregar os dados do cliente'); }
+    }
+    if (!pessoa) return undefined;
+    carregada.current = null;   // depois de parabenizar, a próxima vez busca de novo (o "já parabenizado" muda)
+    const primeiroNome = String(pessoa.nome || '').trim().split(/\s+/)[0] || pessoa.nome;
     if (pessoa.ja_parabenizado && pessoa.parabens?.length) {
       const ult = pessoa.parabens[pessoa.parabens.length - 1];
       const canalTxt = ult.canal === 'whatsapp' ? 'WhatsApp' : 'e-mail';
@@ -59,19 +76,22 @@ export default function AcoesAniversariante({ pessoa, onFeito }) {
           `Deseja enviar novamente?`,
         textoBotao: 'Enviar novamente',
         tipo: 'aviso',
-        acao: () => executar(canal),
+        acao: () => executar(canal, pessoa),
       });
     } else {
-      executar(canal);
+      executar(canal, pessoa);
     }
+    return undefined;
   }
 
   return (
     <>
-      <MenuAcoes itens={[
-        { label: 'Parabenizar Zap',    icone: '🟢', onClick: () => parabenizar('whatsapp') },
-        { label: 'Parabenizar E-mail', icone: '✉️', onClick: () => parabenizar('email') },
-      ]} />
+      <span onClickCapture={antecipar} style={{ display: 'inline-block' }}>
+        <MenuAcoes itens={[
+          { label: 'Parabenizar Zap',    icone: '🟢', onClick: () => parabenizar('whatsapp') },
+          { label: 'Parabenizar E-mail', icone: '✉️', onClick: () => parabenizar('email') },
+        ]} />
+      </span>
       {confirmar && <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(null)} />}
     </>
   );

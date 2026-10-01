@@ -62,4 +62,9 @@ async function catalogoParaUsuario(ctx) {
   return { assuntos, periodos: listarPeriodos() };
 }
 
-module.exports = { obterAssunto, assuntoPermitido, campoPermitido, opcoesDoCampo, catalogoParaUsuario };
+// Ações por linha que o usuário pode usar neste assunto (ex.: ['parabenizar'])
+function acoesDoAssunto(ctx, assunto) {
+  return (assunto.acoes || []).filter(a => pode(ctx, a.permissao.chave, a.permissao.acao)).map(a => a.chave);
+}
+
+module.exports = { acoesDoAssunto, obterAssunto, assuntoPermitido, campoPermitido, opcoesDoCampo, catalogoParaUsuario };

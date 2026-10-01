@@ -759,8 +759,8 @@ function ModalHistoricoUsuario({ usuario, onFechar }) {
   const [registros, setRegistros] = useState([]);
   const [carregando, setCarregando] = useState(false);
 
-  const ACAO_LABEL = { criar: 'Criou', editar: 'Editou', excluir: 'Excluiu', visualizar: 'Visualizou', login: 'Login', logout: 'Logout', rodar: 'Rodou', exportar: 'Exportou' };
-  const ACAO_COR   = { criar: '#16a34a', editar: '#2563eb', excluir: '#dc2626', visualizar: '#6b7280', login: '#0891b2', logout: '#7c3aed', rodar: '#0d9488', exportar: '#b45309' };
+  const ACAO_LABEL = { criar: 'Criou', editar: 'Editou', excluir: 'Excluiu', visualizar: 'Visualizou', login: 'Login', logout: 'Logout', rodar: 'Rodou', exportar: 'Exportou', compartilhar: 'Compartilhou', descompartilhar: 'Saiu do compartilhado' };
+  const ACAO_COR   = { criar: '#16a34a', editar: '#2563eb', excluir: '#dc2626', visualizar: '#6b7280', login: '#0891b2', logout: '#7c3aed', rodar: '#0d9488', exportar: '#b45309', compartilhar: '#7c3aed', descompartilhar: '#7c3aed' };
 
   async function buscar() {
     setCarregando(true);

@@ -15,6 +15,7 @@ export default function ResultadoDetalhado({ corpoBase, limiteInicial = 50, aoMu
   const [dados, setDados] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
+  const [versao, setVersao] = useState(0);   // sobe depois de uma ação (ex.: parabenizar) para recarregar a lista
 
   useEffect(() => {
     let ativo = true;
@@ -25,7 +26,7 @@ export default function ResultadoDetalhado({ corpoBase, limiteInicial = 50, aoMu
       .finally(() => { if (ativo) setCarregando(false); });
     return () => { ativo = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [corpoBase, pagina, limite]);
+  }, [corpoBase, pagina, limite, versao]);
 
   function trocarLimite(valor) { setLimite(valor); setPagina(1); aoMudarLimite?.(valor); }
 
@@ -54,7 +55,7 @@ export default function ResultadoDetalhado({ corpoBase, limiteInicial = 50, aoMu
               Refine os filtros ou exporte para o Excel.
             </p>
           )}
-          <div style={{ opacity: carregando ? 0.5 : 1 }}><TabelaResultado colunas={dados.colunas} linhas={dados.linhas} /></div>
+          <div style={{ opacity: carregando ? 0.5 : 1 }}><TabelaResultado colunas={dados.colunas} linhas={dados.linhas} acoes={dados.acoes || []} aoFazerAcao={() => setVersao(v => v + 1)} /></div>
           {totalPaginas > 1 && (
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center', marginTop: '12px' }}>
               <button className="btn btn-secondary" disabled={pagina <= 1 || carregando} onClick={() => setPagina(p => p - 1)}>‹ Anterior</button>

@@ -3,7 +3,7 @@
 // e alterna entre as telas (lista, construtor, resultado). A lógica de cada tela
 // mora no seu próprio arquivo — este fica pequeno de propósito.
 // O limite de relatórios fica em Configurações → Permissões.
-// Em construção: por enquanto só o administrador enxerga (rota /meus-relatorios).
+// Liberada para quem tem permissão em Relatórios (rota /meus-relatorios).
 // ============================================================
 import React, { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
@@ -14,10 +14,11 @@ import ListaRelatorios from './ListaRelatorios';
 import Construtor, { mensagemDeErro } from './Construtor';
 import Resultado from './Resultado';
 import ModalPerguntas from './ModalPerguntas';
+import ModalCompartilhar from './ModalCompartilhar';
 import { perguntasDe, normalizarReceita } from './receita';
 
 export default function RelatoriosNovo() {
-  const { temPermissao } = useAuth();
+  const { temPermissao, ehAdmin } = useAuth();
   const podeCriar = temPermissao('relatorios.criar', 'cadastrar');
   const [catalogo, setCatalogo] = useState(null);
   const [lista, setLista] = useState({ modelos: [], limite: 0, criados: 0 });
@@ -26,6 +27,7 @@ export default function RelatoriosNovo() {
   const [tela, setTela] = useState({ nome: 'lista' });
   const [perguntando, setPerguntando] = useState(null);  // janela de perguntas aberta (antes de rodar)
   const [confirmar, setConfirmar] = useState(null);
+  const [compartilhando, setCompartilhando] = useState(null);  // relatório cuja janela de compartilhar está aberta
 
   const carregarLista = useCallback(async () => {
     const { data } = await relatoriosAPI.listarModelos();
@@ -61,9 +63,36 @@ export default function RelatoriosNovo() {
   }
 
   function pedirExclusao(m) {
+    const sistema = m.origem === 'sistema';
     setConfirmar({
-      titulo: 'Excluir relatório', mensagem: `O relatório "${m.nome}" será excluído. Os dados do sistema não são afetados.`, textoBotao: 'Excluir',
+      titulo: 'Excluir relatório',
+      mensagem: sistema
+        ? `O relatório do sistema "${m.nome}" deixará de existir para TODOS os usuários. Os dados do sistema não são afetados.`
+        : `O relatório "${m.nome}" será excluído${m.compartilhado_com ? ` e os ${m.compartilhado_com} colega(s) com quem você o compartilhou perdem o acesso` : ''}. Os dados do sistema não são afetados.`,
+      textoBotao: 'Excluir',
       acao: async () => { await relatoriosAPI.excluirModelo(m.id); toast.success('Relatório excluído'); await carregarLista(); },
+    });
+  }
+
+  function pedirSaida(m) {
+    setConfirmar({
+      titulo: 'Remover da sua lista', mensagem: `"${m.nome}" sai da sua lista. O relatório de ${m.dono_nome} não é afetado e ele pode compartilhar de novo.`, textoBotao: 'Remover',
+      acao: async () => { await relatoriosAPI.sairDoCompartilhamento(m.id); toast.success('Removido da sua lista'); await carregarLista(); },
+    });
+  }
+
+  function pedirInstalacaoPadrao() {
+    setConfirmar({
+      titulo: 'Instalar relatórios padrão',
+      mensagem: 'Cria os relatórios padrão do escritório (prazos, tarefas, audiências, perícias por perito, processos, processos parados, aniversariantes e lançamentos financeiros) que ainda não existem. Os que já existem não são alterados.',
+      textoBotao: 'Instalar', tipo: 'aviso',
+      acao: async () => {
+        const { data } = await relatoriosAPI.instalarPadrao();
+        const r = data.dados;
+        toast.success(`${r.criados.length} criado(s); ${r.jaExistiam.length} já existia(m).`);
+        r.falhas.forEach(f => toast.error(`${f.nome}: ${f.motivo}`));
+        await carregarLista();
+      },
     });
   }
 
@@ -78,28 +107,35 @@ export default function RelatoriosNovo() {
     <div>
       {tela.nome === 'lista' && (
         <ListaRelatorios modelos={lista.modelos} assuntos={catalogo.assuntos} limite={lista.limite} criados={lista.criados}
-          podeCriar={podeCriar}
+          podeCriar={podeCriar} ehAdmin={ehAdmin}
           onNovo={() => setTela({ nome: 'construtor', modelo: null, receita: null })}
           onAbrir={m => iniciar(m.receita, m)}
           onEditar={m => setTela({ nome: 'construtor', modelo: m, receita: m.receita })}
-          onDuplicar={duplicar} onExcluir={pedirExclusao} />
+          onDuplicar={duplicar} onExcluir={pedirExclusao} onCompartilhar={setCompartilhando} onSair={pedirSaida}
+          onInstalarPadrao={pedirInstalacaoPadrao} />
       )}
       {tela.nome === 'construtor' && (
-        <Construtor catalogo={catalogo} modelo={tela.modelo} receitaInicial={tela.receita} podeSalvar={podeCriar}
+        <Construtor catalogo={catalogo} modelo={tela.modelo} receitaInicial={tela.receita} podeSalvar={podeCriar || (ehAdmin && tela.modelo?.escopo === 'sistema')} podeSistema={ehAdmin}
           onVerResultado={(receita, modelo) => iniciar(receita, null, modelo)}
           onSalvo={irParaLista} onCancelar={irParaLista} />
       )}
       {tela.nome === 'resultado' && (
         <Resultado receita={tela.receita} modelo={tela.modelo} parametros={tela.parametros}
           temPerguntas={perguntasDe(tela.receita.filtros).length > 0}
+          podeEditar={!tela.modelo || tela.modelo.pode_editar !== false}
           onVoltar={irParaLista}
           onPerguntas={() => setPerguntando({ receita: tela.receita, modelo: tela.modelo, origem: tela.origem, perguntas: perguntasDe(tela.receita.filtros), respostasIniciais: tela.respostas })}
-          onEditar={() => setTela({ nome: 'construtor', modelo: tela.modelo || tela.origem || null, receita: tela.receita })} />
+          onEditar={() => {
+            // relatório que não é meu (sistema para quem não é admin, ou compartilhado): edita uma CÓPIA nova, só minha
+            const editavel = !tela.modelo || tela.modelo.pode_editar !== false;
+            setTela({ nome: 'construtor', modelo: editavel ? (tela.modelo || tela.origem || null) : null, receita: tela.receita });
+          }} />
       )}
       {perguntando && (
         <ModalPerguntas assunto={assuntoDe(perguntando.receita)} periodos={catalogo.periodos} perguntas={perguntando.perguntas}
           respostasIniciais={perguntando.respostasIniciais} onConfirmar={responder} onCancelar={() => setPerguntando(null)} />
       )}
+      {compartilhando && <ModalCompartilhar modelo={compartilhando} onCancelar={() => setCompartilhando(null)} onSalvo={() => { setCompartilhando(null); carregarLista().catch(() => {}); }} />}
       {confirmar && <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(null)} />}
     </div>
   );

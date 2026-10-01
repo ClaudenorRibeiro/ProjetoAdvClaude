@@ -30,7 +30,7 @@ const FORMATOS = [
   { valor: 'docx', rotulo: 'Word', padrao: 'relatorio.docx' },
 ];
 
-export default function Resultado({ receita, modelo, parametros, temPerguntas, onVoltar, onEditar, onPerguntas }) {
+export default function Resultado({ receita, modelo, parametros, temPerguntas, podeEditar = true, onVoltar, onEditar, onPerguntas }) {
   const [exportando, setExportando] = useState(null);          // 'xlsx' | 'pdf' | 'docx' | null
   const [incluirDetalhes, setIncluirDetalhes] = useState(false);
   const [incluirGrafico, setIncluirGrafico] = useState(true);
@@ -63,7 +63,8 @@ export default function Resultado({ receita, modelo, parametros, temPerguntas, o
     <div>
       <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '12px' }}>
         <button className="btn btn-secondary" onClick={onVoltar}>← Voltar</button>
-        <button className="btn btn-secondary" onClick={onEditar}>Editar relatório</button>
+        <button className="btn btn-secondary" onClick={onEditar}
+          title={podeEditar ? '' : 'Este relatório não é seu: a edição cria uma cópia só sua'}>{podeEditar ? 'Editar relatório' : 'Editar uma cópia'}</button>
         {temPerguntas && <button className="btn btn-secondary" onClick={onPerguntas}>Alterar respostas</button>}
         {FORMATOS.map(f => (
           <button key={f.valor} className={`btn ${f.primario ? 'btn-primary' : 'btn-secondary'}`} disabled={!!exportando} onClick={() => exportar(f)}>

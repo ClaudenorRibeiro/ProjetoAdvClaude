@@ -27,9 +27,13 @@ router.post('/relatorios/modelos',                      autenticar, criar, ctrl.
 router.put('/relatorios/modelos/:id',                   autenticar, criar, ctrl.atualizarModelo);
 router.delete('/relatorios/modelos/:id',                autenticar, criar, ctrl.excluirModelo);
 router.post('/relatorios/modelos/:id/duplicar',         autenticar, criar, ctrl.duplicarModelo);
+router.get('/relatorios/modelos/:id/compartilhamento',  autenticar, criar, ctrl.consultarCompartilhamento);
+router.put('/relatorios/modelos/:id/compartilhamento',  autenticar, criar, ctrl.definirCompartilhamento);
+router.delete('/relatorios/modelos/:id/compartilhado-comigo', autenticar, ver, ctrl.sairDoCompartilhamento);
 router.put('/relatorios/modelos/:id/preferencias',      autenticar, ver, ctrl.salvarPreferencias);
 router.post('/relatorios/executar',                     autenticar, ver, ctrl.executar);
 router.post('/relatorios/exportar',                     autenticar, ver, limitarExportacao, ctrl.exportar);
+router.post('/relatorios/sistema/padrao',                autenticar, apenasAdmin, ctrl.instalarRelatoriosPadrao);
 router.get('/relatorios/limites',                       autenticar, apenasAdmin, ctrl.obterLimites);
 router.put('/relatorios/limites',                       autenticar, apenasAdmin, ctrl.salvarLimites);
 

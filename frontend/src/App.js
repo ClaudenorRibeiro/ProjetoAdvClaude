@@ -179,7 +179,7 @@ function AppRoutes() {
       <Route path="/agenda/*"      element={<RotaProtegida><Agenda /></RotaProtegida>} />
       <Route path="/relatorios/*"  element={<RotaProtegida modulo="relatorios"><Relatorios /></RotaProtegida>} />
       {/* Tela nova de relatórios (em construção): só administrador até substituir a antiga */}
-      <Route path="/meus-relatorios/*" element={<RotaProtegida apenasAdmin><RelatoriosNovo /></RotaProtegida>} />
+      <Route path="/meus-relatorios/*" element={<RotaProtegida modulo="relatorios"><RelatoriosNovo /></RotaProtegida>} />
       <Route path="/configuracoes/*"   element={<RotaProtegida apenasAdmin><Configuracoes /></RotaProtegida>} />
       <Route path="/controle/foruns"  element={<RotaProtegida apenasAdmin><Foruns /></RotaProtegida>} />
       <Route path="/controle/varas"   element={<RotaProtegida apenasAdmin><Varas /></RotaProtegida>} />

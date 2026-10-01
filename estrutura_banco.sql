@@ -2000,7 +2000,7 @@ DROP TABLE IF EXISTS `relatorio_modelo_usuario`;
 CREATE TABLE `relatorio_modelo_usuario` (
   `modelo_id` int NOT NULL,
   `usuario_id` int NOT NULL,
-  `origem` varchar(12) NOT NULL DEFAULT 'proprio' COMMENT 'proprio | compartilhado | liberado',
+  `origem` varchar(12) NOT NULL DEFAULT 'proprio' COMMENT 'proprio | colega | liberado',
   `preferencias` json DEFAULT NULL COMMENT 'preferencias deste usuario neste relatorio (ex.: linhas por pagina)',
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`modelo_id`,`usuario_id`),

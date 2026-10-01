@@ -149,6 +149,7 @@ export const pessoasAPI = {
   // Aniversariantes (clientes PF) — relatório e ação de parabenizar
   aniversariantes: (params) => api.get('/pessoas/aniversariantes', { params }),
   parabenizar:     (id, dados) => api.post(`/pessoas/${id}/parabens`, dados),
+  dadosParabens:   (id) => api.get(`/pessoas/${id}/parabens`),
   // Enviar e-mail avulso (mensagem digitada na hora) — { para, assunto, mensagem, tipo_pessoa?, pessoa_id? }
   enviarEmail:     (dados) => api.post('/pessoas/enviar-email', dados),
   // Registra no log que o usuário abriu o WhatsApp de uma pessoa — { telefone, tipo_pessoa?, pessoa_id? }
@@ -453,6 +454,10 @@ export const relatoriosAPI = {
   salvarPreferencias: (id, dados) => api.put(`/relatorios/modelos/${id}/preferencias`, dados),
   executar:         (dados) => api.post('/relatorios/executar', dados),
   exportar:         (dados) => api.post('/relatorios/exportar', dados, { responseType: 'blob', timeout: 120000 }),
+  consultarCompartilhamento: (id) => api.get(`/relatorios/modelos/${id}/compartilhamento`),
+  definirCompartilhamento:   (id, usuarios) => api.put(`/relatorios/modelos/${id}/compartilhamento`, { usuarios }),
+  sairDoCompartilhamento:    (id) => api.delete(`/relatorios/modelos/${id}/compartilhado-comigo`),
+  instalarPadrao:   () => api.post('/relatorios/sistema/padrao', {}),
   obterLimites:     () => api.get('/relatorios/limites'),
   salvarLimites:    (dados) => api.put('/relatorios/limites', dados),
 };
