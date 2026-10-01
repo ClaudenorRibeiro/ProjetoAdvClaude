@@ -29,6 +29,7 @@ const DESCRICAO_MAPA = {
   usuarios:             { coluna: 'nome',         prefixo: 'Usuário: ' },
   pendencia_documento:  { coluna: 'observacao',   prefixo: 'Pendência de documentos: ' },
   instituicao_financeira: { coluna: 'nome',       prefixo: 'Banco: ' },
+  relatorio_modelo:     { coluna: 'nome',         prefixo: 'Relatório: ' },
 };
 
 // Descrições fixas (não dependem de um registro específico)
@@ -84,11 +85,15 @@ async function montarDescricao(executor, tabela, registroId, dadosAntigos) {
 // conn: conexão de transação OPCIONAL — quando informada, o INSERT participa
 //       da transação do chamador e uma falha provoca rollback (tudo ou nada);
 //       sem ela, mantém o comportamento tolerante (auditoria não derruba a operação)
-async function registrar(usuarioId, tabela, acao, registroId, dadosAntigos = null, dadosNovos = null, conn = null) {
+// descricaoFixa: texto pronto para a coluna "Registro" (opcional) — usado quando não há um
+//       registro para descrever (ex.: relatório rodado sem ter sido salvo).
+async function registrar(usuarioId, tabela, acao, registroId, dadosAntigos = null, dadosNovos = null, conn = null, descricaoFixa = null) {
   const executor = conn || pool;
   // Texto legível do registro (nunca lança — em caso de falha, vem null e o
   // histórico mostra "#id"). Fica FORA do try/catch do INSERT de propósito.
-  const descricao = await montarDescricao(executor, tabela, registroId, dadosAntigos);
+  const descricao = descricaoFixa
+    ? String(descricaoFixa).slice(0, 255)
+    : await montarDescricao(executor, tabela, registroId, dadosAntigos);
   try {
     await executor.execute(
       `INSERT INTO logs_auditoria

@@ -54,7 +54,9 @@ const MODULOS_PERM = [
   { chave: 'pendencias', label: 'Pendências de documentos — quem tem "Visualizar" vê as de todos os clientes', submodulos: [
     { chave: 'pendencias.tipos', label: 'Tipos de documento (editar a lista)' },
   ]},
-  { chave: 'relatorios',   label: 'Relatórios' },
+  { chave: 'relatorios',   label: 'Relatórios', submodulos: [
+    { chave: 'relatorios.criar', label: 'Criar e alterar os próprios relatórios — marque Cadastrar' },
+  ]},
   { chave: 'sms',          label: 'SMS (enviar)' },
 ];
 // 'historico' aparece para todos os módulos — futuras implementações de histórico
@@ -756,8 +758,8 @@ function ModalHistoricoUsuario({ usuario, onFechar }) {
   const [registros, setRegistros] = useState([]);
   const [carregando, setCarregando] = useState(false);
 
-  const ACAO_LABEL = { criar: 'Criou', editar: 'Editou', excluir: 'Excluiu', visualizar: 'Visualizou', login: 'Login', logout: 'Logout' };
-  const ACAO_COR   = { criar: '#16a34a', editar: '#2563eb', excluir: '#dc2626', visualizar: '#6b7280', login: '#0891b2', logout: '#7c3aed' };
+  const ACAO_LABEL = { criar: 'Criou', editar: 'Editou', excluir: 'Excluiu', visualizar: 'Visualizou', login: 'Login', logout: 'Logout', rodar: 'Rodou', exportar: 'Exportou' };
+  const ACAO_COR   = { criar: '#16a34a', editar: '#2563eb', excluir: '#dc2626', visualizar: '#6b7280', login: '#0891b2', logout: '#7c3aed', rodar: '#0d9488', exportar: '#b45309' };
 
   async function buscar() {
     setCarregando(true);

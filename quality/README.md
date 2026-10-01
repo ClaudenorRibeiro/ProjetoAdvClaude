@@ -13,7 +13,7 @@ O arquivo `backend/.env.test` fica fora do Git. Nunca reutilize nele a senha do 
 
 ## Execução
 
-- `TESTAR-SISTEMA.bat` — rápida: regras, contratos, proteção das 294 rotas e build.
+- `TESTAR-SISTEMA.bat` — rápida: regras, contratos, proteção das 305 rotas e build.
 - `TESTAR-SISTEMA.bat completo` — rápida + MySQL isolado + fluxo crítico no navegador.
 - `TESTAR-SISTEMA.bat profundo` — todos os navegadores, tamanhos de tela, cobertura, mutação e auditoria de dependências.
 

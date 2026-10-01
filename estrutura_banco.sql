@@ -707,6 +707,7 @@ CREATE TABLE `configuracoes_escritorio` (
   `advogado_principal_id` int DEFAULT NULL,
   `oab_principal` varchar(30) DEFAULT NULL,
   `modelos_email_perito` json DEFAULT NULL COMMENT 'Modelos editáveis de e-mail enviados ao perito a partir da ata',
+  `max_relatorios_por_usuario` int NOT NULL DEFAULT '10' COMMENT 'limite padrao de relatorios pessoais por usuario',
   PRIMARY KEY (`id`),
   KEY `fk_config_advogado_principal` (`advogado_principal_id`),
   CONSTRAINT `fk_config_advogado_principal` FOREIGN KEY (`advogado_principal_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
@@ -1963,6 +1964,53 @@ CREATE TABLE `publicacoes_lidas` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `relatorio_modelo`
+--
+
+DROP TABLE IF EXISTS `relatorio_modelo`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `relatorio_modelo` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `nome` varchar(100) NOT NULL,
+  `descricao` varchar(300) DEFAULT NULL,
+  `assunto` varchar(40) NOT NULL COMMENT 'chave do assunto no catalogo (ex.: prazos, tarefas)',
+  `definicao` json NOT NULL COMMENT 'receita: colunas, filtros e ordem. Nunca guarda dados',
+  `escopo` varchar(10) NOT NULL DEFAULT 'pessoal' COMMENT 'pessoal | sistema',
+  `dono_id` int NOT NULL,
+  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  `alterado_em` datetime DEFAULT NULL,
+  `alterado_por` int DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_relmod_dono_nome` (`dono_id`,`nome`),
+  KEY `idx_relmod_escopo` (`escopo`),
+  KEY `fk_relmod_alterado_por` (`alterado_por`),
+  CONSTRAINT `fk_relmod_alterado_por` FOREIGN KEY (`alterado_por`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `fk_relmod_dono` FOREIGN KEY (`dono_id`) REFERENCES `usuarios` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `relatorio_modelo_usuario`
+--
+
+DROP TABLE IF EXISTS `relatorio_modelo_usuario`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `relatorio_modelo_usuario` (
+  `modelo_id` int NOT NULL,
+  `usuario_id` int NOT NULL,
+  `origem` varchar(12) NOT NULL DEFAULT 'proprio' COMMENT 'proprio | compartilhado | liberado',
+  `preferencias` json DEFAULT NULL COMMENT 'preferencias deste usuario neste relatorio (ex.: linhas por pagina)',
+  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`modelo_id`,`usuario_id`),
+  KEY `idx_relmu_usuario` (`usuario_id`),
+  CONSTRAINT `fk_relmu_modelo` FOREIGN KEY (`modelo_id`) REFERENCES `relatorio_modelo` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_relmu_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `reset_tokens`
 --
 
@@ -2469,6 +2517,7 @@ CREATE TABLE `usuarios` (
   `google_agenda_ativo` tinyint(1) NOT NULL DEFAULT '0',
   `google_agenda_email` varchar(255) DEFAULT NULL,
   `publicacoes_escopo` varchar(10) NOT NULL DEFAULT 'todas',
+  `max_relatorios` int DEFAULT NULL COMMENT 'limite individual de relatorios (vazio = usa o padrao do escritorio)',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_login` (`login`),
   KEY `fk_usuarios_criado_por` (`criado_por`),

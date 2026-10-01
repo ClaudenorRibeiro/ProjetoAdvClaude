@@ -457,6 +457,9 @@ router.put('/etiquetas/escritorio/catalogo/:modulo', autenticar, apenasAdmin, et
 router.put('/etiquetas/escritorio/marcar',           autenticar, etiquetasCtrl.marcarEscritorio);
 router.get('/etiquetas/escritorio/historico/:modulo/:registro_id', autenticar, etiquetasCtrl.historicoEscritorio);
 
+// ---- RELATÓRIOS (rotas no arquivo próprio, para o index.js não crescer) ----
+router.use(require('./relatorios'));
+
 // ---- MANUTENÇÃO (somente SUPERUSUÁRIO, nivel 0) ----
 router.post('/manutencao/limpar-dados-teste',     autenticar, apenasSuper, manutencaoCtrl.limparDadosTeste);
 

@@ -441,6 +441,22 @@ export const publicacoesAPI = {
 // ============================================================
 // PERÍCIAS
 // ============================================================
+// ---- RELATÓRIOS (tela nova) ----
+// exportar devolve um ARQUIVO (blob); o conteúdo nunca fica guardado no servidor.
+export const relatoriosAPI = {
+  catalogo:         () => api.get('/relatorios/catalogo'),
+  listarModelos:    () => api.get('/relatorios/modelos'),
+  criarModelo:      (dados) => api.post('/relatorios/modelos', dados),
+  atualizarModelo:  (id, dados) => api.put(`/relatorios/modelos/${id}`, dados),
+  excluirModelo:    (id) => api.delete(`/relatorios/modelos/${id}`),
+  duplicarModelo:   (id) => api.post(`/relatorios/modelos/${id}/duplicar`),
+  salvarPreferencias: (id, dados) => api.put(`/relatorios/modelos/${id}/preferencias`, dados),
+  executar:         (dados) => api.post('/relatorios/executar', dados),
+  exportar:         (dados) => api.post('/relatorios/exportar', dados, { responseType: 'blob', timeout: 120000 }),
+  obterLimites:     () => api.get('/relatorios/limites'),
+  salvarLimites:    (dados) => api.put('/relatorios/limites', dados),
+};
+
 export const periciasAPI = {
   listar:            (params) => api.get('/pericias', { params }),
   relatorioPeritos:  (params) => api.get('/pericias/relatorio-peritos', { params }),

@@ -3,7 +3,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const arquivo = fs.readFileSync(path.join(__dirname, '../src/routes/index.js'), 'utf8');
+// Lê TODOS os arquivos de rotas (index.js + os que ele monta, ex.: relatorios.js):
+// assim uma rota nova num arquivo novo também passa pelo contrato de segurança.
+const pastaRotas = path.join(__dirname, '../src/routes');
+const arquivo = fs.readdirSync(pastaRotas).filter(f => f.endsWith('.js')).sort()
+  .map(f => fs.readFileSync(path.join(pastaRotas, f), 'utf8')).join('\n');
 const linhas = arquivo.split(/\r?\n/).filter(l => /router\.(get|post|put|patch|delete)\(/.test(l));
 const publicas = new Set([
   'GET /public/info',
@@ -19,8 +23,8 @@ function identificar(linha) {
   return m ? `${m[1].toUpperCase()} ${m[2]}` : null;
 }
 
-test('inventário contém todas as 294 rotas conhecidas', () => {
-  assert.equal(linhas.length, 294, 'mudou a quantidade de rotas: revise o contrato de segurança e atualize este teste');
+test('inventário contém todas as 305 rotas conhecidas', () => {
+  assert.equal(linhas.length, 305, 'mudou a quantidade de rotas: revise o contrato de segurança e atualize este teste');
 });
 
 test('não existem método e caminho duplicados', () => {
