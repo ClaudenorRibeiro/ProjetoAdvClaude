@@ -587,16 +587,18 @@ function EventoDetalhe({ evento }) {
   const linhas = [];
 
   if (tipo === 'prazo') {
+    if (dados.pasta_id) linhas.push(['Pasta', <Link to={`/processos/pasta/${dados.pasta_id}`}>{dados.pasta_numero_fmt}</Link>]);
     if (dados.processo_numero) linhas.push(['Processo', dados.processo_numero]);
-    if (dados.pasta_titulo)    linhas.push(['Pasta', dados.pasta_titulo]);
+    if (dados.pasta_titulo)    linhas.push(['Título do processo', dados.pasta_titulo]);
     if (dados.subtipo_nome)    linhas.push(['Tipo', dados.subtipo_nome]);
     if (dados.descricao)       linhas.push(['Descrição', dados.descricao]);
     linhas.push(['Vencimento', formatarData(dados.data_vencimento)]);
     linhas.push(['Status', dados.status]);
     if (dados.responsavel_nome) linhas.push(['Responsável', dados.responsavel_nome]);
   } else if (tipo === 'audiencia') {
+    if (dados.pasta_id) linhas.push(['Pasta', <Link to={`/processos/pasta/${dados.pasta_id}`}>{dados.pasta_numero_fmt}</Link>]);
     if (dados.processo_numero) linhas.push(['Processo', dados.processo_numero]);
-    if (dados.pasta_titulo)    linhas.push(['Pasta', dados.pasta_titulo]);
+    if (dados.pasta_titulo)    linhas.push(['Título do processo', dados.pasta_titulo]);
     if (dados.tipo_nome)       linhas.push(['Tipo', dados.tipo_nome]);
     linhas.push(['Data', `${formatarData(String(dados.data).slice(0, 10))}${dados.hora ? ' ' + dados.hora.slice(0, 5) : ''}`]);
     linhas.push(['Modalidade', dados.modalidade === 'sem_comparecimento' ? 'Sem comparecimento' : dados.modalidade]);
@@ -612,8 +614,11 @@ function EventoDetalhe({ evento }) {
     if (dados.assistente_nome) linhas.push(['Assistente', dados.assistente_nome]);
   } else if (tipo === 'tarefa') {
     linhas.push(['Título', dados.titulo]);
+    // Pasta: a do processo vinculado; se a tarefa estiver ligada direto a uma pasta (sem processo), usa essa.
+    const tarefaPastaId  = dados.pasta_do_processo_id || dados.pasta_id;
+    const tarefaPastaFmt = dados.pasta_do_processo_fmt || dados.pasta_numero_fmt;
+    if (tarefaPastaId && tarefaPastaFmt) linhas.push(['Pasta', <Link to={`/processos/pasta/${tarefaPastaId}`}>{tarefaPastaFmt}</Link>]);
     if (dados.processo_numero)       linhas.push(['Processo', dados.processo_numero]);
-    if (dados.pasta_do_processo_fmt) linhas.push(['Pasta', dados.pasta_do_processo_fmt]);
     if (dados.descricao)       linhas.push(['Descrição', dados.descricao]);
     linhas.push(['Prioridade', dados.prioridade]);
     if (dados.data_vencimento) linhas.push(['Vencimento', formatarData(dados.data_vencimento)]);
