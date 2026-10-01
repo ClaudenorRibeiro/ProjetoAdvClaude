@@ -31,7 +31,8 @@ export async function copiarTexto(texto) {
   }
 }
 
-export default function NumeroProcessoCopiavel({ numero, onAbrir, href }) {
+// tamanhoIcone (opcional, px): tamanho do ⧉; sem informar, mantém 13 como sempre foi.
+export default function NumeroProcessoCopiavel({ numero, onAbrir, href, tamanhoIcone = 13 }) {
   const [copiado, setCopiado] = useState(false);
   const [falhou, setFalhou]   = useState(false);
   const [hover, setHover]     = useState(false);
@@ -87,7 +88,7 @@ export default function NumeroProcessoCopiavel({ numero, onAbrir, href }) {
       )}
       {abreProcesso && <button type="button" onClick={(event) => { event.stopPropagation(); copiar(); }}
         aria-label={`Copiar número ${numero}`} title="Copiar número"
-        style={{ marginLeft:'5px', border:0, background:'transparent', padding:0, color:'#475569', cursor:'pointer', fontSize:'13px', lineHeight:1 }}>⧉</button>}
+        style={{ marginLeft:'5px', border:0, background:'transparent', padding:0, color:'#475569', cursor:'pointer', fontSize:`${tamanhoIcone}px`, lineHeight:1 }}>⧉</button>}
       {mostrarBalao && (
         <span style={{
           position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
@@ -108,7 +109,8 @@ export default function NumeroProcessoCopiavel({ numero, onAbrir, href }) {
 // maior (ex.: "Una — 1001412-69.2026.5.02.0040"). Copia o número e, por ~1,5s, troca
 // o ícone por ✓ (sem balão, para não ser cortado por áreas com rolagem). Usa <span
 // role="button"> porque pode ficar dentro de outro botão; não dispara o clique do pai.
-export function BotaoCopiarNumero({ numero }) {
+// tamanho (opcional, px): tamanho do ícone; sem informar, 13.
+export function BotaoCopiarNumero({ numero, tamanho = 13 }) {
   const [estado, setEstado] = useState(null); // null | 'ok' | 'erro'
   const timerRef = useRef(null);
   useEffect(() => () => clearTimeout(timerRef.current), []);
@@ -128,7 +130,7 @@ export function BotaoCopiarNumero({ numero }) {
     <span role="button" tabIndex={0} onClick={copiar}
       onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') copiar(event); }}
       aria-label={`Copiar número ${numero}`} title={rotulo}
-      style={{ marginLeft: '6px', cursor: 'pointer', fontSize: '13px', lineHeight: 1, flexShrink: 0,
+      style={{ marginLeft: '6px', cursor: 'pointer', fontSize: `${tamanho}px`, lineHeight: 1, flexShrink: 0,
                color: 'inherit', fontWeight: estado ? 700 : 400 }}>
       {estado === 'ok' ? '✓' : estado === 'erro' ? '✗' : '⧉'}
     </span>

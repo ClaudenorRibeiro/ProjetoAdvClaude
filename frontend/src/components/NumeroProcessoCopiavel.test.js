@@ -64,4 +64,20 @@ describe('NumeroProcessoCopiavel (regressão após extrair a função de copiar)
     await user.click(screen.getByRole('button', { name: `Copiar número ${NUMERO}` }));
     expect(await navigator.clipboard.readText()).toBe(NUMERO);
   });
+
+  it('tamanho do ⧉: 13px por padrão (como sempre foi) e configurável sem afetar quem não pede', () => {
+    const { unmount } = render(React.createElement(NumeroProcessoCopiavel, { numero: NUMERO, onAbrir: vi.fn() }));
+    expect(screen.getByRole('button', { name: `Copiar número ${NUMERO}` })).toHaveStyle({ fontSize: '13px' });
+    unmount();
+    render(React.createElement(NumeroProcessoCopiavel, { numero: NUMERO, onAbrir: vi.fn(), tamanhoIcone: 18 }));
+    expect(screen.getByRole('button', { name: `Copiar número ${NUMERO}` })).toHaveStyle({ fontSize: '18px' });
+  });
+
+  it('BotaoCopiarNumero também aceita tamanho (padrão 13px)', () => {
+    const { unmount } = render(React.createElement(BotaoCopiarNumero, { numero: NUMERO }));
+    expect(screen.getByRole('button')).toHaveStyle({ fontSize: '13px' });
+    unmount();
+    render(React.createElement(BotaoCopiarNumero, { numero: NUMERO, tamanho: 18 }));
+    expect(screen.getByRole('button')).toHaveStyle({ fontSize: '18px' });
+  });
 });

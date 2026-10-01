@@ -54,6 +54,9 @@ const mensagens = {
 // compartilhado `utils/coresAgenda`. Cada usuário pode sobrescrever (usuarios.cores_agenda);
 // dentro do componente, `cores` = padrão + escolhas do usuário. Ver [[ModalAparencia]].
 
+// Tamanho (px) do ícone ⧉ de copiar o número do processo nesta tela.
+const TAMANHO_ICONE_COPIAR = 18;
+
 // Nome do responsável/delegado do item, conforme o tipo. Vazio quando não há (ex.: feriado, ou
 // tarefa "do escritório" sem atribuição). Usado no calendário E na janela do dia — sem duplicar.
 function responsavelDoEvento(ev) {
@@ -438,7 +441,7 @@ export default function Agenda() {
                         <span style={{ textAlign: 'left', whiteSpace: 'normal', wordBreak: 'break-word' }}>
                           {ev.title}
                           {/* Só audiência e perícia trazem o número do processo no título */}
-                          {(ev.tipo === 'audiencia' || ev.tipo === 'pericia') && <BotaoCopiarNumero numero={ev.dados?.processo_numero} />}
+                          {(ev.tipo === 'audiencia' || ev.tipo === 'pericia') && <BotaoCopiarNumero numero={ev.dados?.processo_numero} tamanho={TAMANHO_ICONE_COPIAR} />}
                         </span>
                         {resp && (
                           <span style={{ flexShrink: 0, fontStyle: 'italic', opacity: 0.9, fontSize: '13px', whiteSpace: 'nowrap' }}>
@@ -593,7 +596,7 @@ function EventoDetalhe({ evento }) {
   const linhas = [];
   // Número do processo com o ⧉ de copiar (mesmo componente das demais telas). O número abre a pasta.
   const numeroProcesso = (numero, pastaId) => (
-    <NumeroProcessoCopiavel numero={numero}
+    <NumeroProcessoCopiavel numero={numero} tamanhoIcone={TAMANHO_ICONE_COPIAR}
       href={pastaId ? `/processos/pasta/${pastaId}` : undefined}
       onAbrir={pastaId ? () => navigate(`/processos/pasta/${pastaId}`) : undefined} />
   );
