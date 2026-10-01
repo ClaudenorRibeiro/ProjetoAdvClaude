@@ -30,13 +30,17 @@ function converterCelula(coluna, v) {
 function larguraDaColuna(coluna) {
   if (coluna.tipo === 'data') return 13;
   if (coluna.tipo === 'datahora') return 18;
+  if (coluna.formato === 'moeda') return 16;
   if (coluna.tipo === 'booleano' || coluna.tipo === 'numero') return 12;
   if (coluna.formato === 'processo') return 30;
   if (coluna.formato === 'pasta') return 9;
   return 28;
 }
 
+const FORMATO_MOEDA = '"R$" #,##0.00';
+
 function formatoNumerico(coluna) {
+  if (coluna.formato === 'moeda') return FORMATO_MOEDA;
   return coluna.tipo === 'data' ? FORMATO_DATA : coluna.tipo === 'datahora' ? FORMATO_DATAHORA : null;
 }
 

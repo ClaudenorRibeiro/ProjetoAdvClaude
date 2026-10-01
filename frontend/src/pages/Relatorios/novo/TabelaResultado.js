@@ -5,7 +5,7 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import NumeroProcessoCopiavel from '../../../components/NumeroProcessoCopiavel';
-import { formatarData, formatarDataHora } from '../../../utils/formatters';
+import { formatarData, formatarDataHora, formatarMoeda } from '../../../utils/formatters';
 
 function Celula({ coluna, linha, navigate }) {
   const v = linha[coluna.chave];
@@ -19,6 +19,7 @@ function Celula({ coluna, linha, navigate }) {
   if (coluna.tipo === 'data') return formatarData(v);
   if (coluna.tipo === 'datahora') return formatarDataHora(v);
   if (coluna.tipo === 'booleano') return v ? 'Sim' : 'Não';
+  if (coluna.formato === 'moeda') return formatarMoeda(v);
   return String(v);
 }
 
@@ -28,12 +29,12 @@ export default function TabelaResultado({ colunas, linhas }) {
   return (
     <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflow: 'auto' }}>
       <table className="tabela tabela-sticky">
-        <thead><tr>{colunas.map(c => <th key={c.chave}>{c.rotulo}</th>)}</tr></thead>
+        <thead><tr>{colunas.map(c => <th key={c.chave} style={c.formato === 'moeda' ? { textAlign: 'right' } : undefined}>{c.rotulo}</th>)}</tr></thead>
         <tbody>
           {linhas.map((linha, i) => (
             <tr key={i}>{colunas.map(c => (
               // número do processo e da pasta nunca quebram em duas linhas
-              <td key={c.chave} style={c.formato ? { whiteSpace: 'nowrap' } : undefined}><Celula coluna={c} linha={linha} navigate={navigate} /></td>
+              <td key={c.chave} style={c.formato === 'moeda' ? { whiteSpace: 'nowrap', textAlign: 'right' } : (c.formato ? { whiteSpace: 'nowrap' } : undefined)}><Celula coluna={c} linha={linha} navigate={navigate} /></td>
             ))}</tr>
           ))}
         </tbody>

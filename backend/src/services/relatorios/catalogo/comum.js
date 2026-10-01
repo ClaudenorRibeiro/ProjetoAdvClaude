@@ -30,6 +30,9 @@ async function opcoesResponsaveisMistos() {
   ];
 }
 
+// Rótulo do tipo de acordo e "Acordo 2" / "Alvará 1" (número na ordem de criação dentro do processo — igual à tela)
+const ORIGEM_ACORDO_EXPR = "CONCAT(CASE a.tipo WHEN 'alvara' THEN 'Alvará ' ELSE 'Acordo ' END, (SELECT COUNT(*) FROM acordo a2 WHERE a2.processo_id = a.processo_id AND a2.tipo = a.tipo AND a2.id <= a.id))";
+
 const opcoesLista = (rotulos) => () => Object.entries(rotulos).map(([valor, rotulo]) => ({ valor, rotulo }));
 
-module.exports = { PASTA_EXPR, responsavelMisto, opcoesResponsaveisMistos, opcoesTodosUsuarios, opcoesLista };
+module.exports = { PASTA_EXPR, responsavelMisto, opcoesResponsaveisMistos, opcoesTodosUsuarios, opcoesLista, ORIGEM_ACORDO_EXPR };

@@ -4,13 +4,14 @@
 // ============================================================
 import React, { useEffect, useState } from 'react';
 import { relatoriosAPI } from '../../../services/api';
-import { formatarData, formatarDataHora } from '../../../utils/formatters';
+import { formatarData, formatarDataHora, formatarMoeda } from '../../../utils/formatters';
 import { mensagemDeErro } from './Construtor';
 
 function formatarTotal(metrica, v) {
   if (v === null || v === undefined) return '—';
   if (metrica.tipo === 'data') return formatarData(v);
   if (metrica.tipo === 'datahora') return formatarDataHora(v);
+  if (metrica.formato === 'moeda') return formatarMoeda(v);
   return metrica.funcao === 'media' ? Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Number(v).toLocaleString('pt-BR');
 }
 

@@ -15,7 +15,8 @@ function colunasDoResultado(assunto, receita) {
   return {
     grupos: receita.agrupar.map(g => ({ chave: g.campo, rotulo: assunto.campos[g.campo].rotulo, passo: g.passo || null })),
     metricas: receita.metricas.map((m, i) => ({ chave: `m${i + 1}`, rotulo: rotuloDaMetrica(m, assunto), funcao: m.funcao,
-      tipo: m.funcao === 'contagem' ? 'numero' : (m.funcao === 'media' ? 'numero' : assunto.campos[m.campo].tipo) })),
+      tipo: m.funcao === 'contagem' ? 'numero' : (m.funcao === 'media' ? 'numero' : assunto.campos[m.campo].tipo),
+      formato: m.funcao === 'contagem' ? null : (assunto.campos[m.campo].formato || null) })),
   };
 }
 

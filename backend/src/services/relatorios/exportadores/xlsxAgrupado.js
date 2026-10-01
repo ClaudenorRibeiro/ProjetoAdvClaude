@@ -10,6 +10,7 @@ const CINZA = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' }
 const AZUL_CLARO = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEAFE' } };
 
 function formatoDaMetrica(m) {
+  if (m.formato === 'moeda') return '"R$" #,##0.00';
   if (m.tipo === 'data') return 'dd/mm/yyyy';
   if (m.tipo === 'datahora') return 'dd/mm/yyyy hh:mm';
   return m.funcao === 'media' ? '#,##0.00' : '#,##0';

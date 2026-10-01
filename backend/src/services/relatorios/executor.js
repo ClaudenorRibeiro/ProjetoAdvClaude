@@ -20,6 +20,7 @@ function converterLinha(assunto, receita, linha) {
     let v = linha[chave];
     if (v === undefined || v === null) v = null;
     else if (campo.tipo === 'booleano') v = Number(v) === 1;
+    else if (campo.tipo === 'numero') v = Number(v);   // DECIMAL do MySQL chega como texto
     else if (campo.rotulosValor) v = campo.rotulosValor[v] ?? v;
     saida[chave] = v;
   }
