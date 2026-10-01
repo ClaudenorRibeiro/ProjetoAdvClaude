@@ -47,4 +47,13 @@ describe('imagem do gráfico (PNG)', () => {
     expect(texto).toContain('<path');
     expect(svg.querySelectorAll('[data-efeito]')).toHaveLength(2);
   });
+
+  it('sem título (gráfico dentro de PDF/Word): só a legenda curta e menos espaço no topo', () => {
+    const com = montarSvgImagem({ ...base, legenda: [] });
+    const sem = montarSvgImagem({ ...base, titulo: '', legenda: [] });
+    expect(sem.texto).not.toContain('font-weight="700"');
+    expect(sem.texto).toContain('Gráfico: Quantidade por Status');
+    expect(sem.altura).toBeLessThan(com.altura);
+    expect(montarSvgImagem({ ...base, titulo: '', subtitulo: '', legenda: [] }).altura).toBe(8 + 320 + 16);
+  });
 });

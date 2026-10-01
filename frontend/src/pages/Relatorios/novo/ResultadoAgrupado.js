@@ -17,7 +17,7 @@ const VISOES = [
   { valor: 'cruzada', rotulo: 'Tabela cruzada' },
 ];
 
-export default function ResultadoAgrupado({ corpoBase, onAbrirGrupo, preferencias, aoMudarPreferencias, nomeRelatorio }) {
+export default function ResultadoAgrupado({ corpoBase, onAbrirGrupo, preferencias, aoMudarPreferencias, nomeRelatorio, registrarGrafico }) {
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState('');
   const [visao, setVisao] = useState(VISOES.some(v => v.valor === preferencias?.visao) ? preferencias.visao : 'tabela');
@@ -54,7 +54,7 @@ export default function ResultadoAgrupado({ corpoBase, onAbrirGrupo, preferencia
         </div>
       )}
       {visaoAtual === 'grafico' && (
-        <ResultadoGrafico dados={dados} preferencias={preferencias} aoMudarPreferencias={aoMudarPreferencias} onAbrirGrupo={abrir} nomeRelatorio={nomeRelatorio} />
+        <ResultadoGrafico dados={dados} preferencias={preferencias} aoMudarPreferencias={aoMudarPreferencias} onAbrirGrupo={abrir} nomeRelatorio={nomeRelatorio} registrarGrafico={registrarGrafico} />
       )}
       {visaoAtual === 'cruzada' && (
         <TabelaCruzada dados={dados} metricaInicial={preferencias?.grafico?.metrica} onAbrirGrupo={abrir} />

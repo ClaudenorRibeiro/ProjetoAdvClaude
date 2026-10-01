@@ -4,6 +4,9 @@
 module.exports = {
   LIMITE_TELA: 2000,        // máximo de linhas que a tela navega (o resto: refinar filtros ou exportar)
   LIMITE_EXCEL: 50000,      // máximo de linhas numa exportação (acima disso o pedido é recusado)
+  LIMITE_DOCUMENTO: 1000,   // máximo de linhas no PDF/Word (são feitos em memória e lidos por gente: acima disso, use Excel)
+  IMAGEM_MAX_BYTES: 3 * 1024 * 1024, // gráfico (PNG) enviado pela tela para entrar no PDF/Word
+  IMAGEM_MAX_LADO: 6000,    // pixels
   POR_PAGINA_PADRAO: 50,
   POR_PAGINA_MAX: 200,
   LOTE_EXPORTACAO: 2000,    // linhas lidas do banco por vez ao exportar (memória sob controle)

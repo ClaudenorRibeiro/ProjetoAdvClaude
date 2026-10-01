@@ -218,7 +218,7 @@ test('Excel: respeita a restrição do usuário, recusa excesso de linhas e form
     assert.equal(grande.status, 413);
     assert.match(grande.body.mensagem, /máximo para exportar/);
   } finally { L.LIMITE_EXCEL = original; }
-  assert.equal((await req(admin).post('/api/relatorios/exportar').send({ receita: receitaPrazos(), formato: 'pdf' })).status, 422);
+  assert.equal((await req(admin).post('/api/relatorios/exportar').send({ receita: receitaPrazos(), formato: 'odt' })).status, 422);
   assert.equal((await req(semPermissao).post('/api/relatorios/exportar').send({ receita: receitaPrazos() })).status, 403);
 });
 

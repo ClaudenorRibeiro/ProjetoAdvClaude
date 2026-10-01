@@ -13,6 +13,7 @@ const { validarReceita } = require('../services/relatorios/validador');
 const { contar, executarPagina } = require('../services/relatorios/executor');
 const { exportarXlsx } = require('../services/relatorios/exportadores/xlsx');
 const { exportarXlsxAgrupado } = require('../services/relatorios/exportadores/xlsxAgrupado');
+const { exportarDocumento, FORMATOS: FORMATOS_DOCUMENTO } = require('../services/relatorios/exportadores/exportarDocumento');
 const { executarAgrupado } = require('../services/relatorios/executorAgrupado');
 const { condicoesDoGrupo } = require('../services/relatorios/agrupamento');
 const { aplicarParametros, receitaDoDetalhe, temAgrupamento } = require('../services/relatorios/parametros');
@@ -114,16 +115,18 @@ async function executar(req, res) {
   } catch (err) { return tratar(res, err); }
 }
 
-function nomeDoArquivo(base) {
+function nomeDoArquivo(base, extensao = 'xlsx') {
   const limpo = String(base || 'Relatório').replace(/[^\p{L}\p{N} _().-]/gu, '').trim().slice(0, 80) || 'Relatório';
   const dia = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
-  return `${limpo} - ${dia}.xlsx`;
+  return `${limpo} - ${dia}.${extensao}`;
 }
 
-function cabecalhosDoArquivo(res, nomeRelatorio) {
+const TIPO_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+function cabecalhosDoArquivo(res, nomeRelatorio, { tipo = TIPO_XLSX, extensao = 'xlsx' } = {}) {
   res.status(200);
-  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', `attachment; filename="relatorio.xlsx"; filename*=UTF-8''${encodeURIComponent(nomeDoArquivo(nomeRelatorio))}`);
+  res.setHeader('Content-Type', tipo);
+  res.setHeader('Content-Disposition', `attachment; filename="relatorio.${extensao}"; filename*=UTF-8''${encodeURIComponent(nomeDoArquivo(nomeRelatorio, extensao))}`);
   res.setHeader('Cache-Control', 'no-store');
 }
 
@@ -131,13 +134,23 @@ function recusarExcesso(total) {
   throw new ErroRelatorio(`Este relatório tem ${total.toLocaleString('pt-BR')} linhas e o máximo para exportar é ${L.LIMITE_EXCEL.toLocaleString('pt-BR')}. Refine os filtros.`, 413);
 }
 
-// POST /api/relatorios/exportar  { receita | modelo_id, parametros?, formato: 'xlsx', nome?, incluirDetalhes? }
+// POST /api/relatorios/exportar  { receita | modelo_id, parametros?, formato: 'xlsx' | 'pdf' | 'docx', nome?, incluirDetalhes?,
+//                                  grafico? (PNG em "data:image/png;base64,..." — só PDF/Word de relatório agrupado) }
 async function exportar(req, res) {
   try {
-    if ((req.body?.formato || 'xlsx') !== 'xlsx') throw new ErroRelatorio('Esse formato ainda não está disponível. Por enquanto: Excel (xlsx).');
+    const formato = req.body?.formato || 'xlsx';
+    if (formato !== 'xlsx' && !Object.prototype.hasOwnProperty.call(FORMATOS_DOCUMENTO, formato)) throw new ErroRelatorio('Formato inválido. Use Excel (xlsx), PDF (pdf) ou Word (docx).');
     const ctx = await criarContexto(req.usuario);
     const { assunto, receita, modelo } = await resolverReceita(req, ctx);
     const nomeRelatorio = modelo ? modelo.nome : (String(req.body?.nome || '').trim().slice(0, 100) || `Relatório de ${assunto.rotulo}`);
+
+    if (formato !== 'xlsx') {   // PDF e Word: gerados em memória (limite de linhas menor), tudo conferido antes de responder
+      const arquivo = await exportarDocumento({ formato, assunto, receita, ctx, nomeRelatorio, incluirDetalhes: req.body?.incluirDetalhes, grafico: req.body?.grafico });
+      cabecalhosDoArquivo(res, nomeRelatorio, arquivo);
+      res.end(arquivo.buffer);
+      await registrarUso(req, 'exportar', modelo, assunto);
+      return undefined;
+    }
 
     // Tudo o que pode ser recusado é conferido ANTES de começar a escrever o arquivo
     let gerar;
