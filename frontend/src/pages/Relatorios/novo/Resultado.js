@@ -66,7 +66,9 @@ export default function Resultado({ receita, modelo, parametros, temPerguntas, o
       </div>
 
       {agrupado
-        ? <ResultadoAgrupado corpoBase={corpoBase} onAbrirGrupo={(chaves, rotulos) => setGrupoAberto({ chaves, rotulos })} />
+        ? <ResultadoAgrupado corpoBase={corpoBase} onAbrirGrupo={(chaves, rotulos) => setGrupoAberto({ chaves, rotulos })}
+            preferencias={modelo?.preferencias} nomeRelatorio={modelo?.nome}
+            aoMudarPreferencias={modelo ? (p) => relatoriosAPI.salvarPreferencias(modelo.id, p).catch(() => {}) : undefined} />
         : <ResultadoDetalhado corpoBase={corpoBase} limiteInicial={modelo?.preferencias?.linhas_por_pagina || 50}
             aoMudarLimite={modelo ? (n) => relatoriosAPI.salvarPreferencias(modelo.id, { linhas_por_pagina: n }).catch(() => {}) : undefined} />}
 

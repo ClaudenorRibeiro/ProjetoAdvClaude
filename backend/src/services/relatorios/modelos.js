@@ -8,7 +8,7 @@ const auditoria = require('../../middleware/auditoria');
 const L = require('./limites');
 const { ErroRelatorio } = require('./erros');
 
-const LINHAS_POR_PAGINA_VALIDAS = [10, 25, 50, 100, 200];
+const { validarPreferencias, mesclar, LINHAS_POR_PAGINA_VALIDAS } = require('./preferencias');
 
 function lerJson(v) { return typeof v === 'string' ? JSON.parse(v) : v; }
 function paraModelo(r) {
@@ -154,14 +154,14 @@ async function duplicar(usuario, id) {
   return obter(pool, novoId, usuario.id);
 }
 
+// Mescla com o que já estava guardado: mudar só o tipo de gráfico não apaga as linhas por página
 async function salvarPreferencias(usuario, id, prefs) {
-  await obterOuErro(pool, id, usuario.id);
-  const linhas = Number(prefs?.linhas_por_pagina);
-  if (!LINHAS_POR_PAGINA_VALIDAS.includes(linhas)) throw new ErroRelatorio('Quantidade de linhas por página inválida.');
+  const atual = await obterOuErro(pool, id, usuario.id);
+  const novas = mesclar(atual.preferencias, validarPreferencias(prefs));
   await pool.execute(
     'UPDATE relatorio_modelo_usuario SET preferencias = ? WHERE modelo_id = ? AND usuario_id = ?',
-    [JSON.stringify({ linhas_por_pagina: linhas }), id, usuario.id]);
-  return { linhas_por_pagina: linhas };
+    [JSON.stringify(novas), id, usuario.id]);
+  return novas;
 }
 
 module.exports = { listarMeus, obter, obterOuErro, criar, atualizar, excluir, duplicar, salvarPreferencias, limiteDoUsuario, LINHAS_POR_PAGINA_VALIDAS };

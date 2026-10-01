@@ -1,25 +1,26 @@
 // ============================================================
-// RELATÓRIOS — resultado AGRUPADO: grupos, subtotais e total geral.
-// Clicar em um grupo abre os itens dele.
+// RELATÓRIOS — resultado AGRUPADO: busca os números UMA vez e os mostra em três visões
+// (Tabela, Gráfico e Tabela cruzada). As três usam exatamente os mesmos números.
+// Clicar em um grupo (linha, barra, fatia ou célula) abre os itens dele.
+// A visão escolhida é uma preferência do relatório salvo (nenhum dado é guardado).
 // ============================================================
 import React, { useEffect, useState } from 'react';
 import { relatoriosAPI } from '../../../services/api';
-import { formatarData, formatarDataHora, formatarMoeda } from '../../../utils/formatters';
 import { mensagemDeErro } from './Construtor';
+import TabelaAgrupada from './TabelaAgrupada';
+import TabelaCruzada from './TabelaCruzada';
+import ResultadoGrafico from './grafico/ResultadoGrafico';
 
-function formatarTotal(metrica, v) {
-  if (v === null || v === undefined) return '—';
-  if (metrica.tipo === 'data') return formatarData(v);
-  if (metrica.tipo === 'datahora') return formatarDataHora(v);
-  if (metrica.formato === 'moeda') return formatarMoeda(v);
-  return metrica.funcao === 'media' ? Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Number(v).toLocaleString('pt-BR');
-}
+const VISOES = [
+  { valor: 'tabela', rotulo: 'Tabela' },
+  { valor: 'grafico', rotulo: 'Gráfico' },
+  { valor: 'cruzada', rotulo: 'Tabela cruzada' },
+];
 
-const FUNDO = { subtotal: '#f3f4f6', total: '#dbeafe' };
-
-export default function ResultadoAgrupado({ corpoBase, onAbrirGrupo }) {
+export default function ResultadoAgrupado({ corpoBase, onAbrirGrupo, preferencias, aoMudarPreferencias, nomeRelatorio }) {
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState('');
+  const [visao, setVisao] = useState(VISOES.some(v => v.valor === preferencias?.visao) ? preferencias.visao : 'tabela');
 
   useEffect(() => {
     let ativo = true;
@@ -32,40 +33,33 @@ export default function ResultadoAgrupado({ corpoBase, onAbrirGrupo }) {
 
   if (erro) return <div className="card" role="alert" style={{ color: '#b91c1c' }}>{erro}</div>;
   if (!dados) return <div className="card"><div className="loading">Carregando...</div></div>;
-  const { grupos, metricas } = dados.colunas;
-  const nGrupos = grupos.length;
+
+  const doisNiveis = dados.colunas.grupos.length >= 2;
+  const visaoAtual = visao === 'cruzada' && !doisNiveis ? 'tabela' : visao;
+  const abrir = (chaves, rotulos) => onAbrirGrupo(chaves, rotulos);
+  function escolher(v) { setVisao(v); if (aoMudarPreferencias) aoMudarPreferencias({ visao: v }); }
 
   return (
-    <div className="card">
-      <p style={{ marginTop: 0 }}>
-        {nGrupos ? `${dados.totalGrupos.toLocaleString('pt-BR')} grupo(s). Clique em um grupo para ver os itens dele.` : 'Total geral.'}
-      </p>
-      <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflow: 'auto' }}>
-        <table className="tabela tabela-sticky">
-          <thead><tr>
-            {grupos.map(g => <th key={g.chave}>{g.rotulo}</th>)}
-            {metricas.map(m => <th key={m.chave} style={{ textAlign: 'right' }}>{m.rotulo}</th>)}
-          </tr></thead>
-          <tbody>
-            {dados.linhas.map((l, i) => {
-              const clicavel = l.tipo === 'grupo';
-              const total = l.tipo === 'total';
-              const celulasGrupo = total
-                ? <td colSpan={Math.max(nGrupos, 1)}><strong>TOTAL GERAL</strong></td>
-                : grupos.map((g, gi) => (
-                  <td key={g.chave}>{l.tipo === 'subtotal' && gi === 1 ? <strong>Subtotal de {l.rotulos[0]}</strong> : (l.tipo === 'subtotal' ? l.rotulos[0] : l.rotulos[gi])}</td>));
-              return (
-                <tr key={i} style={{ background: FUNDO[l.tipo], fontWeight: l.tipo === 'grupo' ? 400 : 700, cursor: clicavel ? 'pointer' : 'default' }}
-                  title={clicavel ? 'Ver os itens deste grupo' : undefined}
-                  onClick={clicavel ? () => onAbrirGrupo(l.chaves, l.rotulos) : undefined}>
-                  {celulasGrupo}
-                  {metricas.map((m, mi) => <td key={m.chave} style={{ textAlign: 'right' }}>{formatarTotal(m, l.valores[mi])}</td>)}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+    <div>
+      {dados.colunas.grupos.length > 0 && (
+        <div role="group" aria-label="Forma de exibição" style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+          {VISOES.map(v => {
+            const bloqueada = v.valor === 'cruzada' && !doisNiveis;
+            return (
+              <button key={v.valor} type="button" className={`btn ${visaoAtual === v.valor ? 'btn-primary' : 'btn-secondary'}`} aria-pressed={visaoAtual === v.valor}
+                disabled={bloqueada} title={bloqueada ? 'Escolha 2 níveis em "Agrupar e totalizar" para usar a tabela cruzada' : undefined}
+                onClick={() => escolher(v.valor)}>{v.rotulo}</button>
+            );
+          })}
+        </div>
+      )}
+      {visaoAtual === 'grafico' && (
+        <ResultadoGrafico dados={dados} preferencias={preferencias} aoMudarPreferencias={aoMudarPreferencias} onAbrirGrupo={abrir} nomeRelatorio={nomeRelatorio} />
+      )}
+      {visaoAtual === 'cruzada' && (
+        <TabelaCruzada dados={dados} metricaInicial={preferencias?.grafico?.metrica} onAbrirGrupo={abrir} />
+      )}
+      {visaoAtual === 'tabela' && <TabelaAgrupada dados={dados} onAbrirGrupo={abrir} />}
     </div>
   );
 }

@@ -83,7 +83,7 @@ async function duplicarModelo(req, res) {
   catch (err) { return tratar(res, err); }
 }
 
-// PUT /api/relatorios/modelos/:id/preferencias  { linhas_por_pagina }
+// PUT /api/relatorios/modelos/:id/preferencias  { linhas_por_pagina?, visao?, grafico? } (mescla com o que já estava)
 async function salvarPreferencias(req, res) {
   try { return sucesso(res, await modelos.salvarPreferencias(req.usuario, Number(req.params.id), req.body), 'Preferências salvas'); }
   catch (err) { return tratar(res, err); }

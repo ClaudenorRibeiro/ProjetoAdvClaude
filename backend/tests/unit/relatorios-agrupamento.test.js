@@ -174,3 +174,23 @@ test('linhas agrupadas: 2 níveis intercalam o subtotal depois dos filhos; datas
   const porTotal = montarLinhas({ assunto: prazos, agrupar, ordemGrupo: { por: 'm1', direcao: 'asc' }, folhas, subtotais, total: { valores: [7] } });
   assert.equal(porTotal[0].rotulos[0], '02/2026');                       // bloco de menor subtotal primeiro
 });
+
+// ----- Fase 4: preferências de exibição (visão e gráfico) -----
+const { validarPreferencias, mesclar } = require('../../src/services/relatorios/preferencias');
+
+test('preferências: aceita linhas por página, visão e gráfico; recusa o resto', () => {
+  assert.deepEqual(validarPreferencias({ linhas_por_pagina: 25 }), { linhas_por_pagina: 25 });
+  assert.deepEqual(validarPreferencias({ visao: 'grafico' }), { visao: 'grafico' });
+  assert.deepEqual(validarPreferencias({ grafico: { tipo: 'rosca', metrica: 'm2', empilhado: true } }), { grafico: { tipo: 'rosca', metrica: 'm2', empilhado: true } });
+  for (const ruim of [null, [], {}, { visao: 'pizza' }, { linhas_por_pagina: 7 }, { grafico: { tipo: 'radar' } }, { grafico: { metrica: 'm9' } },
+    { grafico: { metrica: 'x1' } }, { grafico: { empilhado: 'sim' } }, { grafico: [] }, { outra: 1 }, { visao: 'tabela', sql: 'DROP' }]) {
+    assert.throws(() => validarPreferencias(ruim), ErroRelatorio, JSON.stringify(ruim));
+  }
+});
+
+test('preferências: mesclar não apaga o que já estava (mudar o tipo mantém o total escolhido)', () => {
+  const atuais = { linhas_por_pagina: 50, visao: 'tabela', grafico: { tipo: 'colunas', metrica: 'm2' } };
+  assert.deepEqual(mesclar(atuais, { grafico: { tipo: 'linhas' } }), { linhas_por_pagina: 50, visao: 'tabela', grafico: { tipo: 'linhas', metrica: 'm2' } });
+  assert.deepEqual(mesclar(atuais, { visao: 'grafico' }), { linhas_por_pagina: 50, visao: 'grafico', grafico: { tipo: 'colunas', metrica: 'm2' } });
+  assert.deepEqual(mesclar(null, { visao: 'cruzada' }), { visao: 'cruzada' });
+});
