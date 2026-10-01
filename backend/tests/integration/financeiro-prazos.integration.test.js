@@ -101,7 +101,7 @@ test('financeiro: acordo valida totais, recalcula valores e baixa é atômica', 
   ]);
   assert.deepEqual([primeira.status, segunda.status].sort(), [200, 400]);
   assert.equal((await consultar('SELECT COUNT(*) AS n FROM conta_corrente WHERE parcela_id = ?', [parcela.id]))[0].n, 1);
-  assert.equal(Number((await consultar('SELECT valor FROM conta_corrente WHERE parcela_id = ?', [parcela.id]))[0].valor), 30);
+  assert.equal(Number((await consultar('SELECT valor FROM conta_corrente WHERE parcela_id = ?', [parcela.id]))[0].valor), 100); // entrada = valor bruto recebido; honorário e repasses só são lançados quando confirmados
   assert.equal((await requisicao().put(`/api/financeiro/lancamento/${(await consultar('SELECT id FROM conta_corrente WHERE parcela_id = ?', [parcela.id]))[0].id}`)
     .send({ data: '2026-01-06', descricao: 'Tentativa', tipo: 'entrada', valor: 1 })).status, 400);
 

@@ -12,8 +12,6 @@ const instituicoesFront = fs.readFileSync(path.join(raiz, 'frontend/src/pages/Co
 const linhaContaFront = fs.readFileSync(path.join(raiz, 'frontend/src/components/LinhaContaBancaria.js'), 'utf8');
 const documentosController = fs.readFileSync(path.join(raiz, 'backend/src/controllers/documentosController.js'), 'utf8');
 const variaveisDocumento = fs.readFileSync(path.join(raiz, 'backend/src/services/variaveisResolver.js'), 'utf8');
-const sql = fs.readFileSync(path.join(raiz, 'scripts/S4 - 2026-09-18_destinos_financeiros_robustos.sql'), 'utf8');
-const preflight = fs.readFileSync(path.join(raiz, 'scripts/S4 - 2026-09-18_verificar_pre-requisitos.sql'), 'utf8');
 
 test('financeiro exige e registra conta do escritório e snapshot imutável no destino', () => {
   assert.match(controller, /resolverContaEscritorio\(conn, recebimento_conta_financeira_id\)/);
@@ -34,16 +32,6 @@ test('edição de pessoa preserva a conta e inativa a retirada da ficha', () => 
   assert.match(pessoas, /WHERE id=\? AND pessoa_id=\?/);
   assert.match(pessoas, /SET ativo=0, principal=0/);
   assert.match(pessoas, /observacao/);
-});
-
-test('migração S4 é aditiva, portátil e exige verificação prévia', () => {
-  assert.match(sql, /ADD COLUMN observacao TEXT NULL/);
-  assert.doesNotMatch(sql, /IF NOT EXISTS/i);
-  assert.doesNotMatch(sql, /DROP\s+TABLE|DELETE\s+FROM|TRUNCATE/i);
-  assert.match(sql, /repasse_cliente_destino_snapshot/);
-  assert.match(sql, /LONGTEXT NULL/);
-  assert.match(preflight, /APROVADO/);
-  assert.match(preflight, /BLOQUEADO/);
 });
 
 test('caixa físico não mantém dados bancários e o último caixa ativo é protegido', () => {

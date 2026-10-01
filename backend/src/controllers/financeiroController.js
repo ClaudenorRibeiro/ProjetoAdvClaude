@@ -1038,6 +1038,7 @@ async function pagarParcela(req, res) {
     return sucesso(res, null, 'Parcela recebida');
   } catch (err) {
     await conn.rollback();
+    if (err.codigoValidacaoFinanceiro) return erro(res, err.message, 422);
     return erroInterno(res, err);
   } finally {
     conn.release();
@@ -1214,6 +1215,7 @@ async function registrarRepasse(req, res) {
     return sucesso(res, null, `Repasse ao ${cfg.rotulo} registrado`);
   } catch (err) {
     await conn.rollback();
+    if (err.codigoValidacaoFinanceiro) return erro(res, err.message, 422);
     return erroInterno(res, err);
   } finally {
     conn.release();
