@@ -11,6 +11,7 @@ const { enviarEmail } = require('../utils/email');
 const { liberarFazendoExpirados } = require('../controllers/prazosController');
 const { dataParaIsoLocal, hojeBrasilia } = require('../utils/helpers');
 const { enviarComunicadoPericia } = require('./comunicadoService');
+const { executarVencidos: enviarRelatoriosAgendados } = require('./relatorios/agendamento/envio');
 
 // Fuso horário de todos os crons — sem isso, no servidor (Ubuntu/UTC) o cron
 // dispararia 3 horas mais cedo que o horário configurado pelo escritório
@@ -29,6 +30,11 @@ async function iniciarAlertas() {
   // Libera prazos "Fazendo" expirados — roda a cada 5 minutos
   cron.schedule('*/5 * * * *', async () => {
     await liberarFazendoExpirados();
+  }, OPCOES_CRON);
+
+  // Relatórios agendados por e-mail — confere a cada minuto o que venceu
+  cron.schedule('* * * * *', async () => {
+    await enviarRelatoriosAgendados();
   }, OPCOES_CRON);
 
   // Verifica audiências para alertar clientes (todo dia às 8h)

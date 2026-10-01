@@ -33,6 +33,12 @@ router.delete('/relatorios/modelos/:id/compartilhado-comigo', autenticar, ver, c
 router.put('/relatorios/modelos/:id/preferencias',      autenticar, ver, ctrl.salvarPreferencias);
 router.post('/relatorios/executar',                     autenticar, ver, ctrl.executar);
 router.post('/relatorios/exportar',                     autenticar, ver, limitarExportacao, ctrl.exportar);
+router.get('/relatorios/agendamentos',                  autenticar, criar, ctrl.listarAgendamentos);
+router.get('/relatorios/agendamentos/candidatos',       autenticar, criar, ctrl.candidatosAgendamento);
+router.post('/relatorios/agendamentos',                 autenticar, criar, ctrl.criarAgendamento);
+router.put('/relatorios/agendamentos/:id',              autenticar, criar, ctrl.atualizarAgendamento);
+router.delete('/relatorios/agendamentos/:id',           autenticar, criar, ctrl.excluirAgendamento);
+router.post('/relatorios/agendamentos/:id/testar',      autenticar, criar, limitarExportacao, ctrl.testarAgendamento);
 router.post('/relatorios/sistema/padrao',                autenticar, apenasAdmin, ctrl.instalarRelatoriosPadrao);
 router.get('/relatorios/limites',                       autenticar, apenasAdmin, ctrl.obterLimites);
 router.put('/relatorios/limites',                       autenticar, apenasAdmin, ctrl.salvarLimites);

@@ -4,7 +4,7 @@
 -- Gerado em 31/08/2026 a partir do banco LOCAL (sistema_advocacia), via:
 --   mysqldump --no-data --databases --add-drop-database
 --             --routines --triggers --events sistema_advocacia
--- Contém 93 tabelas — SOMENTE A ESTRUTURA, sem nenhum dado.
+-- Contém 94 tabelas — SOMENTE A ESTRUTURA, sem nenhum dado.
 -- (79 do dump de 31/08/2026 + tipo_documento_pendencia, pendencia_documento,
 --  pendencia_documento_item e pendencia_documento_responsavel, do módulo
 --  "Pendências de Documentos"; + acordo_parcela_multa, do módulo de multa
@@ -1960,6 +1960,40 @@ CREATE TABLE `publicacoes_lidas` (
   KEY `idx_pl_usuario` (`usuario_id`),
   CONSTRAINT `fk_pl_pub` FOREIGN KEY (`publicacao_id`) REFERENCES `publicacoes` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_pl_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `relatorio_agendamento`
+--
+
+DROP TABLE IF EXISTS `relatorio_agendamento`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `relatorio_agendamento` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `modelo_id` int NOT NULL,
+  `dono_id` int NOT NULL COMMENT 'quem agendou: o relatorio roda com as permissoes dele',
+  `frequencia` varchar(10) NOT NULL COMMENT 'diaria | semanal | mensal',
+  `dia_semana` tinyint DEFAULT NULL COMMENT '0=domingo ... 6=sabado (semanal)',
+  `dia_mes` tinyint DEFAULT NULL COMMENT '1 a 31 (mensal; meses curtos usam o ultimo dia)',
+  `hora` time NOT NULL,
+  `formato` varchar(4) NOT NULL DEFAULT 'pdf' COMMENT 'pdf | docx | xlsx',
+  `destinatarios` json NOT NULL COMMENT 'ids de usuarios ativos do sistema',
+  `ativo` tinyint(1) NOT NULL DEFAULT '1',
+  `proxima_execucao` datetime DEFAULT NULL COMMENT 'horario de Brasilia',
+  `ultimo_envio` datetime DEFAULT NULL,
+  `ultimo_status` varchar(10) DEFAULT NULL COMMENT 'ok | falha',
+  `ultimo_erro` varchar(300) DEFAULT NULL,
+  `falhas_seguidas` tinyint NOT NULL DEFAULT '0',
+  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  `alterado_em` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_relag_proxima` (`ativo`,`proxima_execucao`),
+  KEY `idx_relag_dono` (`dono_id`),
+  KEY `idx_relag_modelo` (`modelo_id`),
+  CONSTRAINT `fk_relag_dono` FOREIGN KEY (`dono_id`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `fk_relag_modelo` FOREIGN KEY (`modelo_id`) REFERENCES `relatorio_modelo` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 

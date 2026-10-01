@@ -30,6 +30,7 @@ const DESCRICAO_MAPA = {
   pendencia_documento:  { coluna: 'observacao',   prefixo: 'Pendência de documentos: ' },
   instituicao_financeira: { coluna: 'nome',       prefixo: 'Banco: ' },
   relatorio_modelo:     { coluna: 'nome',         prefixo: 'Relatório: ' },
+  relatorio_agendamento: { coluna: 'id',          prefixo: 'Envio agendado de relatório nº ' },
 };
 
 // Descrições fixas (não dependem de um registro específico)

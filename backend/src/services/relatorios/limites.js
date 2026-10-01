@@ -20,5 +20,8 @@ module.exports = {
   LIMITE_PADRAO_MODELOS: 10, // usado só se a configuração do escritório estiver vazia
   MAX_AGRUPAR: 2,           // níveis de agrupamento
   MAX_METRICAS: 6,          // totais (contagem, soma...) por relatório
+  MAX_AGENDAMENTOS: 10,     // envios agendados por usuário
+  MAX_DESTINATARIOS: 10,    // pessoas por envio agendado
+  FALHAS_PARA_PAUSAR: 3,    // falhas seguidas até o agendamento ser pausado sozinho
   VERSAO_RECEITA: 2,        // a 1 (Fase 1, sem agrupamento) continua sendo aceita
 };

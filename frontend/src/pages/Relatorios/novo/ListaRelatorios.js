@@ -16,7 +16,7 @@ function Selo({ texto, cor }) {
   return <span style={{ background: cor, color: '#fff', borderRadius: 10, padding: '1px 8px', fontSize: 11, marginLeft: 8, whiteSpace: 'nowrap' }}>{texto}</span>;
 }
 
-export default function ListaRelatorios({ modelos, assuntos, limite, criados, podeCriar, ehAdmin, onNovo, onAbrir, onEditar, onDuplicar, onExcluir, onCompartilhar, onSair, onInstalarPadrao }) {
+export default function ListaRelatorios({ modelos, assuntos, limite, criados, podeCriar, ehAdmin, onNovo, onAbrir, onEditar, onDuplicar, onExcluir, onCompartilhar, onAgendar, onSair, onInstalarPadrao }) {
   const cheio = criados >= limite;
   const rotuloAssunto = (chave) => assuntos.find(a => a.chave === chave)?.rotulo || chave;
 
@@ -41,6 +41,7 @@ export default function ListaRelatorios({ modelos, assuntos, limite, criados, po
             { label: 'Editar', icone: '✏️', onClick: () => onEditar(m), oculto: !m.pode_editar || !(podeCriar || ehAdmin) },
             { label: 'Duplicar para mim', icone: '📑', onClick: () => onDuplicar(m), oculto: !podeCriar || m.sem_acesso },
             { label: 'Compartilhar', icone: '🤝', onClick: () => onCompartilhar(m), oculto: (m.origem || 'proprio') !== 'proprio' || !podeCriar },
+            { label: 'Agendar envio por e-mail', icone: '📧', onClick: () => onAgendar(m), oculto: !podeCriar || m.sem_acesso },
             { label: 'Remover da minha lista', icone: '🚫', onClick: () => onSair(m), oculto: m.origem !== 'compartilhado' },
             { label: 'Excluir', icone: '🗑️', onClick: () => onExcluir(m), perigo: true, oculto: !m.pode_editar || !(podeCriar || ehAdmin) },
           ]} />

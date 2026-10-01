@@ -20,6 +20,8 @@ const { executarAgrupado } = require('../services/relatorios/executorAgrupado');
 const { condicoesDoGrupo } = require('../services/relatorios/agrupamento');
 const { aplicarParametros, receitaDoDetalhe, temAgrupamento } = require('../services/relatorios/parametros');
 const modelos = require('../services/relatorios/modelos');
+const agendamentos = require('../services/relatorios/agendamento/agendamentos');
+const envioAgendado = require('../services/relatorios/agendamento/envio');
 const limitesAdmin = require('../services/relatorios/limitesAdmin');
 
 function tratar(res, err) {
@@ -217,6 +219,38 @@ async function instalarRelatoriosPadrao(req, res) {
   catch (err) { return tratar(res, err); }
 }
 
+// ── Envio agendado por e-mail (Fase 7) — só o dono mexe nos seus ──
+// GET /api/relatorios/agendamentos?modelo_id=
+async function listarAgendamentos(req, res) {
+  try { return sucesso(res, await agendamentos.listar(req.usuario, Number(req.query.modelo_id) || null)); }
+  catch (err) { return tratar(res, err); }
+}
+// GET /api/relatorios/agendamentos/candidatos?modelo_id=  — quem pode receber este relatório
+async function candidatosAgendamento(req, res) {
+  try { return sucesso(res, await agendamentos.listarCandidatos(req.usuario, Number(req.query.modelo_id))); }
+  catch (err) { return tratar(res, err); }
+}
+// POST /api/relatorios/agendamentos  { modelo_id, frequencia, dia_semana?, dia_mes?, hora, formato, destinatarios: [ids] }
+async function criarAgendamento(req, res) {
+  try { return sucesso(res, await agendamentos.criar(req.usuario, req.body), 'Envio agendado', 201); }
+  catch (err) { return tratar(res, err); }
+}
+// PUT /api/relatorios/agendamentos/:id  (mesmos campos; ativo=false pausa, ativo=true retoma)
+async function atualizarAgendamento(req, res) {
+  try { return sucesso(res, await agendamentos.atualizar(req.usuario, Number(req.params.id), req.body || {}), 'Agendamento atualizado'); }
+  catch (err) { return tratar(res, err); }
+}
+// DELETE /api/relatorios/agendamentos/:id
+async function excluirAgendamento(req, res) {
+  try { await agendamentos.excluir(req.usuario, Number(req.params.id)); return sucesso(res, null, 'Agendamento excluído'); }
+  catch (err) { return tratar(res, err); }
+}
+// POST /api/relatorios/agendamentos/:id/testar — manda agora, só para o próprio dono
+async function testarAgendamento(req, res) {
+  try { return sucesso(res, await envioAgendado.testar(req.usuario, Number(req.params.id)), 'Enviado para o seu e-mail'); }
+  catch (err) { return tratar(res, err); }
+}
+
 // GET /api/relatorios/limites  (admin)
 async function obterLimites(req, res) {
   try { return sucesso(res, await limitesAdmin.obterLimites()); }
@@ -233,4 +267,5 @@ module.exports = {
   catalogo, listarModelos, criarModelo, atualizarModelo, excluirModelo, duplicarModelo,
   salvarPreferencias, executar, exportar, obterLimites, salvarLimites,
   consultarCompartilhamento, definirCompartilhamento, sairDoCompartilhamento, instalarRelatoriosPadrao,
+  listarAgendamentos, candidatosAgendamento, criarAgendamento, atualizarAgendamento, excluirAgendamento, testarAgendamento,
 };

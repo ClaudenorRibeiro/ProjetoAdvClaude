@@ -15,6 +15,7 @@ import Construtor, { mensagemDeErro } from './Construtor';
 import Resultado from './Resultado';
 import ModalPerguntas from './ModalPerguntas';
 import ModalCompartilhar from './ModalCompartilhar';
+import ModalAgendar from './ModalAgendar';
 import { perguntasDe, normalizarReceita } from './receita';
 
 export default function RelatoriosNovo() {
@@ -27,6 +28,7 @@ export default function RelatoriosNovo() {
   const [tela, setTela] = useState({ nome: 'lista' });
   const [perguntando, setPerguntando] = useState(null);  // janela de perguntas aberta (antes de rodar)
   const [confirmar, setConfirmar] = useState(null);
+  const [agendando, setAgendando] = useState(null);            // relatório cuja janela de envios agendados está aberta
   const [compartilhando, setCompartilhando] = useState(null);  // relatório cuja janela de compartilhar está aberta
 
   const carregarLista = useCallback(async () => {
@@ -111,7 +113,7 @@ export default function RelatoriosNovo() {
           onNovo={() => setTela({ nome: 'construtor', modelo: null, receita: null })}
           onAbrir={m => iniciar(m.receita, m)}
           onEditar={m => setTela({ nome: 'construtor', modelo: m, receita: m.receita })}
-          onDuplicar={duplicar} onExcluir={pedirExclusao} onCompartilhar={setCompartilhando} onSair={pedirSaida}
+          onDuplicar={duplicar} onExcluir={pedirExclusao} onCompartilhar={setCompartilhando} onAgendar={setAgendando} onSair={pedirSaida}
           onInstalarPadrao={pedirInstalacaoPadrao} />
       )}
       {tela.nome === 'construtor' && (
@@ -135,6 +137,7 @@ export default function RelatoriosNovo() {
         <ModalPerguntas assunto={assuntoDe(perguntando.receita)} periodos={catalogo.periodos} perguntas={perguntando.perguntas}
           respostasIniciais={perguntando.respostasIniciais} onConfirmar={responder} onCancelar={() => setPerguntando(null)} />
       )}
+      {agendando && <ModalAgendar modelo={agendando} onFechar={() => setAgendando(null)} />}
       {compartilhando && <ModalCompartilhar modelo={compartilhando} onCancelar={() => setCompartilhando(null)} onSalvo={() => { setCompartilhando(null); carregarLista().catch(() => {}); }} />}
       {confirmar && <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(null)} />}
     </div>
