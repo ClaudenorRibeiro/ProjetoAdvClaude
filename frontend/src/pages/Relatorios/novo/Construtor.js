@@ -8,8 +8,9 @@ import { relatoriosAPI } from '../../../services/api';
 import PassoColunas from './PassoColunas';
 import { PassoFiltros } from './GrupoFiltros';
 import PassoOrdem from './PassoOrdem';
+import PassoAgrupar from './PassoAgrupar';
 import ModalSalvar from './ModalSalvar';
-import { receitaVazia, validarLocal, limparReceita } from './receita';
+import { receitaVazia, validarLocal, limparReceita, normalizarReceita } from './receita';
 
 export function mensagemDeErro(err, padrao) {
   const d = err?.response?.data;
@@ -26,7 +27,7 @@ function Passo({ numero, titulo, children }) {
 }
 
 export default function Construtor({ catalogo, modelo, receitaInicial, podeSalvar, onVerResultado, onSalvo, onCancelar }) {
-  const [receita, setReceita] = useState(receitaInicial || null);
+  const [receita, setReceita] = useState(receitaInicial ? normalizarReceita(receitaInicial) : null);
   const [salvando, setSalvando] = useState(false);
   const [modalSalvar, setModalSalvar] = useState(false);
   const assunto = receita ? catalogo.assuntos.find(a => a.chave === receita.assunto) : null;
@@ -61,11 +62,14 @@ export default function Construtor({ catalogo, modelo, receitaInicial, podeSalva
 
       {assunto && (
         <>
-          <Passo numero={2} titulo="Colunas"><PassoColunas assunto={assunto} colunas={receita.colunas} onChange={colunas => set({ colunas })} /></Passo>
+          <Passo numero={2} titulo="Colunas (dos itens)"><PassoColunas assunto={assunto} colunas={receita.colunas} onChange={colunas => set({ colunas })} /></Passo>
           <Passo numero={3} titulo="Filtros">
             <PassoFiltros assunto={assunto} periodos={catalogo.periodos} filtros={receita.filtros} onChange={filtros => set({ filtros })} />
           </Passo>
-          <Passo numero={4} titulo="Ordem"><PassoOrdem assunto={assunto} ordem={receita.ordem} onChange={ordem => set({ ordem })} /></Passo>
+          <Passo numero={4} titulo="Agrupar e totalizar">
+            <PassoAgrupar assunto={assunto} agrupar={receita.agrupar} metricas={receita.metricas} ordemGrupo={receita.ordemGrupo} onChange={set} />
+          </Passo>
+          <Passo numero={5} titulo="Ordem dos itens"><PassoOrdem assunto={assunto} ordem={receita.ordem} onChange={ordem => set({ ordem })} /></Passo>
         </>
       )}
 

@@ -26,6 +26,10 @@ export default function LinhaCondicao({ assunto, periodos, condicao, onChange, o
         <ValorCondicao campo={campo} operador={operador} valor={condicao.valor} periodos={periodos}
           onChange={valor => onChange({ ...condicao, valor })} />
         {incompleta && <small style={{ color: '#b45309' }}>Preencha o valor</small>}
+        <label style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '4px', fontSize: '12px', color: '#4b5563', cursor: 'pointer' }}>
+          <input type="checkbox" checked={Boolean(condicao.perguntar)} onChange={e => onChange({ ...condicao, perguntar: e.target.checked })} />
+          Perguntar ao abrir o relatório <span style={{ color: '#9ca3af' }}>(o valor acima vira o padrão)</span>
+        </label>
       </div>
       <button type="button" className="btn btn-secondary" title="Remover filtro" aria-label="Remover filtro" onClick={onRemover}>✕</button>
     </div>

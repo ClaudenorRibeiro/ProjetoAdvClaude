@@ -49,6 +49,24 @@ OPERADORES.datahora = OPERADORES.data; // datahora filtra pela DATA (ignora a ho
 
 const TIPOS = Object.keys(OPERADORES);
 
+// Totais que o relatório pode calcular, e em que tipo de campo cada um faz sentido
+const FUNCOES = {
+  contagem: { rotulo: 'Contagem', semCampo: true, aceita: () => true },
+  soma:     { rotulo: 'Soma',     aceita: t => t === 'numero' },
+  media:    { rotulo: 'Média',    aceita: t => t === 'numero' },
+  minimo:   { rotulo: 'Mínimo',   aceita: t => ['numero', 'data', 'datahora'].includes(t) },
+  maximo:   { rotulo: 'Máximo',   aceita: t => ['numero', 'data', 'datahora'].includes(t) },
+};
+// Como agrupar datas
+const PASSOS_DATA = { dia: 'Dia', semana: 'Semana', mes: 'Mês', ano: 'Ano' };
+const ehData = (tipo) => tipo === 'data' || tipo === 'datahora';
+
+// Campo de texto só agrupa se o catálogo marcar (descrição, título e motivo não fazem sentido)
+function agrupavel(campo) { return campo.agrupavel ?? campo.tipo !== 'texto'; }
+function funcoesDoCampo(campo) {
+  return Object.entries(FUNCOES).filter(([, f]) => !f.semCampo && f.aceita(campo.tipo)).map(([valor, f]) => ({ valor, rotulo: f.rotulo }));
+}
+
 function operadoresDoTipo(tipo) { return OPERADORES[tipo] || {}; }
 
-module.exports = { OPERADORES, TIPOS, operadoresDoTipo };
+module.exports = { OPERADORES, TIPOS, operadoresDoTipo, FUNCOES, PASSOS_DATA, ehData, agrupavel, funcoesDoCampo };

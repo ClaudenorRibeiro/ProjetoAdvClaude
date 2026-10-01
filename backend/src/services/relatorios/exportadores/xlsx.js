@@ -40,12 +40,22 @@ function formatoNumerico(coluna) {
   return coluna.tipo === 'data' ? FORMATO_DATA : coluna.tipo === 'datahora' ? FORMATO_DATAHORA : null;
 }
 
-async function exportarXlsx({ res, assunto, receita, ctx, nomeRelatorio, total }) {
-  const colunas = descreverColunas(assunto, receita);
+function criarLivro(res) {
   const wb = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: true, useSharedStrings: false });
   wb.creator = 'Sistema de Advocacia';
+  return wb;
+}
 
-  const ws = wb.addWorksheet(nomeAba(nomeRelatorio), { views: [{ state: 'frozen', ySplit: 1 }] });
+function estilizarCabecalho(linha) {
+  linha.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  linha.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F3864' } };
+  linha.alignment = { vertical: 'middle' };
+}
+
+// Aba com as linhas de dados (uma por registro), lidas do banco em lotes
+async function escreverAbaDados(wb, { assunto, receita, ctx, nome, total }) {
+  const colunas = descreverColunas(assunto, receita);
+  const ws = wb.addWorksheet(nomeAba(nome), { views: [{ state: 'frozen', ySplit: 1 }] });
   colunas.forEach((c, i) => {
     const col = ws.getColumn(i + 1);
     col.width = larguraDaColuna(c);
@@ -53,11 +63,8 @@ async function exportarXlsx({ res, assunto, receita, ctx, nomeRelatorio, total }
     if (fmt) col.numFmt = fmt;
   });
   ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: colunas.length } };
-
   const cab = ws.addRow(colunas.map(c => c.rotulo));
-  cab.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-  cab.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F3864' } };
-  cab.alignment = { vertical: 'middle' };
+  estilizarCabecalho(cab);
   cab.commit();
 
   for (let offset = 0; offset < total; offset += L.LOTE_EXPORTACAO) {
@@ -66,13 +73,16 @@ async function exportarXlsx({ res, assunto, receita, ctx, nomeRelatorio, total }
     for (const linha of linhas) ws.addRow(colunas.map(c => converterCelula(c, linha[c.chave]))).commit();
   }
   ws.commit();
+}
 
+// Aba "Informações": quem gerou, quando, quantas linhas, filtros (e o que mais o chamador acrescentar)
+async function escreverAbaInformacoes(wb, { assunto, receita, ctx, nomeRelatorio, linhasInfo }) {
   const info = wb.addWorksheet('Informações');
   info.getColumn(1).width = 22; info.getColumn(2).width = 90;
   const agora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
   const filtros = await descreverFiltros(assunto, receita, ctx);
   [['Relatório', nomeRelatorio || '(sem nome)'], ['Assunto', assunto.rotulo], ['Gerado em', agora],
-   ['Gerado por', ctx.usuario.nome || ''], ['Total de linhas', total], ['Filtros', filtros.join('\n')]]
+   ['Gerado por', ctx.usuario.nome || ''], ...linhasInfo, ['Filtros', filtros.join('\n')]]
     .forEach(([k, v]) => {
       const r = info.addRow([k, v]);
       r.getCell(1).font = { bold: true };
@@ -80,8 +90,13 @@ async function exportarXlsx({ res, assunto, receita, ctx, nomeRelatorio, total }
       r.commit();
     });
   info.commit();
+}
 
+async function exportarXlsx({ res, assunto, receita, ctx, nomeRelatorio, total }) {
+  const wb = criarLivro(res);
+  await escreverAbaDados(wb, { assunto, receita, ctx, nome: nomeRelatorio, total });
+  await escreverAbaInformacoes(wb, { assunto, receita, ctx, nomeRelatorio, linhasInfo: [['Total de linhas', total]] });
   await wb.commit();
 }
 
-module.exports = { exportarXlsx, nomeAba };
+module.exports = { exportarXlsx, criarLivro, escreverAbaDados, escreverAbaInformacoes, estilizarCabecalho, nomeAba, paraData };

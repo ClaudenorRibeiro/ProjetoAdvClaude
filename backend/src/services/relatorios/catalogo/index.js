@@ -3,7 +3,7 @@
 // Assunto novo = um arquivo novo nesta pasta + uma linha aqui.
 // ============================================================
 const { pode } = require('../visibilidade');
-const { operadoresDoTipo } = require('../tipos');
+const { operadoresDoTipo, agrupavel, funcoesDoCampo, ehData, PASSOS_DATA } = require('../tipos');
 const { listarPeriodos } = require('../datasRelativas');
 
 const ASSUNTOS = {
@@ -41,6 +41,9 @@ async function catalogoParaUsuario(ctx) {
         chave, rotulo: campo.rotulo, tipo: campo.tipo, formato: campo.formato || null,
         operadores: Object.entries(operadoresDoTipo(campo.tipo)).map(([valor, o]) => ({ valor, rotulo: o.rotulo, aridade: o.aridade })),
         opcoes: await opcoesDoCampo(campo, ctx),
+        agrupavel: agrupavel(campo),
+        passos: ehData(campo.tipo) ? Object.entries(PASSOS_DATA).map(([valor, rotulo]) => ({ valor, rotulo })) : null,
+        funcoes: funcoesDoCampo(campo),   // totais possíveis neste campo (além da contagem)
       });
     }
     assuntos.push({

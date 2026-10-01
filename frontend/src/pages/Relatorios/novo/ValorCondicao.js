@@ -4,6 +4,7 @@
 // ============================================================
 import React from 'react';
 import Select from 'react-select';
+import EntradaData from './EntradaData';
 
 const estiloSelect = {
   control: (base, state) => ({ ...base, minHeight: '38px', borderColor: state.isFocused ? '#2563eb' : '#d1d5db', boxShadow: 'none' }),
@@ -11,7 +12,8 @@ const estiloSelect = {
 };
 
 function entrada(campo, valor, onChange, rotulo) {
-  const tipo = campo.tipo === 'numero' ? 'number' : campo.tipo.startsWith('data') ? 'date' : 'text';
+  if (campo.tipo.startsWith('data')) return <EntradaData valor={valor} onChange={onChange} rotulo={rotulo} />;
+  const tipo = campo.tipo === 'numero' ? 'number' : 'text';
   return (
     <input className="form-control" type={tipo} value={valor ?? ''} aria-label={rotulo}
       step={tipo === 'number' ? 'any' : undefined} onChange={e => onChange(e.target.value)} />

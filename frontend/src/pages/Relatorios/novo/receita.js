@@ -3,7 +3,7 @@
 // A receita é só uma lista de escolhas: assunto, colunas, filtros (E/OU) e ordem.
 // ============================================================
 
-export const VERSAO_RECEITA = 1;
+export const VERSAO_RECEITA = 2;
 
 export function receitaVazia(assunto) {
   return {
@@ -12,7 +12,15 @@ export function receitaVazia(assunto) {
     colunas: [...assunto.colunasPadrao],
     filtros: { op: 'E', itens: [] },
     ordem: assunto.ordemPadrao.map(o => ({ ...o })),
+    agrupar: [],
+    metricas: [],
+    ordemGrupo: null,
   };
+}
+
+// Receita salva na Fase 1 não tem agrupamento: completa os campos novos
+export function normalizarReceita(r) {
+  return { agrupar: [], metricas: [], ordemGrupo: null, ...r };
 }
 
 export function campoDe(assunto, chave) {
@@ -54,10 +62,12 @@ export function trocarOperador(campo, condicao, novoOperador, periodos) {
   return { ...condicao, operador: novoOperador, valor };
 }
 
-const vazio = (v) => v === '' || v === null || v === undefined;
+// data relativa só vale com o número de dias preenchido
+const vazio = (v) => v === '' || v === null || v === undefined || (typeof v === 'object' && !Array.isArray(v) && v.rel === 'hoje' && (v.dias === '' || v.dias === undefined));
 
 // A condição tem tudo o que precisa para ser executada?
 export function condicaoCompleta(assunto, condicao) {
+  if (condicao.perguntar) return true;   // o valor virá da resposta, na hora de rodar
   const campo = campoDe(assunto, condicao.campo);
   const op = operadorDe(campo, condicao.operador);
   if (!campo || !op) return false;
@@ -112,3 +122,38 @@ export function mover(lista, de, para) {
   nova.splice(para, 0, item);
   return nova;
 }
+
+// ---------- perguntas ("perguntar ao abrir") ----------
+// [{ caminho: [i, j], condicao }] — todas as condições marcadas, em qualquer nível
+export function perguntasDe(grupo, caminho = []) {
+  return grupo.itens.flatMap((item, i) => (item.itens
+    ? perguntasDe(item, [...caminho, i])
+    : (item.perguntar ? [{ caminho: [...caminho, i], condicao: item }] : [])));
+}
+
+// A resposta preenche o que a condição precisa?
+export function respostaCompleta(assunto, condicao, valor) {
+  return condicaoCompleta(assunto, { ...condicao, perguntar: false, valor });
+}
+
+// ---------- agrupar e totalizar ----------
+const NOMES_FUNCAO = { contagem: 'Quantidade', soma: 'Soma', media: 'Média', minimo: 'Mínimo', maximo: 'Máximo' };
+
+export function rotuloMetrica(assunto, metrica) {
+  return metrica.campo ? `${NOMES_FUNCAO[metrica.funcao]} de ${campoDe(assunto, metrica.campo)?.rotulo || metrica.campo}` : NOMES_FUNCAO[metrica.funcao];
+}
+
+// Funções de total que ainda têm algum campo onde fazem sentido neste assunto
+export function funcoesDisponiveis(assunto) {
+  const lista = [{ valor: 'contagem', rotulo: 'Quantidade' }];
+  ['soma', 'media', 'minimo', 'maximo'].forEach(f => {
+    if (assunto.campos.some(c => c.funcoes?.some(x => x.valor === f))) lista.push({ valor: f, rotulo: NOMES_FUNCAO[f] });
+  });
+  return lista;
+}
+
+export function camposDaFuncao(assunto, funcao) {
+  return assunto.campos.filter(c => c.funcoes?.some(x => x.valor === funcao));
+}
+
+export const temAgrupamento = (receita) => (receita.agrupar?.length || 0) > 0 || (receita.metricas?.length || 0) > 0;

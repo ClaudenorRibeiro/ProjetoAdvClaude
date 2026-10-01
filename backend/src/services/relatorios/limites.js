@@ -15,5 +15,7 @@ module.exports = {
   MAX_TEXTO: 200,
   TEMPO_MAX_MS: 20000,      // dica ao MySQL 8 (MAX_EXECUTION_TIME); em versão sem suporte vira só um comentário
   LIMITE_PADRAO_MODELOS: 10, // usado só se a configuração do escritório estiver vazia
-  VERSAO_RECEITA: 1,
+  MAX_AGRUPAR: 2,           // níveis de agrupamento
+  MAX_METRICAS: 6,          // totais (contagem, soma...) por relatório
+  VERSAO_RECEITA: 2,        // a 1 (Fase 1, sem agrupamento) continua sendo aceita
 };

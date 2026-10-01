@@ -1,7 +1,8 @@
 // ============================================================
 // RELATÓRIOS (tela nova) — a "casca": carrega o catálogo e os relatórios do usuário
-// e alterna entre as telas (lista, construtor, resultado). O limite de relatórios fica em Configurações → Permissões. A lógica de cada tela
+// e alterna entre as telas (lista, construtor, resultado). A lógica de cada tela
 // mora no seu próprio arquivo — este fica pequeno de propósito.
+// O limite de relatórios fica em Configurações → Permissões.
 // Em construção: por enquanto só o administrador enxerga (rota /meus-relatorios).
 // ============================================================
 import React, { useCallback, useEffect, useState } from 'react';
@@ -12,6 +13,8 @@ import ModalConfirmar from '../../../components/ui/ModalConfirmar';
 import ListaRelatorios from './ListaRelatorios';
 import Construtor, { mensagemDeErro } from './Construtor';
 import Resultado from './Resultado';
+import ModalPerguntas from './ModalPerguntas';
+import { perguntasDe, normalizarReceita } from './receita';
 
 export default function RelatoriosNovo() {
   const { temPermissao } = useAuth();
@@ -19,8 +22,9 @@ export default function RelatoriosNovo() {
   const [catalogo, setCatalogo] = useState(null);
   const [lista, setLista] = useState({ modelos: [], limite: 0, criados: 0 });
   const [carregando, setCarregando] = useState(true);
-  // tela: { nome: 'lista' } | { nome: 'construtor', modelo, receita } | { nome: 'resultado', modelo, receita }
+  // tela: { nome: 'lista' } | { nome: 'construtor', modelo, receita } | { nome: 'resultado', modelo, origem, receita, parametros, respostas }
   const [tela, setTela] = useState({ nome: 'lista' });
+  const [perguntando, setPerguntando] = useState(null);  // janela de perguntas aberta (antes de rodar)
   const [confirmar, setConfirmar] = useState(null);
 
   const carregarLista = useCallback(async () => {
@@ -36,6 +40,20 @@ export default function RelatoriosNovo() {
   }, []);
 
   const irParaLista = () => { setTela({ nome: 'lista' }); carregarLista().catch(() => {}); };
+
+  // Roda o relatório; se ele tem perguntas ("perguntar ao abrir"), pergunta antes
+  function iniciar(receitaBruta, modelo, origem = null) {
+    const receita = normalizarReceita(receitaBruta);
+    const perguntas = perguntasDe(receita.filtros);
+    if (!perguntas.length) return setTela({ nome: 'resultado', modelo, origem, receita, parametros: [], respostas: {} });
+    return setPerguntando({ receita, modelo, origem, perguntas, respostasIniciais: {} });
+  }
+
+  function responder(parametros, respostas) {
+    const { receita, modelo, origem } = perguntando;
+    setPerguntando(null);
+    setTela({ nome: 'resultado', modelo, origem, receita, parametros, respostas });
+  }
 
   async function duplicar(m) {
     try { await relatoriosAPI.duplicarModelo(m.id); toast.success('Relatório duplicado'); await carregarLista(); }
@@ -54,6 +72,7 @@ export default function RelatoriosNovo() {
   if (!catalogo.assuntos.length) {
     return <div className="card"><p className="lista-vazia">Você não tem permissão para nenhum assunto de relatório. Peça ao administrador.</p></div>;
   }
+  const assuntoDe = (receita) => catalogo.assuntos.find(a => a.chave === receita.assunto);
 
   return (
     <div>
@@ -61,20 +80,26 @@ export default function RelatoriosNovo() {
         <ListaRelatorios modelos={lista.modelos} assuntos={catalogo.assuntos} limite={lista.limite} criados={lista.criados}
           podeCriar={podeCriar}
           onNovo={() => setTela({ nome: 'construtor', modelo: null, receita: null })}
-          onAbrir={m => setTela({ nome: 'resultado', modelo: m, receita: m.receita })}
+          onAbrir={m => iniciar(m.receita, m)}
           onEditar={m => setTela({ nome: 'construtor', modelo: m, receita: m.receita })}
           onDuplicar={duplicar} onExcluir={pedirExclusao} />
       )}
       {tela.nome === 'construtor' && (
         <Construtor catalogo={catalogo} modelo={tela.modelo} receitaInicial={tela.receita} podeSalvar={podeCriar}
-          onVerResultado={(receita, modelo) => setTela({ nome: 'resultado', modelo: null, receita, origem: modelo })}
+          onVerResultado={(receita, modelo) => iniciar(receita, null, modelo)}
           onSalvo={irParaLista} onCancelar={irParaLista} />
       )}
       {tela.nome === 'resultado' && (
-        <Resultado receita={tela.receita} modelo={tela.modelo} onVoltar={irParaLista}
-          onEditar={(receita) => setTela({ nome: 'construtor', modelo: tela.modelo || tela.origem || null, receita })} />
+        <Resultado receita={tela.receita} modelo={tela.modelo} parametros={tela.parametros}
+          temPerguntas={perguntasDe(tela.receita.filtros).length > 0}
+          onVoltar={irParaLista}
+          onPerguntas={() => setPerguntando({ receita: tela.receita, modelo: tela.modelo, origem: tela.origem, perguntas: perguntasDe(tela.receita.filtros), respostasIniciais: tela.respostas })}
+          onEditar={() => setTela({ nome: 'construtor', modelo: tela.modelo || tela.origem || null, receita: tela.receita })} />
       )}
-
+      {perguntando && (
+        <ModalPerguntas assunto={assuntoDe(perguntando.receita)} periodos={catalogo.periodos} perguntas={perguntando.perguntas}
+          respostasIniciais={perguntando.respostasIniciais} onConfirmar={responder} onCancelar={() => setPerguntando(null)} />
+      )}
       {confirmar && <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(null)} />}
     </div>
   );

@@ -55,4 +55,4 @@ function listarPeriodos() {
   return Object.entries(PERIODOS).map(([valor, p]) => ({ valor, rotulo: p.rotulo }));
 }
 
-module.exports = { dataValida, resolverData, resolverPeriodo, listarPeriodos, PERIODOS };
+module.exports = { dataValida, resolverData, resolverPeriodo, listarPeriodos, PERIODOS, somarDias, inicioMes, fimMes };

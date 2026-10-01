@@ -155,7 +155,7 @@ test('relatórios salvos: permissão "criar", limite "x" (padrão e exceção), 
   // a receita salva é só escolhas — nunca dados
   const [linha] = await sql('SELECT definicao FROM relatorio_modelo WHERE id = ?', [a.body.dados.id]);
   const def = typeof linha.definicao === 'string' ? JSON.parse(linha.definicao) : linha.definicao;
-  assert.deepEqual(Object.keys(def).sort(), ['assunto', 'colunas', 'filtros', 'ordem', 'versao']);
+  assert.deepEqual(Object.keys(def).sort(), ['agrupar', 'assunto', 'colunas', 'filtros', 'metricas', 'ordem', 'ordemGrupo', 'versao']);
 
   const upd = await req(chefe).put(`/api/relatorios/modelos/${b.body.dados.id}`).send({ nome: 'Renomeado', receita: receitaPrazos({ colunas: ['pasta'] }) });
   assert.equal(upd.status, 200);

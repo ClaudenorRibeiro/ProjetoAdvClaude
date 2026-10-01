@@ -2,7 +2,8 @@
 // RELATÓRIOS — descreve em português os filtros de uma receita
 // (usado na aba "Informações" do Excel; a tela monta os seus próprios rótulos).
 // ============================================================
-const { operadoresDoTipo } = require('./tipos');
+const { operadoresDoTipo, PASSOS_DATA, ehData } = require('./tipos');
+const { rotuloDaMetrica } = require('./agrupamento');
 const { PERIODOS } = require('./datasRelativas');
 const { opcoesDoCampo } = require('./catalogo');
 
@@ -46,4 +47,13 @@ async function descreverFiltros(assunto, receita, ctx) {
   return [cabeca, ...await descreverGrupo(receita.filtros, assunto, ctx, 1)];
 }
 
-module.exports = { descreverFiltros };
+// "Responsável; Vencimento (mês)"  e  "Quantidade; Média de Quantidade de dias"
+function descreverAgrupamento(assunto, receita) {
+  const grupos = receita.agrupar.map(g => {
+    const c = assunto.campos[g.campo];
+    return ehData(c.tipo) ? `${c.rotulo} (${PASSOS_DATA[g.passo].toLowerCase()})` : c.rotulo;
+  });
+  return { agrupadoPor: grupos.join('; ') || '(sem agrupamento: só o total geral)', totais: receita.metricas.map(m => rotuloDaMetrica(m, assunto)).join('; ') };
+}
+
+module.exports = { descreverFiltros, descreverAgrupamento };

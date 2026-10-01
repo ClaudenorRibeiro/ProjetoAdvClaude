@@ -1,14 +1,15 @@
 // ============================================================
-// RELATÓRIOS — RESULTADO na tela, com páginas e exportação em Excel.
-// Nada é guardado: cada abertura consulta o banco de novo e respeita as permissões de agora.
+// RELATÓRIOS — RESULTADO: barra de ações (voltar, editar, perguntas, Excel) e a tabela certa
+// (uma linha por registro ou agrupada). Nada é guardado: cada abertura consulta o banco de novo
+// e respeita as permissões de agora.
 // ============================================================
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 import { relatoriosAPI } from '../../../services/api';
-import TabelaResultado from './TabelaResultado';
-import { mensagemDeErro } from './Construtor';
-
-const OPCOES_LINHAS = [10, 25, 50, 100, 200];
+import ResultadoDetalhado from './ResultadoDetalhado';
+import ResultadoAgrupado from './ResultadoAgrupado';
+import DetalheGrupo from './DetalheGrupo';
+import { temAgrupamento } from './receita';
 
 async function textoDoBlob(err) {
   try { return JSON.parse(await err.response.data.text()); } catch { return null; }
@@ -23,35 +24,22 @@ function baixar(blob, cabecalho, padrao) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export default function Resultado({ receita, modelo, onVoltar, onEditar }) {
-  const [pagina, setPagina] = useState(1);
-  const [limite, setLimite] = useState(modelo?.preferencias?.linhas_por_pagina || 50);
-  const [dados, setDados] = useState(null);
-  const [carregando, setCarregando] = useState(true);
-  const [erro, setErro] = useState('');
+export default function Resultado({ receita, modelo, parametros, temPerguntas, onVoltar, onEditar, onPerguntas }) {
   const [exportando, setExportando] = useState(false);
+  const [incluirDetalhes, setIncluirDetalhes] = useState(false);
+  const [grupoAberto, setGrupoAberto] = useState(null);
+  const agrupado = temAgrupamento(receita);
 
-  const corpo = useCallback((extra = {}) => (modelo ? { modelo_id: modelo.id, ...extra } : { receita, ...extra }), [modelo, receita]);
-
-  useEffect(() => {
-    let ativo = true;
-    setCarregando(true); setErro('');
-    relatoriosAPI.executar(corpo({ pagina, limite }))
-      .then(({ data }) => { if (ativo) setDados(data.dados); })
-      .catch(err => { if (ativo) setErro(mensagemDeErro(err, 'Não foi possível gerar o relatório')); })
-      .finally(() => { if (ativo) setCarregando(false); });
-    return () => { ativo = false; };
-  }, [corpo, pagina, limite]);
-
-  function trocarLimite(valor) {
-    setLimite(valor); setPagina(1);
-    if (modelo) relatoriosAPI.salvarPreferencias(modelo.id, { linhas_por_pagina: valor }).catch(() => {});
-  }
+  // objeto estável: só muda quando a receita, o relatório salvo ou as respostas mudam (evita consultar de novo à toa)
+  const corpoBase = useMemo(() => ({
+    ...(modelo ? { modelo_id: modelo.id } : { receita }),
+    ...(parametros?.length ? { parametros } : {}),
+  }), [modelo, receita, parametros]);
 
   async function exportar() {
     setExportando(true);
     try {
-      const res = await relatoriosAPI.exportar(corpo({ formato: 'xlsx' }));
+      const res = await relatoriosAPI.exportar({ ...corpoBase, formato: 'xlsx', ...(agrupado ? { incluirDetalhes } : {}) });
       baixar(res.data, res.headers['content-disposition'], 'relatorio.xlsx');
     } catch (err) {
       const corpoErro = await textoDoBlob(err);
@@ -59,55 +47,30 @@ export default function Resultado({ receita, modelo, onVoltar, onEditar }) {
     } finally { setExportando(false); }
   }
 
-  const total = dados?.total ?? 0;
-  const visiveis = dados ? Math.min(total, dados.limiteTela) : 0;
-  const totalPaginas = Math.max(1, Math.ceil(visiveis / limite));
-  const de = total ? (pagina - 1) * limite + 1 : 0;
-  const ate = Math.min(pagina * limite, visiveis);
-
   return (
     <div>
       <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '12px' }}>
         <button className="btn btn-secondary" onClick={onVoltar}>← Voltar</button>
-        <button className="btn btn-secondary" onClick={() => onEditar(dados?.receita || receita)}>Editar relatório</button>
-        <button className="btn btn-primary" disabled={exportando || carregando || !!erro} onClick={exportar}>
-          {exportando ? 'Gerando Excel...' : 'Exportar Excel'}</button>
+        <button className="btn btn-secondary" onClick={onEditar}>Editar relatório</button>
+        {temPerguntas && <button className="btn btn-secondary" onClick={onPerguntas}>Alterar respostas</button>}
+        <button className="btn btn-primary" disabled={exportando} onClick={exportar}>{exportando ? 'Gerando Excel...' : 'Exportar Excel'}</button>
+        {agrupado && (
+          <label style={{ display: 'flex', gap: '6px', alignItems: 'center', cursor: 'pointer' }}>
+            <input type="checkbox" checked={incluirDetalhes} onChange={e => setIncluirDetalhes(e.target.checked)} />
+            Incluir os itens (aba Detalhes)
+          </label>
+        )}
         <span style={{ marginLeft: 'auto', color: '#374151' }}>
           {modelo ? <strong>{modelo.nome}</strong> : <em>Relatório não salvo</em>}
         </span>
       </div>
 
-      {erro && <div className="card" role="alert" style={{ color: '#b91c1c' }}>{erro}</div>}
-      {!erro && (
-        <div className="card">
-          {carregando && !dados ? <div className="loading">Carregando...</div> : dados && (
-            <>
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '8px' }}>
-                <span>{total.toLocaleString('pt-BR')} registro(s){total ? ` — mostrando ${de}–${ate}` : ''}</span>
-                <label style={{ marginLeft: 'auto' }}>Linhas por página{' '}
-                  <select value={limite} aria-label="Linhas por página" onChange={e => trocarLimite(Number(e.target.value))}>
-                    {OPCOES_LINHAS.map(n => <option key={n} value={n}>{n}</option>)}
-                  </select>
-                </label>
-              </div>
-              {dados.truncado && (
-                <p role="status" style={{ background: '#fef3c7', padding: '8px', borderRadius: '6px' }}>
-                  Há {total.toLocaleString('pt-BR')} registros, mas a tela mostra só os primeiros {dados.limiteTela.toLocaleString('pt-BR')}.
-                  Refine os filtros ou exporte para o Excel.
-                </p>
-              )}
-              <div style={{ opacity: carregando ? 0.5 : 1 }}><TabelaResultado colunas={dados.colunas} linhas={dados.linhas} /></div>
-              {totalPaginas > 1 && (
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center', marginTop: '12px' }}>
-                  <button className="btn btn-secondary" disabled={pagina <= 1 || carregando} onClick={() => setPagina(p => p - 1)}>‹ Anterior</button>
-                  <span>Página {pagina} de {totalPaginas}</span>
-                  <button className="btn btn-secondary" disabled={pagina >= totalPaginas || carregando} onClick={() => setPagina(p => p + 1)}>Próxima ›</button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
+      {agrupado
+        ? <ResultadoAgrupado corpoBase={corpoBase} onAbrirGrupo={(chaves, rotulos) => setGrupoAberto({ chaves, rotulos })} />
+        : <ResultadoDetalhado corpoBase={corpoBase} limiteInicial={modelo?.preferencias?.linhas_por_pagina || 50}
+            aoMudarLimite={modelo ? (n) => relatoriosAPI.salvarPreferencias(modelo.id, { linhas_por_pagina: n }).catch(() => {}) : undefined} />}
+
+      {grupoAberto && <DetalheGrupo corpoBase={corpoBase} chaves={grupoAberto.chaves} rotulos={grupoAberto.rotulos} onFechar={() => setGrupoAberto(null)} />}
     </div>
   );
 }

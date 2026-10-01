@@ -19,20 +19,26 @@ import RelatoriosNovo from './RelatoriosNovo';
 import { toast } from 'react-toastify';
 
 const op = (valor, rotulo, aridade) => ({ valor, rotulo, aridade });
+const FUN_NUM = [{ valor: 'soma', rotulo: 'Soma' }, { valor: 'media', rotulo: 'Média' }, { valor: 'minimo', rotulo: 'Mínimo' }, { valor: 'maximo', rotulo: 'Máximo' }];
+const FUN_DATA = [{ valor: 'minimo', rotulo: 'Mínimo' }, { valor: 'maximo', rotulo: 'Máximo' }];
+const PASSOS = [{ valor: 'dia', rotulo: 'Dia' }, { valor: 'semana', rotulo: 'Semana' }, { valor: 'mes', rotulo: 'Mês' }, { valor: 'ano', rotulo: 'Ano' }];
+const campo = (extra) => ({ formato: null, opcoes: null, agrupavel: false, passos: null, funcoes: [], ...extra });
 const CATALOGO = {
   periodos: [{ valor: 'este_mes', rotulo: 'Este mês' }],
   assuntos: [{
     chave: 'prazos', rotulo: 'Prazos', colunasPadrao: ['pasta', 'processo', 'vencimento', 'status'], ordemPadrao: [{ campo: 'vencimento', direcao: 'asc' }],
     campos: [
-      { chave: 'pasta', rotulo: 'Pasta', tipo: 'texto', formato: 'pasta', operadores: [op('contem', 'contém', 'um'), op('vazio', 'está vazio', 'nenhum')], opcoes: null },
-      { chave: 'processo', rotulo: 'Processo', tipo: 'texto', formato: 'processo', operadores: [op('contem', 'contém', 'um')], opcoes: null },
-      { chave: 'vencimento', rotulo: 'Vencimento', tipo: 'data', formato: null, operadores: [op('igual', 'é', 'um'), op('no_periodo', 'no período', 'periodo')], opcoes: null },
-      { chave: 'status', rotulo: 'Status', tipo: 'lista', formato: null, operadores: [op('em', 'é um destes', 'lista')], opcoes: [{ valor: 'atrasado', rotulo: 'Atrasado' }] },
-      { chave: 'concluido', rotulo: 'Concluído', tipo: 'booleano', formato: null, operadores: [op('verdadeiro', 'é sim', 'nenhum')], opcoes: null },
+      campo({ chave: 'pasta', rotulo: 'Pasta', tipo: 'texto', formato: 'pasta', agrupavel: true, operadores: [op('contem', 'contém', 'um'), op('vazio', 'está vazio', 'nenhum')] }),
+      campo({ chave: 'processo', rotulo: 'Processo', tipo: 'texto', formato: 'processo', agrupavel: true, operadores: [op('contem', 'contém', 'um')] }),
+      campo({ chave: 'descricao', rotulo: 'Descrição', tipo: 'texto', operadores: [op('contem', 'contém', 'um')] }),
+      campo({ chave: 'vencimento', rotulo: 'Vencimento', tipo: 'data', agrupavel: true, passos: PASSOS, funcoes: FUN_DATA, operadores: [op('igual', 'é', 'um'), op('entre', 'entre', 'dois'), op('no_periodo', 'no período', 'periodo')] }),
+      campo({ chave: 'status', rotulo: 'Status', tipo: 'lista', agrupavel: true, operadores: [op('em', 'é um destes', 'lista')], opcoes: [{ valor: 'atrasado', rotulo: 'Atrasado' }] }),
+      campo({ chave: 'concluido', rotulo: 'Concluído', tipo: 'booleano', agrupavel: true, operadores: [op('verdadeiro', 'é sim', 'nenhum')] }),
+      campo({ chave: 'quantidade', rotulo: 'Quantidade de dias', tipo: 'numero', agrupavel: true, funcoes: FUN_NUM, operadores: [op('igual', 'é igual a', 'um')] }),
     ],
   }],
 };
-const RECEITA = { versao: 1, assunto: 'prazos', colunas: ['pasta', 'vencimento'], filtros: { op: 'E', itens: [] }, ordem: [] };
+const RECEITA = { versao: 2, assunto: 'prazos', colunas: ['pasta', 'vencimento'], filtros: { op: 'E', itens: [] }, ordem: [], agrupar: [], metricas: [], ordemGrupo: null };
 const MODELO = { id: 5, nome: 'Prazos da semana', descricao: 'dia a dia', assunto: 'prazos', receita: RECEITA, preferencias: {}, criado_em: '2026-10-01 09:00:00', alterado_em: null };
 const RESULTADO = {
   colunas: [{ chave: 'pasta', rotulo: 'Pasta', tipo: 'texto', formato: 'pasta' }, { chave: 'processo', rotulo: 'Processo', tipo: 'texto', formato: 'processo' },
@@ -93,9 +99,9 @@ describe('Relatórios (tela nova)', () => {
     await waitFor(() => expect(api.executar).toHaveBeenCalled());
     expect(api.executar.mock.calls[0][0]).toEqual({
       receita: {
-        versao: 1, assunto: 'prazos', colunas: ['pasta', 'processo', 'vencimento'],
+        versao: 2, assunto: 'prazos', colunas: ['pasta', 'processo', 'vencimento'],
         filtros: { op: 'E', itens: [{ campo: 'pasta', operador: 'contem', valor: '8969' }] },
-        ordem: [{ campo: 'vencimento', direcao: 'asc' }],
+        ordem: [{ campo: 'vencimento', direcao: 'asc' }], agrupar: [], metricas: [], ordemGrupo: null,
       }, pagina: 1, limite: 50,
     });
     expect(await screen.findByText('1 registro(s) — mostrando 1–1')).toBeInTheDocument();
@@ -159,5 +165,128 @@ describe('Relatórios (tela nova)', () => {
     api.executar.mockRejectedValueOnce({ response: { data: { mensagem: 'Você não tem permissão para relatórios de Prazos.' } } });
     await user.click(screen.getByRole('button', { name: 'Próxima ›' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Você não tem permissão para relatórios de Prazos.');
+  });
+
+  const AGRUPADO = {
+    modo: 'agrupado', totalGrupos: 2, limiteGrupos: 2000, receita: RECEITA, modelo: null,
+    colunas: { grupos: [{ chave: 'status', rotulo: 'Status', passo: null }], metricas: [{ chave: 'm1', rotulo: 'Quantidade', funcao: 'contagem', tipo: 'numero' }, { chave: 'm2', rotulo: 'Média de Quantidade de dias', funcao: 'media', tipo: 'numero' }] },
+    linhas: [
+      { tipo: 'grupo', nivel: 1, chaves: ['agendado'], rotulos: ['Agendado'], valores: [5, 12.5] },
+      { tipo: 'grupo', nivel: 1, chaves: ['atrasado'], rotulos: ['Atrasado'], valores: [3, null] },
+      { tipo: 'total', nivel: 0, chaves: [], rotulos: [], valores: [8, 12.5] },
+    ],
+  };
+
+  it('agrupar: o passo oferece só o que faz sentido, roda agrupado e mostra grupos e total geral', async () => {
+    const user = userEvent.setup();
+    api.executar.mockResolvedValue({ data: { dados: AGRUPADO } });
+    abrir();
+    await user.click(await screen.findByRole('button', { name: '+ Novo relatório' }));
+    await user.selectOptions(screen.getByLabelText('Assunto do relatório'), 'prazos');
+
+    const agrupar = screen.getByLabelText('Agrupar por (1)');
+    const opcoes = within(agrupar).getAllByRole('option').map(o => o.textContent);
+    expect(opcoes).toContain('Status');
+    expect(opcoes).not.toContain('Descrição');                                    // texto livre não agrupa
+    await user.selectOptions(agrupar, 'status');
+    expect(screen.getByLabelText('Total 1')).toHaveValue('contagem');            // a contagem entra sozinha
+    const funcoes = within(screen.getByLabelText('Total 1')).getAllByRole('option').map(o => o.textContent);
+    expect(funcoes).toEqual(['Quantidade', 'Soma', 'Média', 'Mínimo', 'Máximo']);
+    await user.click(screen.getByRole('button', { name: '+ Total' }));
+    await user.selectOptions(screen.getByLabelText('Total 2'), 'media');
+    expect(screen.getByLabelText('Campo do total 2')).toHaveValue('quantidade');  // só números aparecem para média
+
+    await user.click(screen.getByRole('button', { name: 'Ver resultado' }));
+    await waitFor(() => expect(api.executar).toHaveBeenCalled());
+    const corpo = api.executar.mock.calls[0][0];
+    expect(corpo.receita.agrupar).toEqual([{ campo: 'status' }]);
+    expect(corpo.receita.metricas).toEqual([{ funcao: 'contagem' }, { funcao: 'media', campo: 'quantidade' }]);
+    expect(corpo.pagina).toBeUndefined();                                         // agrupado não pagina
+
+    expect(await screen.findByText('2 grupo(s). Clique em um grupo para ver os itens dele.')).toBeInTheDocument();
+    expect(screen.getByText('Agendado').closest('tr')).toHaveTextContent('512,50');
+    expect(screen.getByText('Atrasado').closest('tr')).toHaveTextContent('3—');   // média sem valor aparece como traço
+    expect(screen.getByText('TOTAL GERAL').closest('tr')).toHaveTextContent('812,50');
+  });
+
+  it('data agrupa por mês por padrão e deixa trocar para dia, semana ou ano; segundo nível não repete o campo', async () => {
+    const user = userEvent.setup();
+    abrir();
+    await user.click(await screen.findByRole('button', { name: '+ Novo relatório' }));
+    await user.selectOptions(screen.getByLabelText('Assunto do relatório'), 'prazos');
+    await user.selectOptions(screen.getByLabelText('Agrupar por (1)'), 'vencimento');
+    expect(screen.getByLabelText('Agrupar Vencimento por')).toHaveValue('mes');
+    expect(within(screen.getByLabelText('Agrupar Vencimento por')).getAllByRole('option').map(o => o.textContent)).toEqual(['por dia', 'por semana', 'por mês', 'por ano']);
+    await user.selectOptions(screen.getByLabelText('Agrupar Vencimento por'), 'semana');
+    expect(within(screen.getByLabelText('Agrupar por (2)')).queryByRole('option', { name: 'Vencimento' })).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText('Agrupar por (2)'), 'status');
+    await user.selectOptions(screen.getByLabelText('Agrupar por (1)'), '');          // limpar o 1º limpa o 2º
+    expect(screen.queryByLabelText('Agrupar por (2)')).not.toBeInTheDocument();
+  });
+
+  it('clicar num grupo abre os itens dele; o Excel agrupado pode incluir os detalhes', async () => {
+    const user = userEvent.setup();
+    const clicar = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    api.listarModelos.mockResolvedValue({ data: { dados: { modelos: [{ ...MODELO, receita: { ...RECEITA, agrupar: [{ campo: 'status' }], metricas: [{ funcao: 'contagem' }] } }], limite: 10, criados: 1 } } });
+    api.executar.mockImplementation(async (corpo) => ({ data: { dados: corpo.grupo ? { ...RESULTADO, total: 1 } : AGRUPADO } }));
+    api.exportar.mockResolvedValue({ data: new Blob(['x']), headers: {} });
+    abrir();
+    await user.click(await screen.findByText('Prazos da semana', { selector: 'button' }));
+    await user.click(await screen.findByText('Atrasado'));
+    const janela = await screen.findByRole('dialog', { name: 'Itens do grupo' });
+    expect(within(janela).getByText('Itens: Atrasado')).toBeInTheDocument();
+    await waitFor(() => expect(api.executar).toHaveBeenCalledWith(expect.objectContaining({ modelo_id: 5, grupo: ['atrasado'] })));
+    expect(await within(janela).findByText('8969')).toBeInTheDocument();
+    await user.click(within(janela).getByRole('button', { name: 'Fechar' }));
+    expect(screen.queryByRole('dialog', { name: 'Itens do grupo' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Exportar Excel' }));
+    await waitFor(() => expect(api.exportar).toHaveBeenLastCalledWith({ modelo_id: 5, formato: 'xlsx', incluirDetalhes: false }));
+    await user.click(screen.getByRole('checkbox', { name: /Incluir os itens/ }));
+    await user.click(screen.getByRole('button', { name: 'Exportar Excel' }));
+    await waitFor(() => expect(api.exportar).toHaveBeenLastCalledWith({ modelo_id: 5, formato: 'xlsx', incluirDetalhes: true }));
+    clicar.mockRestore();
+  });
+
+  it('perguntar ao abrir: pergunta antes de rodar, só libera com tudo respondido e envia as respostas por caminho', async () => {
+    const user = userEvent.setup();
+    abrir();
+    await user.click(await screen.findByRole('button', { name: '+ Novo relatório' }));
+    await user.selectOptions(screen.getByLabelText('Assunto do relatório'), 'prazos');
+    await user.click(screen.getByRole('button', { name: '+ Condição' }));                       // Pasta contém ...
+    await user.click(screen.getByRole('checkbox', { name: /Perguntar ao abrir/ }));
+    expect(screen.queryByText('Preencha o valor')).not.toBeInTheDocument();                   // vazio é permitido: será perguntado
+    await user.click(screen.getByRole('button', { name: 'Ver resultado' }));
+
+    const janela = await screen.findByRole('dialog', { name: 'Perguntas do relatório' });
+    expect(api.executar).not.toHaveBeenCalled();                                                // não roda antes de responder
+    const rodar = within(janela).getByRole('button', { name: 'Rodar relatório' });
+    expect(rodar).toBeDisabled();
+    await user.type(within(janela).getByLabelText('Valor de Pasta'), '8969');
+    await user.click(rodar);
+    await waitFor(() => expect(api.executar).toHaveBeenCalled());
+    const corpo = api.executar.mock.calls[0][0];
+    expect(corpo.parametros).toEqual([{ caminho: [0], valor: '8969' }]);
+    expect(corpo.receita.filtros.itens[0]).toMatchObject({ campo: 'pasta', operador: 'contem', perguntar: true });
+    await user.click(await screen.findByRole('button', { name: 'Alterar respostas' }));
+    expect(within(await screen.findByRole('dialog', { name: 'Perguntas do relatório' })).getByLabelText('Valor de Pasta')).toHaveValue('8969'); // lembra a última resposta
+  });
+
+  it('data relativa: "hoje" mais ou menos N dias fica na receita como objeto', async () => {
+    const user = userEvent.setup();
+    abrir();
+    await user.click(await screen.findByRole('button', { name: '+ Novo relatório' }));
+    await user.selectOptions(screen.getByLabelText('Assunto do relatório'), 'prazos');
+    await user.click(screen.getByRole('button', { name: '+ Condição' }));
+    await user.selectOptions(screen.getByLabelText('Campo do filtro'), 'vencimento');          // operador "é"
+    await user.selectOptions(screen.getByLabelText(/Valor de Vencimento: tipo de data/), 'relativa');
+    expect(screen.getByRole('button', { name: 'Ver resultado' })).toBeEnabled();                // 0 dias = hoje: já está completo
+    const dias = screen.getByLabelText(/dias a somar/);
+    await user.clear(dias);
+    expect(screen.getByRole('button', { name: 'Ver resultado' })).toBeDisabled();               // dias vazio bloqueia
+    await user.type(dias, '-30');
+    await user.click(screen.getByRole('button', { name: 'Ver resultado' }));
+    await waitFor(() => expect(api.executar).toHaveBeenCalled());
+    expect(api.executar.mock.calls[0][0].receita.filtros.itens[0]).toEqual({ campo: 'vencimento', operador: 'igual', valor: { rel: 'hoje', dias: -30 } });
   });
 });

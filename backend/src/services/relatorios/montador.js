@@ -83,4 +83,4 @@ function montarConsulta(assunto, receita, ctx, { limite, offset }) {
   };
 }
 
-module.exports = { montarConsulta, montarContagem, resolverJuncoes };
+module.exports = { montarConsulta, montarContagem, resolverJuncoes, base, DICA };

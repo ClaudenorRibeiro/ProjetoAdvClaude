@@ -10,8 +10,10 @@ const { ErroRelatorio } = require('./erros');
 const { operadoresDoTipo } = require('./tipos');
 const { dataValida, resolverData, PERIODOS } = require('./datasRelativas');
 const { obterAssunto, assuntoPermitido, campoPermitido, opcoesDoCampo } = require('./catalogo');
+const { validarAgrupamento } = require('./validadorAgrupamento');
 
 const ehObjeto = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+const semValor = v => v === undefined || v === null || v === '' || (Array.isArray(v) && v.every(x => x === '' || x === null || x === undefined));
 
 function valorDeData(v, hoje) {
   if (typeof v === 'string') return dataValida(v) ? v : null;
@@ -77,15 +79,21 @@ async function validarGrupo(no, assunto, ctx, estado, profundidade) {
     if (!Object.prototype.hasOwnProperty.call(operadoresDoTipo(campo.tipo), item.operador)) {
       estado.erros.push(`"${campo.rotulo}" não aceita essa condição.`); continue;
     }
+    // Ao SALVAR, uma condição "perguntar ao abrir" pode ficar sem valor padrão (a resposta vem na hora de rodar)
+    if (item.perguntar === true && estado.salvando && semValor(item.valor)) {
+      itens.push({ campo: item.campo, operador: item.operador, valor: null, perguntar: true });
+      continue;
+    }
     const v = await validarValor(campo, item.operador, item.valor, ctx, estado.cacheOpcoes);
     if (!v.ok) { estado.erros.push(v.erro); continue; }
-    itens.push({ campo: item.campo, operador: item.operador, valor: v.valor });
+    itens.push({ campo: item.campo, operador: item.operador, valor: v.valor, ...(item.perguntar === true ? { perguntar: true } : {}) });
   }
   return itens.length ? { op, itens } : null; // grupo vazio é descartado
 }
 
 // Devolve { assunto, receita } normalizados ou lança ErroRelatorio
-async function validarReceita(bruta, ctx) {
+// opcoes.salvando = true: permite deixar sem valor as condições marcadas "perguntar ao abrir"
+async function validarReceita(bruta, ctx, opcoes = {}) {
   const r = ehObjeto(bruta) ? bruta : {};
   const assunto = obterAssunto(r.assunto);
   if (!assunto) throw new ErroRelatorio('Escolha um assunto de relatório válido.');
@@ -99,7 +107,7 @@ async function validarReceita(bruta, ctx) {
   if (colunas.length > L.MAX_COLUNAS) erros.push(`No máximo ${L.MAX_COLUNAS} colunas.`);
   colunas.forEach(c => { if (!campoOk(c)) erros.push(`Coluna indisponível: ${String(c).slice(0, 40)}.`); });
 
-  const estado = { erros, condicoes: 0, cacheOpcoes: new Map() };
+  const estado = { erros, condicoes: 0, cacheOpcoes: new Map(), salvando: opcoes.salvando === true };
   const raiz = ehObjeto(r.filtros) ? r.filtros : { op: 'E', itens: [] };
   const filtros = await validarGrupo(raiz, assunto, ctx, estado, 1) || { op: 'E', itens: [] };
 
@@ -112,8 +120,10 @@ async function validarReceita(bruta, ctx) {
     ordem.push({ campo: o.campo, direcao: o.direcao === 'desc' ? 'desc' : 'asc' });
   }
 
+  const { agrupar, metricas, ordemGrupo } = validarAgrupamento(r, assunto, ctx, erros);
+
   if (erros.length) throw new ErroRelatorio([...new Set(erros)]);
-  return { assunto, receita: { versao: L.VERSAO_RECEITA, assunto: assunto.chave, colunas, filtros, ordem } };
+  return { assunto, receita: { versao: L.VERSAO_RECEITA, assunto: assunto.chave, colunas, filtros, ordem, agrupar, metricas, ordemGrupo } };
 }
 
 module.exports = { validarReceita };
