@@ -9,6 +9,8 @@ const { listarPeriodos } = require('../datasRelativas');
 const ASSUNTOS = {
   prazos: require('./prazos'),
   tarefas: require('./tarefas'),
+  audiencias: require('./audiencias'),
+  pericias: require('./pericias'),
 };
 
 function obterAssunto(chave) {

@@ -8,9 +8,7 @@ const { restringirPorResponsavel, opcoesUsuarios, opcoesTabela } = require('../v
 const STATUS_EXPR = `CASE WHEN pp.status = 'concluido' THEN 'concluido' WHEN pp.status = 'cancelado' THEN 'cancelado' WHEN pp.data_vencimento < CURDATE() THEN 'atrasado' WHEN pp.data_vencimento = CURDATE() THEN 'pendente' ELSE 'agendado' END`;
 const ROTULOS_STATUS = { concluido: 'Concluído', cancelado: 'Cancelado', atrasado: 'Atrasado', pendente: 'Vence hoje', agendado: 'Agendado' };
 
-// Pasta com no mínimo 4 dígitos (0042). LPAD sozinho CORTA números maiores (99001 viraria 9900),
-// por isso só completa com zeros quando o número tem menos de 4 dígitos.
-const PASTA_EXPR = "IF(pa.numPasta >= 1000, CAST(pa.numPasta AS CHAR), LPAD(pa.numPasta, 4, '0'))";
+const { PASTA_EXPR } = require('./comum');
 
 module.exports = {
   chave: 'prazos',

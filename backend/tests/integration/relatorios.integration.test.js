@@ -56,7 +56,7 @@ test.after(async () => pool.end());
 test('catálogo: só mostra o que o usuário pode usar e nunca vaza SQL', async () => {
   const a = await req(admin).get('/api/relatorios/catalogo');
   assert.equal(a.status, 200);
-  assert.deepEqual(a.body.dados.assuntos.map(x => x.chave).sort(), ['prazos', 'tarefas']);
+  assert.deepEqual(a.body.dados.assuntos.map(x => x.chave).sort(), ['audiencias', 'pericias', 'prazos', 'tarefas']);
   assert.ok(a.body.dados.periodos.some(p => p.valor === 'proximos_30_dias'));
   const txt = JSON.stringify(a.body);
   assert.doesNotMatch(txt, /pp\.|LPAD|JOIN|tblproc|expr/);

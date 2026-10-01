@@ -5,9 +5,7 @@ const { restringirPorResponsavel, opcoesUsuarios } = require('../visibilidade');
 
 const ROTULOS_PRIORIDADE = { urgente: 'Urgente', normal: 'Normal', baixa: 'Baixa' };
 
-// Pasta com no mínimo 4 dígitos (0042). LPAD sozinho CORTA números maiores (99001 viraria 9900),
-// por isso só completa com zeros quando o número tem menos de 4 dígitos.
-const PASTA_EXPR = "IF(pa.numPasta >= 1000, CAST(pa.numPasta AS CHAR), LPAD(pa.numPasta, 4, '0'))";
+const { PASTA_EXPR } = require('./comum');
 
 module.exports = {
   chave: 'tarefas',
