@@ -19,17 +19,18 @@ export default function PassoColunas({ assunto, colunas, onChange }) {
           </label>
         ))}
       </div>
-      <div style={{ flex: '1 1 240px' }}>
+      <div style={{ flex: '1 1 240px', maxWidth: '440px' }}>   {/* largura limitada: os botões ficam colados ao nome da coluna */}
         <strong style={{ display: 'block', marginBottom: '6px' }}>Colunas no relatório (na ordem)</strong>
+        {colunas.length > 1 && <p style={{ margin: '0 0 6px', fontSize: '12px', color: '#6b7280' }}>Use ↑ e ↓ para mudar a ordem das colunas e ✕ para tirar uma.</p>}
         {colunas.length === 0 && <p style={{ color: '#b45309', margin: 0 }}>Escolha ao menos uma coluna.</p>}
         {colunas.map((chave, i) => (
           <div key={chave} style={{ display: 'flex', gap: '6px', alignItems: 'center', padding: '3px 0' }}>
             <span style={{ flex: 1 }}>{i + 1}. {rotulo(chave)}</span>
-            <button type="button" className="btn btn-secondary" aria-label={`Subir ${rotulo(chave)}`} disabled={i === 0}
+            <button type="button" className="btn btn-secondary" aria-label={`Subir ${rotulo(chave)}`} title="Subir esta coluna" disabled={i === 0}
               onClick={() => onChange(mover(colunas, i, i - 1))}>↑</button>
-            <button type="button" className="btn btn-secondary" aria-label={`Descer ${rotulo(chave)}`} disabled={i === colunas.length - 1}
+            <button type="button" className="btn btn-secondary" aria-label={`Descer ${rotulo(chave)}`} title="Descer esta coluna" disabled={i === colunas.length - 1}
               onClick={() => onChange(mover(colunas, i, i + 1))}>↓</button>
-            <button type="button" className="btn btn-secondary" aria-label={`Remover ${rotulo(chave)}`} onClick={() => alternar(chave)}>✕</button>
+            <button type="button" className="btn btn-secondary" aria-label={`Remover ${rotulo(chave)}`} title="Tirar esta coluna do relatório" onClick={() => alternar(chave)}>✕</button>
           </div>
         ))}
       </div>
