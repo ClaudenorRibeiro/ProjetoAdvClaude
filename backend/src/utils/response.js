@@ -43,12 +43,18 @@ function erroInterno(res, err) {
   // Exclusão barrada por vínculo (chave estrangeira): o registro possui "filhos" em outra
   // tabela e o banco recusa apagá-lo. Mostra mensagem amigável e correta em vez do genérico
   // "tente novamente" (que aqui seria enganoso — não adianta repetir).
-  // ATENÇÃO: só os códigos de "parent row is referenced" (apagar/atualizar o PAI é barrado).
-  // NÃO inclui o oposto (ER_NO_REFERENCED_ROW_*, que é inserir apontando para algo inexistente).
   if (err && (err.code === 'ER_ROW_IS_REFERENCED_2' || err.code === 'ER_ROW_IS_REFERENCED')) {
     return res.status(409).json({
       ok: false,
       mensagem: 'Não é possível excluir este item porque ele está vinculado a outros registros no sistema. Remova ou desvincule esses registros antes de excluir.',
+    });
+  }
+  // O oposto: gravar apontando para algo que não existe mais (vara, tipo, status, pasta... removido por outra
+  // pessoa com a tela ainda aberta). Nada foi gravado; recarregar resolve — por isso não é "erro interno".
+  if (err && (err.code === 'ER_NO_REFERENCED_ROW_2' || err.code === 'ER_NO_REFERENCED_ROW')) {
+    return res.status(409).json({
+      ok: false,
+      mensagem: 'Um dos itens escolhidos não existe mais (foi removido ou desativado). Recarregue a tela e tente novamente.',
     });
   }
   return res.status(500).json({

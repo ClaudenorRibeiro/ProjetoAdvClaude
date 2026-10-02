@@ -94,6 +94,11 @@ function formatarNumeroPasta(numero) {
   return String(numero).padStart(4, '0');
 }
 
+// Protege os curingas do LIKE (% _ \\) para que o texto digitado seja procurado COMO ESTÁ ("50%" acha "50%").
+function escaparLike(s) {
+  return String(s).replace(/[\\%_]/g, c => `\\${c}`);
+}
+
 // Mesma regra, para dentro do SQL: pasta com no mínimo 4 dígitos (0042). LPAD sozinho CORTA números
 // maiores (99001 viraria 9900 e a busca pelo número inteiro não acharia), por isso só completa com
 // zeros quando o número tem menos de 4 dígitos. `alias` é o apelido da tabela tblpasta na consulta.
@@ -129,5 +134,6 @@ module.exports = {
   truncar,
   formatarNumeroPasta,
   pastaFormatadaSql,
+  escaparLike,
   parseMoeda,
 };

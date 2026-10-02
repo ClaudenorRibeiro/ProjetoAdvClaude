@@ -7,7 +7,7 @@
 const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
-const { parseMoeda, pastaFormatadaSql } = require('../utils/helpers');
+const { parseMoeda, pastaFormatadaSql, escaparLike } = require('../utils/helpers');
 
 // Confere que TODA parte (autor/réu/perito) enviada aponta para uma pessoa que
 // existe e está ativa. tbltituloproc* e processo_perito são polimórficos SEM
@@ -75,25 +75,27 @@ async function validarOabsExistem(conn, oabs) {
 // ============================================================
 
 // GET /api/processos/sugerir-pasta
-// Retorna o menor numPasta disponível na sequência (gap-finding).
+// Retorna o MENOR numPasta livre (1, ou o primeiro buraco da sequência).
 // Pastas vazias (sem processos ativos) são tratadas como disponíveis —
 // ao cadastrar um novo processo com esse número, a pasta existente é reaproveitada.
 async function sugerirNumeroPasta(req, res) {
   try {
     const [rows] = await pool.execute(`
-      SELECT IFNULL(
-        (SELECT MIN(t1.numPasta + 1)
-         FROM tblpasta t1
-         -- t1 precisa ser uma pasta "ocupada" (com processos ativos)
-         WHERE EXISTS (SELECT 1 FROM tblproc p WHERE p.pasta_id = t1.id AND p.ativo = 1)
-         -- o próximo número não pode ser de uma pasta também "ocupada"
-         AND NOT EXISTS (
-           SELECT 1 FROM tblpasta t2
-           WHERE t2.numPasta = t1.numPasta + 1
-           AND EXISTS (SELECT 1 FROM tblproc p WHERE p.pasta_id = t2.id AND p.ativo = 1)
-         )),
-        1
-      ) AS proximo
+      -- O menor número livre é o 1 ou o "número seguinte" de alguma pasta ocupada (com processos ativos),
+      -- desde que ele mesmo não seja de uma pasta ocupada.
+      SELECT MIN(cand.n) AS proximo
+        FROM (
+          SELECT 1 AS n
+          UNION ALL
+          SELECT t1.numPasta + 1
+            FROM tblpasta t1
+           WHERE EXISTS (SELECT 1 FROM tblproc p WHERE p.pasta_id = t1.id AND p.ativo = 1)
+        ) cand
+       WHERE NOT EXISTS (
+         SELECT 1 FROM tblpasta t2
+          WHERE t2.numPasta = cand.n
+            AND EXISTS (SELECT 1 FROM tblproc p WHERE p.pasta_id = t2.id AND p.ativo = 1)
+       )
     `);
     return sucesso(res, { proximo: rows[0].proximo });
   } catch (err) {
@@ -877,7 +879,7 @@ async function atualizarProcesso(req, res) {
          data_distribuicao=?, observacoes=?, responsavel_id=?,
          alterado_por=?, alterado_em=NOW()
        WHERE id = ?`,
-      [numProc          || null,
+      [numProcLimpo,
        protocoloLimpo,
        NomeTituloProc   || antes[0].NomeTituloProc,
        // se não veio no body, preserva o valor atual; se veio vazio, grava NULL
@@ -1532,7 +1534,7 @@ async function buscarProcessosPorNumero(req, res) {
     const { q } = req.query;
     if (!q || q.length < 2) return sucesso(res, []);
 
-    const termo = `%${q}%`;
+    const termo = `%${escaparLike(q)}%`;
     const [rows] = await pool.execute(
       `SELECT p.id, p.numProc, p.NomeTituloProc, p.vara_id, pa.numPasta
        FROM tblproc p

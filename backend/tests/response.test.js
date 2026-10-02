@@ -32,6 +32,19 @@ test('violação de vínculo retorna conflito amigável', () => {
   assert.match(res.corpo.mensagem, /vinculado/i);
 });
 
+test('gravar apontando para item que não existe mais retorna aviso de recarregar (409), não erro interno', () => {
+  for (const code of ['ER_NO_REFERENCED_ROW_2', 'ER_NO_REFERENCED_ROW']) {
+    const res = resFalso();
+    const erroOriginal = console.error;
+    console.error = () => {};
+    try { resposta.erroInterno(res, { code, sqlMessage: 'detalhe técnico confidencial' }); }
+    finally { console.error = erroOriginal; }
+    assert.equal(res.codigo, 409, code);
+    assert.match(res.corpo.mensagem, /não existe mais.*Recarregue a tela/i);
+    assert.doesNotMatch(JSON.stringify(res.corpo), /confidencial|ER_/);
+  }
+});
+
 test('401, 403 e 404 permanecem semanticamente distintos', () => {
   const naoAutorizado = resFalso();
   resposta.naoAutorizado(naoAutorizado, 'Sessão inválida', 'SESSAO_ENCERRADA');

@@ -75,7 +75,7 @@ test.after(async () => pool.end());
 
 // ------------------------------------------------------------------ sugerir número da pasta (primeiro: o banco ainda só tem a pasta 99001)
 test('sugerir-pasta: próximo livre, buraco aberto por exclusão, pasta vazia reaproveitada ao cadastrar', async () => {
-  assert.equal((await api().get('/api/processos/sugerir-pasta')).body.dados.proximo, 99002);   // só a 99001 está ocupada
+  assert.equal((await api().get('/api/processos/sugerir-pasta')).body.dados.proximo, 1);   // só a 99001 está ocupada: o menor livre é o 1
   const p1 = await criar({ numPasta: 1 }); const p2 = await criar({ numPasta: 2 }); const p3 = await criar({ numPasta: 3 });
   assert.equal((await api().get('/api/processos/sugerir-pasta')).body.dados.proximo, 4);
   // exclui o processo da pasta 2: o número 2 volta a ser sugerido, e a pasta continua existindo (vazia)
@@ -141,12 +141,13 @@ test('criar: validações de campos obrigatórios e de valores inválidos (nada 
   assert.equal(await total('SELECT COUNT(*) AS n FROM tblpasta'), pastasAntes);               // nem pasta nova (rollback inteiro)
 });
 
-test('criar: valores que o banco recusa (vara, tipo, assunto, pasta inexistentes) dão erro de cliente, sem detalhe técnico e sem gravar', async () => {
+test('criar: item que não existe mais (vara, tipo, status, instância, assunto, pasta) dá aviso claro (409), sem detalhe técnico e sem gravar', async () => {
   const antes = await total('SELECT COUNT(*) AS n FROM tblproc');
   for (const extra of [{ vara_id: 999999 }, { tipo_id: 999999 }, { status_id: 999999 }, { instancia_id: 999999 },
     { assuntos: [999999] }, { numPasta: undefined, pasta_id: 999999 }]) {
     const r = await api().post('/api/processos').send(corpo(extra));
-    assert.ok(r.status >= 400 && r.status < 500, `${JSON.stringify(extra)} → ${r.status} ${JSON.stringify(r.body)}`);
+    assert.equal(r.status, 409, `${JSON.stringify(extra)} → ${r.status} ${JSON.stringify(r.body)}`);
+    assert.match(msg(r), /não existe mais.*Recarregue a tela/, JSON.stringify(extra));
     assert.doesNotMatch(JSON.stringify(r.body), /ER_|SQLSTATE|FOREIGN KEY|constraint/i, JSON.stringify(extra));
   }
   assert.equal(await total('SELECT COUNT(*) AS n FROM tblproc'), antes);
@@ -267,9 +268,13 @@ test('editar: validações (404, listas vazias, polo, duplicados de outro proces
   const falhaOab = await put(b.id, { oabs: [{ tipo: 'usuario', id: 999999 }] });
   assert.equal(falhaOab.status, 400);
   // valores que o banco recusa viram erro de cliente, sem detalhe técnico
-  const fk = await put(b.id, { vara_id: 999999, numProc: '7100002-00.2026.5.15.0002' });
-  assert.ok(fk.status >= 400 && fk.status < 500, `vara inexistente → ${fk.status}`);
-  assert.doesNotMatch(JSON.stringify(fk.body), /ER_|SQLSTATE|FOREIGN KEY|constraint/i);
+  for (const extra of [{ vara_id: 999999 }, { tipo_id: 999999 }, { status_id: 999999 }, { instancia_id: 999999 }, { assuntos: [999999] }]) {
+    const fk = await put(b.id, { numProc: '7100002-00.2026.5.15.0002', ...extra });
+    assert.equal(fk.status, 409, `${JSON.stringify(extra)} → ${fk.status}`);
+    assert.match(msg(fk), /não existe mais.*Recarregue a tela/);
+    assert.doesNotMatch(JSON.stringify(fk.body), /ER_|SQLSTATE|FOREIGN KEY|constraint/i);
+  }
+  assert.equal((await um('SELECT NomeTituloProc FROM tblproc WHERE id = ?', [b.id])).NomeTituloProc, 'TÍTULO ORIGINAL DE B');   // nada mudou
 });
 
 test('editar: número do processo é gravado SEM espaços nas pontas (igual à criação e à checagem de duplicado)', async () => {

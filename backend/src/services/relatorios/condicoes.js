@@ -3,9 +3,8 @@
 // O valor do usuário NUNCA entra no texto do SQL.
 // ============================================================
 const { resolverData, resolverPeriodo } = require('./datasRelativas');
+const { escaparLike } = require('../../utils/helpers');
 
-// Protege os curingas do LIKE para que "50%" procure mesmo "50%"
-function escaparLike(s) { return String(s).replace(/[\\%_]/g, c => `\\${c}`); }
 
 function condicaoSql(campo, operador, valor, hoje) {
   const expr = campo.exprFiltro || campo.expr;
