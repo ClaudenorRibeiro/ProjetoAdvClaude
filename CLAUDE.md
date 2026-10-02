@@ -31,6 +31,16 @@ listados antes numa conversa — reler o trecho exato no arquivo atual.
 Nunca reciclar a conclusão de uma auditoria anterior sem reconferir contra
 o código de agora.
 
+**Regra eterna (pedido do usuário, 02/10/2026): NUNCA CONFIAR EM MEMÓRIAS, SEMPRE
+CONFERIR UMA INFORMAÇÃO PARA TER CERTEZA, NUNCA SUPOR NADA.** Isso vale para a memória da
+própria IA, para o resumo de uma conversa anterior, para resultados de análises passadas e
+para qualquer "já sabemos que...". Antes de afirmar um fato que pode ter mudado (estado do
+banco, de um servidor, de um arquivo, resultado de teste), conferir na fonte AGORA ou pedir
+ao usuário que confira. Não inventar explicação para conciliar dois resultados: se não se
+sabe o que aconteceu entre eles, dizer "não sei". **Erro real (02/10/2026):** a IA repetiu
+"seu banco local está desatualizado" a partir de um diagnóstico antigo; o diagnóstico mais
+recente já mostrava o banco em dia, e a IA ainda inventou uma explicação ("alguém atualizou").
+
 ## 1. Nunca codar sem autorização prévia
 
 - A IA nunca escreve/altera código sem autorização explícita do usuário
