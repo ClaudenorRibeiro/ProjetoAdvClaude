@@ -248,3 +248,11 @@ renomear ou remover um script. Nenhum teste pode depender de arquivo que não es
   derrubava a tela ao cadastrar testemunha na ata. O TypeScript fica só no frontend porque o `backend/.npmrc`
   (`omit=optional`) impediria a instalação do programa nativo dele.
 
+
+## 9. Plano em andamento: bateria completa do módulo Processos (pedido do usuário, 02/10/2026)
+
+O usuário pediu que **TUDO** da tela de Processos entre na bateria. O plano numerado (A1…D1), o protocolo de cada
+passo e os achados estão em `PLANO-TESTES-PROCESSOS.md` (raiz). **Qualquer sessão deve ler esse arquivo antes de
+continuar**, conferir o `git log` do `rascunho` para saber o que já foi feito e seguir do primeiro passo sem `[x]`.
+Regra do protocolo: ao achar erro, PARAR e combinar o ajuste com o usuário antes de corrigir. Nada de desmembrar
+arquivos agora (decisão dele) e nada no `main`.
