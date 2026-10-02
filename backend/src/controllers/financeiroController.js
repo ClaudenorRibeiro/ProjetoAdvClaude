@@ -732,8 +732,13 @@ async function atualizarAcordo(req, res) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [ac] = await conn.execute('SELECT id FROM acordo WHERE id = ?', [id]);
+    const [ac] = await conn.execute('SELECT id, status FROM acordo WHERE id = ? FOR UPDATE', [id]);
     if (!ac.length) { await conn.rollback(); return naoEncontrado(res, 'Acordo não encontrado'); }
+    // Cancelamento é definitivo: o acordo vira registro permanente (mesma regra do excluirAcordo).
+    if (ac[0].status === 'cancelado') {
+      await conn.rollback();
+      return erro(res, 'Acordo cancelado é registro permanente e não pode ser editado.');
+    }
 
     let destinoCliente = null;
     if (beneficiario_cliente_tipo || beneficiario_cliente_id || beneficiario_cliente_conta_id) {

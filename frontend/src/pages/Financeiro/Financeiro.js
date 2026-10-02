@@ -2038,15 +2038,15 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
                     <tr key={i} style={parcelaRecebida ? { background: '#eff6ff' } : undefined}>
                       <td>{p.numero || i + 1}{parcelaRecebida && <span title="Parcela recebida: não pode ser alterada" style={{ marginLeft: 5 }}>🔒</span>}</td>
                       <td>
-                        <input type="date" className="form-control" style={{ minWidth: '140px', padding: '4px 6px' }}
+                        <input aria-label={`Vencimento da parcela ${p.numero || i + 1}`} type="date" className="form-control" style={{ minWidth: '140px', padding: '4px 6px' }}
                           value={p.vencimento} disabled={parcelaRecebida} onChange={e => setParc(i, 'vencimento', e.target.value)} />
                       </td>
                       <td>
-                        <input type="text" inputMode="numeric" className="form-control" style={{ width: '110px', padding: '4px 6px' }}
+                        <input aria-label={`Valor bruto da parcela ${p.numero || i + 1}`} type="text" inputMode="numeric" className="form-control" style={{ width: '110px', padding: '4px 6px' }}
                           value={p.valor_bruto} disabled={parcelaRecebida} onChange={e => setParc(i, 'valor_bruto', mascaraMoeda(e.target.value))} />
                       </td>
                       <td>
-                        <select className="form-control" style={{ width: '90px', padding: '4px 6px' }}
+                        <select aria-label={`Tipo do honorário da parcela ${p.numero || i + 1}`} className="form-control" style={{ width: '90px', padding: '4px 6px' }}
                           value={p.honor_tipo} disabled={parcelaRecebida} onChange={e => setParc(i, 'honor_tipo', e.target.value)}>
                           <option value="percent">%</option>
                           <option value="fixo">Fixo</option>
@@ -2055,12 +2055,12 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
                       </td>
                       <td>
                         {p.honor_tipo === 'percent' && (
-                          <input type="number" step="0.01" className="form-control" style={{ width: '70px', padding: '4px 6px' }}
+                          <input aria-label={`Percentual do honorário da parcela ${p.numero || i + 1}`} type="number" step="0.01" className="form-control" style={{ width: '70px', padding: '4px 6px' }}
                             value={p.honor_percentual ?? ''} disabled={parcelaRecebida} onChange={e => setParc(i, 'honor_percentual', e.target.value)} />
                         )}
                         {p.honor_tipo === 'fixo' && (
                           <>
-                            <input type="text" inputMode="numeric"
+                            <input aria-label={`Valor fixo do honorário da parcela ${p.numero || i + 1}`} type="text" inputMode="numeric"
                               className={`form-control ${parseMoeda(p.honor_valor) > parseMoeda(p.valor_bruto) ? 'is-invalid' : ''}`}
                               style={{ width: '100px', padding: '4px 6px' }}
                               value={p.honor_valor ?? ''} disabled={parcelaRecebida} onChange={e => setParc(i, 'honor_valor', mascaraMoeda(e.target.value))} />
@@ -2083,7 +2083,7 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
                               disabled={parcelaRecebida} onClick={() => setParceriaRow(i)}>+ parceria</button>}
                       </td>
                       <td>
-                        <input className="form-control" style={{ width: '120px', padding: '4px 6px' }}
+                        <input aria-label={`Observação da parcela ${p.numero || i + 1}`} className="form-control" style={{ width: '120px', padding: '4px 6px' }}
                           value={p.observacao || ''} disabled={parcelaRecebida} onChange={e => setParc(i, 'observacao', e.target.value)} />
                       </td>
                     </tr>
@@ -2165,13 +2165,13 @@ function ModalParceriaParcela({ parcela, onCancelar, onAplicar, titulo = 'Parcer
         <div className="modal-body">
           <p style={{ color: '#6b7280', fontSize: '13px', marginTop: 0 }}>A parceria incide sobre o <strong>honorário</strong> desta parcela.</p>
           <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-            <select className="form-control" style={{ maxWidth: '130px' }} value={tipoPessoa}
+            <select aria-label="Tipo de pessoa do parceiro" className="form-control" style={{ maxWidth: '130px' }} value={tipoPessoa}
               onChange={e => { setTipoPessoa(e.target.value); setResultados([]); }}>
               <option value="fisica">Física</option>
               <option value="juridica">Jurídica</option>
             </select>
             <div style={{ flex: 1, position: 'relative' }}>
-              <input className="form-control" autoComplete="off" placeholder="Buscar parceiro..."
+              <input aria-label="Buscar parceiro" className="form-control" autoComplete="off" placeholder="Buscar parceiro..."
                 value={busca} onChange={e => { setBusca(e.target.value); buscar(e.target.value); }} />
               {resultados.length > 0 && (
                 <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #ddd', borderRadius: '6px', zIndex: 20, maxHeight: '130px', overflowY: 'auto' }}>
@@ -2197,8 +2197,8 @@ function ModalParceriaParcela({ parcela, onCancelar, onAplicar, titulo = 'Parcer
             <div className="form-group">
               <label className="form-label">{tipo === 'percent' ? 'Percentual (%)' : 'Valor (R$)'}</label>
               {tipo === 'percent'
-                ? <input type="number" step="0.01" min="0" max="100" className="form-control" value={percentual} onChange={e => setPercentual(e.target.value)} />
-                : <input type="text" inputMode="numeric" className="form-control" value={valorFixo} onChange={e => setValorFixo(mascaraMoeda(e.target.value))} placeholder="0,00" />}
+                ? <input aria-label="Percentual (%)" type="number" step="0.01" min="0" max="100" className="form-control" value={percentual} onChange={e => setPercentual(e.target.value)} />
+                : <input aria-label="Valor (R$)" type="text" inputMode="numeric" className="form-control" value={valorFixo} onChange={e => setValorFixo(mascaraMoeda(e.target.value))} placeholder="0,00" />}
             </div>
           </div>
         </div>
