@@ -26,7 +26,7 @@ BEGIN/COMMIT/ROLLBACK; nenhum registro órfão ao excluir; nomes de tabela em mi
 ### Fase A — Servidor (as 31 rotas de `/processos`)
 - [x] **A1 (concluído em 02/10/2026)** Processos: criar, editar, excluir (sem deixar órfãos: OABs, partes, vínculos), histórico, buscas
       (`/buscar`, `/:id/basico`, `/sugerir-pasta`, `/pastas/checar`, `/auxiliares`), validações e entradas inválidas.
-- [ ] **A2** Pastas: listar (busca, etiquetas, assuntos, paginação), buscar uma pasta, renumerar (conflitos, histórico).
+- [ ] **A2 (EM ANDAMENTO — teste escrito, 5 achados aguardando decisão do usuário; ver "Achados do A2")** Pastas: listar (busca, etiquetas, assuntos, paginação), buscar uma pasta, renumerar (conflitos, histórico).
 - [ ] **A3** Auxiliares: fóruns, varas, tipos, status, instâncias e assuntos — criar, editar, excluir, com os bloqueios de uso.
 - [ ] **A4** Permissões: 401 sem login e 403 sem permissão em TODAS as rotas de Processos; áreas restritas.
 
@@ -75,7 +75,24 @@ Teste: `backend/tests/integration/processos-crud.integration.test.js` (16/16). S
 5. (informativo, sem correção) `log_documentos_gerados` guarda `ancora_tipo/ancora_id` sem chave declarada; excluir um
    processo deixa essas linhas de histórico apontando para um id que sumiu (é log, não é cadastro).
 
+## Achados do A2 (teste `backend/tests/integration/processos-pastas.integration.test.js`: 12 passam, 5 falham DE PROPÓSITO)
+
+O arquivo está no `rascunho` com 5 testes vermelhos (achados reais). Nada deve ser corrigido sem a resposta do usuário.
+
+1. **Listagem de pastas com página/limite inválidos → erro 500**: `pagina=0`, `pagina=-1`, `pagina=abc`, `pagina=` (vazia) e
+   `limite=-5` (sondagem confirmou; `limite=0/abc/1000/1.5` e `pagina=1.5` funcionam). `listarPastas` faz `LIMIT/OFFSET` com NaN/negativo.
+2. **Busca de pastas trata `%` e `_` como curinga**: `busca=%` traz todas as pastas (`bL = %${busca}%`, sem `escaparLike`).
+3. **Renumerar aceita número "meio válido"**: `"12abc"` vira 12, `"1e3"` vira 1, `"0x10"` vira 16, `12.7` vira 12 (`parseInt` solto).
+4. **Duas renumerações ao mesmo tempo para o mesmo número**: a segunda recebe 500 "Erro interno" (o UNIQUE do banco protege: só uma pasta fica
+   com o número; sem dado errado). Deveria receber o aviso "já pertence a outra pasta".
+5. **Duas criações de processo ao mesmo tempo numa pasta NOVA com o mesmo número**: uma recebe 500 (nada é gravado; tentar de novo funciona).
+   Deveria usar a pasta que a outra acabou de criar. (Pertence a `criarProcesso`, achado durante o A2.)
+6. (informativo, sem correção) Busca por poucos dígitos (ex.: "30") também casa CPF/CNPJ/telefone das partes que contenham esses dígitos — é o desenho
+   da busca, mas surpreende (o teste usa "0030" para provar que pasta sem processo ativo não é achada).
+7. (a decidir depois) O mesmo padrão de `LIKE` sem proteção de curingas provavelmente existe em buscas de OUTROS módulos (Pessoas, Prazos, Tarefas...);
+   fazer uma varredura no servidor inteiro como passo separado, se o usuário quiser.
+
 ## Estado atual
 
-Plano criado em 02/10/2026. **Próximo passo: A2.** Antes de continuar, reler este arquivo e conferir o `git log` do
+Plano criado em 02/10/2026. **Passo atual: A2 — teste escrito; aguardando o usuário decidir os achados 1 a 5.** Antes de continuar, reler este arquivo e conferir o `git log` do
 `rascunho` para saber o que já foi feito (marque `[x]` acima ao concluir cada passo).
