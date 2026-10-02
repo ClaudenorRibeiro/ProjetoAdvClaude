@@ -23,6 +23,9 @@ Ao fechar a Fase D (ou quando o usuário pedir), **lembrar o usuário destas pen
 - [ ] **P5 — Migração do react-router para a versão 7** (adiada por decisão do usuário; hoje o `npm audit` do frontend mostra 2 avisos "média").
 - [ ] **P6 — Informativo, sem ação:** `log_documentos_gerados` guarda a origem (processo, etc.) sem chave declarada; excluir o processo deixa o histórico
       apontando para um id que sumiu. Busca por poucos dígitos (ex.: "30") também casa CPF/CNPJ/telefone — é o desenho da busca.
+- [ ] **P8 — Decidir (só se o usuário quiser): "ver só os meus processos".** Hoje todo usuário com a permissão de Processos vê todos os processos. A coluna
+      `usuarios.ver_todos_processos` é vestigial (sem tela e sem uso). Seria um RECURSO NOVO (permissão nova em Processos, tela de Permissões e regra no
+      servidor) — não é conserto. Se a coluna for removida, precisa de script SQL para o HeidiSQL e atualizar o `estrutura_banco.sql`.
 - [ ] **P7 — Verificar no servidor real** se o PM2 reinicia sozinho após queda (o código menciona PM2; não foi verificado).
 
 ## Como cada passo funciona (protocolo combinado com o usuário)
@@ -48,7 +51,7 @@ BEGIN/COMMIT/ROLLBACK; nenhum registro órfão ao excluir; nomes de tabela em mi
       (`/buscar`, `/:id/basico`, `/sugerir-pasta`, `/pastas/checar`, `/auxiliares`), validações e entradas inválidas.
 - [x] **A2 (concluído em 02/10/2026)** Pastas: listar (busca, etiquetas, assuntos, paginação), buscar uma pasta, renumerar (conflitos, histórico).
 - [x] **A3 (concluído em 02/10/2026)** Auxiliares: fóruns, varas, tipos, status, instâncias e assuntos — criar, editar, excluir, com os bloqueios de uso.
-- [ ] **A4 (EM ANDAMENTO — teste escrito; 1 achado + 2 perguntas aguardando decisão do usuário; ver "Achados do A4")** Permissões: 401 sem login e 403 sem permissão em TODAS as rotas de Processos; áreas restritas.
+- [x] **A4 (concluído em 02/10/2026)** Permissões: 401 sem login e 403 sem permissão em TODAS as rotas de Processos; áreas restritas.
 
 ### Fase B — Tela "lista de Processos" (`Processos.js`)
 - [ ] **B1** Tela: busca, filtros, ordenação, paginação, etiquetas, menu de cada linha, "Abrir pasta", estados vazio/erro.
@@ -138,23 +141,22 @@ Teste: `backend/tests/integration/processos-auxiliares.integration.test.js` (21/
 11. (para a varredura) a rede de segurança resolve a QUEDA em qualquer rota; os erros de validação específicos (nome não-texto etc.) ainda precisam de
     verificação módulo a módulo — fazer nos passos de cada módulo.
 
-## Achados do A4 (teste `backend/tests/integration/processos-permissoes.integration.test.js`: 9 passam, 1 falha DE PROPÓSITO)
+## Achados do A4 — RESOLVIDOS (teste `backend/tests/integration/processos-permissoes.integration.test.js`: 10/10)
 
 Resultado principal: as PORTAS DE PERMISSÃO de Processos estão corretas (matriz: um usuário só com a permissão X passa só nas rotas de X e leva 403
-em todas as outras; negada explicitamente = 403; sub-módulo "assuntos" separado; admin/super passam; sem login = 401 em todas; efeito imediato de revogar
-permissão, rebaixar nível e desativar usuário; recusa ocorre antes de qualquer gravação).
+em todas as outras; negada explicitamente = 403; sub-módulo "assuntos" separado; admin/super passam; sem login = 401 em todas; efeito imediato de
+revogar permissão, rebaixar nível e desativar usuário; a recusa ocorre antes de qualquer gravação).
+Servidor completo no fim do A4: 127 rápidos + 206 banco + 16 navegador, tudo verde.
 
-1. **Token válido SEM o campo `id` → erro 500** (deveria ser 401 "sessão não é mais válida"): `autenticar` (`backend/src/middleware/auth.js`) manda `undefined`
-   para o banco. Só acontece com token assinado pelo servidor sem `id` (não dá para forjar sem a chave secreta) — risco baixo. Proposta: validar que `id` é
-   inteiro positivo antes de consultar o banco.
-2. **(pergunta/decisão) Rotas abertas a qualquer usuário LOGADO, mesmo sem nenhuma permissão**: `/processos/buscar`, `/processos/:id/basico`,
-   `/processos/sugerir-pasta`, `/processos/pastas/checar` e `GET /processos/auxiliares` (que também devolve a lista de usuários: id, nome, tipo, OAB, e os
-   advogados avulsos). Hoje são usadas por outros módulos (Prazos, Tarefas, Audiências...) para escolher um processo. Opções: manter como está (padrão
-   atual) ou exigir que o usuário tenha ao menos uma permissão de algum módulo que use isso.
-3. **(pergunta) `usuarios.ver_todos_processos`** é gravado no cadastro e carregado na sessão, mas NADA em Processos o usa: lista de pastas, pasta, histórico
-   e busca mostram tudo a quem tem a permissão. (Prazos e Tarefas usam a permissão própria `ver_todos`.) Não se sabe a intenção; confirmar com o usuário.
+1. [corrigido, decisão do usuário] Token válido sem `id` (ou com `id` que não é número positivo) dava 500 → agora 401 "sessão não é mais válida"
+   (`autenticar` em `backend/src/middleware/auth.js` valida o `id`; id numérico em texto, ex.: "1", continua valendo e é conferido no banco).
+2. [decisão do usuário: MANTER] As rotas `/processos/buscar`, `/processos/:id/basico`, `/processos/sugerir-pasta`, `/processos/pastas/checar` e
+   `GET /processos/auxiliares` continuam abertas a qualquer usuário logado (outros módulos as usam). O teste documenta esse comportamento.
+3. [esclarecido] `usuarios.ver_todos_processos` é só uma coluna do banco (padrão 0) que o servidor grava e carrega na sessão; NÃO existe campo na tela de
+   usuários (zero ocorrências no frontend) e NADA a usa. As permissões reais "ver de todos" ficam na aba Permissões (Prazos, Tarefas, Agenda). Para
+   Processos não existe permissão desse tipo. Ver pendência P8.
 
 ## Estado atual
 
-Plano criado em 02/10/2026. **Passo atual: A4 — teste escrito; aguardando o usuário sobre os achados 1 a 3.** (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
+Plano criado em 02/10/2026. **Próximo passo: B1** (fim da Fase A). (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
 `rascunho` para saber o que já foi feito (marque `[x]` acima ao concluir cada passo).

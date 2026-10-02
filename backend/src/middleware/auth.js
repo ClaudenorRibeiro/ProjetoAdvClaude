@@ -28,11 +28,17 @@ async function autenticar(req, res, next) {
     return naoAutorizado(res, 'Token inválido ou expirado. Faça login novamente.');
   }
 
+  // Token sem um identificador de usuário válido (ausente, texto, objeto...) não vale: sessão inválida, nunca erro interno.
+  const usuarioId = Number(dados && dados.id);
+  if (!Number.isInteger(usuarioId) || usuarioId < 1) {
+    return naoAutorizado(res, 'Sua sessão não é mais válida. Faça login novamente.');
+  }
+
   // 2) Reconfere o cadastro ATUAL no banco (o token guarda os dados do momento do login)
   try {
     const [rows] = await pool.execute(
       'SELECT nivel, tipo, ver_todos_processos, sessao_atual FROM usuarios WHERE id = ? AND ativo = 1',
-      [dados.id]
+      [usuarioId]
     );
     // Sem linha = usuário desativado, excluído ou inexistente → desloga (precisa entrar de novo)
     if (!rows.length) {

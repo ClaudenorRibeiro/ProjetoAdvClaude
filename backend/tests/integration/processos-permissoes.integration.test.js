@@ -103,6 +103,18 @@ test('login recusado em qualquer formato: cabeçalho vazio, token mal formado, a
     ['sessão aberta em outro dispositivo', () => chamar(emitir(1, 1, 'sessao-antiga'), ...rota), /outro dispositivo/],
     ['usuário que não existe', () => chamar(emitir(999999, 1, 'sessao-admin'), ...rota), /não é mais válida/],
     ['token sem id', () => chamar(jwt.sign({ nivel: 1, sessao: 'sessao-admin' }, process.env.JWT_SECRET, { expiresIn: '1h' }), ...rota), /não é mais válida/],
+    ['token com id que não é número (texto, objeto, lista, zero, negativo)', async () => {
+      for (const id of ['abc', { a: 1 }, [1, 2], 0, -5, '', null]) {
+        const r = await chamar(jwt.sign({ id, nivel: 1, sessao: 'sessao-admin' }, process.env.JWT_SECRET, { expiresIn: '1h' }), ...rota);
+        assert.equal(r.status, 401, `id=${JSON.stringify(id)} → ${r.status} ${JSON.stringify(r.body)}`);
+      }
+      return chamar(jwt.sign({ id: 'abc', nivel: 1, sessao: 'sessao-admin' }, process.env.JWT_SECRET, { expiresIn: '1h' }), ...rota);
+    }, /não é mais válida/],
+    ['id do token como texto numérico ("1") continua valendo, conferindo o banco', async () => {
+      const r = await chamar(jwt.sign({ id: '1', nivel: 1, sessao: 'sessao-admin' }, process.env.JWT_SECRET, { expiresIn: '1h' }), ...rota);
+      assert.equal(r.status, 200, `id "1" → ${r.status}`);
+      return chamar(null, ...rota);                                    // o resultado devolvido só serve para o teste comum abaixo (401)
+    }, /não informado/],
   ];
   for (const [rotulo, fazer, mensagem] of casos) {
     const r = await fazer();
