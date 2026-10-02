@@ -1200,6 +1200,8 @@ export default function PastaDetalhe() {
         {audienciaAta && (
           <ModalRegistrarAta
             audiencia={audienciaAta}
+            tipos={tiposAudiencia || []}
+            onTiposChange={recarregarTiposAudiencia}
             onFechar={(reload) => { setAudienciaAta(null); if (reload) carregarAudiencias(); }}
           />
         )}

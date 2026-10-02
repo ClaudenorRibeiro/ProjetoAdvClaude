@@ -2366,7 +2366,7 @@ function FaixaEmBreve({ rotulo }) {
 }
 
 // Modal para registrar ata da audiência
-export function ModalRegistrarAta({ audiencia, onFechar, tipos, onTiposChange }) {
+export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChange }) {
   // "Registrar Ata" pressupõe que a audiência ACONTECEU → status Realizada. Cancelar/Remarcar são
   // ações à parte; o acordo é registrado pelo modal completo do Financeiro (botão abaixo).
   const [form, setForm] = useState({});

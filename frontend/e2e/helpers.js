@@ -15,7 +15,7 @@ export async function bloquearRedeExterna(page) {
   });
 }
 
-export async function criarAudienciaSemComparecimento(request, hora = '10:20') {
+export async function criarAudiencia(request, hora = '10:20', modalidade = 'sem_comparecimento') {
   const login = await request.post('http://127.0.0.1:3001/api/auth/login', {
     data: { login: 'admteste', senha: 'TesteSeguro123!' },
   });
@@ -28,7 +28,7 @@ export async function criarAudienciaSemComparecimento(request, hora = '10:20') {
       tipo_audiencia_id: 1,
       data: '2001-01-01',
       hora,
-      modalidade: 'sem_comparecimento',
+      modalidade,
       responsaveis: [],
       testemunhas: [],
       observacoes: 'Criada pela bateria E2E',
@@ -47,6 +47,9 @@ export async function abrirMenuAcoes(page, linha) {
   await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
   await botao.click();
 }
+
+
+export const criarAudienciaSemComparecimento = (request, hora) => criarAudiencia(request, hora, 'sem_comparecimento');
 
 // Espera a tela terminar de carregar (rede quieta e sem "Carregando..."), para a análise
 // de acessibilidade nunca ler uma tela pela metade — isso fazia o teste passar sem verificar nada.
