@@ -7,7 +7,8 @@ const HOSTS_LOCAIS = new Set(['127.0.0.1', 'localhost', '::1']);
 
 function carregarAmbienteTeste() {
   const arquivoLocal = path.join(__dirname, '../../.env.test');
-  if (fs.existsSync(arquivoLocal)) dotenv.config({ path: arquivoLocal, override: true });
+  // override:false — o arquivo só PREENCHE o que falta; valores já definidos (ex.: simulações dos testes de segurança) prevalecem
+  if (fs.existsSync(arquivoLocal)) dotenv.config({ path: arquivoLocal, override: false });
 
   const nome = String(process.env.TEST_DB_NAME || '').trim().toLowerCase();
   const usuario = String(process.env.TEST_DB_USER || '').trim().toLowerCase();

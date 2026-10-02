@@ -177,9 +177,9 @@ async function exportar(req, res) {
 
     if (formato !== 'xlsx') {   // PDF e Word: gerados em memória (limite de linhas menor), tudo conferido antes de responder
       const arquivo = await exportarDocumento({ formato, assunto, receita, ctx, nomeRelatorio, incluirDetalhes: req.body?.incluirDetalhes, grafico: req.body?.grafico });
+      await registrarUso(req, 'exportar', modelo, assunto);   // antes de entregar: o Histórico já está completo quando o arquivo chega
       cabecalhosDoArquivo(res, nomeRelatorio, arquivo);
       res.end(arquivo.buffer);
-      await registrarUso(req, 'exportar', modelo, assunto);
       return undefined;
     }
 
