@@ -811,7 +811,7 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
                   e oferecer "salvar endereço" (vale em qualquer micro/navegador, sem config local). */}
               <div className="grid-3">
                 <div className="form-group">
-                  <label className="form-label">CEP {buscandoCep && <small style={{color:'#3b82f6'}}>(buscando...)</small>}</label>
+                  <label className="form-label">CEP {buscandoCep && <small style={{color:'#2563eb'}}>(buscando...)</small>}</label>
                   <input className="form-control" autoComplete="off" value={form.cep||''}
                     onChange={e => {
                       const v = e.target.value.replace(/\D/g,'').slice(0,8);
@@ -1241,10 +1241,10 @@ function ModalGerenciarTipos({ onFechar, onAtualizar }) {
                   <>
                     <span style={{flex:1,fontSize:'14px'}}>{t.nome}</span>
                     <button onClick={() => setEditando({ id: t.id, nome: t.nome })}
-                      style={{background:'none',border:'none',cursor:'pointer',fontSize:'15px',color:'#3b82f6'}}
+                      style={{background:'none',border:'none',cursor:'pointer',fontSize:'15px',color:'#2563eb'}}
                       title="Editar">✏️</button>
                     <button onClick={() => excluir(t.id)} disabled={salvando}
-                      style={{background:'none',border:'none',cursor:'pointer',fontSize:'15px',color:'#ef4444'}}
+                      style={{background:'none',border:'none',cursor:'pointer',fontSize:'15px',color:'#dc2626'}}
                       title="Remover">🗑️</button>
                   </>
                 )}

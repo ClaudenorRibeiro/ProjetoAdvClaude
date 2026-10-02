@@ -275,7 +275,7 @@ export default function Varas() {
                       Abreviação{' '}
                       <span style={{ color: '#5b6472', fontWeight: 400 }}>— exibida nos dropdowns</span>
                     </label>
-                    <input
+                    <input aria-label="Abreviação"
                       className="form-control"
                       placeholder="Ex: 1ªVT/SP"
                       {...campo('abrev_nome')}
@@ -290,7 +290,7 @@ export default function Varas() {
                       Código CNJ{' '}
                       <span style={{ color: '#5b6472', fontWeight: 400 }}>— segmento de vara no nº do processo</span>
                     </label>
-                    <input
+                    <input aria-label="Código CNJ"
                       className="form-control"
                       placeholder="Ex: 5.02.0001"
                       maxLength={15}
@@ -303,7 +303,7 @@ export default function Varas() {
                       Complemento de endereço{' '}
                       <span style={{ color: '#5b6472', fontWeight: 400 }}>— mesmo endereço do fórum</span>
                     </label>
-                    <input
+                    <input aria-label="Complemento de endereço"
                       className="form-control"
                       placeholder="Ex: 4º andar, Bloco B, térreo..."
                       {...campo('compl_end')}

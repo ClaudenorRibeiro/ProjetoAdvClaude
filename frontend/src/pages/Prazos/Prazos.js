@@ -606,7 +606,7 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
           <div className="form-group">
             <label className="form-label">Número do Processo *</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-              <input className="form-control" ref={procRef} placeholder="0000000-00.0000.0.00.0000"
+              <input aria-label="Número do Processo" className="form-control" ref={procRef} placeholder="0000000-00.0000.0.00.0000"
                 value={buscaPasta} maxLength={25}
                 style={{ maxWidth: '260px', fontFamily: 'monospace', letterSpacing: '0.5px',
                          ...(processoInicial ? { background: '#f8fafc', cursor: 'default' } : {}) }}

@@ -21,7 +21,7 @@ PARA RODAR NO HEIDISQL (banco)
 
 REFERÊNCIA
   estrutura_banco.sql                           IMPORTANTE  Estrutura oficial do banco; os testes leem este arquivo.
-  quality/ (run.mjs e outros)                   IMPORTANTE  Motor da bateria de testes.
+  quality/ (run.mjs, check-nomes-indefinidos.mjs...)  IMPORTANTE  Motor da bateria de testes (inclui a conferência de nomes indefinidos no código).
   scripts/ (deploy, dados_iniciais.sql etc.)    IMPORTANTE  Instalação/atualização dos servidores (só no PC, contém senhas de clientes).
 
 HISTÓRICO (anotações antigas, defasadas; não são fonte de verdade — ver CLAUDE.md, seção 6)

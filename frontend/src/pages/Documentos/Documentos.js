@@ -771,7 +771,7 @@ function ModalModelo({ modelo, onFechar, onBaixar }) {
             <label className="form-label">
               Arquivo .docx {editando ? '(opcional — só envie se quiser trocar)' : '*'}
             </label>
-            <input type="file" className="form-control" accept=".docx"
+            <input aria-label="Arquivo .docx" type="file" className="form-control" accept=".docx"
               onChange={e => setArquivo(e.target.files[0] || null)} />
             {editando && (
               <small style={{ color: '#5b6472' }}>

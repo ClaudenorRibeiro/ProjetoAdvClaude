@@ -192,7 +192,7 @@ function TabManutencao() {
       </p>
       <div className="form-group" style={{ maxWidth: '260px' }}>
         <label className="form-label">Digite <strong>LIMPAR</strong> para liberar o botão</label>
-        <input className="form-control" value={texto} placeholder="LIMPAR"
+        <input aria-label="Digite LIMPAR para liberar o botão" className="form-control" value={texto} placeholder="LIMPAR"
           onChange={e => setTexto(e.target.value)} autoComplete="off" />
       </div>
       <button className="btn" disabled={!liberado || executando} onClick={pedirConfirmacao}

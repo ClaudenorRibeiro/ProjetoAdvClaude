@@ -1,3 +1,6 @@
+import { createRequire } from 'node:module';
+import AxeBuilder from '@axe-core/playwright';
+
 export async function loginPelaTela(page, login = 'admteste', senha = 'TesteSeguro123!') {
   await page.goto('/login');
   await page.getByPlaceholder('Seu login').fill(login);
@@ -57,4 +60,30 @@ export async function aguardarTelaPronta(page) {
   await page.waitForLoadState('networkidle');
   await page.waitForFunction(() => !document.querySelector('.loading') && !/Carregando/i.test(document.body.innerText));
   await page.waitForTimeout(300);
+}
+
+// Coloca uma pessoa como AUTOR do processo 1 do banco de teste (o processo de teste nasce sem partes, e a
+// testemunha da ata precisa dizer "de quem" ela é testemunha). Usa a mesma conexão isolada dos testes de banco.
+export async function adicionarAutorAoProcesso(nome = 'Autor Do Processo') {
+  const { conectarBancoTeste } = createRequire(import.meta.url)('../../backend/tests/support/testDatabase');
+  const conn = await conectarBancoTeste();
+  try {
+    const [r] = await conn.execute("INSERT INTO pessoas_fisicas (nome, cpf) VALUES (?, '11144477735')", [nome]);
+    await conn.execute("INSERT INTO tbltituloprocautor (proc_id, tipo_pessoa, pessoa_id) VALUES (1, 'fisica', ?)", [r.insertId]);
+  } finally { await conn.end(); }
+}
+
+// Violações SÉRIAS ou CRÍTICAS de acessibilidade da tela (ou janela) aberta agora; [] = tudo certo.
+export async function violacoesGraves(page) {
+  // Espera as animações que têm fim (ex.: aviso "toast" entrando, com texto ainda meio transparente), senão o
+  // verificador de contraste lê uma cor que existe só por uma fração de segundo.
+  await page.evaluate(() => Promise.all(document.getAnimations()
+    .filter(a => a.effect?.getTiming().iterations !== Infinity)
+    .map(a => a.finished.catch(() => {}))));
+  const resultado = await new AxeBuilder({ page }).analyze();
+  return resultado.violations.filter(v => ['serious', 'critical'].includes(v.impact))
+    .map(v => ({ regra: v.id, itens: v.nodes.map(n => {
+      const d = n.any[0]?.data;   // no contraste: cor do texto / cor do fundo / razão encontrada
+      return `${d?.fgColor ? `[${d.fgColor} sobre ${d.bgColor} = ${d.contrastRatio}] ` : ''}${n.html.replace(/\s+/g, ' ').slice(0, 140)}`;
+    }) }));
 }

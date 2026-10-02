@@ -39,14 +39,14 @@
 
 .contador-azul     { border-top-color: #1a56db; .contador-valor { color: #1a56db; } }
 .contador-vermelho { border-top-color: #dc2626; .contador-valor { color: #dc2626; } }
-.contador-laranja  { border-top-color: #d97706; .contador-valor { color: #d97706; } }
-.contador-verde    { border-top-color: #059669; .contador-valor { color: #059669; } }
+.contador-laranja  { border-top-color: #b45309; .contador-valor { color: #b45309; } }
+.contador-verde    { border-top-color: #047857; .contador-valor { color: #047857; } }
 .contador-roxo     { border-top-color: #7c3aed; .contador-valor { color: #7c3aed; } }
 
 .contador-azul     .contador-valor { color: #1a56db; }
 .contador-vermelho .contador-valor { color: #dc2626; }
-.contador-laranja  .contador-valor { color: #d97706; }
-.contador-verde    .contador-valor { color: #059669; }
+.contador-laranja  .contador-valor { color: #b45309; }
+.contador-verde    .contador-valor { color: #047857; }
 .contador-roxo     .contador-valor { color: #7c3aed; }
 
 .dashboard-grid {

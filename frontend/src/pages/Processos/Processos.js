@@ -852,7 +852,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
             <div className="form-group">
               <label className="form-label">Número da Pasta *</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <input
+                <input aria-label="Número da Pasta"
                   type="number" min="1"
                   className="form-control"
                   style={{ maxWidth: '110px' }}
@@ -1077,7 +1077,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
           <div className="form-group">
             <label className="form-label">Peritos do processo (opcional)</label>
             <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
-              <select className="form-control" style={{ maxWidth: '130px' }}
+              <select aria-label="Peritos do processo (opcional)" className="form-control" style={{ maxWidth: '130px' }}
                 value={tipoPerito}
                 onChange={e => { setTipoPerito(e.target.value); setResultPerito([]); setBuscaPerito(''); }}>
                 <option value="fisica">Física</option>
@@ -1178,7 +1178,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
             <div className="form-group">
               <label className="form-label">Vara</label>
               <div style={{ display: 'flex', gap: '4px' }}>
-                <select className="form-control" value={form.vara_id} onChange={e => set('vara_id', e.target.value)} disabled={!form.forum_id}>
+                <select aria-label="Vara" className="form-control" value={form.vara_id} onChange={e => set('vara_id', e.target.value)} disabled={!form.forum_id}>
                   <option value="">{form.forum_id ? '— Selecione —' : '— Selecione o fórum primeiro —'}</option>
                   {varasFiltradas.map(v => <option key={v.id} value={v.id}>{v.abrev_nome || v.nome}</option>)}
                 </select>
@@ -1512,7 +1512,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
           <div className="form-group">
             <label className="form-label">Autores — polo ativo *</label>
             <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
-              <select className="form-control" style={{ maxWidth: '130px' }} value={tipoAutor}
+              <select aria-label="Autores — polo ativo" className="form-control" style={{ maxWidth: '130px' }} value={tipoAutor}
                 disabled={leitura}
                 onChange={e => { setTipoAutor(e.target.value); setResultAutor([]); setBuscaAutor(''); }}>
                 <option value="fisica">Física</option>
@@ -1566,7 +1566,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
           <div className="form-group">
             <label className="form-label">Réus — polo passivo *</label>
             <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
-              <select className="form-control" style={{ maxWidth: '130px' }} value={tipoReu}
+              <select aria-label="Réus — polo passivo" className="form-control" style={{ maxWidth: '130px' }} value={tipoReu}
                 disabled={leitura}
                 onChange={e => { setTipoReu(e.target.value); setResultReu([]); setBuscaReu(''); }}>
                 <option value="fisica">Física</option>
@@ -1652,7 +1652,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
           <div className="form-group">
             <label className="form-label">Peritos do processo (opcional)</label>
             <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
-              <select className="form-control" style={{ maxWidth: '130px' }}
+              <select aria-label="Peritos do processo (opcional)" className="form-control" style={{ maxWidth: '130px' }}
                 value={tipoPerito}
                 onChange={e => { setTipoPerito(e.target.value); setResultPerito([]); setBuscaPerito(''); }}>
                 <option value="fisica">Física</option>
@@ -1721,7 +1721,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
             <div className="form-group">
               <label className="form-label">Tipo</label>
               <div style={{ display: 'flex', gap: '4px' }}>
-                <select className="form-control" value={form.tipo_id} onChange={e => set('tipo_id', e.target.value)}>
+                <select aria-label="Tipo" className="form-control" value={form.tipo_id} onChange={e => set('tipo_id', e.target.value)}>
                   <option value="">— Selecione —</option>
                   {aux.tipos?.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
                 </select>
@@ -1731,7 +1731,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
             <div className="form-group">
               <label className="form-label">Status</label>
               <div style={{ display: 'flex', gap: '4px' }}>
-                <select className="form-control" value={form.status_id} onChange={e => set('status_id', e.target.value)}>
+                <select aria-label="Status" className="form-control" value={form.status_id} onChange={e => set('status_id', e.target.value)}>
                   <option value="">— Selecione —</option>
                   {aux.status?.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
                 </select>
@@ -1741,7 +1741,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
             <div className="form-group">
               <label className="form-label">Instância</label>
               <div style={{ display: 'flex', gap: '4px' }}>
-                <select className="form-control" value={form.instancia_id} onChange={e => set('instancia_id', e.target.value)}>
+                <select aria-label="Instância" className="form-control" value={form.instancia_id} onChange={e => set('instancia_id', e.target.value)}>
                   <option value="">— Selecione —</option>
                   {aux.instancias?.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
                 </select>
@@ -1755,7 +1755,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
             <div className="form-group">
               <label className="form-label">Fórum</label>
               <div style={{ display: 'flex', gap: '4px' }}>
-                <select className="form-control" value={form.forum_id} onChange={e => mudarForum(e.target.value)}>
+                <select aria-label="Fórum" className="form-control" value={form.forum_id} onChange={e => mudarForum(e.target.value)}>
                   <option value="">— Selecione —</option>
                   {aux.foruns?.map(f => <option key={f.id} value={f.id}>{f.abrev_nome || f.nome}</option>)}
                 </select>
@@ -2303,7 +2303,7 @@ export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtuali
                       <small style={{ color: '#5b6472', fontSize: '11px' }}>Buscando endereço...</small>
                     )}
                     {c.key === 'cep' && erroCep && !buscandoCep && (
-                      <small style={{ color: '#d97706', fontSize: '11px' }}>{erroCep}</small>
+                      <small style={{ color: '#b45309', fontSize: '11px' }}>{erroCep}</small>
                     )}
                     </>)}
                   </div>

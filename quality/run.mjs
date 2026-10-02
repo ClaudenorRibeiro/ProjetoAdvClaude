@@ -141,6 +141,7 @@ try {
   await comando('npm', ['test'], 'backend', 'Backend: unidade, contratos e rotas sem token', true, true);
   await comando(process.execPath, ['quality/check-backend-load.js'], '.', 'Backend: todos os módulos carregam');
   await comando(process.execPath, ['quality/check-tamanho-relatorios.js'], '.', 'Relatórios: nenhum arquivo passa de 300 linhas');
+  await comando(process.execPath, ['quality/check-nomes-indefinidos.mjs'], '.', 'Código: nenhum nome indefinido (frontend e backend)');
   await comando('npm', ['test'], 'frontend', 'Frontend: regras e formatadores', true, true);
   await comando('npm', ['run', 'build'], 'frontend', 'Build de produção do frontend');
   auditarDependenciasProducao();

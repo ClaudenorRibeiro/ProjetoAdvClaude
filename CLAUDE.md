@@ -242,4 +242,9 @@ renomear ou remover um script. Nenhum teste pode depender de arquivo que não es
   `uuid` por versões novas dentro do `exceljs`/`node-cron` (zera o `npm audit`). **Não** trocar o
   `archiver` do `exceljs` pela versão 7: ela quebra a exportação de Excel (testado). Depois de
   mexer em dependência, rodar a bateria completa — os testes de Excel, e-mail e upload pegam o problema.
+- **Nome indefinido no código = reprovado** (`quality/check-nomes-indefinidos.mjs`): o TypeScript, instalado
+  no frontend, lê os `.js` do frontend e do backend e reprova qualquer função/variável/componente usado sem
+  existir (erro "Cannot find name"). Origem: `impedirAlteracaoDataPorRoda` estava só chamada, nunca definida, e
+  derrubava a tela ao cadastrar testemunha na ata. O TypeScript fica só no frontend porque o `backend/.npmrc`
+  (`omit=optional`) impediria a instalação do programa nativo dele.
 

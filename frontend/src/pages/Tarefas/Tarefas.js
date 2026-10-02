@@ -781,7 +781,7 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
                 }}
               />
               {form.processo_id && (
-                <span style={{ fontSize: '12px', color: '#16a34a', marginTop: '4px', display: 'block' }}>
+                <span style={{ fontSize: '12px', color: '#15803d', marginTop: '4px', display: 'block' }}>
                   ✓ Processo selecionado
                 </span>
               )}

@@ -103,7 +103,7 @@ export default function ResetSenha() {
             <div className="form-group">
               <label className="form-label">Nova senha</label>
               <div style={{ position: 'relative' }}>
-                <input
+                <input aria-label="Nova senha"
                   type={verSenha ? 'text' : 'password'} className="form-control"
                   value={senha} onChange={e => setSenha(e.target.value)}
                   placeholder="Mínimo 6 caracteres" autoFocus
@@ -135,7 +135,7 @@ export default function ResetSenha() {
             <div className="form-group">
               <label className="form-label">Confirmar nova senha</label>
               <div style={{ position: 'relative' }}>
-                <input
+                <input aria-label="Confirmar nova senha"
                   type={verConfirma ? 'text' : 'password'} className="form-control"
                   value={confirma} onChange={e => setConfirma(e.target.value)}
                   placeholder="Repita a nova senha"

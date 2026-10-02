@@ -36,7 +36,7 @@ export default function ModalInfo({
 
   const CONFIG = {
     perigo:  { icone: '🗑️', cor: '#dc2626', corHover: '#b91c1c', corFaixa: '#fef2f2' },
-    aviso:   { icone: '⚠️', cor: '#d97706', corHover: '#b45309', corFaixa: '#fffbeb' },
+    aviso:   { icone: '⚠️', cor: '#b45309', corHover: '#92400e', corFaixa: '#fffbeb' },
     sucesso: { icone: '✅', cor: '#16a34a', corHover: '#15803d', corFaixa: '#f0fdf4' },
     info:    { icone: 'ℹ️', cor: '#1a56db', corHover: '#1e40af', corFaixa: '#eff6ff' },
   };

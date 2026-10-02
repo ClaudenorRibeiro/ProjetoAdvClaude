@@ -339,7 +339,7 @@ export default function Layout({ children }) {
                     <strong style={{fontSize:'14px'}}>Notificações</strong>
                     {qtdNotif > 0 && (
                       <button onClick={marcarLidas}
-                        style={{background:'none',border:'none',color:'#3b82f6',cursor:'pointer',fontSize:'12px'}}>
+                        style={{background:'none',border:'none',color:'#2563eb',cursor:'pointer',fontSize:'12px'}}>
                         Marcar todas como lidas
                       </button>
                     )}
@@ -364,7 +364,7 @@ export default function Layout({ children }) {
                   </div>
                   <div style={{padding:'10px 16px',borderTop:'1px solid #e5e7eb',textAlign:'center'}}>
                     <button onClick={verTodas ? carregarNovas : carregarTodas}
-                      style={{background:'none',border:'none',color:'#3b82f6',cursor:'pointer',fontSize:'12px'}}>
+                      style={{background:'none',border:'none',color:'#2563eb',cursor:'pointer',fontSize:'12px'}}>
                       {verTodas ? '← Ver só as novas' : 'Ver todas'}
                     </button>
                   </div>

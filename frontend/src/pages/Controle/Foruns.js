@@ -269,7 +269,7 @@ export default function Foruns() {
                       Abreviação{' '}
                       <span style={{ color: '#5b6472', fontWeight: 400 }}>— exibida nos dropdowns</span>
                     </label>
-                    <input
+                    <input aria-label="Abreviação"
                       className="form-control"
                       placeholder="Ex: FT/B.Funda"
                       {...campo('abrev_nome')}

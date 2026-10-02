@@ -412,7 +412,7 @@ body {
 }
 
 .btn-warning {
-  background: #d97706;
+  background: #b45309;
   color: #fff;
 }
 
@@ -433,7 +433,7 @@ body {
   display: block;
   font-size: 12px;
   font-weight: 500;
-  color: #6b7280;
+  color: #5b6472;
   margin-bottom: 5px;
   transition: color 0.15s;
 }
@@ -908,7 +908,7 @@ body {
 }
 
 .valor-positivo {
-  color: #059669;
+  color: #047857;
 }
 
 /* Spinner de carregamento (reutilizável) — anel azul girando */
@@ -1003,4 +1003,10 @@ body {
 .rbc-off-range,
 .rbc-off-range .rbc-button-link {
   color: #595959;
+}
+
+/* Links dentro de linhas coloridas de prazo (atrasado/urgente) mantêm contraste ≥ 4,5:1, inclusive no hover */
+.prazo-atrasado a,
+.prazo-urgente a {
+  color: #1e3a8a !important;
 }

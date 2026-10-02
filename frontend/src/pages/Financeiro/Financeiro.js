@@ -252,7 +252,7 @@ export default function Financeiro() {
               <h3 style={{ margin: 0 }}>Conta corrente {processoSel ? `— ${processoSel.numProc || ''}` : ''}</h3>
               <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
                 <div style={{ fontSize: '12px', color: '#5b6472' }}>Saldo</div>
-                <strong style={{ fontSize: '20px', color: (conta.saldo_total || 0) >= 0 ? '#059669' : '#dc2626' }}>
+                <strong style={{ fontSize: '20px', color: (conta.saldo_total || 0) >= 0 ? '#047857' : '#dc2626' }}>
                   {formatarMoeda(conta.saldo_total || 0)}
                 </strong>
               </div>
@@ -302,7 +302,7 @@ export default function Financeiro() {
                         </td>
                         <td style={{ textAlign: 'right', fontWeight: ultimoDoGrupo ? 600 : 400 }}>
                           {ultimoDoGrupo && (
-                            <span style={{ color: (l.saldo_acumulado || 0) >= 0 ? '#059669' : '#dc2626' }}>
+                            <span style={{ color: (l.saldo_acumulado || 0) >= 0 ? '#047857' : '#dc2626' }}>
                               {formatarMoeda(l.saldo_acumulado)}
                             </span>
                           )}
@@ -1132,7 +1132,7 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
           {/* Acordo cancelado vira registro permanente: sem Editar/Excluir/Cancelar */}
           {!cancelado && podeAlterar && <button className="btn btn-outline" style={{ fontSize: '11px', padding: '3px 8px' }} onClick={onEditar}>Editar</button>}
           {!cancelado && podeAlterar && (
-            <button className="btn btn-outline" style={{ fontSize: '11px', padding: '3px 8px', color: '#d97706', borderColor: '#d97706' }}
+            <button className="btn btn-outline" style={{ fontSize: '11px', padding: '3px 8px', color: '#b45309', borderColor: '#d97706' }}
               onClick={() => setCancelando(true)}>Cancelar</button>
           )}
           {!cancelado && podeExcluir && <button className="btn btn-danger" style={{ fontSize: '11px', padding: '3px 8px' }} onClick={onExcluir}>Excluir</button>}
@@ -1176,12 +1176,12 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
                         : p.status === 'cancelada' ? 'Cancelada' : 'Pendente'}
                     </span>
                     {p.status === 'pago' && (
-                      <div style={{ fontSize: 10, color: '#059669', marginTop: 2 }}>
+                      <div style={{ fontSize: 10, color: '#047857', marginTop: 2 }}>
                         {p.repasse_cliente_em ? <div>✓ Cliente {formatarData(p.repasse_cliente_em)}</div>
                           : Number(p.valor_liquido) > 0 && <div style={{ color: '#b45309' }}>○ Falta repassar ao cliente</div>}
                         {p.parceria_pessoa_id && (p.repasse_parceiro_em ? <div>✓ Parceiro {formatarData(p.repasse_parceiro_em)}</div>
                           : Number(p.parceria_valor) > 0 && <div style={{ color: '#b45309' }}>○ Falta repassar ao parceiro</div>)}
-                        {cicloDaParcela(p)?.length === 0 && <div style={{ color: '#059669', fontWeight: 600 }}>✓ Ciclo concluído</div>}
+                        {cicloDaParcela(p)?.length === 0 && <div style={{ color: '#047857', fontWeight: 600 }}>✓ Ciclo concluído</div>}
                       </div>
                     )}
                   </td>
@@ -1276,7 +1276,7 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
                         {p.multa.status === 'pago' ? `Multa recebida ${p.multa.recebido_em ? formatarData(p.multa.recebido_em) : ''}` : 'Multa pendente'}
                       </span>
                       {p.multa.status === 'pago' && (
-                        <div style={{ fontSize: 10, color: '#059669', marginTop: 2 }}>
+                        <div style={{ fontSize: 10, color: '#047857', marginTop: 2 }}>
                           {p.multa.repasse_cliente_habilitado ? (p.multa.repasse_cliente_em ? <div>✓ Cliente {formatarData(p.multa.repasse_cliente_em)}</div>
                             : <div style={{ color: '#b45309' }}>○ Falta repassar ao cliente</div>) : null}
                           {p.multa.repasse_parceiro_habilitado ? (p.multa.repasse_parceiro_em ? <div>✓ Parceiro {formatarData(p.multa.repasse_parceiro_em)}</div>
@@ -1997,7 +1997,7 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
               </select></div>
             <div className="form-group"><label className="form-label">Conta padrão do beneficiário</label>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <select className="form-control" value={contaBeneficiarioId} disabled={!beneficiarioId} onChange={e => setContaBeneficiarioId(e.target.value)}>
+                <select aria-label="Conta padrão do beneficiário" className="form-control" value={contaBeneficiarioId} disabled={!beneficiarioId} onChange={e => setContaBeneficiarioId(e.target.value)}>
                   <option value="">Selecione...</option>
                   {contasBeneficiario.map(c => <option key={c.id} value={c.id}>{c.instituicao_nome} — {c.numero || c.chave_pix || c.titular}</option>)}
                 </select>

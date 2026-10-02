@@ -9,9 +9,9 @@ export const CORES_AGENDA_PADRAO = {
   prazo:       '#e2d3a8', // bege
   audiencia:   '#1a56db', // azul
   pericia:     '#7c3aed', // roxo
-  tarefa:      '#d97706', // laranja
-  compromisso: '#0891b2', // ciano
-  feriado:     '#059669', // verde
+  tarefa:      '#b45309', // laranja escuro (texto branco com contraste ≥ 4,5:1)
+  compromisso: '#0e7490', // ciano escuro
+  feriado:     '#047857', // verde escuro
 };
 
 // Rótulos amigáveis (para o modal de personalização).

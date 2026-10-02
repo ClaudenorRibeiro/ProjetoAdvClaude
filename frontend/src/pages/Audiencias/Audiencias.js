@@ -19,6 +19,10 @@ import { ModalTarefa } from '../Tarefas/Tarefas';
 import ModalPericiaAta from './ModalPericiaAta';
 import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetasSubmenu, useEtiquetasPessoais } from '../../components/Etiquetas';
 
+// A roda do mouse, sobre um campo de data focado, muda a data sem querer. Tirar o foco ao rolar evita isso.
+// (Estava sendo usada no cadastro rápido de testemunha da ata mas nunca foi definida: a tela quebrava.)
+function impedirAlteracaoDataPorRoda(evento) { evento.currentTarget.blur(); }
+
 const STATUS_COR = {
   agendada: 'badge-azul',
   realizada: 'badge-verde',
@@ -703,7 +707,7 @@ export function ModalHistoricoAudiencia({ audiencia, onFechar }) {
                       <td style={{ fontSize: '12px', color: '#dc2626', maxWidth: '200px', wordBreak: 'break-word' }}>
                         {r.valor_anterior || <span style={{ color: '#9ca3af' }}>—</span>}
                       </td>
-                      <td style={{ fontSize: '12px', color: '#16a34a', maxWidth: '200px', wordBreak: 'break-word' }}>
+                      <td style={{ fontSize: '12px', color: '#15803d', maxWidth: '200px', wordBreak: 'break-word' }}>
                         {r.valor_novo || <span style={{ color: '#9ca3af' }}>—</span>}
                       </td>
                     </tr>
@@ -880,7 +884,7 @@ function ModalCadastroRapidoPessoa({ onFechar, onSalvo }) {
           {/* Endereço — autoComplete="off" evita o navegador oferecer "salvar endereço" */}
           <div className="grid-2">
             <div className="form-group">
-              <label className="form-label">CEP {buscandoCep && <small style={{ color: '#3b82f6' }}>(buscando...)</small>}</label>
+              <label className="form-label">CEP {buscandoCep && <small style={{ color: '#2563eb' }}>(buscando...)</small>}</label>
               <input className="form-control" autoComplete="off" value={form.cep || ''} placeholder="00000-000"
                 onChange={e => set('cep', e.target.value)}
                 onBlur={e => buscarCep(e.target.value)} />
@@ -1101,7 +1105,7 @@ function SecaoTestemunhas({ processoId, testemunhas, onChange, somenteLeitura = 
               {!somenteLeitura && (
                 <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                   <button type="button" onClick={() => remover(t.id)}
-                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '16px', lineHeight: 1 }}>×</button>
+                    style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '16px', lineHeight: 1 }}>×</button>
                 </div>
               )}
             </div>
@@ -1483,7 +1487,7 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
           <div className="form-group" style={{ position: 'relative' }}>
             <label className="form-label">Processo *</label>
             <div style={{ display: 'flex', gap: '6px' }}>
-              <input className="form-control" placeholder="Digite o número CNJ ou parte do título..."
+              <input aria-label="Processo" className="form-control" placeholder="Digite o número CNJ ou parte do título..."
                 value={buscaProc}
                 readOnly={processoBloqueado}
                 onChange={e => { if (!processoBloqueado) alterarBuscaProcesso(e.target.value); }} />
@@ -1513,7 +1517,7 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
             <div className="form-group">
               <label className="form-label">Tipo de audiência *</label>
               <div style={{ display: 'flex', gap: '6px' }}>
-                <select className="form-control" value={form.tipo_audiencia_id || ''}
+                <select aria-label="Tipo de audiência" className="form-control" value={form.tipo_audiencia_id || ''}
                   onChange={e => set('tipo_audiencia_id', e.target.value)}>
                   <option value="">— Selecione —</option>
                   {tipos.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
@@ -1529,7 +1533,7 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
               <label className="form-label">Data *</label>
               <SeletorData value={form.data || ''} onChange={v => { set('data', v); setAvisos(a => ({ ...a, data: '' })); }} ariaLabel="Data da audiência" destaque />
               {avisos.data && (
-                <small style={{ color: '#d97706', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                <small style={{ color: '#b45309', fontSize: '12px', marginTop: '4px', display: 'block' }}>
                   ⚠️ {avisos.data}
                 </small>
               )}
@@ -1540,7 +1544,7 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
                 onChange={e => { set('hora', e.target.value); setAvisos(a => ({ ...a, hora: '' })); }}
                 onBlur={validarHoraBlur} />
               {avisos.hora && (
-                <small style={{ color: '#d97706', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                <small style={{ color: '#b45309', fontSize: '12px', marginTop: '4px', display: 'block' }}>
                   ⚠️ {avisos.hora}
                 </small>
               )}
@@ -1920,7 +1924,7 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
             <div className="form-group">
               <label className="form-label">Tipo de audiência *</label>
               <div style={{ display: 'flex', gap: '6px' }}>
-                <select className="form-control" value={form.tipo_audiencia_id || ''} disabled={leitura}
+                <select aria-label="Tipo de audiência" className="form-control" value={form.tipo_audiencia_id || ''} disabled={leitura}
                   onChange={e => set('tipo_audiencia_id', e.target.value)}>
                   <option value="">— Selecione —</option>
                   {tipos.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
@@ -1937,7 +1941,7 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
               <SeletorData value={form.data || ''} disabled={leitura} ariaLabel="Data da audiência" destaque
                 onChange={v => { set('data', v); setAvisos(a => ({ ...a, data: '' })); }} />
               {avisos.data && (
-                <small style={{ color: '#d97706', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                <small style={{ color: '#b45309', fontSize: '12px', marginTop: '4px', display: 'block' }}>
                   ⚠️ {avisos.data}
                 </small>
               )}
@@ -1948,7 +1952,7 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
                 onChange={e => { set('hora', e.target.value); setAvisos(a => ({ ...a, hora: '' })); }}
                 onBlur={validarHoraBlur} />
               {avisos.hora && (
-                <small style={{ color: '#d97706', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                <small style={{ color: '#b45309', fontSize: '12px', marginTop: '4px', display: 'block' }}>
                   ⚠️ {avisos.hora}
                 </small>
               )}
@@ -2170,7 +2174,7 @@ export function ModalNovoFreela({ onFechar, onSalvo, profissoes = [], exigirProf
           </div>
           <div className="form-group">
             <label className="form-label">Profissão{exigirProfissao ? ' *' : ''}</label>
-            <select className="form-control" value={form.profissao_id} onChange={e => set('profissao_id', e.target.value)}>
+            <select aria-label="Profissão" className="form-control" value={form.profissao_id} onChange={e => set('profissao_id', e.target.value)}>
               <option value="">— Não informada —</option>
               {profissoes.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
             </select>
@@ -2336,10 +2340,10 @@ function ModalGerenciarTipos({ onFechar, onAtualizar }) {
                   <>
                     <span style={{ flex: 1, fontSize: '14px' }}>{t.nome}</span>
                     <button onClick={() => setEditando({ id: t.id, nome: t.nome })}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px', color: '#3b82f6' }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px', color: '#2563eb' }}
                       title="Editar">✏️</button>
                     <button onClick={() => excluir(t.id)} disabled={salvando}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px', color: '#ef4444' }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px', color: '#dc2626' }}
                       title="Remover">🗑️</button>
                   </>
                 )}
@@ -2666,7 +2670,8 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
           <div className="form-group">
             <label className="form-label obrigatorio">{ehSemComparecimento ? 'Responsável pelo acompanhamento' : 'Advogado(a) que acompanhou a audiência'}</label>
             <div style={{ display: 'flex', gap: '6px' }}>
-              <select className="form-control" value={advogadoSel}
+              <select aria-label={ehSemComparecimento ? 'Responsável pelo acompanhamento' : 'Advogado(a) que acompanhou a audiência'}
+                className="form-control" value={advogadoSel}
                 onChange={e => { setAdvogadoSel(e.target.value); setAviso(''); }}>
                 <option value="">— Selecione —</option>
                 <option value="ninguem">{ehSemComparecimento ? 'Não informado' : 'Ninguém (a parte compareceu sozinha)'}</option>
@@ -2723,7 +2728,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
                 {abrindoAcordo ? 'Abrindo...' : '💰 Registrar acordo'}
               </button>
               {acordoRegistrado && (
-                <span style={{ color: '#16a34a', fontSize: '13px', fontWeight: 600 }}>✓ Acordo registrado no Financeiro</span>
+                <span style={{ color: '#15803d', fontSize: '13px', fontWeight: 600 }}>✓ Acordo registrado no Financeiro</span>
               )}
             </div>
           )}
@@ -2736,7 +2741,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
               </button>
               {novaAudienciaRascunho && (
                 <>
-                  <span style={{ color: '#16a34a', fontSize: '13px', fontWeight: 600 }}>✓ Nova audiência pronta para ser registrada com a ata</span>
+                  <span style={{ color: '#15803d', fontSize: '13px', fontWeight: 600 }}>✓ Nova audiência pronta para ser registrada com a ata</span>
                   <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: 12 }} onClick={() => setNovaAudienciaRascunho(null)}>Remover</button>
                 </>
               )}
@@ -2750,7 +2755,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
                 <button type="button" className="btn btn-outline" style={{ padding: '4px 8px', fontSize: 12 }} onClick={() => setCadastroTestemunhasAberto(v => !v)}>
                   {cadastroTestemunhasAberto ? 'Fechar cadastro' : '+ Testemunhas'}
                 </button>
-                {testemunhasAta.length > 0 && <span style={{ color: '#16a34a', fontSize: 13 }}>{testemunhasAta.length} cadastrada(s) para a ATA</span>}
+                {testemunhasAta.length > 0 && <span style={{ color: '#15803d', fontSize: 13 }}>{testemunhasAta.length} cadastrada(s) para a ATA</span>}
               </div>
               {cadastroTestemunhasAberto && (processoTestemunhasAta ? <SecaoTestemunhas processoId={processoTestemunhasAta} testemunhas={testemunhasAta} onChange={setTestemunhasAta} /> : <span style={{ fontSize: 13 }}>Carregando processo...</span>)}
             </div>

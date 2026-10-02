@@ -673,6 +673,7 @@ export default function PastaDetalhe() {
   // Seletor de processo — reutilizado em todas as abas como elemento JSX
   const selectProcesso = (
     <select
+      aria-label="Filtrar por processo"
       className="form-control"
       style={{ maxWidth: '340px' }}
       value={processoFiltro}
@@ -1436,7 +1437,7 @@ export default function PastaDetalhe() {
                               {a.link_virtual && (
                                 <a href={a.link_virtual} target="_blank" rel="noreferrer"
                                   onClick={e => e.stopPropagation()}
-                                  style={{ marginLeft: a.plataforma_virtual ? 6 : 0, color: '#3b82f6' }}>
+                                  style={{ marginLeft: a.plataforma_virtual ? 6 : 0, color: '#2563eb' }}>
                                   🔗 Link
                                 </a>
                               )}
@@ -1567,7 +1568,7 @@ export default function PastaDetalhe() {
                   <strong>Conta corrente</strong>
                   <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
                     <span style={{ fontSize: '12px', color: '#5b6472' }}>Saldo </span>
-                    <strong style={{ color: (contaCorrente.saldo_total || 0) >= 0 ? '#059669' : '#dc2626' }}>
+                    <strong style={{ color: (contaCorrente.saldo_total || 0) >= 0 ? '#047857' : '#dc2626' }}>
                       {formatarMoeda(contaCorrente.saldo_total || 0)}
                     </strong>
                   </div>

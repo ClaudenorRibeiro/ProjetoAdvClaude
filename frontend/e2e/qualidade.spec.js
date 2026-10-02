@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { aguardarTelaPronta, bloquearRedeExterna, loginPelaTela } from './helpers';
+import { aguardarTelaPronta, bloquearRedeExterna, loginPelaTela, violacoesGraves } from './helpers';
 
 test.beforeEach(async ({ page }) => bloquearRedeExterna(page));
 
@@ -23,12 +23,6 @@ const TELAS_LOGADAS = ['/dashboard', '/pessoas', '/processos', '/processos/pasta
   '/pericias', '/financeiro', '/documentos', '/publicacoes', '/pendencias-documento', '/agenda', '/relatorios',
   '/configuracoes', '/controle/foruns', '/controle/varas', '/controle/auxiliares', '/controle/formas-pagamento',
   '/controle/instituicoes-financeiras'];
-
-async function violacoesGraves(page) {
-  const resultado = await new AxeBuilder({ page }).analyze();
-  return resultado.violations.filter(v => ['serious', 'critical'].includes(v.impact))
-    .map(v => ({ regra: v.id, itens: v.nodes.map(n => n.html.replace(/\s+/g, ' ').slice(0, 140)) }));
-}
 
 test('@critical todas as telas não têm violações sérias ou críticas de acessibilidade', async ({ page }, testInfo) => {
   test.setTimeout(240_000);

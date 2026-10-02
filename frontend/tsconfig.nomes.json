@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "allowJs": true, "checkJs": true, "noEmit": true, "jsx": "react", "target": "ES2022",
+    "module": "ESNext", "moduleResolution": "bundler", "lib": ["dom", "dom.iterable", "es2022"],
+    "skipLibCheck": true, "strict": false, "resolveJsonModule": true, "types": []
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.js", "src/setupTests.js"]
+}
