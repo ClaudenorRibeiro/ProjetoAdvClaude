@@ -5,7 +5,7 @@
 const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
-const { bloqueiaAgendarPassado, hojeBrasilia } = require('../utils/helpers');
+const { bloqueiaAgendarPassado, hojeBrasilia, pastaFormatadaSql } = require('../utils/helpers');
 
 // Mesma regra de visibilidade da listagem: admin/super (nível <= 1) OU
 // permissão 'tarefas.ver_todos:visualizar'. Usada para barrar ações (concluir/
@@ -93,7 +93,7 @@ async function enviarEmailDaTarefa(tarefaId, atribuidaPara, autorNome, edicao) {
         `SELECT t.titulo, t.descricao, t.prioridade,
                 DATE_FORMAT(t.data_vencimento, '%d/%m/%Y') AS venc_fmt,
                 pr.numProc AS processo_numero,
-                LPAD(pa.numPasta, 4, '0') AS pasta_fmt
+                ${pastaFormatadaSql('pa')} AS pasta_fmt
            FROM tarefas t
            LEFT JOIN tblproc  pr ON t.processo_id = pr.id
            LEFT JOIN tblpasta pa ON pr.pasta_id   = pa.id
@@ -160,9 +160,9 @@ async function listar(req, res) {
         OR t.descricao LIKE ?
         OR pr.numProc LIKE ?
         OR REPLACE(REPLACE(REPLACE(pr.numProc, '.', ''), '-', ''), ' ', '') LIKE ?
-        OR LPAD(pa.numPasta, 4, '0') LIKE ?
+        OR ${pastaFormatadaSql('pa')} LIKE ?
         OR CAST(pa.numPasta AS CHAR) LIKE ?
-        OR LPAD(pa2.numPasta, 4, '0') LIKE ?
+        OR ${pastaFormatadaSql('pa2')} LIKE ?
         OR CAST(pa2.numPasta AS CHAR) LIKE ?
         OR ('rotina interna' LIKE CONCAT('%', LOWER(?), '%') AND t.processo_id IS NULL AND t.pasta_id IS NULL)
       )`;
@@ -229,11 +229,11 @@ async function listar(req, res) {
               u.nome  AS atribuida_para_nome,
               uc.nome AS criado_por_nome,
               -- Vínculo: pasta direta
-              LPAD(pa.numPasta, 4, '0') AS pasta_numero_fmt,
+              ${pastaFormatadaSql('pa')} AS pasta_numero_fmt,
               -- Vínculo: processo (e pasta do processo para o link)
               pr.numProc  AS processo_numero,
               pa2.id      AS pasta_do_processo_id,
-              LPAD(pa2.numPasta, 4, '0') AS pasta_do_processo_fmt,
+              ${pastaFormatadaSql('pa2')} AS pasta_do_processo_fmt,
               DATEDIFF(t.data_vencimento, CURDATE()) AS dias_restantes,
               (SELECT pe.slot FROM tarefas_etiquetas pe
                 WHERE pe.tarefa_id = t.id AND pe.usuario_id = ?) AS etiqueta_pessoal

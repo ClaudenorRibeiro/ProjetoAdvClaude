@@ -6,7 +6,7 @@
 const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
-const { hojeBrasilia } = require('../utils/helpers');
+const { hojeBrasilia, pastaFormatadaSql } = require('../utils/helpers');
 const { enviarEmail } = require('../utils/email');
 const { registrarComunicacao } = require('../utils/logComunicacao');
 const smsService = require('../services/smsService');
@@ -2034,7 +2034,7 @@ async function processosDaPessoa(req, res) {
       `SELECT
          pr.id, pr.numProc,
          pr.NomeTituloProc                       AS titulo,
-         LPAD(pa.numPasta, 4, '0')               AS pasta_numero_fmt,
+         ${pastaFormatadaSql('pa')}               AS pasta_numero_fmt,
          sp.nome                                 AS status_nome,
          tp.nome                                 AS tipo_nome,
          v.abrev_nome                            AS vara_abrev_nome,

@@ -94,6 +94,13 @@ function formatarNumeroPasta(numero) {
   return String(numero).padStart(4, '0');
 }
 
+// Mesma regra, para dentro do SQL: pasta com no mínimo 4 dígitos (0042). LPAD sozinho CORTA números
+// maiores (99001 viraria 9900 e a busca pelo número inteiro não acharia), por isso só completa com
+// zeros quando o número tem menos de 4 dígitos. `alias` é o apelido da tabela tblpasta na consulta.
+function pastaFormatadaSql(alias = 'pa') {
+  return `IF(${alias}.numPasta >= 1000, CAST(${alias}.numPasta AS CHAR), LPAD(${alias}.numPasta, 4, '0'))`;
+}
+
 // Converte texto em formato de moeda brasileira ("1.000,00") para número (1000).
 // Espelha o parseMoeda do frontend (utils/formatters.js) para os dois lados lerem
 // o mesmo valor do mesmo jeito. Só reconhece como moeda quando há vírgula no texto
@@ -121,5 +128,6 @@ module.exports = {
   bloqueiaAgendarPassado,
   truncar,
   formatarNumeroPasta,
+  pastaFormatadaSql,
   parseMoeda,
 };

@@ -5,7 +5,7 @@
 
 const { pool } = require('../config/database');
 const { sucesso, erroInterno } = require('../utils/response');
-const { hojeBrasilia } = require('../utils/helpers');
+const { hojeBrasilia, pastaFormatadaSql } = require('../utils/helpers');
 const { buscarAniversariantes } = require('./pessoasController');
 const { contarProcessosParados, JOIN_ULTIMA_ACAO, FILTRO_NAO_ENCERRADO } = require('./processosController');
 
@@ -166,7 +166,7 @@ async function buscarDados(req, res) {
       pool.execute(
         `SELECT a.id, a.data, a.hora, ta.nome AS tipo,
                 pr.numProc AS processo_numero, pr.NomeTituloProc AS pasta_titulo,
-                LPAD(pa.numPasta, 4, '0') AS pasta_numero_fmt
+                ${pastaFormatadaSql('pa')} AS pasta_numero_fmt
          FROM audiencia a
          LEFT JOIN tipo_audiencia ta ON a.tipo_audiencia_id = ta.id
          JOIN tblproc pr ON a.processo_id = pr.id
@@ -182,7 +182,7 @@ async function buscarDados(req, res) {
       pool.execute(
         `SELECT a.id, a.data, a.hora, ta.nome AS tipo,
                 pr.numProc AS processo_numero, pr.NomeTituloProc AS pasta_titulo,
-                LPAD(pa.numPasta, 4, '0') AS pasta_numero_fmt,
+                ${pastaFormatadaSql('pa')} AS pasta_numero_fmt,
                 DATEDIFF(a.data, CURDATE()) AS dias_para_audiencia
          FROM audiencia a
          LEFT JOIN tipo_audiencia ta ON a.tipo_audiencia_id = ta.id
@@ -207,7 +207,7 @@ async function buscarDados(req, res) {
       pool.execute(
         `SELECT pr.id, pr.numProc AS numero, pr.NomeTituloProc AS pasta_titulo,
                 pa.id AS pasta_id,
-                LPAD(pa.numPasta, 4, '0') AS pasta_numero_fmt,
+                ${pastaFormatadaSql('pa')} AS pasta_numero_fmt,
                 DATE(COALESCE(ult.ultima, pr.criado_em)) AS ultima_movimentacao,
                 DATEDIFF(CURDATE(), DATE(COALESCE(ult.ultima, pr.criado_em))) AS dias_sem_movimentacao
          FROM tblproc pr

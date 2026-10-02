@@ -8,6 +8,7 @@ const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response
 const auditoria = require('../middleware/auditoria');
 const agendaGoogle = require('../services/agendaGoogleService');
 const { enviarComunicadoPericia, enviarEmailPeritoPericia } = require('../services/comunicadoService');
+const { pastaFormatadaSql } = require('../utils/helpers');
 
 const MODALIDADES_AUDIENCIA = new Set(['presencial', 'virtual', 'sem_comparecimento']);
 
@@ -209,7 +210,7 @@ async function listar(req, res) {
               pr.numProc AS processo_numero,
               pr.NomeTituloProc AS pasta_titulo,
               pa.id AS pasta_id,
-              LPAD(pa.numPasta, 4, '0') AS pasta_numero_fmt,
+              ${pastaFormatadaSql('pa')} AS pasta_numero_fmt,
               CASE WHEN aa.id IS NOT NULL THEN 1 ELSE 0 END AS tem_ata,
               EXISTS (SELECT 1 FROM audiencia_testemunhas att WHERE att.audiencia_id = a.id) AS tem_testemunha,
               DATEDIFF(a.data, CURDATE()) AS dias_para_audiencia,

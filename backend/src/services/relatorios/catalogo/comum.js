@@ -2,10 +2,10 @@
 // CATÁLOGO — peças compartilhadas entre os assuntos (não duplicar lógica)
 // ============================================================
 const { pool } = require('../../../config/database');
+const { pastaFormatadaSql } = require('../../../utils/helpers');
 
-// Pasta com no mínimo 4 dígitos (0042). LPAD sozinho CORTA números maiores (99001 viraria 9900),
-// por isso só completa com zeros quando o número tem menos de 4 dígitos.
-const PASTA_EXPR = "IF(pa.numPasta >= 1000, CAST(pa.numPasta AS CHAR), LPAD(pa.numPasta, 4, '0'))";
+// Pasta com no mínimo 4 dígitos (0042), sem cortar números maiores — regra única em utils/helpers.
+const PASTA_EXPR = pastaFormatadaSql('pa');
 
 // Responsável que pode ser usuário do sistema OU advogado freelancer (audiências e perícias).
 // A chave mistura os dois ('u5' / 'f2') porque os números das duas tabelas se repetem.

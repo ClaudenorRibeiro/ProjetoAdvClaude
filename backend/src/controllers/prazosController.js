@@ -7,7 +7,7 @@ const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const { calcularVencimento, calcularQuantidade } = require('../services/calendarioService');
 const { criarNotificacao, notificarConclusao, emailPrazoDelegado } = require('../services/notificacaoService');
-const { hojeBrasilia } = require('../utils/helpers');
+const { hojeBrasilia, pastaFormatadaSql } = require('../utils/helpers');
 const auditoria = require('../middleware/auditoria');
 
 function responderErroCalendario(res, err) {
@@ -217,7 +217,7 @@ async function listar(req, res) {
               u.nome AS responsavel_nome,
               pr.numProc AS processo_numero,
               pa.id AS pasta_id,
-              pr.NomeTituloProc AS pasta_titulo, LPAD(pa.numPasta, 4, '0') AS pasta_numero_fmt,
+              pr.NomeTituloProc AS pasta_titulo, ${pastaFormatadaSql('pa')} AS pasta_numero_fmt,
               DATEDIFF(pp.data_vencimento, CURDATE()) AS dias_restantes,
               CASE
                 WHEN pp.status = 'concluido' THEN 'concluido'

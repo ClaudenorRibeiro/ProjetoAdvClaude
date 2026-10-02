@@ -7,7 +7,7 @@
 const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
-const { parseMoeda } = require('../utils/helpers');
+const { parseMoeda, pastaFormatadaSql } = require('../utils/helpers');
 
 // Confere que TODA parte (autor/réu/perito) enviada aponta para uma pessoa que
 // existe e está ativa. tbltituloproc* e processo_perito são polimórficos SEM
@@ -130,7 +130,7 @@ async function listarPastas(req, res) {
       // e jurídicos) e, quando o texto for um valor em dinheiro, parcela (acordo/alvará) ou
       // lançamento (entrada/saída) do processo com esse valor exato.
       where += ` AND (
-        LPAD(pa.numPasta, 4, '0') LIKE ?
+        ${pastaFormatadaSql('pa')} LIKE ?
         OR EXISTS (
           SELECT 1 FROM tblproc p WHERE p.pasta_id = pa.id AND p.ativo = 1
           AND (
@@ -1627,7 +1627,7 @@ async function listarProcessosParados(req, res) {
     }
     const [rows] = await pool.execute(
       `SELECT pr.id AS processo_id, pr.numProc AS numero, pr.NomeTituloProc AS pasta_titulo,
-              pa.id AS pasta_id, LPAD(pa.numPasta, 4, '0') AS pasta_numero_fmt,
+              pa.id AS pasta_id, ${pastaFormatadaSql('pa')} AS pasta_numero_fmt,
               DATE(COALESCE(ult.ultima, pr.criado_em)) AS ultima_acao,
               DATEDIFF(CURDATE(), DATE(COALESCE(ult.ultima, pr.criado_em))) AS dias_parado
          FROM tblproc pr
