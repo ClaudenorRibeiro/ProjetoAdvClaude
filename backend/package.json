@@ -26,7 +26,7 @@
     "express-validator": "^7.0.1",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
-    "multer": "^1.4.5-lts.1",
+    "multer": "^2.4.0",
     "mysql2": "^3.6.5",
     "node-cron": "^3.0.3",
     "nodemailer": "^10.0.13",
@@ -37,5 +37,14 @@
     "nodemon": "^3.0.2",
     "pdfjs-dist": "^3.11.174",
     "supertest": "^7.2.2"
+  },
+  "overrides": {
+    "exceljs": {
+      "unzipper": "^0.12.3",
+      "uuid": "^11.1.1"
+    },
+    "node-cron": {
+      "uuid": "^11.1.1"
+    }
   }
 }

@@ -228,4 +228,8 @@ renomear ou remover um script. Nenhum teste pode depender de arquivo que não es
   campo de formulário sem rótulo, área rolável sem teclado). **Toda tela nova entra na lista
   `TELAS_LOGADAS`/`TELAS_PUBLICAS`.** Campo novo: `aria-label` (ou `<label htmlFor>`); texto
   secundário usa `#5b6472` ou mais escuro, nunca cinzas claros como `#888`/`#94a3b8`.
+- **Dependências (`backend/package.json`)**: `multer` está na versão 2; `overrides` troca `unzipper` e
+  `uuid` por versões novas dentro do `exceljs`/`node-cron` (zera o `npm audit`). **Não** trocar o
+  `archiver` do `exceljs` pela versão 7: ela quebra a exportação de Excel (testado). Depois de
+  mexer em dependência, rodar a bateria completa — os testes de Excel, e-mail e upload pegam o problema.
 
