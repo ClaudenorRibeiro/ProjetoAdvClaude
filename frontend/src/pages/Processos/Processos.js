@@ -305,10 +305,11 @@ function SeletorAssuntos({ assuntos = [], selecionados = [], onChange, podeGeren
   return (
     <div style={{ display: 'flex', gap: '4px', alignItems: 'flex-start' }}>
       <div ref={boxRef} onBlur={fecharAoSair} style={{ flex: 1, position: 'relative' }}>
-        <button
-          type="button"
+        {/* A caixa NÃO é um botão (botão dentro de botão confunde leitor de tela e teclado): é um contêiner clicável com
+            controles irmãos — um botão "×" por assunto e um botão ▲/▼ que abre a lista (o clique em qualquer ponto da caixa
+            também abre/fecha, como antes). */}
+        <div
           className="form-control"
-          disabled={somenteLeitura}
           onClick={() => { if (!somenteLeitura) setAberto(a => !a); }}
           style={{
             minHeight: '40px',
@@ -346,19 +347,25 @@ function SeletorAssuntos({ assuntos = [], selecionados = [], onChange, podeGeren
               }}>
                 {a.nome}
                 {!somenteLeitura && (
-                  <span
-                    role="button"
-                    tabIndex={0}
+                  <button
+                    type="button"
+                    aria-label={`Remover assunto ${a.nome}`}
                     onClick={e => { e.stopPropagation(); remover(a.id); }}
-                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); remover(a.id); } }}
-                    style={{ fontWeight: 700, cursor: 'pointer', lineHeight: 1 }}
-                  >×</span>
+                    style={{ font: 'inherit', fontWeight: 700, cursor: 'pointer', lineHeight: 1, background: 'none', border: 0, padding: 0, color: 'inherit' }}
+                  >×</button>
                 )}
               </span>
             ))}
           </span>
-          {!somenteLeitura && <span style={{ color: '#5b6472', fontSize: '12px', paddingTop: '5px' }}>{aberto ? '▲' : '▼'}</span>}
-        </button>
+          {!somenteLeitura && (
+            <button
+              type="button"
+              aria-label="Abrir a lista de assuntos"
+              aria-expanded={aberto}
+              style={{ color: '#5b6472', fontSize: '12px', paddingTop: '5px', background: 'none', border: 0, cursor: 'pointer' }}
+            >{aberto ? '▲' : '▼'}</button>
+          )}
+        </div>
 
         {!somenteLeitura && aberto && (
           <div style={{

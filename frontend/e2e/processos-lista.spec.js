@@ -134,9 +134,27 @@ test('@critical Lista de Processos: filtro de Assuntos (abrir, buscar, marcar, c
   await buscar(page, '8107');
   expect(await pastasDasLinhas(page)).toEqual([8107]);
   await buscar(page, '');
-  // tirar um assunto pelo "×" do chip
-  await page.getByRole('button', { name: '×' }).first().click(); await aguardarTelaPronta(page);
+  // tirar um assunto pelo "×" do chip (botão próprio, com nome para leitor de tela)
+  await expect(page.getByRole('button', { name: 'Remover assunto Assunto Lista A' })).toBeVisible();
+  await page.getByRole('button', { name: 'Remover assunto Assunto Lista A' }).click(); await aguardarTelaPronta(page);
   expect((await pastasDasLinhas(page)).sort()).toEqual([8104, 8105, 8106, 8107, 8108]);          // sobrou só o assunto B
+  // pelo TECLADO: o "×" remove com Enter e o botão ▲/▼ abre e fecha a lista
+  await page.getByRole('button', { name: 'Remover assunto Assunto Lista B' }).focus();
+  await page.keyboard.press('Enter'); await aguardarTelaPronta(page);
+  await expect(page.getByText('Selecionar assuntos...')).toBeVisible();
+  await expect(contador(page)).toHaveText(`${totalPastas} pasta(s)`);
+  const abrir = page.getByRole('button', { name: 'Abrir a lista de assuntos' });
+  await expect(abrir).toHaveAttribute('aria-expanded', 'false');
+  await abrir.focus(); await page.keyboard.press('Enter');
+  await expect(abrir).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByPlaceholder('Buscar assunto...')).toBeVisible();
+  await page.keyboard.press('Tab');                                                                // o foco sai da caixa (primeiro vai para o campo de busca da lista)
+  await page.mouse.click(5, 5);
+  await expect(page.getByPlaceholder('Buscar assunto...')).toHaveCount(0);
+  await expect(abrir).toHaveAttribute('aria-expanded', 'false');
+  await page.getByText('Selecionar assuntos...').click();                                          // e o clique em qualquer ponto da caixa continua abrindo
+  await page.getByRole('checkbox', { name: 'Assunto Lista A' }).check(); await aguardarTelaPronta(page);
+  await page.mouse.click(5, 5);
   await page.getByRole('button', { name: 'Limpar', exact: true }).click(); await aguardarTelaPronta(page);
   await expect(contador(page)).toHaveText(`${totalPastas} pasta(s)`);
   await expect(page.getByText('Selecionar assuntos...')).toBeVisible();
