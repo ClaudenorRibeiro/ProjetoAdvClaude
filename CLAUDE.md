@@ -41,6 +41,11 @@ sabe o que aconteceu entre eles, dizer "não sei". **Erro real (02/10/2026):** a
 "seu banco local está desatualizado" a partir de um diagnóstico antigo; o diagnóstico mais
 recente já mostrava o banco em dia, e a IA ainda inventou uma explicação ("alguém atualizou").
 
+**Erro real (02/10/2026, 2ª vez que o usuário reclama disto):** a IA descreveu "um campo `ver_todos_processos` no cadastro do usuário" como
+se fosse algo visível, sem ter conferido se esse campo aparece na tela. Não aparecia (só existia como coluna do banco, sem uso). Regra: **antes de
+falar de qualquer tela, botão, campo ou comportamento, a IA lê o código que o define (e o `estrutura_banco.sql`, quando for banco) e só então afirma.**
+Nada de descrever de memória ou "por dedução" do nome de uma coluna ou variável.
+
 ## 1. Nunca codar sem autorização prévia
 
 - A IA nunca escreve/altera código sem autorização explícita do usuário

@@ -54,7 +54,7 @@ BEGIN/COMMIT/ROLLBACK; nenhum registro órfão ao excluir; nomes de tabela em mi
 - [x] **A4 (concluído em 02/10/2026)** Permissões: 401 sem login e 403 sem permissão em TODAS as rotas de Processos; áreas restritas.
 
 ### Fase B — Tela "lista de Processos" (`Processos.js`)
-- [ ] **B1** Tela: busca, filtros, ordenação, paginação, etiquetas, menu de cada linha, "Abrir pasta", estados vazio/erro.
+- [ ] **B1 (EM ANDAMENTO — teste escrito; 1 achado aguardando decisão do usuário; ver "Achados do B1")** Tela: busca, filtros, ordenação, paginação, etiquetas, menu de cada linha, "Abrir pasta", estados vazio/erro.
 - [ ] **B2** Janela "Novo processo": todos os campos, assuntos, OABs, partes, cadastro rápido de parte, CEP, validações.
 - [ ] **B3** "Editar processo" (e modo Detalhes, somente leitura — todo campo travado), "Motivo do status", "Histórico".
 - [ ] **B4** Excluir processo, renumerar, "Gerenciar auxiliares" (fóruns, varas, tipos, status, instâncias, assuntos).
@@ -156,7 +156,21 @@ Servidor completo no fim do A4: 127 rápidos + 206 banco + 16 navegador, tudo ve
    usuários (zero ocorrências no frontend) e NADA a usa. As permissões reais "ver de todos" ficam na aba Permissões (Prazos, Tarefas, Agenda). Para
    Processos não existe permissão desse tipo. Ver pendência P8.
 
+## Achados do B1 (teste `frontend/e2e/processos-lista.spec.js`: 9 passam, 1 falha DE PROPÓSITO)
+
+Cobertura: cabeçalho/colunas/contador, ordem e paginação (20 por página), busca (título, nº da pasta com destaque verde e "430 == 0430", CNJ, protocolo,
+partes, CPF com/sem pontos, telefone, sem resultado, curingas `% _`, volta à página 1), filtro de assuntos, etiquetas pessoais e do escritório (legenda,
+bolinhas, filtrar, combinar, limpar), marcar/trocar/remover etiqueta pelo menu ⋮ (conferido no banco), abrir pasta (título e menu), "+ Novo Processo"
+(abre/fecha por Cancelar, ✕ e ESC), usuário que só visualiza (sem o botão), erro 500 do servidor, celular (375 px) e acessibilidade em cada estado.
+Dados de teste: `prepararListaProcessos` (26 pastas) e `criarUsuarioSoVisualiza` em `frontend/e2e/helpers.js`.
+
+1. **Acessibilidade — "controle interativo dentro de outro" no seletor de assuntos** (axe `nested-interactive`, severidade séria): quando há assunto
+   marcado, o "×" que remove cada assunto é um `<span role="button">` DENTRO do `<button>` grande que abre a lista (`SeletorAssuntos`,
+   `frontend/src/pages/Processos/Processos.js`). Leitores de tela e o teclado não tratam direito botão dentro de botão. O mesmo componente aparece nas
+   janelas Novo Processo e Editar Processo (a conferir no B2/B3 com o mesmo estado). Proposta: separar o "×" (botão próprio, fora do botão que abre a lista),
+   sem mudar o visual.
+
 ## Estado atual
 
-Plano criado em 02/10/2026. **Próximo passo: B1** (fim da Fase A). (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
+Plano criado em 02/10/2026. **Passo atual: B1 — teste escrito; aguardando o usuário sobre o achado 1.** (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
 `rascunho` para saber o que já foi feito (marque `[x]` acima ao concluir cada passo).

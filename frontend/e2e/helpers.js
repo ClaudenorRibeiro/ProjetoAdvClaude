@@ -124,3 +124,72 @@ export async function prepararFinanceiro(request) {
   F.api = async (metodo, rota, data) => { const r = await request[metodo](`${API}${rota}`, { headers: h, data }); if (!r.ok()) throw new Error(`${rota}: ${r.status()} ${await r.text()}`); return (await r.json()).dados; };
   return F;
 }
+
+// Dados da LISTA de Processos (passo B1): 26 pastas (8101 a 8125 e a 430), cada uma com um processo ativo, para a paginação (20 por página),
+// a busca (título, CNJ, protocolo, partes, CPF, telefone), os assuntos e as etiquetas pessoais/do escritório. Tudo por SQL (sem login pela API:
+// um novo login derruba a sessão anterior) e com nomes próprios, para não atrapalhar os outros testes que usam o mesmo banco.
+//   pasta 8100+i: título "LISTA E2E ii", CNJ "70000ii-11.2026.5.15.0001", protocolo "PROT-LISTA-ii"
+//   autora "Cliente Lista Silva" (CPF 71428793860, tel 11955554444) nas pastas 8101 a 8103
+//   assunto A: pastas 8101-8105; assunto B: pastas 8104-8108
+//   etiquetas pessoais do admin: slot 1 "Urgente E2E" (8101, 8102), slot 2 "Aguardando E2E" (8103)
+//   etiquetas do escritório: slot 1 "Arquivada E2E" (8101, 8102), slot 2 "Em recurso E2E" (8103)
+export async function prepararListaProcessos() {
+  const { conectarBancoTeste } = createRequire(import.meta.url)('../../backend/tests/support/testDatabase');
+  const conn = await conectarBancoTeste();
+  const info = { pastaId: {}, procId: {} };
+  const numeros = [...Array.from({ length: 25 }, (_, k) => 8101 + k), 430];       // a pasta 430 serve para provar "430 == 0430"
+  try {
+    const [jaTem] = await conn.execute('SELECT COUNT(*) AS n FROM tblpasta WHERE numPasta = 8101');
+    if (jaTem[0].n) {                                                               // já preparado (o teste foi repetido): só lê os identificadores
+      for (const n of numeros) {
+        const [[r]] = await conn.execute('SELECT pa.id AS pasta, (SELECT MIN(p.id) FROM tblproc p WHERE p.pasta_id = pa.id) AS proc FROM tblpasta pa WHERE pa.numPasta = ?', [n]);
+        info.pastaId[n] = r.pasta; info.procId[n] = r.proc;
+      }
+      return info;
+    }
+    const assuntoA = (await conn.execute("INSERT INTO tblassuntoproc (nome, ativo) VALUES ('Assunto Lista A', 1)"))[0].insertId;
+    const assuntoB = (await conn.execute("INSERT INTO tblassuntoproc (nome, ativo) VALUES ('Assunto Lista B', 1)"))[0].insertId;
+    const autora = (await conn.execute("INSERT INTO pessoas_fisicas (nome, cpf) VALUES ('Cliente Lista Silva', '71428793860')"))[0].insertId;
+    await conn.execute("INSERT INTO telefones_pf (pessoa_id, numero) VALUES (?, '11955554444')", [autora]);
+    for (let i = 1; i <= 26; i += 1) {
+      const ii = String(i).padStart(2, '0');
+      const numPasta = i <= 25 ? 8100 + i : 430;
+      const pastaId = (await conn.execute('INSERT INTO tblpasta (numPasta, criado_por) VALUES (?, 1)', [numPasta]))[0].insertId;
+      const procId = (await conn.execute(
+        `INSERT INTO tblproc (pasta_id, numProc, protocolo, NomeTituloProc, tipo_id, status_id, ativo, criado_por)
+         VALUES (?, ?, ?, ?, 1, 1, 1, 1)`, [pastaId, `70000${ii}-11.2026.5.15.0001`, `PROT-LISTA-${ii}`, `LISTA E2E ${ii}`]))[0].insertId;
+      info.pastaId[numPasta] = pastaId; info.procId[numPasta] = procId;
+      if (i <= 3) await conn.execute("INSERT INTO tbltituloprocautor (proc_id, tipo_pessoa, pessoa_id) VALUES (?, 'fisica', ?)", [procId, autora]);
+      if (i <= 5) await conn.execute('INSERT INTO processo_assunto (processo_id, assunto_id, criado_por) VALUES (?, ?, 1)', [procId, assuntoA]);
+      if (i >= 4 && i <= 8) await conn.execute('INSERT INTO processo_assunto (processo_id, assunto_id, criado_por) VALUES (?, ?, 1)', [procId, assuntoB]);
+    }
+    await conn.execute("INSERT INTO etiquetas_definicoes (usuario_id, modulo, slot, cor, significado) VALUES (1, 'pastas', 1, '#e24b4a', 'Urgente E2E'), (1, 'pastas', 2, '#378add', 'Aguardando E2E')");
+    await conn.execute('INSERT INTO pastas_etiquetas (pasta_id, usuario_id, slot) VALUES (?, 1, 1), (?, 1, 1), (?, 1, 2)', [info.pastaId[8101], info.pastaId[8102], info.pastaId[8103]]);
+    await conn.execute("INSERT INTO etiquetas_escritorio_catalogo (modulo, slot, cor, significado) VALUES ('processos', 1, '#639922', 'Arquivada E2E'), ('processos', 2, '#ef9f27', 'Em recurso E2E')");
+    await conn.execute('INSERT INTO processos_etiquetas_escritorio (processo_id, slot) VALUES (?, 1), (?, 1), (?, 2)', [info.procId[8101], info.procId[8102], info.procId[8103]]);
+  } finally { await conn.end(); }
+  return info;
+}
+
+// Usuário comum que só pode VER Processos (sem cadastrar/alterar/excluir), com a senha padrão de teste. Devolve o login.
+export async function criarUsuarioSoVisualiza(login = 'sovisualiza') {
+  const { conectarBancoTeste } = createRequire(import.meta.url)('../../backend/tests/support/testDatabase');
+  const bcrypt = createRequire(import.meta.url)('../../backend/node_modules/bcryptjs');
+  const conn = await conectarBancoTeste();
+  try {
+    const id = (await conn.execute(
+      `INSERT INTO usuarios (nome, login, senha_hash, email, tipo, nivel, ativo, ver_todos_processos, notif_email, google_agenda_ativo)
+       VALUES ('Usuário Só Visualiza', ?, ?, ?, 'advogado', 2, 1, 0, 0, 0)`,
+      [login, bcrypt.hashSync('TesteSeguro123!', 4), `${login}@example.invalid`]))[0].insertId;
+    await conn.execute("INSERT INTO permissoes (usuario_id, modulo, submodulo, acao, permitido) VALUES (?, 'processos', NULL, 'visualizar', 1)", [id]);
+  } finally { await conn.end(); }
+  return login;
+}
+
+// Quantas pastas a lista deve mostrar agora (pastas com pelo menos um processo ativo).
+export async function contarPastasDaLista() {
+  const { conectarBancoTeste } = createRequire(import.meta.url)('../../backend/tests/support/testDatabase');
+  const conn = await conectarBancoTeste();
+  try { return Number((await conn.execute('SELECT COUNT(*) AS n FROM tblpasta pa WHERE EXISTS (SELECT 1 FROM tblproc p WHERE p.pasta_id = pa.id AND p.ativo = 1)'))[0][0].n); }
+  finally { await conn.end(); }
+}
