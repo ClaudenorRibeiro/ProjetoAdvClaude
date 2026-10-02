@@ -9,6 +9,9 @@ test('@critical login, proteção de rota e navegação principal', async ({ pag
   await expect(page).toHaveURL(/\/login$/);
   await loginPelaTela(page);
   await expect(page.getByText('Prazos Hoje', { exact: true })).toBeVisible();
+  // Abrir o sistema não pode acender o aviso de capacidade (antes acendia por uma fila de milissegundos).
+  await aguardarTelaPronta(page);
+  await expect(page.getByText(/limite de capacidade/)).toHaveCount(0);
   await page.goto('/audiencias');
   await expect(page.getByRole('heading', { name: /Audiências/i }).first()).toBeVisible();
 });

@@ -4,6 +4,7 @@
 // ============================================================
 
 const mysql = require('mysql2/promise');
+const { criarDetectorSobrecarga } = require('./sobrecargaPool');
 
 // Cria um pool de conexões — o sistema reutiliza conexões abertas
 // em vez de abrir uma nova a cada requisição (muito mais rápido)
@@ -51,21 +52,25 @@ async function testarConexao() {
 
 // ============================================================
 // DETECÇÃO DE SOBRECARGA DO POOL (aviso de capacidade na tela, p/ admin)
-// O pool emite o evento 'enqueue' quando TODAS as conexões (connectionLimit)
-// estão ocupadas e um novo pedido precisa esperar na fila. Guardamos em memória
-// o instante da última vez que isso aconteceu — sem banco, sem custo relevante.
+// Regra e motivo em ./sobrecargaPool.js. Aqui só ligamos o detector à fila real do pool
+// (o mysql2 guarda os pedidos que esperam conexão em pool.pool._connectionQueue).
+// Se uma versão futura do mysql2 mudar isso, o teste "fila do pool é legível" avisa na bateria.
 // ============================================================
-let ultimaSobrecargaEm = 0;                     // timestamp (ms) da última saturação; 0 = nunca houve
-const JANELA_SOBRECARGA_MS = 3 * 60 * 1000;     // considera "sobrecarregado" se ocorreu nos últimos 3 minutos
-
-pool.on('enqueue', () => {
-  ultimaSobrecargaEm = Date.now();
-});
-
-// Retorna true se o pool ficou saturado nos últimos minutos.
-// Usado pelo endpoint de notificações para acender o aviso de capacidade no topo da tela.
-function sistemaSobrecarregado() {
-  return ultimaSobrecargaEm > 0 && (Date.now() - ultimaSobrecargaEm) < JANELA_SOBRECARGA_MS;
+function lerFilaDoPool() {
+  const fila = pool.pool && pool.pool._connectionQueue;
+  return fila && typeof fila.length === 'number' ? fila.length : null;
+}
+const detector = criarDetectorSobrecarga({ lerFila: () => lerFilaDoPool() ?? 0 });
+if (lerFilaDoPool() === null) {
+  console.error('Aviso de capacidade desativado: não foi possível ler a fila do pool de conexões (mysql2 mudou?).');
+} else {
+  detector.iniciar();
 }
 
-module.exports = { pool, testarConexao, sistemaSobrecarregado, FUSO_BRASILIA };
+// Retorna true se o pool ficou realmente saturado (fila contínua) nos últimos minutos.
+// Usado pelo endpoint de notificações para acender o aviso de capacidade no topo da tela.
+function sistemaSobrecarregado() {
+  return detector.sobrecarregado();
+}
+
+module.exports = { pool, testarConexao, sistemaSobrecarregado, lerFilaDoPool, FUSO_BRASILIA };
