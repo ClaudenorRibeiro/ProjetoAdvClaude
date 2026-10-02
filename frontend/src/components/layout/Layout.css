@@ -709,7 +709,7 @@ body {
 .lista-vazia {
   text-align: center;
   padding: 48px;
-  color: #9ca3af;
+  color: #6b7280;
   font-size: 14px;
 }
 
@@ -719,7 +719,7 @@ body {
   align-items: center;
   justify-content: center;
   padding: 48px;
-  color: #6b7280;
+  color: #4b5563;
 }
 
 /* ---- MODAIS ---- */

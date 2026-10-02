@@ -1,7 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { bloquearRedeExterna, criarAudienciaSemComparecimento, loginPelaTela } from './helpers';
+import { abrirMenuAcoes, bloquearRedeExterna, criarAudienciaSemComparecimento, loginPelaTela } from './helpers';
 
 test.describe('resultado de ato sem comparecimento', () => {
+  // O banco de teste é compartilhado: cada teste localiza a SUA audiência pelo horário que criou.
+  let horaTeste;
+  const linhaDoTeste = (page) => page.locator('tbody tr').filter({ hasText: '0000001-01.2026.5.15.0001' }).filter({ hasText: horaTeste }).first();
+
   test.beforeEach(async ({ page, request }, testInfo) => {
     await bloquearRedeExterna(page);
     const projetos = ['chromium', 'firefox', 'webkit', 'celular', 'tablet'];
@@ -11,23 +15,24 @@ test.describe('resultado de ato sem comparecimento', () => {
     const faixa = (indiceProjeto * 6) + (indiceTeste * 3) + testInfo.retry;
     const hora = String(10 + Math.floor(faixa / 60)).padStart(2, '0');
     const minuto = String(faixa % 60).padStart(2, '0');
-    await criarAudienciaSemComparecimento(request, `${hora}:${minuto}`);
+    horaTeste = `${hora}:${minuto}`;
+    await criarAudienciaSemComparecimento(request, horaTeste);
     await loginPelaTela(page);
   });
 
   test('@critical mostra a modalidade e usa Registrar resultado', async ({ page }) => {
     await page.goto('/audiencias');
-    const linha = page.locator('tbody tr').filter({ hasText: '0000001-01.2026.5.15.0001' }).first();
+    const linha = linhaDoTeste(page);
     await expect(linha).toContainText('Sem comparecimento');
-    await linha.getByTitle('Mais ações').click();
+    await abrirMenuAcoes(page, linha);
     await expect(page.getByRole('button', { name: 'Registrar resultado' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Registrar ata' })).toHaveCount(0);
   });
 
   test('@critical exige descrição e permite salvar somente o texto', async ({ page }) => {
     await page.goto('/audiencias');
-    const linha = page.locator('tbody tr').filter({ hasText: '0000001-01.2026.5.15.0001' }).first();
-    await linha.getByTitle('Mais ações').click();
+    const linha = linhaDoTeste(page);
+    await abrirMenuAcoes(page, linha);
     await page.getByRole('button', { name: 'Registrar resultado' }).click();
 
     await expect(page.getByRole('heading', { name: /Registrar resultado/ })).toBeVisible();
@@ -44,9 +49,9 @@ test.describe('resultado de ato sem comparecimento', () => {
     await page.getByRole('button', { name: 'Registrar resultado', exact: true }).last().click();
     await expect(page.getByRole('heading', { name: /Registrar resultado/ })).toHaveCount(0);
 
-    const linhaAtualizada = page.locator('tbody tr').filter({ hasText: '0000001-01.2026.5.15.0001' }).first();
+    const linhaAtualizada = linhaDoTeste(page);
     await expect(linhaAtualizada).toContainText('Realizada');
-    await linhaAtualizada.getByTitle('Mais ações').click();
+    await abrirMenuAcoes(page, linhaAtualizada);
     await page.getByRole('button', { name: 'Detalhes do resultado' }).click();
     await expect(page.getByText('Conclusos para sentença.')).toBeVisible();
   });

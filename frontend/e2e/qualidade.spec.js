@@ -8,7 +8,7 @@ test('@critical login, proteção de rota e navegação principal', async ({ pag
   await page.goto('/audiencias');
   await expect(page).toHaveURL(/\/login$/);
   await loginPelaTela(page);
-  await expect(page.getByText('Dashboard', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Prazos Hoje', { exact: true })).toBeVisible();
   await page.goto('/audiencias');
   await expect(page.getByRole('heading', { name: /Audiências/i }).first()).toBeVisible();
 });
@@ -20,6 +20,7 @@ test('@critical páginas críticas não têm violações sérias ou críticas de
   expect(graves, `Login: ${JSON.stringify(graves, null, 2)}`).toEqual([]);
 
   await loginPelaTela(page);
+  await expect(page.getByText('Prazos Hoje', { exact: true })).toBeVisible();
   resultado = await new AxeBuilder({ page }).analyze();
   graves = resultado.violations.filter(v => ['serious', 'critical'].includes(v.impact));
   expect(graves, `Dashboard: ${JSON.stringify(graves, null, 2)}`).toEqual([]);

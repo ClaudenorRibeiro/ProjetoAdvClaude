@@ -37,3 +37,13 @@ export async function criarAudienciaSemComparecimento(request, hora = '10:20') {
   if (!resposta.ok()) throw new Error(`Preparação da audiência falhou: ${resposta.status()} ${await resposta.text()}`);
   return (await resposta.json()).dados.id;
 }
+
+// Abre o menu "⋮" de uma linha. O navegador de teste rola a tabela até o botão e o
+// evento de rolagem chega logo depois do clique, o que fecha o menu (o sistema fecha
+// o menu ao rolar). Por isso rolamos antes e esperamos a tela assentar.
+export async function abrirMenuAcoes(page, linha) {
+  const botao = linha.getByTitle('Mais ações');
+  await botao.scrollIntoViewIfNeeded();
+  await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+  await botao.click();
+}

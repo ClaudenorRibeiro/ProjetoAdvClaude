@@ -35,7 +35,7 @@
   line-height: 1;
   margin-bottom: 6px;
 }
-.contador-titulo { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+.contador-titulo { font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; }
 
 .contador-azul     { border-top-color: #1a56db; .contador-valor { color: #1a56db; } }
 .contador-vermelho { border-top-color: #dc2626; .contador-valor { color: #dc2626; } }
