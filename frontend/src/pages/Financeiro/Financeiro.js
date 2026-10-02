@@ -265,7 +265,7 @@ export default function Financeiro() {
               <button className={`btn ${periodoSaldo === 'mensal' ? 'btn-primary' : 'btn-outline'}`} style={{ fontSize: 12, padding: '4px 10px' }}
                 onClick={() => setPeriodoSaldo('mensal')}>Mensal</button>
             </div>
-            <div className="tabela-wrapper">
+            <div className="tabela-wrapper" tabIndex={0} role="region" aria-label="Lançamentos da conta corrente">
               <table className="tabela">
                 <thead>
                   <tr>
@@ -454,7 +454,7 @@ function RepassesView({ podeAlterar, onMudou }) {
       {/* ----- PENDENTES ----- */}
       {sub === 'pendentes' && (
         pendentes.length === 0 ? <p className="lista-vazia">Nenhum repasse pendente. 🎉</p> : (
-          <div className="tabela-wrapper">
+          <div className="tabela-wrapper" tabIndex={0} role="region" aria-label="Repasses pendentes">
             <table className="tabela">
               <thead>
                 <tr>
@@ -491,7 +491,7 @@ function RepassesView({ podeAlterar, onMudou }) {
       {/* ----- CONCLUÍDOS ----- */}
       {sub === 'concluidos' && (
         concluidos.length === 0 ? <p className="lista-vazia">Nenhum repasse concluído ainda.</p> : (
-          <div className="tabela-wrapper">
+          <div className="tabela-wrapper" tabIndex={0} role="region" aria-label="Repasses concluídos">
             <table className="tabela">
               <thead>
                 <tr>
@@ -938,7 +938,7 @@ function ConsultaFinanceiro() {
       {/* Resultado */}
       {carregando ? <div className="loading">Carregando...</div> : !dados ? null : (
         dados.registros.length === 0 ? <p className="lista-vazia">Nenhuma parcela encontrada para os filtros.</p> : (
-          <div className="tabela-wrapper">
+          <div className="tabela-wrapper" tabIndex={0} role="region" aria-label="Resultado da consulta">
             <table className="tabela">
               <thead>
                 <tr>
@@ -1008,7 +1008,7 @@ export function ModalHistoricoLancamento({ lancamento, onFechar }) {
           <p style={{ color: '#6b7280', fontSize: '13px', marginTop: 0 }}>{lancamento.descricao}</p>
           {carregando ? <div className="loading">Carregando...</div> : (
             registros.length === 0 ? <p className="lista-vazia">Nenhum registro</p> : (
-              <div className="tabela-wrapper">
+              <div className="tabela-wrapper" tabIndex={0} role="region" aria-label="Histórico do lançamento">
                 <table className="tabela">
                   <thead><tr><th>Quando</th><th>Evento</th><th>Campo</th><th>De</th><th>Para</th><th>Usuário</th></tr></thead>
                   <tbody>
@@ -1141,7 +1141,7 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
       </div>
 
       {aberto && parcelas && (
-        <div className="tabela-wrapper" style={{ marginTop: '10px' }}>
+        <div className="tabela-wrapper" tabIndex={0} role="region" aria-label="Parcelas do acordo" style={{ marginTop: '10px' }}>
           <table className="tabela">
             <thead>
               <tr>
@@ -1466,7 +1466,7 @@ function ModalHistoricoParcela({ parcela, onFechar }) {
         <div className="modal-body">
           {carregando ? <div className="loading">Carregando...</div> : (
             registros.length === 0 ? <p className="lista-vazia">Nenhum registro</p> : (
-              <div className="tabela-wrapper">
+              <div className="tabela-wrapper" tabIndex={0} role="region" aria-label="Histórico da parcela">
                 <table className="tabela">
                   <thead><tr><th>Quando</th><th>Evento</th><th>Campo</th><th>De</th><th>Para</th><th>Usuário</th></tr></thead>
                   <tbody>
@@ -2023,7 +2023,7 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
 
           {/* Tabela editável */}
           {parcelas.length > 0 && (
-            <div className="tabela-wrapper" style={{ marginTop: '8px' }}>
+            <div className="tabela-wrapper" tabIndex={0} role="region" aria-label="Parcelas do acordo em edição" style={{ marginTop: '8px' }}>
               <table className="tabela" style={{ fontSize: '13px' }}>
                 <thead>
                   <tr>

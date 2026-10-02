@@ -294,10 +294,16 @@ test('@critical Ata: preencher TODOS os controles com dados (cadastrar, remover,
     await nova.getByRole('button', { name: 'Hoje', exact: true }).click();
     await nova.getByLabel('Hora').fill('14:30');
     await nova.getByRole('button', { name: 'Criar Audiência' }).click();
+    // Dependendo da hora do dia, "Hoje 14:30" já passou e o sistema pede "Confirmar mesmo assim"; também pode pedir a senha.
+    // Trata os dois avisos, em qualquer ordem, até a janela fechar.
     const senha = page.locator('input[type="password"]');
-    if (await senha.waitFor({ state: 'visible', timeout: 3000 }).then(() => true, () => false)) {
-      await senha.fill('TesteSeguro123!');
-      await page.getByRole('button', { name: 'Confirmar e Agendar' }).click();
+    const mesmoAssim = page.getByRole('button', { name: 'Confirmar mesmo assim' });
+    for (let i = 0; i < 3 && await nova.count(); i++) {
+      if (await mesmoAssim.waitFor({ state: 'visible', timeout: 2500 }).then(() => true, () => false)) await mesmoAssim.click();
+      else if (await senha.waitFor({ state: 'visible', timeout: 2500 }).then(() => true, () => false)) {
+        await senha.fill('TesteSeguro123!');
+        await page.getByRole('button', { name: 'Confirmar e Agendar' }).click();
+      }
     }
     await expect(nova).toHaveCount(0);
     await expect(ata.getByText('✓ Nova audiência pronta para ser registrada com a ata')).toBeVisible();

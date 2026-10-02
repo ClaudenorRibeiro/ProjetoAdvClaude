@@ -106,8 +106,8 @@ export async function prepararFinanceiro(request) {
     F.caixa = (await post('/financeiro/contas-escritorio', { nome: 'Caixa E2E', tipo: 'especie' })).id;
     F.formaDinheiro = (await post('/financeiro/formas-pagamento', { nome: 'Dinheiro E2E', uso_permitido: 'especie' })).id;
     F.formaPix = (await post('/financeiro/formas-pagamento', { nome: 'Pix E2E', uso_permitido: 'financeira' })).id;
-    F.cliente = (await conn.execute("INSERT INTO pessoas_fisicas (nome, cpf) VALUES ('Cliente Financeiro E2E', '52998224725')"))[0].insertId;
-    F.parceiro = (await conn.execute("INSERT INTO pessoas_fisicas (nome, cpf) VALUES ('Parceiro Financeiro E2E', '11144477735')"))[0].insertId;
+    F.cliente = (await conn.execute("INSERT INTO pessoas_fisicas (nome, cpf) VALUES ('Cliente Financeiro E2E', '16899535009')"))[0].insertId;
+    F.parceiro = (await conn.execute("INSERT INTO pessoas_fisicas (nome, cpf) VALUES ('Parceiro Financeiro E2E', '39053344705')"))[0].insertId;
     await conn.execute("INSERT INTO tbltituloprocautor (proc_id, tipo_pessoa, pessoa_id) VALUES (1, 'fisica', ?)", [F.cliente]);
     F.contaCliente = (await post(`/financeiro/beneficiario/fisica/${F.cliente}/conta`, { instituicao_financeira_id: F.banco, agencia: '0001', numero: '12345', digito: '6', principal: true })).id;
     F.contaParceiro = (await post(`/financeiro/beneficiario/fisica/${F.parceiro}/conta`, { instituicao_financeira_id: F.banco, chave_pix: 'parceiro@example.invalid' })).id;
