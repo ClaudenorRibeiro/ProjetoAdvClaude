@@ -36,6 +36,16 @@ async function opcoesDoCampo(campo, ctx) {
   return typeof campo.opcoes === 'function' ? campo.opcoes(ctx) : (campo.opcoes || []);
 }
 
+// Para montar a TELA: se a lista de opções de UM campo falhar (ex.: tabela que o banco ainda não tem),
+// só esse campo fica sem opções — o erro vai para o log e o resto dos relatórios continua funcionando.
+async function opcoesParaTela(campo, ctx, assunto, chave) {
+  try { return await opcoesDoCampo(campo, ctx); }
+  catch (err) {
+    console.error(`Relatórios: não foi possível listar as opções de "${assunto.chave}.${chave}":`, err.message);
+    return [];
+  }
+}
+
 // O que a TELA recebe: só assuntos/campos que o usuário pode usar (nunca a expressão SQL)
 async function catalogoParaUsuario(ctx) {
   const assuntos = [];
@@ -47,7 +57,7 @@ async function catalogoParaUsuario(ctx) {
       campos.push({
         chave, rotulo: campo.rotulo, tipo: campo.tipo, formato: campo.formato || null,
         operadores: Object.entries(operadoresDoTipo(campo.tipo)).map(([valor, o]) => ({ valor, rotulo: o.rotulo, aridade: o.aridade })),
-        opcoes: await opcoesDoCampo(campo, ctx),
+        opcoes: await opcoesParaTela(campo, ctx, assunto, chave),
         agrupavel: agrupavel(campo),
         passos: ehData(campo.tipo) ? Object.entries(PASSOS_DATA).map(([valor, rotulo]) => ({ valor, rotulo })) : null,
         funcoes: funcoesDoCampo(campo),   // totais possíveis neste campo (além da contagem)
