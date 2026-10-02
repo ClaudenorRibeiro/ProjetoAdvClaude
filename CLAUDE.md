@@ -196,3 +196,31 @@ usuário — nunca repetir o conteúdo deles como se fosse a situação
 presente. Eles só têm valor como histórico de contexto (o que já foi
 tentado/discutido no passado), não como checklist confiável do que falta
 fazer.
+
+## 7. Scripts: sempre indicar a importância (pedido do usuário, 02/10/2026)
+
+O usuário já apagou, sem saber para que servia, um script que um teste usava.
+Por isso, **todo script que a IA criar ou alterar** (SQL para o HeidiSQL, `.bat`, `.sh`)
+precisa trazer, nas primeiras linhas, um aviso claro:
+- `IMPORTANTE — NÃO APAGAR` + para que serve + quando e quem roda; ou
+- `TEMPORÁRIO — pode apagar depois de <condição>`.
+
+O índice `SCRIPTS-IMPORTANTES.txt` (raiz) lista todos; a IA o atualiza sempre que criar,
+renomear ou remover um script. Nenhum teste pode depender de arquivo que não está no Git.
+
+## 8. Bateria de testes (`node quality/run.mjs`) — regras do usuário (02/10/2026)
+
+- **Teste pulado = REPROVADO.** A bateria não aprova o que não verificou. Não usar
+  `skip`/`todo`/`only`/`fixme` em teste algum (a largada da bateria já barra) e a
+  bateria reprova se qualquer ferramenta relatar teste pulado, pendente ou não executado.
+- **A bateria prepara o que precisa**, em vez de pular: instala as dependências do npm e,
+  nos perfis `completo`/`profundo`, o Chromium de teste. Nada de "instale o programa X
+  no PC": se um teste precisa de uma ferramenta, ela vem pelo `npm` ou é instalada pela bateria.
+- **Erro é erro, não importa a origem ou a idade.** Falha encontrada pela bateria é corrigida,
+  mesmo que já existisse antes. Não existe "já falhava" como justificativa.
+- No branch `rascunho` a IA pode alterar e enviar sem pedir autorização a cada vez;
+  no `main` a IA nunca mexe (só o usuário, pelos scripts dele, ou com "PODE SUBIR").
+- O horário do banco é o de Brasília: `backend/src/config/database.js` fixa o fuso
+  (`-03:00`) em toda conexão, para `CURDATE()`/`NOW()` concordarem com o escritório
+  mesmo se o MySQL rodar em UTC.
+

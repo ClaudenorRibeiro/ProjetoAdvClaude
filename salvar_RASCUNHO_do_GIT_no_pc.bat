@@ -1,4 +1,5 @@
 @echo off
+rem IMPORTANTE - NAO APAGAR. Baixa o RASCUNHO do GitHub para este PC, para voce testar antes de oficializar.
 :: ============================================================
 :: Atualizar este PC com o RASCUNHO do GitHub
 :: Baixa (puxa) para esta pasta tudo que estiver na branch

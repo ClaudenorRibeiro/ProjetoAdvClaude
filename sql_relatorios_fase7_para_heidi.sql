@@ -1,3 +1,5 @@
+-- IMPORTANTE — NÃO APAGAR. OBRIGATÓRIO: cria a tabela do agendamento/envio de relatórios por e-mail.
+-- Rodar em CADA instância (local e AWS), depois do script da Fase 1. Pode rodar de novo sem problema.
 -- ============================================================================
 -- RELATÓRIOS (tela nova) — FASE 7: agendamento e envio por e-mail
 -- Rodar pelo HeidiSQL, com o BANCO DO SISTEMA selecionado. Executar TUDO (F9).

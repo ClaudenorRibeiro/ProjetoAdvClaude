@@ -1,3 +1,4 @@
+-- IMPORTANTE — NÃO APAGAR. Cria o banco ISOLADO de testes (sistema_advocacia_test) e o usuário dele. Necessário para a bateria completa.
 -- EXECUTAR UMA ÚNICA VEZ NO HEIDISQL, como administrador do MySQL local.
 -- Antes de executar, troque a senha entre aspas por uma senha exclusiva de testes.
 -- Este usuário recebe acesso SOMENTE ao banco descartável sistema_advocacia_test.

@@ -1,4 +1,5 @@
 @echo off
+rem IMPORTANTE - NAO APAGAR. ENVIA esta pasta para o main (PRODUCAO) no GitHub. Uso exclusivo do usuario, no PC de CASA.
 :: ============================================================
 :: Salvar e enviar para o GitHub - Sistema de Advocacia
 :: Duplo clique para rodar

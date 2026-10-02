@@ -1,15 +1,18 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import { contarPulados } from './pulados.mjs';
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const perfil = process.argv.includes('--profundo') ? 'profundo'
   : process.argv.includes('--completo') ? 'completo' : 'rapido';
 const resultados = [];
 
-function comando(binario, args, cwd, nome, obrigatorio = true) {
+// Roda um comando mostrando a saída em tempo real (como antes) e, nos comandos de teste,
+// lê essa mesma saída para reprovar se algum teste foi pulado.
+async function comando(binario, args, cwd, nome, obrigatorio = true, ehTeste = false) {
   const inicio = Date.now();
   let executavel = binario;
   let argumentos = args;
@@ -20,19 +23,34 @@ function comando(binario, args, cwd, nome, obrigatorio = true) {
     executavel = process.execPath;
     argumentos = [npmCli, ...args];
   }
-  const r = spawnSync(executavel, argumentos, {
-    cwd: path.join(raiz, cwd),
-    stdio: 'inherit',
-    env: { ...process.env },
-    shell: false,
+  const segundos = () => ((Date.now() - inicio) / 1000).toFixed(1);
+  const { status, erro, saida } = await new Promise((resolver) => {
+    let texto = '';
+    const filho = spawn(executavel, argumentos, {
+      cwd: path.join(raiz, cwd),
+      stdio: ['inherit', 'pipe', 'inherit'],
+      env: { ...process.env },
+      shell: false,
+    });
+    filho.stdout.on('data', (pedaco) => { process.stdout.write(pedaco); texto += pedaco.toString('utf8'); });
+    filho.on('error', (e) => resolver({ status: null, erro: e, saida: texto }));
+    filho.on('close', (codigo) => resolver({ status: codigo, erro: null, saida: texto }));
   });
-  if (r.error) {
-    resultados.push({ nome, ok: false, segundos: ((Date.now() - inicio) / 1000).toFixed(1), obrigatorio });
-    console.error(`${nome}: ${r.error.message}`);
+  if (erro) {
+    resultados.push({ nome, ok: false, segundos: segundos(), obrigatorio });
+    console.error(`${nome}: ${erro.message}`);
     return false;
   }
-  const ok = r.status === 0;
-  resultados.push({ nome, ok, segundos: ((Date.now() - inicio) / 1000).toFixed(1), obrigatorio });
+  let ok = status === 0;
+  let rotulo = nome;
+  if (ok && ehTeste) {
+    const pulados = contarPulados(saida);
+    if (pulados > 0) {
+      ok = false;
+      rotulo = `${nome} — REPROVADO: ${pulados} teste(s) PULADO(S) (pulado = não verificado)`;
+    }
+  }
+  resultados.push({ nome: rotulo, ok, segundos: segundos(), obrigatorio });
   return ok;
 }
 
@@ -53,7 +71,7 @@ function preflight() {
   const proibidos = [];
   for (const arquivo of arquivos) {
     const texto = fs.readFileSync(arquivo, 'utf8');
-    if (/\b(?:test|it|describe)\.(?:only|skip)\s*\(/.test(texto)) proibidos.push(path.relative(raiz, arquivo));
+    if (/\b(?:test|it|describe|suite|t|testInfo)\.(?:only|skip|todo|fixme)\s*\(|[{,]\s*(?:skip|todo)\s*:/.test(texto)) proibidos.push(path.relative(raiz, arquivo));
   }
   if (proibidos.length) throw new Error(`Há testes isolados/ignorados: ${proibidos.join(', ')}`);
 
@@ -107,27 +125,38 @@ function imprimirResumo() {
   console.log(`Perfil: ${perfil} | ${etapas.filter(r => r.ok).length}/${etapas.length} etapas aprovadas`);
 }
 
+// A bateria prepara o que precisa em vez de pular testes: instala as dependências do npm
+// (rápido quando já estão em dia) e, nos perfis com navegador, baixa o Chromium de teste.
+async function prepararFerramentas() {
+  await comando('npm', ['install', '--no-audit', '--no-fund'], 'backend', 'Preparar: dependências do backend');
+  await comando('npm', ['install', '--no-audit', '--no-fund'], 'frontend', 'Preparar: dependências do frontend');
+  if (perfil === 'completo' || perfil === 'profundo') {
+    await comando('npm', ['exec', '--', 'playwright', 'install', 'chromium'], 'frontend', 'Preparar: navegador Chromium de teste');
+  }
+}
+
 try {
   preflight();
-  comando('npm', ['test'], 'backend', 'Backend: unidade, contratos e rotas sem token');
-  comando(process.execPath, ['quality/check-backend-load.js'], '.', 'Backend: todos os módulos carregam');
-  comando(process.execPath, ['quality/check-tamanho-relatorios.js'], '.', 'Relatórios: nenhum arquivo passa de 300 linhas');
-  comando('npm', ['test'], 'frontend', 'Frontend: regras e formatadores');
-  comando('npm', ['run', 'build'], 'frontend', 'Build de produção do frontend');
+  await prepararFerramentas();
+  await comando('npm', ['test'], 'backend', 'Backend: unidade, contratos e rotas sem token', true, true);
+  await comando(process.execPath, ['quality/check-backend-load.js'], '.', 'Backend: todos os módulos carregam');
+  await comando(process.execPath, ['quality/check-tamanho-relatorios.js'], '.', 'Relatórios: nenhum arquivo passa de 300 linhas');
+  await comando('npm', ['test'], 'frontend', 'Frontend: regras e formatadores', true, true);
+  await comando('npm', ['run', 'build'], 'frontend', 'Build de produção do frontend');
   auditarDependenciasProducao();
 
   if (perfil === 'completo' || perfil === 'profundo') {
-    comando('npm', ['run', 'test:integration'], 'backend', 'API + MySQL isolado + permissões + transações');
-    comando('npm', ['run', 'test:e2e:critical'], 'frontend', 'Navegador Chromium: fluxos críticos e acessibilidade');
+    await comando('npm', ['run', 'test:integration'], 'backend', 'API + MySQL isolado + permissões + transações', true, true);
+    await comando('npm', ['run', 'test:e2e:critical'], 'frontend', 'Navegador Chromium: fluxos críticos e acessibilidade', true, true);
   }
 
   if (perfil === 'profundo') {
-    comando('npm', ['run', 'test:coverage'], 'backend', 'Cobertura backend');
-    comando('npm', ['run', 'test:coverage'], 'frontend', 'Cobertura frontend');
-    comando('npm', ['run', 'test:e2e'], 'frontend', 'Navegadores e tamanhos de tela');
-    comando('npm', ['run', 'test:mutation'], 'frontend', 'Mutação: qualidade dos próprios testes');
-    comando('npm', ['audit', '--omit=dev', '--audit-level=high'], 'backend', 'Dependências de produção do backend');
-    comando('npm', ['audit', '--omit=dev', '--audit-level=high'], 'frontend', 'Dependências de produção do frontend');
+    await comando('npm', ['run', 'test:coverage'], 'backend', 'Cobertura backend', true, true);
+    await comando('npm', ['run', 'test:coverage'], 'frontend', 'Cobertura frontend', true, true);
+    await comando('npm', ['run', 'test:e2e'], 'frontend', 'Navegadores e tamanhos de tela', true, true);
+    await comando('npm', ['run', 'test:mutation'], 'frontend', 'Mutação: qualidade dos próprios testes');
+    await comando('npm', ['audit', '--omit=dev', '--audit-level=high'], 'backend', 'Dependências de produção do backend');
+    await comando('npm', ['audit', '--omit=dev', '--audit-level=high'], 'frontend', 'Dependências de produção do frontend');
   }
   imprimirResumo();
   if (resultados.some(r => r.obrigatorio && !r.ok)) process.exit(1);

@@ -1,0 +1,29 @@
+SCRIPTS DO PROJETO — O QUE CADA UM FAZ E SE PODE APAGAR
+=======================================================
+Regra: todo script do projeto traz, nas primeiras linhas, o aviso
+"IMPORTANTE — NÃO APAGAR" (ou "TEMPORÁRIO — pode apagar depois de ...").
+Este arquivo é o índice. Se um script não estiver aqui, pergunte antes de apagar.
+
+PARA RODAR NO PC (duplo clique)
+  iniciar_pc_casa.bat / iniciar_pc_escrit.bat   IMPORTANTE  Liga o sistema neste PC.
+  parar_pc_casa.bat / parar_pc_escrit.bat       IMPORTANTE  Desliga o sistema (fecha TODAS as janelas do Prompt de Comando).
+  salvar_RASCUNHO_do_GIT_no_pc.bat              IMPORTANTE  Baixa o rascunho do GitHub para testar.
+  salvar_pc_casa_no_Git.bat / ..._escrit_...    IMPORTANTE  ENVIA para o main (produção). Uso exclusivo do usuário.
+  TESTAR-SISTEMA.bat                            IMPORTANTE  Bateria de testes (rápida; "completo" ou "profundo" como argumento).
+  TESTAR-COMPLETO.bat                           IMPORTANTE  Bateria COMPLETA (uns 11 min). Instala sozinha o que faltar.
+
+PARA RODAR NO HEIDISQL (banco)
+  sql_relatorios_fase1_para_heidi.sql           IMPORTANTE  OBRIGATÓRIO em cada instância: tabelas do módulo Relatórios.
+  sql_relatorios_fase7_para_heidi.sql           IMPORTANTE  OBRIGATÓRIO em cada instância: agendamento/envio por e-mail (depois da Fase 1).
+  sql_relatorios_fase6_para_heidi.sql           OPCIONAL    Só ajusta um comentário de coluna. Guardar até rodar em todas as instâncias.
+  sql_diagnostico_estrutura_para_heidi.sql      IMPORTANTE  Só lê. Mostra o que falta no banco comparado ao estrutura_banco.sql.
+  quality/sql/CRIAR_BANCO_TESTE_HEIDISQL.sql    IMPORTANTE  Cria o banco isolado de testes (necessário para a bateria completa).
+
+REFERÊNCIA
+  estrutura_banco.sql                           IMPORTANTE  Estrutura oficial do banco; os testes leem este arquivo.
+  quality/ (run.mjs e outros)                   IMPORTANTE  Motor da bateria de testes.
+  scripts/ (deploy, dados_iniciais.sql etc.)    IMPORTANTE  Instalação/atualização dos servidores (só no PC, contém senhas de clientes).
+
+HISTÓRICO (anotações antigas, defasadas; não são fonte de verdade — ver CLAUDE.md, seção 6)
+  REVISAO-CODEX-10-09-2026.md, RESUMO-SESSAO-*.txt, RELATORIO-*.txt,
+  PROMPT - cadastrar pessoa fisica-juridica.txt, resumo a ser dito para o outro codex.txt

@@ -1,4 +1,5 @@
 @echo off
+rem IMPORTANTE - NAO APAGAR. Liga o sistema (servidor na porta 3001 e tela na 3000) no PC de CASA.
 title Sistema de Advocacia
 
 echo ============================================

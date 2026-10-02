@@ -1,3 +1,4 @@
+-- IMPORTANTE — NÃO APAGAR. Fonte da verdade da estrutura do banco: os testes e a criação do banco de teste leem este arquivo.
 -- =====================================================================
 -- ESTRUTURA DO BANCO — Sistema de Advocacia (NovoJud)
 -- ---------------------------------------------------------------------

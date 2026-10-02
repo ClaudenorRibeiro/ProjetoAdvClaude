@@ -33,7 +33,7 @@ function sqlSomenteEstruturaTeste() {
 }
 
 async function recriarBancoTeste() {
-  const conn = await mysql.createConnection(configuracao());
+  const conn = await conectarBancoTeste();
   try {
     await conn.query(sqlSomenteEstruturaTeste());
     await semearDadosBase(conn);
@@ -87,8 +87,12 @@ async function semearDadosBase(conn) {
   );
 }
 
+// Toda conexão de teste usa o mesmo fuso do sistema (Brasília); senão CURDATE()/NOW() do teste
+// e do sistema divergiriam num banco que roda em UTC.
 async function conectarBancoTeste() {
-  return mysql.createConnection(configuracao());
+  const conn = await mysql.createConnection(configuracao());
+  await conn.query("SET time_zone = '-03:00'");
+  return conn;
 }
 
 module.exports = { recriarBancoTeste, conectarBancoTeste, sqlSomenteEstruturaTeste };

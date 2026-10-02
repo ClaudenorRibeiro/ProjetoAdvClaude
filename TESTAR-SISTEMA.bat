@@ -1,4 +1,5 @@
 @echo off
+rem IMPORTANTE - NAO APAGAR. Roda a bateria de testes: rapida (sem argumento) ou "completo" / "profundo" como argumento.
 setlocal
 cd /d "%~dp0"
 

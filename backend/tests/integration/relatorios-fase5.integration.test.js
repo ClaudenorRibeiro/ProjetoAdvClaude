@@ -1,15 +1,15 @@
 // Relatórios (Fase 5) — exportar em PDF e Word contra MySQL real.
-// O PDF é lido com pdftotext (poppler) e o Word é aberto por dentro (zip + XML): conferimos o CONTEÚDO, não só o formato.
+// O PDF é lido por dentro com pdfjs-dist (instalado pelo npm, sem programa externo) e o Word é aberto por dentro (zip + XML): conferimos o CONTEÚDO, não só o formato.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const zlib = require('node:zlib');
-const { spawnSync } = require('node:child_process');
 const jwt = require('jsonwebtoken');
 const request = require('supertest');
 const JSZip = require('jszip');
 
 const { carregarAmbienteTeste } = require('../support/testEnvironment');
 const { recriarBancoTeste, conectarBancoTeste } = require('../support/testDatabase');
+const { lerPdf } = require('../support/pdfLeitor');
 
 carregarAmbienteTeste();
 const { criarApp } = require('../../src/app');
@@ -30,9 +30,6 @@ const exportar = (corpo, t = proximo()) => request(app).post('/api/relatorios/ex
 const receita = (extra = {}) => ({ assunto: 'financeiro_parcelas', colunas: ['pasta', 'origem', 'vencimento', 'valor_bruto', 'status'], filtros: { op: 'E', itens: [] }, ordem: [{ campo: 'vencimento', direcao: 'asc' }], ...extra });
 const AGRUPADA = receita({ colunas: ['pasta'], agrupar: [{ campo: 'status' }], metricas: [{ funcao: 'contagem' }, { funcao: 'soma', campo: 'valor_bruto' }] });
 
-const TEM_POPPLER = spawnSync('pdftotext', ['-v']).error === undefined;
-const textoDoPdf = (buf) => spawnSync('pdftotext', ['-layout', '-', '-'], { input: buf, maxBuffer: 20 * 1024 * 1024 }).stdout.toString('utf8');
-const paginasDoPdf = (buf) => Number(/Pages:\s+(\d+)/.exec(spawnSync('pdfinfo', ['-'], { input: buf }).stdout.toString())[1]);
 async function abrirDocx(buf) {
   const zip = await JSZip.loadAsync(buf);
   const xml = await zip.file('word/document.xml').async('string');
@@ -73,15 +70,15 @@ test.before(async () => {
 });
 test.after(async () => pool.end());
 
-test('PDF de lista: abre, tem título, quem gerou, filtros, cabeçalho e os valores em R$ certos', async (t) => {
+test('PDF de lista: abre, tem título, quem gerou, filtros, cabeçalho e os valores em R$ certos', async () => {
   const r = await exportar({ receita: receita(), formato: 'pdf', nome: 'Parcelas do mês' });
   assert.equal(r.status, 200);
   assert.equal(r.headers['content-type'], 'application/pdf');
   assert.equal(r.headers['cache-control'], 'no-store');
   assert.match(decodeURIComponent(/filename\*=UTF-8''([^;]+)/.exec(r.headers['content-disposition'])[1]), /^Parcelas do mês - \d{4}-\d{2}-\d{2}\.pdf$/);
   assert.equal(r.body.subarray(0, 5).toString(), '%PDF-');
-  if (!TEM_POPPLER) return t.skip('poppler (pdftotext) não instalado: só o formato foi conferido');
-  const txt = textoDoPdf(r.body);
+  const pdf = await lerPdf(r.body);
+  const txt = pdf.texto;
   assert.match(txt, /Parcelas do mês/);
   assert.match(txt, /Escritório Automatizado/);
   assert.match(txt, /Gerado por:\s+Usuário \d Ção|Gerado por:\s+Teste|Gerado por:/);
@@ -91,7 +88,7 @@ test('PDF de lista: abre, tem título, quem gerou, filtros, cabeçalho e os valo
   assert.match(txt, /R\$\s*100,00/); assert.match(txt, /R\$\s*100,50/);
   assert.match(txt, /Recebida/); assert.match(txt, /Cancelada/);
   assert.match(txt, /Página 1 de 1/);
-  assert.equal(paginasDoPdf(r.body), 1);
+  assert.equal(pdf.paginas, 1);
 });
 
 test('Word de lista: abre como .docx, tabela com cabeçalho repetível, mesmos valores e rodapé com página', async () => {
@@ -115,7 +112,7 @@ test('mais de 5 colunas vira paisagem (PDF e Word)', async () => {
   const w = await abrirDocx((await exportar({ receita: larga, formato: 'docx' })).body);
   assert.match(w.xml, /w:orient="landscape"/);
   const p = await exportar({ receita: larga, formato: 'pdf' });
-  if (TEM_POPPLER) assert.match(spawnSync('pdfinfo', ['-'], { input: p.body }).stdout.toString(), /Page size:\s+841/);
+  assert.equal((await lerPdf(p.body)).tamanho.largura, 842);   // A4 paisagem
 });
 
 test('agrupado: resumo com subtotais/total geral em R$; "incluir os itens" acrescenta a lista; igual ao Excel', async () => {
@@ -129,7 +126,7 @@ test('agrupado: resumo com subtotais/total geral em R$; "incluir os itens" acres
   const com = await abrirDocx((await exportar({ receita: AGRUPADA, formato: 'docx', incluirDetalhes: true })).body);
   assert.match(com.texto, /Itens listados: 4/); assert.match(com.texto, /\bItens\b/);
   const pdf = await exportar({ receita: AGRUPADA, formato: 'pdf', incluirDetalhes: true });
-  if (TEM_POPPLER) { const t = textoDoPdf(pdf.body); assert.match(t, /TOTAL GERAL\s+4\s+R\$\s*350,50/); assert.match(t, /Itens/); }
+  { const t = (await lerPdf(pdf.body)).texto; assert.match(t, /TOTAL GERAL\s+4\s+R\$\s*350,50/); assert.match(t, /Itens/); }
 });
 
 test('gráfico: a imagem PNG entra no PDF e no Word (e só em relatório agrupado)', async () => {
@@ -173,7 +170,7 @@ test('texto do banco é protegido: marcação, símbolos e caracteres de control
   assert.doesNotMatch(d.xml, /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/);   // sem caracteres proibidos no XML
   const p = await exportar({ receita: col, formato: 'pdf' });
   assert.equal(p.status, 200);
-  if (TEM_POPPLER) assert.match(textoDoPdf(p.body), /Texto <b>com<\/b> marcação & símbolos \? \?\?/);   // fonte do PDF: o que não existe vira "?"
+  assert.match((await lerPdf(p.body)).texto, /Texto <b>com<\/b> marcação & símbolos \? \?\?/);   // fonte do PDF: o que não existe vira "?"
 });
 
 test('logo e cor do escritório: PNG válido entra no cabeçalho; imagem inválida é ignorada sem derrubar o relatório', async () => {

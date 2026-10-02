@@ -1,3 +1,5 @@
+-- IMPORTANTE — NÃO APAGAR. Só LÊ (não altera nada): mostra o que falta no banco em relação ao estrutura_banco.sql.
+-- Usar sempre que o sistema reclamar de tabela/coluna inexistente, e depois de atualizar uma instância.
 -- ============================================================================
 -- DIAGNOSTICO (SOMENTE LEITURA): o que o estrutura_banco.sql tem e este banco NAO tem
 -- Rodar no HeidiSQL com o BANCO DO SISTEMA selecionado. Executar TUDO (F9).

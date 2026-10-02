@@ -21,6 +21,22 @@ const pool = mysql.createPool({
   dateStrings: true,          // Retorna DATE/DATETIME como string (YYYY-MM-DD) em vez de objeto Date JS
 });
 
+// ============================================================
+// HORÁRIO DO BANCO = HORÁRIO DE BRASÍLIA
+// O MySQL calcula CURDATE(), NOW() e os carimbos automáticos (criado_em etc.) no fuso do
+// SERVIDOR onde ele roda — que pode ser UTC (comum em nuvem) e então "hoje" mudaria 3 horas
+// cedo demais (a partir das 21h de Brasília). Para o sistema inteiro concordar com o relógio
+// do escritório, toda conexão do pool fixa o fuso da sessão em -03:00 (o Brasil não tem horário
+// de verão desde 2019). Os comandos de uma conexão rodam em fila, então o ajuste vale
+// antes de qualquer consulta que a use.
+// ============================================================
+const FUSO_BRASILIA = '-03:00';
+pool.on('connection', (conexao) => {
+  conexao.query(`SET time_zone = '${FUSO_BRASILIA}'`, (err) => {
+    if (err) console.error('Não foi possível ajustar o fuso horário da sessão do banco:', err.message);
+  });
+});
+
 // Testa a conexão ao iniciar — lança erro se o banco não estiver acessível
 async function testarConexao() {
   try {
@@ -52,4 +68,4 @@ function sistemaSobrecarregado() {
   return ultimaSobrecargaEm > 0 && (Date.now() - ultimaSobrecargaEm) < JANELA_SOBRECARGA_MS;
 }
 
-module.exports = { pool, testarConexao, sistemaSobrecarregado };
+module.exports = { pool, testarConexao, sistemaSobrecarregado, FUSO_BRASILIA };

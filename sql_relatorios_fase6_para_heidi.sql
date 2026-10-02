@@ -1,3 +1,4 @@
+-- IMPORTANTE — NÃO APAGAR até rodar em todas as instâncias. OPCIONAL: só ajusta o comentário de uma coluna (documentação).
 -- ============================================================================
 -- RELATÓRIOS (tela nova) — FASE 6: acerto do COMENTÁRIO de uma coluna (OPCIONAL, só documentação)
 -- Rodar pelo HeidiSQL, com o BANCO DO SISTEMA selecionado. Executar TUDO (F9).

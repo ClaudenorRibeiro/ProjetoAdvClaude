@@ -1,3 +1,5 @@
+-- IMPORTANTE — NÃO APAGAR. OBRIGATÓRIO: cria as tabelas do módulo Relatórios.
+-- Rodar em CADA instância (local e AWS) antes de usar a tela de Relatórios. Pode rodar de novo sem problema.
 -- ============================================================================
 -- RELATÓRIOS (tela nova) — FASE 1: tabelas e colunas
 -- Rodar pelo HeidiSQL, com o BANCO DO SISTEMA selecionado. Executar TUDO (F9).

@@ -1,4 +1,5 @@
 @echo off
+rem IMPORTANTE - NAO APAGAR. Desliga o sistema no PC de CASA. ATENCAO: fecha TODAS as janelas do Prompt de Comando.
 title Parando Sistema de Advocacia
 
 echo ============================================
