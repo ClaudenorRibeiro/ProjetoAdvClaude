@@ -577,6 +577,8 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
   // Marca que o usuário confirmou "incluir na pasta existente" — evita reverter o
   // número ao fechar o modal de confirmação (o fechamento é compartilhado com o cancelar)
   const pastaConfirmadaRef = useRef(false);
+  // O usuário confirmou "Sim, incluir" numa pasta que já existe? Vale só para o número digitado: zera ao mudar o número.
+  const usarPastaExistenteRef = useRef(false);
 
   // ---- Monta o estado inicial de partes a partir de um processo ----
   function partesDoProcesso(proc) {
@@ -679,6 +681,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
   // Ao sair do campo "Número da Pasta": se a pasta já existir e tiver processo
   // ativo, avisa e pede confirmação antes de anexar mais um processo a ela.
   async function checarPastaEmUso() {
+    usarPastaExistenteRef.current = false;
     const num = parseInt(form.numPasta);
     if (!num || num < 1) return;
     try {
@@ -693,7 +696,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
         mensagem:   `A pasta nº ${formatarNumeroPasta(num)} já existe e possui ${d.totalProcessos} `
           + `processo(s)${d.titulo ? ` (ex.: ${d.titulo})` : ''}. `
           + 'Deseja incluir mais um processo dentro desta mesma pasta?',
-        acao: async () => { pastaConfirmadaRef.current = true; },
+        acao: async () => { pastaConfirmadaRef.current = true; usarPastaExistenteRef.current = true; },
       });
     } catch {
       // Se a checagem falhar, não bloqueia o cadastro — apenas segue sem aviso.
@@ -807,6 +810,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
       const payload = {
         pasta_id:          pastaId || null,
         numPasta:          pastaId ? undefined : parseInt(form.numPasta),
+        pasta_existente_confirmada: !pastaId && usarPastaExistenteRef.current === true,
         numProc:           form.numProc || null,
         protocolo:         form.protocolo?.trim() || null,
         NomeTituloProc:    nomeTitulo,
@@ -857,7 +861,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
                   className="form-control"
                   style={{ maxWidth: '110px' }}
                   value={form.numPasta}
-                  onChange={e => set('numPasta', e.target.value)}
+                  onChange={e => { usarPastaExistenteRef.current = false; set('numPasta', e.target.value); }}
                   onBlur={checarPastaEmUso}
                 />
                 <span style={{ fontSize: '12px', color: '#5b6472' }}>

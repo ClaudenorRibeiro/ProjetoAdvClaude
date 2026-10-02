@@ -547,6 +547,7 @@ async function criarProcesso(req, res) {
     cliente_polo,          // 'autor' ou 'reu' — qual polo é o cliente do escritório
     responsavel_id,
     oabs = [],             // OABs vinculadas ao processo: [{ tipo: 'usuario'|'freela', id }]
+    pasta_existente_confirmada = false,   // true só quando o usuário confirmou, na tela, incluir mais um processo numa pasta que já existe
   } = req.body;
 
   if (!NomeTituloProc) return erro(res, 'Título do processo é obrigatório');
@@ -576,15 +577,34 @@ async function criarProcesso(req, res) {
         'SELECT id FROM tblpasta WHERE numPasta = ? FOR UPDATE',
         [num]
       );
+      // Pasta que já tem processo ativo só recebe outro (carta precatória, recurso...) se o usuário CONFIRMOU isso na
+      // tela. Sem a confirmação, quem chegou depois de outra pessoa não pode cair na pasta dela em silêncio:
+      // recebe o aviso e escolhe outro número. Pasta vazia (sem processo ativo) continua livre para qualquer um.
+      const pastaEmUso = () => {
+        const mensagem = `A pasta nº ${String(num).padStart(4, '0')} já está em uso. Escolha outro número de pasta.`;
+        return res.status(409).json({ ok: false, mensagem });
+      };
       if (existente.length) {
-        // Pasta já existe com este número (carta precatória, recurso, etc.)
         pastaId = existente[0].id;
+        if (pasta_existente_confirmada !== true) {
+          const [[{ total }]] = await conn.execute(
+            'SELECT COUNT(*) AS total FROM tblproc WHERE pasta_id = ? AND ativo = 1', [pastaId]
+          );
+          if (total > 0) { await conn.rollback(); return pastaEmUso(); }
+        }
       } else {
-        const [pastaResult] = await conn.execute(
-          'INSERT INTO tblpasta (numPasta, criado_por) VALUES (?, ?)',
-          [num, req.usuario.id]
-        );
-        pastaId = pastaResult.insertId;
+        // Duas pessoas criando o mesmo número ao mesmo tempo: o banco (UNIQUE em numPasta) deixa só uma vencer;
+        // quem perdeu recebe o mesmo aviso de "pasta em uso", não um erro interno.
+        try {
+          const [pastaResult] = await conn.execute(
+            'INSERT INTO tblpasta (numPasta, criado_por) VALUES (?, ?)',
+            [num, req.usuario.id]
+          );
+          pastaId = pastaResult.insertId;
+        } catch (e) {
+          if (e && (e.code === 'ER_DUP_ENTRY' || e.code === 'ER_LOCK_DEADLOCK')) { await conn.rollback(); return pastaEmUso(); }
+          throw e;
+        }
       }
     }
 

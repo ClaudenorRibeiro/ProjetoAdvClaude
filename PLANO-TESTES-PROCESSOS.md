@@ -26,7 +26,7 @@ BEGIN/COMMIT/ROLLBACK; nenhum registro órfão ao excluir; nomes de tabela em mi
 ### Fase A — Servidor (as 31 rotas de `/processos`)
 - [x] **A1 (concluído em 02/10/2026)** Processos: criar, editar, excluir (sem deixar órfãos: OABs, partes, vínculos), histórico, buscas
       (`/buscar`, `/:id/basico`, `/sugerir-pasta`, `/pastas/checar`, `/auxiliares`), validações e entradas inválidas.
-- [ ] **A2 (EM ANDAMENTO — teste escrito, 5 achados aguardando decisão do usuário; ver "Achados do A2")** Pastas: listar (busca, etiquetas, assuntos, paginação), buscar uma pasta, renumerar (conflitos, histórico).
+- [x] **A2 (concluído em 02/10/2026)** Pastas: listar (busca, etiquetas, assuntos, paginação), buscar uma pasta, renumerar (conflitos, histórico).
 - [ ] **A3** Auxiliares: fóruns, varas, tipos, status, instâncias e assuntos — criar, editar, excluir, com os bloqueios de uso.
 - [ ] **A4** Permissões: 401 sem login e 403 sem permissão em TODAS as rotas de Processos; áreas restritas.
 
@@ -75,28 +75,27 @@ Teste: `backend/tests/integration/processos-crud.integration.test.js` (16/16). S
 5. (informativo, sem correção) `log_documentos_gerados` guarda `ancora_tipo/ancora_id` sem chave declarada; excluir um
    processo deixa essas linhas de histórico apontando para um id que sumiu (é log, não é cadastro).
 
-## Achados do A2 (teste `backend/tests/integration/processos-pastas.integration.test.js`: 16 passam, 1 falha DE PROPÓSITO)
+## Achados do A2 (teste `backend/tests/integration/processos-pastas.integration.test.js`: 18/18 — TODOS CORRIGIDOS)
 
-Decisões do usuário (02/10/2026): itens 1 a 4 — seguir a recomendação (JÁ CORRIGIDOS); item 5 — regra dele (abaixo), AINDA NÃO implementada.
+Decisões do usuário (02/10/2026): itens 1 a 4 — seguir a recomendação; item 5 — regra dele (abaixo). Todos corrigidos.
 
 1. [corrigido] Listagem com página/limite inválidos dava 500 → `paginacao()` em `backend/src/utils/helpers.js` (inválido vira padrão: página 1, 20 por página; teto de limite 100 e de página).
 2. [corrigido] Busca de pastas tratava `%`/`_` como curinga → `escaparLike` na `listarPastas`.
 3. [corrigido] Renumerar aceitava "12abc", "1e3", "0x10", 12.7 → `numeroPastaValido()` (só inteiro positivo de até 9 dígitos; espaços nas pontas ok).
    Aplicado também ao número da pasta em `criarProcesso` (mesmo defeito).
 4. [corrigido] Duas renumerações simultâneas para o mesmo número: a segunda agora recebe "O número já pertence a outra pasta" (400), não 500.
-5. [PENDENTE — regra do usuário] Dois usuários pegam o mesmo número de pasta ao mesmo tempo (pasta vazia ou ainda inexistente): **só um fica com
-   a pasta; o outro recebe mensagem de que a pasta já está em uso e para escolher outro número.** Hoje o perdedor recebe 500 (corrida) ou,
-   se chegar depois, o servidor reaproveita a pasta em silêncio. Cuidado de projeto: o sistema PERMITE de propósito vários processos na mesma
-   pasta (carta precatória, recurso), com aviso na tela ("Pasta já em uso... Sim, incluir" em `Processos.js`, `checarPastaEmUso`/
-   `pastaConfirmadaRef`). Proposta (aguarda o OK do usuário): a tela passa a mandar `pasta_existente_confirmada: true` só quando o usuário
-   clica "Sim, incluir"; o servidor recusa (409) quando a pasta já tem processo ativo e essa confirmação não veio; pasta vazia continua reaproveitável.
-   Isso altera `criarProcesso` (servidor) e `Processos.js` (1 linha + zerar a confirmação ao digitar outro número); testes de A1/A2 que
-   reaproveitam pasta por número passam a mandar a confirmação.
+5. [corrigido, regra do usuário] Dois usuários pegam o mesmo número de pasta ao mesmo tempo (ou um chega depois com a tela desatualizada):
+   só um fica com a pasta; o outro recebe 409 "A pasta nº X já está em uso. Escolha outro número de pasta." O sistema continua PERMITINDO vários
+   processos na mesma pasta (carta precatória, recurso) quando o usuário confirma "Sim, incluir": a tela (`Processos.js`, marca
+   `usarPastaExistenteRef`, zerada ao mudar o número) manda `pasta_existente_confirmada: true`; `criarProcesso` só aceita pasta com processo
+   ativo com essa confirmação (booleano `true`); pasta vazia continua livre para qualquer um; `pasta_id` explícito não muda. Corrida de INSERT
+   (ER_DUP_ENTRY/ER_LOCK_DEADLOCK) também vira o mesmo 409. A tela "Novo processo" é o único chamador do POST /processos.
+   **No B2 (tela Novo processo): cobrir no navegador o aviso "Pasta já em uso → Sim, incluir" e a mensagem de pasta em uso.**
 6. (informativo, sem correção) Busca por poucos dígitos (ex.: "30") também casa CPF/CNPJ/telefone das partes que contenham esses dígitos.
 7. (a decidir) O mesmo `LIKE` sem proteção de curingas e a mesma paginação sem validação provavelmente existem em OUTROS módulos
    (Pessoas, Prazos, Tarefas...); fazer varredura no servidor inteiro como passo separado, se o usuário quiser.
 
 ## Estado atual
 
-Plano criado em 02/10/2026. **Passo atual: A2 — itens 1 a 4 corrigidos; falta o item 5 (aguardando o OK do usuário para a proposta acima).** Antes de continuar, reler este arquivo e conferir o `git log` do
+Plano criado em 02/10/2026. **Próximo passo: A3.** (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
 `rascunho` para saber o que já foi feito (marque `[x]` acima ao concluir cada passo).

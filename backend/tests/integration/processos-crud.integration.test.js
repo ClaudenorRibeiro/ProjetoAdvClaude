@@ -203,7 +203,9 @@ test('criar: número de processo e protocolo não podem repetir; vazio repete à
   await criar({ numProc: '9000001-00.2026.5.15.0001' });
   // mesma pasta (carta precatória, recurso): reaproveita pelo número e também pelo id
   const base = await criar({ numPasta: 6100 });
-  const mesmaPorNumero = await criar({ numPasta: 6100 });
+  const semConfirmar = await api().post('/api/processos').send(corpo({ numPasta: 6100 }));    // pasta com processo ativo: exige confirmação
+  assert.equal(semConfirmar.status, 409); assert.match(msg(semConfirmar), /pasta nº 6100 já está em uso\. Escolha outro número/);
+  const mesmaPorNumero = await criar({ numPasta: 6100, pasta_existente_confirmada: true });
   assert.equal(mesmaPorNumero.pastaId, base.pastaId);
   const mesmaPorId = await criar({ numPasta: undefined, pasta_id: base.pastaId });
   assert.equal(mesmaPorId.pastaId, base.pastaId);

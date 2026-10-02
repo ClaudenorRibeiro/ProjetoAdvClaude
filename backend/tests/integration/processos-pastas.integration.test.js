@@ -71,7 +71,8 @@ test.before(async () => {
   // Pasta 20: dois processos (tipos diferentes, mesmo status).
   P.b = await novoProc(20, { NomeTituloProc: 'BETA CAUSA CIVEL', numProc: '2222222-22.2026.5.15.0022', tipo_id: F.tipo2, status_id: F.status2,
     autores: [{ tipo_pessoa: 'juridica', pessoa_id: F.autorPJ }], reus: [{ tipo_pessoa: 'fisica', pessoa_id: F.reuPF }], assuntos: [F.assunto2], cliente_polo: 'reu' });
-  P.c = await novoProc(20, { NomeTituloProc: 'BETA RECURSO', numProc: '2222223-22.2026.5.15.0023', protocolo: 'PROT-BETA', tipo_id: 1, status_id: F.status2 });
+  P.c = await novoProc(20, { NomeTituloProc: 'BETA RECURSO', numProc: '2222223-22.2026.5.15.0023', protocolo: 'PROT-BETA', tipo_id: 1, status_id: F.status2,
+    pasta_existente_confirmada: true });   // segundo processo na mesma pasta: o usuário confirmou
   // Pasta 30: só processo INATIVO (a pasta não aparece).
   P.d = await novoProc(30, { NomeTituloProc: 'GAMA INATIVA', numProc: '3333333-33.2026.5.15.0033' });
   await sql('UPDATE tblproc SET ativo = 0 WHERE id = ?', [P.d.id]);
@@ -322,4 +323,28 @@ test('criar: dois usuários pegam o MESMO número de pasta ao mesmo tempo — s�
   assert.match(msg(perdeu), /pasta.*já está em uso.*Escolha outro número/i);
   assert.equal(await total('SELECT COUNT(*) AS n FROM tblpasta WHERE numPasta = 95'), 1);
   assert.equal(await total('SELECT COUNT(*) AS n FROM tblproc WHERE pasta_id = (SELECT id FROM tblpasta WHERE numPasta = 95)'), 1);   // só o vencedor gravou
+});
+
+test('criar: pasta que já tem processo ativo exige a confirmação do usuário; com ela entra na mesma pasta; pasta vazia dispensa', async () => {
+  const dados = (n, extra = {}) => ({ numPasta: 96, NomeTituloProc: `PASTA EM USO ${n}`, tipo_id: 1, status_id: 1, cliente_polo: 'autor',
+    autores: [{ tipo_pessoa: 'fisica', pessoa_id: F.autorPF }], reus: [{ tipo_pessoa: 'juridica', pessoa_id: F.reuPJ }], ...extra });
+  const primeiro = await api().post('/api/processos').send(dados(1));
+  assert.equal(primeiro.status, 201);
+  const semConfirmar = await api().post('/api/processos').send(dados(2));
+  assert.equal(semConfirmar.status, 409);
+  assert.match(msg(semConfirmar), /A pasta nº 0096 já está em uso\. Escolha outro número de pasta\./);
+  for (const falso of ['true', 1, 'sim', null]) {                                             // só o booleano true vale
+    assert.equal((await api().post('/api/processos').send(dados(2, { pasta_existente_confirmada: falso }))).status, 409, JSON.stringify(falso));
+  }
+  assert.equal(await total('SELECT COUNT(*) AS n FROM tblproc WHERE pasta_id = ?', [primeiro.body.dados.pasta_id]), 1);   // nada gravado nas recusas
+  const confirmado = await api().post('/api/processos').send(dados(3, { pasta_existente_confirmada: true }));
+  assert.equal(confirmado.status, 201);
+  assert.equal(confirmado.body.dados.pasta_id, primeiro.body.dados.pasta_id);
+  assert.equal(await total('SELECT COUNT(*) AS n FROM tblproc WHERE pasta_id = ?', [primeiro.body.dados.pasta_id]), 2);
+  // a confirmação não atrapalha pasta nova nem pasta vazia
+  assert.equal((await api().post('/api/processos').send(dados(4, { numPasta: 97, pasta_existente_confirmada: true }))).status, 201);
+  await sql('UPDATE tblproc SET ativo = 0 WHERE pasta_id = ?', [primeiro.body.dados.pasta_id]);                              // pasta ficou vazia
+  assert.equal((await api().post('/api/processos').send(dados(5))).status, 201);                                             // vazia: qualquer um pega, sem confirmar
+  // pasta escolhida pelo id (criar dentro de uma pasta aberta na tela) continua funcionando sem confirmação
+  assert.equal((await api().post('/api/processos').send(dados(6, { numPasta: undefined, pasta_id: primeiro.body.dados.pasta_id }))).status, 201);
 });
