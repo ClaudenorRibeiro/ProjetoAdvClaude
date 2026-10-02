@@ -99,6 +99,25 @@ function escaparLike(s) {
   return String(s).replace(/[\\%_]/g, c => `\\${c}`);
 }
 
+// Paginação segura de uma listagem: valor ausente, texto, zero ou negativo vira o padrão (nunca erro de SQL);
+// o limite nunca passa de `limiteMax` e a página tem teto para o deslocamento caber no banco.
+function paginacao(query = {}, { limitePadrao = 20, limiteMax = 100 } = {}) {
+  const lim = parseInt(query.limite, 10);
+  const pag = parseInt(query.pagina, 10);
+  const limite = lim >= 1 ? Math.min(lim, limiteMax) : limitePadrao;
+  const pagina = pag >= 1 ? Math.min(pag, 1000000) : 1;
+  return { limite, pagina, offset: (pagina - 1) * limite };
+}
+
+// Número de pasta digitado/enviado: só inteiro positivo de até 9 dígitos ("12abc", "1e3", "0x10" e 12.7 NÃO valem;
+// espaços nas pontas são ignorados). Devolve o número ou null.
+function numeroPastaValido(valor) {
+  const texto = typeof valor === 'number' ? (Number.isInteger(valor) ? String(valor) : '') : String(valor ?? '').trim();
+  if (!/^\d{1,9}$/.test(texto)) return null;
+  const n = Number(texto);
+  return n >= 1 ? n : null;
+}
+
 // Mesma regra, para dentro do SQL: pasta com no mínimo 4 dígitos (0042). LPAD sozinho CORTA números
 // maiores (99001 viraria 9900 e a busca pelo número inteiro não acharia), por isso só completa com
 // zeros quando o número tem menos de 4 dígitos. `alias` é o apelido da tabela tblpasta na consulta.
@@ -135,5 +154,7 @@ module.exports = {
   formatarNumeroPasta,
   pastaFormatadaSql,
   escaparLike,
+  paginacao,
+  numeroPastaValido,
   parseMoeda,
 };

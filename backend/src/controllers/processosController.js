@@ -7,7 +7,7 @@
 const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
-const { parseMoeda, pastaFormatadaSql, escaparLike } = require('../utils/helpers');
+const { parseMoeda, pastaFormatadaSql, escaparLike, paginacao, numeroPastaValido } = require('../utils/helpers');
 
 // Confere que TODA parte (autor/réu/perito) enviada aponta para uma pessoa que
 // existe e está ativa. tbltituloproc* e processo_perito são polimórficos SEM
@@ -106,9 +106,8 @@ async function sugerirNumeroPasta(req, res) {
 // GET /api/processos/pastas — Lista pastas com resumo do processo mais recente
 async function listarPastas(req, res) {
   try {
-    const { busca, pagina = 1, limite = 20, etiqueta, etiquetaEscritorio, assuntos } = req.query;
-    const limitInt  = Math.min(parseInt(limite) || 20, 100);
-    const offsetInt = (parseInt(pagina) - 1) * limitInt;
+    const { busca, etiqueta, etiquetaEscritorio, assuntos } = req.query;
+    const { limite: limitInt, offset: offsetInt } = paginacao(req.query);
     const params = [];
     let where = 'WHERE 1=1';
 
@@ -118,7 +117,7 @@ async function listarPastas(req, res) {
     if (busca) {
       // Versão somente dígitos para comparar CPF, CNPJ e telefone armazenados sem formatação
       const buscaDigitos = busca.replace(/\D/g, '');
-      const bL = `%${busca}%`;
+      const bL = `%${escaparLike(busca)}%`;
       const bD = buscaDigitos.length >= 3 ? `%${buscaDigitos}%` : bL;
       // Busca por VALOR em dinheiro (ex.: "1.000,00") — só reconhece quando há vírgula no
       // texto, pra não confundir com número de pasta/CNJ. Casamento EXATO (a decimal(15,2)
@@ -319,8 +318,8 @@ async function listarPastas(req, res) {
 // (o banco já tem UNIQUE em numPasta — duas pastas jamais dividem um número).
 async function renumerarPasta(req, res) {
   const { id } = req.params;
-  const num = parseInt(req.body.numPasta);
-  if (!num || num < 1) return erro(res, 'Número de pasta inválido');
+  const num = numeroPastaValido(req.body.numPasta);
+  if (!num) return erro(res, 'Número de pasta inválido');
 
   const conn = await pool.getConnection();
   try {
@@ -330,18 +329,22 @@ async function renumerarPasta(req, res) {
     if (!pasta.length) { await conn.rollback(); return naoEncontrado(res, 'Pasta não encontrada'); }
     if (pasta[0].numPasta === num) { await conn.rollback(); return erro(res, 'A pasta já possui este número'); }
 
+    const jaPertence = () => erro(res,
+      `O número ${String(num).padStart(4,'0')} já pertence a outra pasta. ` +
+      `Escolha um número que não esteja em uso.`
+    );
     // O número precisa estar livre — tanto faz se a outra pasta tem processos ou não.
     const [existente] = await conn.execute('SELECT id FROM tblpasta WHERE numPasta = ? AND id != ?', [num, id]);
-    if (existente.length) {
-      await conn.rollback();
-      return erro(res,
-        `O número ${String(num).padStart(4,'0')} já pertence a outra pasta. ` +
-        `Escolha um número que não esteja em uso.`
-      );
-    }
+    if (existente.length) { await conn.rollback(); return jaPertence(); }
 
-    // Renumera a pasta
-    await conn.execute('UPDATE tblpasta SET numPasta = ? WHERE id = ?', [num, id]);
+    // Renumera a pasta. Se outra pessoa pegou o MESMO número no mesmo instante, o banco (UNIQUE em numPasta)
+    // deixa só uma vencer: quem perdeu recebe o mesmo aviso de "número em uso", não um erro interno.
+    try {
+      await conn.execute('UPDATE tblpasta SET numPasta = ? WHERE id = ?', [num, id]);
+    } catch (e) {
+      if (e && (e.code === 'ER_DUP_ENTRY' || e.code === 'ER_LOCK_DEADLOCK')) { await conn.rollback(); return jaPertence(); }
+      throw e;
+    }
 
     // Auditoria na MESMA transação (tudo ou nada): antes do commit, com conn
     await auditoria.registrar(req.usuario.id, 'tblpasta', 'renumerar', id, null, null, conn);
@@ -563,8 +566,8 @@ async function criarProcesso(req, res) {
 
     // Se não tem pasta_id, cria ou reutiliza pasta pelo numPasta
     if (!pastaId) {
-      const num = parseInt(numPasta);
-      if (!num || num < 1) {
+      const num = numeroPastaValido(numPasta);
+      if (!num) {
         await conn.rollback();
         return erro(res, 'Número da pasta deve ser um inteiro positivo');
       }

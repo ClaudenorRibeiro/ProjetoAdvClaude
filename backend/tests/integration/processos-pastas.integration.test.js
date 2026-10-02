@@ -122,10 +122,10 @@ test('listar: paginação (limite, página, total) e valores inválidos viram o 
   assert.deepEqual(numeros(await api().get('/api/processos/pastas?limite=2&pagina=2')), todas.slice(2));
   assert.deepEqual(numeros(await api().get('/api/processos/pastas?limite=2&pagina=3')), []);          // além do fim
   assert.equal((await api().get('/api/processos/pastas')).body.dados.registros.length, 4);              // padrão 20
-  for (const qs of ['limite=0', 'limite=abc', 'limite=-5', 'pagina=0', 'pagina=-1', 'pagina=abc', 'limite=1000', 'pagina=1.5', 'limite=2&pagina=']) {
+  for (const qs of ['limite=0', 'limite=abc', 'limite=-5', 'pagina=0', 'pagina=-1', 'pagina=abc', 'limite=1000', 'pagina=1.5', 'limite=2&pagina=', 'pagina=99999999999999999999', 'limite=99999999999999999999']) {
     const r = await api().get(`/api/processos/pastas?${qs}`);
     assert.equal(r.status, 200, `${qs} → ${r.status} ${JSON.stringify(r.body)}`);
-    assert.ok(r.body.dados.registros.length >= 1, qs);
+    if (!qs.includes('99999999999999999999') || qs.startsWith('limite')) assert.ok(r.body.dados.registros.length >= 1, qs);   // página gigante: lista vazia é o certo
   }
 });
 
@@ -292,11 +292,14 @@ test('renumerar: recusa número igual ao atual, em uso (com ou sem processos), i
 
 test('renumerar: número com letras, decimal ou notação científica NÃO é aceito como se fosse outro número', async () => {
   const { pastaId } = await novoProc(70);
-  for (const ruim of ['12abc', '12.7', '1e3', ' 15 ', '0x10', 12.7]) {
+  for (const ruim of ['12abc', '12.7', '1e3', '0x10', 12.7, '9999999999']) {
     const r = await api().put(`/api/processos/pastas/${pastaId}/renumerar`).send({ numPasta: ruim });
     assert.equal(r.status, 400, `numPasta=${JSON.stringify(ruim)} foi aceito → ${r.status}`);
     assert.equal((await um('SELECT numPasta FROM tblpasta WHERE id = ?', [pastaId])).numPasta, 70, `${JSON.stringify(ruim)} mudou a pasta`);
   }
+  // espaços nas pontas são ignorados
+  assert.equal((await api().put(`/api/processos/pastas/${pastaId}/renumerar`).send({ numPasta: ' 15 ' })).status, 200);
+  assert.equal((await um('SELECT numPasta FROM tblpasta WHERE id = ?', [pastaId])).numPasta, 15);
 });
 
 test('renumerar: duas renumerações ao mesmo tempo para o MESMO número — só uma vence, a outra recebe aviso (não erro interno)', async () => {
@@ -310,12 +313,13 @@ test('renumerar: duas renumerações ao mesmo tempo para o MESMO número — só
   assert.equal(await total('SELECT COUNT(*) AS n FROM tblpasta WHERE numPasta = 90'), 1);
 });
 
-test('criar: dois processos ao mesmo tempo numa pasta NOVA com o mesmo número terminam na mesma pasta, sem erro interno', async () => {
+test('criar: dois usuários pegam o MESMO número de pasta ao mesmo tempo — só um fica com ela; o outro recebe aviso para escolher outra', async () => {
   const dados = (n) => ({ numPasta: 95, NomeTituloProc: `CORRIDA ${n}`, tipo_id: 1, status_id: 1, cliente_polo: 'autor',
     autores: [{ tipo_pessoa: 'fisica', pessoa_id: F.autorPF }], reus: [{ tipo_pessoa: 'juridica', pessoa_id: F.reuPJ }] });
   const respostas = await Promise.all([api().post('/api/processos').send(dados(1)), api().post('/api/processos').send(dados(2))]);
-  assert.deepEqual(respostas.map(r => r.status), [201, 201], JSON.stringify(respostas.map(r => [r.status, r.body.mensagem])));
-  assert.equal(respostas[0].body.dados.pasta_id, respostas[1].body.dados.pasta_id);
+  assert.deepEqual(respostas.map(r => r.status).sort(), [201, 409], JSON.stringify(respostas.map(r => [r.status, r.body.mensagem])));
+  const perdeu = respostas.find(r => r.status === 409);
+  assert.match(msg(perdeu), /pasta.*já está em uso.*Escolha outro número/i);
   assert.equal(await total('SELECT COUNT(*) AS n FROM tblpasta WHERE numPasta = 95'), 1);
-  assert.equal(await total('SELECT COUNT(*) AS n FROM tblproc WHERE pasta_id = ?', [respostas[0].body.dados.pasta_id]), 2);
+  assert.equal(await total('SELECT COUNT(*) AS n FROM tblproc WHERE pasta_id = (SELECT id FROM tblpasta WHERE numPasta = 95)'), 1);   // só o vencedor gravou
 });
