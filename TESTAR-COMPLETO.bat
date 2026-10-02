@@ -38,7 +38,20 @@ if %ERRORLEVEL% EQU 0 (
   )
 )
 
-rem --- 3) roda a bateria completa
+rem --- 3) navegador de teste (so baixa se faltar; se ja tem, termina em segundos)
+echo Conferindo o navegador de teste ^(Chromium^)...
+pushd frontend
+call npx playwright install chromium
+set CODNAV=%ERRORLEVEL%
+popd
+if not %CODNAV% EQU 0 (
+  echo.
+  echo ERRO: nao consegui instalar o navegador de teste. Confira a internet e rode de novo.
+  goto :fim
+)
+echo.
+
+rem --- 4) roda a bateria completa
 node quality\run.mjs --completo
 set CODIGO=%ERRORLEVEL%
 
