@@ -24,6 +24,23 @@ const linhaDoAcordo = (page, descricao) => page.locator('div').filter({ hasText:
   .filter({ has: page.getByRole('button', { name: 'Cancelar', exact: true }) }).last();
 const parcelaPendente = (page) => page.locator('tbody tr').filter({ hasText: 'Pendente' });
 
+
+// Escolhe a pasta e o processo (a tela "Por processo" pode voltar vazia depois de trocar de aba).
+async function abrirProcesso(page) {
+  if (!(await page.getByLabel('Processo', { exact: true }).count())) {
+    await page.getByPlaceholder('Buscar pasta pelo título ou número...').pressSequentially('PROCESSO', { delay: 50 });
+    await page.locator('div[style*="cursor: pointer"]').first().dispatchEvent('mousedown');
+  }
+  await page.getByLabel('Processo', { exact: true }).selectOption({ index: 1 });
+  await aguardarTelaPronta(page);
+}
+const abrirParcelas = async (page) => {
+  // sempre as parcelas do "Acordo E2E" (a lista mostra o "Segundo E2E" primeiro)
+  const fechado = linhaDoAcordo(page, 'Acordo E2E').getByRole('button', { name: /▶ Parcelas/ });
+  if (await fechado.count()) await fechado.click();
+  await expect(parcelaPendente(page).or(page.locator('tbody tr').filter({ hasText: 'Recebida' })).first()).toBeVisible();
+};
+
 test.beforeEach(async ({ page }) => { await bloquearRedeExterna(page); });
 
 test('@critical Financeiro: abas, janelas, validações, recebimento, multa, repasse e consulta', async ({ page, request }) => {
@@ -48,10 +65,7 @@ test('@critical Financeiro: abas, janelas, validações, recebimento, multa, rep
   await page.getByRole('button', { name: 'Por processo' }).click();
 
   console.log('PASSO: Escolher pasta e processo');
-  await page.getByPlaceholder('Buscar pasta pelo título ou número...').pressSequentially('PROCESSO', { delay: 50 });
-  await page.locator('div[style*="cursor: pointer"]').first().dispatchEvent('mousedown');
-  await page.getByLabel('Processo', { exact: true }).selectOption({ index: 1 });
-  await aguardarTelaPronta(page);
+  await abrirProcesso(page);
   await expect(page.getByText('Acordos e Alvarás')).toBeVisible();
   await expect(page.getByText('Nenhum lançamento neste processo')).toBeVisible();
   await semViolacoes(page, 'Financeiro — processo com acordos');
@@ -230,5 +244,136 @@ test('@critical Financeiro: abas, janelas, validações, recebimento, multa, rep
   const baixa = page.waitForEvent('download');
   await page.getByRole('button', { name: /Exportar Excel/ }).click();
   expect((await baixa).suggestedFilename()).toMatch(/\.xlsx$/);
+  console.log('PASSO: Receber a parcela 2 em espécie (gera mais repasses pendentes)');
+  await page.getByRole('button', { name: 'Por processo' }).click(); await aguardarTelaPronta(page);
+  await abrirProcesso(page);
+  await abrirParcelas(page);
+  await abrirMenuAcoes(page, parcelaPendente(page).first());
+  await page.getByRole('button', { name: /Receber/ }).click();
+  await modal(page).getByLabel('Conta ou caixa de recebimento').selectOption({ label: 'Caixa E2E' });
+  await modal(page).getByLabel('Forma de recebimento').selectOption({ label: 'Dinheiro E2E' });
+  await modal(page).getByLabel('Data do recebimento').fill('2026-02-22');
+  await modal(page).getByRole('button', { name: 'Confirmar recebimento' }).click();
+  await aviso(page, 'Recebimento registrado');
+  await aguardarTelaPronta(page);
+
+  console.log('PASSO: Repasse ao parceiro em espécie (em mãos)');
+  await page.getByRole('button', { name: 'Repasses pendentes' }).click(); await aguardarTelaPronta(page);
+  const pend = (quem, parc) => page.locator('tbody tr').filter({ hasText: parc }).filter(quem === 'parceiro' ? { hasText: 'Parceiro:' } : { hasText: 'Cliente', hasNotText: 'Parceiro' }).first();
+  await abrirMenuAcoes(page, pend('parceiro', 'parc 1/2'));
+  await page.getByRole('button', { name: /Repassar/ }).click();
+  let rep2 = modal(page);
+  await expect(rep2.getByRole('heading', { name: /Repassar ao parceiro/ })).toBeVisible();
+  await rep2.getByLabel('Destino do repasse').selectOption({ label: 'Dinheiro em espécie — em mãos' });
+  await expect(rep2.getByText('O valor será entregue pessoalmente ao beneficiário')).toBeVisible();
+  await expect(rep2.getByLabel('Conta do beneficiário')).toHaveCount(0);                       // sem conta de destino
+  await expect(rep2.getByLabel('Forma do repasse').locator('option', { hasText: 'Dinheiro E2E' })).toHaveCount(1);
+  await expect(rep2.getByLabel('Forma do repasse').locator('option', { hasText: 'Pix E2E' })).toHaveCount(0);   // Pix não vale para espécie
+  await semViolacoes(page, 'janela Repassar em espécie');
+  await rep2.getByLabel('Conta ou caixa de saída').selectOption({ label: 'Caixa E2E' });
+  await rep2.getByLabel('Forma do repasse').selectOption({ label: 'Dinheiro E2E' });
+  await rep2.getByRole('button', { name: 'Confirmar repasse' }).click();
+  await aguardarTelaPronta(page);
+  expect((await noBanco("SELECT COUNT(*) AS n FROM acordo_parcela WHERE repasse_parceiro_em IS NOT NULL"))[0].n).toBe(1);
+
+  console.log('PASSO: Repasse ao cliente em espécie');
+  await abrirMenuAcoes(page, pend('cliente', 'parc 2/2'));
+  await page.getByRole('button', { name: /Repassar/ }).click();
+  rep2 = modal(page);
+  await rep2.getByLabel('Destino do repasse').selectOption({ label: 'Dinheiro em espécie — em mãos' });
+  await rep2.getByLabel('Conta ou caixa de saída').selectOption({ label: 'Caixa E2E' });
+  await rep2.getByLabel('Forma do repasse').selectOption({ label: 'Dinheiro E2E' });
+  await rep2.getByRole('button', { name: 'Confirmar repasse' }).click();
+  await aguardarTelaPronta(page);
+  expect((await noBanco("SELECT COUNT(*) AS n FROM acordo_parcela WHERE repasse_cliente_em IS NOT NULL"))[0].n).toBe(2);
+
+  console.log('PASSO: Repasse ao parceiro por conta bancária + Nova conta do beneficiário');
+  await abrirMenuAcoes(page, pend('parceiro', 'parc 2/2'));
+  await page.getByRole('button', { name: /Repassar/ }).click();
+  rep2 = modal(page);
+  await expect(rep2.getByLabel('Conta do beneficiário').locator('option')).toHaveCount(2);      // "Selecione" + a conta Pix do parceiro
+  await rep2.getByRole('button', { name: '+ Cadastrar conta do beneficiário' }).click();
+  const nova = modal(page);
+  await expect(nova.getByRole('heading', { name: /Nova conta de/ })).toBeVisible();
+  await semViolacoes(page, 'janela Nova conta do beneficiário');
+  await nova.getByRole('button', { name: /^Cadastrar/ }).click();
+  await aviso(page, 'Escolha a instituição financeira.');                                        // exige a instituição
+  await nova.getByLabel('Instituição financeira').selectOption({ label: 'Banco E2E' });
+  await nova.getByRole('checkbox', { name: /Conta de outra pessoa/ }).check();
+  await expect(nova.getByLabel('Titular')).toBeVisible();
+  await semViolacoes(page, 'Nova conta do beneficiário — conta de terceiro');
+  await nova.getByRole('button', { name: /^Cadastrar/ }).click();
+  await aviso(page, 'Informe o titular e o CPF/CNPJ da conta de terceiro.');
+  await nova.getByRole('checkbox', { name: /Conta de outra pessoa/ }).uncheck();
+  await nova.getByLabel('Agência').fill('0002');
+  await nova.getByLabel('Conta', { exact: true }).fill('99887');
+  await nova.getByLabel('Dígito').fill('123');                                                    // 3 caracteres: o sistema pede confirmação
+  await nova.getByRole('button', { name: /^Cadastrar/ }).click();
+  await expect(page.getByText('Confirmar dígito da conta')).toBeVisible();
+  await semViolacoes(page, 'aviso do dígito da conta');
+  await page.getByRole('button', { name: 'Cadastrar mesmo assim' }).click();
+  await aviso(page, 'Conta cadastrada e selecionada para este repasse.');
+  rep2 = modal(page);
+  await expect(rep2.getByLabel('Conta do beneficiário').locator('option')).toHaveCount(3);      // agora com a conta nova
+  await expect(rep2.getByLabel('Conta do beneficiário').locator('option:checked')).toContainText('99887');
+  await rep2.getByLabel('Conta ou caixa de saída').selectOption({ label: 'Banco E2E — Conta E2E' });
+  await rep2.getByLabel('Forma do repasse').selectOption({ label: 'Pix E2E' });
+  await rep2.getByRole('button', { name: 'Confirmar repasse' }).click();
+  await aguardarTelaPronta(page);
+  expect((await noBanco("SELECT COUNT(*) AS n FROM acordo_parcela WHERE repasse_parceiro_em IS NOT NULL"))[0].n).toBe(2);
+  await page.getByRole('button', { name: /^Concluídos/ }).click();
+  await expect(page.locator('tbody tr')).toHaveCount(4);                                          // 2 parcelas × (cliente + parceiro)
+  await semViolacoes(page, 'Repasses concluídos (4 linhas)');
+
+  console.log('PASSO: Desfazer recebimento bloqueado, desfazer repasses e desfazer recebimento');
+  await page.getByRole('button', { name: 'Por processo' }).click(); await aguardarTelaPronta(page);
+  await abrirProcesso(page);
+  await abrirParcelas(page);
+  await abrirMenuAcoes(page, page.locator('tbody tr').filter({ hasText: 'Recebida' }).first());
+  await page.getByRole('button', { name: /Desfazer recebimento/ }).click();
+  await aviso(page, "Desfaça os repasses na aba 'Repasses' antes de desfazer o recebimento.");     // bloqueio com explicação
+  expect((await noBanco("SELECT COUNT(*) AS n FROM acordo_parcela WHERE status = 'pago'"))[0].n).toBe(2);
+  await page.getByRole('button', { name: 'Repasses pendentes' }).click(); await aguardarTelaPronta(page);
+  await page.getByRole('button', { name: /^Concluídos/ }).click();
+  for (let i = 0; i < 2; i++) {                                                                   // cliente e parceiro da parcela 1
+    await abrirMenuAcoes(page, page.locator('tbody tr').filter({ hasText: 'parc 1/2' }).first());
+    await page.getByRole('button', { name: /Desfazer/ }).click();
+    await aviso(page, 'Repasse desfeito');
+    await aguardarTelaPronta(page);
+  }
+  await expect(page.locator('tbody tr').filter({ hasText: 'parc 1/2' })).toHaveCount(0);
+  expect((await noBanco("SELECT COUNT(*) AS n FROM acordo_parcela WHERE repasse_cliente_em IS NOT NULL OR repasse_parceiro_em IS NOT NULL"))[0].n).toBe(1);   // só a parcela 2 segue repassada
+  await page.getByRole('button', { name: 'Por processo' }).click(); await aguardarTelaPronta(page);
+  await abrirProcesso(page);
+  await abrirParcelas(page);
+  await abrirMenuAcoes(page, page.locator('tbody tr').filter({ hasText: 'Recebida' }).first());
+  await page.getByRole('button', { name: /Desfazer recebimento/ }).click();
+  await aviso(page, 'Recebimento desfeito');
+  await aguardarTelaPronta(page);
+  expect((await noBanco("SELECT COUNT(*) AS n FROM acordo_parcela WHERE status = 'pago'"))[0].n).toBe(1);
+  await expect(page.getByText('Recebimento — parc 1/2 do acordo')).toHaveCount(0);              // o lançamento da conta corrente sumiu
+
+  console.log('PASSO: Remover multa');
+  await abrirParcelas(page);
+  await abrirMenuAcoes(page, parcelaPendente(page).first());
+  await page.getByRole('button', { name: /Lançar multa/ }).click();
+  await modal(page).getByLabel('Valor da multa (R$)').fill('50,00');
+  await modal(page).getByLabel('Data em que a multa deve ser paga').fill('2026-03-01');
+  await modal(page).getByRole('button', { name: 'Salvar multa' }).click();
+  await aviso(page, 'Multa lançada');
+  await aguardarTelaPronta(page);
+  await abrirParcelas(page);
+  await expect(page.getByText('Multa ·')).toHaveCount(2);                                         // parcela 1 (pendente) e parcela 2 (recebida)
+  await abrirMenuAcoes(page, parcelaPendente(page).first());
+  await page.getByRole('button', { name: /Multa/ }).first().hover();
+  await page.getByRole('button', { name: /Remover multa/ }).click();
+  await expect(page.getByRole('heading', { name: 'Remover multa' })).toBeVisible();
+  await semViolacoes(page, 'confirmação Remover multa');
+  await page.getByRole('button', { name: 'Remover', exact: true }).click();
+  await aviso(page, 'Multa removida');
+  await aguardarTelaPronta(page);
+  await abrirParcelas(page);
+  await expect(page.getByText('Multa ·')).toHaveCount(1);                                         // só a multa recebida da parcela 2 ficou
+  await semViolacoes(page, 'processo no fim do fluxo');
   await erroDeTela(page);
 });
