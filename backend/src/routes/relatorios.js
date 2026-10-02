@@ -5,7 +5,8 @@
 // ============================================================
 const express = require('express');
 const rateLimit = require('express-rate-limit');
-const router = express.Router();
+const { protegerRotas } = require('../utils/rotasSeguras');
+const router = protegerRotas(express.Router());
 
 const { autenticar, apenasAdmin } = require('../middleware/auth');
 const { verificarPermissao } = require('../middleware/permissoes');

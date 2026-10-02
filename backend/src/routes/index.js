@@ -3,7 +3,8 @@
 // ============================================================
 
 const express = require('express');
-const router = express.Router();
+const { protegerRotas } = require('../utils/rotasSeguras');
+const router = protegerRotas(express.Router());   // erro inesperado numa rota vira resposta 500, nunca derruba o servidor
 const rateLimit = require('express-rate-limit');
 
 const { autenticar, apenasAdmin, apenasSuper } = require('../middleware/auth');

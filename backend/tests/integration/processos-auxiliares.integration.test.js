@@ -244,8 +244,9 @@ for (const [rotulo, rota, tabela, coluna, singular] of [['tipo', 'tipos', 'tblti
 test('status: criar (com e sem "encerra o processo"), nome obrigatório e longo, editar nome/flag, 404', async () => {
   const a = await api().post(`${BASE}/status`, { nome: ' Em andamento A3 ' });
   assert.equal(a.status, 201); assert.deepEqual(a.body.dados, { id: a.body.dados.id, nome: 'Em andamento A3', encerra_processo: 0 });
+  let n = 0;
   for (const [valor, esperado] of [[true, 1], ['1', 1], ['true', 1], [1, 1], [false, 0], ['0', 0], ['false', 0], ['qualquer', 0], ['', 0]]) {
-    const r = await api().post(`${BASE}/status`, { nome: `Status flag ${String(valor)}-${esperado}`, encerra_processo: valor });
+    const r = await api().post(`${BASE}/status`, { nome: `Status flag ${n += 1} (${JSON.stringify(valor)})`, encerra_processo: valor });   // nome único em cada rodada
     assert.equal(r.status, 201); assert.equal(r.body.dados.encerra_processo, esperado, `encerra_processo=${JSON.stringify(valor)}`);
   }
   for (const ruim of [{}, { nome: '' }, { nome: '   ' }, { nome: null }]) {
@@ -334,4 +335,35 @@ test('assunto: excluir é bloqueado por QUALQUER vínculo com processo (inclusiv
   assert.ok(!(await lista('assuntos')).some(x => x.id === id));
   const denovo = await api().post(`${BASE}/assuntos`, { nome: 'Assunto vinculado A3' });          // o nome de um assunto excluído volta a poder ser usado
   assert.equal(denovo.status, 201, `recriar o assunto excluído → ${denovo.status} ${JSON.stringify(denovo.body)}`);
+});
+
+test('REGRESSÃO — edição com nome que não é texto (número, lista, objeto) não derruba o servidor: responde 400 e o sistema continua atendendo', async () => {
+  const f = (await api().post(`${BASE}/foruns`, { nome: 'Fórum regressão' })).body.dados.id;
+  const ids = {
+    foruns: f,
+    varas: (await api().post(`${BASE}/varas`, { nome: 'Vara regressão', forum_id: f })).body.dados.id,
+    tipos: (await api().post(`${BASE}/tipos`, { nome: 'Tipo regressão' })).body.dados.id,
+    instancias: (await api().post(`${BASE}/instancias`, { nome: 'Instância regressão' })).body.dados.id,
+    status: (await api().post(`${BASE}/status`, { nome: 'Status regressão' })).body.dados.id,
+    assuntos: (await api().post(`${BASE}/assuntos`, { nome: 'Assunto regressão' })).body.dados.id,
+  };
+  for (const [rota, id] of Object.entries(ids)) {
+    for (const nome of [5, ['x'], { a: 1 }, true]) {
+      const corpo = rota === 'varas' ? { nome, forum_id: f } : { nome };
+      const r = await api().put(`${BASE}/${rota}/${id}`, corpo);
+      assert.equal(r.status, 400, `${rota} nome=${JSON.stringify(nome)} → ${r.status} ${JSON.stringify(r.body)}`);
+    }
+  }
+  assert.equal((await api().get(BASE)).status, 200);                                              // o servidor continua de pé
+});
+
+test('identificador que não é número (ex.: /foruns/abc) em editar e excluir de TODOS os auxiliares dá 404, nunca erro interno', async () => {
+  for (const rota of ['foruns', 'varas', 'tipos', 'instancias', 'status', 'assuntos']) {
+    for (const lixo of ['abc', '1abc', '-1', '1.5', '%20']) {
+      const ed = await api().put(`${BASE}/${rota}/${lixo}`, { nome: 'x', forum_id: 1 });
+      assert.equal(ed.status, 404, `PUT ${rota}/${lixo} → ${ed.status} ${JSON.stringify(ed.body)}`);
+      const ex = await api().delete(`${BASE}/${rota}/${lixo}`);
+      assert.equal(ex.status, 404, `DELETE ${rota}/${lixo} → ${ex.status} ${JSON.stringify(ex.body)}`);
+    }
+  }
 });
