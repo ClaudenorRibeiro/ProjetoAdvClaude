@@ -27,7 +27,7 @@ BEGIN/COMMIT/ROLLBACK; nenhum registro órfão ao excluir; nomes de tabela em mi
 - [x] **A1 (concluído em 02/10/2026)** Processos: criar, editar, excluir (sem deixar órfãos: OABs, partes, vínculos), histórico, buscas
       (`/buscar`, `/:id/basico`, `/sugerir-pasta`, `/pastas/checar`, `/auxiliares`), validações e entradas inválidas.
 - [x] **A2 (concluído em 02/10/2026)** Pastas: listar (busca, etiquetas, assuntos, paginação), buscar uma pasta, renumerar (conflitos, histórico).
-- [ ] **A3** Auxiliares: fóruns, varas, tipos, status, instâncias e assuntos — criar, editar, excluir, com os bloqueios de uso.
+- [ ] **A3 (EM ANDAMENTO — teste escrito, 8 achados aguardando decisão do usuário; ver "Achados do A3")** Auxiliares: fóruns, varas, tipos, status, instâncias e assuntos — criar, editar, excluir, com os bloqueios de uso.
 - [ ] **A4** Permissões: 401 sem login e 403 sem permissão em TODAS as rotas de Processos; áreas restritas.
 
 ### Fase B — Tela "lista de Processos" (`Processos.js`)
@@ -95,7 +95,25 @@ Decisões do usuário (02/10/2026): itens 1 a 4 — seguir a recomendação; ite
 7. (a decidir) O mesmo `LIKE` sem proteção de curingas e a mesma paginação sem validação provavelmente existem em OUTROS módulos
    (Pessoas, Prazos, Tarefas...); fazer varredura no servidor inteiro como passo separado, se o usuário quiser.
 
+## Achados do A3 (teste `backend/tests/integration/processos-auxiliares.integration.test.js`: 6 passam, 13 falham DE PROPÓSITO)
+
+Nada deve ser corrigido sem a resposta do usuário. Sondagem completa (valores reais) abaixo.
+
+1. **GRAVE — o servidor CAI**: `PUT` de fórum/vara/tipo/instância/assunto com `nome` que não é texto (ex.: `{nome: 5}`) derruba o processo inteiro
+   (confirmado subindo o app real: `TypeError: nome?.trim is not a function` fora do `try` do handler async; o Express 4 não captura e não há
+   `unhandledRejection`/wrapper; o processo sai com código 1). Propor: (a) rede de segurança GLOBAL (todo handler async cai no tratamento de
+   erro → 500 "Erro interno", servidor continua) e (b) validar que `nome` é texto. O mesmo padrão pode existir em outros módulos.
+2. Tipos e instâncias aceitam nome só com espaços e GRAVAM nome vazio (a sondagem encontrou 1 vazio em cada tabela). Status/assunto/fórum/vara recusam.
+3. `nome` que não é texto: fórum/tipo/instância/assunto/vara → 500 (POST); status aceita `123` e `['x']` e grava como texto.
+4. Textos longos demais (nome e todos os campos de fórum e vara: abrev, cep, num_end, cidade, logradouro, compl, bairro, código, e-mail, tel) → 500 "Erro
+   interno" sem explicação (limites do banco: fórum nome 150/abrev 50/cep 8/num 11/cidade 100/logradouro 300/compl 50/bairro 100; vara nome 150/cód 15/email 100/
+   tel 50/compl 100/abrev 50; tipo, instância e status 100; assunto 150).
+5. Nome repetido é aceito em tipos, instâncias e status (assunto já recusa). Fórum/vara repetidos podem ser legítimos (mesmo nome em lugares diferentes) — não testado.
+6. Excluir algo que NÃO existe (ou já excluído) responde 200 "Excluído" e grava auditoria falsa (6 auditorias fantasma na sondagem).
+7. Vara pode ser criada/movida para um FÓRUM EXCLUÍDO (200/201).
+8. Assunto EXCLUÍDO não deixa reutilizar o nome ("Já existe um assunto..." mesmo sem aparecer na lista) — o UNIQUE do banco vale também para os excluídos.
+
 ## Estado atual
 
-Plano criado em 02/10/2026. **Próximo passo: A3.** (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
+Plano criado em 02/10/2026. **Passo atual: A3 — teste escrito; aguardando o usuário decidir os achados 1 a 8.** (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
 `rascunho` para saber o que já foi feito (marque `[x]` acima ao concluir cada passo).
