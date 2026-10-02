@@ -172,6 +172,13 @@ Dados de teste: `prepararListaProcessos` (26 pastas) e `criarUsuarioSoVisualiza`
 
 Resultado no fim do B1: lista 10/10; navegador completo 26/26; frontend 175/175 + build; servidor 127 + 206 (sem mudança no servidor neste passo).
 
+### Achados do B2 (02/10/2026) — AGUARDANDO decisão do usuário (nada corrigido ainda)
+Teste: `frontend/e2e/processos-novo.spec.js` (12 testes; criar processo completo conferido no banco, pasta em uso, erros do servidor e permissões já passam).
+1. Acessibilidade: textos "Nenhum autor/réu/perito adicionado" em cinza #ccc (contraste 1,6:1) e "Será gerado ao adicionar autores e réus abaixo" (#aaa sobre #f8f8f8, 2,18:1).
+2. Acessibilidade: campos sem rótulo — seletor Física/Jurídica de autor, de réu e de perito, e o seletor de OAB do processo.
+3. Tecla ESC com uma lista aberta (responsável, assuntos etc.) fecha a janela "Novo Processo" inteira e perde o que foi digitado (`hooks/useEscFechar.js` fecha a janela mais acima sem olhar se há lista aberta).
+4. Observação (não é erro): o "…" dos botões não tem nome descritivo (só "…") — sugestão de aria-label/title.
+
 ## Estado atual
 
 Plano criado em 02/10/2026. **Próximo passo: B2** (janela "Novo processo"). (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do

@@ -193,3 +193,84 @@ export async function contarPastasDaLista() {
   try { return Number((await conn.execute('SELECT COUNT(*) AS n FROM tblpasta pa WHERE EXISTS (SELECT 1 FROM tblproc p WHERE p.pasta_id = pa.id AND p.ativo = 1)'))[0][0].n); }
   finally { await conn.end(); }
 }
+
+// Dados da janela "Novo Processo" (passo B2). Idempotente (se o teste for repetido, só relê os identificadores). Mexe em configurações
+// do escritório (advogado principal) e na OAB dos usuários 1 e 2; `restaurarNovoProcesso` devolve isso ao que era.
+//   status "Conhecimento" e instância "1ª Instância" (a janela os pré-seleciona); tipo "Trabalhista E2E" (código 5); fórum Norte com
+//   2 varas (a "Vara Norte 1" tem o código 5150002, o do CNJ ...5.15.0002) e fórum Sul com 1 vara; pessoas, perito, advogado avulso;
+//   pasta 7001 EM USO (um processo ativo) e pasta 7002 VAZIA (existe, sem processo ativo).
+export async function prepararNovoProcesso() {
+  const { conectarBancoTeste } = createRequire(import.meta.url)('../../backend/tests/support/testDatabase');
+  const conn = await conectarBancoTeste();
+  const id = async (sql, params = []) => (await conn.execute(sql, params))[0].insertId;
+  const um = async (sql, params = []) => (await conn.execute(sql, params))[0][0];
+  const d = {};
+  try {
+    // Sempre refeito (o fim de cada processo de teste desfaz isto, e o Playwright reinicia o processo após uma falha):
+    // OAB dos usuários 1 e 2 (a janela só oferece quem tem OAB) e advogado principal do escritório = usuário 1
+    await conn.execute("UPDATE usuarios SET oab = 'SP 111111' WHERE id = 1"); await conn.execute("UPDATE usuarios SET oab = 'SP 222222' WHERE id = 2");
+    await conn.execute('UPDATE configuracoes_escritorio SET advogado_principal_id = 1 WHERE id = 1');
+    await conn.execute("UPDATE tblproc SET protocolo = 'PROT-EMUSO-E2E' WHERE numProc = '8000001-00.2026.5.15.0001'");   // (no-op na 1ª vez: o processo ainda não existe; abaixo já nasce com ele)
+    const jaTem = await um("SELECT id FROM tblstatusproc WHERE nome = 'Conhecimento E2E'");
+    if (jaTem) {
+      const ler = async (sql, p = []) => (await um(sql, p)).id;
+      Object.assign(d, {
+        autor1: await ler("SELECT id FROM pessoas_fisicas WHERE nome = 'Alberto Autor E2E'"), autor2: await ler("SELECT id FROM pessoas_fisicas WHERE nome = 'Beatriz Autora E2E'"),
+        reu1: await ler("SELECT id FROM pessoas_juridicas WHERE razao_social = 'Empresa Alfa E2E Ltda'"), reu2: await ler("SELECT id FROM pessoas_juridicas WHERE razao_social = 'Empresa Beta E2E Ltda'"),
+        perito: await ler("SELECT id FROM pessoas_fisicas WHERE nome = 'Perito Paulo E2E'"), forumNorte: await ler("SELECT id FROM tblforum WHERE nome = 'Fórum Norte E2E'"),
+        varaNorte1: await ler("SELECT id FROM tblvara WHERE nome = 'Vara Norte 1 E2E'"), tipo: await ler("SELECT id FROM tbltipoproc WHERE nome = 'Trabalhista E2E'"),
+        assuntoA: await ler("SELECT id FROM tblassuntoproc WHERE nome = 'Assunto Novo A E2E'"), assuntoB: await ler("SELECT id FROM tblassuntoproc WHERE nome = 'Assunto Novo B E2E'"),
+        pastaEmUso: await ler('SELECT id FROM tblpasta WHERE numPasta = 7001'), pastaVazia: await ler('SELECT id FROM tblpasta WHERE numPasta = 7002'),
+      });
+      return d;
+    }
+    d.statusConhecimento = await id("INSERT INTO tblstatusproc (nome, ativo) VALUES ('Conhecimento E2E', 1)");
+    d.instancia1 = await id("INSERT INTO tblinstanciaproc (nome, ativo) VALUES ('1ª Instância E2E', 1)");
+    await id("INSERT INTO tblinstanciaproc (nome, ativo) VALUES ('2ª Instância E2E', 1)");
+    d.tipo = await id("INSERT INTO tbltipoproc (nome, codTipoProc, ativo) VALUES ('Trabalhista E2E', '5', 1)");
+    d.forumNorte = await id("INSERT INTO tblforum (nome, cidade, uf, ativo) VALUES ('Fórum Norte E2E', 'Campinas', 'SP', 1)");
+    d.forumSul = await id("INSERT INTO tblforum (nome, cidade, uf, ativo) VALUES ('Fórum Sul E2E', 'Santos', 'SP', 1)");
+    d.varaNorte1 = await id("INSERT INTO tblvara (forum_id, nome, abrev_nome, codVaraNoProc, ativo) VALUES (?, 'Vara Norte 1 E2E', '1ª Norte', '5150002', 1)", [d.forumNorte]);
+    d.varaNorte2 = await id("INSERT INTO tblvara (forum_id, nome, ativo) VALUES (?, 'Vara Norte 2 E2E', 1)", [d.forumNorte]);
+    d.varaSul1 = await id("INSERT INTO tblvara (forum_id, nome, ativo) VALUES (?, 'Vara Sul 1 E2E', 1)", [d.forumSul]);
+    d.assuntoA = await id("INSERT INTO tblassuntoproc (nome, ativo) VALUES ('Assunto Novo A E2E', 1)");
+    d.assuntoB = await id("INSERT INTO tblassuntoproc (nome, ativo) VALUES ('Assunto Novo B E2E', 1)");
+    d.autor1 = await id("INSERT INTO pessoas_fisicas (nome, cpf) VALUES ('Alberto Autor E2E', '90000000001')");
+    d.autor2 = await id("INSERT INTO pessoas_fisicas (nome, cpf) VALUES ('Beatriz Autora E2E', '90000000002')");
+    d.perito = await id("INSERT INTO pessoas_fisicas (nome, cpf) VALUES ('Perito Paulo E2E', '90000000003')");
+    d.reu1 = await id("INSERT INTO pessoas_juridicas (razao_social, cnpj) VALUES ('Empresa Alfa E2E Ltda', '90000000000101')");
+    d.reu2 = await id("INSERT INTO pessoas_juridicas (razao_social, cnpj) VALUES ('Empresa Beta E2E Ltda', '90000000000202')");
+    await conn.execute("INSERT INTO advogados_freela (nome, oab) VALUES ('Avulso E2E', 'RJ 99999')");
+    // pasta 7001 em uso (1 processo ativo) e pasta 7002 vazia (só processo inativo)
+    d.pastaEmUso = await id("INSERT INTO tblpasta (numPasta, criado_por) VALUES (7001, 1)");
+    await conn.execute("INSERT INTO tblproc (pasta_id, numProc, protocolo, NomeTituloProc, tipo_id, status_id, ativo, criado_por) VALUES (?, '8000001-00.2026.5.15.0001', 'PROT-EMUSO-E2E', 'PASTA EM USO E2E', 1, 1, 1, 1)", [d.pastaEmUso]);
+    d.pastaVazia = await id("INSERT INTO tblpasta (numPasta, criado_por) VALUES (7002, 1)");
+    await conn.execute("INSERT INTO tblproc (pasta_id, numProc, NomeTituloProc, tipo_id, status_id, ativo, criado_por) VALUES (?, '8000002-00.2026.5.15.0001', 'PASTA VAZIA E2E', 1, 1, 0, 1)", [d.pastaVazia]);
+  } finally { await conn.end(); }
+  return d;
+}
+export async function restaurarNovoProcesso() {
+  const { conectarBancoTeste } = createRequire(import.meta.url)('../../backend/tests/support/testDatabase');
+  const conn = await conectarBancoTeste();
+  try {
+    await conn.execute('UPDATE configuracoes_escritorio SET advogado_principal_id = NULL WHERE id = 1');
+    await conn.execute('UPDATE usuarios SET oab = NULL WHERE id IN (1, 2)');
+  } finally { await conn.end(); }
+}
+
+// Usuário comum com UMA lista exata de permissões [[módulo, submódulo|null, ação], ...], senha padrão de teste. Devolve o login.
+export async function criarUsuarioComPermissoes(login, permissoes) {
+  const { conectarBancoTeste } = createRequire(import.meta.url)('../../backend/tests/support/testDatabase');
+  const bcrypt = createRequire(import.meta.url)('../../backend/node_modules/bcryptjs');
+  const conn = await conectarBancoTeste();
+  try {
+    const [jaExiste] = await conn.execute('SELECT id FROM usuarios WHERE login = ?', [login]);
+    if (jaExiste.length) return login;
+    const id = (await conn.execute(
+      `INSERT INTO usuarios (nome, login, senha_hash, email, tipo, nivel, ativo, ver_todos_processos, notif_email, google_agenda_ativo)
+       VALUES (?, ?, ?, ?, 'advogado', 2, 1, 0, 0, 0)`,
+      [`Usuário ${login}`, login, bcrypt.hashSync('TesteSeguro123!', 4), `${login}@example.invalid`]))[0].insertId;
+    for (const [m, s, a] of permissoes) await conn.execute('INSERT INTO permissoes (usuario_id, modulo, submodulo, acao, permitido) VALUES (?, ?, ?, ?, 1)', [id, m, s, a]);
+  } finally { await conn.end(); }
+  return login;
+}
