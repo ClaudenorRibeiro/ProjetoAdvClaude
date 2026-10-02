@@ -48,7 +48,7 @@ BEGIN/COMMIT/ROLLBACK; nenhum registro órfão ao excluir; nomes de tabela em mi
       (`/buscar`, `/:id/basico`, `/sugerir-pasta`, `/pastas/checar`, `/auxiliares`), validações e entradas inválidas.
 - [x] **A2 (concluído em 02/10/2026)** Pastas: listar (busca, etiquetas, assuntos, paginação), buscar uma pasta, renumerar (conflitos, histórico).
 - [x] **A3 (concluído em 02/10/2026)** Auxiliares: fóruns, varas, tipos, status, instâncias e assuntos — criar, editar, excluir, com os bloqueios de uso.
-- [ ] **A4** Permissões: 401 sem login e 403 sem permissão em TODAS as rotas de Processos; áreas restritas.
+- [ ] **A4 (EM ANDAMENTO — teste escrito; 1 achado + 2 perguntas aguardando decisão do usuário; ver "Achados do A4")** Permissões: 401 sem login e 403 sem permissão em TODAS as rotas de Processos; áreas restritas.
 
 ### Fase B — Tela "lista de Processos" (`Processos.js`)
 - [ ] **B1** Tela: busca, filtros, ordenação, paginação, etiquetas, menu de cada linha, "Abrir pasta", estados vazio/erro.
@@ -138,7 +138,23 @@ Teste: `backend/tests/integration/processos-auxiliares.integration.test.js` (21/
 11. (para a varredura) a rede de segurança resolve a QUEDA em qualquer rota; os erros de validação específicos (nome não-texto etc.) ainda precisam de
     verificação módulo a módulo — fazer nos passos de cada módulo.
 
+## Achados do A4 (teste `backend/tests/integration/processos-permissoes.integration.test.js`: 9 passam, 1 falha DE PROPÓSITO)
+
+Resultado principal: as PORTAS DE PERMISSÃO de Processos estão corretas (matriz: um usuário só com a permissão X passa só nas rotas de X e leva 403
+em todas as outras; negada explicitamente = 403; sub-módulo "assuntos" separado; admin/super passam; sem login = 401 em todas; efeito imediato de revogar
+permissão, rebaixar nível e desativar usuário; recusa ocorre antes de qualquer gravação).
+
+1. **Token válido SEM o campo `id` → erro 500** (deveria ser 401 "sessão não é mais válida"): `autenticar` (`backend/src/middleware/auth.js`) manda `undefined`
+   para o banco. Só acontece com token assinado pelo servidor sem `id` (não dá para forjar sem a chave secreta) — risco baixo. Proposta: validar que `id` é
+   inteiro positivo antes de consultar o banco.
+2. **(pergunta/decisão) Rotas abertas a qualquer usuário LOGADO, mesmo sem nenhuma permissão**: `/processos/buscar`, `/processos/:id/basico`,
+   `/processos/sugerir-pasta`, `/processos/pastas/checar` e `GET /processos/auxiliares` (que também devolve a lista de usuários: id, nome, tipo, OAB, e os
+   advogados avulsos). Hoje são usadas por outros módulos (Prazos, Tarefas, Audiências...) para escolher um processo. Opções: manter como está (padrão
+   atual) ou exigir que o usuário tenha ao menos uma permissão de algum módulo que use isso.
+3. **(pergunta) `usuarios.ver_todos_processos`** é gravado no cadastro e carregado na sessão, mas NADA em Processos o usa: lista de pastas, pasta, histórico
+   e busca mostram tudo a quem tem a permissão. (Prazos e Tarefas usam a permissão própria `ver_todos`.) Não se sabe a intenção; confirmar com o usuário.
+
 ## Estado atual
 
-Plano criado em 02/10/2026. **Próximo passo: A4.** (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
+Plano criado em 02/10/2026. **Passo atual: A4 — teste escrito; aguardando o usuário sobre os achados 1 a 3.** (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
 `rascunho` para saber o que já foi feito (marque `[x]` acima ao concluir cada passo).
