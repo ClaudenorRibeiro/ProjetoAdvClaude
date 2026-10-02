@@ -77,7 +77,7 @@ export default function ModalGoogleAgenda({ onFechar }) {
 
           <div className="form-group">
             <label className="form-label">E-mail do Google</label>
-            <input className="form-control" type="email" value={email}
+            <input aria-label="E-mail do Google" className="form-control" type="email" value={email}
               placeholder="seuemail@gmail.com"
               onChange={e => setEmail(e.target.value)} />
           </div>

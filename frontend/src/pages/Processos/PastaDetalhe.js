@@ -844,7 +844,7 @@ export default function PastaDetalhe() {
                         {pr.numProc
                           ? <NumeroProcessoCopiavel numero={pr.numProc} />
                           : pr.protocolo
-                            ? <span style={{ fontSize: '12px', color: '#64748b' }}>
+                            ? <span style={{ fontSize: '12px', color: '#5b6472' }}>
                                 Protocolo:{' '}<NumeroProcessoCopiavel numero={pr.protocolo} />
                               </span>
                             : <NumeroProcessoCopiavel numero={null} />}
@@ -854,7 +854,7 @@ export default function PastaDetalhe() {
                       <td>{pr.instancia_nome || '—'}</td>
                       <td>
                         <div style={{ fontSize: '13px' }}>{pr.vara_abrev_nome || pr.vara_nome || '—'}</div>
-                        {pr.forum_nome && <div style={{ fontSize: '11px', color: '#888' }}>{pr.forum_abrev_nome || pr.forum_nome}</div>}
+                        {pr.forum_nome && <div style={{ fontSize: '11px', color: '#5b6472' }}>{pr.forum_abrev_nome || pr.forum_nome}</div>}
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         <EtiquetaCelula slot={pr.etiqueta_escritorio} definicoes={catEscritorio} />
@@ -1015,7 +1015,7 @@ export default function PastaDetalhe() {
               {selectProcesso}
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">Status</label>
-                <select className="form-control" value={filtrosPrazo.status}
+                <select aria-label="Status" className="form-control" value={filtrosPrazo.status}
                   onChange={e => setFiltrosPrazo(f => ({ ...f, status: e.target.value }))}>
                   <option value="">Todos</option>
                   {['agendado','pendente','atrasado','fazendo','concluido','cancelado'].map(s =>
@@ -1026,7 +1026,7 @@ export default function PastaDetalhe() {
               {podeVerTodosPrazos && (
                 <div className="form-group" style={{ margin: 0 }}>
                   <label className="form-label">Responsável</label>
-                  <select className="form-control" value={filtrosPrazo.usuario_id}
+                  <select aria-label="Responsável" className="form-control" value={filtrosPrazo.usuario_id}
                     onChange={e => setFiltrosPrazo(f => ({ ...f, usuario_id: e.target.value }))}>
                     <option value="">Todos</option>
                     {usuariosPrazo.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
@@ -1035,12 +1035,12 @@ export default function PastaDetalhe() {
               )}
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">Vencimento de</label>
-                <input type="date" className="form-control" value={filtrosPrazo.data_de}
+                <input aria-label="Vencimento de" type="date" className="form-control" value={filtrosPrazo.data_de}
                   onChange={e => setFiltrosPrazo(f => ({ ...f, data_de: e.target.value }))} />
               </div>
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">Até</label>
-                <input type="date" className="form-control" value={filtrosPrazo.data_ate}
+                <input aria-label="Até" type="date" className="form-control" value={filtrosPrazo.data_ate}
                   onChange={e => setFiltrosPrazo(f => ({ ...f, data_ate: e.target.value }))} />
               </div>
               <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
@@ -1294,7 +1294,7 @@ export default function PastaDetalhe() {
               </div>
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">Prioridade</label>
-                <select className="form-control" value={filtrosTarefa.prioridade}
+                <select aria-label="Prioridade" className="form-control" value={filtrosTarefa.prioridade}
                   onChange={e => setFiltrosTarefa(f => ({ ...f, prioridade: e.target.value }))}>
                   <option value="">Todas</option>
                   <option value="urgente">🔴 Urgente</option>
@@ -1305,7 +1305,7 @@ export default function PastaDetalhe() {
               {podeVerTodosTarefas && (
                 <div className="form-group" style={{ margin: 0 }}>
                   <label className="form-label">Para</label>
-                  <select className="form-control" value={filtrosTarefa.usuario_id}
+                  <select aria-label="Para" className="form-control" value={filtrosTarefa.usuario_id}
                     onChange={e => setFiltrosTarefa(f => ({ ...f, usuario_id: e.target.value }))}>
                     <option value="">Todos</option>
                     {usuariosTarefa.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
@@ -1314,12 +1314,12 @@ export default function PastaDetalhe() {
               )}
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">Vencimento de</label>
-                <input type="date" className="form-control" value={filtrosTarefa.data_de}
+                <input aria-label="Vencimento de" type="date" className="form-control" value={filtrosTarefa.data_de}
                   onChange={e => setFiltrosTarefa(f => ({ ...f, data_de: e.target.value }))} />
               </div>
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">Até</label>
-                <input type="date" className="form-control" value={filtrosTarefa.data_ate}
+                <input aria-label="Até" type="date" className="form-control" value={filtrosTarefa.data_ate}
                   onChange={e => setFiltrosTarefa(f => ({ ...f, data_ate: e.target.value }))} />
               </div>
               <button className="btn btn-secondary"
@@ -1349,7 +1349,7 @@ export default function PastaDetalhe() {
                             {t.titulo}
                           </strong>
                           {t.descricao && (
-                            <div style={{ fontSize: '12px', color: '#888', marginTop: '2px' }}>{t.descricao}</div>
+                            <div style={{ fontSize: '12px', color: '#5b6472', marginTop: '2px' }}>{t.descricao}</div>
                           )}
                         </td>
                         <td>
@@ -1564,7 +1564,7 @@ export default function PastaDetalhe() {
                 <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
                   <strong>Conta corrente</strong>
                   <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-                    <span style={{ fontSize: '12px', color: '#888' }}>Saldo </span>
+                    <span style={{ fontSize: '12px', color: '#5b6472' }}>Saldo </span>
                     <strong style={{ color: (contaCorrente.saldo_total || 0) >= 0 ? '#059669' : '#dc2626' }}>
                       {formatarMoeda(contaCorrente.saldo_total || 0)}
                     </strong>
@@ -1588,7 +1588,7 @@ export default function PastaDetalhe() {
                               {l.tipo === 'saida' ? '−' : '+'}{formatarMoeda(l.valor)}
                             </td>
                             <td style={{ whiteSpace: 'nowrap' }}>
-                              {ehAcordo ? <span style={{ fontSize: 11, color: '#888' }}>(acordo)</span> : (
+                              {ehAcordo ? <span style={{ fontSize: 11, color: '#5b6472' }}>(acordo)</span> : (
                                 <MenuAcoes itens={[
                                   { label: 'Editar', icone: '✏️',
                                     oculto: !temPermissao('financeiro','alterar'),
@@ -1746,12 +1746,12 @@ function ModalAndamento({ processoId, andamento, onFechar }) {
           )}
           <div className="form-group">
             <label className="form-label">Data *</label>
-            <input type="date" className="form-control" value={form.data || ''}
+            <input aria-label="Data" type="date" className="form-control" value={form.data || ''}
               onChange={e => set('data', e.target.value)} />
           </div>
           <div className="form-group">
             <label className="form-label">Descrição *</label>
-            <textarea className="form-control" rows={4} value={form.descricao || ''}
+            <textarea aria-label="Descrição" className="form-control" rows={4} value={form.descricao || ''}
               onChange={e => set('descricao', e.target.value)}
               onBlur={() => set('descricao', toTitleCase(form.descricao))}
               placeholder="Descreva o andamento processual..." />
@@ -1825,10 +1825,10 @@ function PainelPartes({ processos, smsAtivo, onReload }) {
       {/* Cabeçalho clicável: seta + título + contagem. Clica para abrir/fechar. */}
       <div onClick={() => setAberto(a => !a)}
         style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer',
-          fontSize: '13px', fontWeight: 600, color: '#64748b', userSelect: 'none' }}>
-        <span aria-hidden="true" style={{ fontSize: '11px', color: '#94a3b8' }}>{aberto ? '▼' : '▶'}</span>
+          fontSize: '13px', fontWeight: 600, color: '#5b6472', userSelect: 'none' }}>
+        <span aria-hidden="true" style={{ fontSize: '11px', color: '#5b6472' }}>{aberto ? '▼' : '▶'}</span>
         Partes do processo
-        <span style={{ color: '#94a3b8', fontWeight: 500 }}>({linhas.length})</span>
+        <span style={{ color: '#5b6472', fontWeight: 500 }}>({linhas.length})</span>
       </div>
 
       {aberto && (
@@ -1915,7 +1915,7 @@ function ItemParteContato({ parte, smsAtivo, onReload }) {
 
   return (
     <div
-      onMouseEnter={e => (e.currentTarget.style.background = 'var(--linha-hover, #aec6e4)')}
+      onMouseEnter={e => (e.currentTarget.style.background = 'var(--linha-hover, #eaf1fc)')}
       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
       style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 8px',
         borderBottom: '1px solid #f1f5f9', borderRadius: '6px',

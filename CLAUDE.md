@@ -223,4 +223,9 @@ renomear ou remover um script. Nenhum teste pode depender de arquivo que não es
 - O horário do banco é o de Brasília: `backend/src/config/database.js` fixa o fuso
   (`-03:00`) em toda conexão, para `CURDATE()`/`NOW()` concordarem com o escritório
   mesmo se o MySQL rodar em UTC.
+- **Acessibilidade em todas as telas** (`frontend/e2e/qualidade.spec.js`): a bateria varre cada
+  tela com o verificador axe e reprova por violação séria/crítica (contraste mínimo 4,5:1,
+  campo de formulário sem rótulo, área rolável sem teclado). **Toda tela nova entra na lista
+  `TELAS_LOGADAS`/`TELAS_PUBLICAS`.** Campo novo: `aria-label` (ou `<label htmlFor>`); texto
+  secundário usa `#5b6472` ou mais escuro, nunca cinzas claros como `#888`/`#94a3b8`.
 

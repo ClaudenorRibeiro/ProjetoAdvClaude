@@ -136,7 +136,7 @@ export default function MenuAcoes({ itens = [], titulo = 'Mais ações' }) {
                       padding: '8px 10px', borderRadius: '6px', color: '#334155', whiteSpace: 'nowrap' }}>
                     {it.icone && <span aria-hidden="true">{it.icone}</span>}
                     <span style={{ flex: 1 }}>{it.label}</span>
-                    <span aria-hidden="true" style={{ color: '#94a3b8' }}>▸</span>
+                    <span aria-hidden="true" style={{ color: '#5b6472' }}>▸</span>
                   </button>
                   {aberto && (
                     <div onMouseDown={e => e.stopPropagation()}

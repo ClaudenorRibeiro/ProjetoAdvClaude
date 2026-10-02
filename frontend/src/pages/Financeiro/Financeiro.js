@@ -179,7 +179,7 @@ export default function Financeiro() {
         <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div className="form-group" style={{ margin: 0, flex: 1, minWidth: '260px', maxWidth: '420px', position: 'relative' }}>
             <label className="form-label">Pasta</label>
-            <input className="form-control" placeholder="Buscar pasta pelo título ou número..."
+            <input aria-label="Pasta" className="form-control" placeholder="Buscar pasta pelo título ou número..."
               value={buscaPasta}
               onChange={e => { setBuscaPasta(e.target.value); buscarPastas(e.target.value); }} />
             {pastas.length > 0 && (
@@ -196,7 +196,7 @@ export default function Financeiro() {
           {pastaSel && (
             <div className="form-group" style={{ margin: 0, minWidth: '240px' }}>
               <label className="form-label">Processo</label>
-              <select className="form-control" value={processoId} onChange={e => setProcessoId(e.target.value)}>
+              <select aria-label="Processo" className="form-control" value={processoId} onChange={e => setProcessoId(e.target.value)}>
                 <option value="">— Selecione o processo —</option>
                 {processos.map(p => <option key={p.id} value={p.id}>{p.numProc || `#${p.id}`}</option>)}
               </select>
@@ -251,7 +251,7 @@ export default function Financeiro() {
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
               <h3 style={{ margin: 0 }}>Conta corrente {processoSel ? `— ${processoSel.numProc || ''}` : ''}</h3>
               <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-                <div style={{ fontSize: '12px', color: '#888' }}>Saldo</div>
+                <div style={{ fontSize: '12px', color: '#5b6472' }}>Saldo</div>
                 <strong style={{ fontSize: '20px', color: (conta.saldo_total || 0) >= 0 ? '#059669' : '#dc2626' }}>
                   {formatarMoeda(conta.saldo_total || 0)}
                 </strong>
@@ -309,7 +309,7 @@ export default function Financeiro() {
                         </td>
                         <td style={{ whiteSpace: 'nowrap' }}>
                           {ehAcordo ? (
-                            <span style={{ fontSize: '11px', color: '#888' }}>(parcela de acordo)</span>
+                            <span style={{ fontSize: '11px', color: '#5b6472' }}>(parcela de acordo)</span>
                           ) : (
                             <MenuAcoes itens={[
                               { label: 'Editar', icone: '✏️',
@@ -649,31 +649,31 @@ function ModalRepasse({ linha, onCancelar, onConfirmar }) {
         <div className="modal-body">
           <div className="form-group">
             <label className="form-label">Data do repasse *</label>
-            <input ref={dataRef} type="date" className="form-control" value={data}
+            <input aria-label="Data do repasse" ref={dataRef} type="date" className="form-control" value={data}
               onChange={e => setData(e.target.value)} autoFocus />
           </div>
           <div className="form-group">
             <label className="form-label">Conta ou caixa de saída *</label>
-            <select ref={contaEscritorioRef} className="form-control" value={contaEscritorioId} onChange={e => { setContaEscritorioId(e.target.value); setFormaId(''); }}>
+            <select aria-label="Conta ou caixa de saída" ref={contaEscritorioRef} className="form-control" value={contaEscritorioId} onChange={e => { setContaEscritorioId(e.target.value); setFormaId(''); }}>
               <option value="">Selecione a conta ou caixa...</option>
               {contasEscritorio.map(c => <option key={c.id} value={c.id}>{c.instituicao_nome ? `${c.instituicao_nome} — ${c.nome}` : c.nome}</option>)}
             </select>
           </div>
           {linha.tipo === 'cliente' && !inicialPessoa && (
             <div className="form-group"><label className="form-label">Beneficiário *</label>
-              <select ref={beneficiarioRef} className="form-control" value={destinoPessoa ? `${destinoTipo}:${destinoPessoa}` : ''} onChange={e => { const [t, id] = e.target.value.split(':'); setDestinoTipo(t || ''); setDestinoPessoa(id || ''); setContaDestinoId(''); }}>
+              <select aria-label="Beneficiário" ref={beneficiarioRef} className="form-control" value={destinoPessoa ? `${destinoTipo}:${destinoPessoa}` : ''} onChange={e => { const [t, id] = e.target.value.split(':'); setDestinoTipo(t || ''); setDestinoPessoa(id || ''); setContaDestinoId(''); }}>
                 <option value="">Selecione...</option>{beneficiarios.map(b => <option key={`${b.tipo}:${b.id}`} value={`${b.tipo}:${b.id}`}>{b.nome}</option>)}
               </select></div>
           )}
           <div className="form-group"><label className="form-label">Destino do repasse *</label>
-            <select className="form-control" value={tipoDestino} onChange={e => { setTipoDestino(e.target.value); setFormaId(''); }}>
+            <select aria-label="Destino do repasse" className="form-control" value={tipoDestino} onChange={e => { setTipoDestino(e.target.value); setFormaId(''); }}>
               <option value="bancaria">Conta bancária</option>
               <option value="em_maos">Dinheiro em espécie — em mãos</option>
             </select>
           </div>
           {tipoDestino === 'bancaria' ? (
             <div className="form-group"><label className="form-label">Conta do beneficiário *</label>
-              <select ref={contaDestinoRef} className="form-control" value={contaDestinoId} onChange={e => setContaDestinoId(e.target.value)}>
+              <select aria-label="Conta do beneficiário" ref={contaDestinoRef} className="form-control" value={contaDestinoId} onChange={e => setContaDestinoId(e.target.value)}>
                 <option value="">Selecione...</option>{contasDestino.map(c => <option key={c.id} value={c.id}>{c.instituicao_nome} — {c.agencia ? `Ag. ${c.agencia} · ` : ''}{c.numero || c.chave_pix || c.titular}</option>)}
               </select>
               {podeCadastrarConta && destinoTipo && destinoPessoa && (
@@ -689,7 +689,7 @@ function ModalRepasse({ linha, onCancelar, onConfirmar }) {
           )}
           <div className="form-group">
             <label className="form-label">Forma do repasse *</label>
-            <select ref={formaRef} className="form-control" value={formaId} onChange={e => setFormaId(e.target.value)}>
+            <select aria-label="Forma do repasse" ref={formaRef} className="form-control" value={formaId} onChange={e => setFormaId(e.target.value)}>
               <option value="">Selecione...</option>
               {formasCompativeis.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
             </select>
@@ -701,7 +701,7 @@ function ModalRepasse({ linha, onCancelar, onConfirmar }) {
           </div>
           <div className="form-group">
             <label className="form-label">Observação do repasse (opcional)</label>
-            <textarea className="form-control" rows="3" maxLength={1000} value={observacao}
+            <textarea aria-label="Observação do repasse (opcional)" className="form-control" rows="3" maxLength={1000} value={observacao}
               onChange={e => setObservacao(e.target.value)} placeholder="Anotações gerais sobre este repasse" />
           </div>
           <p style={{ color: '#6b7280', fontSize: '13px' }}>
@@ -772,22 +772,22 @@ function ModalNovaContaBeneficiario({ tipo, pessoaId, nome, onFechar, onSalva })
         <div className="modal-body">
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <div className="form-group" style={{ flex: 2, minWidth: 220 }}><label className="form-label">Instituição financeira *</label>
-              <select className="form-control" value={form.instituicao_financeira_id} onChange={e => set('instituicao_financeira_id', e.target.value)}><option value="">Selecione...</option>{instituicoes.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}</select></div>
+              <select aria-label="Instituição financeira" className="form-control" value={form.instituicao_financeira_id} onChange={e => set('instituicao_financeira_id', e.target.value)}><option value="">Selecione...</option>{instituicoes.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}</select></div>
             <div className="form-group" style={{ flex: 1, minWidth: 130 }}><label className="form-label">Tipo</label>
-              <select className="form-control" value={form.tipo_conta} onChange={e => set('tipo_conta', e.target.value)}><option value="corrente">Corrente</option><option value="poupanca">Poupança</option></select></div>
+              <select aria-label="Tipo" className="form-control" value={form.tipo_conta} onChange={e => set('tipo_conta', e.target.value)}><option value="corrente">Corrente</option><option value="poupanca">Poupança</option></select></div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <div className="form-group" style={{ flex: 1, minWidth: 100 }}><label className="form-label">Agência</label><input className="form-control" value={form.agencia} onChange={e => set('agencia', e.target.value)} /></div>
-            <div className="form-group" style={{ flex: 2, minWidth: 130 }}><label className="form-label">Conta</label><input className="form-control" value={form.numero} onChange={e => set('numero', e.target.value)} /></div>
-            <div className="form-group" style={{ width: 80 }}><label className="form-label">Dígito</label><input className="form-control" maxLength={4} value={form.digito} onChange={e => set('digito', e.target.value)} /></div>
+            <div className="form-group" style={{ flex: 1, minWidth: 100 }}><label className="form-label">Agência</label><input aria-label="Agência" className="form-control" value={form.agencia} onChange={e => set('agencia', e.target.value)} /></div>
+            <div className="form-group" style={{ flex: 2, minWidth: 130 }}><label className="form-label">Conta</label><input aria-label="Conta" className="form-control" value={form.numero} onChange={e => set('numero', e.target.value)} /></div>
+            <div className="form-group" style={{ width: 80 }}><label className="form-label">Dígito</label><input aria-label="Dígito" className="form-control" maxLength={4} value={form.digito} onChange={e => set('digito', e.target.value)} /></div>
           </div>
-          <div className="form-group"><label className="form-label">Chave PIX</label><input className="form-control" value={form.chave_pix} onChange={e => set('chave_pix', e.target.value)} /></div>
+          <div className="form-group"><label className="form-label">Chave PIX</label><input aria-label="Chave PIX" className="form-control" value={form.chave_pix} onChange={e => set('chave_pix', e.target.value)} /></div>
           <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, marginBottom: 10 }}><input type="checkbox" checked={form.conta_terceiro} onChange={e => set('conta_terceiro', e.target.checked)} />Conta de outra pessoa (autorização)</label>
           {form.conta_terceiro && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <div className="form-group" style={{ flex: 2, minWidth: 210 }}><label className="form-label">Titular *</label><input className="form-control" value={form.titular} onChange={e => set('titular', e.target.value)} /></div>
-            <div className="form-group" style={{ flex: 1, minWidth: 150 }}><label className="form-label">CPF/CNPJ *</label><input className="form-control" value={form.documento_titular} onChange={e => set('documento_titular', mascaraDocumento(e.target.value))} /></div>
+            <div className="form-group" style={{ flex: 2, minWidth: 210 }}><label className="form-label">Titular *</label><input aria-label="Titular" className="form-control" value={form.titular} onChange={e => set('titular', e.target.value)} /></div>
+            <div className="form-group" style={{ flex: 1, minWidth: 150 }}><label className="form-label">CPF/CNPJ *</label><input aria-label="CPF/CNPJ" className="form-control" value={form.documento_titular} onChange={e => set('documento_titular', mascaraDocumento(e.target.value))} /></div>
           </div>}
-          <div className="form-group"><label className="form-label">Observação da conta (opcional)</label><textarea className="form-control" rows="2" maxLength={1000} value={form.observacao} onChange={e => set('observacao', e.target.value)} /></div>
+          <div className="form-group"><label className="form-label">Observação da conta (opcional)</label><textarea aria-label="Observação da conta (opcional)" className="form-control" rows="2" maxLength={1000} value={form.observacao} onChange={e => set('observacao', e.target.value)} /></div>
           <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}><input type="checkbox" checked={form.principal} onChange={e => set('principal', e.target.checked)} />Definir como conta principal</label>
         </div>
         <div className="modal-footer"><button className="btn btn-secondary" onClick={onFechar}>Cancelar</button><button className="btn btn-primary" disabled={salvando} onClick={() => salvar()}>{salvando ? 'Salvando...' : 'Cadastrar conta'}</button></div>
@@ -889,32 +889,32 @@ function ConsultaFinanceiro() {
       {/* Filtros */}
       <div className="grid-3" style={{ gap: 10, marginBottom: 10 }}>
         <div className="form-group"><label className="form-label">Vencimento de</label>
-          <input type="date" className="form-control" value={filtros.venc_de} onChange={e => setF('venc_de', e.target.value)} /></div>
+          <input aria-label="Vencimento de" type="date" className="form-control" value={filtros.venc_de} onChange={e => setF('venc_de', e.target.value)} /></div>
         <div className="form-group"><label className="form-label">Vencimento até</label>
-          <input type="date" className="form-control" value={filtros.venc_ate} onChange={e => setF('venc_ate', e.target.value)} /></div>
+          <input aria-label="Vencimento até" type="date" className="form-control" value={filtros.venc_ate} onChange={e => setF('venc_ate', e.target.value)} /></div>
         <div className="form-group"><label className="form-label">Status</label>
-          <select className="form-control" value={filtros.status} onChange={e => setF('status', e.target.value)}>
+          <select aria-label="Status" className="form-control" value={filtros.status} onChange={e => setF('status', e.target.value)}>
             <option value="">Todos</option><option value="pendente">Pendente</option>
             <option value="pago">Recebida</option><option value="cancelada">Cancelada</option>
           </select></div>
         <div className="form-group"><label className="form-label">Valor — campo</label>
-          <select className="form-control" value={filtros.valor_campo} onChange={e => setF('valor_campo', e.target.value)}>
+          <select aria-label="Valor — campo" className="form-control" value={filtros.valor_campo} onChange={e => setF('valor_campo', e.target.value)}>
             <option value="bruto">Bruto</option><option value="liquido">Líquido</option><option value="honorario">Honorário</option>
           </select></div>
         <div className="form-group"><label className="form-label">Valor de</label>
-          <input className="form-control" value={filtros.valor_de} onChange={e => setF('valor_de', mascaraMoeda(e.target.value))} placeholder="0,00" /></div>
+          <input aria-label="Valor de" className="form-control" value={filtros.valor_de} onChange={e => setF('valor_de', mascaraMoeda(e.target.value))} placeholder="0,00" /></div>
         <div className="form-group"><label className="form-label">Valor até</label>
-          <input className="form-control" value={filtros.valor_ate} onChange={e => setF('valor_ate', mascaraMoeda(e.target.value))} placeholder="0,00" /></div>
+          <input aria-label="Valor até" className="form-control" value={filtros.valor_ate} onChange={e => setF('valor_ate', mascaraMoeda(e.target.value))} placeholder="0,00" /></div>
         <div className="form-group"><label className="form-label">Autor</label>
-          <input className="form-control" value={filtros.autor} onChange={e => setF('autor', e.target.value)} placeholder="Nome do autor" /></div>
+          <input aria-label="Autor" className="form-control" value={filtros.autor} onChange={e => setF('autor', e.target.value)} placeholder="Nome do autor" /></div>
         <div className="form-group"><label className="form-label">Réu</label>
-          <input className="form-control" value={filtros.reu} onChange={e => setF('reu', e.target.value)} placeholder="Nome do réu" /></div>
+          <input aria-label="Réu" className="form-control" value={filtros.reu} onChange={e => setF('reu', e.target.value)} placeholder="Nome do réu" /></div>
         <div className="form-group"><label className="form-label">Parceiro</label>
-          <input className="form-control" value={filtros.parceiro} onChange={e => setF('parceiro', e.target.value)} placeholder="Nome do parceiro" /></div>
+          <input aria-label="Parceiro" className="form-control" value={filtros.parceiro} onChange={e => setF('parceiro', e.target.value)} placeholder="Nome do parceiro" /></div>
         <div className="form-group"><label className="form-label">Nº do processo</label>
-          <input className="form-control" value={filtros.num_processo} onChange={e => setF('num_processo', e.target.value)} placeholder="Parte do número" /></div>
+          <input aria-label="Nº do processo" className="form-control" value={filtros.num_processo} onChange={e => setF('num_processo', e.target.value)} placeholder="Parte do número" /></div>
         <div className="form-group"><label className="form-label">Pasta (número)</label>
-          <input className="form-control" value={filtros.pasta} onChange={e => setF('pasta', e.target.value)} placeholder="Ex.: 6" /></div>
+          <input aria-label="Pasta (número)" className="form-control" value={filtros.pasta} onChange={e => setF('pasta', e.target.value)} placeholder="Ex.: 6" /></div>
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
         <button className="btn btn-primary" onClick={pesquisar}>Pesquisar</button>
@@ -1161,8 +1161,8 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
                   <td style={{ textAlign: 'right' }}>{formatarMoeda(p.valor_bruto)}</td>
                   <td style={{ textAlign: 'right' }}>
                     {p.honor_tipo === 'sem' ? '—' : formatarMoeda(p.honor_valor)}
-                    {p.honor_tipo === 'percent' && p.honor_percentual != null && <span style={{ color: '#888', fontSize: 11 }}> ({p.honor_percentual}%)</span>}
-                    {p.honor_tipo === 'fixo' && <span style={{ color: '#888', fontSize: 11 }}> (Fixo)</span>}
+                    {p.honor_tipo === 'percent' && p.honor_percentual != null && <span style={{ color: '#5b6472', fontSize: 11 }}> ({p.honor_percentual}%)</span>}
+                    {p.honor_tipo === 'fixo' && <span style={{ color: '#5b6472', fontSize: 11 }}> (Fixo)</span>}
                   </td>
                   <td style={{ textAlign: 'right' }}>{formatarMoeda(p.valor_liquido)}</td>
                   <td>{p.parceria_nome ? `${p.parceria_nome}${p.parceria_valor ? ' · ' + formatarMoeda(p.parceria_valor) : ''}` : '—'}</td>
@@ -1261,8 +1261,8 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
                     <td style={{ textAlign: 'right' }}>{formatarMoeda(p.multa.valor_bruto)}</td>
                     <td style={{ textAlign: 'right' }}>
                       {p.multa.honor_tipo === 'sem' ? '—' : formatarMoeda(p.multa.honor_valor)}
-                      {p.multa.honor_tipo === 'percent' && p.multa.honor_percentual != null && <span style={{ color: '#888', fontSize: 11 }}> ({p.multa.honor_percentual}%)</span>}
-                      {p.multa.honor_tipo === 'fixo' && <span style={{ color: '#888', fontSize: 11 }}> (Fixo)</span>}
+                      {p.multa.honor_tipo === 'percent' && p.multa.honor_percentual != null && <span style={{ color: '#5b6472', fontSize: 11 }}> ({p.multa.honor_percentual}%)</span>}
+                      {p.multa.honor_tipo === 'fixo' && <span style={{ color: '#5b6472', fontSize: 11 }}> (Fixo)</span>}
                     </td>
                     <td style={{ textAlign: 'right' }}>{formatarMoeda(p.multa.valor_liquido)}</td>
                     <td>{p.multa.parceria_nome ? `${p.multa.parceria_nome}${p.multa.parceria_valor ? ' · ' + formatarMoeda(p.multa.parceria_valor) : ''}` : '—'}</td>
@@ -1416,7 +1416,7 @@ function ModalCancelarAcordo({ onCancelar, onConfirmar }) {
           </p>
           <div className="form-group">
             <label className="form-label">Motivo do cancelamento *</label>
-            <textarea className="form-control" rows={3} value={motivo}
+            <textarea aria-label="Motivo do cancelamento" className="form-control" rows={3} value={motivo}
               onChange={e => setMotivo(e.target.value)} autoFocus
               placeholder="Ex: cliente refez o acordo / réu renegociou..." />
           </div>
@@ -1543,19 +1543,19 @@ function ModalReceberParcela({ parcela, onCancelar, onConfirmar, titulo, valorEx
         <div className="modal-body">
           <div className="form-group">
             <label className="form-label">Data do recebimento *</label>
-            <input type="date" className="form-control" value={data}
+            <input aria-label="Data do recebimento" type="date" className="form-control" value={data}
               onChange={e => setData(e.target.value)} autoFocus />
           </div>
           <div className="form-group">
             <label className="form-label">Conta ou caixa de recebimento *</label>
-            <select className="form-control" value={contaEscritorioId} onChange={e => { setContaEscritorioId(e.target.value); setFormaId(''); }}>
+            <select aria-label="Conta ou caixa de recebimento" className="form-control" value={contaEscritorioId} onChange={e => { setContaEscritorioId(e.target.value); setFormaId(''); }}>
               <option value="">Selecione a conta ou caixa...</option>
               {contasEscritorio.map(c => <option key={c.id} value={c.id}>{c.instituicao_nome ? `${c.instituicao_nome} — ${c.nome}` : c.nome}</option>)}
             </select>
           </div>
           <div className="form-group">
             <label className="form-label">Forma de recebimento *</label>
-            <select className="form-control" value={formaId} onChange={e => setFormaId(e.target.value)}>
+            <select aria-label="Forma de recebimento" className="form-control" value={formaId} onChange={e => setFormaId(e.target.value)}>
               <option value="">Selecione...</option>
               {formasCompativeis.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
             </select>
@@ -1567,7 +1567,7 @@ function ModalReceberParcela({ parcela, onCancelar, onConfirmar, titulo, valorEx
           </div>
           <div className="form-group">
             <label className="form-label">Identificação no extrato</label>
-            <input type="text" className="form-control" value={identificacao}
+            <input aria-label="Identificação no extrato" type="text" className="form-control" value={identificacao}
               placeholder="Ex.: PIX, nº do depósito/cheque, TED..."
               onChange={e => setIdentificacao(e.target.value)} />
           </div>
@@ -1648,18 +1648,18 @@ function ModalMulta({ parcela, onCancelar, onConfirmar }) {
           <div className="grid-2" style={{ gap: '12px' }}>
             <div className="form-group">
               <label className="form-label">Percentual da multa (%)</label>
-              <input type="number" step="0.01" min="0" className="form-control" value={percentualJuiz}
+              <input aria-label="Percentual da multa (%)" type="number" step="0.01" min="0" className="form-control" value={percentualJuiz}
                 onChange={onChangePercentual} placeholder="Ex: 10" autoFocus />
             </div>
             <div className="form-group">
               <label className="form-label">Valor da multa (R$) *</label>
-              <input type="text" inputMode="numeric" className="form-control" value={valorBruto}
+              <input aria-label="Valor da multa (R$)" type="text" inputMode="numeric" className="form-control" value={valorBruto}
                 onChange={onChangeValor} placeholder="0,00" />
             </div>
           </div>
           <div className="form-group">
             <label className="form-label">Data em que a multa deve ser paga *</label>
-            <input type="date" className="form-control" value={vencimento} onChange={e => setVencimento(e.target.value)} />
+            <input aria-label="Data em que a multa deve ser paga" type="date" className="form-control" value={vencimento} onChange={e => setVencimento(e.target.value)} />
           </div>
           <p style={{ color: '#6b7280', fontSize: '13px', marginTop: 0 }}>
             O escritório sempre fica com o honorário desta multa. Marque abaixo só se parte dela também for repassada.
@@ -1722,26 +1722,26 @@ export function ModalLancamento({ processoId, lancamento, onFechar }) {
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Tipo *</label>
-              <select className="form-control" value={form.tipo} onChange={e => set('tipo', e.target.value)}>
+              <select aria-label="Tipo" className="form-control" value={form.tipo} onChange={e => set('tipo', e.target.value)}>
                 <option value="entrada">Entrada</option>
                 <option value="saida">Saída</option>
               </select>
             </div>
             <div className="form-group">
               <label className="form-label">Data *</label>
-              <input type="date" className="form-control" value={form.data} onChange={e => set('data', e.target.value)} />
+              <input aria-label="Data" type="date" className="form-control" value={form.data} onChange={e => set('data', e.target.value)} />
             </div>
           </div>
           <div className="form-group">
             <label className="form-label">Descrição *</label>
-            <input className="form-control" autoComplete="off" value={form.descricao || ''}
+            <input aria-label="Descrição" className="form-control" autoComplete="off" value={form.descricao || ''}
               onChange={e => set('descricao', e.target.value)}
               onBlur={() => set('descricao', toTitleCase(form.descricao))}
               placeholder="Ex: Cartório, gasolina, adiantamento ao cliente..." />
           </div>
           <div className="form-group">
             <label className="form-label">Valor (R$) *</label>
-            <input type="text" inputMode="numeric" className="form-control" value={form.valor || ''}
+            <input aria-label="Valor (R$)" type="text" inputMode="numeric" className="form-control" value={form.valor || ''}
               onChange={e => set('valor', mascaraMoeda(e.target.value))} placeholder="0,00" />
           </div>
         </div>
@@ -1959,38 +1959,38 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
           <div className="grid-4" style={{ gap: '12px' }}>
             <div className="form-group">
               <label className="form-label">Valor total (R$) *</label>
-              <input type="text" inputMode="numeric" className="form-control" value={cab.valor_total}
+              <input aria-label="Valor total (R$)" type="text" inputMode="numeric" className="form-control" value={cab.valor_total}
                 onChange={e => setC('valor_total', mascaraMoeda(e.target.value))} placeholder="0,00" />
             </div>
             <div className="form-group">
               <label className="form-label">Nº de parcelas *</label>
-              <input type="number" min="1" className="form-control" value={cab.qtd_parcelas}
+              <input aria-label="Nº de parcelas" type="number" min="1" className="form-control" value={cab.qtd_parcelas}
                 onChange={e => setC('qtd_parcelas', e.target.value)} placeholder="Ex: 25" />
             </div>
             <div className="form-group">
               <label className="form-label">1ª parcela *</label>
-              <input type="date" className="form-control" value={cab.data_primeira}
+              <input aria-label="1ª parcela" type="date" className="form-control" value={cab.data_primeira}
                 onChange={e => setC('data_primeira', e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Honorário padrão (%)</label>
-              <input type="number" step="0.01" min="0" max="100" className="form-control" value={cab.honor_percentual}
+              <input aria-label="Honorário padrão (%)" type="number" step="0.01" min="0" max="100" className="form-control" value={cab.honor_percentual}
                 onChange={e => setC('honor_percentual', e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Multa por atraso (%)</label>
-              <input type="number" step="0.01" min="0" className="form-control" value={cab.multa_percentual}
+              <input aria-label="Multa por atraso (%)" type="number" step="0.01" min="0" className="form-control" value={cab.multa_percentual}
                 onChange={e => setC('multa_percentual', e.target.value)} placeholder="Ex: 10 (opcional)" />
             </div>
           </div>
           <div className="form-group">
             <label className="form-label">Descrição (opcional)</label>
-            <input className="form-control" autoComplete="off" value={cab.descricao}
+            <input aria-label="Descrição (opcional)" className="form-control" autoComplete="off" value={cab.descricao}
               onChange={e => setC('descricao', e.target.value)} placeholder="Ex: Acordo trabalhista homologado" />
           </div>
           <div className="grid-2" style={{ gap: '12px' }}>
             <div className="form-group"><label className="form-label">Beneficiário padrão das parcelas</label>
-              <select className="form-control" value={beneficiarioId ? `${beneficiarioTipo}:${beneficiarioId}` : ''}
+              <select aria-label="Beneficiário padrão das parcelas" className="form-control" value={beneficiarioId ? `${beneficiarioTipo}:${beneficiarioId}` : ''}
                 onChange={e => { const [t, id] = e.target.value.split(':'); setBeneficiarioTipo(t || ''); setBeneficiarioId(id || ''); setContaBeneficiarioId(''); }}>
                 <option value="">Definir depois, no repasse</option>
                 {beneficiarios.map(b => <option key={`${b.tipo}:${b.id}`} value={`${b.tipo}:${b.id}`}>{b.nome}</option>)}
@@ -2071,7 +2071,7 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
                             )}
                           </>
                         )}
-                        {p.honor_tipo === 'sem' && <span style={{ color: '#888' }}>—</span>}
+                        {p.honor_tipo === 'sem' && <span style={{ color: '#5b6472' }}>—</span>}
                       </td>
                       <td style={{ whiteSpace: 'nowrap' }}>{formatarMoeda(liquidoDaParcela(p))}</td>
                       <td>
@@ -2189,7 +2189,7 @@ function ModalParceriaParcela({ parcela, onCancelar, onAplicar, titulo = 'Parcer
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Forma</label>
-              <select className="form-control" value={tipo} onChange={e => setTipo(e.target.value)}>
+              <select aria-label="Forma" className="form-control" value={tipo} onChange={e => setTipo(e.target.value)}>
                 <option value="percent">% do honorário</option>
                 <option value="fixo">Valor fixo</option>
               </select>

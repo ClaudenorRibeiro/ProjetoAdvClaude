@@ -189,7 +189,7 @@ export default function Tarefas() {
         </Link>
       );
     }
-    return <span style={{ fontSize: '13px', color: '#64748b' }}>Rotina Interna</span>;
+    return <span style={{ fontSize: '13px', color: '#5b6472' }}>Rotina Interna</span>;
   }
 
   const totalPaginas = Math.ceil(total / LIMITE);
@@ -203,7 +203,7 @@ export default function Tarefas() {
             <label className="form-label">Mostrar</label>
             {/* Dropdown único. "Atrasadas" é um atalho: mostra só as pendentes já vencidas.
                 Quando escolhido, guardamos atrasadas='1' e limpamos concluida (o backend aplica a regra). */}
-            <select className="form-control"
+            <select aria-label="Mostrar" className="form-control"
               value={filtros.atrasadas === '1' ? 'atrasadas' : filtros.concluida}
               onChange={e => {
                 const v = e.target.value;
@@ -218,7 +218,7 @@ export default function Tarefas() {
           </div>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Prioridade</label>
-            <select className="form-control" value={filtros.prioridade} onChange={e => setFiltro('prioridade', e.target.value)}>
+            <select aria-label="Prioridade" className="form-control" value={filtros.prioridade} onChange={e => setFiltro('prioridade', e.target.value)}>
               <option value="">Todas</option>
               <option value="urgente">🔴 Urgente</option>
               <option value="normal">🟡 Normal</option>
@@ -228,7 +228,7 @@ export default function Tarefas() {
           {podeVerTodos && (
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Para</label>
-              <select className="form-control" value={filtros.usuario_id} onChange={e => setFiltro('usuario_id', e.target.value)}>
+              <select aria-label="Para" className="form-control" value={filtros.usuario_id} onChange={e => setFiltro('usuario_id', e.target.value)}>
                 <option value="">Todos</option>
                 {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
               </select>
@@ -244,11 +244,11 @@ export default function Tarefas() {
           </div>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Vencimento de</label>
-            <input type="date" className="form-control" value={filtros.data_de} onChange={e => setDataManual('data_de', e.target.value)} />
+            <input aria-label="Vencimento de" type="date" className="form-control" value={filtros.data_de} onChange={e => setDataManual('data_de', e.target.value)} />
           </div>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Até</label>
-            <input type="date" className="form-control" value={filtros.data_ate} onChange={e => setDataManual('data_ate', e.target.value)} />
+            <input aria-label="Até" type="date" className="form-control" value={filtros.data_ate} onChange={e => setDataManual('data_ate', e.target.value)} />
           </div>
           <button className="btn btn-secondary" style={{ marginBottom: '1px' }}
             onClick={() => { setBuscaInput(''); setFiltros(filtrosPadrao(usuario?.id)); }}>
@@ -260,14 +260,14 @@ export default function Tarefas() {
               + Nova Tarefa
             </button>
           )}
-          <span style={{ marginLeft: 'auto', color: '#888', fontSize: '13px', marginBottom: '1px' }}>
+          <span style={{ marginLeft: 'auto', color: '#5b6472', fontSize: '13px', marginBottom: '1px' }}>
             {total} tarefa(s)
           </span>
         </div>
 
         {/* Período rápido: sempre inclui as atrasadas e as sem data; muda só o teto de vencimento (hoje/hoje+7/hoje+30). */}
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '12px', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 500 }}>Período rápido:</span>
+          <span style={{ fontSize: '13px', color: '#5b6472', fontWeight: 500 }}>Período rápido:</span>
           {PERIODOS.map(p => (
             <button key={p.chave} type="button"
               className={`btn ${periodoAtivo === p.chave ? 'btn-primary' : 'btn-secondary'}`}
@@ -365,7 +365,7 @@ export default function Tarefas() {
               style={{ padding: '6px 16px', fontSize: '13px' }}>
               ◀ Anterior
             </button>
-            <span style={{ color: '#64748b', fontSize: '13px' }}>
+            <span style={{ color: '#5b6472', fontSize: '13px' }}>
               Página <strong>{filtros.pagina}</strong> de <strong>{totalPaginas}</strong>
               &nbsp;·&nbsp;{total} registro(s)
             </span>
@@ -436,7 +436,7 @@ export function ModalHistoricoTarefa({ tarefa, onFechar }) {
             {tarefa.titulo}
           </p>
 
-          {carregando && <p style={{ color: '#888', textAlign: 'center', padding: '24px' }}>Carregando...</p>}
+          {carregando && <p style={{ color: '#5b6472', textAlign: 'center', padding: '24px' }}>Carregando...</p>}
 
           {!carregando && historico && (
             <div style={{ position: 'relative' }}>
@@ -469,7 +469,7 @@ export function ModalHistoricoTarefa({ tarefa, onFechar }) {
                         {ev.data ? formatarDataHora(ev.data) : '—'}
                       </span>
                     </div>
-                    <div style={{ fontSize: '13px', color: '#64748b', marginTop: '2px' }}>
+                    <div style={{ fontSize: '13px', color: '#5b6472', marginTop: '2px' }}>
                       👤 {ev.usuario}
                     </div>
                   </div>
@@ -786,7 +786,7 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
                 </span>
               )}
               {bloquearProcesso && pastaInicial && (
-                <span style={{ fontSize: '12px', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                <span style={{ fontSize: '12px', color: '#5b6472', marginTop: '4px', display: 'block' }}>
                   {pastaInicial} — vínculo definido pela audiência e não pode ser alterado.
                 </span>
               )}
@@ -809,7 +809,7 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
               {!bloquearProcesso && processosDaPasta.length > 1 && (
                 <div style={{ marginTop: '8px', border: '1px solid #e2e8f0', borderRadius: '6px',
                               background: '#f8fafc', padding: '8px' }}>
-                  <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>
+                  <div style={{ fontSize: '12px', color: '#5b6472', marginBottom: '6px' }}>
                     Selecione o processo:
                   </div>
                   {processosDaPasta.map(proc => (
@@ -829,14 +829,14 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
           {/* ── Título e Descrição ── */}
           <div className="form-group">
             <label className="form-label">Título *</label>
-            <input className="form-control" ref={tituloRef} value={form.titulo}
+            <input aria-label="Título" className="form-control" ref={tituloRef} value={form.titulo}
               onChange={e => set('titulo', e.target.value)}
               onBlur={() => set('titulo', toTitleCase(form.titulo))}
               placeholder="Descreva a tarefa..." />
           </div>
           <div className="form-group">
             <label className="form-label">Descrição</label>
-            <textarea className="form-control" rows={3} value={form.descricao}
+            <textarea aria-label="Descrição" className="form-control" rows={3} value={form.descricao}
               onChange={e => set('descricao', e.target.value)}
               onBlur={() => set('descricao', toTitleCase(form.descricao))}
               placeholder="Detalhes adicionais..." style={{ resize: 'vertical' }} />
@@ -846,7 +846,7 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
           <div className="grid-3">
             <div className="form-group">
               <label className="form-label">Prioridade</label>
-              <select className="form-control" value={form.prioridade} onChange={e => set('prioridade', e.target.value)}>
+              <select aria-label="Prioridade" className="form-control" value={form.prioridade} onChange={e => set('prioridade', e.target.value)}>
                 <option value="urgente">🔴 Urgente</option>
                 <option value="normal">🟡 Normal</option>
                 <option value="baixa">🟢 Baixa</option>
@@ -854,12 +854,12 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
             </div>
             <div className="form-group">
               <label className="form-label">Vencimento</label>
-              <input type="date" className="form-control" ref={dataVencRef} value={form.data_vencimento}
+              <input aria-label="Vencimento" type="date" className="form-control" ref={dataVencRef} value={form.data_vencimento}
                 onChange={e => set('data_vencimento', e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Atribuir para</label>
-              <select className="form-control" value={form.atribuida_para}
+              <select aria-label="Atribuir para" className="form-control" value={form.atribuida_para}
                 onChange={e => { set('atribuida_para', e.target.value); if (!e.target.value) { setNotificarConclusao(false); setEnviarEmailPara(false); } }}>
                 <option value="">Escritório</option>
                 {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}

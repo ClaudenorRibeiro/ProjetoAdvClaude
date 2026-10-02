@@ -115,7 +115,7 @@ export default function ModalGerarLote({ ancoraTipo, ancoraIds, onFechar }) {
             <>
               <div className="form-group">
                 <label className="form-label">Formato</label>
-                <select className="form-control" value={formato} onChange={e => setFormato(e.target.value)}>
+                <select aria-label="Formato" className="form-control" value={formato} onChange={e => setFormato(e.target.value)}>
                   <option value="docx">Word (.docx)</option>
                   <option value="pdf">PDF</option>
                 </select>
@@ -125,7 +125,7 @@ export default function ModalGerarLote({ ancoraTipo, ancoraIds, onFechar }) {
               {comModelo.map(g => (
                 <div className="form-group" key={g.chave}>
                   <label className="form-label">
-                    {g.rotulo} <span style={{ color: '#888', fontWeight: 'normal' }}>({g.ancora_ids.length})</span>
+                    {g.rotulo} <span style={{ color: '#5b6472', fontWeight: 'normal' }}>({g.ancora_ids.length})</span>
                   </label>
                   <select className="form-control" value={escolhas[g.chave] || ''}
                     onChange={e => escolherModelo(g.chave, e.target.value)}>

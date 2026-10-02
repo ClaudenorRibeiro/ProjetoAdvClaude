@@ -343,14 +343,14 @@ function ModalProfissao({ editando, nome, setNome, salvando, onFechar, onSalvar 
           <div className="modal-body">
             <div className="form-group">
               <label className="form-label obrigatorio">Nome</label>
-              <input
+              <input aria-label="Nome"
                 className="form-control"
                 placeholder="Ex.: Perícia médica, Advogado, Operador..."
                 value={nome}
                 onChange={e => setNome(e.target.value)}
                 autoFocus
               />
-              <small style={{ color: '#64748b', display: 'block', marginTop: 6 }}>
+              <small style={{ color: '#5b6472', display: 'block', marginTop: 6 }}>
                 Para aparecer como perito nas perícias, a profissão deve começar com “Perícia”.
               </small>
             </div>

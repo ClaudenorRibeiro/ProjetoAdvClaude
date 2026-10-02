@@ -300,7 +300,7 @@ export default function Pessoas() {
               <button className="btn btn-outline" onClick={sairModoUnificar}>Cancelar</button>
             </>
           )}
-          <span style={{marginLeft:'auto',color:'#888',fontSize:'13px'}}>{total} registro(s)</span>
+          <span style={{marginLeft:'auto',color:'#5b6472',fontSize:'13px'}}>{total} registro(s)</span>
         </div>
 
         {/* Tabela */}
@@ -444,7 +444,7 @@ export default function Pessoas() {
             <>
               Tem certeza que deseja excluir <strong>{confirmarExclusao.nome}</strong>?
               <br />
-              <span style={{fontSize:'12px',color:'#888'}}>
+              <span style={{fontSize:'12px',color:'#5b6472'}}>
                 O registro ficará inativo e não aparecerá mais nas listagens.
               </span>
             </>
@@ -533,7 +533,7 @@ function ModalProcessosDaPessoa({ pessoa, tipo, onFechar }) {
         </div>
         <div className="modal-body">
           {carregando ? (
-            <p style={{color:'#888',textAlign:'center',padding:'20px'}}>Carregando...</p>
+            <p style={{color:'#5b6472',textAlign:'center',padding:'20px'}}>Carregando...</p>
           ) : lista.length === 0 ? (
             <p className="lista-vazia">Nenhum processo encontrado</p>
           ) : (
@@ -719,7 +719,7 @@ export function ModalAnotacoes({ pessoa, tipo, onFechar }) {
 
           {/* Lista de anotações — mais recente em cima */}
           {carregando ? (
-            <p style={{color:'#888',textAlign:'center',padding:'20px'}}>Carregando...</p>
+            <p style={{color:'#5b6472',textAlign:'center',padding:'20px'}}>Carregando...</p>
           ) : lista.length === 0 ? (
             <p className="lista-vazia">Nenhuma anotação registrada ainda</p>
           ) : (
@@ -857,10 +857,10 @@ export function ModalEnviarSMS({ pessoa, telefones, tipo, onFechar }) {
           )}
 
           <label style={rotulo}>Mensagem</label>
-          <textarea style={{ ...campo, resize:'vertical', minHeight:'90px' }}
+          <textarea aria-label="Mensagem" style={{ ...campo, resize:'vertical', minHeight:'90px' }}
             value={mensagem} onChange={e => setMensagem(e.target.value)}
             placeholder="Escreva o SMS..." />
-          <small style={{ color: segmentos > 1 ? '#c0392b' : '#888', fontSize:'12px' }}>
+          <small style={{ color: segmentos > 1 ? '#c0392b' : '#5b6472', fontSize:'12px' }}>
             {len} caractere(s){segmentos > 1
               ? ` — ${segmentos} SMS (cada 160 caracteres = 1 crédito)`
               : ' — 1 SMS (até 160 caracteres = 1 crédito)'}
@@ -1006,11 +1006,11 @@ export function ModalEnviarEmail({ pessoa, emails, tipo, onFechar }) {
           )}
 
           <label style={rotulo}>Assunto</label>
-          <input value={assunto} onChange={e => setAssunto(e.target.value)} maxLength={200}
+          <input aria-label="Assunto" value={assunto} onChange={e => setAssunto(e.target.value)} maxLength={200}
             placeholder="Assunto do e-mail" style={campo} />
 
           <label style={rotulo}>Mensagem</label>
-          <textarea value={mensagem} onChange={e => setMensagem(e.target.value)} rows={7}
+          <textarea aria-label="Mensagem" value={mensagem} onChange={e => setMensagem(e.target.value)} rows={7}
             placeholder="Escreva a mensagem..."
             style={{...campo, resize:'vertical'}} />
 
@@ -1023,7 +1023,7 @@ export function ModalEnviarEmail({ pessoa, emails, tipo, onFechar }) {
                 accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
                 onChange={e => adicionarArquivos(e.target.files, e.target)} />
             </label>
-            <span style={{ fontSize:'12px', color:'#888', marginLeft:'8px' }}>Até 20 MB no total</span>
+            <span style={{ fontSize:'12px', color:'#5b6472', marginLeft:'8px' }}>Até 20 MB no total</span>
           </div>
           {anexos.length > 0 && (
             <ul style={{ listStyle:'none', margin:'6px 0 0', padding:0 }}>
@@ -1032,7 +1032,7 @@ export function ModalEnviarEmail({ pessoa, emails, tipo, onFechar }) {
                   fontSize:'13px', color:'#333', background:'#f5f7fa', border:'1px solid #e2e8f0',
                   borderRadius:'6px', padding:'6px 8px', marginBottom:'4px' }}>
                   <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                    📄 {f.name} <span style={{ color:'#888' }}>({fmtTamanho(f.size)})</span>
+                    📄 {f.name} <span style={{ color:'#5b6472' }}>({fmtTamanho(f.size)})</span>
                   </span>
                   <button type="button" onClick={() => removerArquivo(i)} disabled={enviando}
                     style={{ background:'none', border:'none', color:'#dc2626', cursor:'pointer', fontSize:'16px', lineHeight:1, marginLeft:'8px' }}
@@ -1404,7 +1404,7 @@ function TabelaFisicas({ lista, onEditar, onVerDetalhes, onExcluir, onVerProcess
             {/* Modo unificar: caixa para marcar cadastros duplicados da mesma pessoa */}
             {modoUnificar && (
               <td style={{textAlign:'center'}}>
-                <input type="checkbox" checked={estaSel(p.id)} onChange={() => onToggleSel(p)} />
+                <input type="checkbox" aria-label="Selecionar esta pessoa" checked={estaSel(p.id)} onChange={() => onToggleSel(p)} />
               </td>
             )}
             <td><strong onClick={() => onVerDetalhes(p)} title="Ver detalhes"
@@ -1464,7 +1464,7 @@ function TabelaJuridicas({ lista, onEditar, onVerDetalhes, onExcluir, onVerProce
             {/* Modo unificar: caixa para marcar cadastros duplicados da mesma empresa */}
             {modoUnificar && (
               <td style={{textAlign:'center'}}>
-                <input type="checkbox" checked={estaSel(p.id)} onChange={() => onToggleSel(p)} />
+                <input type="checkbox" aria-label="Selecionar esta pessoa" checked={estaSel(p.id)} onChange={() => onToggleSel(p)} />
               </td>
             )}
             <td><strong onClick={() => onVerDetalhes(p)} title="Ver detalhes"
@@ -1583,9 +1583,9 @@ function ModalUnificarPessoas({ tipo, selecionados, onFechar }) {
                   <span style={{flex:1}}>
                     <strong>{nomeDe(p)}</strong>
                     {ehFisica && p.cpf && (
-                      <span style={{color:'#888',fontSize:'12px',marginLeft:'6px'}}>CPF {formatarCPF(p.cpf)}</span>
+                      <span style={{color:'#5b6472',fontSize:'12px',marginLeft:'6px'}}>CPF {formatarCPF(p.cpf)}</span>
                     )}
-                    <span style={{color:'#888',fontSize:'12px',marginLeft:'6px'}}>
+                    <span style={{color:'#5b6472',fontSize:'12px',marginLeft:'6px'}}>
                       ({p.qtde_proc ?? 0} processo(s))
                     </span>
                   </span>
@@ -2105,7 +2105,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
           {/* Observações */}
           <div className="form-group" style={{marginTop:'16px'}}>
             <label className="form-label">Observações</label>
-            <textarea className="form-control" rows={3} value={form.observacoes||''} disabled={leitura} onChange={e=>set('observacoes',e.target.value)} onBlur={()=>set('observacoes', toTitleCase(form.observacoes))} />
+            <textarea aria-label="Observações" className="form-control" rows={3} value={form.observacoes||''} disabled={leitura} onChange={e=>set('observacoes',e.target.value)} onBlur={()=>set('observacoes', toTitleCase(form.observacoes))} />
           </div>
         </div>
 
@@ -2194,7 +2194,7 @@ function CampoCPF({ value, onChange, pessoaIdAtual = null, onAbrirEdicao = null,
       />
       {/* Exibe feedback abaixo do campo */}
       {verificando && (
-        <small style={{ color: '#888', fontSize: '12px' }}>⏳ Verificando CPF...</small>
+        <small style={{ color: '#5b6472', fontSize: '12px' }}>⏳ Verificando CPF...</small>
       )}
       {erroCpf && (
         <small style={{ color: '#e74c3c', fontSize: '12px' }}>⚠️ {erroCpf}</small>
@@ -2262,7 +2262,7 @@ function CampoCNPJ({ value, onChange, somenteLeitura = false }) {
   return (
     <div className="form-group">
       <label className="form-label">CNPJ</label>
-      <input
+      <input aria-label="CNPJ"
         type="text"
         className={`form-control ${erroCnpj ? 'is-invalid' : ''}`}
         value={mascaraCNPJ(value || '')}
@@ -2299,7 +2299,7 @@ function CampoDataNascimento({ value, onChange, somenteLeitura = false, refCampo
   return (
     <div className="form-group">
       <label className="form-label">Data de nascimento</label>
-      <input
+      <input aria-label="Data de nascimento"
         ref={refCampo}
         type="date"
         className={`form-control ${erroData ? 'is-invalid' : ''}`}
@@ -2353,7 +2353,7 @@ function CampoAvisosIdade({ avisos, setAvisos, dataNascimento, somenteLeitura = 
   return (
     <div style={{ marginTop: '4px', marginBottom: '8px' }}>
       <h4 style={{ margin: '12px 0 6px', color: '#555', fontSize: '13px', fontWeight: 600 }}>
-        Avisos de idade <span style={{ fontWeight: 400, color: '#888' }}>— opcional</span>
+        Avisos de idade <span style={{ fontWeight: 400, color: '#5b6472' }}>— opcional</span>
       </h4>
       <p style={{ fontSize: '12px', color: '#6b7280', margin: '0 0 8px' }}>
         No dia em que a pessoa completar a idade marcada, os administradores recebem um aviso no sino.
@@ -2457,7 +2457,7 @@ function CampoResponsavelLegal({ form, set, opcoesParentesco, onNovoParentesco, 
   return (
     <>
       <h4 style={{margin:'16px 0 8px',color:'#555',fontSize:'13px',fontWeight:600}}>
-        Responsável legal <span style={{fontWeight:400,color:'#888'}}>— para menor ou incapaz</span>
+        Responsável legal <span style={{fontWeight:400,color:'#5b6472'}}>— para menor ou incapaz</span>
       </h4>
 
       <div className="grid-2">
@@ -2576,7 +2576,7 @@ function CampoNomeCompleto({ value, onChange, somenteLeitura = false, refCampo }
   return (
     <div className="form-group">
       <label className="form-label">Nome completo *</label>
-      <input
+      <input aria-label="Nome completo"
         ref={refCampo}
         type="text"
         className={`form-control ${erroNome ? 'is-invalid' : ''}`}
@@ -2645,7 +2645,7 @@ function CampoCEP({ value, onChange, onAutoFill, somenteLeitura = false }) {
   return (
     <div className="form-group">
       <label className="form-label">CEP</label>
-      <input
+      <input aria-label="CEP"
         type="text"
         autoComplete="off"
         className={`form-control ${erroCep ? 'is-invalid' : ''}`}
@@ -2656,7 +2656,7 @@ function CampoCEP({ value, onChange, onAutoFill, somenteLeitura = false }) {
         placeholder="00000-000"
         maxLength={9}
       />
-      {buscando && <small style={{ color: '#888', fontSize: '12px' }}>🔍 Buscando endereço...</small>}
+      {buscando && <small style={{ color: '#5b6472', fontSize: '12px' }}>🔍 Buscando endereço...</small>}
       {erroCep  && <small style={{ color: '#e74c3c', fontSize: '12px' }}>⚠️ {erroCep}</small>}
     </div>
   );

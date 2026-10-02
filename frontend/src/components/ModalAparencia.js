@@ -236,7 +236,7 @@ export default function ModalAparencia({ onFechar }) {
           </p>
           <div className="form-group" style={{ marginBottom: 10 }}>
             <label className="form-label">Módulo</label>
-            <select className="form-control" value={etqModulo} onChange={e => setEtqModulo(e.target.value)}>
+            <select aria-label="Módulo" className="form-control" value={etqModulo} onChange={e => setEtqModulo(e.target.value)}>
               {MODULOS_ETIQUETA_PESSOAL.map(m => <option key={m.chave} value={m.chave}>{m.label}</option>)}
             </select>
           </div>

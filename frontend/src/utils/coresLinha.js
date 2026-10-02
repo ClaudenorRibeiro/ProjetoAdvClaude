@@ -4,9 +4,9 @@
 // Cada usuário pode sobrescrever (usuarios.cor_linha); vazio = padrão do sistema.
 // ============================================================
 
-// Cor PADRÃO da linha SOB O MOUSE — EXATAMENTE a atual (.tabela tr:hover no Layout.css).
+// Cor PADRÃO da linha SOB O MOUSE — a mesma de .tabela tr:hover no Layout.css (clara o bastante para links e textos manterem contraste 4,5:1).
 // Se o usuário não personalizar, nada muda (o Layout.css usa esse mesmo valor como fallback).
-export const COR_LINHA_PADRAO = '#aec6e4';
+export const COR_LINHA_PADRAO = '#eaf1fc';
 
 // Cor PADRÃO da linha de PUBLICAÇÃO JÁ LIDA (verde-claro). Aplicada por padrão a quem não
 // personalizar (o front usa este valor como fallback em Publicações).

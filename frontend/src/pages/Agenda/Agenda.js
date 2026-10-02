@@ -661,7 +661,7 @@ function EventoDetalhe({ evento }) {
       <tbody>
         {linhas.map(([label, valor], i) => (
           <tr key={i}>
-            <td style={{padding:'5px 0',color:'#888',width:'40%',fontWeight:500}}>{label}</td>
+            <td style={{padding:'5px 0',color:'#5b6472',width:'40%',fontWeight:500}}>{label}</td>
             <td style={{padding:'5px 0',color:'#333'}}>{valor || '—'}</td>
           </tr>
         ))}
@@ -744,16 +744,16 @@ export function ModalCompromisso({ compromisso, dataInicial, usuarios = [], usua
           )}
           <div className="form-group">
             <label className="form-label obrigatorio">Título</label>
-            <input className="form-control" value={form.titulo} onChange={e => set('titulo', e.target.value)}
+            <input aria-label="Título" className="form-control" value={form.titulo} onChange={e => set('titulo', e.target.value)}
               placeholder="Ex.: Reunião com cliente" autoFocus />
           </div>
           <div className="form-group">
             <label className="form-label">Descrição</label>
-            <textarea className="form-control" rows={2} value={form.descricao} onChange={e => set('descricao', e.target.value)} />
+            <textarea aria-label="Descrição" className="form-control" rows={2} value={form.descricao} onChange={e => set('descricao', e.target.value)} />
           </div>
           <div className="form-group">
             <label className="form-label">Delegar para</label>
-            <select className="form-control" value={form.delegado_para} onChange={e => set('delegado_para', e.target.value)}>
+            <select aria-label="Delegar para" className="form-control" value={form.delegado_para} onChange={e => set('delegado_para', e.target.value)}>
               {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
             </select>
             <small style={{ color: '#6b7280', fontSize: 12 }}>
@@ -763,7 +763,7 @@ export function ModalCompromisso({ compromisso, dataInicial, usuarios = [], usua
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label obrigatorio">Data</label>
-              <input type="date" className="form-control" value={form.data} onChange={e => set('data', e.target.value)} />
+              <input aria-label="Data" type="date" className="form-control" value={form.data} onChange={e => set('data', e.target.value)} />
             </div>
             <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
@@ -776,11 +776,11 @@ export function ModalCompromisso({ compromisso, dataInicial, usuarios = [], usua
             <div className="grid-2">
               <div className="form-group">
                 <label className="form-label">Hora início</label>
-                <input type="time" className="form-control" value={form.hora_inicio} onChange={e => set('hora_inicio', e.target.value)} />
+                <input aria-label="Hora início" type="time" className="form-control" value={form.hora_inicio} onChange={e => set('hora_inicio', e.target.value)} />
               </div>
               <div className="form-group">
                 <label className="form-label">Hora fim</label>
-                <input type="time" className="form-control" value={form.hora_fim} onChange={e => set('hora_fim', e.target.value)} />
+                <input aria-label="Hora fim" type="time" className="form-control" value={form.hora_fim} onChange={e => set('hora_fim', e.target.value)} />
               </div>
             </div>
           )}

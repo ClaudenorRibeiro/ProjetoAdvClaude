@@ -4,11 +4,11 @@
 // Cada usuário pode sobrescrever essas cores (usuarios.cores_menu); vazio = padrão.
 // ============================================================
 
-// Cores PADRÃO — EXATAMENTE as atuais do menu no Layout.css. Se o usuário não
-// personalizar, nada muda (o Layout.css usa esses mesmos valores como fallback).
+// Cores PADRÃO — as mesmas usadas como reserva no Layout.css. Se o usuário não
+// personalizar, vale esta (o Layout.css usa esses mesmos valores como fallback).
 export const CORES_MENU_PADRAO = {
   fundo:    '#2a4146', // fundo do menu lateral
-  destaque: '#7eb8f7', // item ativo / hover (texto, barra à direita e realce)
+  destaque: '#b5d9fc', // item ativo / hover (texto, barra à direita e realce) — contraste ≥ 4,5:1 sobre o fundo padrão (acessibilidade)
 };
 
 // Rótulos amigáveis (para o modal de personalização).

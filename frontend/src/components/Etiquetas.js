@@ -81,7 +81,7 @@ export function EditorEtiquetasCinco({ rows, onChange, emUso = [], statusOpcoes 
               </select>
             )}
             {travada && (
-              <span style={{ fontSize: '11px', color: '#888', whiteSpace: 'nowrap' }}
+              <span style={{ fontSize: '11px', color: '#5b6472', whiteSpace: 'nowrap' }}
                 title="Essa cor já está em uso em registros existentes — não pode mudar de cor nem ser removida, só o nome">
                 🔒 em uso
               </span>
@@ -245,7 +245,7 @@ export function ModalHistoricoEtiquetaEscritorio({ modulo, registroId, catalogo,
 
   function ladoEtiqueta(slot) {
     const def = defDoSlot(catalogo, slot);
-    if (!slot) return <span style={{ color: '#888' }}>Sem etiqueta</span>;
+    if (!slot) return <span style={{ color: '#5b6472' }}>Sem etiqueta</span>;
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
         <span style={{ width: 11, height: 11, borderRadius: '50%', background: def?.cor || '#ccc', display: 'inline-block' }} />
@@ -284,7 +284,7 @@ export function ModalHistoricoEtiquetaEscritorio({ modulo, registroId, catalogo,
                     <span style={{ color: '#aaa' }}>→</span>
                     {ladoEtiqueta(l.slot_novo)}
                   </div>
-                  <div style={{ color: '#888', fontSize: '11px', marginTop: '4px' }}>
+                  <div style={{ color: '#5b6472', fontSize: '11px', marginTop: '4px' }}>
                     {l.usuario_nome} · {formatarDataHora(l.criado_em)}
                   </div>
                 </div>

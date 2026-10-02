@@ -162,7 +162,7 @@ export default function Pericias() {
         <div style={{display:'flex',gap:'12px',flexWrap:'wrap',alignItems:'flex-end'}}>
           <div className="form-group" style={{margin:0}}>
             <label className="form-label">Status</label>
-            <select className="form-control" value={filtros.status} onChange={e => setFiltro('status', e.target.value)}>
+            <select aria-label="Status" className="form-control" value={filtros.status} onChange={e => setFiltro('status', e.target.value)}>
               <option value="">Todos</option>
               <option value="aguardando_data">Aguardando data</option>
               <option value="agendada">Agendada</option>
@@ -173,12 +173,12 @@ export default function Pericias() {
           </div>
           <div className="form-group" style={{margin:0}}>
             <label className="form-label">Data de</label>
-            <input type="date" className="form-control" value={filtros.data_de}
+            <input aria-label="Data de" type="date" className="form-control" value={filtros.data_de}
               onChange={e => setFiltro('data_de', e.target.value)} />
           </div>
           <div className="form-group" style={{margin:0}}>
             <label className="form-label">Até</label>
-            <input type="date" className="form-control" value={filtros.data_ate}
+            <input aria-label="Até" type="date" className="form-control" value={filtros.data_ate}
               onChange={e => setFiltro('data_ate', e.target.value)} />
           </div>
           <button className="btn btn-primary" style={{marginBottom:'1px'}}
@@ -193,7 +193,7 @@ export default function Pericias() {
               📄 Gerar em lote{selecionados.size ? ` (${selecionados.size})` : ''}
             </button>
           )}
-          <span style={{marginLeft:'auto',color:'#888',fontSize:'13px',marginBottom:'1px'}}>
+          <span style={{marginLeft:'auto',color:'#5b6472',fontSize:'13px',marginBottom:'1px'}}>
             {total} perícia(s)
           </span>
         </div>
@@ -212,7 +212,7 @@ export default function Pericias() {
                       {/* Marca/desmarca todas as perícias elegíveis da página */}
                       <input type="checkbox" checked={todosSelecionados}
                         onChange={alternarTodos} disabled={idsElegiveis.length === 0}
-                        title="Selecionar todas (agendadas)" />
+                        aria-label="Selecionar todas (agendadas)" title="Selecionar todas (agendadas)" />
                     </th>
                   )}
                   <th>Processo</th><th>Pasta</th><th>Tipo</th>
@@ -232,7 +232,7 @@ export default function Pericias() {
                         <td>
                           {/* Caixinha só nas perícias elegíveis (agendadas) */}
                           {elegivelLote(p) && (
-                            <input type="checkbox" checked={selecionados.has(p.id)}
+                            <input type="checkbox" aria-label="Selecionar esta perícia" checked={selecionados.has(p.id)}
                               onChange={() => alternarSelecao(p.id)} />
                           )}
                         </td>
@@ -253,7 +253,7 @@ export default function Pericias() {
                       <td>{p.tipo_nome || '—'}</td>
                       <td>
                         <strong>{p.data ? formatarData(p.data) : 'Aguardando data'}</strong>
-                        {p.hora && <div style={{fontSize:'12px',color:'#888'}}>{p.hora.slice(0,5)}</div>}
+                        {p.hora && <div style={{fontSize:'12px',color:'#5b6472'}}>{p.hora.slice(0,5)}</div>}
                       </td>
                       <td>{p.perito_nome || '—'}</td>
                       <td>{p.responsavel_nome || '—'}</td>
@@ -674,7 +674,7 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
               pasta (processoInicial), o processo é fixo e o campo fica somente leitura. */}
           <div className="form-group">
             <label className="form-label">Número do Processo *</label>
-            <input className="form-control" placeholder="0000000-00.0000.0.00.0000"
+            <input aria-label="Número do Processo" className="form-control" placeholder="0000000-00.0000.0.00.0000"
               value={buscaProc} maxLength={25}
               style={{ maxWidth: '260px', fontFamily: 'monospace', letterSpacing: '0.5px',
                        ...(processoInicial ? { background: '#f8fafc', cursor: 'default' } : {}) }}
@@ -698,7 +698,7 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
           </div>
           <div className="form-group">
             <label className="form-label">Título</label>
-            <input className="form-control" value={form.titulo||''} readOnly
+            <input aria-label="Título" className="form-control" value={form.titulo||''} readOnly
               style={{background:'#f8fafc', cursor:'default'}} />
           </div>
 
@@ -728,12 +728,12 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
             </div>
             <div className="form-group">
               <label className="form-label">Data *</label>
-              <input type="date" className="form-control" value={form.data ? String(form.data).slice(0,10) : ''}
+              <input aria-label="Data" type="date" className="form-control" value={form.data ? String(form.data).slice(0,10) : ''}
                 onChange={e => set('data', e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Hora</label>
-              <input type="time" className="form-control" value={form.hora ? String(form.hora).slice(0,5) : ''}
+              <input aria-label="Hora" type="time" className="form-control" value={form.hora ? String(form.hora).slice(0,5) : ''}
                 onChange={e => set('hora', e.target.value)} />
             </div>
           </div>
@@ -774,7 +774,7 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
                       <input type="checkbox" checked={marcado} disabled={r.endereco_incompleto}
                         onChange={() => alternarLocalReu(r)} style={{marginRight:8}} />
                       <strong>{r.nome}</strong>
-                      <small style={{display:'block',marginLeft:24,color:r.endereco_incompleto ? '#b45309' : '#64748b'}}>
+                      <small style={{display:'block',marginLeft:24,color:r.endereco_incompleto ? '#b45309' : '#5b6472'}}>
                         {r.endereco_incompleto
                           ? 'Endereço incompleto — edite o cadastro deste réu antes de usar como local.'
                           : enderecoResumo(r)}
@@ -785,7 +785,7 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
                 })}
               </div>
             ) : (
-              <small style={{color:'#888'}}>Nenhum réu carregado para este processo.</small>
+              <small style={{color:'#5b6472'}}>Nenhum réu carregado para este processo.</small>
             )}
           </div>
 
@@ -800,7 +800,7 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
             <>
               <div className="form-group">
                 <label className="form-label">Nome/Referência do local</label>
-                <input className="form-control" value={form.local||''}
+                <input aria-label="Nome/Referência do local" className="form-control" value={form.local||''}
                   onChange={e => set('local', e.target.value)}
                   onBlur={() => set('local', toTitleCase(form.local))}
                   placeholder="Ex: IML Central, Consultório Dr. Fulano, Canteiro de obra..." />
@@ -823,36 +823,36 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
                 </div>
                 <div className="form-group" style={{gridColumn:'span 2'}}>
                   <label className="form-label">Logradouro</label>
-                  <input className="form-control" autoComplete="off" value={form.logradouro||''}
+                  <input aria-label="Logradouro" className="form-control" autoComplete="off" value={form.logradouro||''}
                     onChange={e => set('logradouro', e.target.value)} />
                 </div>
               </div>
               <div className="grid-3">
                 <div className="form-group">
                   <label className="form-label">Número</label>
-                  <input className="form-control" autoComplete="off" value={form.numero||''}
+                  <input aria-label="Número" className="form-control" autoComplete="off" value={form.numero||''}
                     onChange={e => set('numero', e.target.value)} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Complemento</label>
-                  <input className="form-control" autoComplete="off" value={form.complemento||''}
+                  <input aria-label="Complemento" className="form-control" autoComplete="off" value={form.complemento||''}
                     onChange={e => set('complemento', e.target.value)} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Bairro</label>
-                  <input className="form-control" autoComplete="off" value={form.bairro||''}
+                  <input aria-label="Bairro" className="form-control" autoComplete="off" value={form.bairro||''}
                     onChange={e => set('bairro', e.target.value)} />
                 </div>
               </div>
               <div className="grid-3">
                 <div className="form-group" style={{gridColumn:'span 2'}}>
                   <label className="form-label">Cidade</label>
-                  <input className="form-control" autoComplete="off" value={form.cidade||''}
+                  <input aria-label="Cidade" className="form-control" autoComplete="off" value={form.cidade||''}
                     onChange={e => set('cidade', e.target.value)} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Estado</label>
-                  <input className="form-control" autoComplete="off" value={form.estado||''}
+                  <input aria-label="Estado" className="form-control" autoComplete="off" value={form.estado||''}
                     onChange={e => set('estado', e.target.value)} placeholder="SP" maxLength={2} />
                 </div>
               </div>
@@ -900,7 +900,7 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
                 opcoes={[{ value: '', label: '— Selecione um perito do processo —' }, ...peritosProc.map(x => ({ value: `${x.tipo_pessoa}:${x.pessoa_id}`, label: `${x.nome}${x.telefone ? ` · ${x.telefone}` : ''}${x.email ? ` · ${x.email}` : ''}` }))]}
               />
             ) : (
-              <small style={{color:'#888'}}>
+              <small style={{color:'#5b6472'}}>
                 Nenhum perito vinculado a este processo. Busque abaixo ou cadastre pelo botão "...".
               </small>
             )}
@@ -916,7 +916,7 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
                       <div key={p.id} style={{padding:'8px 12px',cursor:'pointer',borderBottom:'1px solid #f0f0f0'}}
                         onClick={() => selecionarPerito(p.id, p.nome)}>
                         <strong>{p.nome}</strong>
-                        <small style={{display:'block',color:'#64748b'}}>
+                        <small style={{display:'block',color:'#5b6472'}}>
                           {p.telefone ? `Tel: ${p.telefone}` : 'Sem telefone principal'}
                           {p.email ? ` · ${p.email}` : ''}
                         </small>
@@ -1087,7 +1087,7 @@ function ModalCadastroPeritoRapido({ profissoes, onFechar, onSalvo }) {
           )}
           <div className="form-group">
             <label className="form-label">Nome *</label>
-            <input className="form-control" value={form.nome}
+            <input aria-label="Nome" className="form-control" value={form.nome}
               onChange={e => { set('nome', e.target.value); setConfirmarDuplicado(false); setDuplicados([]); }}
               onBlur={() => set('nome', toTitleCase(form.nome))}
               autoFocus />
@@ -1095,12 +1095,12 @@ function ModalCadastroPeritoRapido({ profissoes, onFechar, onSalvo }) {
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">CPF (opcional)</label>
-              <input className="form-control" value={form.cpf}
+              <input aria-label="CPF (opcional)" className="form-control" value={form.cpf}
                 onChange={e => set('cpf', e.target.value)} placeholder="Pode ficar em branco" />
             </div>
             <div className="form-group">
               <label className="form-label">Profissão *</label>
-              <select className="form-control" value={form.profissao_id}
+              <select aria-label="Profissão" className="form-control" value={form.profissao_id}
                 onChange={e => set('profissao_id', e.target.value)}>
                 <option value="">— Selecione —</option>
                 {peritoProfissoes.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
@@ -1113,18 +1113,18 @@ function ModalCadastroPeritoRapido({ profissoes, onFechar, onSalvo }) {
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Telefone principal</label>
-              <input className="form-control" value={form.telefone}
+              <input aria-label="Telefone principal" className="form-control" value={form.telefone}
                 onChange={e => set('telefone', mascaraTelefone(e.target.value))} placeholder="(11) 99999-9999" />
             </div>
             <div className="form-group">
               <label className="form-label">E-mail principal</label>
-              <input className="form-control" type="email" value={form.email}
+              <input aria-label="E-mail principal" className="form-control" type="email" value={form.email}
                 onChange={e => set('email', e.target.value)} />
             </div>
           </div>
           <div className="form-group">
             <label className="form-label">Observações</label>
-            <textarea className="form-control" rows={3} value={form.observacoes}
+            <textarea aria-label="Observações" className="form-control" rows={3} value={form.observacoes}
               onChange={e => set('observacoes', e.target.value)} />
           </div>
           {duplicados.length > 0 && (
@@ -1304,7 +1304,7 @@ function ModalPericiaJaAgendada({ existentes, salvando, onVoltar, onNaoERemarcac
           {remarcando && (
             <div className="form-group">
               <label className="form-label">Motivo da remarcação *</label>
-              <textarea className="form-control" rows={3} value={motivo} autoFocus
+              <textarea aria-label="Motivo da remarcação" className="form-control" rows={3} value={motivo} autoFocus
                 onChange={e => setMotivo(e.target.value)} placeholder="Descreva o motivo..." />
               <small style={{ color: '#6b7280' }}>
                 A perícia antiga ficará como <strong>Remarcada</strong> quando a nova for salva.
@@ -1358,7 +1358,7 @@ export function ModalCancelar({ pericia, onFechar }) {
         <div className="modal-body">
           <div className="form-group">
             <label className="form-label">Motivo do cancelamento *</label>
-            <textarea className="form-control" rows={3} value={motivo}
+            <textarea aria-label="Motivo do cancelamento" className="form-control" rows={3} value={motivo}
               onChange={e => setMotivo(e.target.value)} autoFocus
               placeholder="Descreva o motivo..." />
           </div>
@@ -1436,18 +1436,18 @@ export function ModalRemarcar({ pericia, onFechar }) {
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Nova data *</label>
-              <input type="date" className="form-control" value={dados.nova_data}
+              <input aria-label="Nova data" type="date" className="form-control" value={dados.nova_data}
                 onChange={e => set('nova_data', e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Nova hora</label>
-              <input type="time" className="form-control" value={dados.nova_hora}
+              <input aria-label="Nova hora" type="time" className="form-control" value={dados.nova_hora}
                 onChange={e => set('nova_hora', e.target.value)} />
             </div>
           </div>
           <div className="form-group">
             <label className="form-label">Motivo da remarcação *</label>
-            <textarea className="form-control" rows={3} value={dados.motivo}
+            <textarea aria-label="Motivo da remarcação" className="form-control" rows={3} value={dados.motivo}
               onChange={e => set('motivo', e.target.value)} placeholder="Descreva o motivo..." />
           </div>
         </div>
@@ -1503,7 +1503,7 @@ export function ModalMarcarRemarcada({ pericia, onFechar }) {
           </p>
           <div className="form-group">
             <label className="form-label">Motivo da remarcação *</label>
-            <textarea className="form-control" rows={3} value={motivo} autoFocus
+            <textarea aria-label="Motivo da remarcação" className="form-control" rows={3} value={motivo} autoFocus
               onChange={e => setMotivo(e.target.value)} placeholder="Descreva o motivo..." />
           </div>
         </div>
@@ -1605,7 +1605,7 @@ function ModalConfirmarSenhaDiaUtil({ descricao, onCancelar, onConfirmar }) {
           </p>
           <div className="form-group">
             <label className="form-label">Sua senha *</label>
-            <input type="password" className="form-control" value={senha}
+            <input aria-label="Sua senha" type="password" className="form-control" value={senha}
               onChange={e => setSenha(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && confirmar()}
               autoFocus autoComplete="current-password" />

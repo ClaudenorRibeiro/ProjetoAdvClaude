@@ -92,7 +92,7 @@ export default function ModalLerPublicacao({ publicacaoId, onFechar }) {
                   border: '1px solid #cbd5e1', borderRadius: '6px' }}
               />
               {busca.trim() && (
-                <span style={{ fontSize: '12px', color: total ? '#64748b' : '#b91c1c', whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: '12px', color: total ? '#5b6472' : '#b91c1c', whiteSpace: 'nowrap' }}>
                   {total} {total === 1 ? 'ocorrência' : 'ocorrências'}
                 </span>
               )}

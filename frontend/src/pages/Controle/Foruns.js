@@ -223,7 +223,7 @@ export default function Foruns() {
                       {[f.logradouro, f.num_end, f.compl_end, f.bairro]
                         .filter(Boolean).join(', ') || <span style={{ color: '#bbb' }}>—</span>}
                       {f.cep && (
-                        <span style={{ marginLeft: 6, color: '#999' }}>
+                        <span style={{ marginLeft: 6, color: '#5b6472' }}>
                           CEP {f.cep}
                         </span>
                       )}
@@ -257,7 +257,7 @@ export default function Foruns() {
                 <div className="grid-2">
                   <div className="form-group">
                     <label className="form-label obrigatorio">Nome completo</label>
-                    <input
+                    <input aria-label="Nome completo"
                       className="form-control"
                       placeholder="Ex: Fórum Trabalhista Barra Funda"
                       autoFocus
@@ -267,7 +267,7 @@ export default function Foruns() {
                   <div className="form-group">
                     <label className="form-label">
                       Abreviação{' '}
-                      <span style={{ color: '#999', fontWeight: 400 }}>— exibida nos dropdowns</span>
+                      <span style={{ color: '#5b6472', fontWeight: 400 }}>— exibida nos dropdowns</span>
                     </label>
                     <input
                       className="form-control"
@@ -286,7 +286,7 @@ export default function Foruns() {
                   <div className="grid-3">
                     <div className="form-group">
                       <label className="form-label">CEP</label>
-                      <input
+                      <input aria-label="CEP"
                         className={`form-control ${erroCep ? 'is-invalid' : ''}`}
                         placeholder="00000000"
                         maxLength={8}
@@ -294,16 +294,16 @@ export default function Foruns() {
                         {...campo('cep')}
                         onBlur={handleCepBlur}
                       />
-                      {buscandoCep && <small style={{ color: '#888', fontSize: 12 }}>🔍 Buscando endereço...</small>}
+                      {buscandoCep && <small style={{ color: '#5b6472', fontSize: 12 }}>🔍 Buscando endereço...</small>}
                       {erroCep     && <small style={{ color: '#e74c3c', fontSize: 12 }}>⚠️ {erroCep}</small>}
                     </div>
                     <div className="form-group">
                       <label className="form-label">Cidade</label>
-                      <input className="form-control" placeholder="São Paulo" {...campo('cidade')} />
+                      <input aria-label="Cidade" className="form-control" placeholder="São Paulo" {...campo('cidade')} />
                     </div>
                     <div className="form-group">
                       <label className="form-label">UF</label>
-                      <input
+                      <input aria-label="UF"
                         className="form-control"
                         placeholder="SP"
                         maxLength={2}
@@ -315,21 +315,21 @@ export default function Foruns() {
 
                   <div className="form-group">
                     <label className="form-label">Logradouro</label>
-                    <input className="form-control" placeholder="Rua / Avenida e nome" {...campo('logradouro')} />
+                    <input aria-label="Logradouro" className="form-control" placeholder="Rua / Avenida e nome" {...campo('logradouro')} />
                   </div>
 
                   <div className="grid-3">
                     <div className="form-group">
                       <label className="form-label">Número</label>
-                      <input className="form-control" placeholder="100" ref={refNumero} {...campo('num_end')} />
+                      <input aria-label="Número" className="form-control" placeholder="100" ref={refNumero} {...campo('num_end')} />
                     </div>
                     <div className="form-group">
                       <label className="form-label">Complemento</label>
-                      <input className="form-control" placeholder="Bloco A" {...campo('compl_end')} />
+                      <input aria-label="Complemento" className="form-control" placeholder="Bloco A" {...campo('compl_end')} />
                     </div>
                     <div className="form-group">
                       <label className="form-label">Bairro</label>
-                      <input className="form-control" placeholder="Barra Funda" {...campo('bairro')} />
+                      <input aria-label="Bairro" className="form-control" placeholder="Barra Funda" {...campo('bairro')} />
                     </div>
                   </div>
                 </div>

@@ -176,7 +176,7 @@ export default function Documentos() {
                     <tr key={m.id} style={m.ativo ? {} : { opacity: 0.55 }}>
                       <td>
                         <strong>{m.nome}</strong>
-                        {m.descricao && <div style={{ fontSize: '11px', color: '#888' }}>{m.descricao}</div>}
+                        {m.descricao && <div style={{ fontSize: '11px', color: '#5b6472' }}>{m.descricao}</div>}
                       </td>
                       <td><span className={`badge ${tipo.cor}`}>{tipo.texto}</span></td>
                       <td style={{ fontSize: '12px', color: '#555' }}>
@@ -465,27 +465,27 @@ function ModelosEmailPerito() {
       </div>
       {aberto && (
         <div style={{ marginTop: '12px' }}>
-          <small style={{ color: '#888', display: 'block', marginBottom: '10px' }}>
+          <small style={{ color: '#5b6472', display: 'block', marginBottom: '10px' }}>
             Estes modelos aparecem ao registrar uma ata. Aceitam as mesmas variáveis do catálogo acima
             (cliente, processo, parte adversa, perícia, escritório...).
           </small>
           {carregando ? <div className="loading">Carregando...</div> : (
             <>
               {modelos.length === 0 && (
-                <small style={{ color: '#888', display: 'block', marginBottom: '10px' }}>Nenhum modelo cadastrado.</small>
+                <small style={{ color: '#5b6472', display: 'block', marginBottom: '10px' }}>Nenhum modelo cadastrado.</small>
               )}
               {modelos.map((modelo, indice) => (
                 <div key={modelo.id || indice} style={{ border: '1px solid #dbeafe', borderRadius: 8, padding: 12, marginBottom: 10, background: '#f8fbff' }}>
                   <div className="grid-2">
                     <div className="form-group"><label className="form-label">Nome do modelo *</label>
-                      <input className="form-control" value={modelo.nome || ''} onChange={e => alterar(indice, 'nome', e.target.value)} placeholder="Ex.: Convocação para perícia" />
+                      <input aria-label="Nome do modelo" className="form-control" value={modelo.nome || ''} onChange={e => alterar(indice, 'nome', e.target.value)} placeholder="Ex.: Convocação para perícia" />
                     </div>
                     <div className="form-group"><label className="form-label">Assunto *</label>
-                      <input className="form-control" value={modelo.assunto || ''} onChange={e => alterar(indice, 'assunto', e.target.value)} placeholder="Ex.: Perícia referente ao processo {{numero_processo}}" />
+                      <input aria-label="Assunto" className="form-control" value={modelo.assunto || ''} onChange={e => alterar(indice, 'assunto', e.target.value)} placeholder="Ex.: Perícia referente ao processo {{numero_processo}}" />
                     </div>
                   </div>
                   <div className="form-group"><label className="form-label">Mensagem *</label>
-                    <textarea className="form-control" rows={4} value={modelo.corpo || ''} onChange={e => alterar(indice, 'corpo', e.target.value)} />
+                    <textarea aria-label="Mensagem" className="form-control" rows={4} value={modelo.corpo || ''} onChange={e => alterar(indice, 'corpo', e.target.value)} />
                   </div>
                   <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: 12 }} onClick={() => remover(indice)}>Remover modelo</button>
                 </div>
@@ -538,12 +538,12 @@ function HistoricoDocumentos() {
           <div style={{ display: 'flex', gap: '10px', margin: '12px 0', flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <div>
               <label className="form-label">De</label>
-              <input type="date" className="form-control" value={filtro.de}
+              <input aria-label="De" type="date" className="form-control" value={filtro.de}
                 onChange={e => { setFiltro(f => ({ ...f, de: e.target.value })); setPagina(1); }} />
             </div>
             <div>
               <label className="form-label">Até</label>
-              <input type="date" className="form-control" value={filtro.ate}
+              <input aria-label="Até" type="date" className="form-control" value={filtro.ate}
                 onChange={e => { setFiltro(f => ({ ...f, ate: e.target.value })); setPagina(1); }} />
             </div>
             <button className="btn btn-outline" onClick={() => { setPagina(1); carregar(); }}>Filtrar</button>
@@ -677,7 +677,7 @@ function ModalModelo({ modelo, onFechar, onBaixar }) {
         <div className="modal-body">
           <div className="form-group">
             <label className="form-label">Nome do modelo *</label>
-            <input className="form-control" value={form.nome}
+            <input aria-label="Nome do modelo" className="form-control" value={form.nome}
               onChange={e => set('nome', e.target.value)}
               onBlur={() => set('nome', toTitleCase(form.nome))}
               placeholder="Ex: Procuração Trabalhista" />
@@ -685,14 +685,14 @@ function ModalModelo({ modelo, onFechar, onBaixar }) {
 
           <div className="form-group">
             <label className="form-label">Descrição (opcional)</label>
-            <input className="form-control" value={form.descricao}
+            <input aria-label="Descrição (opcional)" className="form-control" value={form.descricao}
               onChange={e => set('descricao', e.target.value)}
               placeholder="Breve descrição do modelo" />
           </div>
 
           <div className="form-group">
             <label className="form-label">Destino do modelo</label>
-            <select className="form-control" value={form.destino}
+            <select aria-label="Destino do modelo" className="form-control" value={form.destino}
               onChange={e => set('destino', e.target.value)}>
               <option value="comum">Comum (procuração, contrato, declaração…)</option>
               <option value="multipessoas">Documento de partes (autores e réus)</option>
@@ -704,7 +704,7 @@ function ModalModelo({ modelo, onFechar, onBaixar }) {
               <option value="pericia">Documento de perícia</option>
               <option value="prazo">Documento de prazo</option>
             </select>
-            <small style={{ color: '#888' }}>
+            <small style={{ color: '#5b6472' }}>
               Define em qual situação o modelo aparece ao gerar. "Audiência/Perícia/Prazo" só aparecem na tela correspondente, no tipo certo.
             </small>
           </div>
@@ -714,7 +714,7 @@ function ModalModelo({ modelo, onFechar, onBaixar }) {
             <div className="grid-2">
               <div className="form-group">
                 <label className="form-label">Tipo de audiência *</label>
-                <select className="form-control" value={form.tipo_audiencia_id}
+                <select aria-label="Tipo de audiência" className="form-control" value={form.tipo_audiencia_id}
                   onChange={e => set('tipo_audiencia_id', e.target.value)}>
                   <option value="">— Selecione —</option>
                   {(opcoes?.tipos_audiencia || []).map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
@@ -722,7 +722,7 @@ function ModalModelo({ modelo, onFechar, onBaixar }) {
               </div>
               <div className="form-group">
                 <label className="form-label">Modalidade *</label>
-                <select className="form-control" value={form.modalidade}
+                <select aria-label="Modalidade" className="form-control" value={form.modalidade}
                   onChange={e => set('modalidade', e.target.value)}>
                   <option value="">— Selecione —</option>
                   {(opcoes?.modalidades || []).map(m => <option key={m.valor} value={m.valor}>{m.nome}</option>)}
@@ -733,7 +733,7 @@ function ModalModelo({ modelo, onFechar, onBaixar }) {
           {form.destino === 'pericia' && (
             <div className="form-group">
               <label className="form-label">Tipo de perícia *</label>
-              <select className="form-control" value={form.tipo_pericia_id}
+              <select aria-label="Tipo de perícia" className="form-control" value={form.tipo_pericia_id}
                 onChange={e => set('tipo_pericia_id', e.target.value)}>
                 <option value="">— Selecione —</option>
                 {(opcoes?.tipos_pericia || []).map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
@@ -743,7 +743,7 @@ function ModalModelo({ modelo, onFechar, onBaixar }) {
           {form.destino === 'prazo' && (
             <div className="form-group">
               <label className="form-label">Subtipo de prazo *</label>
-              <select className="form-control" value={form.subtipo_prazo_id}
+              <select aria-label="Subtipo de prazo" className="form-control" value={form.subtipo_prazo_id}
                 onChange={e => set('subtipo_prazo_id', e.target.value)}>
                 <option value="">— Selecione —</option>
                 {(opcoes?.subtipos_prazo || []).map(s => (
@@ -757,10 +757,10 @@ function ModalModelo({ modelo, onFechar, onBaixar }) {
           {(form.destino === 'audiencia' || form.destino === 'pericia') && (
             <div className="form-group">
               <label className="form-label">Imprimir o horário quantos minutos antes?</label>
-              <input type="number" min="0" step="5" className="form-control"
+              <input aria-label="Imprimir o horário quantos minutos antes?" type="number" min="0" step="5" className="form-control"
                 value={form.minutos_antes}
                 onChange={e => set('minutos_antes', e.target.value)} />
-              <small style={{ color: '#888' }}>
+              <small style={{ color: '#5b6472' }}>
                 0 = horário real. Ex.: 60 faz uma audiência das 09:00 sair como 08:00 no documento.
                 O horário real continua disponível em {'{{hora_audiencia_real}}'} / {'{{hora_pericia_real}}'}.
               </small>
@@ -774,7 +774,7 @@ function ModalModelo({ modelo, onFechar, onBaixar }) {
             <input type="file" className="form-control" accept=".docx"
               onChange={e => setArquivo(e.target.files[0] || null)} />
             {editando && (
-              <small style={{ color: '#888' }}>
+              <small style={{ color: '#5b6472' }}>
                 Sem novo arquivo, o atual é mantido.{' '}
                 <button type="button"
                   onClick={() => onBaixar(modelo)}

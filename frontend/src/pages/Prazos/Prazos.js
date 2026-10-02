@@ -160,7 +160,7 @@ export default function Prazos() {
         <div style={{display:'flex',gap:'12px',flexWrap:'wrap',alignItems:'flex-end'}}>
           <div className="form-group" style={{margin:0}}>
             <label className="form-label">Status</label>
-            <select className="form-control" value={filtros.status} onChange={e=>setFiltro('status',e.target.value)}>
+            <select aria-label="Status" className="form-control" value={filtros.status} onChange={e=>setFiltro('status',e.target.value)}>
               <option value="">Todos</option>
               {STATUS_OPCOES.map(s => <option key={s} value={s}>{labelStatus(s)}</option>)}
             </select>
@@ -168,7 +168,7 @@ export default function Prazos() {
           {podeVerTodos && (
             <div className="form-group" style={{margin:0}}>
               <label className="form-label">Responsável</label>
-              <select className="form-control" value={filtros.usuario_id} onChange={e=>setFiltro('usuario_id', e.target.value)}>
+              <select aria-label="Responsável" className="form-control" value={filtros.usuario_id} onChange={e=>setFiltro('usuario_id', e.target.value)}>
                 <option value="">Todos</option>
                 {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
               </select>
@@ -185,11 +185,11 @@ export default function Prazos() {
           </div>
           <div className="form-group" style={{margin:0}}>
             <label className="form-label">Vencimento de</label>
-            <input type="date" className="form-control" value={filtros.data_de} onChange={e=>setFiltro('data_de',e.target.value)} />
+            <input aria-label="Vencimento de" type="date" className="form-control" value={filtros.data_de} onChange={e=>setFiltro('data_de',e.target.value)} />
           </div>
           <div className="form-group" style={{margin:0}}>
             <label className="form-label">Até</label>
-            <input type="date" className="form-control" value={filtros.data_ate} onChange={e=>setFiltro('data_ate',e.target.value)} />
+            <input aria-label="Até" type="date" className="form-control" value={filtros.data_ate} onChange={e=>setFiltro('data_ate',e.target.value)} />
           </div>
           <label style={{margin:0, marginBottom:'7px', display:'flex', alignItems:'center', gap:'6px',
             cursor:'pointer', userSelect:'none'}}>
@@ -204,7 +204,7 @@ export default function Prazos() {
           <button className="btn btn-primary" style={{marginBottom:'1px'}} onClick={() => setModalAberto(true)}>
             + Novo Prazo
           </button>
-          <span style={{marginLeft:'auto',color:'#888',fontSize:'13px',marginBottom:'1px'}}>
+          <span style={{marginLeft:'auto',color:'#5b6472',fontSize:'13px',marginBottom:'1px'}}>
             {total} prazo(s)
           </span>
         </div>
@@ -330,7 +330,7 @@ export default function Prazos() {
               ◀ Anterior
             </button>
 
-            <span style={{color:'#64748b',fontSize:'13px'}}>
+            <span style={{color:'#5b6472',fontSize:'13px'}}>
               Página <strong>{filtros.pagina}</strong> de <strong>{Math.ceil(total / LIMITE)}</strong>
               &nbsp;·&nbsp;{total} registro(s)
             </span>
@@ -388,7 +388,7 @@ export function ModalCancelarPrazo({ prazo, onFechar }) {
           </p>
           <div className="form-group">
             <label className="form-label">Motivo do cancelamento *</label>
-            <textarea className="form-control" rows={3} value={motivo}
+            <textarea aria-label="Motivo do cancelamento" className="form-control" rows={3} value={motivo}
               onChange={e => setMotivo(e.target.value)}
               placeholder="Descreva o motivo..." style={{resize:'vertical'}} />
           </div>
@@ -633,7 +633,7 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
           </div>
           <div className="form-group">
             <label className="form-label">Titulo</label>
-            <input className="form-control" value={form.titulo||''} readOnly style={{background:'#f8fafc', cursor:'default'}} />
+            <input aria-label="Titulo" className="form-control" value={form.titulo||''} readOnly style={{background:'#f8fafc', cursor:'default'}} />
           </div>
           <div className="grid-2">
             <div ref={tipoWrapRef}>
@@ -688,7 +688,7 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
           </div>
           <div className="form-group">
             <label className="form-label">Descrição</label>
-            <textarea className="form-control" rows={3} maxLength={1000} value={form.descricao||''}
+            <textarea aria-label="Descrição" className="form-control" rows={3} maxLength={1000} value={form.descricao||''}
               onChange={e=>set('descricao',e.target.value)}
               onBlur={()=>set('descricao', toTitleCase(form.descricao))}
               placeholder="Descrição adicional..." style={{ resize: 'vertical' }} />
@@ -696,22 +696,22 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
           <div className="grid-4">
             <div className="form-group">
               <label className="form-label">Data início *</label>
-              <input type="date" className="form-control" ref={dataInicioRef} value={form.data_inicio} onChange={e=>set('data_inicio',e.target.value)} />
+              <input aria-label="Data início" type="date" className="form-control" ref={dataInicioRef} value={form.data_inicio} onChange={e=>set('data_inicio',e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Quantidade de dias</label>
-              <input type="number" className="form-control" value={form.quantidade||''} onChange={e=>{ set('quantidade',e.target.value); setModo('dias'); }} />
+              <input aria-label="Quantidade de dias" type="number" className="form-control" value={form.quantidade||''} onChange={e=>{ set('quantidade',e.target.value); setModo('dias'); }} />
             </div>
             <div className="form-group">
               <label className="form-label">Tipo de dias</label>
-              <select className="form-control" value={form.tipo_dias} onChange={e=>set('tipo_dias',e.target.value)}>
+              <select aria-label="Tipo de dias" className="form-control" value={form.tipo_dias} onChange={e=>set('tipo_dias',e.target.value)}>
                 <option value="uteis">Dias úteis</option>
                 <option value="corridos">Dias corridos</option>
               </select>
             </div>
             <div className="form-group">
               <label className="form-label">Data final *</label>
-              <input type="date" className="form-control" ref={dataFinalRef} value={form.data_final||''} onChange={e=>{ set('data_final',e.target.value); setModo('data'); }} />
+              <input aria-label="Data final" type="date" className="form-control" ref={dataFinalRef} value={form.data_final||''} onChange={e=>{ set('data_final',e.target.value); setModo('data'); }} />
             </div>
           </div>
           <div className="form-group">
@@ -871,12 +871,12 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Processo</label>
-              <input className="form-control" value={prazo.processo_numero || '—'} readOnly
+              <input aria-label="Processo" className="form-control" value={prazo.processo_numero || '—'} readOnly
                 style={{background:'#f8fafc', cursor:'default', fontFamily:'monospace'}} />
             </div>
             <div className="form-group">
               <label className="form-label">Pasta</label>
-              <input className="form-control" value={`${prazo.pasta_numero_fmt} — ${prazo.pasta_titulo}`} readOnly
+              <input aria-label="Pasta" className="form-control" value={`${prazo.pasta_numero_fmt} — ${prazo.pasta_titulo}`} readOnly
                 style={{background:'#f8fafc', cursor:'default'}} />
             </div>
           </div>
@@ -928,7 +928,7 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
           </div>
           <div className="form-group">
             <label className="form-label">Descrição</label>
-            <textarea className="form-control" rows={3} maxLength={1000} value={form.descricao}
+            <textarea aria-label="Descrição" className="form-control" rows={3} maxLength={1000} value={form.descricao}
               onChange={e=>set('descricao',e.target.value)}
               onBlur={() => set('descricao', toTitleCase(form.descricao))}
               placeholder="Descrição adicional..." style={{ resize: 'vertical' }} />
@@ -936,22 +936,22 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
           <div className="grid-4">
             <div className="form-group">
               <label className="form-label">Data início *</label>
-              <input type="date" className="form-control" value={form.data_inicio} onChange={e=>set('data_inicio',e.target.value)} />
+              <input aria-label="Data início" type="date" className="form-control" value={form.data_inicio} onChange={e=>set('data_inicio',e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Quantidade de dias</label>
-              <input type="number" className="form-control" value={form.quantidade} onChange={e=>{ set('quantidade',e.target.value); setModo('dias'); }} />
+              <input aria-label="Quantidade de dias" type="number" className="form-control" value={form.quantidade} onChange={e=>{ set('quantidade',e.target.value); setModo('dias'); }} />
             </div>
             <div className="form-group">
               <label className="form-label">Tipo de dias</label>
-              <select className="form-control" value={form.tipo_dias} onChange={e=>set('tipo_dias',e.target.value)}>
+              <select aria-label="Tipo de dias" className="form-control" value={form.tipo_dias} onChange={e=>set('tipo_dias',e.target.value)}>
                 <option value="uteis">Dias úteis</option>
                 <option value="corridos">Dias corridos</option>
               </select>
             </div>
             <div className="form-group">
               <label className="form-label">Data final *</label>
-              <input type="date" className="form-control" value={form.data_final||''} onChange={e=>{ set('data_final',e.target.value); setModo('data'); }} />
+              <input aria-label="Data final" type="date" className="form-control" value={form.data_final||''} onChange={e=>{ set('data_final',e.target.value); setModo('data'); }} />
             </div>
           </div>
           <div className="form-group">
@@ -1045,12 +1045,12 @@ function ModalHistoricoPrazo({ prazo, onFechar }) {
           {/* Identificação do prazo */}
           <p style={{marginBottom:'20px',color:'#555',fontWeight:600}}>
             {prazo.subtipo_nome || prazo.descricao || `Prazo #${prazo.id}`}
-            <span style={{fontWeight:400,color:'#888',marginLeft:'8px'}}>
+            <span style={{fontWeight:400,color:'#5b6472',marginLeft:'8px'}}>
               — Vencimento: {formatarData(prazo.data_vencimento)}
             </span>
           </p>
 
-          {carregando && <p style={{color:'#888',textAlign:'center',padding:'24px'}}>Carregando...</p>}
+          {carregando && <p style={{color:'#5b6472',textAlign:'center',padding:'24px'}}>Carregando...</p>}
 
           {!carregando && historico && (
             <div style={{position:'relative'}}>
@@ -1086,7 +1086,7 @@ function ModalHistoricoPrazo({ prazo, onFechar }) {
                         {ev.data ? formatarDataHora(ev.data) : '—'}
                       </span>
                     </div>
-                    <div style={{fontSize:'13px', color:'#64748b', marginTop:'2px'}}>
+                    <div style={{fontSize:'13px', color:'#5b6472', marginTop:'2px'}}>
                       👤 {ev.usuario}
                     </div>
                     {ev.observacao && (

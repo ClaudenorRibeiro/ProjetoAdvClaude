@@ -119,7 +119,7 @@ export default function Login() {
 
           <div className="form-group">
             <label className="form-label">Login</label>
-            <input
+            <input aria-label="Login"
               type="text"
               className="form-control"
               value={login}
@@ -211,7 +211,7 @@ export default function Login() {
                   )}
                   <div className="form-group">
                     <label className="form-label">Login ou E-mail</label>
-                    <input
+                    <input aria-label="Login ou E-mail"
                       className="form-control"
                       value={loginOuEmail}
                       onChange={e => setLoginOuEmail(e.target.value)}

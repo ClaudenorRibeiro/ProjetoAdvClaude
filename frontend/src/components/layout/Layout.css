@@ -156,9 +156,9 @@ body {
    fundo azul + texto azul + barra à direita + ícone e rótulo crescendo +40% ("crescem juntos") */
 .menu-item.ativo,
 .menu-item:hover {
-  background: var(--menu-accent-soft, rgba(126, 184, 247, 0.15));
-  color: var(--menu-accent, #7eb8f7);
-  border-right-color: var(--menu-accent, #7eb8f7);
+  background: var(--menu-accent-soft, rgba(181, 217, 252, 0.15));
+  color: var(--menu-accent, #b5d9fc);
+  border-right-color: var(--menu-accent, #b5d9fc);
 }
 
 .menu-item.ativo .menu-icone,
@@ -219,7 +219,7 @@ body {
 }
 
 .menu-grupo-header.ativo {
-  color: var(--menu-accent, #7eb8f7);
+  color: var(--menu-accent, #b5d9fc);
 }
 
 .menu-grupo-chevron {
@@ -256,9 +256,9 @@ body {
 }
 
 .menu-subitem.ativo {
-  color: var(--menu-accent, #7eb8f7);
-  background: var(--menu-accent-soft2, rgba(126, 184, 247, 0.1));
-  border-right: 3px solid var(--menu-accent, #7eb8f7);
+  color: var(--menu-accent, #b5d9fc);
+  background: var(--menu-accent-soft2, rgba(181, 217, 252, 0.1));
+  border-right: 3px solid var(--menu-accent, #b5d9fc);
 }
 
 /* ---- ÁREA PRINCIPAL ---- */
@@ -498,7 +498,7 @@ body {
 }
 
 .tabela tr:hover td {
-  background: var(--linha-hover, #aec6e4);
+  background: var(--linha-hover, #eaf1fc);
 }
 
 /* Badges de status */
@@ -532,7 +532,7 @@ body {
 
 .badge-cinza {
   background: #f3f4f6;
-  color: #6b7280;
+  color: #4b5563;
 }
 
 .badge-roxo {
@@ -803,7 +803,7 @@ body {
 
 .busca-publicacao-modal span {
   min-width: 76px;
-  color: #64748b;
+  color: #5b6472;
   font-size: 12px;
   white-space: nowrap;
 }
@@ -997,4 +997,10 @@ body {
   opacity: 1;
   background: #f8fafc;
   cursor: default;
+}
+
+/* Calendário: dias de OUTRO mês (cinza claro da biblioteca) com contraste mínimo de 4,5:1 */
+.rbc-off-range,
+.rbc-off-range .rbc-button-link {
+  color: #595959;
 }

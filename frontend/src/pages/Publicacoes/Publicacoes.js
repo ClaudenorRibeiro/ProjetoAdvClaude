@@ -597,7 +597,7 @@ function PainelSugestoes({ pub, sugestoes: sugestoesProp, iaHabilitada, onUsar, 
 
   if (!sugestoes.length) {
     return (
-      <div style={{ marginTop: '12px', fontSize: '12px', color: '#94a3b8' }}>
+      <div style={{ marginTop: '12px', fontSize: '12px', color: '#5b6472' }}>
         {consultandoIa
           ? '✨ Consultando IA…'
           : '✨ Nenhuma sugestão automática nesta publicação — use os botões de ação abaixo.'}
@@ -734,7 +734,7 @@ function ModalJustificarSemAcao({ pub, onFechar, onSucesso }) {
           </p>
           <div className="form-group">
             <label className="form-label">Motivo *</label>
-            <textarea className="form-control" rows={4} value={motivo} maxLength={500}
+            <textarea aria-label="Motivo" className="form-control" rows={4} value={motivo} maxLength={500}
               onChange={e => setMotivo(e.target.value)}
               placeholder="Ex.: publicação meramente informativa, sem providência a tomar." />
           </div>
@@ -810,7 +810,7 @@ function ModalEnviarPublicacaoEmail({ pub, onFechar, onSucesso }) {
         <input type="checkbox" disabled={semEmail} checked={sel.has(chave)} onChange={() => toggle(chave)} />
         <span style={{ fontSize:'13px' }}>
           {p.nome}{p.oab ? ` — OAB ${p.oab}` : ''}
-          <span style={{ color: semEmail ? '#b45309' : '#888', fontSize:'12px' }}>
+          <span style={{ color: semEmail ? '#b45309' : '#5b6472', fontSize:'12px' }}>
             {semEmail ? '  (sem e-mail cadastrado)' : `  ·  ${p.email}`}
           </span>
         </span>
@@ -839,17 +839,17 @@ function ModalEnviarPublicacaoEmail({ pub, onFechar, onSucesso }) {
               </p>
               <div className="form-group">
                 <label className="form-label">Mensagem (opcional)</label>
-                <textarea className="form-control" rows={4} value={mensagem}
+                <textarea aria-label="Mensagem (opcional)" className="form-control" rows={4} value={mensagem}
                   onChange={e => setMensagem(e.target.value)}
                   placeholder="Ex.: Boa tarde, segue a publicação que ficou para você resolver..." />
-                <small style={{ color:'#888' }}>Aparece no topo do e-mail e fica registrada no histórico.</small>
+                <small style={{ color:'#5b6472' }}>Aparece no topo do e-mail e fica registrada no histórico.</small>
               </div>
               <div style={{ fontWeight:600, fontSize:'13px', margin:'8px 0 2px' }}>Usuários do sistema</div>
               {dados.usuarios.length ? dados.usuarios.map(u => <Linha key={`u${u.id}`} tipo="usuario" p={u} />)
-                : <div style={{ fontSize:'12px', color:'#888' }}>Nenhum usuário.</div>}
+                : <div style={{ fontSize:'12px', color:'#5b6472' }}>Nenhum usuário.</div>}
               <div style={{ fontWeight:600, fontSize:'13px', margin:'14px 0 2px' }}>Advogados freelancers</div>
               {dados.freelancers.length ? dados.freelancers.map(f => <Linha key={`f${f.id}`} tipo="freela" p={f} />)
-                : <div style={{ fontSize:'12px', color:'#888' }}>Nenhum freelancer cadastrado.</div>}
+                : <div style={{ fontSize:'12px', color:'#5b6472' }}>Nenhum freelancer cadastrado.</div>}
               <div style={{ marginTop:'14px', borderTop:'1px solid #eef2f7', paddingTop:'10px' }}>
                 <label style={{ display:'flex', alignItems:'center', gap:'8px', padding:'6px 4px', cursor:'pointer' }}>
                   <input type="checkbox" checked={incluirOutro} onChange={e => setIncluirOutro(e.target.checked)} />
@@ -1218,7 +1218,7 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
   }
   const subAba = (on) => ({
     background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', padding: '7px 12px',
-    color: on ? '#1a56db' : '#64748b', fontWeight: on ? 600 : 400,
+    color: on ? '#1a56db' : '#5b6472', fontWeight: on ? 600 : 400,
     borderBottom: on ? '2px solid #1a56db' : '2px solid transparent', marginBottom: '-1px',
   });
 
@@ -1255,7 +1255,7 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
           <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Dia da disponibilização (AASP)</label>
-              <input type="date" className="form-control" value={dataImport}
+              <input aria-label="Dia da disponibilização (AASP)" type="date" className="form-control" value={dataImport}
                 onChange={e => setDataImport(e.target.value)} />
             </div>
             <button className="btn btn-primary" style={{ marginBottom: '1px' }}
@@ -1269,27 +1269,27 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
       {/* Painel FILTRAR / PESQUISAR */}
       <div className="card" style={{ marginBottom: '16px' }} hidden={podeImportar && painel !== 'filtrar'}>
         {!podeImportar && (
-          <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '8px' }}>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: '#5b6472', marginBottom: '8px' }}>
             Filtrar e pesquisar
           </div>
         )}
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
           <div className="form-group" style={{ margin: 0, flex: '2 1 240px' }}>
             <label className="form-label">Pesquisar no conteúdo</label>
-            <input className="form-control" placeholder="Parte do texto, nome ou número do processo"
+            <input aria-label="Pesquisar no conteúdo" className="form-control" placeholder="Parte do texto, nome ou número do processo"
               value={filtros.busca} onChange={e => setFiltro('busca', e.target.value)} />
           </div>
           {/* Janela de datas da pesquisa (máx. 3 meses). "Todas as datas" ignora a janela. */}
           <div className="form-group" style={{ margin: 0, flex: '1.35 1 420px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
-              <label className="form-label" style={{ margin: 0 }}>Período <span style={{ color: '#94a3b8', fontWeight: 400 }}>(máx. 3 meses)</span></label>
+              <label className="form-label" style={{ margin: 0 }}>Período <span style={{ color: '#5b6472', fontWeight: 400 }}>(máx. 3 meses)</span></label>
               <ControlePeriodoPublicacoes todasDatas={filtros.todasDatas} onChange={toggleTodasDatas} />
             </div>
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-              <input type="date" className="form-control" value={filtros.dataInicio}
+              <input aria-label="Período: data inicial" type="date" className="form-control" value={filtros.dataInicio}
                 disabled={filtros.todasDatas} onChange={e => setFiltro('dataInicio', e.target.value)} />
-              <span style={{ fontSize: '12px', color: '#888' }}>até</span>
-              <input type="date" className="form-control" value={filtros.dataFim}
+              <span style={{ fontSize: '12px', color: '#5b6472' }}>até</span>
+              <input aria-label="Período: data final" type="date" className="form-control" value={filtros.dataFim}
                 disabled={filtros.todasDatas} onChange={e => setFiltro('dataFim', e.target.value)} />
             </div>
             {periodoInvalido && (
@@ -1300,7 +1300,7 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
           </div>
           <div className="form-group" style={{ margin: 0, flex: '0 1 150px' }}>
             <label className="form-label">Status</label>
-            <select className="form-control" value={filtros.tratada}
+            <select aria-label="Status" className="form-control" value={filtros.tratada}
               onChange={e => setFiltro('tratada', e.target.value)}>
               <option value="0">Não tratadas</option>
               <option value="1">Tratadas</option>
@@ -1313,7 +1313,7 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
           {podeEscolherEscopo && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ fontSize: '13px', color: '#555' }}>Ver</span>
-              <select className="form-control" style={{ width: 'auto' }} value={filtros.escopo}
+              <select aria-label="Ver publicações" className="form-control" style={{ width: 'auto' }} value={filtros.escopo}
                 onChange={e => trocarEscopo(e.target.value)}
                 title="Fica salvo no seu usuário e vale em qualquer dispositivo">
                 <option value="minhas">Atribuídas a mim</option>
@@ -1328,7 +1328,7 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
       <div className="card">
         {/* Barra de resultados + ação em lote */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginBottom: '8px' }}>
-          <div style={{ fontSize: '13px', color: '#64748b' }}>
+          <div style={{ fontSize: '13px', color: '#5b6472' }}>
             <strong style={{ color: '#1e293b', fontWeight: 600 }}>{total} {total === 1 ? 'publicação' : 'publicações'}</strong>
             {(() => {
               const partes = [{ '0': 'não tratadas', '1': 'tratadas', '': 'todas' }[filtros.tratada]];
@@ -1349,7 +1349,7 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
         </div>
         {/* Legenda das cores das linhas */}
         <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center',
-          fontSize: '12px', color: '#64748b', padding: '8px 0', borderTop: '1px solid #eef2f7' }}>
+          fontSize: '12px', color: '#5b6472', padding: '8px 0', borderTop: '1px solid #eef2f7' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#fde8e8', border: '1px solid #f0c0c0' }} />
             processo repetido no mesmo dia
@@ -1372,7 +1372,7 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
                   {podeExcluir && (
                     <th style={{ width: '34px', textAlign: 'center' }}>
                       <input type="checkbox" checked={todasMarcadas} onChange={toggleSelPagina}
-                        title="Marcar/desmarcar todas da página" />
+                        aria-label="Marcar/desmarcar todas da página" title="Marcar/desmarcar todas da página" />
                     </th>
                   )}
                   {thOrder('data', 'Data')}
@@ -1395,7 +1395,7 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
                     style={{ background: p.lida ? 'var(--linha-lida, #cdebd6)' : (p.buscada_novamente ? '#fff8db' : '#fff') }}>
                     {podeExcluir && (
                       <td style={{ textAlign: 'center' }}>
-                        <input type="checkbox" checked={selecionados.includes(p.id)}
+                        <input type="checkbox" aria-label="Selecionar esta publicação" checked={selecionados.includes(p.id)}
                           onChange={() => toggleSel(p.id)}
                           disabled={p.tratada} title={p.tratada ? 'Publicação tratada não pode ser excluída' : undefined} />
                       </td>
@@ -1503,7 +1503,7 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
               <div className="modal-header modal-publicacao-header">
                 <h3>
                   Publicação — {formatarData(textoAberto.data_publicacao)}
-                  {idx >= 0 && <span style={{ color: '#888', fontWeight: 'normal', fontSize: '13px' }}> ({idx + 1} de {lista.length})</span>}
+                  {idx >= 0 && <span style={{ color: '#5b6472', fontWeight: 'normal', fontSize: '13px' }}> ({idx + 1} de {lista.length})</span>}
                   {/* Polo do cliente do escritório no processo desta publicação (vem do cadastro
                       do processo, campo "Cliente do escritório"). Processo não cadastrado ou sem
                       o campo preenchido → não mostra nada. */}
@@ -1933,7 +1933,7 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
   }
   const subAba = (on) => ({
     background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', padding: '7px 12px',
-    color: on ? '#1a56db' : '#64748b', fontWeight: on ? 600 : 400,
+    color: on ? '#1a56db' : '#5b6472', fontWeight: on ? 600 : 400,
     borderBottom: on ? '2px solid #1a56db' : '2px solid transparent', marginBottom: '-1px',
   });
 
@@ -1970,12 +1970,12 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
           <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">De (CNJ)</label>
-              <input type="date" className="form-control" value={dataInicio}
+              <input aria-label="De (CNJ)" type="date" className="form-control" value={dataInicio}
                 onChange={e => setDataInicio(e.target.value)} />
             </div>
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Até</label>
-              <input type="date" className="form-control" value={dataFim}
+              <input aria-label="Até" type="date" className="form-control" value={dataFim}
                 onChange={e => setDataFim(e.target.value)} />
             </div>
             <button className="btn btn-primary" style={{ marginBottom: '1px' }}
@@ -1989,27 +1989,27 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
       {/* Painel FILTRAR / PESQUISAR */}
       <div className="card" style={{ marginBottom: '16px' }} hidden={podeImportar && painel !== 'filtrar'}>
         {!podeImportar && (
-          <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '8px' }}>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: '#5b6472', marginBottom: '8px' }}>
             Filtrar e pesquisar
           </div>
         )}
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
           <div className="form-group" style={{ margin: 0, flex: '2 1 240px' }}>
             <label className="form-label">Pesquisar no conteúdo</label>
-            <input className="form-control" placeholder="Parte do texto, nome ou número do processo"
+            <input aria-label="Pesquisar no conteúdo" className="form-control" placeholder="Parte do texto, nome ou número do processo"
               value={filtros.busca} onChange={e => setFiltro('busca', e.target.value)} />
           </div>
           {/* Janela de datas da pesquisa (máx. 3 meses). "Todas as datas" ignora a janela. */}
           <div className="form-group" style={{ margin: 0, flex: '1.35 1 420px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
-              <label className="form-label" style={{ margin: 0 }}>Período <span style={{ color: '#94a3b8', fontWeight: 400 }}>(máx. 3 meses)</span></label>
+              <label className="form-label" style={{ margin: 0 }}>Período <span style={{ color: '#5b6472', fontWeight: 400 }}>(máx. 3 meses)</span></label>
               <ControlePeriodoPublicacoes todasDatas={filtros.todasDatas} onChange={toggleTodasDatas} />
             </div>
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-              <input type="date" className="form-control" value={filtros.dataInicio}
+              <input aria-label="Período: data inicial" type="date" className="form-control" value={filtros.dataInicio}
                 disabled={filtros.todasDatas} onChange={e => setFiltro('dataInicio', e.target.value)} />
-              <span style={{ fontSize: '12px', color: '#888' }}>até</span>
-              <input type="date" className="form-control" value={filtros.dataFim}
+              <span style={{ fontSize: '12px', color: '#5b6472' }}>até</span>
+              <input aria-label="Período: data final" type="date" className="form-control" value={filtros.dataFim}
                 disabled={filtros.todasDatas} onChange={e => setFiltro('dataFim', e.target.value)} />
             </div>
             {periodoInvalido && (
@@ -2020,7 +2020,7 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
           </div>
           <div className="form-group" style={{ margin: 0, flex: '0 1 150px' }}>
             <label className="form-label">Status</label>
-            <select className="form-control" value={filtros.tratada}
+            <select aria-label="Status" className="form-control" value={filtros.tratada}
               onChange={e => setFiltro('tratada', e.target.value)}>
               <option value="0">Não tratadas</option>
               <option value="1">Tratadas</option>
@@ -2033,7 +2033,7 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
           {podeEscolherEscopo && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ fontSize: '13px', color: '#555' }}>Ver</span>
-              <select className="form-control" style={{ width: 'auto' }} value={filtros.escopo}
+              <select aria-label="Ver publicações" className="form-control" style={{ width: 'auto' }} value={filtros.escopo}
                 onChange={e => trocarEscopo(e.target.value)}
                 title="Fica salvo no seu usuário e vale em qualquer dispositivo">
                 <option value="minhas">Atribuídas a mim</option>
@@ -2048,7 +2048,7 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
       <div className="card">
         {/* Barra de resultados + ação em lote */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginBottom: '8px' }}>
-          <div style={{ fontSize: '13px', color: '#64748b' }}>
+          <div style={{ fontSize: '13px', color: '#5b6472' }}>
             <strong style={{ color: '#1e293b', fontWeight: 600 }}>{total} {total === 1 ? 'publicação' : 'publicações'}</strong>
             {(() => {
               const partes = [{ '0': 'não tratadas', '1': 'tratadas', '': 'todas' }[filtros.tratada]];
@@ -2069,7 +2069,7 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
         </div>
         {/* Legenda das cores das linhas */}
         <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center',
-          fontSize: '12px', color: '#64748b', padding: '8px 0', borderTop: '1px solid #eef2f7' }}>
+          fontSize: '12px', color: '#5b6472', padding: '8px 0', borderTop: '1px solid #eef2f7' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#fde8e8', border: '1px solid #f0c0c0' }} />
             processo repetido no mesmo dia
@@ -2092,7 +2092,7 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
                   {podeExcluir && (
                     <th style={{ width: '34px', textAlign: 'center' }}>
                       <input type="checkbox" checked={todasMarcadas} onChange={toggleSelPagina}
-                        title="Marcar/desmarcar todas da página" />
+                        aria-label="Marcar/desmarcar todas da página" title="Marcar/desmarcar todas da página" />
                     </th>
                   )}
                   {thOrder('data', 'Data')}
@@ -2112,7 +2112,7 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
                     style={{ background: p.lida ? 'var(--linha-lida, #cdebd6)' : '#fff8db' }}>
                     {podeExcluir && (
                       <td style={{ textAlign: 'center' }}>
-                        <input type="checkbox" checked={selecionados.includes(p.id)}
+                        <input type="checkbox" aria-label="Selecionar esta publicação" checked={selecionados.includes(p.id)}
                           onChange={() => toggleSel(p.id)}
                           disabled={p.tratada} title={p.tratada ? 'Publicação tratada não pode ser excluída' : undefined} />
                       </td>
@@ -2220,7 +2220,7 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
               <div className="modal-header modal-publicacao-header">
                 <h3>
                   Publicação — {formatarData(textoAberto.data_publicacao)}
-                  {idx >= 0 && <span style={{ color: '#888', fontWeight: 'normal', fontSize: '13px' }}> ({idx + 1} de {lista.length})</span>}
+                  {idx >= 0 && <span style={{ color: '#5b6472', fontWeight: 'normal', fontSize: '13px' }}> ({idx + 1} de {lista.length})</span>}
                   {/* Polo do cliente do escritório no processo desta publicação (vem do cadastro
                       do processo, campo "Cliente do escritório"). Processo não cadastrado ou sem
                       o campo preenchido → não mostra nada. */}
@@ -2506,7 +2506,7 @@ function ModalHistorico({ publicacao, onFechar }) {
             <ul style={{ listStyle: 'none', margin: 0, padding: 0, fontSize: '13px', lineHeight: '1.8' }}>
               <li>
                 <strong>Importada/lida por:</strong> {dados.importada_por_nome || '—'}
-                <span style={{ color: '#888' }}> · {dataHora(dados.criado_em)}</span>
+                <span style={{ color: '#5b6472' }}> · {dataHora(dados.criado_em)}</span>
               </li>
               <li>
                 <strong>Atribuída a:</strong>{' '}
@@ -2517,10 +2517,10 @@ function ModalHistorico({ publicacao, onFechar }) {
                         <li key={i}>
                           👤 {a.nome} — {a.tratada ? 'tratada' : 'pendente'}
                           {a.tratada && a.tratada_em && (
-                            <span style={{ color: '#888' }}> em {dataHora(a.tratada_em)}</span>
+                            <span style={{ color: '#5b6472' }}> em {dataHora(a.tratada_em)}</span>
                           )}
                           {a.atribuida_por_nome && (
-                            <span style={{ color: '#888' }}> · atribuída por {a.atribuida_por_nome} em {dataHora(a.atribuida_em)}</span>
+                            <span style={{ color: '#5b6472' }}> · atribuída por {a.atribuida_por_nome} em {dataHora(a.atribuida_em)}</span>
                           )}
                         </li>
                       ))}
@@ -2531,7 +2531,7 @@ function ModalHistorico({ publicacao, onFechar }) {
               <li>
                 <strong>Tratada:</strong>{' '}
                 {dados.tratada
-                  ? <>por {dados.tratada_por_nome || '—'} <span style={{ color: '#888' }}>· {dataHora(dados.tratada_em)}</span></>
+                  ? <>por {dados.tratada_por_nome || '—'} <span style={{ color: '#5b6472' }}>· {dataHora(dados.tratada_em)}</span></>
                   : 'Ainda não tratada'}
                 {dados.tratada && dados.motivo_sem_acao && (
                   <div style={{ color: '#8a5300', marginTop: '2px' }}>
@@ -2581,7 +2581,7 @@ function ModalHistorico({ publicacao, onFechar }) {
                   <ul style={{ margin: '6px 0 0', paddingLeft: '18px', lineHeight: '1.7' }}>
                     {dados.emails.map((e, i) => (
                       <li key={i}>📧 {e.destinatario_nome || e.para}
-                        <span style={{ color: '#888' }}> · {dataHora(e.enviado_em)}</span>
+                        <span style={{ color: '#5b6472' }}> · {dataHora(e.enviado_em)}</span>
                         {e.status !== 'sucesso' && <span style={{ color: '#b91c1c' }}> · falhou</span>}
                         {e.mensagem && <div style={{ color: '#555', fontSize: '12px' }}>💬 {e.mensagem}</div>}
                       </li>

@@ -92,7 +92,7 @@ function SeletorPolo({ titulo, cor, lista, setLista, listaOposta, tipoInicial = 
               onClick={() => adicionar(p)}
               style={{ padding: '6px 10px', cursor: 'pointer', borderBottom: '1px solid #eef2f7', fontSize: '13px' }}>
               {p.nome || p.razao_social}
-              <span style={{ color: '#888', fontSize: '11px' }}>
+              <span style={{ color: '#5b6472', fontSize: '11px' }}>
                 {p.cpf ? ` · ${p.cpf}` : ''}{p.cnpj ? ` · ${p.cnpj}` : ''}
               </span>
             </div>
@@ -192,14 +192,14 @@ function ModalGerarPartes({ onFechar }) {
               <div className="grid-2">
                 <div className="form-group">
                   <label className="form-label">Modelo *</label>
-                  <select className="form-control" value={modeloId} onChange={e => setModeloId(e.target.value)}>
+                  <select aria-label="Modelo" className="form-control" value={modeloId} onChange={e => setModeloId(e.target.value)}>
                     <option value="">— Selecione —</option>
                     {modelos.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
                   </select>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Formato</label>
-                  <select className="form-control" value={formato} onChange={e => setFormato(e.target.value)}>
+                  <select aria-label="Formato" className="form-control" value={formato} onChange={e => setFormato(e.target.value)}>
                     <option value="docx">Word (.docx)</option>
                     <option value="pdf">PDF</option>
                   </select>

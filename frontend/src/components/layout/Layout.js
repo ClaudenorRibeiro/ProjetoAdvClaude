@@ -381,7 +381,7 @@ export default function Layout({ children }) {
                 onMouseLeave={e => e.currentTarget.style.background='none'}>
                 <span>👤</span>
                 <span className="usuario-nome-header" style={{fontWeight:500}}>{usuario?.nome}</span>
-                <span style={{fontSize:'10px',color:'#94a3b8'}}>{menuUsuario ? '▲' : '▼'}</span>
+                <span style={{fontSize:'10px',color:'#5b6472'}}>{menuUsuario ? '▲' : '▼'}</span>
               </button>
               {menuUsuario && (
                 <div style={{
@@ -497,19 +497,19 @@ function ModalTrocarSenha({ onFechar }) {
         <div className="modal-body">
           <div className="form-group">
             <label className="form-label">Senha atual *</label>
-            <input type="password" className="form-control" autoFocus
+            <input aria-label="Senha atual" type="password" className="form-control" autoFocus
               value={form.senha_atual} onChange={e => set('senha_atual', e.target.value)}
               placeholder="Digite sua senha atual" autoComplete="current-password" />
           </div>
           <div className="form-group">
             <label className="form-label">Nova senha *</label>
-            <input type="password" className="form-control"
+            <input aria-label="Nova senha" type="password" className="form-control"
               value={form.nova_senha} onChange={e => set('nova_senha', e.target.value)}
               placeholder="Mínimo 6 caracteres" autoComplete="new-password" />
           </div>
           <div className="form-group">
             <label className="form-label">Confirmar nova senha *</label>
-            <input type="password" className="form-control"
+            <input aria-label="Confirmar nova senha" type="password" className="form-control"
               value={form.confirmar_senha} onChange={e => set('confirmar_senha', e.target.value)}
               placeholder="Repita a nova senha" autoComplete="new-password" />
           </div>

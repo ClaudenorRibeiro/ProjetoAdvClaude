@@ -141,12 +141,12 @@ export default function PendenciasDocumento() {
       <div className="card" style={{ marginBottom: 16, padding: '12px 16px', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <div style={{ minWidth: 220, flex: 1 }}>
           <label className="form-label" style={{ fontSize: 12 }}>Buscar por cliente com pendências agendadas</label>
-          <input className="form-control" placeholder="Nome do cliente que tem pendências de Documentos"
+          <input aria-label="Buscar por cliente com pendências agendadas" className="form-control" placeholder="Nome do cliente que tem pendências de Documentos"
             value={filtros.busca} onChange={e => setFiltros(f => ({ ...f, busca: e.target.value }))} />
         </div>
         <div style={{ minWidth: 150 }}>
           <label className="form-label" style={{ fontSize: 12 }}>Situação</label>
-          <select className="form-control" value={filtros.status}
+          <select aria-label="Situação" className="form-control" value={filtros.status}
             onChange={e => setFiltros(f => ({ ...f, status: e.target.value }))}>
             <option value="aberta">Abertas</option>
             <option value="resolvida">Resolvidas</option>
@@ -156,7 +156,7 @@ export default function PendenciasDocumento() {
         </div>
         <div style={{ minWidth: 180 }}>
           <label className="form-label" style={{ fontSize: 12 }}>Responsável</label>
-          <select className="form-control" value={filtros.responsavel_id}
+          <select aria-label="Responsável" className="form-control" value={filtros.responsavel_id}
             onChange={e => setFiltros(f => ({ ...f, responsavel_id: e.target.value }))}>
             <option value="">Todos</option>
             {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
@@ -164,7 +164,7 @@ export default function PendenciasDocumento() {
         </div>
         <div style={{ minWidth: 170 }}>
           <label className="form-label" style={{ fontSize: 12 }}>Aviso</label>
-          <select className="form-control" value={filtros.aviso}
+          <select aria-label="Aviso" className="form-control" value={filtros.aviso}
             onChange={e => setFiltros(f => ({ ...f, aviso: e.target.value }))}>
             <option value="">Qualquer</option>
             <option value="vencido">Aviso vencido (abertas)</option>
@@ -213,7 +213,7 @@ export default function PendenciasDocumento() {
                       <td>
                         <strong style={{ color: '#1e2a3a' }}>{p.cliente_nome || <span style={{ color: '#bbb' }}>—</span>}</strong>
                         <span style={{
-                          marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#64748b',
+                          marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#5b6472',
                           background: '#f1f5f9', borderRadius: 4, padding: '1px 5px', textTransform: 'uppercase',
                         }}>{p.tipo_pessoa === 'juridica' ? 'PJ' : 'PF'}</span>
                       </td>
@@ -437,7 +437,7 @@ function ModalPendencia({ pendenciaId, usuarios, tipos, podeAlterar, podeGerenci
                   <SeletorCliente onSelecionar={setCliente} selecionado={cliente} />
                 )}
                 {editando && (
-                  <small style={{ color: '#94a3b8', fontSize: 12 }}>
+                  <small style={{ color: '#5b6472', fontSize: 12 }}>
                     O cliente não muda depois de criada — para outro cliente, abra uma nova pendência.
                   </small>
                 )}
@@ -487,7 +487,7 @@ function ModalPendencia({ pendenciaId, usuarios, tipos, podeAlterar, podeGerenci
               {/* Responsáveis pela cobrança — um ou vários, cada um com a sua data e canais */}
               <div className="form-group">
                 <label className="form-label obrigatorio">Responsáveis pela cobrança</label>
-                <small style={{ color: '#94a3b8', fontSize: 12, display: 'block', marginBottom: 6 }}>
+                <small style={{ color: '#5b6472', fontSize: 12, display: 'block', marginBottom: 6 }}>
                   Cada pessoa é avisada na data dela, pelos canais que você marcar. Data em branco = sem aviso agendado.
                 </small>
 
@@ -499,7 +499,7 @@ function ModalPendencia({ pendenciaId, usuarios, tipos, podeAlterar, podeGerenci
                     <div className="grid-2">
                       <div>
                         <label className="form-label" style={{ fontSize: 12 }}>Usuário</label>
-                        <select className="form-control" disabled={somenteLeitura}
+                        <select aria-label="Usuário" className="form-control" disabled={somenteLeitura}
                           value={r.usuario_id}
                           onChange={e => atualizarResp(idx, { usuario_id: e.target.value })}>
                           <option value="">— Selecione —</option>
@@ -508,7 +508,7 @@ function ModalPendencia({ pendenciaId, usuarios, tipos, podeAlterar, podeGerenci
                       </div>
                       <div>
                         <label className="form-label" style={{ fontSize: 12 }}>Avisar em</label>
-                        <input type="date" className="form-control" disabled={somenteLeitura}
+                        <input aria-label="Avisar em" type="date" className="form-control" disabled={somenteLeitura}
                           value={r.data_aviso}
                           onChange={e => atualizarResp(idx, { data_aviso: e.target.value })} />
                       </div>
@@ -543,7 +543,7 @@ function ModalPendencia({ pendenciaId, usuarios, tipos, podeAlterar, podeGerenci
 
               <div className="form-group">
                 <label className="form-label">Observações</label>
-                <textarea className="form-control" rows={3} maxLength={1000} disabled={somenteLeitura}
+                <textarea aria-label="Observações" className="form-control" rows={3} maxLength={1000} disabled={somenteLeitura}
                   placeholder="Ex.: cliente vai trazer na próxima semana; falta reconhecer firma..."
                   value={observacao}
                   onChange={e => setObservacao(e.target.value)} />
@@ -614,7 +614,7 @@ function SeletorCliente({ onSelecionar, selecionado }) {
       onBlur={e => { if (!boxRef.current?.contains(e.relatedTarget)) setAberto(false); }}>
       <input className="form-control" placeholder="Digite o nome, CPF ou CNPJ do cliente..."
         value={busca} onChange={e => setBusca(e.target.value)} onFocus={() => resultados.length && setAberto(true)} />
-      {buscando && <small style={{ color: '#888', fontSize: 12 }}>🔍 Buscando...</small>}
+      {buscando && <small style={{ color: '#5b6472', fontSize: 12 }}>🔍 Buscando...</small>}
       {aberto && resultados.length > 0 && (
         <div style={{
           position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 40,
@@ -629,17 +629,17 @@ function SeletorCliente({ onSelecionar, selecionado }) {
                 padding: '9px 12px', background: 'none', border: 'none', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', fontSize: 13,
               }}>
               <span style={{
-                fontSize: 10, fontWeight: 700, color: '#64748b', background: '#f1f5f9',
+                fontSize: 10, fontWeight: 700, color: '#5b6472', background: '#f1f5f9',
                 borderRadius: 4, padding: '1px 5px',
               }}>{r.tipo_pessoa === 'juridica' ? 'PJ' : 'PF'}</span>
               <span style={{ flex: 1 }}>{r.nome}</span>
-              {r.documento && <span style={{ color: '#94a3b8', fontSize: 12 }}>{r.documento}</span>}
+              {r.documento && <span style={{ color: '#5b6472', fontSize: 12 }}>{r.documento}</span>}
             </button>
           ))}
         </div>
       )}
       {aberto && !buscando && busca.trim().length >= 2 && resultados.length === 0 && (
-        <div style={{ padding: '8px 4px', color: '#94a3b8', fontSize: 13 }}>Nenhum cliente encontrado.</div>
+        <div style={{ padding: '8px 4px', color: '#5b6472', fontSize: 13 }}>Nenhum cliente encontrado.</div>
       )}
     </div>
   );
@@ -678,7 +678,7 @@ function SeletorDocumentos({ tipos = [], selecionados = [], onChange, somenteLei
             borderColor: aberto ? '#2d6be4' : '#d9e1ec',
           }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', maxHeight: 90, overflowY: 'auto' }}>
-            {escolhidos.length === 0 && <span style={{ color: '#94a3b8' }}>Selecionar documentos...</span>}
+            {escolhidos.length === 0 && <span style={{ color: '#5b6472' }}>Selecionar documentos...</span>}
             {escolhidos.map(t => (
               <span key={t.id} style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -695,7 +695,7 @@ function SeletorDocumentos({ tipos = [], selecionados = [], onChange, somenteLei
               </span>
             ))}
           </span>
-          {!somenteLeitura && <span style={{ color: '#64748b', fontSize: 12, paddingTop: 5 }}>{aberto ? '▲' : '▼'}</span>}
+          {!somenteLeitura && <span style={{ color: '#5b6472', fontSize: 12, paddingTop: 5 }}>{aberto ? '▲' : '▼'}</span>}
         </button>
 
         {!somenteLeitura && aberto && (
@@ -721,7 +721,7 @@ function SeletorDocumentos({ tipos = [], selecionados = [], onChange, somenteLei
                   <span>{t.nome}</span>
                 </label>
               )) : (
-                <div style={{ padding: 10, color: '#94a3b8', fontSize: 13 }}>
+                <div style={{ padding: 10, color: '#5b6472', fontSize: 13 }}>
                   Nenhum documento na lista. Use o botão “…” para cadastrar.
                 </div>
               )}
@@ -853,7 +853,7 @@ function ModalCatalogoTipos({ onFechar, onAtualizado }) {
                     <>
                       <span style={{ flex: 1 }}>{t.nome}</span>
                       {t.em_uso ? (
-                        <span style={{ color: '#94a3b8', fontSize: 12 }}>em uso</span>
+                        <span style={{ color: '#5b6472', fontSize: 12 }}>em uso</span>
                       ) : (
                         <>
                           {podeAlterar && (

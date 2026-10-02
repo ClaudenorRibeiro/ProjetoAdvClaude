@@ -139,13 +139,13 @@ export default function ModalCadastroRapidoParte({ tipo, onFechar, onSalvo }) {
             <>
               <div className="form-group">
                 <label className="form-label">Nome completo *</label>
-                <input className="form-control" autoFocus ref={refNome}
+                <input aria-label="Nome completo" className="form-control" autoFocus ref={refNome}
                   value={form.nome || ''} onChange={e => { setAvisoDup(''); set('nome', e.target.value); }}
                   onBlur={() => set('nome', toTitleCase(form.nome))} />
               </div>
               <div className="form-group">
                 <label className="form-label">CPF</label>
-                <input className="form-control" placeholder="000.000.000-00" ref={refCpf}
+                <input aria-label="CPF" className="form-control" placeholder="000.000.000-00" ref={refCpf}
                   value={form.cpf || ''} onChange={e => { setAvisoDup(''); set('cpf', mascaraCPF(e.target.value)); }} />
               </div>
             </>
@@ -153,13 +153,13 @@ export default function ModalCadastroRapidoParte({ tipo, onFechar, onSalvo }) {
             <>
               <div className="form-group">
                 <label className="form-label">Razão social *</label>
-                <input className="form-control" autoFocus ref={refRazao}
+                <input aria-label="Razão social" className="form-control" autoFocus ref={refRazao}
                   value={form.razao_social || ''} onChange={e => { setAvisoDup(''); set('razao_social', e.target.value); }}
                   onBlur={() => set('razao_social', toTitleCase(form.razao_social))} />
               </div>
               <div className="form-group">
                 <label className="form-label">CNPJ</label>
-                <input className="form-control" placeholder="00.000.000/0000-00" ref={refCnpj}
+                <input aria-label="CNPJ" className="form-control" placeholder="00.000.000/0000-00" ref={refCnpj}
                   value={form.cnpj || ''} onChange={e => { setAvisoDup(''); set('cnpj', mascaraCNPJ(e.target.value)); }} />
               </div>
             </>

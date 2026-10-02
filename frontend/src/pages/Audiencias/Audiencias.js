@@ -224,7 +224,7 @@ export default function Audiencias() {
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Status</label>
-            <select className="form-control" value={filtros.status} onChange={e => setFiltro('status', e.target.value)}>
+            <select aria-label="Status" className="form-control" value={filtros.status} onChange={e => setFiltro('status', e.target.value)}>
               <option value="">Todos</option>
               {Object.entries(STATUS_LABEL)
                 .filter(([valor]) => !STATUS_APOSENTADOS.includes(valor))
@@ -257,7 +257,7 @@ export default function Audiencias() {
               📄 Gerar em lote{selecionados.size ? ` (${selecionados.size})` : ''}
             </button>
           )}
-          <span style={{ marginLeft: 'auto', color: '#888', fontSize: '13px', marginBottom: '1px' }}>
+          <span style={{ marginLeft: 'auto', color: '#5b6472', fontSize: '13px', marginBottom: '1px' }}>
             {total} audiência(s)
           </span>
         </div>
@@ -267,7 +267,7 @@ export default function Audiencias() {
         <LegendaEtiquetasPessoais definicoes={etqDefs} filtroAtivo={filtros.etiqueta}
           onFiltrar={(slot) => setFiltro('etiqueta', slot)} />
         {carregando ? <div className="loading">Carregando...</div> : (
-          <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+          <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }} tabIndex={0} role="region" aria-label="Lista de audiências">
             <table className="tabela tabela-sticky">
               <thead>
                 <tr>
@@ -276,7 +276,7 @@ export default function Audiencias() {
                       {/* Marca/desmarca todas as audiências elegíveis da página */}
                       <input type="checkbox" checked={todosSelecionados}
                         onChange={alternarTodos} disabled={idsElegiveis.length === 0}
-                        title="Selecionar todas (agendadas/adiadas)" />
+                        aria-label="Selecionar todas (agendadas/adiadas)" title="Selecionar todas (agendadas/adiadas)" />
                     </th>
                   )}
                   <CabecalhoOrdenavel campo="processo">Processo</CabecalhoOrdenavel>
@@ -297,7 +297,7 @@ export default function Audiencias() {
                       <td>
                         {/* Caixinha só nas audiências elegíveis (agendada/adiada) */}
                         {elegivelLote(a) && (
-                          <input type="checkbox" checked={selecionados.has(a.id)}
+                          <input type="checkbox" aria-label="Selecionar esta audiência" checked={selecionados.has(a.id)}
                             onChange={() => alternarSelecao(a.id)} />
                         )}
                       </td>
@@ -505,7 +505,7 @@ export function ModalCancelarAudiencia({ audiencia, onFechar }) {
           </p>
           <div className="form-group">
             <label className="form-label">Motivo do cancelamento *</label>
-            <textarea className="form-control" rows={3} value={motivo}
+            <textarea aria-label="Motivo do cancelamento" className="form-control" rows={3} value={motivo}
               onChange={e => setMotivo(e.target.value)}
               placeholder="Descreva o motivo do cancelamento..." />
           </div>
@@ -556,7 +556,7 @@ export function ModalRemarcarAudiencia({ audiencia, onFechar, onContinuar }) {
           </p>
           <div className="form-group">
             <label className="form-label">Motivo da remarcação *</label>
-            <textarea className="form-control" rows={2} value={form.motivo}
+            <textarea aria-label="Motivo da remarcação" className="form-control" rows={2} value={form.motivo}
               onChange={e => set('motivo', e.target.value)}
               placeholder="Ex: Pedido de adiamento pela parte contrária..." />
           </div>
@@ -619,7 +619,7 @@ function ModalDetalhesAta({ audiencia, onFechar }) {
                   <strong style={{ color: '#1d4ed8', fontSize: 13 }}>{ROTULO[item.tipo] || item.tipo}</strong>
                   <div style={{ marginTop: 3, fontSize: 14 }}>{item.titulo}</div>
                   {item.descricao && <div style={{ marginTop: 3, fontSize: 13, color: '#475569', whiteSpace: 'pre-wrap' }}>{item.descricao}</div>}
-                  {item.data_referencia && <div style={{ marginTop: 3, fontSize: 12, color: '#64748b' }}>Data: {formatarData(item.data_referencia)}</div>}
+                  {item.data_referencia && <div style={{ marginTop: 3, fontSize: 12, color: '#5b6472' }}>Data: {formatarData(item.data_referencia)}</div>}
                 </div>)}
               </div>
             )}
@@ -824,35 +824,35 @@ function ModalCadastroRapidoPessoa({ onFechar, onSalvo }) {
           {/* Nome */}
           <div className="form-group">
             <label className="form-label">Nome completo *</label>
-            <input className="form-control" value={form.nome || ''} onChange={e => set('nome', e.target.value)} />
+            <input aria-label="Nome completo" className="form-control" value={form.nome || ''} onChange={e => set('nome', e.target.value)} />
           </div>
 
           {/* CPF + RG + Órgão + Data Nasc + Gênero */}
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">CPF</label>
-              <input className="form-control" value={form.cpf || ''} placeholder="000.000.000-00"
+              <input aria-label="CPF" className="form-control" value={form.cpf || ''} placeholder="000.000.000-00"
                 onChange={e => set('cpf', mascaraCPF(e.target.value))} />
             </div>
             <div className="form-group">
               <label className="form-label">Data de nascimento</label>
-              <input type="date" className="form-control" value={form.data_nascimento || ''}
+              <input aria-label="Data de nascimento" type="date" className="form-control" value={form.data_nascimento || ''}
                 onChange={e => set('data_nascimento', e.target.value)} onWheel={impedirAlteracaoDataPorRoda} />
             </div>
           </div>
           <div className="grid-3">
             <div className="form-group">
               <label className="form-label">RG</label>
-              <input className="form-control" value={form.rg || ''} onChange={e => set('rg', e.target.value)} />
+              <input aria-label="RG" className="form-control" value={form.rg || ''} onChange={e => set('rg', e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Órgão Expedidor</label>
-              <input className="form-control" value={form.rg_orgao || ''} placeholder="SSP/SP"
+              <input aria-label="Órgão Expedidor" className="form-control" value={form.rg_orgao || ''} placeholder="SSP/SP"
                 onChange={e => set('rg_orgao', e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Gênero</label>
-              <select className="form-control" value={form.genero_id || ''} onChange={e => set('genero_id', e.target.value)}>
+              <select aria-label="Gênero" className="form-control" value={form.genero_id || ''} onChange={e => set('genero_id', e.target.value)}>
                 <option value="">— Selecione —</option>
                 {auxiliares.generos.map(g => <option key={g.id} value={g.id}>{g.nome}</option>)}
               </select>
@@ -863,14 +863,14 @@ function ModalCadastroRapidoPessoa({ onFechar, onSalvo }) {
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Estado civil</label>
-              <select className="form-control" value={form.estado_civil_id || ''} onChange={e => set('estado_civil_id', e.target.value)}>
+              <select aria-label="Estado civil" className="form-control" value={form.estado_civil_id || ''} onChange={e => set('estado_civil_id', e.target.value)}>
                 <option value="">— Selecione —</option>
                 {auxiliares.estados_civis.map(ec => <option key={ec.id} value={ec.id}>{ec.nome}</option>)}
               </select>
             </div>
             <div className="form-group">
               <label className="form-label">Profissão</label>
-              <select className="form-control" value={form.profissao_id || ''} onChange={e => set('profissao_id', e.target.value)}>
+              <select aria-label="Profissão" className="form-control" value={form.profissao_id || ''} onChange={e => set('profissao_id', e.target.value)}>
                 <option value="">— Selecione —</option>
                 {auxiliares.profissoes.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
               </select>
@@ -887,32 +887,32 @@ function ModalCadastroRapidoPessoa({ onFechar, onSalvo }) {
             </div>
             <div className="form-group">
               <label className="form-label">Logradouro</label>
-              <input className="form-control" autoComplete="off" value={form.logradouro || ''} onChange={e => set('logradouro', e.target.value)} />
+              <input aria-label="Logradouro" className="form-control" autoComplete="off" value={form.logradouro || ''} onChange={e => set('logradouro', e.target.value)} />
             </div>
           </div>
           <div className="grid-3">
             <div className="form-group">
               <label className="form-label">Número</label>
-              <input className="form-control" autoComplete="off" value={form.numero || ''} onChange={e => set('numero', e.target.value)} />
+              <input aria-label="Número" className="form-control" autoComplete="off" value={form.numero || ''} onChange={e => set('numero', e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Complemento</label>
-              <input className="form-control" autoComplete="off" value={form.complemento || ''} placeholder="Apto, sala..."
+              <input aria-label="Complemento" className="form-control" autoComplete="off" value={form.complemento || ''} placeholder="Apto, sala..."
                 onChange={e => set('complemento', e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Bairro</label>
-              <input className="form-control" autoComplete="off" value={form.bairro || ''} onChange={e => set('bairro', e.target.value)} />
+              <input aria-label="Bairro" className="form-control" autoComplete="off" value={form.bairro || ''} onChange={e => set('bairro', e.target.value)} />
             </div>
           </div>
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Cidade</label>
-              <input className="form-control" autoComplete="off" value={form.cidade || ''} onChange={e => set('cidade', e.target.value)} />
+              <input aria-label="Cidade" className="form-control" autoComplete="off" value={form.cidade || ''} onChange={e => set('cidade', e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Estado</label>
-              <input className="form-control" autoComplete="off" value={form.estado || ''} placeholder="SP" maxLength={2}
+              <input aria-label="Estado" className="form-control" autoComplete="off" value={form.estado || ''} placeholder="SP" maxLength={2}
                 onChange={e => set('estado', e.target.value.toUpperCase())} />
             </div>
           </div>
@@ -920,7 +920,7 @@ function ModalCadastroRapidoPessoa({ onFechar, onSalvo }) {
           {/* Observações */}
           <div className="form-group">
             <label className="form-label">Observações</label>
-            <textarea className="form-control" rows={2} value={form.observacoes || ''}
+            <textarea aria-label="Observações" className="form-control" rows={2} value={form.observacoes || ''}
               onChange={e => set('observacoes', e.target.value)} />
           </div>
         </div>
@@ -1045,8 +1045,8 @@ function SecaoTestemunhas({ processoId, testemunhas, onChange, somenteLeitura = 
                       {/* Sem CPF é comum na base — deixa claro que falta o dado, em vez de
                       mostrar só o nome (que parece "o sistema não achou o CPF"). */}
                       {p.cpf
-                        ? <span style={{ color: '#64748b' }}> — CPF {formatarCPF(p.cpf)}</span>
-                        : <span style={{ color: '#94a3b8', fontStyle: 'italic' }}> — sem CPF</span>}
+                        ? <span style={{ color: '#5b6472' }}> — CPF {formatarCPF(p.cpf)}</span>
+                        : <span style={{ color: '#5b6472', fontStyle: 'italic' }}> — sem CPF</span>}
                     </div>
                   ))}
                 </div>
@@ -1065,7 +1065,7 @@ function SecaoTestemunhas({ processoId, testemunhas, onChange, somenteLeitura = 
 
       {/* Sem testemunhas no modo leitura — deixa claro que não há */}
       {somenteLeitura && testemunhas.length === 0 && (
-        <div style={{ fontSize: '13px', color: '#94a3b8' }}>Nenhuma testemunha cadastrada.</div>
+        <div style={{ fontSize: '13px', color: '#5b6472' }}>Nenhuma testemunha cadastrada.</div>
       )}
 
       {/* A parte é específica: nunca se deduz pelo polo. */}
@@ -1092,7 +1092,7 @@ function SecaoTestemunhas({ processoId, testemunhas, onChange, somenteLeitura = 
             <div key={t.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 12px', borderBottom: '1px solid #f0f0f0', fontSize: '13px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span>{t.nome}</span>
-                <span style={{ color: '#64748b' }}>de {t.parte_nome || 'pessoa não identificada (cadastro antigo)'}</span>
+                <span style={{ color: '#5b6472' }}>de {t.parte_nome || 'pessoa não identificada (cadastro antigo)'}</span>
                 <span className={`badge ${t.polo === 'autor' ? 'badge-azul' : 'badge-roxo'}`}
                   style={t.polo !== 'autor' ? { background: '#7c3aed', color: '#fff' } : {}}>
                   {t.polo === 'autor' ? 'Testem. Autor' : 'Testem. Réu'}
@@ -1156,7 +1156,7 @@ function ModalConfirmarSenhaDiaUtil({ descricao, onCancelar, onConfirmar }) {
           </p>
           <div className="form-group">
             <label className="form-label">Sua senha *</label>
-            <input type="password" className="form-control" value={senha}
+            <input aria-label="Sua senha" type="password" className="form-control" value={senha}
               onChange={e => setSenha(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && confirmar()}
               autoFocus autoComplete="current-password" />
@@ -1204,11 +1204,11 @@ function CampoResponsaveis({ advogados, valores, onChange, disabled = false, onN
       aria-expanded={aberto} aria-haspopup="listbox"
       title={selecionados.length ? resumo : 'Selecionar responsável pela condução'}
       style={{ width: '100%', minHeight: '38px', padding: '7px 9px', border: '1px solid #d1d5db', borderRadius: '6px',
-        background: disabled ? '#f3f4f6' : '#fff', color: selecionados.length ? '#334155' : '#64748b',
+        background: disabled ? '#f3f4f6' : '#fff', color: selecionados.length ? '#334155' : '#5b6472',
         cursor: disabled ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         gap: '8px', textAlign: 'left', fontFamily: 'inherit', fontSize: '12px' }}>
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{resumo}</span>
-      {!disabled && <span aria-hidden="true" style={{ color: '#64748b', fontSize: '14px' }}>{aberto ? '▴' : '▾'}</span>}
+      {!disabled && <span aria-hidden="true" style={{ color: '#5b6472', fontSize: '14px' }}>{aberto ? '▴' : '▾'}</span>}
     </button>
 
     {!disabled && aberto && (
@@ -1217,7 +1217,7 @@ function CampoResponsaveis({ advogados, valores, onChange, disabled = false, onN
           maxHeight: '260px', overflowY: 'auto', padding: '8px 9px', border: '1px solid #bfdbfe',
           borderRadius: '6px', background: '#fff', boxShadow: '0 5px 14px rgba(15,23,42,0.18)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
-          <span style={{ fontSize: '12px', color: '#64748b' }}>{valores.length ? `${valores.length} responsável(is) selecionado(s)` : 'Nenhum responsável selecionado'}</span>
+          <span style={{ fontSize: '12px', color: '#5b6472' }}>{valores.length ? `${valores.length} responsável(is) selecionado(s)` : 'Nenhum responsável selecionado'}</span>
           {onNovoFreela && <button type="button" onClick={() => { setAberto(false); onNovoFreela(); }} title="Cadastrar advogado freelancer" style={{ border: 0, background: 'none', color: '#2563eb', cursor: 'pointer', fontSize: '12px' }}>+ Freelancer</button>}
         </div>
         <input className="form-control" aria-label="Pesquisar responsáveis pela condução"
@@ -1536,7 +1536,7 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
             </div>
             <div className="form-group">
               <label className="form-label">Hora *</label>
-              <input type="time" className="form-control" value={form.hora}
+              <input aria-label="Hora" type="time" className="form-control" value={form.hora}
                 onChange={e => { set('hora', e.target.value); setAvisos(a => ({ ...a, hora: '' })); }}
                 onBlur={validarHoraBlur} />
               {avisos.hora && (
@@ -1551,7 +1551,7 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Modalidade</label>
-              <select className="form-control" value={form.modalidade}
+              <select aria-label="Modalidade" className="form-control" value={form.modalidade}
                 onChange={e => alterarModalidade(e.target.value)}>
                 <option value="presencial">Presencial</option>
                 <option value="virtual">Virtual (online)</option>
@@ -1580,13 +1580,13 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
             <div className="grid-2">
               <div className="form-group">
                 <label className="form-label">Plataforma</label>
-                <input className="form-control" value={form.plataforma_virtual || ''}
+                <input aria-label="Plataforma" className="form-control" value={form.plataforma_virtual || ''}
                   onChange={e => set('plataforma_virtual', e.target.value)}
                   placeholder="Zoom, Teams, Meet..." />
               </div>
               <div className="form-group">
                 <label className="form-label">Link</label>
-                <input className="form-control" value={form.link_virtual || ''}
+                <input aria-label="Link" className="form-control" value={form.link_virtual || ''}
                   onChange={e => set('link_virtual', e.target.value)}
                   placeholder="https://..." />
               </div>
@@ -1595,7 +1595,7 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
 
           <div className="form-group">
             <label className="form-label">Obs.</label>
-            <textarea className="form-control" rows={3} value={form.observacoes || ''}
+            <textarea aria-label="Obs." className="form-control" rows={3} value={form.observacoes || ''}
               onChange={e => set('observacoes', e.target.value)}
               placeholder="Anotações da audiência (livre). Quando criada de uma publicação, já vem com o texto da sugestão." />
           </div>
@@ -1910,7 +1910,7 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
             <div style={{ padding: '8px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '14px', color: '#111827', fontWeight: 600 }}>
               {audiencia.processo_numero || '(sem número)'} — {audiencia.pasta_titulo || ''}
             </div>
-            <small style={{ color: '#94a3b8', fontSize: '12px' }}>
+            <small style={{ color: '#5b6472', fontSize: '12px' }}>
               Para alterar o processo, exclua esta audiência e crie uma nova.
             </small>
           </div>
@@ -1944,7 +1944,7 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
             </div>
             <div className="form-group">
               <label className="form-label">Hora *</label>
-              <input type="time" className="form-control" value={form.hora || ''} disabled={leitura}
+              <input aria-label="Hora" type="time" className="form-control" value={form.hora || ''} disabled={leitura}
                 onChange={e => { set('hora', e.target.value); setAvisos(a => ({ ...a, hora: '' })); }}
                 onBlur={validarHoraBlur} />
               {avisos.hora && (
@@ -1959,7 +1959,7 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Modalidade</label>
-              <select className="form-control" value={form.modalidade} disabled={leitura}
+              <select aria-label="Modalidade" className="form-control" value={form.modalidade} disabled={leitura}
                 onChange={e => alterarModalidade(e.target.value)}>
                 <option value="presencial">Presencial</option>
                 <option value="virtual">Virtual (online)</option>
@@ -1989,13 +1989,13 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
             <div className="grid-2">
               <div className="form-group">
                 <label className="form-label">Plataforma</label>
-                <input className="form-control" value={form.plataforma_virtual || ''} disabled={leitura}
+                <input aria-label="Plataforma" className="form-control" value={form.plataforma_virtual || ''} disabled={leitura}
                   onChange={e => set('plataforma_virtual', e.target.value)}
                   placeholder="Zoom, Teams, Meet..." />
               </div>
               <div className="form-group">
                 <label className="form-label">Link</label>
-                <input className="form-control" value={form.link_virtual || ''} disabled={leitura}
+                <input aria-label="Link" className="form-control" value={form.link_virtual || ''} disabled={leitura}
                   onChange={e => set('link_virtual', e.target.value)}
                   placeholder="https://..." />
               </div>
@@ -2004,7 +2004,7 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
 
           <div className="form-group">
             <label className="form-label">Obs.</label>
-            <textarea className="form-control" rows={3} value={form.observacoes || ''} disabled={leitura}
+            <textarea aria-label="Obs." className="form-control" rows={3} value={form.observacoes || ''} disabled={leitura}
               onChange={e => set('observacoes', e.target.value)}
               placeholder="Anotações da audiência (livre)." />
           </div>
@@ -2160,12 +2160,12 @@ export function ModalNovoFreela({ onFechar, onSalvo, profissoes = [], exigirProf
           )}
           <div className="form-group">
             <label className="form-label">Nome *</label>
-            <input className="form-control" value={form.nome}
+            <input aria-label="Nome" className="form-control" value={form.nome}
               onChange={e => set('nome', e.target.value)} />
           </div>
           <div className="form-group">
             <label className="form-label">E-mail *</label>
-            <input className="form-control" type="email" placeholder="nome@exemplo.com"
+            <input aria-label="E-mail" className="form-control" type="email" placeholder="nome@exemplo.com"
               value={form.email} onChange={e => set('email', e.target.value)} />
           </div>
           <div className="form-group">
@@ -2178,12 +2178,12 @@ export function ModalNovoFreela({ onFechar, onSalvo, profissoes = [], exigirProf
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">OAB</label>
-              <input className="form-control" placeholder="Ex: SP 123456"
+              <input aria-label="OAB" className="form-control" placeholder="Ex: SP 123456"
                 value={form.oab} onChange={e => set('oab', e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Telefone</label>
-              <input className="form-control" placeholder="(00) 00000-0000"
+              <input aria-label="Telefone" className="form-control" placeholder="(00) 00000-0000"
                 value={form.telefone}
                 onChange={e => set('telefone', mascaraTel(e.target.value))} />
             </div>
@@ -2193,45 +2193,45 @@ export function ModalNovoFreela({ onFechar, onSalvo, profissoes = [], exigirProf
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">CEP</label>
-              <input className="form-control" autoComplete="off" placeholder="00000-000" maxLength={9}
+              <input aria-label="CEP" className="form-control" autoComplete="off" placeholder="00000-000" maxLength={9}
                 value={form.cep}
                 onChange={e => { setErroCep(''); set('cep', mascaraCEP(e.target.value)); }}
                 onBlur={e => buscarCep(e.target.value)} />
-              {buscandoCep && <small style={{ color: '#888', fontSize: '12px' }}>🔍 Buscando...</small>}
+              {buscandoCep && <small style={{ color: '#5b6472', fontSize: '12px' }}>🔍 Buscando...</small>}
               {erroCep && <small style={{ color: '#e74c3c', fontSize: '12px' }}>⚠️ {erroCep}</small>}
             </div>
             <div className="form-group">
               <label className="form-label">Logradouro</label>
-              <input className="form-control" autoComplete="off" value={form.logradouro}
+              <input aria-label="Logradouro" className="form-control" autoComplete="off" value={form.logradouro}
                 onChange={e => set('logradouro', e.target.value)} />
             </div>
           </div>
           <div className="grid-3">
             <div className="form-group">
               <label className="form-label">Número</label>
-              <input className="form-control" autoComplete="off" value={form.numero}
+              <input aria-label="Número" className="form-control" autoComplete="off" value={form.numero}
                 onChange={e => set('numero', e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Complemento</label>
-              <input className="form-control" autoComplete="off" value={form.complemento}
+              <input aria-label="Complemento" className="form-control" autoComplete="off" value={form.complemento}
                 onChange={e => set('complemento', e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Bairro</label>
-              <input className="form-control" autoComplete="off" value={form.bairro}
+              <input aria-label="Bairro" className="form-control" autoComplete="off" value={form.bairro}
                 onChange={e => set('bairro', e.target.value)} />
             </div>
           </div>
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Cidade</label>
-              <input className="form-control" autoComplete="off" value={form.cidade}
+              <input aria-label="Cidade" className="form-control" autoComplete="off" value={form.cidade}
                 onChange={e => set('cidade', e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Estado</label>
-              <input className="form-control" autoComplete="off" maxLength={2} value={form.estado}
+              <input aria-label="Estado" className="form-control" autoComplete="off" maxLength={2} value={form.estado}
                 onChange={e => set('estado', e.target.value.toUpperCase())} />
             </div>
           </div>
@@ -2813,7 +2813,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos, onTiposChange })
                   <strong style={{ fontSize: 13, color: '#9a3412' }}>Desistência da ação</strong>
                   <div className="form-group" style={{ margin: '8px 0' }}>
                     <label className="form-label obrigatorio">Motivo da desistência</label>
-                    <textarea className="form-control" rows={2} value={motivoDesistencia}
+                    <textarea aria-label="Motivo da desistência" className="form-control" rows={2} value={motivoDesistencia}
                       onChange={e => setMotivoDesistencia(e.target.value)}
                       onBlur={() => setMotivoDesistencia(toTitleCase(motivoDesistencia))}
                       placeholder="Descreva o motivo da desistência..." />
@@ -2846,7 +2846,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos, onTiposChange })
 
           <div className="form-group">
             <label className="form-label">Observações</label>
-            <textarea className="form-control" rows={2} value={form.observacoes || ''}
+            <textarea aria-label="Observações" className="form-control" rows={2} value={form.observacoes || ''}
               onChange={e => set('observacoes', e.target.value)}
               onBlur={() => set('observacoes', toTitleCase(form.observacoes))} />
           </div>
@@ -2979,7 +2979,7 @@ function ModalReverterStatus({ audiencia, onFechar }) {
           </div>
           <div className="form-group">
             <label className="form-label">Motivo *</label>
-            <textarea className="form-control" rows={3} value={motivo}
+            <textarea aria-label="Motivo" className="form-control" rows={3} value={motivo}
               onChange={e => setMotivo(e.target.value)}
               placeholder="Descreva o motivo da reversão (fica registrado no histórico)" />
           </div>
@@ -3046,13 +3046,13 @@ function CampoLocalVara({ varas, foruns, varaId, onChange, onRecarregarVaras, so
               {!somenteLeitura && (
                 <button type="button"
                   onClick={() => { onChange(null); setBusca(''); }}
-                  style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 0 0 8px' }}
+                  style={{ background: 'none', border: 'none', color: '#5b6472', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 0 0 8px' }}
                   title="Limpar seleção">×</button>
               )}
             </div>
           ) : somenteLeitura ? (
             /* Somente leitura sem vara: mostra aviso, sem campo de busca */
-            <div style={{ padding: '7px 12px', fontSize: 13, color: '#94a3b8' }}>Local não informado</div>
+            <div style={{ padding: '7px 12px', fontSize: 13, color: '#5b6472' }}>Local não informado</div>
           ) : (
             /* Campo de busca */
             <input className="form-control"
@@ -3075,7 +3075,7 @@ function CampoLocalVara({ varas, foruns, varaId, onChange, onRecarregarVaras, so
                   <strong>{v.abrev_nome || v.nome}</strong>
                   {' — '}{v.forum_nome}
                   {v.forum_cidade && (
-                    <span style={{ color: '#888', fontSize: 12 }}>
+                    <span style={{ color: '#5b6472', fontSize: 12 }}>
                       {' · '}{v.forum_cidade}{v.forum_uf ? `/${v.forum_uf}` : ''}
                     </span>
                   )}
@@ -3086,7 +3086,7 @@ function CampoLocalVara({ varas, foruns, varaId, onChange, onRecarregarVaras, so
 
           {/* Hint quando nenhum resultado */}
           {aberto && busca.length >= 1 && varasFiltradas.length === 0 && !varaSelecionada && (
-            <div style={{ position: 'absolute', zIndex: 150, width: '100%', border: '1px solid #ddd', borderRadius: 6, marginTop: 2, background: '#fff', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: '10px 12px', fontSize: 13, color: '#888' }}>
+            <div style={{ position: 'absolute', zIndex: 150, width: '100%', border: '1px solid #ddd', borderRadius: 6, marginTop: 2, background: '#fff', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: '10px 12px', fontSize: 13, color: '#5b6472' }}>
               Nenhuma vara encontrada. Use o botão <strong>…</strong> para cadastrar.
             </div>
           )}
@@ -3107,7 +3107,7 @@ function CampoLocalVara({ varas, foruns, varaId, onChange, onRecarregarVaras, so
         </div>
       )}
       {varaSelecionada && !endereco && (
-        <div style={{ marginTop: 6, fontSize: 12, color: '#94a3b8' }}>
+        <div style={{ marginTop: 6, fontSize: 12, color: '#5b6472' }}>
           📍 Endereço não cadastrado para este fórum
         </div>
       )}
@@ -3159,7 +3159,7 @@ function ModalNovaVara({ foruns, onFechar, onSalvo }) {
         <div className="modal-body">
           <div className="form-group">
             <label className="form-label obrigatorio">Fórum</label>
-            <select className="form-control" value={form.forum_id}
+            <select aria-label="Fórum" className="form-control" value={form.forum_id}
               onChange={e => set('forum_id', e.target.value)} autoFocus>
               <option value="">Selecione o fórum...</option>
               {foruns.map(f => (
@@ -3170,29 +3170,29 @@ function ModalNovaVara({ foruns, onFechar, onSalvo }) {
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label obrigatorio">Nome completo</label>
-              <input className="form-control" placeholder="Ex: 1ª Vara do Trabalho"
+              <input aria-label="Nome completo" className="form-control" placeholder="Ex: 1ª Vara do Trabalho"
                 value={form.nome} onChange={e => set('nome', e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Abreviação</label>
-              <input className="form-control" placeholder="Ex: 1ªVT/SP"
+              <input aria-label="Abreviação" className="form-control" placeholder="Ex: 1ªVT/SP"
                 value={form.abrev_nome} onChange={e => set('abrev_nome', e.target.value)} />
             </div>
           </div>
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Código CNJ</label>
-              <input className="form-control" placeholder="Ex: 5020001" maxLength={15}
+              <input aria-label="Código CNJ" className="form-control" placeholder="Ex: 5020001" maxLength={15}
                 style={{ fontFamily: 'monospace' }}
                 value={form.codVaraNoProc} onChange={e => set('codVaraNoProc', e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-label">Complemento de endereço</label>
-              <input className="form-control" placeholder="Ex: 3º andar, Bloco A"
+              <input aria-label="Complemento de endereço" className="form-control" placeholder="Ex: 3º andar, Bloco A"
                 value={form.compl_end} onChange={e => set('compl_end', e.target.value)} />
             </div>
           </div>
-          <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 8 }}>
+          <p style={{ fontSize: 12, color: '#5b6472', marginTop: 8 }}>
             Para editar mais detalhes desta vara (tel, e-mail), acesse Controle → Varas.
           </p>
         </div>

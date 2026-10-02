@@ -163,6 +163,7 @@ export default function Varas() {
             onChange={e => setBusca(e.target.value)}
           />
           <select
+            aria-label="Filtrar por fórum"
             className="form-control"
             style={{ maxWidth: 280 }}
             value={filtroForum}
@@ -251,7 +252,7 @@ export default function Varas() {
                 {/* Fórum */}
                 <div className="form-group">
                   <label className="form-label obrigatorio">Fórum</label>
-                  <select className="form-control" {...campo('forum_id')} autoFocus>
+                  <select aria-label="Fórum" className="form-control" {...campo('forum_id')} autoFocus>
                     <option value="">Selecione o fórum...</option>
                     {foruns.map(f => (
                       <option key={f.id} value={f.id}>{f.abrev_nome || f.nome}</option>
@@ -263,7 +264,7 @@ export default function Varas() {
                 <div className="grid-2">
                   <div className="form-group">
                     <label className="form-label obrigatorio">Nome completo</label>
-                    <input
+                    <input aria-label="Nome completo"
                       className="form-control"
                       placeholder="Ex: 1ª Vara do Trabalho"
                       {...campo('nome')}
@@ -272,7 +273,7 @@ export default function Varas() {
                   <div className="form-group">
                     <label className="form-label">
                       Abreviação{' '}
-                      <span style={{ color: '#999', fontWeight: 400 }}>— exibida nos dropdowns</span>
+                      <span style={{ color: '#5b6472', fontWeight: 400 }}>— exibida nos dropdowns</span>
                     </label>
                     <input
                       className="form-control"
@@ -287,7 +288,7 @@ export default function Varas() {
                   <div className="form-group">
                     <label className="form-label">
                       Código CNJ{' '}
-                      <span style={{ color: '#999', fontWeight: 400 }}>— segmento de vara no nº do processo</span>
+                      <span style={{ color: '#5b6472', fontWeight: 400 }}>— segmento de vara no nº do processo</span>
                     </label>
                     <input
                       className="form-control"
@@ -300,7 +301,7 @@ export default function Varas() {
                   <div className="form-group">
                     <label className="form-label">
                       Complemento de endereço{' '}
-                      <span style={{ color: '#999', fontWeight: 400 }}>— mesmo endereço do fórum</span>
+                      <span style={{ color: '#5b6472', fontWeight: 400 }}>— mesmo endereço do fórum</span>
                     </label>
                     <input
                       className="form-control"
@@ -318,7 +319,7 @@ export default function Varas() {
                   <div className="grid-2">
                     <div className="form-group">
                       <label className="form-label">Telefone</label>
-                      <input
+                      <input aria-label="Telefone"
                         className="form-control"
                         placeholder="(11) 0000-0000"
                         {...campo('tel')}
@@ -327,7 +328,7 @@ export default function Varas() {
                     </div>
                     <div className="form-group">
                       <label className="form-label">E-mail</label>
-                      <input
+                      <input aria-label="E-mail"
                         className="form-control"
                         type="email"
                         placeholder="vara@trt.jus.br"

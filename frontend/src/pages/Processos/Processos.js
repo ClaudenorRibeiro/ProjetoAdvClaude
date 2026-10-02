@@ -156,7 +156,7 @@ export default function Processos() {
               )}
             </div>
           </div>
-          <span style={{ marginLeft: 'auto', color: '#888', fontSize: '13px' }}>
+          <span style={{ marginLeft: 'auto', color: '#5b6472', fontSize: '13px' }}>
             {total} pasta(s)
           </span>
         </div>
@@ -208,13 +208,13 @@ export default function Processos() {
                     <td>
                       {p.tipo_nome
                         ? <span className="badge badge-azul">{p.tipo_nome}</span>
-                        : <span style={{ color: '#888', fontWeight: '600' }}>—</span>
+                        : <span style={{ color: '#5b6472', fontWeight: '600' }}>—</span>
                       }
                     </td>
                     <td>
                       {p.status_nome
                         ? <span className="badge badge-cinza">{p.status_nome}</span>
-                        : <span style={{ color: '#888', fontWeight: '600' }}>—</span>
+                        : <span style={{ color: '#5b6472', fontWeight: '600' }}>—</span>
                       }
                     </td>
                     <td style={{ textAlign: 'center' }}>
@@ -336,7 +336,7 @@ function SeletorAssuntos({ assuntos = [], selecionados = [], onChange, podeGeren
             paddingRight: assuntosSelecionados.length > 6 ? '4px' : 0,
           }}>
             {assuntosSelecionados.length === 0 && (
-              <span style={{ color: '#94a3b8' }}>Selecionar assuntos...</span>
+              <span style={{ color: '#5b6472' }}>Selecionar assuntos...</span>
             )}
             {assuntosSelecionados.map(a => (
               <span key={a.id} style={{
@@ -357,7 +357,7 @@ function SeletorAssuntos({ assuntos = [], selecionados = [], onChange, podeGeren
               </span>
             ))}
           </span>
-          {!somenteLeitura && <span style={{ color: '#64748b', fontSize: '12px', paddingTop: '5px' }}>{aberto ? '▲' : '▼'}</span>}
+          {!somenteLeitura && <span style={{ color: '#5b6472', fontSize: '12px', paddingTop: '5px' }}>{aberto ? '▲' : '▼'}</span>}
         </button>
 
         {!somenteLeitura && aberto && (
@@ -392,7 +392,7 @@ function SeletorAssuntos({ assuntos = [], selecionados = [], onChange, podeGeren
                   <span>{a.nome}</span>
                 </label>
               )) : (
-                <div style={{ padding: '10px', color: '#94a3b8', fontSize: '13px' }}>Nenhum assunto encontrado</div>
+                <div style={{ padding: '10px', color: '#5b6472', fontSize: '13px' }}>Nenhum assunto encontrado</div>
               )}
             </div>
           </div>
@@ -492,7 +492,7 @@ function SeletorOabsProcesso({ oabs = [], onChange, opcoes = [], onOpcoesAtualiz
         ))}
         {oabs.length === 0 && <span style={{ color: '#ccc', fontSize: '13px' }}>Nenhuma OAB adicionada</span>}
       </div>
-      <small style={{ color: '#888' }}>Advogado(s) responsável(is) pela OAB sob a qual o processo foi distribuído. Só aparecem advogados com OAB já cadastrada.</small>
+      <small style={{ color: '#5b6472' }}>Advogado(s) responsável(is) pela OAB sob a qual o processo foi distribuído. Só aparecem advogados com OAB já cadastrada.</small>
 
       {modalNovoFreela && (
         <ModalNovoFreela titulo="Novo advogado avulso (sem login no sistema)"
@@ -860,7 +860,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
                   onChange={e => set('numPasta', e.target.value)}
                   onBlur={checarPastaEmUso}
                 />
-                <span style={{ fontSize: '12px', color: '#888' }}>
+                <span style={{ fontSize: '12px', color: '#5b6472' }}>
                   Sugerido automaticamente — altere se necessário (ex: carta precatória na pasta 42)
                 </span>
               </div>
@@ -904,7 +904,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
                   <div style={{ fontWeight: '600', fontSize: '13px', color: novasPartes ? '#92400e' : '#0369a1' }}>
                     Novas Partes
                   </div>
-                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                  <div style={{ fontSize: '12px', color: '#5b6472', marginTop: '2px' }}>
                     {novasPartes
                       ? 'Partes desbloqueadas — adicione ou remova livremente. Um novo título será gerado.'
                       : 'As mesmas partes do processo anterior foram carregadas. Marque para alterar.'}
@@ -1051,14 +1051,14 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
           {/* === CLIENTE DO ESCRITÓRIO (qual polo) === */}
           <div className="form-group">
             <label className="form-label">Cliente do escritório</label>
-            <select className="form-control" style={{ maxWidth: '260px' }}
+            <select aria-label="Cliente do escritório" className="form-control" style={{ maxWidth: '260px' }}
               value={form.cliente_polo || ''}
               onChange={e => set('cliente_polo', e.target.value)}>
               <option value="">— Não definido —</option>
               <option value="autor">Autor (polo ativo)</option>
               <option value="reu">Réu (polo passivo)</option>
             </select>
-            <small style={{ color: '#888' }}>Define para quem vão os comunicados (perícia/audiência)</small>
+            <small style={{ color: '#5b6472' }}>Define para quem vão os comunicados (perícia/audiência)</small>
           </div>
 
           {/* === RESPONSABILIDADE DO PROCESSO === */}
@@ -1067,7 +1067,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
             <SelectPesquisavel ariaLabel="Responsável pelo processo" className="form-control"
               value={form.responsavel_id || ''} onChange={valor => set('responsavel_id', valor)}
               opcoes={[{ value: '', label: '— Não definido —' }, ...(aux.usuarios || []).map(u => ({ value: u.id, label: `${u.nome}${u.oab ? ` — OAB ${u.oab}` : ''}` }))]} />
-            <small style={{ color: '#888' }}>Advogado que cuida do processo no escritório.</small>
+            <small style={{ color: '#5b6472' }}>Advogado que cuida do processo no escritório.</small>
           </div>
 
           {/* === OAB(s) DO PROCESSO === */}
@@ -1120,7 +1120,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div className="form-group">
               <label className="form-label">Número do Processo (CNJ)</label>
-              <input
+              <input aria-label="Número do Processo (CNJ)"
                 className="form-control"
                 value={form.numProc}
                 onChange={e => { set('numProc', mascaraCNJ(e.target.value)); preencherTipoPorCNJ(e.target.value); }}
@@ -1131,7 +1131,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
             {/* Protocolo: processos ainda não distribuídos (ex.: previdenciário) só têm protocolo */}
             <div className="form-group">
               <label className="form-label">Número de Protocolo</label>
-              <input
+              <input aria-label="Número de Protocolo"
                 className="form-control"
                 value={form.protocolo}
                 onChange={e => set('protocolo', e.target.value)}
@@ -1202,7 +1202,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
           {/* Data de distribuição */}
           <div className="form-group">
             <label className="form-label">Data de Distribuição</label>
-            <input
+            <input aria-label="Data de Distribuição"
               type="date" className="form-control"
               style={{ maxWidth: '180px' }}
               value={form.data_distribuicao}
@@ -1213,7 +1213,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
           {/* Observações */}
           <div className="form-group">
             <label className="form-label">Observações</label>
-            <textarea
+            <textarea aria-label="Observações"
               className="form-control" rows={2}
               value={form.observacoes}
               onChange={e => set('observacoes', e.target.value)}
@@ -1619,20 +1619,20 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
           {/* === CLIENTE DO ESCRITÓRIO (qual polo) === */}
           <div className="form-group">
             <label className="form-label">Cliente do escritório</label>
-            <select className="form-control" style={{ maxWidth: '260px' }}
+            <select aria-label="Cliente do escritório" className="form-control" style={{ maxWidth: '260px' }}
               value={form.cliente_polo || ''}
               onChange={e => set('cliente_polo', e.target.value)}>
               <option value="">— Não definido —</option>
               <option value="autor">Autor (polo ativo)</option>
               <option value="reu">Réu (polo passivo)</option>
             </select>
-            <small style={{ color: '#888' }}>Define para quem vão os comunicados (perícia/audiência)</small>
+            <small style={{ color: '#5b6472' }}>Define para quem vão os comunicados (perícia/audiência)</small>
           </div>
 
           {/* === RESPONSABILIDADE DO PROCESSO === */}
           <div className="form-group">
             <label className="form-label">Responsável pelo processo</label>
-            <select className="form-control"
+            <select aria-label="Responsável pelo processo" className="form-control"
               value={form.responsavel_id || ''}
               onChange={e => set('responsavel_id', e.target.value)}>
               <option value="">— Não definido —</option>
@@ -1642,7 +1642,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
                 </option>
               ))}
             </select>
-            <small style={{ color: '#888' }}>Advogado que cuida do processo no escritório.</small>
+            <small style={{ color: '#5b6472' }}>Advogado que cuida do processo no escritório.</small>
           </div>
 
           {/* === OAB(s) DO PROCESSO === */}
@@ -1697,7 +1697,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div className="form-group">
               <label className="form-label">Número do Processo (CNJ)</label>
-              <input className="form-control"
+              <input aria-label="Número do Processo (CNJ)" className="form-control"
                 value={form.numProc}
                 disabled={leitura}
                 onChange={e => set('numProc', mascaraCNJ(e.target.value))}
@@ -1707,7 +1707,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
             {/* Protocolo: processos ainda não distribuídos (ex.: previdenciário) só têm protocolo */}
             <div className="form-group">
               <label className="form-label">Número de Protocolo</label>
-              <input className="form-control"
+              <input aria-label="Número de Protocolo" className="form-control"
                 value={form.protocolo}
                 disabled={leitura}
                 onChange={e => set('protocolo', e.target.value)}
@@ -1789,7 +1789,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
           {/* Data de distribuição */}
           <div className="form-group">
             <label className="form-label">Data de Distribuição</label>
-            <input type="date" className="form-control" style={{ maxWidth: '180px' }}
+            <input aria-label="Data de Distribuição" type="date" className="form-control" style={{ maxWidth: '180px' }}
               value={form.data_distribuicao}
               disabled={leitura}
               onChange={e => set('data_distribuicao', e.target.value)} />
@@ -1798,7 +1798,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
           {/* Observações */}
           <div className="form-group">
             <label className="form-label">Observações</label>
-            <textarea className="form-control" rows={2}
+            <textarea aria-label="Observações" className="form-control" rows={2}
               value={form.observacoes}
               disabled={leitura}
               onChange={e => set('observacoes', e.target.value)}
@@ -1957,7 +1957,7 @@ export function ModalHistoricoProcesso({ processo, onFechar }) {
                           <span style={{ color: HISTORICO_PROCESSO_ACAO_COR[r.acao] || '#333', fontWeight: 600, fontSize: '12px' }}>
                             {HISTORICO_PROCESSO_ACAO_LABEL[r.acao] || r.acao}
                           </span>
-                          {r.descricao && <div style={{ fontSize: '11px', color: '#888' }}>{r.descricao}</div>}
+                          {r.descricao && <div style={{ fontSize: '11px', color: '#5b6472' }}>{r.descricao}</div>}
                         </td>
                         <td style={{ fontSize: '12px' }}>{r.usuario_nome}</td>
                       </tr>
@@ -2223,13 +2223,13 @@ export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtuali
                       )}
                       {/* Cidade/UF para fóruns */}
                       {tipo === 'foruns' && item.cidade && (
-                        <span style={{ color: '#888', marginLeft: '6px', fontSize: '11px' }}>
+                        <span style={{ color: '#5b6472', marginLeft: '6px', fontSize: '11px' }}>
                           {item.cidade}{item.uf ? ` - ${item.uf}` : ''}
                         </span>
                       )}
                       {/* Fórum pai para varas */}
                       {tipo === 'varas' && item.forum_nome && (
-                        <span style={{ color: '#888', marginLeft: '6px', fontSize: '11px' }}>
+                        <span style={{ color: '#5b6472', marginLeft: '6px', fontSize: '11px' }}>
                           {item.forum_nome}
                         </span>
                       )}
@@ -2300,7 +2300,7 @@ export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtuali
                       }}
                     />
                     {c.key === 'cep' && buscandoCep && (
-                      <small style={{ color: '#888', fontSize: '11px' }}>Buscando endereço...</small>
+                      <small style={{ color: '#5b6472', fontSize: '11px' }}>Buscando endereço...</small>
                     )}
                     {c.key === 'cep' && erroCep && !buscandoCep && (
                       <small style={{ color: '#d97706', fontSize: '11px' }}>{erroCep}</small>
@@ -2335,7 +2335,7 @@ export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtuali
           )}
 
           {!podeCadastrar && !podeAlterar && !podeExcluir && (
-            <p style={{ color: '#888', fontSize: '13px', textAlign: 'center' }}>
+            <p style={{ color: '#5b6472', fontSize: '13px', textAlign: 'center' }}>
               Você tem acesso somente leitura a estes registros.
             </p>
           )}

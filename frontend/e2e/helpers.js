@@ -47,3 +47,11 @@ export async function abrirMenuAcoes(page, linha) {
   await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
   await botao.click();
 }
+
+// Espera a tela terminar de carregar (rede quieta e sem "Carregando..."), para a análise
+// de acessibilidade nunca ler uma tela pela metade — isso fazia o teste passar sem verificar nada.
+export async function aguardarTelaPronta(page) {
+  await page.waitForLoadState('networkidle');
+  await page.waitForFunction(() => !document.querySelector('.loading') && !/Carregando/i.test(document.body.innerText));
+  await page.waitForTimeout(300);
+}

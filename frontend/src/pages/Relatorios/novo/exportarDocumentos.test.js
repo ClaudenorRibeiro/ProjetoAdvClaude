@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const api = vi.hoisted(() => ({ executar: vi.fn(), exportar: vi.fn(), salvarPreferencias: vi.fn() }));
 vi.mock('../../../services/api', () => ({ relatoriosAPI: api }));
@@ -30,7 +30,10 @@ describe('Exportar em PDF e Word', () => {
   beforeEach(() => {
     Object.values(api).forEach(f => f.mockReset()); avisos.erro.mockReset();
     global.URL.createObjectURL = vi.fn(() => 'blob:x'); global.URL.revokeObjectURL = vi.fn();
+    // O download clica num link; o jsdom não navega (e reclama). Aqui o clique é só absorvido.
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
   });
+  afterEach(() => { vi.restoreAllMocks(); });
 
   it('três botões: Excel, PDF e Word; cada um pede o formato certo (lista simples, sem gráfico)', async () => {
     montar(RECEITA_LISTA, LISTA);

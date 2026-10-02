@@ -138,12 +138,12 @@ export default function FormasPagamento() {
               <div className="modal-body">
                 <div className="form-group">
                   <label className="form-label obrigatorio">Nome</label>
-                  <input className="form-control" placeholder="Ex.: PIX, TED, Dinheiro, Cheque, Cartão..."
+                  <input aria-label="Nome" className="form-control" placeholder="Ex.: PIX, TED, Dinheiro, Cheque, Cartão..."
                     value={nome} onChange={e => setNome(e.target.value)} autoFocus />
                 </div>
                 <div className="form-group">
                   <label className="form-label obrigatorio">Disponível em</label>
-                  <select className="form-control" value={usoPermitido} onChange={e => setUsoPermitido(e.target.value)}>
+                  <select aria-label="Disponível em" className="form-control" value={usoPermitido} onChange={e => setUsoPermitido(e.target.value)}>
                     <option value="financeira">Somente instituição financeira</option>
                     <option value="especie">Somente dinheiro em espécie</option>
                     <option value="ambos">Instituição financeira e dinheiro em espécie</option>

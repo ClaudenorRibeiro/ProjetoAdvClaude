@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { bloquearRedeExterna, loginPelaTela } from './helpers';
+import { aguardarTelaPronta, bloquearRedeExterna, loginPelaTela } from './helpers';
 
 test.beforeEach(async ({ page }) => bloquearRedeExterna(page));
 
@@ -13,18 +13,38 @@ test('@critical login, proteção de rota e navegação principal', async ({ pag
   await expect(page.getByRole('heading', { name: /Audiências/i }).first()).toBeVisible();
 });
 
-test('@critical páginas críticas não têm violações sérias ou críticas de acessibilidade', async ({ page }, testInfo) => {
-  await page.goto('/login');
-  let resultado = await new AxeBuilder({ page }).analyze();
-  let graves = resultado.violations.filter(v => ['serious', 'critical'].includes(v.impact));
-  expect(graves, `Login: ${JSON.stringify(graves, null, 2)}`).toEqual([]);
+// Todas as telas que o administrador abre. Só conta violação SÉRIA ou CRÍTICA de acessibilidade
+// (contraste de cor, campo sem rótulo, área de rolagem sem teclado etc.).
+const TELAS_PUBLICAS = ['/login', '/redefinir-senha'];
+const TELAS_LOGADAS = ['/dashboard', '/pessoas', '/processos', '/processos/pasta/1', '/prazos', '/tarefas', '/audiencias',
+  '/pericias', '/financeiro', '/documentos', '/publicacoes', '/pendencias-documento', '/agenda', '/relatorios',
+  '/configuracoes', '/controle/foruns', '/controle/varas', '/controle/auxiliares', '/controle/formas-pagamento',
+  '/controle/instituicoes-financeiras'];
 
+async function violacoesGraves(page) {
+  const resultado = await new AxeBuilder({ page }).analyze();
+  return resultado.violations.filter(v => ['serious', 'critical'].includes(v.impact))
+    .map(v => ({ regra: v.id, itens: v.nodes.map(n => n.html.replace(/\s+/g, ' ').slice(0, 140)) }));
+}
+
+test('@critical todas as telas não têm violações sérias ou críticas de acessibilidade', async ({ page }, testInfo) => {
+  test.setTimeout(240_000);
+  const achados = {};
+  for (const rota of TELAS_PUBLICAS) {
+    await page.goto(rota);
+    await aguardarTelaPronta(page);
+    const graves = await violacoesGraves(page);
+    if (graves.length) achados[rota] = graves;
+  }
   await loginPelaTela(page);
-  await expect(page.getByText('Prazos Hoje', { exact: true })).toBeVisible();
-  resultado = await new AxeBuilder({ page }).analyze();
-  graves = resultado.violations.filter(v => ['serious', 'critical'].includes(v.impact));
-  expect(graves, `Dashboard: ${JSON.stringify(graves, null, 2)}`).toEqual([]);
-  await testInfo.attach('acessibilidade.json', { body: JSON.stringify(resultado, null, 2), contentType: 'application/json' });
+  for (const rota of TELAS_LOGADAS) {
+    await page.goto(rota);
+    await aguardarTelaPronta(page);
+    const graves = await violacoesGraves(page);
+    if (graves.length) achados[rota] = graves;
+  }
+  await testInfo.attach('acessibilidade.json', { body: JSON.stringify(achados, null, 2), contentType: 'application/json' });
+  expect(achados, `Violações de acessibilidade por tela: ${JSON.stringify(achados, null, 2)}`).toEqual({});
 });
 
 test('login permanece utilizável em tela pequena', async ({ page }) => {

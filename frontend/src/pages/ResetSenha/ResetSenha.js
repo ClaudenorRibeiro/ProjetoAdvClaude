@@ -58,12 +58,12 @@ export default function ResetSenha() {
       }}>
         <div style={{ textAlign: 'center', marginBottom: '28px' }}>
           <h1 style={{ margin: '0 0 4px', fontSize: '22px', color: '#1e2a3a' }}>Sistema de Advocacia</h1>
-          <p style={{ margin: 0, color: '#888', fontSize: '14px' }}>Redefinição de senha</p>
+          <p style={{ margin: 0, color: '#5b6472', fontSize: '14px' }}>Redefinição de senha</p>
         </div>
 
         {/* Validando */}
         {status === 'validando' && (
-          <p style={{ textAlign: 'center', color: '#888' }}>Validando link...</p>
+          <p style={{ textAlign: 'center', color: '#5b6472' }}>Validando link...</p>
         )}
 
         {/* Token inválido ou expirado */}

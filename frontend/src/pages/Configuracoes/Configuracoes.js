@@ -254,7 +254,7 @@ function PainelHoraServidor() {
 
       {/* Informações */}
       <div>
-        <div style={{ fontSize: '11px', fontWeight: 600, color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>
+        <div style={{ fontSize: '11px', fontWeight: 600, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>
           Data e Hora do Servidor
         </div>
         <div style={{ fontSize: '15px', fontWeight: 600, color: '#1e2a3a' }}>
@@ -264,7 +264,7 @@ function PainelHoraServidor() {
         <div style={{ fontSize: '20px', fontWeight: 700, color: '#1e2a3a', fontVariantNumeric: 'tabular-nums' }}>
           {horaFmt}
           {fusoAbrev && (
-            <span style={{ fontSize: '12px', fontWeight: 400, color: '#6b7280', marginLeft: '10px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 400, color: '#5b6472', marginLeft: '10px' }}>
               {fusoAbrev} {fusoHorario && `• ${fusoHorario}`}
             </span>
           )}
@@ -420,14 +420,14 @@ function TabEscritorio() {
       <div className="grid-2">
         <div className="form-group">
           <label className="form-label">Nome do escritório *</label>
-          <input className="form-control" value={form.nome||''} onChange={e => set('nome', e.target.value)} onBlur={() => set('nome', toTitleCase(form.nome))} disabled={!ehSuper} />
+          <input aria-label="Nome do escritório" className="form-control" value={form.nome||''} onChange={e => set('nome', e.target.value)} onBlur={() => set('nome', toTitleCase(form.nome))} disabled={!ehSuper} />
         </div>
         <div className="form-group">
           <label className="form-label">Título da aba do navegador</label>
-          <input className="form-control" value={form.titulo_aba||''}
+          <input aria-label="Título da aba do navegador" className="form-control" value={form.titulo_aba||''}
             onChange={e => set('titulo_aba', e.target.value)}
             placeholder={form.nome || 'Ex: Dr. Antonio | Advocacia'} disabled={!ehSuper} />
-          <small style={{color:'#888',fontSize:'12px'}}>Se vazio, usa o nome do escritório</small>
+          <small style={{color:'#5b6472',fontSize:'12px'}}>Se vazio, usa o nome do escritório</small>
         </div>
       </div>
 
@@ -441,7 +441,7 @@ function TabEscritorio() {
                        background:'#f8fafc', overflow:'hidden'}}>
             {form.logo_base64
               ? <img src={form.logo_base64} alt="Logo atual" style={{maxWidth:'100%', maxHeight:'100%'}} />
-              : <span style={{color:'#94a3b8', fontSize:'12px'}}>Sem logo</span>}
+              : <span style={{color:'#5b6472', fontSize:'12px'}}>Sem logo</span>}
           </div>
           {ehSuper && (
             <div style={{display:'flex', flexDirection:'column', gap:'8px'}}>
@@ -457,7 +457,7 @@ function TabEscritorio() {
             </div>
           )}
         </div>
-        <small style={{color:'#888', fontSize:'12px', display:'block', marginTop:'8px', lineHeight:'1.5'}}>
+        <small style={{color:'#5b6472', fontSize:'12px', display:'block', marginTop:'8px', lineHeight:'1.5'}}>
           Aceita apenas imagens <strong>PNG, JPG ou WEBP</strong>, de no máximo <strong>512 KB</strong>.
           Para um resultado melhor, use um PNG com fundo transparente. Por segurança, qualquer
           outro tipo de arquivo é bloqueado.
@@ -467,7 +467,7 @@ function TabEscritorio() {
       <div className="grid-2">
         <div className="form-group">
           <label className="form-label">CNPJ / CPF</label>
-          <input className="form-control" value={form.cnpj_cpf||''}
+          <input aria-label="CNPJ / CPF" className="form-control" value={form.cnpj_cpf||''}
             onChange={e => set('cnpj_cpf', mascaraCnpjCpf(e.target.value))}
             placeholder="000.000.000-00 ou 00.000.000/0000-00"
             maxLength={18} disabled={!ehSuper} />
@@ -476,18 +476,18 @@ function TabEscritorio() {
       <div className="grid-2">
         <div className="form-group">
           <label className="form-label">E-mail principal</label>
-          <input type="email" className="form-control" value={form.email||''} onChange={e => set('email', e.target.value)} disabled={!ehSuper} />
+          <input aria-label="E-mail principal" type="email" className="form-control" value={form.email||''} onChange={e => set('email', e.target.value)} disabled={!ehSuper} />
         </div>
         <div className="form-group">
           <label className="form-label">Telefone</label>
-          <input className="form-control" value={form.telefone||''} onChange={e => set('telefone', mascaraTelefone(e.target.value))}
+          <input aria-label="Telefone" className="form-control" value={form.telefone||''} onChange={e => set('telefone', mascaraTelefone(e.target.value))}
             placeholder="(11) 99999-9999" disabled={!ehSuper} />
         </div>
       </div>
       <div className="grid-3">
         <div className="form-group">
           <label className="form-label">CEP</label>
-          <input className="form-control" value={form.cep||''}
+          <input aria-label="CEP" className="form-control" value={form.cep||''}
             onChange={e => {
               const v = e.target.value.replace(/\D/g, '').slice(0, 8);
               const fmt = v.length > 5 ? v.replace(/(\d{5})(\d)/, '$1-$2') : v;
@@ -498,25 +498,25 @@ function TabEscritorio() {
         </div>
         <div className="form-group">
           <label className="form-label">Logradouro</label>
-          <input className="form-control" value={form.logradouro||''} onChange={e => set('logradouro', e.target.value)} onBlur={() => set('logradouro', toTitleCase(form.logradouro))} disabled={!ehSuper} />
+          <input aria-label="Logradouro" className="form-control" value={form.logradouro||''} onChange={e => set('logradouro', e.target.value)} onBlur={() => set('logradouro', toTitleCase(form.logradouro))} disabled={!ehSuper} />
         </div>
         <div className="form-group">
           <label className="form-label">Número</label>
-          <input ref={refNumero} className="form-control" value={form.numero||''} onChange={e => set('numero', e.target.value)} disabled={!ehSuper} />
+          <input aria-label="Número" ref={refNumero} className="form-control" value={form.numero||''} onChange={e => set('numero', e.target.value)} disabled={!ehSuper} />
         </div>
       </div>
       <div className="grid-3">
         <div className="form-group">
           <label className="form-label">Bairro</label>
-          <input className="form-control" value={form.bairro||''} onChange={e => set('bairro', e.target.value)} onBlur={() => set('bairro', toTitleCase(form.bairro))} disabled={!ehSuper} />
+          <input aria-label="Bairro" className="form-control" value={form.bairro||''} onChange={e => set('bairro', e.target.value)} onBlur={() => set('bairro', toTitleCase(form.bairro))} disabled={!ehSuper} />
         </div>
         <div className="form-group">
           <label className="form-label">Cidade</label>
-          <input className="form-control" value={form.cidade||''} onChange={e => set('cidade', e.target.value)} onBlur={() => set('cidade', toTitleCase(form.cidade))} disabled={!ehSuper} />
+          <input aria-label="Cidade" className="form-control" value={form.cidade||''} onChange={e => set('cidade', e.target.value)} onBlur={() => set('cidade', toTitleCase(form.cidade))} disabled={!ehSuper} />
         </div>
         <div className="form-group">
           <label className="form-label">Estado</label>
-          <input className="form-control" value={form.estado||''} onChange={e => set('estado', e.target.value)}
+          <input aria-label="Estado" className="form-control" value={form.estado||''} onChange={e => set('estado', e.target.value)}
             placeholder="SP" maxLength={2} disabled={!ehSuper} />
         </div>
       </div>
@@ -524,7 +524,7 @@ function TabEscritorio() {
       <h4 style={{margin:'20px 0 12px',fontSize:'13px',fontWeight:600,color:'#555'}}>Padrão para novos processos</h4>
       <div className="form-group">
         <label className="form-label">Advogado principal do escritório</label>
-        <select className="form-control" value={form.advogado_principal_id || ''}
+        <select aria-label="Advogado principal do escritório" className="form-control" value={form.advogado_principal_id || ''}
           onChange={e => set('advogado_principal_id', e.target.value)}
           disabled={!ehSuper}>
           <option value="">— Não definido —</option>
@@ -534,22 +534,22 @@ function TabEscritorio() {
             </option>
           ))}
         </select>
-        <small style={{color:'#888'}}>Será usado como responsável padrão e já entra na lista de OABs ao criar um processo novo.</small>
+        <small style={{color:'#5b6472'}}>Será usado como responsável padrão e já entra na lista de OABs ao criar um processo novo.</small>
       </div>
 
       <h4 style={{margin:'20px 0 12px',fontSize:'13px',fontWeight:600,color:'#555'}}>Alertas de prazos — e-mail coletivo</h4>
       <div className="grid-2">
         <div className="form-group">
           <label className="form-label">Horário do e-mail diário</label>
-          <input type="time" className="form-control" value={form.horario_alerta_prazos||'18:00'}
+          <input aria-label="Horário do e-mail diário" type="time" className="form-control" value={form.horario_alerta_prazos||'18:00'}
             onChange={e => set('horario_alerta_prazos', e.target.value)} />
-          <small style={{color:'#888'}}>Envia "PRAZO PENDENTE HOJE" (e atrasado) neste horário</small>
+          <small style={{color:'#5b6472'}}>Envia "PRAZO PENDENTE HOJE" (e atrasado) neste horário</small>
         </div>
         <div className="form-group">
           <label className="form-label">Segundo horário — opcional</label>
-          <input type="time" className="form-control" value={form.horario_alerta_prazos_2||''}
+          <input aria-label="Segundo horário — opcional" type="time" className="form-control" value={form.horario_alerta_prazos_2||''}
             onChange={e => set('horario_alerta_prazos_2', e.target.value)} />
-          <small style={{color: horariosInvalidos ? '#dc2626' : '#888'}}>
+          <small style={{color: horariosInvalidos ? '#dc2626' : '#5b6472'}}>
             {horariosInvalidos
               ? 'Mínimo de 1 hora de diferença entre os dois horários'
               : 'Dispara os mesmos alertas. Deixe vazio para usar só um horário'}
@@ -558,10 +558,10 @@ function TabEscritorio() {
       </div>
       <div className="form-group">
         <label className="form-label">E-mails dos destinatários</label>
-        <input type="text" className="form-control" value={form.alerta_emails||''}
+        <input aria-label="E-mails dos destinatários" type="text" className="form-control" value={form.alerta_emails||''}
           onChange={e => set('alerta_emails', e.target.value)}
           placeholder="email1@ex.com, email2@ex.com" />
-        <small style={{color:'#888'}}>Separe por vírgula</small>
+        <small style={{color:'#5b6472'}}>Separe por vírgula</small>
       </div>
       <div className="form-group">
         <label style={{display:'flex',alignItems:'center',gap:'10px',cursor:'pointer'}}>
@@ -575,26 +575,26 @@ function TabEscritorio() {
       <div className="grid-2">
         <div className="form-group">
           <label className="form-label">Dias úteis antes da audiência para alertar cliente</label>
-          <input type="number" min="1" className="form-control" value={form.dias_alerta_audiencia||''}
+          <input aria-label="Dias úteis antes da audiência para alertar cliente" type="number" min="1" className="form-control" value={form.dias_alerta_audiencia||''}
             onChange={e => set('dias_alerta_audiencia', e.target.value)} />
         </div>
         <div className="form-group">
           <label className="form-label">Dias úteis antes da perícia para alertar cliente</label>
-          <input type="number" min="1" className="form-control" value={form.dias_alerta_pericia||''}
+          <input aria-label="Dias úteis antes da perícia para alertar cliente" type="number" min="1" className="form-control" value={form.dias_alerta_pericia||''}
             onChange={e => set('dias_alerta_pericia', e.target.value)} />
         </div>
       </div>
       <div className="form-group" style={{maxWidth:'300px'}}>
         <label className="form-label">Audiências sem advogado — alertar nos próximos (dias)</label>
-        <input type="number" min="1" className="form-control" value={form.dias_audiencia_sem_adv||7}
+        <input aria-label="Audiências sem advogado — alertar nos próximos (dias)" type="number" min="1" className="form-control" value={form.dias_audiencia_sem_adv||7}
           onChange={e => set('dias_audiencia_sem_adv', e.target.value)} />
-        <small style={{color:'#888'}}>Aparece no dashboard para todos os usuários</small>
+        <small style={{color:'#5b6472'}}>Aparece no dashboard para todos os usuários</small>
       </div>
       <div className="form-group" style={{maxWidth:'300px'}}>
         <label className="form-label">Processo parado — alertar após (dias sem nenhuma ação)</label>
-        <input type="number" min="1" className="form-control" value={form.dias_processo_parado||365}
+        <input aria-label="Processo parado — alertar após (dias sem nenhuma ação)" type="number" min="1" className="form-control" value={form.dias_processo_parado||365}
           onChange={e => set('dias_processo_parado', e.target.value)} />
-        <small style={{color:'#888'}}>Risco de prescrição. Considera a última ação de qualquer módulo do processo (andamento, prazo, tarefa, audiência, perícia, financeiro). Aparece no cartão "Processos Parados" do dashboard e no relatório.</small>
+        <small style={{color:'#5b6472'}}>Risco de prescrição. Considera a última ação de qualquer módulo do processo (andamento, prazo, tarefa, audiência, perícia, financeiro). Aparece no cartão "Processos Parados" do dashboard e no relatório.</small>
       </div>
       <div className="form-group">
         <label style={{display:'flex',alignItems:'center',gap:'10px',cursor:'pointer'}}>
@@ -602,25 +602,25 @@ function TabEscritorio() {
             onChange={e => set('ata_advogado_obrigatorio', e.target.checked ? 1 : 0)} />
           <span>Exigir advogado acompanhante ao registrar a ata</span>
         </label>
-        <small style={{color:'#888'}}>Quando ligado, é obrigatório informar quem acompanhou a audiência (ou marcar "Ninguém") para registrar a ata.</small>
+        <small style={{color:'#5b6472'}}>Quando ligado, é obrigatório informar quem acompanhou a audiência (ou marcar "Ninguém") para registrar a ata.</small>
       </div>
 
       <h4 style={{margin:'20px 0 12px',fontSize:'13px',fontWeight:600,color:'#555'}}>Controle "Fazendo" em prazos</h4>
       <div className="form-group" style={{maxWidth:'300px'}}>
         <label className="form-label">Liberar prazo "Fazendo" automaticamente após (minutos)</label>
-        <input type="number" min="5" max="480" className="form-control"
+        <input aria-label="Liberar prazo &quot;Fazendo&quot; automaticamente após (minutos)" type="number" min="5" max="480" className="form-control"
           value={form.prazo_fazendo_timeout || 60}
           onChange={e => set('prazo_fazendo_timeout', e.target.value)} />
-        <small style={{color:'#888'}}>O prazo volta ao status anterior se ninguém concluiu no prazo definido</small>
+        <small style={{color:'#5b6472'}}>O prazo volta ao status anterior se ninguém concluiu no prazo definido</small>
       </div>
 
       <h4 style={{margin:'20px 0 12px',fontSize:'13px',fontWeight:600,color:'#555'}}>Segurança da sessão</h4>
       <div className="form-group" style={{maxWidth:'300px'}}>
         <label className="form-label">Tempo de inatividade até o logout automático (minutos)</label>
-        <input type="number" min="15" className="form-control"
+        <input aria-label="Tempo de inatividade até o logout automático (minutos)" type="number" min="15" className="form-control"
           value={form.tempo_inatividade_min ?? 15}
           onChange={e => set('tempo_inatividade_min', e.target.value)} />
-        <small style={{color:'#888'}}>
+        <small style={{color:'#5b6472'}}>
           Mínimo 15 minutos. Após esse tempo sem atividade, o usuário é desconectado automaticamente.
           (Fechar o navegador também já desconecta.)
         </small>
@@ -628,10 +628,10 @@ function TabEscritorio() {
 
       <div className="form-group" style={{marginTop:'8px'}}>
         <label className="form-label">Mensagem de aniversário</label>
-        <textarea className="form-control" rows={3} value={form.mensagem_aniversario || ''}
+        <textarea aria-label="Mensagem de aniversário" className="form-control" rows={3} value={form.mensagem_aniversario || ''}
           onChange={e => set('mensagem_aniversario', e.target.value)}
           placeholder="Olá, {{nome}}! O escritório {{escritorio}} deseja a você um feliz aniversário! 🎂" />
-        <small style={{color:'#888'}}>
+        <small style={{color:'#5b6472'}}>
           Usada no relatório de Aniversariantes (WhatsApp e e-mail). Use <b>{'{{nome}}'}</b> para o nome do
           cliente e <b>{'{{escritorio}}'}</b> para o nome do escritório. Se ficar em branco, um texto padrão é usado.
         </small>
@@ -784,11 +784,11 @@ function ModalHistoricoUsuario({ usuario, onFechar }) {
           <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', marginBottom: '16px' }}>
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">De</label>
-              <input type="date" className="form-control" value={dataDe} onChange={e => setDataDe(e.target.value)} />
+              <input aria-label="De" type="date" className="form-control" value={dataDe} onChange={e => setDataDe(e.target.value)} />
             </div>
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Até</label>
-              <input type="date" className="form-control" value={dataAte} onChange={e => setDataAte(e.target.value)} />
+              <input aria-label="Até" type="date" className="form-control" value={dataAte} onChange={e => setDataAte(e.target.value)} />
             </div>
             <button className="btn btn-primary" onClick={buscar} disabled={carregando}>
               {carregando ? 'Buscando...' : 'Buscar'}
@@ -826,7 +826,7 @@ function ModalHistoricoUsuario({ usuario, onFechar }) {
                     ))}
                   </tbody>
                 </table>
-                <p style={{ fontSize: '11px', color: '#999', marginTop: '8px' }}>
+                <p style={{ fontSize: '11px', color: '#5b6472', marginTop: '8px' }}>
                   {registros.length} registro{registros.length !== 1 ? 's' : ''} encontrado{registros.length !== 1 ? 's' : ''}
                   {registros.length === 500 ? ' (limite de 500 — refine o período)' : ''}
                 </p>
@@ -890,7 +890,7 @@ function ModalRedefinirSenha({ usuario, onFechar }) {
           </p>
           <div className="form-group">
             <label className="form-label">Nova senha *</label>
-            <input type="password" className="form-control"
+            <input aria-label="Nova senha" type="password" className="form-control"
               value={senha} onChange={e => setSenha(e.target.value)}
               placeholder="Nova senha" autoFocus
               autoComplete="new-password" />
@@ -898,7 +898,7 @@ function ModalRedefinirSenha({ usuario, onFechar }) {
           </div>
           <div className="form-group">
             <label className="form-label">Confirmar senha *</label>
-            <input type="password" className="form-control"
+            <input aria-label="Confirmar senha" type="password" className="form-control"
               value={confirma} onChange={e => setConfirma(e.target.value)}
               placeholder="Repita a nova senha"
               autoComplete="new-password" />
@@ -954,7 +954,7 @@ function ModalUsuario({ usuario, onFechar }) {
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Nome completo *</label>
-              <input className="form-control" value={form.nome||''} onChange={e => set('nome', e.target.value)} onBlur={() => set('nome', toTitleCase(form.nome))} />
+              <input aria-label="Nome completo" className="form-control" value={form.nome||''} onChange={e => set('nome', e.target.value)} onBlur={() => set('nome', toTitleCase(form.nome))} />
             </div>
             <div className="form-group">
               <label className="form-label">Login (usuário) *</label>
@@ -970,7 +970,7 @@ function ModalUsuario({ usuario, onFechar }) {
           {!usuario && (
             <div className="form-group">
               <label className="form-label">Senha *</label>
-              <input type="password" className="form-control" value={form.senha||''}
+              <input aria-label="Senha" type="password" className="form-control" value={form.senha||''}
                 onChange={e => set('senha', e.target.value)} placeholder="Senha"
                 autoComplete="new-password" />
               <small style={{ color: '#777', fontSize: '12px' }}>{DICA_SENHA}</small>
@@ -979,7 +979,7 @@ function ModalUsuario({ usuario, onFechar }) {
           {usuario && (
             <div className="form-group">
               <label className="form-label">Nova senha (deixe em branco para não alterar)</label>
-              <input type="password" className="form-control" value={form.senha||''}
+              <input aria-label="Nova senha (deixe em branco para não alterar)" type="password" className="form-control" value={form.senha||''}
                 onChange={e => set('senha', e.target.value)} placeholder="Nova senha"
                 autoComplete="new-password" />
               {form.senha && <small style={{ color: '#777', fontSize: '12px' }}>{DICA_SENHA}</small>}
@@ -988,7 +988,7 @@ function ModalUsuario({ usuario, onFechar }) {
           <div className="grid-3">
             <div className="form-group">
               <label className="form-label">Tipo</label>
-              <select className="form-control" value={form.tipo} onChange={e => set('tipo', e.target.value)}>
+              <select aria-label="Tipo" className="form-control" value={form.tipo} onChange={e => set('tipo', e.target.value)}>
                 {Object.entries(TIPO_USUARIO).map(([k, v]) => (
                   <option key={k} value={k}>{v}</option>
                 ))}
@@ -996,20 +996,20 @@ function ModalUsuario({ usuario, onFechar }) {
             </div>
             <div className="form-group">
               <label className="form-label">Nível de acesso</label>
-              <select className="form-control" value={form.nivel} onChange={e => set('nivel', Number(e.target.value))}>
+              <select aria-label="Nível de acesso" className="form-control" value={form.nivel} onChange={e => set('nivel', Number(e.target.value))}>
                 <option value={1}>Admin</option>
                 <option value={2}>Usuário comum</option>
               </select>
             </div>
             <div className="form-group">
               <label className="form-label">Nº OAB (advogados)</label>
-              <input className="form-control" value={form.oab||''} onChange={e => set('oab', e.target.value)} />
+              <input aria-label="Nº OAB (advogados)" className="form-control" value={form.oab||''} onChange={e => set('oab', e.target.value)} />
             </div>
           </div>
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">E-mail</label>
-              <input type="email" className="form-control" value={form.email||''}
+              <input aria-label="E-mail" type="email" className="form-control" value={form.email||''}
                 onChange={e => set('email', e.target.value)} />
             </div>
             <div className="form-group">
@@ -1134,7 +1134,7 @@ function TabPermissoes() {
       <div style={{display:'flex',gap:'24px',alignItems:'flex-end',flexWrap:'wrap',marginBottom:'20px'}}>
         <div className="form-group" style={{maxWidth:'320px',margin:0,flex:'0 1 320px'}}>
           <label className="form-label">Selecionar usuário</label>
-          <select className="form-control" value={usuarioId}
+          <select aria-label="Selecionar usuário" className="form-control" value={usuarioId}
             onChange={e => setUsuarioId(e.target.value)}>
             <option value="">— Selecione —</option>
             {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome} ({u.login})</option>)}
@@ -1181,6 +1181,7 @@ function TabPermissoes() {
                           // onClick com stopPropagation: o clique no checkbox NÃO "vaza" para a barra (tr) — só marca/desmarca, não expande/oculta
                           <td key={acao} style={{textAlign:'center'}} onClick={e => e.stopPropagation()}>
                             <input type="checkbox"
+                              aria-label={`${modulo.label}: ${acao}`}
                               checked={ehAdmin ? true : !!permissoes[modulo.chave]?.[acao]}
                               disabled={ehAdmin}
                               onChange={() => !ehAdmin && togglePerm(modulo.chave, acao)}
@@ -1190,6 +1191,7 @@ function TabPermissoes() {
                         {/* onClick com stopPropagation: idem para o "Todos" — clicar aqui não expande/oculta a barra */}
                         <td style={{textAlign:'center'}} onClick={e => e.stopPropagation()}>
                           <input type="checkbox"
+                            aria-label={`${modulo.label}: todas as ações`}
                             checked={ehAdmin ? true : todosMarcados}
                             disabled={ehAdmin}
                             onChange={e => !ehAdmin && toggleModuloPai(modulo, e.target.checked)}
@@ -1208,6 +1210,7 @@ function TabPermissoes() {
                             {ACOES_PERM.map(acao => (
                               <td key={acao} style={{textAlign:'center'}}>
                                 <input type="checkbox"
+                                  aria-label={`${sub.label}: ${acao}`}
                                   checked={ehAdmin ? true : !!permissoes[sub.chave]?.[acao]}
                                   disabled={ehAdmin}
                                   onChange={() => !ehAdmin && togglePerm(sub.chave, acao)}
@@ -1216,6 +1219,7 @@ function TabPermissoes() {
                             ))}
                             <td style={{textAlign:'center'}}>
                               <input type="checkbox"
+                                aria-label={`${sub.label}: todas as ações`}
                                 checked={ehAdmin ? true : subTodos}
                                 disabled={ehAdmin}
                                 onChange={e => !ehAdmin && toggleTodos(sub.chave, e.target.checked)}
@@ -1305,18 +1309,18 @@ function TabFeriados() {
         <div style={{display:'flex',gap:'12px',alignItems:'flex-end',flexWrap:'wrap'}}>
           <div className="form-group" style={{margin:0}}>
             <label className="form-label">Data *</label>
-            <input type="date" className="form-control" value={form.data}
+            <input aria-label="Data" type="date" className="form-control" value={form.data}
               onChange={e => setForm(f => ({...f, data: e.target.value}))} />
           </div>
           <div className="form-group" style={{margin:0,flex:1,minWidth:'200px'}}>
             <label className="form-label">Descrição *</label>
-            <input className="form-control" value={form.descricao}
+            <input aria-label="Descrição" className="form-control" value={form.descricao}
               onChange={e => setForm(f => ({...f, descricao: e.target.value}))}
               placeholder="Ex: Natal, Corpus Christi..." />
           </div>
           <div className="form-group" style={{margin:0}}>
             <label className="form-label">Tipo</label>
-            <select className="form-control" value={form.nacional ? '1' : '0'}
+            <select aria-label="Tipo" className="form-control" value={form.nacional ? '1' : '0'}
               onChange={e => setForm(f => ({...f, nacional: e.target.value === '1'}))}>
               <option value="1">Nacional</option>
               <option value="0">Local / Estadual</option>
@@ -1332,13 +1336,13 @@ function TabFeriados() {
       {/* Filtro por ano */}
       <div style={{display:'flex',gap:'12px',alignItems:'center',marginBottom:'16px'}}>
         <label className="form-label" style={{margin:0}}>Ano:</label>
-        <select className="form-control" style={{width:'100px'}} value={ano}
+        <select aria-label="Ano" className="form-control" style={{width:'100px'}} value={ano}
           onChange={e => setAno(Number(e.target.value))}>
           {Array.from({length:10},(_,i) => new Date().getFullYear() - 2 + i).map(y => (
             <option key={y} value={y}>{y}</option>
           ))}
         </select>
-        <span style={{color:'#888',fontSize:'13px'}}>{feriados.length} feriado(s) em {ano}</span>
+        <span style={{color:'#5b6472',fontSize:'13px'}}>{feriados.length} feriado(s) em {ano}</span>
       </div>
 
       {carregando ? <div className="loading">Carregando...</div> : (
@@ -1462,7 +1466,7 @@ function TabEtiquetasEscritorio() {
       )}
       <div className="form-group" style={{ maxWidth: 280 }}>
         <label className="form-label">Módulo</label>
-        <select className="form-control" value={modulo} onChange={e => setModulo(e.target.value)}>
+        <select aria-label="Módulo" className="form-control" value={modulo} onChange={e => setModulo(e.target.value)}>
           {MODULOS_ETIQUETA_ESCRITORIO.map(m => <option key={m.chave} value={m.chave}>{m.label}</option>)}
         </select>
       </div>
@@ -1565,20 +1569,20 @@ function TabIntegracoes() {
           <>
             <div className="form-group">
               <label className="form-label">URL da API AASP</label>
-              <input className="form-control" value={aasp.url||''}
+              <input aria-label="URL da API AASP" className="form-control" value={aasp.url||''}
                 onChange={e => setModulo('aasp','url', e.target.value)}
                 placeholder={URL_PADRAO_AASP} />
-              <small style={{ color: '#888' }}>
+              <small style={{ color: '#5b6472' }}>
                 Endereço da API de Intimações da AASP. Já vem preenchido com o padrão oficial —
                 só altere se a AASP informar uma URL diferente.
               </small>
             </div>
             <div className="form-group">
               <label className="form-label">Chave de acesso AASP</label>
-              <input className="form-control" value={aasp.chave||''}
+              <input aria-label="Chave de acesso AASP" className="form-control" value={aasp.chave||''}
                 onChange={e => setModulo('aasp','chave', e.target.value)}
                 placeholder="Chave única fornecida pela AASP" />
-              <small style={{ color: '#888' }}>
+              <small style={{ color: '#5b6472' }}>
                 A chave é fornecida pela AASP (API de Intimações). As OABs monitoradas já estão vinculadas
                 a essa chave na própria AASP — não precisa cadastrá-las aqui.
               </small>
@@ -1605,20 +1609,20 @@ function TabIntegracoes() {
           <>
             <div className="form-group">
               <label className="form-label">Chave de API (x-api-key) da Comtele</label>
-              <input className="form-control" value={comtele.api_key||''}
+              <input aria-label="Chave de API (x-api-key) da Comtele" className="form-control" value={comtele.api_key||''}
                 onChange={e => setModulo('comtele','api_key', e.target.value)}
                 placeholder="Chave em Configurações → Chaves de API (painel Comtele)" />
-              <small style={{ color: '#888' }}>
+              <small style={{ color: '#5b6472' }}>
                 A chave fica no painel da Comtele em <strong>Configurações → Chaves de API</strong>. Cada
                 escritório usa a própria conta/crédito da Comtele; o custo do SMS é da conta cadastrada aqui.
               </small>
             </div>
             <div className="form-group">
               <label className="form-label">Rota de envio (route)</label>
-              <input className="form-control" value={comtele.route||''}
+              <input aria-label="Rota de envio (route)" className="form-control" value={comtele.route||''}
                 onChange={e => setModulo('comtele','route', e.target.value)}
                 placeholder="ID da rota de envio da sua conta Comtele" />
-              <small style={{ color: '#888' }}>
+              <small style={{ color: '#5b6472' }}>
                 A API de envio da Comtele exige a <strong>rota (route)</strong> da sua conta
                 (ex.: <strong>16</strong> para marketing ou <strong>17</strong> para prioritário/avisos).
                 Pegue esse valor no painel da Comtele — sem ele o envio é recusado.
@@ -1644,14 +1648,14 @@ function TabIntegracoes() {
         </div>
         <div className="form-group">
           <label className="form-label">Provedor</label>
-          <select className="form-control" value={ia.provedor || 'nenhum'}
+          <select aria-label="Provedor" className="form-control" value={ia.provedor || 'nenhum'}
             onChange={e => setModulo('ia','provedor', e.target.value)}>
             <option value="nenhum">Nenhuma — usar só as regras internas</option>
             <option value="claude">Claude (Anthropic)</option>
             <option value="openai">GPT (OpenAI)</option>
             <option value="mock">Simulação — teste, sem custo, sem chamada externa</option>
           </select>
-          <small style={{ color: '#888' }}>
+          <small style={{ color: '#5b6472' }}>
             Um provedor por vez (ou nenhum). A IA é usada <strong>só como apoio</strong>: as regras
             internas rodam primeiro; a IA só é consultada quando elas não encontram nada.
           </small>
@@ -1660,13 +1664,13 @@ function TabIntegracoes() {
           <>
             <div className="form-group">
               <label className="form-label">Chave de API</label>
-              <input className="form-control" type="password" autoComplete="new-password"
+              <input aria-label="Chave de API" className="form-control" type="password" autoComplete="new-password"
                 value={ia.chave || ''}
                 onChange={e => setModulo('ia','chave', e.target.value)}
                 placeholder={ia.chaveDefinida
                   ? '•••••••• (chave já cadastrada — deixe em branco para manter)'
                   : (ia.provedor === 'claude' ? 'sk-ant-...' : 'sk-...')} />
-              <small style={{ color: '#888' }}>
+              <small style={{ color: '#5b6472' }}>
                 O <strong>texto da publicação</strong> é enviado ao provedor escolhido para análise.
                 A chave é da conta do próprio escritório — o consumo é <strong>pré-pago</strong>, cobrado
                 diretamente pelo provedor (Anthropic ou OpenAI). Por segurança, a chave salva não é
@@ -1675,10 +1679,10 @@ function TabIntegracoes() {
             </div>
             <div className="form-group">
               <label className="form-label">Modelo (opcional)</label>
-              <input className="form-control" value={ia.modelo || ''}
+              <input aria-label="Modelo (opcional)" className="form-control" value={ia.modelo || ''}
                 onChange={e => setModulo('ia','modelo', e.target.value)}
                 placeholder={ia.provedor === 'claude' ? 'claude-sonnet-5' : 'gpt-4o-mini'} />
-              <small style={{ color: '#888' }}>Em branco = usa o modelo padrão do provedor.</small>
+              <small style={{ color: '#5b6472' }}>Em branco = usa o modelo padrão do provedor.</small>
             </div>
           </>
         )}
@@ -1702,17 +1706,17 @@ function TabIntegracoes() {
           <>
             <div className="form-group">
               <label className="form-label">URL da API do CNJ</label>
-              <input className="form-control" value={cnj.url||''}
+              <input aria-label="URL da API do CNJ" className="form-control" value={cnj.url||''}
                 onChange={e => setModulo('cnj','url', e.target.value)}
                 placeholder={URL_PADRAO_CNJ} />
-              <small style={{ color: '#888' }}>
+              <small style={{ color: '#5b6472' }}>
                 Endereço da ComunicaAPI (DJEN). Já vem preenchido com o padrão oficial —
                 a consulta é pública e gratuita, sem chave. Só altere se o CNJ informar outra URL.
               </small>
             </div>
             <div className="form-group">
               <label className="form-label">OABs monitoradas</label>
-              <small style={{ color: '#888', display: 'block', marginBottom: '8px' }}>
+              <small style={{ color: '#5b6472', display: 'block', marginBottom: '8px' }}>
                 Cadastre as OABs do escritório (número e UF). As publicações do DJEN são buscadas por essas OABs.
               </small>
               {oabsCnj.map((o, i) => (
@@ -1732,7 +1736,7 @@ function TabIntegracoes() {
               <button type="button" className="btn btn-outline" onClick={addOabCnj}
                 disabled={oabsCnj.length >= 10}>+ Adicionar OAB</button>
               {oabsCnj.length >= 10 && (
-                <small style={{ color: '#888', display: 'block', marginTop: '6px' }}>
+                <small style={{ color: '#5b6472', display: 'block', marginTop: '6px' }}>
                   Máximo de 10 OABs por escritório.
                 </small>
               )}
@@ -1759,20 +1763,20 @@ function TabIntegracoes() {
           <>
             <div className="form-group">
               <label className="form-label">URL da API do DataJud</label>
-              <input className="form-control" value={datajud.url||''}
+              <input aria-label="URL da API do DataJud" className="form-control" value={datajud.url||''}
                 onChange={e => setModulo('datajud','url', e.target.value)}
                 placeholder={URL_PADRAO_DATAJUD} />
-              <small style={{ color: '#888' }}>
+              <small style={{ color: '#5b6472' }}>
                 Endereço-base da API Pública do DataJud. Já vem com o padrão oficial —
                 o índice do tribunal é descoberto pelo próprio número do processo.
               </small>
             </div>
             <div className="form-group">
               <label className="form-label">Chave pública (APIKey)</label>
-              <input className="form-control" value={datajud.apikey||''}
+              <input aria-label="Chave pública (APIKey)" className="form-control" value={datajud.apikey||''}
                 onChange={e => setModulo('datajud','apikey', e.target.value)}
                 placeholder={APIKEY_PADRAO_DATAJUD} />
-              <small style={{ color: '#888' }}>
+              <small style={{ color: '#5b6472' }}>
                 Chave pública fornecida pelo CNJ (a mesma para todos). Já vem preenchida —
                 só troque se o CNJ divulgar uma chave nova.
               </small>
@@ -1805,7 +1809,7 @@ function TabIntegracoes() {
           <>
             <div className="form-group">
               <label className="form-label">Tipo</label>
-              <select className="form-control" style={{maxWidth:'200px'}} value={email.tipo||'smtp'}
+              <select aria-label="Tipo" className="form-control" style={{maxWidth:'200px'}} value={email.tipo||'smtp'}
                 onChange={e => setModulo('email','tipo', e.target.value)}>
                 <option value="smtp">SMTP genérico</option>
                 <option value="office365">Office 365</option>
@@ -1815,13 +1819,13 @@ function TabIntegracoes() {
             <div className="grid-2">
               <div className="form-group">
                 <label className="form-label">Servidor SMTP / Host</label>
-                <input className="form-control" value={email.host||''}
+                <input aria-label="Servidor SMTP / Host" className="form-control" value={email.host||''}
                   onChange={e => setModulo('email','host', e.target.value)}
                   placeholder="smtp.seudominio.com.br" />
               </div>
               <div className="form-group">
                 <label className="form-label">Porta</label>
-                <input type="number" className="form-control" value={email.porta||''}
+                <input aria-label="Porta" type="number" className="form-control" value={email.porta||''}
                   onChange={e => setModulo('email','porta', e.target.value)}
                   placeholder="587" />
               </div>
@@ -1829,12 +1833,12 @@ function TabIntegracoes() {
             <div className="grid-2">
               <div className="form-group">
                 <label className="form-label">Usuário / E-mail remetente</label>
-                <input className="form-control" value={email.usuario||''}
+                <input aria-label="Usuário / E-mail remetente" className="form-control" value={email.usuario||''}
                   onChange={e => setModulo('email','usuario', e.target.value)} />
               </div>
               <div className="form-group">
                 <label className="form-label">Senha</label>
-                <input type="password" className="form-control" value={email.senha||''}
+                <input aria-label="Senha" type="password" className="form-control" value={email.senha||''}
                   onChange={e => setModulo('email','senha', e.target.value)} />
               </div>
             </div>

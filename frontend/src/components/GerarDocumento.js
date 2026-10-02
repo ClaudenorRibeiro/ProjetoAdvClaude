@@ -111,14 +111,14 @@ export function ModalGerar({ ancoraTipo, ancoraId, beneficiario, destinatarioTip
             <>
               <div className="form-group">
                 <label className="form-label">Modelo *</label>
-                <select className="form-control" value={modeloId} onChange={e => setModeloId(e.target.value)}>
+                <select aria-label="Modelo" className="form-control" value={modeloId} onChange={e => setModeloId(e.target.value)}>
                   <option value="">— Selecione —</option>
                   {modelos.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
                 </select>
               </div>
               <div className="form-group">
                 <label className="form-label">Formato</label>
-                <select className="form-control" value={formato} onChange={e => setFormato(e.target.value)}>
+                <select aria-label="Formato" className="form-control" value={formato} onChange={e => setFormato(e.target.value)}>
                   <option value="docx">Word (.docx)</option>
                   <option value="pdf">PDF</option>
                 </select>
@@ -218,7 +218,7 @@ function ModalEnviarDocumentoEmail({ ancoraTipo, ancoraId, modeloId, formato, on
         </div>
         <div className="modal-body">
           <label style={rotulo}>Para</label>
-          <input value={para} onChange={e => setPara(e.target.value)}
+          <input aria-label="Para" value={para} onChange={e => setPara(e.target.value)}
             placeholder={carregandoDest ? 'Buscando e-mail sugerido...' : 'e-mail do destinatário'} style={campo} />
           {/* Atalhos para outros e-mails sugeridos (quando a pessoa tem mais de um) */}
           {outros.length > 0 && (
@@ -234,11 +234,11 @@ function ModalEnviarDocumentoEmail({ ancoraTipo, ancoraId, modeloId, formato, on
           )}
 
           <label style={rotulo}>Assunto</label>
-          <input value={assunto} onChange={e => setAssunto(e.target.value)} maxLength={200}
+          <input aria-label="Assunto" value={assunto} onChange={e => setAssunto(e.target.value)} maxLength={200}
             placeholder="Assunto do e-mail" style={campo} />
 
           <label style={rotulo}>Mensagem</label>
-          <textarea value={mensagem} onChange={e => setMensagem(e.target.value)} rows={6}
+          <textarea aria-label="Mensagem" value={mensagem} onChange={e => setMensagem(e.target.value)} rows={6}
             placeholder="Escreva a mensagem..." style={{ ...campo, resize: 'vertical' }} />
 
           <div style={{ fontSize: '13px', color: '#334155', background: '#f1f5f9', border: '1px solid #e2e8f0',
