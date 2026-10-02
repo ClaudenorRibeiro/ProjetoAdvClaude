@@ -9,7 +9,7 @@ const api = vi.hoisted(() => ({
   duplicarModelo: vi.fn(), salvarPreferencias: vi.fn(), executar: vi.fn(), exportar: vi.fn(),
 }));
 vi.mock('../../../services/api', () => ({ relatoriosAPI: api }));
-vi.mock('react-toastify', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('react-toastify', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 const auth = vi.hoisted(() => ({ podeCriar: true }));
 vi.mock('../../../context/AuthContext', () => ({
   useAuth: () => ({ temPermissao: (m) => (m === 'relatorios.criar' ? auth.podeCriar : true) }),
@@ -47,8 +47,8 @@ const RESULTADO = {
   total: 1, pagina: 1, limite: 50, limiteTela: 2000, truncado: false, receita: RECEITA, modelo: null,
 };
 
-function abrir() {
-  return render(<MemoryRouter><RelatoriosNovo /></MemoryRouter>);
+function abrir(url = '/relatorios') {
+  return render(<MemoryRouter initialEntries={[url]}><RelatoriosNovo /></MemoryRouter>);
 }
 
 beforeEach(() => {

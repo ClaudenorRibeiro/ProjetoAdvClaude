@@ -3,9 +3,11 @@
 // e alterna entre as telas (lista, construtor, resultado). A lógica de cada tela
 // mora no seu próprio arquivo — este fica pequeno de propósito.
 // O limite de relatórios fica em Configurações → Permissões.
-// Liberada para quem tem permissão em Relatórios (rota /meus-relatorios).
+// Liberada para quem tem permissão em Relatórios (rota /relatorios).
+// Atalho de outras telas: /relatorios?rel=processos_parados abre o relatório do sistema correspondente.
 // ============================================================
 import React, { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { relatoriosAPI } from '../../../services/api';
 import { useAuth } from '../../../context/AuthContext';
@@ -17,6 +19,9 @@ import ModalPerguntas from './ModalPerguntas';
 import ModalCompartilhar from './ModalCompartilhar';
 import ModalAgendar from './ModalAgendar';
 import { perguntasDe, normalizarReceita } from './receita';
+
+// atalhos (?rel=...) -> nome do relatório do sistema
+const ATALHOS = { processos_parados: 'Processos parados' };
 
 export default function RelatoriosNovo() {
   const { temPermissao, ehAdmin } = useAuth();
@@ -42,6 +47,19 @@ export default function RelatoriosNovo() {
       .catch(err => toast.error(mensagemDeErro(err, 'Erro ao carregar os relatórios')))
       .finally(() => setCarregando(false));
   }, []);
+
+  // Atalho vindo de outra tela (ex.: card "Processos Parados" do Dashboard): abre o relatório do sistema
+  const [params, setParams] = useSearchParams();
+  const atalho = params.get('rel');
+  useEffect(() => {
+    if (carregando || !atalho) return;
+    setParams({}, { replace: true });
+    const nome = ATALHOS[atalho];
+    const m = nome && lista.modelos.find(x => x.origem === 'sistema' && x.nome === nome);
+    if (m && !m.sem_acesso) iniciar(m.receita, m);
+    else toast.info(`O relatório "${nome || atalho}" ainda não está disponível. Peça ao administrador para instalar os relatórios padrão.`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carregando, atalho]);
 
   const irParaLista = () => { setTela({ nome: 'lista' }); carregarLista().catch(() => {}); };
 

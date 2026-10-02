@@ -32,7 +32,6 @@ const MENU = [
   { path: '/pendencias-documento', label: 'Pendências de Docs.', icone: '📌', modulo: 'pendencias' },
   { path: '/agenda',        label: 'Agenda',        icone: '📅', modulo: null },
   { path: '/relatorios',    label: 'Relatórios',    icone: '📊', modulo: 'relatorios' },
-  { path: '/meus-relatorios', label: 'Relatórios (novo)', icone: '🧪', modulo: 'relatorios' },
   {
     tipo: 'grupo', id: 'controle', label: 'Controle', icone: '🗂️', apenasAdmin: true,
     filhos: [

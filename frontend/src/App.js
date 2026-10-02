@@ -38,7 +38,6 @@ function lazyComRetry(importar) {
 // --- Telas carregadas SOB DEMANDA (code-splitting) ---
 // Cada uma vira um "pedaço" (chunk) separado, baixado só quando a pessoa entra
 // na tela — não pesa no primeiro carregamento. Fase 1: as telas mais isoladas.
-const Relatorios      = lazyComRetry(() => import('./pages/Relatorios/Relatorios'));
 const RelatoriosNovo = lazyComRetry(() => import('./pages/Relatorios/novo/RelatoriosNovo'));
 const Foruns          = lazyComRetry(() => import('./pages/Controle/Foruns'));
 const Varas           = lazyComRetry(() => import('./pages/Controle/Varas'));
@@ -177,9 +176,9 @@ function AppRoutes() {
       <Route path="/publicacoes/*" element={<RotaProtegida modulo="publicacoes"><Publicacoes /></RotaProtegida>} />
       <Route path="/pendencias-documento/*" element={<RotaProtegida modulo="pendencias"><PendenciasDocumento /></RotaProtegida>} />
       <Route path="/agenda/*"      element={<RotaProtegida><Agenda /></RotaProtegida>} />
-      <Route path="/relatorios/*"  element={<RotaProtegida modulo="relatorios"><Relatorios /></RotaProtegida>} />
-      {/* Tela nova de relatórios (em construção): só administrador até substituir a antiga */}
-      <Route path="/meus-relatorios/*" element={<RotaProtegida modulo="relatorios"><RelatoriosNovo /></RotaProtegida>} />
+      <Route path="/relatorios/*"  element={<RotaProtegida modulo="relatorios"><RelatoriosNovo /></RotaProtegida>} />
+      {/* endereço provisório usado durante a construção: quem tiver nos favoritos cai na tela definitiva */}
+      <Route path="/meus-relatorios/*" element={<Navigate to="/relatorios" replace />} />
       <Route path="/configuracoes/*"   element={<RotaProtegida apenasAdmin><Configuracoes /></RotaProtegida>} />
       <Route path="/controle/foruns"  element={<RotaProtegida apenasAdmin><Foruns /></RotaProtegida>} />
       <Route path="/controle/varas"   element={<RotaProtegida apenasAdmin><Varas /></RotaProtegida>} />
