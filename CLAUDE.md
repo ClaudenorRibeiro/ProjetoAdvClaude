@@ -254,5 +254,6 @@ renomear ou remover um script. Nenhum teste pode depender de arquivo que não es
 O usuário pediu que **TUDO** da tela de Processos entre na bateria. O plano numerado (A1…D1), o protocolo de cada
 passo e os achados estão em `PLANO-TESTES-PROCESSOS.md` (raiz). **Qualquer sessão deve ler esse arquivo antes de
 continuar**, conferir o `git log` do `rascunho` para saber o que já foi feito e seguir do primeiro passo sem `[x]`.
-Regra do protocolo: ao achar erro, PARAR e combinar o ajuste com o usuário antes de corrigir. Nada de desmembrar
+**Há uma seção "PENDÊNCIAS GERAIS — NÃO ESQUECER" (P1…P7) nesse arquivo** (validações por módulo, curingas do LIKE, paginação, ids não numéricos,
+react-router 7…): o usuário pediu que não sejam esquecidas — lembrá-lo delas ao fechar a Fase D. Regra do protocolo: ao achar erro, PARAR e combinar o ajuste com o usuário antes de corrigir. Nada de desmembrar
 arquivos agora (decisão dele) e nada no `main`.
