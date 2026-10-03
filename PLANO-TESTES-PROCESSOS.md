@@ -202,6 +202,11 @@ Teste: `frontend/e2e/processos-pasta-partes.spec.js` (11 testes: cabeçalho, pai
 4. Quem só tem permissão de Processos (sem Pessoas) vê todas as ações de contato; ao usar, aparece só "Erro ao buscar os telefones da pessoa" (o servidor exige permissão de Pessoas). Sugestão: esconder essas ações nesse caso.
 5. Acessibilidade: "representado(a) por …" (#6b7280) com contraste 4,25:1 sobre a cor da linha ao passar o mouse; campo "Para" do e-mail e "Telefone" do SMS (listas) sem rótulo; ficha da pessoa em modo leitura (aberta pela pasta) com 2 campos de texto e 2 listas sem rótulo (bloco do responsável/parentesco).
 
+### Achados do C2 (03/10/2026) — AGUARDANDO decisão do usuário (nada corrigido ainda)
+Teste: `frontend/e2e/processos-pasta-processos.spec.js` (9 testes: tabela e número copiável, etiqueta do escritório — aplicar/trocar/remover, status ligado com motivo, histórico, permissão, erro —, e "+ Novo Processo (mesma pasta)"). Só 1 falha, de acessibilidade:
+1. O balão "Copiado!" do número do processo (`NumeroProcessoCopiavel`, componente compartilhado) é branco sobre verde #16a34a — contraste 3,29:1. Sugestão: verde mais escuro (#15803d, ~5:1). (O mesmo componente aparece em várias telas.)
+Observação (não é erro): o "processo de referência" do "+ Novo Processo (mesma pasta)" é o 1º da lista (o mais novo); se ele não tiver partes, o novo processo não herda nada.
+
 ## Estado atual
 
 Plano criado em 02/10/2026. **C1 concluído (11 testes). Próximo passo: C2** (aba Processos da pasta; depois C3–C8). (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
