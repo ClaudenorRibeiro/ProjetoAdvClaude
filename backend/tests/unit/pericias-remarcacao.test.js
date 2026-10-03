@@ -14,7 +14,13 @@ let eventos;       // begin / commit / rollback
 let respostas;     // regras: [{ casa: /regex/, retorna: [rows] }]
 
 function preparar(regras = []) {
-  sqls = []; connSqls = []; eventos = []; respostas = regras;
+  sqls = []; connSqls = []; eventos = [];
+  // Conferências de existência que o cadastro faz antes de gravar (processo ativo e tipo de perícia): aqui sempre existem.
+  respostas = [
+    { casa: /FROM tblproc WHERE id = \? AND ativo = 1/i, retorna: [{ id: 10 }] },
+    { casa: /FROM tipo_pericia WHERE id = \?/i, retorna: [{ id: 2 }] },
+    ...regras,
+  ];
   pool.execute = async (sql, params = []) => {
     sqls.push({ sql, params });
     for (const r of respostas) if (r.casa.test(sql)) return [r.retorna];

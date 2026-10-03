@@ -10,6 +10,24 @@ const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response
 const auditoria = require('../middleware/auditoria');
 const { enviarComunicadoPericia } = require('../services/comunicadoService');
 const agendaGoogle = require('../services/agendaGoogleService');
+const { paginacao } = require('../utils/helpers');
+const { texto, dataIso, inteiroPositivo } = require('../utils/camposTexto');
+
+const LIMITE_MOTIVO_PERICIA = 300;           // motivo de cancelar / remarcar (mesmo limite dos prazos e audiências)
+const LIMITE_OBS_AUDITORIA = 2000;           // texto da confirmação com senha (dia/horário incomum)
+const HORA_VALIDA = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
+const FORMATO_RESPONSAVEL = /^(usuario|freela):\d+$/;
+// Tamanho real de cada coluna da tabela pericia (estrutura_banco.sql) — passou disso o banco dá erro.
+const TEXTOS_PERICIA = {
+  local:       { rotulo: 'O local', max: 300 },
+  cep:         { rotulo: 'O CEP', max: 9 },
+  logradouro:  { rotulo: 'O logradouro', max: 200 },
+  numero:      { rotulo: 'O número do endereço', max: 20 },
+  complemento: { rotulo: 'O complemento', max: 100 },
+  bairro:      { rotulo: 'O bairro', max: 100 },
+  cidade:      { rotulo: 'A cidade', max: 100 },
+  estado:      { rotulo: 'O estado', max: 2 },
+};
 
 // ===== Integração com o Google Agenda (convite .ics) =====
 // Mesma lógica da audiência: o evento vai para o Google do RESPONSÁVEL, só quando
@@ -202,12 +220,113 @@ async function gravarLocaisReus(conn, periciaId, locaisReus) {
   }
 }
 
+// Id da rota (":id") como número; null quando não é um inteiro positivo (a perícia "abc" simplesmente não existe).
+function lerIdPericia(bruto) {
+  const r = inteiroPositivo(bruto, { rotulo: 'Perícia' });
+  return r.erro ? null : r.valor;
+}
+
+// Motivo de cancelar / remarcar: obrigatório, só texto, até 300 caracteres. Devolve { valor } ou { erro }.
+function lerMotivoPericia(bruto, rotulo) {
+  return texto(bruto, { rotulo, max: LIMITE_MOTIVO_PERICIA, obrigatorio: true });
+}
+
+// "usuario:X" / "freela:X" (responsável ou assistente): formato certo e pessoa existente. Vazio = ninguém. Devolve { valor } ou { erro, status }.
+async function lerPessoaPericia(bruto, rotulo) {
+  if (bruto === undefined || bruto === null || bruto === '') return { valor: null };
+  if (typeof bruto !== 'string' || !FORMATO_RESPONSAVEL.test(bruto.trim())) return { erro: `${rotulo} inválido`, status: 400 };
+  const [tipo, id] = bruto.trim().split(':');
+  const [achou] = await pool.execute(
+    tipo === 'usuario' ? 'SELECT id FROM usuarios WHERE id = ?' : 'SELECT id FROM advogados_freela WHERE id = ?', [Number(id)]
+  );
+  if (!achou.length) return { erro: `${rotulo} não encontrado`, status: 404 };
+  return { valor: `${tipo}:${Number(id)}` };
+}
+
+// Confere os campos que vêm da tela (criar e editar) e devolve os valores já limpos: { dados } ou { erro, status }.
+// Textos aparados e dentro do tamanho da coluna, data real, hora HH:MM, números inteiros, perito/tipo/responsável existentes.
+async function lerCamposPericia(corpo, { exigeProcesso = false } = {}) {
+  const c = corpo || {};
+  const dados = {};
+  if (exigeProcesso) {
+    if (!c.processo_id) return { erro: 'Processo é obrigatório', status: 400 };
+    const proc = inteiroPositivo(c.processo_id, { rotulo: 'Processo' });
+    if (proc.erro) return { erro: proc.erro, status: 400 };
+    const [achou] = await pool.execute('SELECT id FROM tblproc WHERE id = ? AND ativo = 1', [proc.valor]);
+    if (!achou.length) return { erro: 'Processo não encontrado', status: 404 };
+    dados.processo_id = proc.valor;
+  }
+  if (!c.data) return { erro: 'Data é obrigatória', status: 400 };
+  const dia = dataIso(c.data, { rotulo: 'Data da perícia' });
+  if (dia.erro) return { erro: dia.erro, status: 400 };
+  dados.data = dia.valor;
+  if (c.hora === undefined || c.hora === null || c.hora === '') dados.hora = null;
+  else if (typeof c.hora !== 'string' || !HORA_VALIDA.test(c.hora.trim())) return { erro: 'Hora inválida (use HH:MM)', status: 400 };
+  else dados.hora = c.hora.trim();
+  const tipo = inteiroPositivo(c.tipo_pericia_id, { rotulo: 'Tipo de perícia' });
+  if (tipo.erro) return { erro: tipo.erro, status: 400 };
+  if (tipo.valor) {
+    const [achou] = await pool.execute('SELECT id FROM tipo_pericia WHERE id = ?', [tipo.valor]);
+    if (!achou.length) return { erro: 'Tipo de perícia não encontrado', status: 404 };
+  }
+  dados.tipo_pericia_id = tipo.valor;
+  for (const [chave, opcoes] of Object.entries(TEXTOS_PERICIA)) {
+    const r = texto(c[chave], opcoes);
+    if (r.erro) return { erro: r.erro, status: 400 };
+    dados[chave] = r.valor;
+  }
+  const perito = inteiroPositivo(c.perito_id, { rotulo: 'Perito' });
+  if (perito.erro) return { erro: perito.erro, status: 400 };
+  if (perito.valor) {
+    const [achou] = await pool.execute('SELECT id FROM pessoas_fisicas WHERE id = ?', [perito.valor]);
+    if (!achou.length) return { erro: 'Perito não encontrado', status: 404 };
+  }
+  dados.perito_id = perito.valor;
+  const resp = await lerPessoaPericia(c.responsavel_id, 'Responsável');
+  if (resp.erro) return resp;
+  dados.responsavel_id = resp.valor;
+  const assist = await lerPessoaPericia(c.assistente_tecnico_id, 'Assistente técnico');
+  if (assist.erro) return assist;
+  dados.assistente_tecnico_id = assist.valor;
+  return { dados };
+}
+
+// Nomes legíveis para o histórico (gravados NA HORA da alteração, como nas audiências).
+async function nomeTipoPericia(id) {
+  if (!id) return '';
+  const [r] = await pool.execute('SELECT nome FROM tipo_pericia WHERE id = ?', [id]);
+  return r.length ? r[0].nome : String(id);
+}
+async function nomePeritoPericia(id) {
+  if (!id) return '';
+  const [r] = await pool.execute('SELECT nome FROM pessoas_fisicas WHERE id = ?', [id]);
+  return r.length ? r[0].nome : String(id);
+}
+async function nomePessoaPericia(valor) {
+  if (!valor) return '';
+  const [tipo, id] = String(valor).split(':');
+  const [r] = await pool.execute(
+    tipo === 'usuario' ? 'SELECT nome FROM usuarios WHERE id = ?' : 'SELECT nome FROM advogados_freela WHERE id = ?', [Number(id)]
+  );
+  if (!r.length) return valor;
+  return tipo === 'freela' ? `${r[0].nome} (freelancer)` : r[0].nome;
+}
+async function nomesLocaisReus(conn, periciaId) {
+  const [rows] = await conn.execute(
+    `SELECT CASE plr.tipo_pessoa
+              WHEN 'fisica'   THEN (SELECT pf.nome FROM pessoas_fisicas pf WHERE pf.id = plr.pessoa_id)
+              WHEN 'juridica' THEN (SELECT pj.razao_social FROM pessoas_juridicas pj WHERE pj.id = plr.pessoa_id)
+            END AS nome
+       FROM pericia_local_reu plr WHERE plr.pericia_id = ? ORDER BY nome`, [periciaId]
+  );
+  return rows.map(r => r.nome).filter(Boolean).join(', ');
+}
+
 // GET /api/pericias — Lista perícias com filtros
 async function listar(req, res) {
   try {
-    const { processo_id, data_de, data_ate, assistente_id, status, pagina = 1, limite = 30 } = req.query;
-    const limitInt  = Math.min(parseInt(limite) || 30, 100);
-    const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
+    const { processo_id, data_de, data_ate, assistente_id, status } = req.query;
+    const { limite: limitInt, offset: offsetInt } = paginacao(req.query, { limitePadrao: 30, limiteMax: 100 });
     const params = [];
     let where = 'WHERE 1=1';
 
@@ -276,6 +395,8 @@ async function listar(req, res) {
 // GET /api/pericias/:id — Busca perícia por ID (inclui endereço e responsável para edição)
 async function buscar(req, res) {
   try {
+    const periciaId = lerIdPericia(req.params.id);
+    if (!periciaId) return naoEncontrado(res, 'Perícia não encontrada');
     const [rows] = await pool.execute(`
       SELECT pe.*,
         tp.nome AS tipo_nome,
@@ -307,7 +428,7 @@ async function buscar(req, res) {
       LEFT JOIN advogados_freela rf ON pe.responsavel_freela_id = rf.id
       LEFT JOIN tblproc pr ON pe.processo_id = pr.id
       WHERE pe.id = ?
-    `, [req.params.id]);
+    `, [periciaId]);
 
     if (!rows.length) return naoEncontrado(res, 'Perícia não encontrada');
     const pericia = rows[0];
@@ -320,7 +441,7 @@ async function buscar(req, res) {
          FROM pericia_local_reu plr
         WHERE plr.pericia_id = ?
         ORDER BY nome`,
-      [req.params.id]
+      [periciaId]
     );
     return sucesso(res, { ...pericia, locais_reus: locais });
   } catch (e) {
@@ -613,6 +734,9 @@ async function relatorioPeritos(req, res) {
 // POST /api/pericias — Cria perícia
 // Transação: INSERT + auditoria_pericia + log geral (tudo ou nada)
 async function criar(req, res) {
+  const lido = await lerCamposPericia(req.body, { exigeProcesso: true });
+  if (lido.erro) return erro(res, lido.erro, lido.status);
+  Object.assign(req.body, lido.dados);   // daqui para frente os campos já estão limpos e conferidos
   const {
     processo_id, tipo_pericia_id, data, hora,
     local, cep, logradouro, numero, complemento, bairro, cidade, estado,
@@ -625,16 +749,21 @@ async function criar(req, res) {
     confirmar_nova        // (opcional) usuário confirmou que NÃO é remarcação, é outra perícia
   } = req.body;
 
-  if (!processo_id) return erro(res, 'Processo é obrigatório');
-  if (!data)        return erro(res, 'Data é obrigatória');
+  const obs = texto(obs_auditoria, { rotulo: 'A observação', max: LIMITE_OBS_AUDITORIA });
+  if (obs.erro) return erro(res, obs.erro);
 
   // Remarcação feita direto no cadastro: valida a perícia antiga ANTES de qualquer gravação.
   let periciaRemarcada = null;
+  let motivoRemarcacao = null;
   if (remarcar_pericia_id) {
     const permitido = await temPermissaoBackend(req.usuario.id, req.usuario.nivel, 'pericias', 'alterar');
     if (!permitido) return erro(res, 'Sem permissão para remarcar perícias', 403);
-    if (!String(motivo_remarcacao || '').trim()) return erro(res, 'Motivo da remarcação é obrigatório');
-    const [antiga] = await pool.execute('SELECT id, processo_id, tipo_pericia_id, status FROM pericia WHERE id = ?', [remarcar_pericia_id]);
+    const motivo = lerMotivoPericia(motivo_remarcacao, 'O motivo da remarcação');
+    if (motivo.erro) return erro(res, motivo.erro);
+    motivoRemarcacao = motivo.valor;
+    const idAntiga = inteiroPositivo(remarcar_pericia_id, { rotulo: 'Perícia a remarcar' });
+    if (idAntiga.erro) return erro(res, idAntiga.erro);
+    const [antiga] = await pool.execute('SELECT id, processo_id, tipo_pericia_id, status FROM pericia WHERE id = ?', [idAntiga.valor]);
     if (!antiga.length) return naoEncontrado(res, 'Perícia a remarcar não encontrada');
     if (antiga[0].status !== 'agendada') return erro(res, `Perícia com status "${antiga[0].status}" não pode ser remarcada`);
     if (String(antiga[0].processo_id) !== String(processo_id)) return erro(res, 'A perícia a remarcar pertence a outro processo');
@@ -697,11 +826,11 @@ async function criar(req, res) {
       [periciaId, req.usuario.id]
     );
     // Registra confirmação de data/dia incomum (com senha), se houver
-    if (obs_auditoria) {
+    if (obs.valor) {
       await conn.execute(
         `INSERT INTO auditoria_pericia (pericia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
          VALUES (?, 'criacao', null, ?, ?)`,
-        [periciaId, obs_auditoria, req.usuario.id]
+        [periciaId, obs.valor, req.usuario.id]
       );
     }
 
@@ -710,7 +839,7 @@ async function criar(req, res) {
       await conn.execute(
         `UPDATE pericia SET status = 'remarcada', motivo_status = ?, alterado_por = ?, alterado_em = NOW()
          WHERE id = ? AND status = 'agendada'`,
-        [String(motivo_remarcacao).trim(), req.usuario.id, periciaRemarcada.id]
+        [motivoRemarcacao, req.usuario.id, periciaRemarcada.id]
       );
       await conn.execute(
         `INSERT INTO auditoria_pericia (pericia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
@@ -750,6 +879,11 @@ async function criar(req, res) {
 // PUT /api/pericias/:id — Atualiza perícia
 // Transação: UPDATE + auditoria_pericia + log geral (tudo ou nada)
 async function atualizar(req, res) {
+  const periciaId = lerIdPericia(req.params.id);
+  if (!periciaId) return naoEncontrado(res, 'Perícia não encontrada');
+  const lido = await lerCamposPericia(req.body);
+  if (lido.erro) return erro(res, lido.erro, lido.status);
+  Object.assign(req.body, lido.dados);   // daqui para frente os campos já estão limpos e conferidos
   const {
     tipo_pericia_id, data, hora,
     local, cep, logradouro, numero, complemento, bairro, cidade, estado,
@@ -757,8 +891,6 @@ async function atualizar(req, res) {
     responsavel_id: responsavelRaw,
     locais_reus: locaisReusRaw = []
   } = req.body;
-
-  if (!data) return erro(res, 'Data é obrigatória');
 
   const { responsavel_id, responsavel_freela_id } = parsarResponsavel(responsavelRaw);
   const { assistente_tecnico_id, assistente_tecnico_freela_id } = parsarAssistente(assistenteRaw);
@@ -768,14 +900,24 @@ async function atualizar(req, res) {
   try {
     await conn.beginTransaction();
 
-    const [existe] = await conn.execute('SELECT id, processo_id, responsavel_id, status FROM pericia WHERE id = ?', [req.params.id]);
+    const [existe] = await conn.execute(
+      `SELECT id, processo_id, tipo_pericia_id, DATE_FORMAT(data, '%Y-%m-%d') AS data, TIME_FORMAT(hora, '%H:%i') AS hora,
+              local, cep, logradouro, numero, complemento, bairro, cidade, estado,
+              perito_id, assistente_tecnico_id, assistente_tecnico_freela_id, responsavel_id, responsavel_freela_id, status
+         FROM pericia WHERE id = ? FOR UPDATE`, [periciaId]);
     if (!existe.length) {
       await conn.rollback();
       return naoEncontrado(res, 'Perícia não encontrada');
     }
+    const antes = existe[0];
+    // Cancelada, remarcada e realizada são histórico: não se edita (a tela já esconde o botão; o servidor também recusa).
+    if (antes.status !== 'agendada' && antes.status !== 'aguardando_data') {
+      await conn.rollback();
+      return erro(res, `Perícia com status "${antes.status}" não pode ser editada`);
+    }
 
     const erroLocais = await validarLocaisPericia({
-      processo_id: existe[0].processo_id,
+      processo_id: antes.processo_id,
       locais_reus: locaisReus,
       dados: { local, cep, logradouro, numero, complemento, bairro, cidade, estado },
     });
@@ -783,6 +925,8 @@ async function atualizar(req, res) {
       await conn.rollback();
       return erro(res, erroLocais);
     }
+
+    const locaisAntes = await nomesLocaisReus(conn, periciaId);
 
     await conn.execute(
       `UPDATE pericia SET
@@ -798,32 +942,66 @@ async function atualizar(req, res) {
         complemento || null, bairro || null, cidade || null, estado || null,
         perito_id ? 'fisica' : null, perito_id || null, assistente_tecnico_id, assistente_tecnico_freela_id,
         responsavel_id, responsavel_freela_id,
-        existe[0].status === 'aguardando_data' ? 'agendada' : existe[0].status,
-        req.usuario.id, req.params.id
+        antes.status === 'aguardando_data' ? 'agendada' : antes.status,
+        req.usuario.id, periciaId
       ]
     );
 
-    await gravarLocaisReus(conn, req.params.id, locaisReus);
+    await gravarLocaisReus(conn, periciaId, locaisReus);
 
-    await auditoria.registrar(req.usuario.id, 'pericia', 'atualizar', req.params.id, null, null, conn);
+    // ---- Histórico campo a campo (só o que mudou; nomes legíveis gravados agora) ----
+    const registrar = (campo, de, para) => conn.execute(
+      `INSERT INTO auditoria_pericia (pericia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
+       VALUES (?, ?, ?, ?, ?)`, [periciaId, campo, de, para, req.usuario.id]);
+    if (antes.status === 'aguardando_data') await registrar('status', 'aguardando_data', 'agendada');
+    for (const [campo, vAntes, vDepois] of [
+      ['data', antes.data, data],
+      ['hora', antes.hora, hora],
+      ['local', antes.local, local],
+      ['cep', antes.cep, cep],
+      ['logradouro', antes.logradouro, logradouro],
+      ['numero', antes.numero, numero],
+      ['complemento', antes.complemento, complemento],
+      ['bairro', antes.bairro, bairro],
+      ['cidade', antes.cidade, cidade],
+      ['estado', antes.estado, estado],
+    ]) {
+      if (String(vAntes ?? '') !== String(vDepois ?? '')) await registrar(campo, String(vAntes ?? ''), String(vDepois ?? ''));
+    }
+    if (String(antes.tipo_pericia_id ?? '') !== String(tipo_pericia_id ?? '')) {
+      await registrar('tipo_pericia_id', await nomeTipoPericia(antes.tipo_pericia_id), await nomeTipoPericia(tipo_pericia_id));
+    }
+    if (String(antes.perito_id ?? '') !== String(perito_id ?? '')) {
+      await registrar('perito_id', await nomePeritoPericia(antes.perito_id), await nomePeritoPericia(perito_id));
+    }
+    const respAntes = antes.responsavel_id ? `usuario:${antes.responsavel_id}` : antes.responsavel_freela_id ? `freela:${antes.responsavel_freela_id}` : '';
+    const respDepois = responsavelRaw || '';
+    if (respAntes !== respDepois) await registrar('responsavel_id', await nomePessoaPericia(respAntes), await nomePessoaPericia(respDepois));
+    const assistAntes = antes.assistente_tecnico_id ? `usuario:${antes.assistente_tecnico_id}` : antes.assistente_tecnico_freela_id ? `freela:${antes.assistente_tecnico_freela_id}` : '';
+    const assistDepois = assistenteRaw || '';
+    if (assistAntes !== assistDepois) await registrar('assistente_tecnico_id', await nomePessoaPericia(assistAntes), await nomePessoaPericia(assistDepois));
+    const locaisDepois = await nomesLocaisReus(conn, periciaId);
+    if (locaisAntes !== locaisDepois) await registrar('locais_reus', locaisAntes, locaisDepois);
+
+    await auditoria.registrar(req.usuario.id, 'pericia', 'atualizar', periciaId, null, null, conn);
 
     await conn.commit();
-    if (existe[0].status === 'aguardando_data') {
+    if (antes.status === 'aguardando_data') {
       // A perícia só passa a comunicar o cliente quando finalmente ganha uma data.
-      enviarComunicadoPericia(req.params.id, 'agendada', req.usuario.id)
+      enviarComunicadoPericia(periciaId, 'agendada', req.usuario.id)
         .catch(err => console.error('Falha ao comunicar cliente após informar data da perícia:', err.message));
     }
     // Reflete no Google. Se o responsável (usuário) mudou, migra: cancela no antigo e
     // cria no novo. Freelancer/sem responsável = ids nulos e o envio é ignorado.
     const seq = Math.floor(Date.now() / 1000);
-    const oldResp = existe[0].responsavel_id;
+    const oldResp = antes.responsavel_id;
     const newResp = responsavel_id;
-    dadosPericiaParaGoogle(req.params.id).then(dados => {
+    dadosPericiaParaGoogle(periciaId).then(dados => {
       if (oldResp === newResp) {
-        enviarPericiaParaGoogle(newResp, req.params.id, dados, false, seq);
+        enviarPericiaParaGoogle(newResp, periciaId, dados, false, seq);
       } else {
-        enviarPericiaParaGoogle(oldResp, req.params.id, dados, true,  seq); // some da agenda do antigo
-        enviarPericiaParaGoogle(newResp, req.params.id, dados, false, seq); // entra na do novo
+        enviarPericiaParaGoogle(oldResp, periciaId, dados, true,  seq); // some da agenda do antigo
+        enviarPericiaParaGoogle(newResp, periciaId, dados, false, seq); // entra na do novo
       }
     });
     return sucesso(res, null, 'Perícia atualizada com sucesso');
@@ -838,7 +1016,8 @@ async function atualizar(req, res) {
 // PUT /api/pericias/:id/realizada — Marca a perícia como realizada (sem ata)
 async function marcarRealizada(req, res) {
   try {
-    const { id } = req.params;
+    const id = lerIdPericia(req.params.id);
+    if (!id) return naoEncontrado(res, 'Perícia não encontrada');
     const [antes] = await pool.execute('SELECT status FROM pericia WHERE id = ?', [id]);
     if (!antes.length) return naoEncontrado(res, 'Perícia não encontrada');
     if (antes[0].status !== 'agendada') {
@@ -875,13 +1054,15 @@ async function marcarRealizada(req, res) {
 // PUT /api/pericias/:id/cancelar — Cancela a perícia (registro histórico)
 async function cancelar(req, res) {
   try {
-    const { id } = req.params;
-    const { motivo } = req.body;
+    const id = lerIdPericia(req.params.id);
+    if (!id) return naoEncontrado(res, 'Perícia não encontrada');
 
     const permitido = await temPermissaoBackend(req.usuario.id, req.usuario.nivel, 'pericias', 'alterar');
     if (!permitido) return erro(res, 'Sem permissão para cancelar perícias', 403);
 
-    if (!motivo?.trim()) return erro(res, 'Motivo do cancelamento é obrigatório');
+    const lidoMotivo = lerMotivoPericia(req.body.motivo, 'O motivo do cancelamento');
+    if (lidoMotivo.erro) return erro(res, lidoMotivo.erro);
+    const motivo = lidoMotivo.valor;
 
     const [antes] = await pool.execute('SELECT status FROM pericia WHERE id = ?', [id]);
     if (!antes.length) return naoEncontrado(res, 'Perícia não encontrada');
@@ -897,7 +1078,7 @@ async function cancelar(req, res) {
       await conn.execute(
         `UPDATE pericia SET status = 'cancelada', motivo_status = ?, alterado_por = ?, alterado_em = NOW()
          WHERE id = ?`,
-        [motivo.trim(), req.usuario.id, id]
+        [motivo, req.usuario.id, id]
       );
       await conn.execute(
         `INSERT INTO auditoria_pericia (pericia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
@@ -928,14 +1109,22 @@ async function cancelar(req, res) {
 async function remarcar(req, res) {
   const conn = await pool.getConnection();
   try {
-    const { id } = req.params;
-    const { motivo, nova_data, nova_hora } = req.body;
+    const id = lerIdPericia(req.params.id);
+    if (!id) return naoEncontrado(res, 'Perícia não encontrada');
+    const { nova_hora } = req.body;
 
     const permitido = await temPermissaoBackend(req.usuario.id, req.usuario.nivel, 'pericias', 'alterar');
     if (!permitido) return erro(res, 'Sem permissão para remarcar perícias', 403);
 
-    if (!motivo?.trim()) return erro(res, 'Motivo da remarcação é obrigatório');
-    if (!nova_data)      return erro(res, 'Nova data é obrigatória');
+    const lidoMotivo = lerMotivoPericia(req.body.motivo, 'O motivo da remarcação');
+    if (lidoMotivo.erro) return erro(res, lidoMotivo.erro);
+    const motivo = lidoMotivo.valor;
+    if (!req.body.nova_data) return erro(res, 'Nova data é obrigatória');
+    const lidaData = dataIso(req.body.nova_data, { rotulo: 'Nova data' });
+    if (lidaData.erro) return erro(res, lidaData.erro);
+    const nova_data = lidaData.valor;
+    if (nova_hora !== undefined && nova_hora !== null && nova_hora !== ''
+        && (typeof nova_hora !== 'string' || !HORA_VALIDA.test(nova_hora.trim()))) return erro(res, 'Hora inválida (use HH:MM)');
 
     const [antes] = await pool.execute('SELECT * FROM pericia WHERE id = ?', [id]);
     if (!antes.length) return naoEncontrado(res, 'Perícia não encontrada');
@@ -949,7 +1138,7 @@ async function remarcar(req, res) {
     await conn.execute(
       `UPDATE pericia SET status = 'remarcada', motivo_status = ?, alterado_por = ?, alterado_em = NOW()
        WHERE id = ?`,
-      [motivo.trim(), req.usuario.id, id]
+      [motivo, req.usuario.id, id]
     );
     await conn.execute(
       `INSERT INTO auditoria_pericia (pericia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
@@ -968,7 +1157,7 @@ async function remarcar(req, res) {
          status, criado_por)
        VALUES (?,?,?,?, ?,?,?,?,?,?,?,?, ?,?,?,?, ?,?, 'agendada', ?)`,
       [
-        o.processo_id, o.tipo_pericia_id, nova_data, nova_hora || o.hora,
+        o.processo_id, o.tipo_pericia_id, nova_data, (nova_hora && nova_hora.trim()) || o.hora,
         o.local, o.cep, o.logradouro, o.numero, o.complemento, o.bairro, o.cidade, o.estado,
         o.perito_tipo, o.perito_id, o.assistente_tecnico_id, o.assistente_tecnico_freela_id,
         o.responsavel_id, o.responsavel_freela_id,
@@ -1015,12 +1204,14 @@ async function remarcar(req, res) {
 // Transação: status + auditoria juntos. Body: { motivo }.
 async function marcarRemarcada(req, res) {
   try {
-    const { id } = req.params;
-    const motivo = String(req.body.motivo || '').trim();
+    const id = lerIdPericia(req.params.id);
+    if (!id) return naoEncontrado(res, 'Perícia não encontrada');
 
     const permitido = await temPermissaoBackend(req.usuario.id, req.usuario.nivel, 'pericias', 'alterar');
     if (!permitido) return erro(res, 'Sem permissão para alterar perícias', 403);
-    if (!motivo) return erro(res, 'Motivo da remarcação é obrigatório');
+    const lidoMotivo = lerMotivoPericia(req.body.motivo, 'O motivo da remarcação');
+    if (lidoMotivo.erro) return erro(res, lidoMotivo.erro);
+    const motivo = lidoMotivo.valor;
 
     const [antes] = await pool.execute('SELECT status FROM pericia WHERE id = ?', [id]);
     if (!antes.length) return naoEncontrado(res, 'Perícia não encontrada');
@@ -1061,7 +1252,8 @@ async function marcarRemarcada(req, res) {
 async function excluir(req, res) {
   const conn = await pool.getConnection();
   try {
-    const { id } = req.params;
+    const id = lerIdPericia(req.params.id);
+    if (!id) return naoEncontrado(res, 'Perícia não encontrada');
 
     const permitido = await temPermissaoBackend(req.usuario.id, req.usuario.nivel, 'pericias', 'excluir');
     if (!permitido) return erro(res, 'Sem permissão para excluir perícias', 403);
@@ -1099,14 +1291,17 @@ async function excluir(req, res) {
 // GET /api/pericias/:id/historico — Auditoria campo a campo da perícia
 async function buscarHistorico(req, res) {
   try {
-    const { id } = req.params;
+    const id = lerIdPericia(req.params.id);
+    if (!id) return naoEncontrado(res, 'Perícia não encontrada');
+    const [existe] = await pool.execute('SELECT id FROM pericia WHERE id = ?', [id]);
+    if (!existe.length) return naoEncontrado(res, 'Perícia não encontrada');
     const [rows] = await pool.execute(
       `SELECT ap.id, ap.campo_alterado, ap.valor_anterior, ap.valor_novo,
               ap.alterado_em, u.nome AS usuario_nome
        FROM auditoria_pericia ap
        LEFT JOIN usuarios u ON ap.usuario_id = u.id
        WHERE ap.pericia_id = ?
-       ORDER BY ap.alterado_em ASC`,
+       ORDER BY ap.alterado_em ASC, ap.id ASC`,
       [id]
     );
     return sucesso(res, rows);
@@ -1202,7 +1397,8 @@ async function excluirTipo(req, res) {
 // POST /api/pericias/:id/comunicado — Envia (ou reenvia) o comunicado ao cliente
 async function enviarComunicado(req, res) {
   try {
-    const { id } = req.params;
+    const id = lerIdPericia(req.params.id);
+    if (!id) return naoEncontrado(res, 'Perícia não encontrada');
     const [pe] = await pool.execute('SELECT status FROM pericia WHERE id = ?', [id]);
     if (!pe.length) return naoEncontrado(res, 'Perícia não encontrada');
 

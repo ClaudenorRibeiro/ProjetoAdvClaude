@@ -749,7 +749,7 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
                     : `Existem ${reusPendentesEndereco.length} réus sem endereço completo.`}
                 </div>
                 <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
-                  <select className="form-control" style={{maxWidth:420}}
+                  <select aria-label="Réu sem endereço completo" className="form-control" style={{maxWidth:420}}
                     value={reuPendenteEscolhido ? chavePessoaLocal(reuPendenteEscolhido) : ''}
                     onChange={e => setReuPendenteSelecionado(e.target.value)}>
                     {reusPendentesEndereco.map(r => (
@@ -1521,6 +1521,13 @@ export function ModalMarcarRemarcada({ pericia, onFechar }) {
 // ============================================================
 // MODAL: HISTÓRICO DA PERÍCIA (auditoria)
 // ============================================================
+// Nome que o usuário entende para cada campo gravado no histórico (o que não está aqui aparece como veio).
+const ROTULO_CAMPO_HISTORICO = {
+  tipo_pericia_id: 'Tipo', perito_id: 'Perito', responsavel_id: 'Responsável', assistente_tecnico_id: 'Assistente técnico',
+  data: 'Data', hora: 'Hora', local: 'Local', cep: 'CEP', logradouro: 'Logradouro', numero: 'Número', complemento: 'Complemento',
+  bairro: 'Bairro', cidade: 'Cidade', estado: 'Estado', locais_reus: 'Réus como local',
+};
+
 export function ModalHistorico({ pericia, onFechar }) {
   const [registros, setRegistros] = useState([]);
   const [carregando, setCarregando] = useState(true);
@@ -1552,7 +1559,7 @@ export function ModalHistorico({ pericia, onFechar }) {
                         <td style={{whiteSpace:'nowrap'}}>
                           {r.alterado_em ? formatarDataHora(r.alterado_em) : '—'}
                         </td>
-                        <td>{r.campo_alterado}</td>
+                        <td>{ROTULO_CAMPO_HISTORICO[r.campo_alterado] || r.campo_alterado}</td>
                         <td>{r.valor_anterior || '—'}</td>
                         <td>{r.valor_novo || '—'}</td>
                         <td>{r.usuario_nome || '—'}</td>

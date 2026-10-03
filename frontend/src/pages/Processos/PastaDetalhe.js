@@ -32,8 +32,8 @@ const STATUS_COR_AUD   = { agendada:'badge-azul', realizada:'badge-verde', adiad
 const STATUS_LABEL_AUD = { agendada:'Agendada', realizada:'Realizada', adiada:'Adiada', cancelada:'Cancelada', remarcada:'Remarcada', acordo:'Acordo' };
 
 // Status de perícias — mesmas cores/labels da tela de Perícias (função badgeStatus de lá)
-const STATUS_COR_PER   = { agendada:'badge-azul', realizada:'badge-verde', cancelada:'badge-vermelho', remarcada:'badge-amarelo' };
-const STATUS_LABEL_PER = { agendada:'Agendada', realizada:'Realizada', cancelada:'Cancelada', remarcada:'Remarcada' };
+const STATUS_COR_PER   = { agendada:'badge-azul', realizada:'badge-verde', cancelada:'badge-vermelho', remarcada:'badge-amarelo', aguardando_data:'badge-laranja' };
+const STATUS_LABEL_PER = { agendada:'Agendada', realizada:'Realizada', cancelada:'Cancelada', remarcada:'Remarcada', aguardando_data:'Aguardando data' };
 import { toast } from 'react-toastify';
 
 export default function PastaDetalhe() {
@@ -61,6 +61,7 @@ export default function PastaDetalhe() {
   // Andamentos têm permissões próprias (submódulo): só mostra o botão de quem pode usá-lo
   const podeVerAndamentos      = temPermissao('processos.andamentos', 'visualizar');
   const podeVerAudiencias      = temPermissao('audiencias', 'visualizar');
+  const podeVerPericias        = temPermissao('pericias', 'visualizar');
   const podeCadastrarAndamento = temPermissao('processos.andamentos', 'cadastrar');
   const podeAlterarAndamento   = temPermissao('processos.andamentos', 'alterar');
   const podeExcluirAndamento   = temPermissao('processos.andamentos', 'excluir');
@@ -542,15 +543,29 @@ export default function PastaDetalhe() {
     const minhaSeq = ++periciasSeqRef.current;
     const ids = idsParaBuscar();
     try {
+      if (!podeVerPericias) { setPericias([]); return; }   // sem permissão: nem pergunta ao servidor (a tela mostra o aviso)
+      // O servidor entrega no máximo 100 por vez: busca página por página até trazer TODAS as perícias de cada processo.
+      const buscarTodas = async (pid) => {
+        const acumulado = [];
+        for (let pagina = 1; pagina <= 100; pagina++) {
+          const r = await periciasAPI.listar({ processo_id: pid, limite: 100, pagina });
+          if (!r.data.ok) break;
+          const { registros, total } = r.data.dados;
+          acumulado.push(...registros);
+          if (!registros.length || acumulado.length >= Number(total)) break;
+        }
+        return acumulado;
+      };
       // Perícias dos processos filtrados + tipos (para o modal) em paralelo
       const [resultados, tiposResp] = await Promise.all([
-        Promise.all(ids.map(pid => periciasAPI.listar({ processo_id: pid, limite: 50 }))),
+        Promise.all(ids.map(buscarTodas)),
         tiposPericia.length ? Promise.resolve(null) : periciasAPI.tipos(),
       ]);
       if (minhaSeq !== periciasSeqRef.current) return; // já saiu outra busca de perícias depois desta
-      const todos = resultados.flatMap(r => r.data.ok ? r.data.dados.registros : []);
-      // Mais recentes primeiro (mesma ordenação da aba de audiências)
-      todos.sort((a, b) => new Date(b.data + 'T' + (b.hora || '00:00')) - new Date(a.data + 'T' + (a.hora || '00:00')));
+      const todos = resultados.flat();
+      // "Aguardando data" (ainda sem data) no topo; as demais, mais recentes primeiro (mesma ordenação da aba de audiências)
+      const ordem = (x) => x.status === 'aguardando_data' ? 0 : 1;
+      todos.sort((a, b) => ordem(a) - ordem(b) || new Date(b.data + 'T' + (b.hora || '00:00')) - new Date(a.data + 'T' + (a.hora || '00:00')));
       setPericias(todos);
       if (tiposResp?.data?.ok) setTiposPericia(tiposResp.data.dados);
     } catch {}
@@ -1546,11 +1561,12 @@ export default function PastaDetalhe() {
                 <tbody>
                   {pericias.map(p => {
                     const agendada  = p.status === 'agendada' || !p.status;      // ações de edição só quando agendada
+                    const aguardandoData = p.status === 'aguardando_data';       // nasceu da ata sem data: só dá para informar a data
                     const historico = p.status === 'cancelada' || p.status === 'remarcada'; // não pode excluir
                     return (
                       <tr key={p.id}>
                         <td>{p.tipo_nome || '—'}</td>
-                        <td>{formatarData(p.data)} {p.hora?.slice(0, 5)}</td>
+                        <td>{p.data ? <>{formatarData(p.data)} {p.hora?.slice(0, 5)}</> : 'Aguardando data'}</td>
                         <td>{p.perito_nome || '—'}</td>
                         <td>{p.responsavel_nome || '—'}</td>
                         <td>{p.local || '—'}</td>
@@ -1564,7 +1580,7 @@ export default function PastaDetalhe() {
                             <MenuAcoes itens={[
                               { label: 'Marcar realizada', icone: '✅', oculto: !(agendada && temPermissao('pericias','alterar')), onClick: () => marcarPericiaRealizada(p) },
                               { label: 'Gerar documento', icone: '📄', oculto: !temPermissao('documentos','cadastrar'), gerarDoc: { ancoraTipo: 'pericia', ancoraId: p.id } },
-                              { label: 'Editar', icone: '✏️', oculto: !(agendada && temPermissao('pericias','alterar')), onClick: () => editarPericia(p) },
+                              { label: aguardandoData ? 'Informar data' : 'Editar', icone: '✏️', oculto: !((agendada || aguardandoData) && temPermissao('pericias','alterar')), onClick: () => editarPericia(p) },
                               { label: 'Remarcar', icone: '🔁', oculto: !(agendada && temPermissao('pericias','alterar')), onClick: () => setPericiaRemarcando(p) },
                               { label: 'Marcar como remarcada', icone: '↪️', oculto: !(agendada && temPermissao('pericias','alterar')), onClick: () => setPericiaMarcandoRemarcada(p) },
                               { label: 'Cancelar', icone: '✖', oculto: !(agendada && temPermissao('pericias','alterar')), onClick: () => setPericiaCancelando(p) },
@@ -1578,7 +1594,8 @@ export default function PastaDetalhe() {
                   })}
                 </tbody>
               </table>
-              {pericias.length === 0 && <p className="lista-vazia">Nenhuma perícia encontrada</p>}
+              {!podeVerPericias && <p className="lista-vazia">Você não tem permissão para ver as perícias deste processo.</p>}
+              {podeVerPericias && pericias.length === 0 && <p className="lista-vazia">Nenhuma perícia encontrada</p>}
             </div>
           </div>
         )}

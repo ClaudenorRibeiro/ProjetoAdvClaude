@@ -285,8 +285,8 @@ test('@critical Editar perícia: janela preenchida (carrega a perícia completa)
   await abrirMenuAcoes(page, linha(page, `${br(util(12))} 13:15`));
   await page.getByRole('button', { name: /Histórico/ }).click();
   const h = janela(page, 'Histórico da Perícia');
-  await expect(h.getByRole('cell', { name: 'data', exact: true }), 'a edição não aparece no histórico').toBeVisible();
-  await expect(h.getByRole('cell', { name: 'local', exact: true })).toBeVisible();
+  await expect(h.getByRole('cell', { name: 'Data', exact: true }), 'a edição não aparece no histórico').toBeVisible();
+  await expect(h.getByRole('cell', { name: 'Local', exact: true })).toBeVisible();
 });
 
 test('@critical Marcar como realizada: pede confirmação, "Cancelar" não muda, confirmar muda e registra no histórico', async ({ page }) => {

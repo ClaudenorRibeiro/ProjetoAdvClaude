@@ -68,7 +68,7 @@ BEGIN/COMMIT/ROLLBACK; nenhum registro órfão ao excluir; nomes de tabela em mi
 - [x] **C5** Aba **Tarefas** (nova, editar, concluir, histórico).
 - [x] **C6** Aba **Audiências** (nova, editar, cancelar, remarcar, histórico, resultado; ata já coberta) — inclui o
       problema já confirmado da data (ver "Achados").
-- [ ] **C7** Aba **Perícias** (nova, editar, cancelar, remarcar, marcar realizada/remarcada, histórico).
+- [x] **C7** Aba **Perícias** (nova, editar, cancelar, remarcar, marcar realizada/remarcada, histórico).
 - [ ] **C8** Aba **Financeiro** da pasta (blocos reaproveitados do Financeiro: lançamento, acordo, histórico).
 
 ### Fase D — Fechamento
@@ -246,9 +246,12 @@ Servidor: título só com espaços/número/lista/>300 (criava vazio ou erro inte
 ### Achados do C6 (03/10/2026) — CORRIGIDOS com autorização do usuário (limites: motivo 300, observação 2.000)
 Servidor (criar/editar/remarcar/cancelar/excluir/histórico/listar): data impossível/texto/lista/número, hora "25:00"/texto/número, processo em texto ou já excluído, observação/plataforma (100)/link (500) que não eram texto ou eram longos demais, responsável sem formato, lista de testemunhas inválida e vara inexistente (erro interno ou gravação indevida → mensagem clara); motivo de cancelar/remarcar aceitava número/lista e texto enorme (agora ≤300); salvar sem mudar gravava "observações mudou" por causa dos espaços; histórico de audiência inexistente/id em texto devolvia lista vazia (agora 404); página negativa dava erro interno; "só administrador pode excluir" respondia 400 (agora 403). Tela: data da audiência agora pode ser DIGITADA (dd/mm/aaaa, máscara, calendário ao lado; também na perícia da ata — `SeletorData`); janela Detalhes sem acesso por teclado à área rolável; aviso claro sem permissão de ver audiências; a aba busca todas as páginas (antes cortava em 50).
 
+### Achados do C7 (03/10/2026) — CORRIGIDOS com autorização do usuário (motivo 300; textos = tamanho das colunas; editar só agendada/aguardando data, também no servidor)
+Servidor (criar/editar/remarcar/cancelar/marcar remarcada/excluir/histórico/listar): data impossível/texto/lista/número, hora "25:00"/texto/número, processo/tipo/perito em texto, processo excluído, perito/tipo/responsável/assistente inexistentes, responsável sem formato, textos de endereço maiores que as colunas (local 300, CEP 9, logradouro 200, número 20, complemento/bairro/cidade 100, estado 2) ou que não eram texto, motivo de cancelar/remarcar/remarcação aceitando número/lista e texto enorme (agora ≤300), data/hora da remarcação sem conferência; editar NÃO gravava histórico campo a campo (agora grava data, hora, local, endereço, tipo, perito, responsável, assistente e réus-local, com nomes legíveis, e "aguardando data → agendada"); o servidor deixava editar perícia cancelada/remarcada/realizada (agora 400); histórico/detalhe de perícia inexistente ou id em texto devolvia lista vazia (agora 404); página negativa dava erro interno. Tela (aba da pasta): perícia "Aguardando data" aparecia como "Agendada", sem data e sem ação (agora badge, texto "Aguardando data" e ação "Informar data", no topo); seletor "réu sem endereço" sem nome acessível; sem permissão de ver perícias mostrava "nenhuma perícia" (agora aviso claro); lista cortada em 50 em silêncio (agora busca todas as páginas); histórico mostra "Data/Local/Tipo…" em vez do nome interno do campo.
+
 ## Estado atual
 
-Plano criado em 02/10/2026. **C6 concluído (15 de tela + 11 de servidor). Próximo passo: C7** (aba Perícias; depois C8, D1). A data da perícia na ata usa o mesmo `SeletorData` (já digitável). Lembrar as pendências P1–P8 e a varredura da ficha da pessoa ao fechar a Fase D. Veja o `git log` do
+Plano criado em 02/10/2026. **C7 concluído (18 de tela + 13 de servidor). Próximo passo: C8** (aba Financeiro da pasta: lançamento, acordo, histórico; depois D1). A data da perícia na ata usa o mesmo `SeletorData` (já digitável). Lembrar as pendências P1–P8 e a varredura da ficha da pessoa ao fechar a Fase D. Veja o `git log` do
 `rascunho` para saber o que já foi feito (marque `[x]` acima ao concluir cada passo).
 
 Nota B2: o ESC que fecha janelas está em DOIS lugares — `hooks/useEscFechar.js` e um ouvinte global em `App.js`; ambos usam `escEhDeListaAberta` (lista aberta = ESC só fecha a lista). Textos de aviso em `#aaa` ainda existem em `Processos.js` (dicas das janelas de auxiliares) — tratar no B4.
