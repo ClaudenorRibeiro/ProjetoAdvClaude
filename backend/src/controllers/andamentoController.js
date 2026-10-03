@@ -10,6 +10,7 @@ const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const { hojeBrasilia, agora } = require('../utils/helpers');
 const auditoria = require('../middleware/auditoria');
+const { texto } = require('../utils/camposTexto');
 const datajud = require('../services/datajudService');
 
 // SELECT único da listagem — usa LEFT JOIN em criado_por para que os andamentos
@@ -30,6 +31,23 @@ async function buscarAndamentos(processoId) {
   return rows;
 }
 
+// Descrição do andamento: texto obrigatório (sem ficar só em espaços), até 1.000 caracteres.
+const LIMITE_DESCRICAO = 1000;
+function lerDescricao(bruto) {
+  const r = texto(bruto, { rotulo: 'A descrição', max: LIMITE_DESCRICAO, obrigatorio: true });
+  if (r.erro) r.erro = r.erro.replace('é obrigatório', 'é obrigatória').replace('muito longo', 'muito longa');
+  return r;
+}
+
+// Data do andamento: "AAAA-MM-DD" de um dia que existe (rejeita 2026-02-30, 2026-13-45, números, listas...). Vazia = não informada.
+function lerData(bruto) {
+  if (bruto === undefined || bruto === null || bruto === '') return { valor: null };
+  if (typeof bruto !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(bruto)) return { erro: 'Data inválida (use o formato AAAA-MM-DD)' };
+  const d = new Date(`${bruto}T00:00:00Z`);
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== bruto) return { erro: 'Data inválida' };
+  return { valor: bruto };
+}
+
 // GET /api/andamento/:processoId — Lista andamentos do processo
 async function listar(req, res) {
   try {
@@ -44,11 +62,15 @@ async function listar(req, res) {
 async function criar(req, res) {
   try {
     const { processoId } = req.params;
-    const { data, descricao } = req.body;
+    if (!/^\d+$/.test(String(processoId))) return naoEncontrado(res, 'Processo não encontrado');
+    const desc = lerDescricao((req.body || {}).descricao);
+    if (desc.erro) return erro(res, desc.erro);
+    const dt = lerData((req.body || {}).data);
+    if (dt.erro) return erro(res, dt.erro);
+    const [proc] = await pool.execute('SELECT id FROM tblproc WHERE id = ? AND ativo = 1', [processoId]);
+    if (!proc.length) return naoEncontrado(res, 'Processo não encontrado');
 
-    if (!descricao) return erro(res, 'A descrição é obrigatória');
-
-    const dataAndamento = data || hojeBrasilia();
+    const dataAndamento = dt.valor || hojeBrasilia();
 
     const conn = await pool.getConnection();
     let result;
@@ -57,7 +79,7 @@ async function criar(req, res) {
       [result] = await conn.execute(
         `INSERT INTO andamento_processual (processo_id, data, descricao, fonte, criado_por)
          VALUES (?, ?, ?, 'manual', ?)`,
-        [processoId, dataAndamento, descricao.trim(), req.usuario.id]
+        [processoId, dataAndamento, desc.valor, req.usuario.id]
       );
       await auditoria.registrar(req.usuario.id, 'andamento_processual', 'criar', result.insertId, null, null, conn);
       await conn.commit();
@@ -73,13 +95,15 @@ async function criar(req, res) {
 async function editar(req, res) {
   try {
     const { id } = req.params;
-    const { data, descricao } = req.body;
-
     const [antes] = await pool.execute('SELECT * FROM andamento_processual WHERE id = ?', [id]);
     if (!antes.length) return naoEncontrado(res, 'Andamento não encontrado');
     if (antes[0].fonte === 'datajud') {
       return erro(res, 'Este andamento veio do CNJ (DataJud) e não pode ser editado.');
     }
+    const desc = lerDescricao((req.body || {}).descricao);
+    if (desc.erro) return erro(res, desc.erro);
+    const dt = lerData((req.body || {}).data);
+    if (dt.erro) return erro(res, dt.erro);
 
     const conn = await pool.getConnection();
     try {
@@ -87,7 +111,7 @@ async function editar(req, res) {
       await conn.execute(
         `UPDATE andamento_processual SET data=?, descricao=?, editado_por=?, editado_em=NOW()
          WHERE id = ?`,
-        [data || antes[0].data, descricao.trim(), req.usuario.id, id]
+        [dt.valor || antes[0].data, desc.valor, req.usuario.id, id]
       );
       await auditoria.registrar(req.usuario.id, 'andamento_processual', 'editar', id, antes[0], null, conn);
       await conn.commit();

@@ -122,9 +122,13 @@ test('@critical Novo Andamento: data de hoje, validação, iniciais maiúsculas,
   await semViolacoes(page, 'janela Novo Andamento');
   await jan.getByRole('button', { name: 'Salvar' }).click();
   await expect(jan.getByText('Descreva o andamento para poder salvar.')).toBeVisible();
+  await expect(jan.getByText('0/1000 caracteres')).toBeVisible();
   await jan.getByLabel('Descrição', { exact: true }).fill('   ');
   await jan.getByRole('button', { name: 'Salvar' }).click();
   await expect(jan.getByText('Descreva o andamento para poder salvar.')).toBeVisible();                    // só espaços também não vale
+  await jan.getByLabel('Descrição', { exact: true }).fill('x'.repeat(1200));
+  await expect(jan.getByLabel('Descrição', { exact: true })).toHaveValue('x'.repeat(1000));                 // o campo não aceita mais de 1.000
+  await expect(jan.getByText('1000/1000 caracteres')).toBeVisible();
   await jan.getByLabel('Descrição', { exact: true }).fill('audiência designada para o mês que vem');
   await jan.getByLabel('Data', { exact: true }).fill('2026-04-02');
   await jan.getByLabel('Descrição', { exact: true }).blur();
@@ -260,10 +264,11 @@ test('@critical Andamentos: quem pode cadastrar e alterar, mas não excluir, nã
   await expect(page.getByRole('button', { name: /Excluir/ })).toHaveCount(0);
 });
 
-test('@critical Andamentos: quem não tem permissão de ver andamentos recebe um aviso claro, não uma tela quebrada', async ({ page }) => {
+test('@critical Andamentos: quem não tem permissão de ver andamentos recebe um aviso claro (não "nenhum andamento" nem tela quebrada)', async ({ page }) => {
   const login = await criarUsuarioComPermissoes('sem_andamentos', [['processos', null, 'visualizar']]);
   await loginPelaTela(page, login);
   await page.goto(`/processos/pasta/${d.pastaPartes}?aba=andamentos`); await aguardarTelaPronta(page);
   await expect(page.getByText('Não foi possível carregar esta tela')).toHaveCount(0);
-  await expect(page.getByText('Não foi possível carregar os andamentos agora. Tente novamente em instantes.')).toBeVisible();
+  await expect(page.getByText('Você não tem permissão para ver os andamentos deste processo.')).toBeVisible();
+  await expect(page.getByText('Nenhum andamento registrado')).toHaveCount(0);
 });

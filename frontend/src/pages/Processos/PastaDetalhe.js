@@ -58,6 +58,11 @@ export default function PastaDetalhe() {
   // Etiqueta DO ESCRITÓRIO nos processos (catálogo compartilhado + quem pode aplicar)
   const [catEscritorio, setCatEscritorio] = useState([]);
   const podeEtiquetarEscritorio = temPermissao('processos.etiqueta_escritorio', 'alterar');
+  // Andamentos têm permissões próprias (submódulo): só mostra o botão de quem pode usá-lo
+  const podeVerAndamentos      = temPermissao('processos.andamentos', 'visualizar');
+  const podeCadastrarAndamento = temPermissao('processos.andamentos', 'cadastrar');
+  const podeAlterarAndamento   = temPermissao('processos.andamentos', 'alterar');
+  const podeExcluirAndamento   = temPermissao('processos.andamentos', 'excluir');
   const [historicoEtiquetaAberto, setHistoricoEtiquetaAberto] = useState(null); // { modulo, registroId } | null
   const [historicoProcessoAberto, setHistoricoProcessoAberto] = useState(null); // processo | null
   // Quando a etiqueta que está sendo aplicada tem status vinculado, abrimos antes o
@@ -935,7 +940,7 @@ export default function PastaDetalhe() {
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
               {selectProcesso}
               {/* Botão de novo andamento só aparece quando um processo específico está selecionado */}
-              {processoSelecionado && (
+              {processoSelecionado && podeCadastrarAndamento && (
                 <button className="btn btn-primary"
                   onClick={() => { setAndamentoEditando(null); setModalAndamento(true); }}>
                   + Novo Andamento
@@ -983,14 +988,14 @@ export default function PastaDetalhe() {
                           ? <span style={{ color:'#aaa', fontSize:'12px' }}>—</span>
                           : (
                             <MenuAcoes itens={[
-                              { label: 'Editar', icone: '✏️',
+                              { label: 'Editar', icone: '✏️', oculto: !podeAlterarAndamento,
                                 onClick: () => {
                                   setAndamentoEditando(a);
                                   // Garante que o processo correto esteja selecionado ao editar
                                   if (processoFiltro === 'todos') setProcessoFiltro(String(a._procId));
                                   setModalAndamento(true);
                                 } },
-                              { label: 'Excluir', icone: '🗑️', perigo: true,
+                              { label: 'Excluir', icone: '🗑️', perigo: true, oculto: !podeExcluirAndamento,
                                 onClick: () => excluirAndamento(a.id) },
                             ]} />
                           )}
@@ -999,7 +1004,10 @@ export default function PastaDetalhe() {
                   ))}
                 </tbody>
               </table>
-              {andamentosExibidos.length === 0 && (
+              {!podeVerAndamentos && (
+                <p className="lista-vazia">Você não tem permissão para ver os andamentos deste processo.</p>
+              )}
+              {podeVerAndamentos && andamentosExibidos.length === 0 && (
                 <p className="lista-vazia">
                   {soEscritorio && andamentos.length > 0
                     ? 'Nenhum andamento do escritório registrado'
@@ -1759,9 +1767,10 @@ function ModalAndamento({ processoId, andamento, onFechar }) {
           <div className="form-group">
             <label className="form-label">Descrição *</label>
             <textarea aria-label="Descrição" className="form-control" rows={4} value={form.descricao || ''}
-              onChange={e => set('descricao', e.target.value)}
+              onChange={e => set('descricao', e.target.value)} maxLength={1000}
               onBlur={() => set('descricao', toTitleCase(form.descricao))}
               placeholder="Descreva o andamento processual..." />
+            <small style={{ color: '#5b6472' }}>{(form.descricao || '').length}/1000 caracteres</small>
           </div>
         </div>
         <div className="modal-footer">

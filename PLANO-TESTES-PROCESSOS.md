@@ -63,7 +63,7 @@ BEGIN/COMMIT/ROLLBACK; nenhum registro órfão ao excluir; nomes de tabela em mi
 - [x] **C1** Cabeçalho e partes: voltar, editar número da pasta, painel de partes e contatos (e-mail, SMS, WhatsApp,
       copiar telefone/e-mail, anotações de atendimento, ver cadastro, gerar documento).
 - [x] **C2** Aba **Processos**.
-- [ ] **C3** Aba **Andamentos** (janela de andamento).
+- [x] **C3** Aba **Andamentos** (janela de andamento).
 - [ ] **C4** Aba **Prazos** (novo, editar, cancelar, concluir/fazer/liberar, histórico).
 - [ ] **C5** Aba **Tarefas** (nova, editar, concluir, histórico).
 - [ ] **C6** Aba **Audiências** (nova, editar, cancelar, remarcar, histórico, resultado; ata já coberta) — inclui o
@@ -207,7 +207,7 @@ Teste: `frontend/e2e/processos-pasta-processos.spec.js` (9 testes: tabela e núm
 1. O balão "Copiado!" do número do processo (`NumeroProcessoCopiavel`, componente compartilhado) é branco sobre verde #16a34a — contraste 3,29:1. Sugestão: verde mais escuro (#15803d, ~5:1). (O mesmo componente aparece em várias telas.)
 Observação (não é erro): o "processo de referência" do "+ Novo Processo (mesma pasta)" é o 1º da lista (o mais novo); se ele não tiver partes, o novo processo não herda nada.
 
-### Achados do C3 (03/10/2026) — AGUARDANDO decisão do usuário (nada corrigido ainda)
+### Achados do C3 (03/10/2026) — CORRIGIDOS com autorização do usuário (itens 1–7; limite da descrição = 1.000 caracteres)
 Testes: `frontend/e2e/processos-pasta-andamentos.spec.js` (8) e `backend/tests/integration/andamentos.integration.test.js` (9). Passam: lista/filtro/DataJud (mensagens e "Parar consulta")/Novo/Editar/Excluir na tela; no servidor: listar, excluir, sincronizar, permissões, caminho feliz.
 SERVIDOR (`andamentoController.js`) — entradas inválidas dão erro interno ou gravam lixo:
 1. Criar com descrição só de espaços grava um andamento VAZIO (201). Editar com descrição vazia/só espaços também grava vazio (200).
@@ -222,7 +222,7 @@ Observação: a descrição é convertida em "Iniciais Maiúsculas" ao sair do c
 
 ## Estado atual
 
-Plano criado em 02/10/2026. **C2 concluído (9 testes). Próximo passo: C3** (aba Andamentos e a janela de andamento; depois C4–C8). (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
+Plano criado em 02/10/2026. **C3 concluído (8 de tela + 9 de servidor). Próximo passo: C4** (aba Prazos; depois C5–C8). (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
 `rascunho` para saber o que já foi feito (marque `[x]` acima ao concluir cada passo).
 
 Nota B2: o ESC que fecha janelas está em DOIS lugares — `hooks/useEscFechar.js` e um ouvinte global em `App.js`; ambos usam `escEhDeListaAberta` (lista aberta = ESC só fecha a lista). Textos de aviso em `#aaa` ainda existem em `Processos.js` (dicas das janelas de auxiliares) — tratar no B4.

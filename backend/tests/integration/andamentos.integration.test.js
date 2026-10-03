@@ -92,16 +92,21 @@ test('criar: data inválida, processo que não existe / não é número / está 
   }
   for (const id of ['999999', 'abc', '0', '-1', '1.5']) {
     const r = await api().post(`/api/andamento/${id}`).send({ data: '2026-03-15', descricao: 'Teste' });
-    assert.ok([400, 404, 409].includes(r.status), `processo ${id} → ${r.status} ${JSON.stringify(r.body)}`);
+    assert.equal(r.status, 404, `processo ${id} → ${r.status} ${JSON.stringify(r.body)}`);
     assert.doesNotMatch(msg(r), /Erro interno/i, `processo ${id}`);
   }
   await sql('UPDATE tblproc SET ativo = 0 WHERE id = ?', [F.outro]);
   const inativo = await api().post(`/api/andamento/${F.outro}`).send({ data: '2026-03-15', descricao: 'Teste' });
-  assert.ok([400, 404, 409].includes(inativo.status), `processo inativo → ${inativo.status} ${JSON.stringify(inativo.body)}`);
+  assert.equal(inativo.status, 404, `processo inativo → ${inativo.status} ${JSON.stringify(inativo.body)}`);
   await sql('UPDATE tblproc SET ativo = 1 WHERE id = ?', [F.outro]);
-  const gigante = await api().post(`/api/andamento/${F.proc}`).send({ data: '2026-03-15', descricao: 'x'.repeat(200000) });
-  assert.ok([201, 400, 413].includes(gigante.status), `texto enorme → ${gigante.status}`);
-  assert.equal(await total('SELECT COUNT(*) AS n FROM andamento_processual'), antes + (gigante.status === 201 ? 1 : 0));
+  const gigante = await api().post(`/api/andamento/${F.proc}`).send({ data: '2026-03-15', descricao: 'x'.repeat(1001) });
+  assert.equal(gigante.status, 400);
+  assert.match(msg(gigante), /muito longa \(máximo 1000/);
+  assert.equal(await total('SELECT COUNT(*) AS n FROM andamento_processual'), antes);
+  const noLimite = await api().post(`/api/andamento/${F.proc}`).send({ data: '2026-03-15', descricao: 'x'.repeat(1000) });
+  assert.equal(noLimite.status, 201);                                                    // 1.000 é aceito; 1.001 não
+  const editarGigante = await api().put(`/api/andamento/${noLimite.body.dados.id}`).send({ descricao: 'y'.repeat(1001) });
+  assert.equal(editarGigante.status, 400);
 });
 
 test('editar: troca data e descrição, guarda quem editou, mantém a data quando não vem e recusa descrição vazia/inválida e andamento do DataJud', async () => {
