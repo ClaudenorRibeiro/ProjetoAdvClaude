@@ -179,6 +179,13 @@ Teste: `frontend/e2e/processos-novo.spec.js` (12 testes; criar processo completo
 3. Tecla ESC com uma lista aberta (responsável, assuntos etc.) fecha a janela "Novo Processo" inteira e perde o que foi digitado (`hooks/useEscFechar.js` fecha a janela mais acima sem olhar se há lista aberta).
 4. Observação (não é erro): o "…" dos botões não tem nome descritivo (só "…") — sugestão de aria-label/title.
 
+### Achados do B3 (03/10/2026) — AGUARDANDO decisão do usuário (nada corrigido ainda)
+Teste: `frontend/e2e/processos-editar.spec.js` (10 testes: Detalhes, Editar, partes/assuntos/OABs, motivo do status, erros do servidor, Histórico, assuntos/ESC, permissões). 8 passam.
+1. Acessibilidade — "Detalhes do Processo" (somente leitura): a área rolável da janela não é alcançável pelo teclado (com todos os campos travados não há onde pôr o foco) — `scrollable-region-focusable` em `.modal-body`.
+2. Acessibilidade — "Histórico do processo": cores "Cadastrou" (#16a34a, 3,3:1) e "Mudou status" (#d97706, ~3,2:1) abaixo de 4,5:1.
+3. O motivo do status é gravado (`logs_auditoria.dados_novos`), mas NADA no código lê/mostra `dados_novos`: o Histórico mostra só "Mudou status — Processo <nº>", sem status anterior/novo nem o motivo, embora a janela diga "O motivo ficará salvo no histórico/auditoria do processo".
+4. Observações (não são erro): no Editar o réu começa em "Física" (no Novo Processo começa em "Jurídica"); os seletores Física/Jurídica do Editar têm o mesmo nome acessível do grupo ("Autores — polo ativo"…).
+
 ## Estado atual
 
 Plano criado em 02/10/2026. **B2 concluído (13 testes). Próximo passo: B3** (editar/detalhes/motivo do status/histórico; reconferir assuntos e os mesmos padrões de acessibilidade na janela de edição, que tem os mesmos campos). (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do

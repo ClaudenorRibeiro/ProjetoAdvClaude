@@ -258,6 +258,68 @@ export async function restaurarNovoProcesso() {
   } finally { await conn.end(); }
 }
 
+// Dados das janelas "Editar processo / Detalhes / Motivo do status / Histórico" (passo B3). Usa a base do B2 (`prepararNovoProcesso`) e
+// acrescenta o status "Recurso E2E" e a pasta 7101 com UM processo completo. `restaurarProcessoEditar` devolve esse processo ao estado
+// original (campos, partes, perito, assuntos, OABs e histórico) — é chamada antes de cada teste, porque os testes alteram o processo.
+export async function prepararEditarProcesso() {
+  const d = await prepararNovoProcesso();
+  const { conectarBancoTeste } = createRequire(import.meta.url)('../../backend/tests/support/testDatabase');
+  const conn = await conectarBancoTeste();
+  try {
+    let [[st]] = await conn.execute("SELECT id FROM tblstatusproc WHERE nome = 'Recurso E2E'");
+    d.statusRecurso = st ? st.id : (await conn.execute("INSERT INTO tblstatusproc (nome, ativo) VALUES ('Recurso E2E', 1)"))[0].insertId;
+    [[st]] = await conn.execute("SELECT id FROM tblstatusproc WHERE nome = 'Conhecimento E2E'"); d.statusConhecimento = st.id;
+    d.instancia1 = (await conn.execute("SELECT id FROM tblinstanciaproc WHERE nome = '1ª Instância E2E'"))[0][0].id;
+    d.instancia2 = (await conn.execute("SELECT id FROM tblinstanciaproc WHERE nome = '2ª Instância E2E'"))[0][0].id;
+    d.varaNorte2 = (await conn.execute("SELECT id FROM tblvara WHERE nome = 'Vara Norte 2 E2E'"))[0][0].id;
+    d.forumSul = (await conn.execute("SELECT id FROM tblforum WHERE nome = 'Fórum Sul E2E'"))[0][0].id;
+    d.varaSul1 = (await conn.execute("SELECT id FROM tblvara WHERE nome = 'Vara Sul 1 E2E'"))[0][0].id;
+    d.freela = (await conn.execute("SELECT id FROM advogados_freela WHERE nome = 'Avulso E2E'"))[0][0].id;
+    let [[pasta]] = await conn.execute('SELECT id FROM tblpasta WHERE numPasta = 7101');
+    d.pastaEditar = pasta ? pasta.id : (await conn.execute('INSERT INTO tblpasta (numPasta, criado_por) VALUES (7101, 1)'))[0].insertId;
+    let [[proc]] = await conn.execute("SELECT id FROM tblproc WHERE numProc = '9100001-00.2026.5.15.0003'");
+    d.procEditar = proc ? proc.id : (await conn.execute(
+      "INSERT INTO tblproc (pasta_id, numProc, NomeTituloProc, tipo_id, status_id, ativo, criado_por) VALUES (?, '9100001-00.2026.5.15.0003', 'x', 1, 1, 1, 1)", [d.pastaEditar]))[0].insertId;
+  } finally { await conn.end(); }
+  await restaurarProcessoEditar(d);
+  return d;
+}
+export async function restaurarProcessoEditar(d) {
+  const { conectarBancoTeste } = createRequire(import.meta.url)('../../backend/tests/support/testDatabase');
+  const conn = await conectarBancoTeste();
+  try {
+    await conn.execute('DELETE FROM tblproc WHERE pasta_id = ? AND id <> ?', [d.pastaEditar, d.procEditar]);
+    await conn.execute(
+      `UPDATE tblproc SET numProc = '9100001-00.2026.5.15.0003', protocolo = 'PROT-EDIT-E2E', NomeTituloProc = 'Alberto Autor E2E X Empresa Alfa E2E Ltda',
+         cliente_polo = 'autor', vara_id = ?, tipo_id = ?, status_id = ?, instancia_id = ?, data_distribuicao = '2026-03-10',
+         observacoes = 'Observação Original', responsavel_id = 2, ativo = 1, alterado_por = NULL, alterado_em = NULL WHERE id = ?`,
+      [d.varaNorte1, d.tipo, d.statusConhecimento, d.instancia1, d.procEditar]);
+    for (const t of ['tbltituloprocautor', 'tbltituloprocreu', 'processo_perito']) await conn.execute(`DELETE FROM ${t} WHERE proc_id = ?`, [d.procEditar]);
+    await conn.execute('DELETE FROM processo_assunto WHERE processo_id = ?', [d.procEditar]);
+    await conn.execute('DELETE FROM processo_oabs WHERE processo_id = ?', [d.procEditar]);
+    await conn.execute("INSERT INTO tbltituloprocautor (proc_id, tipo_pessoa, pessoa_id, criado_por) VALUES (?, 'fisica', ?, 1)", [d.procEditar, d.autor1]);
+    await conn.execute("INSERT INTO tbltituloprocreu (proc_id, tipo_pessoa, pessoa_id, criado_por) VALUES (?, 'juridica', ?, 1)", [d.procEditar, d.reu1]);
+    await conn.execute("INSERT INTO processo_perito (proc_id, tipo_pessoa, pessoa_id, criado_por) VALUES (?, 'fisica', ?, 1)", [d.procEditar, d.perito]);
+    await conn.execute('INSERT INTO processo_assunto (processo_id, assunto_id, criado_por) VALUES (?, ?, 1)', [d.procEditar, d.assuntoA]);
+    await conn.execute('INSERT INTO processo_oabs (processo_id, usuario_id, criado_por) VALUES (?, 1, 1)', [d.procEditar]);
+    await conn.execute('INSERT INTO processo_oabs (processo_id, freela_id, criado_por) VALUES (?, ?, 1)', [d.procEditar, d.freela]);
+    await conn.execute("DELETE FROM logs_auditoria WHERE tabela = 'tblproc' AND registro_id = ?", [d.procEditar]);
+    await conn.execute("INSERT INTO logs_auditoria (usuario_id, tabela, acao, registro_id, descricao) VALUES (1, 'tblproc', 'criar', ?, 'Processo 9100001-00.2026.5.15.0003')", [d.procEditar]);
+  } finally { await conn.end(); }
+}
+
+// Remove a pasta 7101 e o processo do B3 (para não aparecerem nas contagens de outros testes) e devolve a base do B2 ao que era.
+export async function limparProcessoEditar(d) {
+  const { conectarBancoTeste } = createRequire(import.meta.url)('../../backend/tests/support/testDatabase');
+  const conn = await conectarBancoTeste();
+  try {
+    await conn.execute("DELETE FROM logs_auditoria WHERE tabela = 'tblproc' AND registro_id IN (SELECT id FROM tblproc WHERE pasta_id = ?)", [d.pastaEditar]);
+    await conn.execute('DELETE FROM tblproc WHERE pasta_id = ?', [d.pastaEditar]);
+    await conn.execute('DELETE FROM tblpasta WHERE id = ?', [d.pastaEditar]);
+  } finally { await conn.end(); }
+  await restaurarNovoProcesso();
+}
+
 // Usuário comum com UMA lista exata de permissões [[módulo, submódulo|null, ação], ...], senha padrão de teste. Devolve o login.
 export async function criarUsuarioComPermissoes(login, permissoes) {
   const { conectarBancoTeste } = createRequire(import.meta.url)('../../backend/tests/support/testDatabase');
