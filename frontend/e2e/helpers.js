@@ -385,6 +385,75 @@ export async function restaurarExcluirRenumerar(d) {
   } finally { await conn.end(); }
 }
 
+// Dados do passo C1 (cabeçalho da pasta e painel de partes). Pasta 7401 com dois processos que dividem partes:
+//   processo 1: autores Alberto (2 telefones, 2 e-mails) e Beatriz (sem contato, representada por "Carlos Responsavel C1" — "Pai C1");
+//               réus Empresa Alfa (EM RECUPERAÇÃO JUDICIAL, 1 telefone, 1 e-mail) e Empresa Beta (sem contato); perito Paulo (1 telefone, 1 e-mail);
+//   processo 2: autor Alberto e réu Empresa Alfa de novo (o painel mostra cada pessoa UMA vez).
+// `restaurarPastaPartes` refaz isso antes de cada teste; `limparPastaPartes` remove tudo e desfaz os contatos/marcas nas pessoas da base do B2.
+export async function prepararPastaPartes() {
+  const d = await prepararNovoProcesso();
+  const { conectarBancoTeste } = createRequire(import.meta.url)('../../backend/tests/support/testDatabase');
+  const conn = await conectarBancoTeste();
+  try { d.statusConhecimento = (await conn.execute("SELECT id FROM tblstatusproc WHERE nome = 'Conhecimento E2E'"))[0][0].id; } finally { await conn.end(); }
+  await restaurarPastaPartes(d);
+  return d;
+}
+export async function limparPastaPartes(d) {
+  const { conectarBancoTeste } = createRequire(import.meta.url)('../../backend/tests/support/testDatabase');
+  const conn = await conectarBancoTeste();
+  try {
+    const [pastas] = await conn.execute('SELECT id FROM tblpasta WHERE numPasta = 7401');
+    for (const { id } of pastas) {
+      const [procs] = await conn.execute('SELECT id FROM tblproc WHERE pasta_id = ?', [id]);
+      for (const p of procs) await conn.execute("DELETE FROM logs_auditoria WHERE tabela = 'tblproc' AND registro_id = ?", [p.id]);
+      await conn.execute('DELETE FROM tblproc WHERE pasta_id = ?', [id]);
+      await conn.execute('DELETE FROM tblpasta WHERE id = ?', [id]);
+    }
+    await conn.execute('UPDATE pessoas_fisicas SET responsavel_id = NULL, parentesco_id = NULL WHERE nome = ?', ['Beatriz Autora E2E']);
+    await conn.execute("DELETE FROM pessoas_fisicas WHERE nome = 'Carlos Responsavel C1'");
+    await conn.execute("DELETE FROM parentesco WHERE nome = 'Pai C1'");
+    await conn.execute("DELETE FROM telefones_pf WHERE numero LIKE '%C1%' OR pessoa_id IN (SELECT id FROM pessoas_fisicas WHERE nome IN ('Alberto Autor E2E','Perito Paulo E2E'))");
+    await conn.execute("DELETE FROM emails_pf WHERE pessoa_id IN (SELECT id FROM pessoas_fisicas WHERE nome IN ('Alberto Autor E2E','Perito Paulo E2E'))");
+    await conn.execute("DELETE FROM telefones_pj WHERE pessoa_id IN (SELECT id FROM pessoas_juridicas WHERE razao_social = 'Empresa Alfa E2E Ltda')");
+    await conn.execute("DELETE FROM emails_pj WHERE pessoa_id IN (SELECT id FROM pessoas_juridicas WHERE razao_social = 'Empresa Alfa E2E Ltda')");
+    await conn.execute("DELETE FROM historico_atendimento WHERE pessoa_id IN (SELECT id FROM pessoas_fisicas WHERE nome IN ('Alberto Autor E2E','Perito Paulo E2E'))");
+    await conn.execute("UPDATE pessoas_juridicas SET em_recuperacao_judicial = 0 WHERE razao_social = 'Empresa Alfa E2E Ltda'");
+    await conn.execute("DELETE FROM log_comunicacoes WHERE destinatario LIKE '%example.invalid%' OR destinatario LIKE '%946850741%'");
+  } finally { await conn.end(); }
+  await restaurarNovoProcesso();
+}
+export async function restaurarPastaPartes(d) {
+  await limparPastaPartes(d);
+  const { conectarBancoTeste } = createRequire(import.meta.url)('../../backend/tests/support/testDatabase');
+  const conn = await conectarBancoTeste();
+  const id = async (sql, params = []) => (await conn.execute(sql, params))[0].insertId;
+  try {
+    await conn.execute("UPDATE usuarios SET oab = 'SP 111111' WHERE id = 1"); await conn.execute("UPDATE usuarios SET oab = 'SP 222222' WHERE id = 2");
+    await conn.execute('UPDATE configuracoes_escritorio SET advogado_principal_id = 1 WHERE id = 1');
+    d.carlos = await id("INSERT INTO pessoas_fisicas (nome, cpf) VALUES ('Carlos Responsavel C1', '90000000099')");
+    d.parentesco = await id("INSERT INTO parentesco (nome) VALUES ('Pai C1')");
+    await conn.execute('UPDATE pessoas_fisicas SET responsavel_id = ?, parentesco_id = ? WHERE id = ?', [d.carlos, d.parentesco, d.autor2]);
+    await conn.execute("UPDATE pessoas_juridicas SET em_recuperacao_judicial = 1 WHERE id = ?", [d.reu1]);
+    const tel = (t, pessoa, num, principal) => conn.execute(`INSERT INTO ${t} (pessoa_id, numero, principal, ativo) VALUES (?, ?, ?, 1)`, [pessoa, num, principal]);
+    await tel('telefones_pf', d.autor1, '11946850741', 1); await tel('telefones_pf', d.autor1, '1133334444', 0);
+    await tel('telefones_pf', d.perito, '21999998888', 1);
+    await tel('telefones_pj', d.reu1, '1932221111', 1);
+    const mail = (t, pessoa, em, principal) => conn.execute(`INSERT INTO ${t} (pessoa_id, email, principal, ativo) VALUES (?, ?, ?, 1)`, [pessoa, em, principal]);
+    await mail('emails_pf', d.autor1, 'alberto@example.invalid', 1); await mail('emails_pf', d.autor1, 'alberto.segundo@example.invalid', 0);
+    await mail('emails_pf', d.perito, 'paulo@example.invalid', 1);
+    await mail('emails_pj', d.reu1, 'alfa@example.invalid', 1);
+    d.pastaPartes = await id('INSERT INTO tblpasta (numPasta, criado_por) VALUES (7401, 1)');
+    const proc = (num, titulo) => id("INSERT INTO tblproc (pasta_id, numProc, NomeTituloProc, tipo_id, status_id, ativo, criado_por) VALUES (?, ?, ?, ?, ?, 1, 1)", [d.pastaPartes, num, titulo, d.tipo, d.statusConhecimento]);
+    const p1 = await proc('9400001-00.2026.5.15.0001', 'Alberto Autor E2E(+1) X Empresa Alfa E2E Ltda(+1)');
+    const p2 = await proc('9400002-00.2026.5.15.0001', 'Alberto Autor E2E X Empresa Alfa E2E Ltda');
+    const parte = (t, proc_, tp, pessoa) => conn.execute(`INSERT INTO ${t} (proc_id, tipo_pessoa, pessoa_id, criado_por) VALUES (?, ?, ?, 1)`, [proc_, tp, pessoa]);
+    await parte('tbltituloprocautor', p1, 'fisica', d.autor1); await parte('tbltituloprocautor', p1, 'fisica', d.autor2);
+    await parte('tbltituloprocreu', p1, 'juridica', d.reu1); await parte('tbltituloprocreu', p1, 'juridica', d.reu2);
+    await parte('processo_perito', p1, 'fisica', d.perito);
+    await parte('tbltituloprocautor', p2, 'fisica', d.autor1); await parte('tbltituloprocreu', p2, 'juridica', d.reu1);
+  } finally { await conn.end(); }
+}
+
 // Usuário comum com UMA lista exata de permissões [[módulo, submódulo|null, ação], ...], senha padrão de teste. Devolve o login.
 export async function criarUsuarioComPermissoes(login, permissoes) {
   const { conectarBancoTeste } = createRequire(import.meta.url)('../../backend/tests/support/testDatabase');

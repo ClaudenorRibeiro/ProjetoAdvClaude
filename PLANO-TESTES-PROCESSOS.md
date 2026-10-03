@@ -194,6 +194,14 @@ Testes: `frontend/e2e/processos-excluir-renumerar.spec.js` (8) e `frontend/e2e/p
 4. Renumerar pasta (lápis ✎): o campo numérico sem rótulo.
 5. Observação: os botões "Editar" e "✕" de cada linha não dizem de qual item são (leitor de tela lê só "Editar"/"✕"); sugestão aria-label "Editar <nome>" / "Excluir <nome>".
 
+### Achados do C1 (03/10/2026) — AGUARDANDO decisão do usuário (nada corrigido ainda)
+Teste: `frontend/e2e/processos-pasta-partes.spec.js` (11 testes: cabeçalho, painel de partes, ver cadastro, copiar telefone/e-mail, WhatsApp, anotações, e-mail, SMS, permissão, ESC do SMS). Passam: cabeçalho, copiar e-mail, anotações; os demais falham pelos achados abaixo.
+1. Painel "Partes do processo": o cabeçalho que abre/fecha é um `div` clicável — não se alcança com Tab nem abre com Enter (só mouse).
+2. Fechar a ficha ("Ver cadastro") recarrega a pasta e o painel de partes volta a ficar FECHADO sozinho (o estado se perde).
+3. ESC na confirmação do "Enviar SMS" (passo "Isso consome crédito…") fecha a janela inteira e perde a mensagem — o ouvinte global de ESC do `App.js` clica no ✕ e o "voltar" do próprio modal nunca roda.
+4. Quem só tem permissão de Processos (sem Pessoas) vê todas as ações de contato; ao usar, aparece só "Erro ao buscar os telefones da pessoa" (o servidor exige permissão de Pessoas). Sugestão: esconder essas ações nesse caso.
+5. Acessibilidade: "representado(a) por …" (#6b7280) com contraste 4,25:1 sobre a cor da linha ao passar o mouse; campo "Para" do e-mail e "Telefone" do SMS (listas) sem rótulo; ficha da pessoa em modo leitura (aberta pela pasta) com 2 campos de texto e 2 listas sem rótulo (bloco do responsável/parentesco).
+
 ## Estado atual
 
 Plano criado em 02/10/2026. **B4 concluído (8 + 11 testes). Próximo passo: C1** (pasta: cabeçalho, partes, aba Processos; as demais abas C2–C8). (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
