@@ -304,7 +304,7 @@ function SeletorAssuntos({ assuntos = [], selecionados = [], onChange, podeGeren
 
   return (
     <div style={{ display: 'flex', gap: '4px', alignItems: 'flex-start' }}>
-      <div ref={boxRef} onBlur={fecharAoSair} style={{ flex: 1, position: 'relative' }}>
+      <div ref={boxRef} onBlur={fecharAoSair} onKeyDown={e => { if (e.key === 'Escape' && aberto) setAberto(false); }} style={{ flex: 1, position: 'relative' }}>
         {/* A caixa NÃO é um botão (botão dentro de botão confunde leitor de tela e teclado): é um contêiner clicável com
             controles irmãos — um botão "×" por assunto e um botão ▲/▼ que abre a lista (o clique em qualquer ponto da caixa
             também abre/fecha, como antes). */}
@@ -368,7 +368,7 @@ function SeletorAssuntos({ assuntos = [], selecionados = [], onChange, podeGeren
         </div>
 
         {!somenteLeitura && aberto && (
-          <div style={{
+          <div data-esc-lista-aberta style={{
             position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
             background: '#fff', border: '1px solid #d9e1ec', borderRadius: '8px',
             boxShadow: '0 12px 30px rgba(15, 23, 42, 0.14)', zIndex: 40,
@@ -407,7 +407,7 @@ function SeletorAssuntos({ assuntos = [], selecionados = [], onChange, podeGeren
       </div>
 
       {!somenteLeitura && podeGerenciar && (
-        <button type="button" className="btn btn-outline" style={{ minHeight: '40px', padding: '0 10px', fontSize: '13px', flexShrink: 0 }} onClick={onGerenciar}>…</button>
+        <button type="button" className="btn btn-outline" style={{ minHeight: '40px', padding: '0 10px', fontSize: '13px', flexShrink: 0 }} aria-label="Gerenciar assuntos" title="Gerenciar assuntos" onClick={onGerenciar}>…</button>
       )}
     </div>
   );
@@ -465,7 +465,7 @@ function SeletorOabsProcesso({ oabs = [], onChange, opcoes = [], onOpcoesAtualiz
       <label className="form-label">OAB(s) do processo — são as OABs que estão nos autos do processo</label>
       {!somenteLeitura && (
         <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
-          <select className="form-control" value="" onChange={e => adicionar(e.target.value)}>
+          <select aria-label="Adicionar OAB ao processo" className="form-control" value="" onChange={e => adicionar(e.target.value)}>
             <option value="">Selecione um ou mais advogados, a quem pertence o processo</option>
             {doEscritorio.length > 0 && (
               <optgroup label="Advogados do escritório">
@@ -484,7 +484,7 @@ function SeletorOabsProcesso({ oabs = [], onChange, opcoes = [], onOpcoesAtualiz
           </select>
           <button type="button" className="btn btn-outline" title="Cadastrar advogado avulso (não trabalha no escritório)"
             style={{ padding: '0 12px', fontSize: '16px', flexShrink: 0 }}
-            onClick={() => setModalNovoFreela(true)}>…</button>
+            aria-label="Cadastrar advogado avulso" onClick={() => setModalNovoFreela(true)}>…</button>
         </div>
       )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '28px' }}>
@@ -497,7 +497,7 @@ function SeletorOabsProcesso({ oabs = [], onChange, opcoes = [], onOpcoesAtualiz
             )}
           </span>
         ))}
-        {oabs.length === 0 && <span style={{ color: '#ccc', fontSize: '13px' }}>Nenhuma OAB adicionada</span>}
+        {oabs.length === 0 && <span style={{ color: '#5b6472', fontSize: '13px' }}>Nenhuma OAB adicionada</span>}
       </div>
       <small style={{ color: '#5b6472' }}>Advogado(s) responsável(is) pela OAB sob a qual o processo foi distribuído. Só aparecem advogados com OAB já cadastrada.</small>
 
@@ -887,7 +887,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
               borderRadius: '6px',
               padding: '10px 14px',
               fontWeight: '600',
-              color: nomeTitulo ? '#1e3a8a' : '#aaa',
+              color: nomeTitulo ? '#1e3a8a' : '#5b6472',
               fontSize: '14px',
               minHeight: '40px',
             }}>
@@ -933,7 +933,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
             {partesEditaveis && (
               <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
                 <select
-                  className="form-control" style={{ maxWidth: '130px' }}
+                  aria-label="Tipo de pessoa do autor" className="form-control" style={{ maxWidth: '130px' }}
                   value={tipoAutor}
                   onChange={e => { setTipoAutor(e.target.value); setResultAutor([]); setBuscaAutor(''); }}
                 >
@@ -963,7 +963,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
                 <button type="button" className="btn btn-outline"
                   title="Cadastrar nova pessoa (conforme o tipo selecionado)"
                   style={{ padding: '0 12px', fontSize: '16px', flexShrink: 0 }}
-                  onClick={() => setCadastroRapido('autor')}>…</button>
+                  aria-label="Cadastrar novo autor" onClick={() => setCadastroRapido('autor')}>…</button>
               </div>
             )}
 
@@ -988,7 +988,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
                   )}
                 </span>
               ))}
-              {autores.length === 0 && <span style={{ color: '#ccc', fontSize: '13px' }}>Nenhum autor adicionado</span>}
+              {autores.length === 0 && <span style={{ color: '#5b6472', fontSize: '13px' }}>Nenhum autor adicionado</span>}
             </div>
           </div>
 
@@ -1000,7 +1000,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
             {partesEditaveis && (
               <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
                 <select
-                  className="form-control" style={{ maxWidth: '130px' }}
+                  aria-label="Tipo de pessoa do réu" className="form-control" style={{ maxWidth: '130px' }}
                   value={tipoReu}
                   onChange={e => { setTipoReu(e.target.value); setResultReu([]); setBuscaReu(''); }}
                 >
@@ -1030,7 +1030,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
                 <button type="button" className="btn btn-outline"
                   title="Cadastrar nova pessoa (conforme o tipo selecionado)"
                   style={{ padding: '0 12px', fontSize: '16px', flexShrink: 0 }}
-                  onClick={() => setCadastroRapido('reu')}>…</button>
+                  aria-label="Cadastrar novo réu" onClick={() => setCadastroRapido('reu')}>…</button>
               </div>
             )}
 
@@ -1055,7 +1055,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
                   )}
                 </span>
               ))}
-              {reus.length === 0 && <span style={{ color: '#ccc', fontSize: '13px' }}>Nenhum réu adicionado</span>}
+              {reus.length === 0 && <span style={{ color: '#5b6472', fontSize: '13px' }}>Nenhum réu adicionado</span>}
             </div>
           </div>
 
@@ -1113,7 +1113,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
               <button type="button" className="btn btn-outline"
                 title="Cadastrar novo perito (conforme o tipo selecionado)"
                 style={{ padding: '0 12px', fontSize: '16px', flexShrink: 0 }}
-                onClick={() => setCadastroRapido('perito')}>…</button>
+                aria-label="Cadastrar novo perito" onClick={() => setCadastroRapido('perito')}>…</button>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '28px' }}>
               {peritos.map((pe, i) => (
@@ -1123,7 +1123,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#5b21b6', fontWeight: 'bold', padding: '0', lineHeight: '1', fontSize: '14px' }}>×</button>
                 </span>
               ))}
-              {peritos.length === 0 && <span style={{ color: '#ccc', fontSize: '13px' }}>Nenhum perito adicionado</span>}
+              {peritos.length === 0 && <span style={{ color: '#5b6472', fontSize: '13px' }}>Nenhum perito adicionado</span>}
             </div>
           </div>
 
@@ -1158,21 +1158,21 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
               <label className="form-label">Tipo</label>
               <div style={{ display: 'flex', gap: '4px' }}>
                 <SelectPesquisavel ariaLabel="Tipo do processo" className="form-control" value={form.tipo_id} onChange={valor => set('tipo_id', valor)} opcoes={[{ value: '', label: '— Selecione —' }, ...(aux.tipos || []).map(t => ({ value: t.id, label: t.nome }))]} />
-                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('tipos')}>…</button>}
+                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} aria-label="Gerenciar tipos de processo" title="Gerenciar tipos de processo" onClick={() => setModalAux('tipos')}>…</button>}
               </div>
             </div>
             <div className="form-group">
               <label className="form-label">Status</label>
               <div style={{ display: 'flex', gap: '4px' }}>
                 <SelectPesquisavel ariaLabel="Status do processo" className="form-control" value={form.status_id} onChange={valor => set('status_id', valor)} opcoes={[{ value: '', label: '— Selecione —' }, ...(aux.status || []).map(s => ({ value: s.id, label: s.nome }))]} />
-                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('status')}>…</button>}
+                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} aria-label="Gerenciar status do processo" title="Gerenciar status do processo" onClick={() => setModalAux('status')}>…</button>}
               </div>
             </div>
             <div className="form-group">
               <label className="form-label">Instância</label>
               <div style={{ display: 'flex', gap: '4px' }}>
                 <SelectPesquisavel ariaLabel="Instância" className="form-control" value={form.instancia_id} onChange={valor => set('instancia_id', valor)} opcoes={[{ value: '', label: '— Selecione —' }, ...(aux.instancias || []).map(i => ({ value: i.id, label: i.nome }))]} />
-                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('instancias')}>…</button>}
+                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} aria-label="Gerenciar instâncias" title="Gerenciar instâncias" onClick={() => setModalAux('instancias')}>…</button>}
               </div>
             </div>
           </div>
@@ -1183,7 +1183,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
               <label className="form-label">Fórum</label>
               <div style={{ display: 'flex', gap: '4px' }}>
                 <SelectPesquisavel ariaLabel="Fórum" className="form-control" value={form.forum_id} onChange={mudarForum} opcoes={[{ value: '', label: '— Selecione —' }, ...(aux.foruns || []).map(f => ({ value: f.id, label: f.abrev_nome || f.nome }))]} />
-                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('foruns')}>…</button>}
+                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} aria-label="Gerenciar fóruns" title="Gerenciar fóruns" onClick={() => setModalAux('foruns')}>…</button>}
               </div>
             </div>
             <div className="form-group">
@@ -1193,7 +1193,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
                   <option value="">{form.forum_id ? '— Selecione —' : '— Selecione o fórum primeiro —'}</option>
                   {varasFiltradas.map(v => <option key={v.id} value={v.id}>{v.abrev_nome || v.nome}</option>)}
                 </select>
-                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('varas')}>…</button>}
+                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} aria-label="Gerenciar varas" title="Gerenciar varas" onClick={() => setModalAux('varas')}>…</button>}
               </div>
             </div>
           </div>
@@ -1512,7 +1512,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
               background: nomeTitulo ? '#f0f4ff' : '#f8f8f8',
               border: `1px solid ${nomeTitulo ? '#c7d7fd' : '#e0e0e0'}`,
               borderRadius: '6px', padding: '10px 14px',
-              fontWeight: '600', color: nomeTitulo ? '#1e3a8a' : '#aaa',
+              fontWeight: '600', color: nomeTitulo ? '#1e3a8a' : '#5b6472',
               fontSize: '14px', minHeight: '40px',
             }}>
               {nomeTitulo || 'Será gerado ao adicionar autores e réus abaixo'}
@@ -1549,7 +1549,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
                 <button type="button" className="btn btn-outline"
                   title="Cadastrar nova pessoa (conforme o tipo selecionado)"
                   style={{ padding: '0 12px', fontSize: '16px', flexShrink: 0 }}
-                  onClick={() => setCadastroRapido('autor')}>…</button>
+                  aria-label="Cadastrar novo autor" onClick={() => setCadastroRapido('autor')}>…</button>
               )}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '28px' }}>
@@ -1569,7 +1569,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
                   )}
                 </span>
               ))}
-              {autores.length === 0 && <span style={{ color: '#ccc', fontSize: '13px' }}>Nenhum autor adicionado</span>}
+              {autores.length === 0 && <span style={{ color: '#5b6472', fontSize: '13px' }}>Nenhum autor adicionado</span>}
             </div>
           </div>
 
@@ -1603,7 +1603,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
                 <button type="button" className="btn btn-outline"
                   title="Cadastrar nova pessoa (conforme o tipo selecionado)"
                   style={{ padding: '0 12px', fontSize: '16px', flexShrink: 0 }}
-                  onClick={() => setCadastroRapido('reu')}>…</button>
+                  aria-label="Cadastrar novo réu" onClick={() => setCadastroRapido('reu')}>…</button>
               )}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '28px' }}>
@@ -1623,7 +1623,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
                   )}
                 </span>
               ))}
-              {reus.length === 0 && <span style={{ color: '#ccc', fontSize: '13px' }}>Nenhum réu adicionado</span>}
+              {reus.length === 0 && <span style={{ color: '#5b6472', fontSize: '13px' }}>Nenhum réu adicionado</span>}
             </div>
           </div>
 
@@ -1688,7 +1688,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
               <button type="button" className="btn btn-outline"
                 title="Cadastrar novo perito (conforme o tipo selecionado)"
                 style={{ padding: '0 12px', fontSize: '16px', flexShrink: 0 }}
-                onClick={() => setCadastroRapido('perito')}>…</button>
+                aria-label="Cadastrar novo perito" onClick={() => setCadastroRapido('perito')}>…</button>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '28px' }}>
               {peritos.map((pe, i) => (
@@ -1700,7 +1700,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
                   )}
                 </span>
               ))}
-              {peritos.length === 0 && <span style={{ color: '#ccc', fontSize: '13px' }}>Nenhum perito adicionado</span>}
+              {peritos.length === 0 && <span style={{ color: '#5b6472', fontSize: '13px' }}>Nenhum perito adicionado</span>}
             </div>
           </div>
 
@@ -1736,7 +1736,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
                   <option value="">— Selecione —</option>
                   {aux.tipos?.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
                 </select>
-                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('tipos')}>…</button>}
+                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} aria-label="Gerenciar tipos de processo" title="Gerenciar tipos de processo" onClick={() => setModalAux('tipos')}>…</button>}
               </div>
             </div>
             <div className="form-group">
@@ -1746,7 +1746,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
                   <option value="">— Selecione —</option>
                   {aux.status?.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
                 </select>
-                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('status')}>…</button>}
+                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} aria-label="Gerenciar status do processo" title="Gerenciar status do processo" onClick={() => setModalAux('status')}>…</button>}
               </div>
             </div>
             <div className="form-group">
@@ -1756,7 +1756,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
                   <option value="">— Selecione —</option>
                   {aux.instancias?.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
                 </select>
-                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('instancias')}>…</button>}
+                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} aria-label="Gerenciar instâncias" title="Gerenciar instâncias" onClick={() => setModalAux('instancias')}>…</button>}
               </div>
             </div>
           </div>
@@ -1770,7 +1770,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
                   <option value="">— Selecione —</option>
                   {aux.foruns?.map(f => <option key={f.id} value={f.id}>{f.abrev_nome || f.nome}</option>)}
                 </select>
-                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('foruns')}>…</button>}
+                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} aria-label="Gerenciar fóruns" title="Gerenciar fóruns" onClick={() => setModalAux('foruns')}>…</button>}
               </div>
             </div>
             <div className="form-group">
@@ -1779,7 +1779,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
                 <SelectPesquisavel ariaLabel="Vara" className="form-control" value={form.vara_id}
                   onChange={valor => set('vara_id', valor)} disabled={leitura || !form.forum_id}
                   opcoes={[{ value: '', label: form.forum_id ? '— Selecione —' : '— Selecione o fórum primeiro —' }, ...varasFiltradas.map(v => ({ value: v.id, label: v.abrev_nome || v.nome }))]} />
-                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} onClick={() => setModalAux('varas')}>…</button>}
+                {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} aria-label="Gerenciar varas" title="Gerenciar varas" onClick={() => setModalAux('varas')}>…</button>}
               </div>
             </div>
           </div>

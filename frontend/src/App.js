@@ -10,6 +10,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/layout/Layout';
 import { authAPI } from './services/api';
+import { escEhDeListaAberta } from './hooks/useEscFechar';
 
 // Páginas
 import Login         from './pages/Login/Login';
@@ -215,6 +216,7 @@ export default function App() {
   useEffect(() => {
     function fecharModalComEsc(event) {
       if (event.key !== 'Escape') return;
+      if (escEhDeListaAberta(event)) return;   // com uma lista aberta, o ESC fecha só a lista (a janela e o que foi digitado ficam)
       const modais = document.querySelectorAll('.modal-overlay');
       const modalAtivo = modais[modais.length - 1];
       if (!modalAtivo) return;

@@ -55,7 +55,7 @@ BEGIN/COMMIT/ROLLBACK; nenhum registro órfão ao excluir; nomes de tabela em mi
 
 ### Fase B — Tela "lista de Processos" (`Processos.js`)
 - [x] **B1 (concluído em 02/10/2026)** Tela: busca, filtros, ordenação, paginação, etiquetas, menu de cada linha, "Abrir pasta", estados vazio/erro.
-- [ ] **B2** Janela "Novo processo": todos os campos, assuntos, OABs, partes, cadastro rápido de parte, CEP, validações.
+- [x] **B2** Janela "Novo processo": todos os campos, assuntos, OABs, partes, cadastro rápido de parte, CEP, validações.
 - [ ] **B3** "Editar processo" (e modo Detalhes, somente leitura — todo campo travado), "Motivo do status", "Histórico".
 - [ ] **B4** Excluir processo, renumerar, "Gerenciar auxiliares" (fóruns, varas, tipos, status, instâncias, assuntos).
 
@@ -172,7 +172,7 @@ Dados de teste: `prepararListaProcessos` (26 pastas) e `criarUsuarioSoVisualiza`
 
 Resultado no fim do B1: lista 10/10; navegador completo 26/26; frontend 175/175 + build; servidor 127 + 206 (sem mudança no servidor neste passo).
 
-### Achados do B2 (02/10/2026) — AGUARDANDO decisão do usuário (nada corrigido ainda)
+### Achados do B2 (02/10/2026) — CORRIGIDOS com autorização do usuário (3 itens + nomes dos "…")
 Teste: `frontend/e2e/processos-novo.spec.js` (12 testes; criar processo completo conferido no banco, pasta em uso, erros do servidor e permissões já passam).
 1. Acessibilidade: textos "Nenhum autor/réu/perito adicionado" em cinza #ccc (contraste 1,6:1) e "Será gerado ao adicionar autores e réus abaixo" (#aaa sobre #f8f8f8, 2,18:1).
 2. Acessibilidade: campos sem rótulo — seletor Física/Jurídica de autor, de réu e de perito, e o seletor de OAB do processo.
@@ -181,5 +181,7 @@ Teste: `frontend/e2e/processos-novo.spec.js` (12 testes; criar processo completo
 
 ## Estado atual
 
-Plano criado em 02/10/2026. **Próximo passo: B2** (janela "Novo processo"). (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
+Plano criado em 02/10/2026. **B2 concluído (13 testes). Próximo passo: B3** (editar/detalhes/motivo do status/histórico; reconferir assuntos e os mesmos padrões de acessibilidade na janela de edição, que tem os mesmos campos). (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
 `rascunho` para saber o que já foi feito (marque `[x]` acima ao concluir cada passo).
+
+Nota B2: o ESC que fecha janelas está em DOIS lugares — `hooks/useEscFechar.js` e um ouvinte global em `App.js`; ambos usam `escEhDeListaAberta` (lista aberta = ESC só fecha a lista). Textos de aviso em `#aaa` ainda existem em `Processos.js` (dicas das janelas de auxiliares) — tratar no B4.

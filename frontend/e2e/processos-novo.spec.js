@@ -65,7 +65,7 @@ test('@critical Novo Processo: abre com os valores iniciais certos (pasta sugeri
   await expect(janela(page).getByText('1ª Instância E2E')).toBeVisible();                               // instância pré-selecionada ("1ª ...")
   await expect(grupo(page, 'Responsável pelo processo')).toContainText('Administrador de Testes — OAB SP 111111');   // advogado principal do escritório
   await expect(janela(page).getByText('Administrador de Testes — OAB SP 111111').last()).toBeVisible();          // e já vem como primeira OAB do processo
-  await expect(page.getByLabel('Vara')).toBeDisabled();                                                 // vara só depois do fórum
+  await expect(page.getByLabel('Vara', { exact: true })).toBeDisabled();                                                 // vara só depois do fórum
   for (const rotulo of ['Número do Processo (CNJ)', 'Número de Protocolo', 'Data de Distribuição', 'Observações']) await expect(page.getByLabel(rotulo)).toHaveValue('');
   await expect(janela(page).getByRole('button', { name: 'Criar Processo' })).toBeEnabled();
   await semViolacoes(page, 'janela Novo Processo (vazia)');
@@ -329,7 +329,7 @@ test('@critical Novo Processo: tipo, status, instância, fórum/vara, responsáv
   await page.getByLabel('Responsável pelo processo', { exact: true }).click();
   await page.keyboard.type('zzz sem nada');
   await expect(page.getByText('Nenhuma opção encontrada')).toBeVisible();
-  await page.getByLabel('Observações').click();                       // (ESC com a lista aberta fecha a janela inteira — achado B2, aguarda decisão)
+  await janela(page).getByRole('heading', { name: 'Novo Processo' }).click();            // clicar fora (no título) fecha a lista
   // tipo, status, instância
   await escolher(page, 'Tipo do processo', 'Trabalhista E2E');
   await expect(grupo(page, 'Tipo')).toContainText('Trabalhista E2E');
@@ -337,7 +337,7 @@ test('@critical Novo Processo: tipo, status, instância, fórum/vara, responsáv
   await escolher(page, 'Instância', '2ª Instância E2E');
   await expect(grupo(page, 'Instância')).toContainText('2ª Instância E2E');
   // fórum e vara: a vara fica travada até escolher o fórum e só mostra as varas daquele fórum
-  const vara = page.getByLabel('Vara');
+  const vara = page.getByLabel('Vara', { exact: true });
   await expect(vara).toBeDisabled();
   await expect(vara.locator('option').first()).toHaveText('— Selecione o fórum primeiro —');   // travada (as varas só ficam escolhíveis depois do fórum)
   await escolher(page, 'Fórum', 'Fórum Norte E2E');
@@ -359,7 +359,7 @@ test('@critical Novo Processo: tipo, status, instância, fórum/vara, responsáv
   await cnj.pressSequentially('150002', { delay: 15 });                                                   // completa os 20 dígitos
   await expect(cnj).toHaveValue('0000000-00.2026.5.15.0002');
   await expect(grupo(page, 'Fórum')).toContainText('Fórum Norte E2E');
-  await expect(page.getByLabel('Vara')).toHaveValue(String(d.varaNorte1));
+  await expect(page.getByLabel('Vara', { exact: true })).toHaveValue(String(d.varaNorte1));
   // protocolo, data e observações (iniciais maiúsculas ao sair do campo)
   await page.getByLabel('Número de Protocolo').fill('PROT-NOVO-CAMPOS');
   await expect(page.getByLabel('Número de Protocolo')).toHaveValue('PROT-NOVO-CAMPOS');
@@ -370,9 +370,9 @@ test('@critical Novo Processo: tipo, status, instância, fórum/vara, responsáv
   await expect(page.getByLabel('Observações')).toHaveValue('Observação de Teste do Processo');
   await semViolacoes(page, 'janela Novo Processo com os campos preenchidos');
   // os "…" de gerenciar auxiliares abrem a janela e fecham por ESC (o conteúdo dela é testado no passo B4)
-  const mais = janela(page).getByRole('button', { name: '…', exact: true });
+  const mais = janela(page).locator('button', { hasText: /^…$/ });
   await expect(mais).toHaveCount(10);                                                                      // tipo, status, instância, fórum, vara, assuntos + autor, réu, perito, OAB
-  await grupo(page, 'Tipo').getByRole('button', { name: '…', exact: true }).click();
+  await grupo(page, 'Tipo').locator('button', { hasText: /^…$/ }).click();
   await expect(page.locator('.modal-box').filter({ has: page.getByRole('button', { name: 'Fechar' }) }).last()).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.locator('.modal-box')).toHaveCount(1);
@@ -390,7 +390,7 @@ test('@critical Novo Processo: assuntos — abrir, buscar, marcar, "×" e teclad
   await page.getByRole('checkbox', { name: 'Assunto Novo B E2E' }).check();
   await page.getByPlaceholder('Buscar assunto...').fill('');
   await page.getByRole('checkbox', { name: 'Assunto Novo A E2E' }).check();
-  await page.getByLabel('Observações').click();                                                           // clicar fora fecha a lista
+  await janela(page).getByRole('heading', { name: 'Novo Processo' }).click();            // clicar fora (no título) fecha a lista
   await expect(page.getByPlaceholder('Buscar assunto...')).toHaveCount(0);
   await expect(assuntos.getByRole('button', { name: 'Remover assunto Assunto Novo A E2E' })).toBeVisible();
   await semViolacoes(page, 'janela Novo Processo com assuntos marcados');
@@ -402,11 +402,40 @@ test('@critical Novo Processo: assuntos — abrir, buscar, marcar, "×" e teclad
   const abrir = assuntos.getByRole('button', { name: 'Abrir a lista de assuntos' });
   await abrir.focus(); await page.keyboard.press('Enter');
   await expect(abrir).toHaveAttribute('aria-expanded', 'true');
-  await page.getByLabel('Observações').click();                       // (ESC com a lista aberta fecha a janela inteira — achado B2, aguarda decisão)
+  await janela(page).getByRole('heading', { name: 'Novo Processo' }).click();            // clicar fora (no título) fecha a lista
   // o "…" ao lado de Assuntos (só quem pode gerenciar assuntos) abre a janela de gerenciamento
-  await assuntos.getByRole('button', { name: '…', exact: true }).click();
+  await assuntos.locator('button', { hasText: /^…$/ }).click();
   await expect(page.locator('.modal-box').filter({ has: page.getByRole('button', { name: 'Fechar' }) }).last()).toBeVisible();
   await page.keyboard.press('Escape');
+});
+
+test('@critical Novo Processo: ESC com uma lista aberta fecha só a lista; só o ESC seguinte fecha a janela (nada digitado se perde)', async ({ page }) => {
+  await loginPelaTela(page);
+  await abrirNovoProcesso(page);
+  await page.getByLabel('Observações').fill('texto que não pode se perder');
+  // lista do "Responsável" (seletor pesquisável)
+  await page.getByLabel('Responsável pelo processo', { exact: true }).click();
+  await expect(opcaoLista(page, 'Usuário de Testes — OAB SP 222222')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(opcaoLista(page, 'Usuário de Testes — OAB SP 222222')).toHaveCount(0);                     // a lista fechou
+  await expect(janela(page).getByRole('heading', { name: 'Novo Processo' })).toBeVisible();               // a janela continua
+  await expect(page.getByLabel('Observações')).toHaveValue('Texto Que Não Pode Se Perder');
+  // lista de "Assuntos": o foco vai para a busca; ESC fecha a lista e a janela continua
+  await grupo(page, 'Assuntos').getByText('Selecionar assuntos...').click();
+  await expect(page.getByPlaceholder('Buscar assunto...')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.getByPlaceholder('Buscar assunto...')).toHaveCount(0);
+  await expect(janela(page).getByRole('heading', { name: 'Novo Processo' })).toBeVisible();
+  // com a lista de assuntos aberta e o foco numa caixa de marcar, também só a lista fecha
+  await grupo(page, 'Assuntos').getByText('Selecionar assuntos...').click();
+  await page.getByRole('checkbox', { name: 'Assunto Novo A E2E' }).focus();
+  await page.keyboard.press('Escape');
+  await expect(page.getByPlaceholder('Buscar assunto...')).toHaveCount(0);
+  await expect(janela(page).getByRole('heading', { name: 'Novo Processo' })).toBeVisible();
+  // sem lista aberta, o ESC fecha a janela
+  await page.getByLabel('Observações').focus();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.modal-box')).toHaveCount(0);
 });
 
 // ------------------------------------------------------------------ pasta em uso, criação de verdade, erros e permissões
@@ -566,9 +595,9 @@ test('@critical Novo Processo: quem só pode CADASTRAR vê os "…" de tipo/stat
   const login = await criarUsuarioComPermissoes('socadastra', [['processos', null, 'visualizar'], ['processos', null, 'cadastrar']]);
   await loginPelaTela(page, login);
   await abrirNovoProcesso(page);
-  await expect(janela(page).getByRole('button', { name: '…', exact: true })).toHaveCount(9);               // 10 do administrador, menos o de assuntos
-  await expect(grupo(page, 'Assuntos').getByRole('button', { name: '…', exact: true })).toHaveCount(0);
-  await expect(grupo(page, 'Tipo').getByRole('button', { name: '…', exact: true })).toHaveCount(1);
+  await expect(janela(page).locator('button', { hasText: /^…$/ })).toHaveCount(9);               // 10 do administrador, menos o de assuntos
+  await expect(grupo(page, 'Assuntos').locator('button', { hasText: /^…$/ })).toHaveCount(0);
+  await expect(grupo(page, 'Tipo').locator('button', { hasText: /^…$/ })).toHaveCount(1);
   await semViolacoes(page, 'janela Novo Processo para quem só cadastra');
 });
 
