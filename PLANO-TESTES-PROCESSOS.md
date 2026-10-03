@@ -186,6 +186,14 @@ Teste: `frontend/e2e/processos-editar.spec.js` (10 testes: Detalhes, Editar, par
 3. O motivo do status é gravado (`logs_auditoria.dados_novos`), mas NADA no código lê/mostra `dados_novos`: o Histórico mostra só "Mudou status — Processo <nº>", sem status anterior/novo nem o motivo, embora a janela diga "O motivo ficará salvo no histórico/auditoria do processo".
 4. Observações (não são erro): no Editar o réu começa em "Física" (no Novo Processo começa em "Jurídica"); os seletores Física/Jurídica do Editar têm o mesmo nome acessível do grupo ("Autores — polo ativo"…).
 
+### Achados do B4 (03/10/2026) — AGUARDANDO decisão do usuário (nada corrigido ainda)
+Testes: `frontend/e2e/processos-excluir-renumerar.spec.js` (8) e `frontend/e2e/processos-auxiliares-ui.spec.js` (11). Passam: excluir processo (confirmação, bloqueio por andamento, erro, permissão), renumerar (exceto a acessibilidade do campo), "Encerra o processo", erro/ESC/fechar e as permissões de editar/excluir/assuntos; falham só na acessibilidade:
+1. Janelas "Gerenciar" (Tipos, Status, Instâncias, Assuntos, Fóruns, Varas): TODO campo do formulário e a caixa de busca sem rótulo associado (o `<label>` não está ligado ao campo) — regra `label`.
+2. Dicas em cinza #aaa (2,2:1) nessas janelas: "Abreviação (Exibida nos dropdowns…)", "Complemento End. (Ex: 4º andar…)", caixa "Encerra o processo (ex.: Arquivado…)". Também ainda existem `#aaa` em "Sem processos" etc. (já tratado) — conferir.
+3. Botão "Editar" da lista dessas janelas: azul com contraste 3,6–3,7:1.
+4. Renumerar pasta (lápis ✎): o campo numérico sem rótulo.
+5. Observação: os botões "Editar" e "✕" de cada linha não dizem de qual item são (leitor de tela lê só "Editar"/"✕"); sugestão aria-label "Editar <nome>" / "Excluir <nome>".
+
 ## Estado atual
 
 Plano criado em 02/10/2026. **B3 concluído (10 testes). Próximo passo: B4** (excluir processo, renumerar pasta, janelas de gerenciar auxiliares — incluindo dicas em #aaa). (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do

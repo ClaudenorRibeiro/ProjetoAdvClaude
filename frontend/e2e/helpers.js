@@ -320,6 +320,71 @@ export async function limparProcessoEditar(d) {
   await restaurarNovoProcesso();
 }
 
+// Dados do passo B4 (excluir processo e renumerar pasta). Pasta 7201 com dois processos — "casca vazia" (pode excluir) e um com andamento
+// (a exclusão é bloqueada) —, pasta 7202 com um único processo (casca vazia) e pasta 7203 com um processo (alvo para testar número em uso).
+// `restaurarExcluirRenumerar` devolve tudo ao estado original antes de cada teste; `limparExcluirRenumerar` remove tudo no fim.
+export async function prepararExcluirRenumerar() {
+  const d = await prepararNovoProcesso();
+  const { conectarBancoTeste } = createRequire(import.meta.url)('../../backend/tests/support/testDatabase');
+  const conn = await conectarBancoTeste();
+  try { d.statusConhecimento = (await conn.execute("SELECT id FROM tblstatusproc WHERE nome = 'Conhecimento E2E'"))[0][0].id; } finally { await conn.end(); }
+  await restaurarExcluirRenumerar(d);
+  return d;
+}
+async function _idsExcluirRenumerar(conn, d) {
+  const r = await conn.execute("SELECT id FROM tblpasta WHERE numPasta IN (7201, 7202, 7203, 7290)");
+  const ids = r[0].map(x => x.id);
+  d.pastas = ids;
+  return ids;
+}
+export async function limparExcluirRenumerar(d) {
+  const { conectarBancoTeste } = createRequire(import.meta.url)('../../backend/tests/support/testDatabase');
+  const conn = await conectarBancoTeste();
+  try {
+    const ids = await _idsExcluirRenumerar(conn, d);
+    if (ids.length) {
+      const ph = ids.map(() => '?').join(',');
+      const [procs] = await conn.execute(`SELECT id FROM tblproc WHERE pasta_id IN (${ph})`, ids);
+      const pids = procs.map(x => x.id);
+      if (pids.length) {
+        const pp = pids.map(() => '?').join(',');
+        await conn.execute(`DELETE FROM andamento_processual WHERE processo_id IN (${pp})`, pids);
+        await conn.execute(`DELETE FROM logs_auditoria WHERE tabela = 'tblproc' AND registro_id IN (${pp})`, pids);
+        await conn.execute(`DELETE FROM tblproc WHERE id IN (${pp})`, pids);
+      }
+      await conn.execute(`DELETE FROM logs_auditoria WHERE tabela = 'tblpasta' AND registro_id IN (${ph})`, ids);
+      await conn.execute(`DELETE FROM tblpasta WHERE id IN (${ph})`, ids);
+    }
+    await conn.execute("DELETE FROM logs_auditoria WHERE tabela = 'tblproc' AND acao = 'excluir' AND descricao LIKE 'Processo 92%'");
+  } finally { await conn.end(); }
+  await restaurarNovoProcesso();
+}
+export async function restaurarExcluirRenumerar(d) {
+  await limparExcluirRenumerar(d);
+  const { conectarBancoTeste } = createRequire(import.meta.url)('../../backend/tests/support/testDatabase');
+  const conn = await conectarBancoTeste();
+  const id = async (sql, params = []) => (await conn.execute(sql, params))[0].insertId;
+  try {
+    // limparExcluirRenumerar desfez as OABs/advogado principal do B2; a base do B2 as refaz
+    await conn.execute("UPDATE usuarios SET oab = 'SP 111111' WHERE id = 1"); await conn.execute("UPDATE usuarios SET oab = 'SP 222222' WHERE id = 2");
+    await conn.execute('UPDATE configuracoes_escritorio SET advogado_principal_id = 1 WHERE id = 1');
+    d.pastaDuas = await id('INSERT INTO tblpasta (numPasta, criado_por) VALUES (7201, 1)');
+    d.pastaUma = await id('INSERT INTO tblpasta (numPasta, criado_por) VALUES (7202, 1)');
+    d.pastaAlvo = await id('INSERT INTO tblpasta (numPasta, criado_por) VALUES (7203, 1)');
+    const proc = (pasta, num, titulo) => id(
+      "INSERT INTO tblproc (pasta_id, numProc, NomeTituloProc, tipo_id, status_id, ativo, criado_por) VALUES (?, ?, ?, ?, ?, 1, 1)", [pasta, num, titulo, d.tipo, d.statusConhecimento]);
+    d.procCasca = await proc(d.pastaDuas, '9200001-00.2026.5.15.0001', 'CASCA VAZIA E2E');
+    d.procComAndamento = await proc(d.pastaDuas, '9200002-00.2026.5.15.0001', 'COM ANDAMENTO E2E');
+    d.procUnico = await proc(d.pastaUma, '9200003-00.2026.5.15.0001', 'PROCESSO UNICO E2E');
+    await proc(d.pastaAlvo, '9200004-00.2026.5.15.0001', 'PASTA ALVO E2E');
+    for (const procId of [d.procCasca, d.procComAndamento, d.procUnico]) {
+      await conn.execute("INSERT INTO tbltituloprocautor (proc_id, tipo_pessoa, pessoa_id, criado_por) VALUES (?, 'fisica', ?, 1)", [procId, d.autor1]);
+      await conn.execute("INSERT INTO tbltituloprocreu (proc_id, tipo_pessoa, pessoa_id, criado_por) VALUES (?, 'juridica', ?, 1)", [procId, d.reu1]);
+    }
+    await conn.execute("INSERT INTO andamento_processual (processo_id, data, descricao, criado_por) VALUES (?, '2026-04-01', 'Andamento que bloqueia a exclusao', 1)", [d.procComAndamento]);
+  } finally { await conn.end(); }
+}
+
 // Usuário comum com UMA lista exata de permissões [[módulo, submódulo|null, ação], ...], senha padrão de teste. Devolve o login.
 export async function criarUsuarioComPermissoes(login, permissoes) {
   const { conectarBancoTeste } = createRequire(import.meta.url)('../../backend/tests/support/testDatabase');
