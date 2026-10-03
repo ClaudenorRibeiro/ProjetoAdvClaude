@@ -220,6 +220,26 @@ TELA:
 7. Quem NÃO tem permissão de ver andamentos vê "Nenhum andamento registrado" (parece que não há nada; devia avisar que não tem acesso/não foi possível carregar).
 Observação: a descrição é convertida em "Iniciais Maiúsculas" ao sair do campo (ex.: "Para", "Que" ficam maiúsculos) — decisão de design já existente, só registrando.
 
+### Achados do C4 (03/10/2026) — AGUARDANDO decisão do usuário (nada corrigido ainda)
+Testes: `frontend/e2e/processos-pasta-prazos.spec.js` (10 de tela) e `backend/tests/integration/prazos-pasta.integration.test.js` (11 de servidor, cada um lista TODAS as falhas). Passam: Fazer/Liberar, Cancelar, Excluir, Novo Prazo (cálculo dias↔data, validações, delegar), Editar, fluxo de Concluir, listar/filtros, histórico, permissões por rota.
+SERVIDOR (`prazosController.js`) — entradas inválidas:
+1. Datas inválidas ("xyz", "2026-13-45", "2026-02-30", lista) em data_inicio/data_final → 500 ao criar e editar; data como número (20260315) é aceita em data_inicio.
+2. Data final ANTERIOR à data de início é aceita (criar e editar).
+3. quantidade negativa ou decimal aceita; "abc" ou gigante → 500.
+4. tipo_dias com qualquer valor ("xyz", número) é aceito (só "uteis"/"corridos" fazem sentido).
+5. descrição que não é texto (número, lista) é aceita; com 1.001 caracteres → 500 (coluna tem 1.000; a tela já limita).
+6. processo_id / subtipo_id / delegado_para como "abc" ou lista → 500 (inexistente dá 409 — aceitável).
+7. Criar prazo em processo INATIVO funciona (devia dar "Processo não encontrado").
+8. Editar prazo já CONCLUÍDO/CANCELADO funciona no servidor (a tela esconde o botão).
+9. Cancelar: motivo que não é texto → 500; motivo com mais de 300 caracteres → 500 (o histórico `auditoria_prazo.observacao` só tem 300, o motivo guardado tem 500) — a tela não limita o campo.
+10. "Fazer" (marcar fazendo) um prazo delegado a OUTRA pessoa é aceito mesmo para quem não pode ver prazos de todos (concluir/cancelar já dão 403).
+TELA:
+11. "+ Novo Prazo" aparece para quem não tem a permissão de cadastrar prazos; "Cancelar" aparece no menu de um prazo que OUTRA pessoa está fazendo (o servidor recusa com 403).
+12. Selo laranja "▶ <outro usuário>" (quem está fazendo) com contraste 2,14:1 (branco sobre #f59e0b).
+13. Botão verde do aviso "Concluir Prazo" (e de todo `ModalConfirmar` tipo "sucesso") com contraste 3,29:1 (branco sobre #16a34a).
+14. Com "todos os processos", a lista de prazos NÃO fica toda por vencimento: vem agrupada por processo (cada processo por vencimento).
+Observações: a aba busca no máximo 50 prazos por processo (limite fixo, sem aviso nem paginação); o banco de teste só tem alguns dias no calendário — o teste de tela cadastra março/2026 para o cálculo em dias úteis.
+
 ## Estado atual
 
 Plano criado em 02/10/2026. **C3 concluído (8 de tela + 9 de servidor). Próximo passo: C4** (aba Prazos; depois C5–C8). (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
