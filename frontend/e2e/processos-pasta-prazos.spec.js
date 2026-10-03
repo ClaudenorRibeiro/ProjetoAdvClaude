@@ -101,7 +101,7 @@ test('@critical Aba Prazos: lista com dias, responsável, "quem faz" e status; e
   expect(nomes).toEqual(['Apelação C4', 'Apelação C4', 'Apelação C4', 'Apelação C4', 'Apelação C4']);        // o nome do subtipo manda sobre a descrição
   const venc = await page.locator('tbody tr td:nth-child(2)').allInnerTexts();
   const fmt = (n) => dia(n).split('-').reverse().join('/');
-  expect.soft(venc, 'com "todos os processos", a lista deveria ficar toda por vencimento').toEqual([-2, 0, 6, 7, 8].map(fmt));
+  expect(venc, 'com "todos os processos", a lista fica toda por vencimento').toEqual([-2, 0, 6, 7, 8].map(fmt));
   await expect(page.getByRole('button', { name: '+ Novo Prazo' })).toHaveCount(0);                           // com "todos os processos" não há onde gravar
   const atrasado = linha(page, dia(-2).split('-').reverse().join('/'));
   await expect(atrasado.getByText('2d atraso')).toBeVisible();
@@ -247,6 +247,9 @@ test('@critical Prazo: Cancelar exige o motivo (Voltar/✕/ESC não cancelam), c
   await jan().getByRole('button', { name: 'Confirmar Cancelamento' }).click();
   await aviso(page, 'Informe o motivo do cancelamento');                                                       // sem motivo
   await esperarSemAviso(page);
+  await expect(jan().getByText('0/300 caracteres')).toBeVisible();
+  await jan().getByLabel('Motivo do cancelamento').fill('x'.repeat(400));
+  await expect(jan().getByLabel('Motivo do cancelamento')).toHaveValue('x'.repeat(300));                      // o campo não aceita mais de 300
   await jan().getByLabel('Motivo do cancelamento').fill('   ');
   await jan().getByRole('button', { name: 'Confirmar Cancelamento' }).click();
   await aviso(page, 'Informe o motivo do cancelamento');
@@ -473,15 +476,25 @@ test('@critical Prazos da pasta: quem só visualiza e pode agir só nos seus —
   await expect(item(page, 'Fazer')).toBeVisible();
   await expect(item(page, 'Concluir')).toBeVisible();
   await expect(item(page, 'Cancelar')).toBeVisible();
-  await expect.soft(item(page, 'Editar')).toHaveCount(0);                                                           // sem "alterar"
-  await expect.soft(item(page, 'Excluir')).toHaveCount(0);                                                          // sem "excluir"
-  await expect.soft(page.getByRole('button', { name: '+ Novo Prazo' })).toHaveCount(0);                             // sem "cadastrar"
+  await expect(item(page, 'Editar')).toHaveCount(0);                                                           // sem "alterar"
+  await expect(item(page, 'Excluir')).toHaveCount(0);                                                          // sem "excluir"
+  await expect(page.getByRole('button', { name: '+ Novo Prazo' })).toHaveCount(0);                             // sem "cadastrar"
   await page.keyboard.press('Escape');
   // prazo que outra pessoa está fazendo: só ver (nada de concluir/cancelar/editar/excluir/liberar)
   await filtroProcesso(page).selectOption({ label: CNJ2 }); await aguardarTelaPronta(page);
   await page.getByRole('checkbox', { name: 'Mostrar concluídos e cancelados' }).check();
   await expect(page.locator('tbody tr')).toHaveCount(3);                                                       // "Fazendo por mim"(admin) é do escritório; o do usuário 2 e delegado a ele não aparece
   // prazo que o ADMIN está fazendo (visto por outra pessoa): ela não pode concluir, cancelar nem liberar
-  await menu(page, dia(7).split('-').reverse().join('/'));
-  for (const nome of ['Fazer', 'Liberar', 'Concluir', 'Cancelar', 'Editar', 'Excluir']) await expect.soft(item(page, nome), `prazo que outra pessoa faz: ${nome}`).toHaveCount(0);
+  await expect(linha(page, dia(7).split('-').reverse().join('/'))).toBeVisible();
+  await expect(linha(page, dia(7).split('-').reverse().join('/')).getByTitle('Mais ações')).toHaveCount(0);   // nenhuma ação sobra: o menu nem aparece
+});
+
+test('@critical Aba Prazos: mais de 50 (e de 100) prazos no mesmo processo aparecem todos, sem cortar', async ({ page }) => {
+  for (let i = 1; i <= 130; i++) await prazoSql(d.proc1, `Prazo Em Massa ${i}`, dia(30 + i));
+  await loginPelaTela(page);
+  await abrirAba(page, CNJ1);
+  await expect(page.locator('tbody tr')).toHaveCount(130);
+  const venc = await page.locator('tbody tr td:nth-child(2)').allInnerTexts();
+  expect(venc[0]).toBe(dia(31).split('-').reverse().join('/'));
+  expect(venc[129]).toBe(dia(160).split('-').reverse().join('/'));
 });

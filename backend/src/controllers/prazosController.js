@@ -9,6 +9,7 @@ const { calcularVencimento, calcularQuantidade } = require('../services/calendar
 const { criarNotificacao, notificarConclusao, emailPrazoDelegado } = require('../services/notificacaoService');
 const { hojeBrasilia, pastaFormatadaSql } = require('../utils/helpers');
 const auditoria = require('../middleware/auditoria');
+const { texto, dataIso, inteiroPositivo } = require('../utils/camposTexto');
 
 function responderErroCalendario(res, err) {
   if (err?.code === 'CALENDARIO_INSUFICIENTE' || err?.code === 'CALENDARIO_QUANTIDADE_INVALIDA') {
@@ -34,6 +35,35 @@ async function podeVerTodosPrazos(req) {
 async function podeAgirNoPrazo(req, delegadoPara) {
   if (delegadoPara == null || Number(delegadoPara) === Number(req.usuario.id)) return true;
   return podeVerTodosPrazos(req);
+}
+
+// ===== Validação dos campos de prazo (criar e editar) =====
+const LIMITE_DESCRICAO_PRAZO = 1000;   // coluna prazos_processo.descricao
+const LIMITE_MOTIVO_PRAZO    = 300;    // o motivo vai para auditoria_prazo.observacao (300)
+const TIPOS_DIAS = ['uteis', 'corridos'];
+// Devolve { dados } com os campos já limpos, ou { erro } (mensagem para o usuário).
+function lerCamposPrazo(corpo) {
+  const c = corpo || {};
+  const di = dataIso(c.data_inicio, { rotulo: 'Data de início' });
+  if (di.erro) return { erro: di.erro };
+  if (!di.valor) return { erro: 'Processo e data de início são obrigatórios' };
+  const df = dataIso(c.data_final, { rotulo: 'Data final' });
+  if (df.erro) return { erro: df.erro };
+  if (df.valor && df.valor < di.valor) return { erro: 'A data final não pode ser anterior à data de início' };
+  const qtd = inteiroPositivo(c.quantidade, { rotulo: 'Quantidade de dias', max: 3650 });
+  if (qtd.erro) return { erro: qtd.erro };
+  let tipoDias = 'uteis';
+  if (c.tipo_dias !== undefined && c.tipo_dias !== null && c.tipo_dias !== '') {
+    if (typeof c.tipo_dias !== 'string' || !TIPOS_DIAS.includes(c.tipo_dias)) return { erro: 'Tipo de dias inválido (use "uteis" ou "corridos")' };
+    tipoDias = c.tipo_dias;
+  }
+  const desc = texto(c.descricao, { rotulo: 'Descrição', max: LIMITE_DESCRICAO_PRAZO });
+  if (desc.erro) return { erro: desc.erro };
+  const sub = inteiroPositivo(c.subtipo_id, { rotulo: 'Subtipo' });
+  if (sub.erro) return { erro: sub.erro };
+  const del = inteiroPositivo(c.delegado_para, { rotulo: 'Responsável' });
+  if (del.erro) return { erro: del.erro };
+  return { dados: { data_inicio: di.valor, data_final: df.valor, quantidade: qtd.valor, tipo_dias: tipoDias, descricao: desc.valor, subtipo_id: sub.valor, delegado_para: del.valor } };
 }
 
 // ===== Integração com o Google Agenda (convite .ics) =====
@@ -270,14 +300,16 @@ async function listar(req, res) {
 // POST /api/prazos — Cria novo prazo
 async function criar(req, res) {
   try {
-    const {
-      processo_id, subtipo_id, descricao, data_inicio,
-      quantidade, tipo_dias, data_final, delegado_para, publicacao_id, notificar_conclusao
-    } = req.body;
-
-    if (!processo_id || !data_inicio) {
-      return erro(res, 'Processo e data de início são obrigatórios');
-    }
+    const { processo_id, publicacao_id, notificar_conclusao } = req.body || {};
+    // Processo: precisa ser um número de processo que existe e está ativo
+    const procLido = inteiroPositivo(processo_id, { rotulo: 'Processo' });
+    if (processo_id === undefined || processo_id === null || processo_id === '') return erro(res, 'Processo e data de início são obrigatórios');
+    if (procLido.erro || !procLido.valor) return naoEncontrado(res, 'Processo não encontrado');
+    const lido = lerCamposPrazo(req.body);
+    if (lido.erro) return erro(res, lido.erro);
+    const { data_inicio, data_final, quantidade, tipo_dias, descricao, subtipo_id, delegado_para } = lido.dados;
+    const [procExiste] = await pool.execute('SELECT id FROM tblproc WHERE id = ? AND ativo = 1', [procLido.valor]);
+    if (!procExiste.length) return naoEncontrado(res, 'Processo não encontrado');
 
     // Define a data de vencimento:
     // - a data final digitada na tela é a que MANDA (é ela que vira o vencimento);
@@ -301,7 +333,7 @@ async function criar(req, res) {
             data_vencimento, delegado_para, criado_por, publicacao_id, notificar_conclusao)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          processo_id, subtipo_id || null, descricao || null, data_inicio,
+          procLido.valor, subtipo_id || null, descricao || null, data_inicio,
           quantidade || null, tipo_dias || 'uteis', data_vencimento,
           delegado_para || null, req.usuario.id, publicacao_id || null, notificar_conclusao ? 1 : 0
         ]
@@ -354,13 +386,22 @@ async function criar(req, res) {
 // Apenas 'concluido' e 'cancelado' são aceitos — os demais são calculados pela data
 async function mudarStatus(req, res) {
   const { id } = req.params;
-  const { status, observacao, motivo_cancelamento } = req.body;
+  const { status } = req.body || {};
 
   if (!['concluido', 'cancelado'].includes(status)) {
     return erro(res, 'Ação inválida. Use "concluido" ou "cancelado".');
   }
-  if (status === 'cancelado' && !motivo_cancelamento?.trim()) {
-    return erro(res, 'Motivo do cancelamento é obrigatório.');
+  // Motivo (cancelar): texto obrigatório, até 300 caracteres; observação (concluir): texto opcional, até 300.
+  let motivo_cancelamento = null;
+  let observacao = null;
+  if (status === 'cancelado') {
+    const m = texto((req.body || {}).motivo_cancelamento, { rotulo: 'Motivo do cancelamento', max: LIMITE_MOTIVO_PRAZO, obrigatorio: true });
+    if (m.erro) return erro(res, m.erro.endsWith('.') ? m.erro : `${m.erro}.`);
+    motivo_cancelamento = m.valor;
+  } else {
+    const o = texto((req.body || {}).observacao, { rotulo: 'Observação', max: LIMITE_MOTIVO_PRAZO });
+    if (o.erro) return erro(res, o.erro);
+    observacao = o.valor;
   }
 
   const [antes] = await pool.execute(
@@ -412,7 +453,7 @@ async function mudarStatus(req, res) {
                 status_alterado_por = ?, status_alterado_em = NOW(),
                 fazendo_por = NULL, fazendo_desde = NULL, status_antes_fazendo = NULL
           WHERE id = ?`,
-        [motivo_cancelamento.trim(), req.usuario.id, id]
+        [motivo_cancelamento, req.usuario.id, id]
       );
     }
 
@@ -428,7 +469,7 @@ async function mudarStatus(req, res) {
       `INSERT INTO auditoria_prazo (prazo_id, status_anterior, status_novo, usuario_id, observacao)
        VALUES (?, ?, ?, ?, ?)`,
       [id, antes[0].status, status, req.usuario.id,
-       status === 'cancelado' ? motivo_cancelamento.trim() : (observacao || null)]
+       status === 'cancelado' ? motivo_cancelamento : observacao]
     );
 
     // Aviso no sino ao criador quando CONCLUÍDO (só se ele pediu ao criar e não foi ele mesmo)
@@ -722,12 +763,16 @@ async function calcularDias(req, res) {
 async function editar(req, res) {
   try {
     const { id } = req.params;
-    const { subtipo_id, descricao, data_inicio, quantidade, tipo_dias, data_final, delegado_para, notificar_conclusao } = req.body;
+    const { notificar_conclusao } = req.body || {};
+    const lido = lerCamposPrazo(req.body);
 
-    if (!data_inicio) return erro(res, 'Data de início é obrigatória');
-
-    const [existe] = await pool.execute('SELECT id, fazendo_por, delegado_para FROM prazos_processo WHERE id = ?', [id]);
+    const [existe] = await pool.execute('SELECT id, status, fazendo_por, delegado_para FROM prazos_processo WHERE id = ?', [id]);
     if (!existe.length) return naoEncontrado(res, 'Prazo não encontrado');
+    if (lido.erro) return erro(res, lido.erro === 'Processo e data de início são obrigatórios' ? 'Data de início é obrigatória' : lido.erro);
+    if (['concluido', 'cancelado'].includes(existe[0].status)) {
+      return erro(res, 'Prazo já finalizado — não pode ser alterado.');
+    }
+    const { data_inicio, data_final, quantidade, tipo_dias, descricao, subtipo_id, delegado_para } = lido.dados;
     if (existe[0].fazendo_por && existe[0].fazendo_por !== req.usuario.id && req.usuario.nivel > 1) {
       return erro(res, 'Este prazo está sendo feito por outro usuário. Apenas o administrador pode editá-lo.', 403);
     }
@@ -840,11 +885,15 @@ async function marcarFazendo(req, res) {
     await liberarFazendoExpirados();
 
     const [rows] = await pool.execute(
-      'SELECT id, fazendo_por, status, data_vencimento FROM prazos_processo WHERE id = ?', [id]
+      'SELECT id, fazendo_por, status, data_vencimento, delegado_para FROM prazos_processo WHERE id = ?', [id]
     );
     if (!rows.length) return naoEncontrado(res, 'Prazo não encontrado');
 
     const prazo = rows[0];
+    // Mesma regra de concluir/cancelar: prazo delegado a OUTRA pessoa só é mexido por quem vê os prazos de todos.
+    if (!(await podeAgirNoPrazo(req, prazo.delegado_para))) {
+      return erro(res, 'Você só pode marcar como "Fazendo" prazos delegados a você ou do escritório.', 403);
+    }
     if (['concluido', 'cancelado'].includes(prazo.status)) {
       return erro(res, 'Prazo já finalizado — não pode ser marcado como Fazendo');
     }

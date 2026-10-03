@@ -333,11 +333,22 @@ export default function PastaDetalhe() {
     try {
       // Aplica os filtros da aba (status/responsável/datas/encerrados) a cada processo do escopo.
       // O backend já respeita a permissão ver_todos (ignora usuario_id de quem não pode ver todos).
-      const resultados = await Promise.all(
-        ids.map(pid => prazosAPI.listar({ processo_id: pid, ...filtrosPrazo, limite: 50 }))
-      );
+      // O servidor entrega no máximo 100 por vez: busca página por página até trazer TODOS os prazos de cada processo.
+      const buscarTodos = async (pid) => {
+        const acumulado = [];
+        for (let pagina = 1; pagina <= 100; pagina++) {
+          const r = await prazosAPI.listar({ processo_id: pid, ...filtrosPrazo, limite: 100, pagina });
+          if (!r.data.ok) break;
+          const { registros, total } = r.data.dados;
+          acumulado.push(...registros);
+          if (!registros.length || acumulado.length >= Number(total)) break;
+        }
+        return acumulado;
+      };
+      const porProcesso = await Promise.all(ids.map(buscarTodos));
       if (minhaSeq !== prazosSeqRef.current) return; // já saiu outra busca de prazos depois desta
-      const todos = resultados.flatMap(r => r.data.ok ? r.data.dados.registros : []);
+      // Com mais de um processo, junta tudo e ordena por vencimento (cada busca já vem ordenada; o sort é estável e mantém a ordem dentro do dia)
+      const todos = porProcesso.flat().sort((a, b) => String(a.data_vencimento).localeCompare(String(b.data_vencimento)));
       setPrazos(todos);
     } catch { toast.error('Erro ao carregar prazos'); }
   }
@@ -1065,7 +1076,7 @@ export default function PastaDetalhe() {
                 onClick={() => setFiltrosPrazo({ status: '', usuario_id: '', data_de: '', data_ate: '', mostrar_encerrados: false })}>
                 ✕ Limpar filtros
               </button>
-              {processoSelecionado && (
+              {processoSelecionado && temPermissao('prazos', 'cadastrar') && (
                 <button className="btn btn-primary" onClick={() => setModalNovoPrazo(true)}>
                   + Novo Prazo
                 </button>
@@ -1105,7 +1116,7 @@ export default function PastaDetalhe() {
                             </span>
                           )}
                           {outroFazendo && (
-                            <span style={{background:'#f59e0b',color:'#fff',borderRadius:'4px',padding:'2px 7px',fontSize:'12px',fontWeight:600,whiteSpace:'nowrap'}}>
+                            <span style={{background:'#b45309',color:'#fff',borderRadius:'4px',padding:'2px 7px',fontSize:'12px',fontWeight:600,whiteSpace:'nowrap'}}>
                               ▶ {p.fazendo_por_nome}
                             </span>
                           )}
@@ -1128,7 +1139,7 @@ export default function PastaDetalhe() {
                               oculto: !temPermissao('documentos','cadastrar'),
                               gerarDoc: { ancoraTipo: 'prazo', ancoraId: p.id } },
                             { label: 'Cancelar', icone: '✖',
-                              oculto: !ativo,
+                              oculto: !ativo || (outroFazendo && !ehAdmin),
                               onClick: () => setPrazoCancelando(p) },
                             { label: 'Editar', icone: '✏️',
                               oculto: !(ativo && temPermissao('prazos','alterar') && (!outroFazendo || ehAdmin)),

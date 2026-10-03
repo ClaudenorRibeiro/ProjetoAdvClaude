@@ -70,7 +70,7 @@ export default function ModalConfirmar({
   const CONFIG = {
     perigo:  { icone: '🗑️', corBotao: '#dc2626', corHover: '#b91c1c', corFaixa: '#fef2f2', corIcone: '#dc2626' },
     aviso:   { icone: '⚠️', corBotao: '#b45309', corHover: '#92400e', corFaixa: '#fffbeb', corIcone: '#d97706' },
-    sucesso: { icone: '✅', corBotao: '#16a34a', corHover: '#15803d', corFaixa: '#f0fdf4', corIcone: '#16a34a' },
+    sucesso: { icone: '✅', corBotao: '#15803d', corHover: '#166534', corFaixa: '#f0fdf4', corIcone: '#15803d' },
     info:    { icone: 'ℹ️', corBotao: '#1a56db', corHover: '#1e40af', corFaixa: '#eff6ff', corIcone: '#1a56db' },
   };
   const cfg = CONFIG[tipo] || CONFIG.perigo;

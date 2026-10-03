@@ -173,10 +173,10 @@ test('concluir: registra quem concluiu, cria o andamento "Prazo concluído: …"
   t.fim();
 });
 
-test('cancelar: motivo obrigatório (texto, até 500), limpa o "fazendo", guarda motivo e histórico; entradas inválidas e prazo já finalizado são recusados', async () => {
+test('cancelar: motivo obrigatório (texto, até 300), limpa o "fazendo", guarda motivo e histórico; entradas inválidas e prazo já finalizado são recusados', async () => {
   const t = juntar();
   const id = await criarPrazo();
-  for (const motivo of [undefined, null, '', '   ', 123, ['a'], { a: 1 }, 'x'.repeat(501)]) {
+  for (const motivo of [undefined, null, '', '   ', 123, ['a'], { a: 1 }, 'x'.repeat(301)]) {
     const r = await api().put(`/api/prazos/${id}/status`).send({ status: 'cancelado', motivo_cancelamento: motivo });
     t.checar(r.status === 400, `cancelar com motivo=${String(JSON.stringify(motivo)).slice(0, 20)} → ${r.status} ${JSON.stringify(r.body).slice(0, 90)} (esperado 400)`);
   }
@@ -188,9 +188,9 @@ test('cancelar: motivo obrigatório (texto, até 500), limpa o "fazendo", guarda
   t.checar(await total("SELECT COUNT(*) AS n FROM auditoria_prazo WHERE prazo_id = ? AND status_novo = 'cancelado'", [id]) === 1, 'faltou o registro no histórico');
   const dnv = await api().put(`/api/prazos/${id}/status`).send({ status: 'cancelado', motivo_cancelamento: 'De novo' });
   t.checar(dnv.status === 400, `cancelar duas vezes → ${dnv.status}`);
-  const ok500 = await criarPrazo();
-  const r500 = await api().put(`/api/prazos/${ok500}/status`).send({ status: 'cancelado', motivo_cancelamento: 'x'.repeat(500) });
-  t.checar(r500.status === 200, `motivo com 500 caracteres deveria ser aceito → ${r500.status}`);
+  const ok300 = await criarPrazo();
+  const r300 = await api().put(`/api/prazos/${ok300}/status`).send({ status: 'cancelado', motivo_cancelamento: 'x'.repeat(300) });
+  t.checar(r300.status === 200, `motivo com 300 caracteres deveria ser aceito → ${r300.status}`);
   const inexistente = await api().put('/api/prazos/999999/status').send({ status: 'cancelado', motivo_cancelamento: 'x' });
   t.checar(inexistente.status === 404, `cancelar prazo inexistente → ${inexistente.status}`);
   const naoNumero = await api().put('/api/prazos/abc/status').send({ status: 'cancelado', motivo_cancelamento: 'x' });

@@ -64,7 +64,7 @@ BEGIN/COMMIT/ROLLBACK; nenhum registro órfão ao excluir; nomes de tabela em mi
       copiar telefone/e-mail, anotações de atendimento, ver cadastro, gerar documento).
 - [x] **C2** Aba **Processos**.
 - [x] **C3** Aba **Andamentos** (janela de andamento).
-- [ ] **C4** Aba **Prazos** (novo, editar, cancelar, concluir/fazer/liberar, histórico).
+- [x] **C4** Aba **Prazos** (novo, editar, cancelar, concluir/fazer/liberar, histórico).
 - [ ] **C5** Aba **Tarefas** (nova, editar, concluir, histórico).
 - [ ] **C6** Aba **Audiências** (nova, editar, cancelar, remarcar, histórico, resultado; ata já coberta) — inclui o
       problema já confirmado da data (ver "Achados").
@@ -220,7 +220,7 @@ TELA:
 7. Quem NÃO tem permissão de ver andamentos vê "Nenhum andamento registrado" (parece que não há nada; devia avisar que não tem acesso/não foi possível carregar).
 Observação: a descrição é convertida em "Iniciais Maiúsculas" ao sair do campo (ex.: "Para", "Que" ficam maiúsculos) — decisão de design já existente, só registrando.
 
-### Achados do C4 (03/10/2026) — AGUARDANDO decisão do usuário (nada corrigido ainda)
+### Achados do C4 (03/10/2026) — CORRIGIDOS com autorização do usuário (itens 1–14 + limite de 50 por processo; motivo do cancelamento = 300 caracteres)
 Testes: `frontend/e2e/processos-pasta-prazos.spec.js` (10 de tela) e `backend/tests/integration/prazos-pasta.integration.test.js` (11 de servidor, cada um lista TODAS as falhas). Passam: Fazer/Liberar, Cancelar, Excluir, Novo Prazo (cálculo dias↔data, validações, delegar), Editar, fluxo de Concluir, listar/filtros, histórico, permissões por rota.
 SERVIDOR (`prazosController.js`) — entradas inválidas:
 1. Datas inválidas ("xyz", "2026-13-45", "2026-02-30", lista) em data_inicio/data_final → 500 ao criar e editar; data como número (20260315) é aceita em data_inicio.
@@ -242,7 +242,7 @@ Observações: a aba busca no máximo 50 prazos por processo (limite fixo, sem a
 
 ## Estado atual
 
-Plano criado em 02/10/2026. **C3 concluído (8 de tela + 9 de servidor). Próximo passo: C4** (aba Prazos; depois C5–C8). (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
+Plano criado em 02/10/2026. **C4 concluído (11 de tela + 11 de servidor). Próximo passo: C5** (aba Tarefas; depois C6–C8). Nota: a aba Tarefas busca `limite: 100` por processo — conferir no C5 o mesmo corte silencioso que havia em Prazos (50). (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
 `rascunho` para saber o que já foi feito (marque `[x]` acima ao concluir cada passo).
 
 Nota B2: o ESC que fecha janelas está em DOIS lugares — `hooks/useEscFechar.js` e um ouvinte global em `App.js`; ambos usam `escEhDeListaAberta` (lista aberta = ESC só fecha a lista). Textos de aviso em `#aaa` ainda existem em `Processos.js` (dicas das janelas de auxiliares) — tratar no B4.

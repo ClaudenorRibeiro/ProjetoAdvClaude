@@ -10,7 +10,7 @@ const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const { hojeBrasilia, agora } = require('../utils/helpers');
 const auditoria = require('../middleware/auditoria');
-const { texto } = require('../utils/camposTexto');
+const { texto, dataIso } = require('../utils/camposTexto');
 const datajud = require('../services/datajudService');
 
 // SELECT único da listagem — usa LEFT JOIN em criado_por para que os andamentos
@@ -39,14 +39,7 @@ function lerDescricao(bruto) {
   return r;
 }
 
-// Data do andamento: "AAAA-MM-DD" de um dia que existe (rejeita 2026-02-30, 2026-13-45, números, listas...). Vazia = não informada.
-function lerData(bruto) {
-  if (bruto === undefined || bruto === null || bruto === '') return { valor: null };
-  if (typeof bruto !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(bruto)) return { erro: 'Data inválida (use o formato AAAA-MM-DD)' };
-  const d = new Date(`${bruto}T00:00:00Z`);
-  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== bruto) return { erro: 'Data inválida' };
-  return { valor: bruto };
-}
+const lerData = (bruto) => dataIso(bruto, { rotulo: 'Data' });
 
 // GET /api/andamento/:processoId — Lista andamentos do processo
 async function listar(req, res) {

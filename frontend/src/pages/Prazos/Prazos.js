@@ -261,7 +261,7 @@ export default function Prazos() {
                       )}
                       {outroFazendo && (
                         <span style={{
-                          background:'#f59e0b',color:'#fff',borderRadius:'4px',
+                          background:'#b45309',color:'#fff',borderRadius:'4px',
                           padding:'2px 7px',fontSize:'12px',fontWeight:600,whiteSpace:'nowrap'
                         }}>
                           ▶ {p.fazendo_por_nome}
@@ -389,8 +389,9 @@ export function ModalCancelarPrazo({ prazo, onFechar }) {
           <div className="form-group">
             <label className="form-label">Motivo do cancelamento *</label>
             <textarea aria-label="Motivo do cancelamento" className="form-control" rows={3} value={motivo}
-              onChange={e => setMotivo(e.target.value)}
+              onChange={e => setMotivo(e.target.value)} maxLength={300}
               placeholder="Descreva o motivo..." style={{resize:'vertical'}} />
+            <small style={{ color: '#5b6472' }}>{motivo.length}/300 caracteres</small>
           </div>
         </div>
         <div className="modal-footer">
