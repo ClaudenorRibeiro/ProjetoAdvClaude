@@ -207,6 +207,19 @@ Teste: `frontend/e2e/processos-pasta-processos.spec.js` (9 testes: tabela e núm
 1. O balão "Copiado!" do número do processo (`NumeroProcessoCopiavel`, componente compartilhado) é branco sobre verde #16a34a — contraste 3,29:1. Sugestão: verde mais escuro (#15803d, ~5:1). (O mesmo componente aparece em várias telas.)
 Observação (não é erro): o "processo de referência" do "+ Novo Processo (mesma pasta)" é o 1º da lista (o mais novo); se ele não tiver partes, o novo processo não herda nada.
 
+### Achados do C3 (03/10/2026) — AGUARDANDO decisão do usuário (nada corrigido ainda)
+Testes: `frontend/e2e/processos-pasta-andamentos.spec.js` (8) e `backend/tests/integration/andamentos.integration.test.js` (9). Passam: lista/filtro/DataJud (mensagens e "Parar consulta")/Novo/Editar/Excluir na tela; no servidor: listar, excluir, sincronizar, permissões, caminho feliz.
+SERVIDOR (`andamentoController.js`) — entradas inválidas dão erro interno ou gravam lixo:
+1. Criar com descrição só de espaços grava um andamento VAZIO (201). Editar com descrição vazia/só espaços também grava vazio (200).
+2. Descrição que não é texto (número, true, lista, objeto) → 500 (criar e editar); editar SEM descrição → 500 (`undefined.trim`).
+3. Data inválida ("xyz", "2026-13-45", "31/12/2026", "2026-02-30", lista, objeto) → 500 ao criar e ao editar (e o número 20260315 é aceito).
+4. Texto enorme (200 mil caracteres) → 500 (a coluna é TEXT).
+5. Criar em processo com id que não é número ("abc") → 500; id inexistente/0/-1/1.5 → 409 (aceitável).
+TELA:
+6. Quem só pode VISUALIZAR andamentos vê "+ Novo Andamento" e, nos manuais, "Editar" e "Excluir" (o servidor recusa com 403 depois). Quem pode cadastrar+alterar (sem excluir) também vê "Excluir".
+7. Quem NÃO tem permissão de ver andamentos vê "Nenhum andamento registrado" (parece que não há nada; devia avisar que não tem acesso/não foi possível carregar).
+Observação: a descrição é convertida em "Iniciais Maiúsculas" ao sair do campo (ex.: "Para", "Que" ficam maiúsculos) — decisão de design já existente, só registrando.
+
 ## Estado atual
 
 Plano criado em 02/10/2026. **C2 concluído (9 testes). Próximo passo: C3** (aba Andamentos e a janela de andamento; depois C4–C8). (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
