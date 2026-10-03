@@ -5,7 +5,60 @@
 const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
-const { bloqueiaAgendarPassado, hojeBrasilia, pastaFormatadaSql } = require('../utils/helpers');
+const { bloqueiaAgendarPassado, hojeBrasilia, pastaFormatadaSql, paginacao } = require('../utils/helpers');
+const { texto, dataIso, inteiroPositivo } = require('../utils/camposTexto');
+
+const PRIORIDADES_TAREFA = ['urgente', 'normal', 'baixa'];
+const LIMITE_TITULO_TAREFA = 300;       // tamanho da coluna tarefas.titulo
+const LIMITE_DESCRICAO_TAREFA = 2000;
+
+// Id da rota (":id") como número; null quando não é um inteiro positivo (a tarefa "abc" simplesmente não existe).
+function lerIdTarefa(req) {
+  const r = inteiroPositivo(req.params.id, { rotulo: 'Tarefa' });
+  return r.erro ? null : r.valor;
+}
+
+// Editar, excluir e ver o histórico: só o responsável pela tarefa, quem a criou ou o administrador.
+// (Concluir/reabrir têm regra própria, mais aberta: podeAgirNaTarefa.)
+function podeGerirTarefa(req, tarefa) {
+  if (Number(req.usuario.nivel) <= 1) return true;
+  const eu = Number(req.usuario.id);
+  return Number(tarefa.criado_por) === eu || (tarefa.atribuida_para != null && Number(tarefa.atribuida_para) === eu);
+}
+const MSG_SO_DONO = 'Só o responsável pela tarefa, quem a criou ou o administrador pode fazer isso.';
+
+// Lê e confere os campos do formulário (criar e editar). Devolve { dados } ou { erro, status }.
+async function lerCamposTarefa(corpo) {
+  const c = corpo || {};
+  const titulo = texto(c.titulo, { rotulo: 'O título', max: LIMITE_TITULO_TAREFA, obrigatorio: true });
+  if (titulo.erro) return { erro: titulo.erro, status: 400 };
+  const descricao = texto(c.descricao, { rotulo: 'A descrição', max: LIMITE_DESCRICAO_TAREFA });
+  if (descricao.erro) return { erro: descricao.erro, status: 400 };
+  let prioridade = 'normal';
+  if (c.prioridade !== undefined && c.prioridade !== null && c.prioridade !== '') {
+    if (typeof c.prioridade !== 'string' || !PRIORIDADES_TAREFA.includes(c.prioridade)) return { erro: 'Prioridade inválida', status: 400 };
+    prioridade = c.prioridade;
+  }
+  const data = dataIso(c.data_vencimento, { rotulo: 'Data de vencimento' });
+  if (data.erro) return { erro: data.erro, status: 400 };
+  const ids = {};
+  for (const [chave, rotulo, tabela, extra, msg] of [
+    ['processo_id', 'Processo', 'tblproc', ' AND ativo = 1', 'Processo não encontrado'],
+    ['pasta_id', 'Pasta', 'tblpasta', '', 'Pasta não encontrada'],
+    ['prazo_id', 'Prazo', 'prazos_processo', '', 'Prazo não encontrado'],
+    ['atribuida_para', 'Responsável', 'usuarios', '', 'Responsável não encontrado'],
+    ['publicacao_id', 'Publicação', null, '', ''],
+  ]) {
+    const r = inteiroPositivo(c[chave], { rotulo });
+    if (r.erro) return { erro: r.erro, status: 400 };
+    if (r.valor && tabela) {
+      const [achou] = await pool.execute(`SELECT id FROM ${tabela} WHERE id = ?${extra}`, [r.valor]);
+      if (!achou.length) return { erro: msg, status: 404 };
+    }
+    ids[chave] = r.valor;
+  }
+  return { dados: { titulo: titulo.valor, descricao: descricao.valor, prioridade, venc: data.valor || hojeBrasilia(), ...ids } };
+}
 
 // Mesma regra de visibilidade da listagem: admin/super (nível <= 1) OU
 // permissão 'tarefas.ver_todos:visualizar'. Usada para barrar ações (concluir/
@@ -126,7 +179,7 @@ async function enviarEmailDaTarefa(tarefaId, atribuidaPara, autorNome, edicao) {
 // GET /api/tarefas — Lista tarefas com filtros
 async function listar(req, res) {
   try {
-    const { usuario_id, concluida, prioridade, processo_id, atrasadas, busca, numero_processo, data_de, data_ate, incluir_sem_data, pagina = 1, limite = 30 } = req.query;
+    const { usuario_id, concluida, prioridade, processo_id, atrasadas, busca, numero_processo, data_de, data_ate, incluir_sem_data } = req.query;
     const params = [];
     let where = 'WHERE 1=1';
 
@@ -218,14 +271,13 @@ async function listar(req, res) {
       params.push(req.usuario.id, etqSlot);
     }
 
-    const limitInt  = Math.min(parseInt(limite) || 30, 100);
-    const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
+    const { limite: limitInt, offset: offsetInt } = paginacao(req.query, { limitePadrao: 30, limiteMax: 100 });
 
     const [rows] = await pool.execute(
       `SELECT t.id, t.titulo, t.descricao, t.prioridade, t.data_vencimento,
               t.concluida, t.concluida_em, t.criado_em,
               t.pasta_id, t.processo_id, t.publicacao_id,
-              t.atribuida_para, t.notificar_conclusao,
+              t.atribuida_para, t.notificar_conclusao, t.criado_por,
               u.nome  AS atribuida_para_nome,
               uc.nome AS criado_por_nome,
               -- Vínculo: pasta direta
@@ -270,15 +322,16 @@ async function listar(req, res) {
 // POST /api/tarefas — Cria nova tarefa
 // Transação: INSERT da tarefa + registro de auditoria (tudo ou nada)
 async function criar(req, res) {
-  const { titulo, descricao, prioridade, processo_id, pasta_id, prazo_id,
-          atribuida_para, data_vencimento, publicacao_id, notificar_conclusao,
+  const { atribuida_para, notificar_conclusao,
           // Checkbox "📧 Enviar e-mail para <pessoa>": NÃO é gravado em lugar nenhum,
           // é só a ordem de disparar o e-mail agora (por isso não há coluna nova).
           enviar_email } = req.body;
 
-  if (!titulo) return erro(res, 'O título é obrigatório');
+  const lido = await lerCamposTarefa(req.body);
+  if (lido.erro) return erro(res, lido.erro, lido.status);
+  const { titulo, descricao, prioridade, processo_id, pasta_id, prazo_id, publicacao_id, venc } = lido.dados;
+  const responsavel = lido.dados.atribuida_para;
   // Toda tarefa tem vencimento: sem data no formulário, assume HOJE (regra do usuário).
-  const venc = data_vencimento || hojeBrasilia();
   if (bloqueiaAgendarPassado(req.usuario, venc)) {
     return erro(res, 'Apenas o administrador pode agendar tarefa com data anterior a hoje. Escolha uma data a partir de hoje.');
   }
@@ -293,11 +346,11 @@ async function criar(req, res) {
           atribuida_para, data_vencimento, criado_por, publicacao_id, notificar_conclusao)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        titulo.trim(), descricao || null,
-        prioridade || 'normal',
-        processo_id || null, pasta_id || null, prazo_id || null,
-        atribuida_para || null, venc,
-        req.usuario.id, publicacao_id || null, notificar_conclusao ? 1 : 0
+        titulo, descricao,
+        prioridade,
+        processo_id, pasta_id, prazo_id,
+        responsavel, venc,
+        req.usuario.id, publicacao_id, (notificar_conclusao && responsavel) ? 1 : 0
       ]
     );
 
@@ -308,8 +361,8 @@ async function criar(req, res) {
     sincronizarTarefaGoogle(result.insertId, {});
     // E-mail ao responsável (só se marcado no formulário). Depois do commit e sem
     // derrubar nada: se falhar, a tarefa continua salva e a tela mostra o motivo.
-    const email = (enviar_email && atribuida_para)
-      ? await enviarEmailDaTarefa(result.insertId, atribuida_para, req.usuario.nome, false)
+    const email = (enviar_email && responsavel)
+      ? await enviarEmailDaTarefa(result.insertId, responsavel, req.usuario.nome, false)
       : null;
     return sucesso(res, { id: result.insertId, email }, 'Tarefa criada com sucesso', 201);
   } catch (err) {
@@ -323,7 +376,8 @@ async function criar(req, res) {
 // PUT /api/tarefas/:id/concluir — Marca tarefa como concluída
 // Transação: UPDATE da tarefa + registro de auditoria (tudo ou nada)
 async function concluir(req, res) {
-  const { id } = req.params;
+  const id = lerIdTarefa(req);
+  if (!id) return naoEncontrado(res, 'Tarefa não encontrada');
   const [exists] = await pool.execute(
     'SELECT id, titulo, processo_id, criado_por, notificar_conclusao, atribuida_para FROM tarefas WHERE id = ?', [id]
   );
@@ -338,10 +392,15 @@ async function concluir(req, res) {
   try {
     await conn.beginTransaction();
 
-    await conn.execute(
-      'UPDATE tarefas SET concluida = 1, concluida_por = ?, concluida_em = NOW() WHERE id = ?',
+    // "AND concluida = 0": se outra tela já concluiu esta tarefa, nada é feito de novo (senão o andamento sairia duplicado).
+    const [upd] = await conn.execute(
+      'UPDATE tarefas SET concluida = 1, concluida_por = ?, concluida_em = NOW() WHERE id = ? AND COALESCE(concluida, 0) = 0',
       [req.usuario.id, id]
     );
+    if (!upd.affectedRows) {
+      await conn.rollback();
+      return erro(res, 'Esta tarefa já foi concluída. Atualize a tela.', 409);
+    }
     // Limpa a etiqueta PESSOAL de quem concluiu (não deixa sujeira). Só a dele;
     // etiquetas de outros usuários nesta tarefa permanecem (cada um só vê a sua).
     await conn.execute(
@@ -389,7 +448,8 @@ async function concluir(req, res) {
 // PUT /api/tarefas/:id/reabrir — Reabre uma tarefa concluída
 // Transação: UPDATE da tarefa + registro de auditoria (tudo ou nada)
 async function reabrir(req, res) {
-  const { id } = req.params;
+  const id = lerIdTarefa(req);
+  if (!id) return naoEncontrado(res, 'Tarefa não encontrada');
 
   const [exists] = await pool.execute(
     'SELECT id, atribuida_para, andamento_id FROM tarefas WHERE id = ?', [id]
@@ -403,10 +463,14 @@ async function reabrir(req, res) {
   try {
     await conn.beginTransaction();
 
-    await conn.execute(
-      'UPDATE tarefas SET concluida = 0, concluida_por = NULL, concluida_em = NULL, andamento_id = NULL WHERE id = ?',
+    const [upd] = await conn.execute(
+      'UPDATE tarefas SET concluida = 0, concluida_por = NULL, concluida_em = NULL, andamento_id = NULL WHERE id = ? AND concluida = 1',
       [id]
     );
+    if (!upd.affectedRows) {
+      await conn.rollback();
+      return erro(res, 'Esta tarefa já está aberta. Atualize a tela.', 409);
+    }
     // Desfaz o andamento lançado automaticamente quando a tarefa foi concluída.
     if (exists[0].andamento_id) {
       await conn.execute('DELETE FROM andamento_processual WHERE id = ?', [exists[0].andamento_id]);
@@ -430,10 +494,11 @@ async function reabrir(req, res) {
 // Combina: dados da tarefa (criação, conclusão) + log de auditoria (ações)
 async function buscarHistorico(req, res) {
   try {
-    const { id } = req.params;
+    const id = lerIdTarefa(req);
+    if (!id) return naoEncontrado(res, 'Tarefa não encontrada');
 
     const [rows] = await pool.execute(
-      `SELECT t.id, t.titulo, t.criado_em, t.concluida_em,
+      `SELECT t.id, t.titulo, t.criado_em, t.concluida_em, t.criado_por, t.atribuida_para,
               uc.nome AS criado_por_nome,
               uf.nome AS concluida_por_nome
        FROM tarefas t
@@ -444,6 +509,7 @@ async function buscarHistorico(req, res) {
     );
     if (!rows.length) return naoEncontrado(res, 'Tarefa não encontrada');
     const tarefa = rows[0];
+    if (!podeGerirTarefa(req, tarefa)) return erro(res, MSG_SO_DONO, 403);
 
     // Ações registradas na auditoria (concluir, reabrir, alterar, excluir)
     const [logs] = await pool.execute(
@@ -494,9 +560,11 @@ async function buscarHistorico(req, res) {
 // DELETE /api/tarefas/:id — Exclui tarefa
 // Transação: DELETE da tarefa + registro de auditoria (tudo ou nada)
 async function excluir(req, res) {
-  const { id } = req.params;
-  const [exists] = await pool.execute('SELECT id FROM tarefas WHERE id = ?', [id]);
+  const id = lerIdTarefa(req);
+  if (!id) return naoEncontrado(res, 'Tarefa não encontrada');
+  const [exists] = await pool.execute('SELECT id, criado_por, atribuida_para FROM tarefas WHERE id = ?', [id]);
   if (!exists.length) return naoEncontrado(res, 'Tarefa não encontrada');
+  if (!podeGerirTarefa(req, exists[0])) return erro(res, MSG_SO_DONO, 403);
 
   // Dados para o cancelamento no Google — capturados ANTES do DELETE (depois a linha some).
   const dadosGoogleExcluir = await dadosTarefaParaGoogle(id);
@@ -532,19 +600,24 @@ async function excluir(req, res) {
 // PUT /api/tarefas/:id — Atualiza tarefa
 // Transação: UPDATE da tarefa + registro de auditoria (tudo ou nada)
 async function atualizar(req, res) {
-  const { id } = req.params;
-  const { titulo, descricao, prioridade, atribuida_para, data_vencimento,
-          pasta_id, processo_id, notificar_conclusao,
+  const id = lerIdTarefa(req);
+  if (!id) return naoEncontrado(res, 'Tarefa não encontrada');
+  const { notificar_conclusao,
           enviar_email } = req.body;   // ver comentário em criar
 
+  // Atribuído ANTES da edição (para migrar de agenda se ele mudar).
+  const [antes] = await pool.execute('SELECT atribuida_para, criado_por FROM tarefas WHERE id = ?', [id]);
+  if (!antes.length) return naoEncontrado(res, 'Tarefa não encontrada');
+  if (!podeGerirTarefa(req, antes[0])) return erro(res, MSG_SO_DONO, 403);
+
+  const lido = await lerCamposTarefa(req.body);
+  if (lido.erro) return erro(res, lido.erro, lido.status);
+  const { titulo, descricao, prioridade, processo_id, pasta_id, venc } = lido.dados;
+  const atribuida_para = lido.dados.atribuida_para;
   // Sem data no formulário → HOJE (toda tarefa tem vencimento).
-  const venc = data_vencimento || hojeBrasilia();
   if (bloqueiaAgendarPassado(req.usuario, venc)) {
     return erro(res, 'Apenas o administrador pode agendar tarefa com data anterior a hoje. Escolha uma data a partir de hoje.');
   }
-
-  // Atribuído ANTES da edição (para migrar de agenda se ele mudar).
-  const [antes] = await pool.execute('SELECT atribuida_para FROM tarefas WHERE id = ?', [id]);
 
   const conn = await pool.getConnection();
   try {
@@ -554,9 +627,9 @@ async function atualizar(req, res) {
       `UPDATE tarefas SET titulo=?, descricao=?, prioridade=?,
        atribuida_para=?, data_vencimento=?, pasta_id=?, processo_id=?, notificar_conclusao=?
        WHERE id = ?`,
-      [titulo, descricao || null, prioridade || 'normal',
-       atribuida_para || null, venc,
-       pasta_id || null, processo_id || null,
+      [titulo, descricao, prioridade,
+       atribuida_para, venc,
+       pasta_id, processo_id,
        (notificar_conclusao && atribuida_para) ? 1 : 0, id]
     );
     await auditoria.registrar(req.usuario.id, 'tarefas', 'alterar', id, null, null, conn);
@@ -566,7 +639,7 @@ async function atualizar(req, res) {
     // sem atribuído (escritório) = id nulo e o envio é ignorado.
     const seq = Math.floor(Date.now() / 1000);
     const donoAntigo = antes[0] ? antes[0].atribuida_para : null;
-    const donoNovo   = atribuida_para ? parseInt(atribuida_para) : null;
+    const donoNovo   = atribuida_para || null;
     dadosTarefaParaGoogle(id).then(dados => {
       if (donoAntigo === donoNovo) {
         enviarTarefaParaGoogle(donoNovo, id, dados, false, seq);

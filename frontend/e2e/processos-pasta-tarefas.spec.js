@@ -22,7 +22,7 @@ const CNJ1 = '9400001-00.2026.5.15.0001';
 const CNJ2 = '9400002-00.2026.5.15.0001';
 const linha = (page, texto) => page.locator('tbody tr').filter({ hasText: texto });
 const filtroProcesso = (page) => page.getByLabel('Filtrar por processo', { exact: true });
-const mostrar = (page) => page.locator('select:has(option[value="atrasadas"])');   // o seletor "Mostrar" (ainda sem nome acessível — ver achados do C5)
+const mostrar = (page) => page.getByLabel('Mostrar', { exact: true });
 const doBanco = (titulo) => noBanco('SELECT *, DATE_FORMAT(data_vencimento, "%Y-%m-%d") AS venc FROM tarefas WHERE titulo = ?', [titulo]);
 
 let d;
@@ -171,18 +171,20 @@ test('@critical Nova tarefa com um processo escolhido: janela, obrigatórios, da
   expect((await doBanco('Tarefa C5 Descartada')).length).toBe(0);
 });
 
-test('@critical Nova tarefa estando em "Todos os processos": a tarefa precisa ficar ligada a esta pasta e aparecer na lista', async ({ page }) => {
+test('@critical "+ Nova Tarefa" só aparece com um processo escolhido (em "Todos os processos" a tarefa ficaria sem ligação com a pasta)', async ({ page }) => {
   await loginPelaTela(page);
   await abrirAba(page);                                                                                       // filtro "— Todos os processos —"
+  await expect(page.getByRole('button', { name: '+ Nova Tarefa' })).toHaveCount(0);
+  await filtroProcesso(page).selectOption({ label: CNJ2 });
+  await expect(page.getByRole('button', { name: '+ Nova Tarefa' })).toBeVisible();
   await page.getByRole('button', { name: '+ Nova Tarefa' }).click();
   const j = janela(page, 'Nova Tarefa');
-  await j.getByLabel('Título', { exact: true }).fill('Tarefa C5 Sem Processo');
+  await expect(j.getByPlaceholder('0000000-00.0000.0.00.0000')).toHaveValue(CNJ2);
+  await j.getByLabel('Título', { exact: true }).fill('Tarefa C5 Do Processo Dois');
   await j.getByRole('button', { name: 'Salvar Tarefa' }).click();
   await aviso(page, 'Tarefa criada!');
-  await expect.poll(async () => (await doBanco('Tarefa C5 Sem Processo')).length).toBe(1);
-  const t = (await doBanco('Tarefa C5 Sem Processo'))[0];
-  expect(t.processo_id || t.pasta_id, 'a tarefa criada dentro da pasta ficou sem nenhum vínculo com ela').toBeTruthy();
-  await expect(linha(page, 'Tarefa C5 Sem Processo'), 'a tarefa criada não aparece na aba da pasta').toBeVisible();
+  await expect(linha(page, 'Tarefa C5 Do Processo Dois')).toBeVisible();
+  expect((await doBanco('Tarefa C5 Do Processo Dois'))[0].processo_id).toBe(d.proc2);
 });
 
 test('@critical Editar tarefa: janela preenchida, salva as mudanças, histórico registra, tarefa concluída não tem Editar', async ({ page }) => {
@@ -287,7 +289,8 @@ test('@critical Permissões: quem só VISUALIZA tarefas não recebe "+ Nova Tare
   await expect(linha(page, 'Preparar Contestação')).toBeVisible();                                           // do escritório
   await expect(linha(page, 'Juntar Procuração')).toHaveCount(0);                                              // do "Usuário de Testes"
   await expect(page.getByLabel('Para', { exact: true })).toHaveCount(0);                                     // sem "ver todas" não há filtro por pessoa
-  await expect(page.getByRole('button', { name: '+ Nova Tarefa' })).toHaveCount(0);
+  await filtroProcesso(page).selectOption({ label: CNJ1 });
+  await expect(page.getByRole('button', { name: '+ Nova Tarefa' })).toHaveCount(0);                         // sem "cadastrar" não há botão
   await abrirMenuAcoes(page, linha(page, 'Preparar Contestação'));
   await expect(page.getByRole('button', { name: /Concluir/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /Editar/ })).toHaveCount(0);
@@ -295,15 +298,31 @@ test('@critical Permissões: quem só VISUALIZA tarefas não recebe "+ Nova Tare
   await expect(page.getByRole('button', { name: /Excluir/ })).toHaveCount(0);
 });
 
-test('Permissões: com alterar, histórico e excluir os itens aparecem; com "ver todas" aparece o filtro "Para" e as tarefas de todos', async ({ page }) => {
+test('Permissões: com alterar, histórico e excluir os itens aparecem só nas tarefas em que a pessoa é a responsável ou a criadora; com "ver todas" vê o filtro "Para" e as tarefas de todos', async ({ page }) => {
   const login = await criarUsuarioComPermissoes('tudo_tarefas', [['processos', null, 'visualizar'], ['tarefas', null, 'visualizar'], ['tarefas', null, 'cadastrar'], ['tarefas', null, 'alterar'], ['tarefas', null, 'excluir'], ['tarefas', null, 'historico'], ['tarefas', 'ver_todos', 'visualizar']]);
+  const eu = (await noBanco('SELECT id FROM usuarios WHERE login = ?', [login]))[0].id;
+  await noBanco("UPDATE tarefas SET atribuida_para = ? WHERE titulo = 'Preparar Contestação'", [eu]);           // responsável: ele
+  await noBanco("UPDATE tarefas SET criado_por = ? WHERE titulo = 'Organizar Documentos'", [eu]);               // criador: ele
   await loginPelaTela(page, login);
   await abrirAba(page);
   await expect(linha(page, 'Juntar Procuração')).toBeVisible();
   await expect(page.getByLabel('Para', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '+ Nova Tarefa' })).toHaveCount(0);                          // "Todos os processos"
+  await filtroProcesso(page).selectOption({ label: CNJ1 });
   await expect(page.getByRole('button', { name: '+ Nova Tarefa' })).toBeVisible();
-  await abrirMenuAcoes(page, linha(page, 'Preparar Contestação'));
+  for (const titulo of ['Preparar Contestação']) {                                                            // responsável
+    await abrirMenuAcoes(page, linha(page, titulo));
+    for (const nome of [/Concluir/, /Editar/, /Histórico/, /Excluir/]) await expect(page.getByRole('button', { name: nome })).toBeVisible();
+    await page.keyboard.press('Escape');
+  }
+  await filtroProcesso(page).selectOption({ label: CNJ2 });
+  await abrirMenuAcoes(page, linha(page, 'Organizar Documentos'));                                           // criador
   for (const nome of [/Concluir/, /Editar/, /Histórico/, /Excluir/]) await expect(page.getByRole('button', { name: nome })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await filtroProcesso(page).selectOption({ label: CNJ1 });
+  await abrirMenuAcoes(page, linha(page, 'Juntar Procuração'));                                              // de outra pessoa: só concluir
+  await expect(page.getByRole('button', { name: /Concluir/ })).toBeVisible();
+  for (const nome of [/Editar/, /Histórico/, /Excluir/]) await expect(page.getByRole('button', { name: nome })).toHaveCount(0);
 });
 
 test('@critical Mais de 100 tarefas no mesmo processo: a aba mostra todas (sem cortar em 100 em silêncio)', async ({ page }) => {

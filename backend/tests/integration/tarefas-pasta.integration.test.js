@@ -141,7 +141,9 @@ test('criar: usuário comum não agenda no passado (400); admin pode; avisar-con
   const bloq = await api(comum.token).put(`/api/tarefas/${ed}`).send({ titulo: 'Passado', processo_id: F.proc, data_vencimento: dia(-1) });
   assert.equal(bloq.status, 400, JSON.stringify(bloq.body));
   const sem = await nova({ notificar_conclusao: true });
-  assert.equal((await tarefa(sem)).notificar_conclusao, 1, 'documentando: criar grava notificar_conclusao mesmo sem responsável');
+  assert.equal((await tarefa(sem)).notificar_conclusao, 0, 'avisar-conclusão sem responsável não vale');
+  const com = await nova({ notificar_conclusao: true, atribuida_para: 1 });
+  assert.equal((await tarefa(com)).notificar_conclusao, 1);
 });
 
 test('editar: altera os campos, mantém o vínculo, registra auditoria; tarefa inexistente = 404; título vazio/inválido = 400; id não numérico = 400/404', async () => {
@@ -297,6 +299,32 @@ test('quem vê o quê: sem "ver todas" só as próprias e as do escritório; com
   t.checar([403, 404].includes((await api(ana.token).put(`/api/tarefas/${daBia}`).send({ titulo: 'Invadida', data_vencimento: dia(2) })).status), 'Ana editou tarefa da Bia');
   t.checar([403, 404].includes((await api(ana.token).delete(`/api/tarefas/${daBia}`).send()).status), 'Ana excluiu tarefa da Bia');
   await sql('DELETE FROM tarefas');
+  t.fim();
+});
+
+test('dono da tarefa: responsável, quem criou e o administrador editam/excluem/veem o histórico; nas tarefas do escritório, só quem criou e o administrador', async () => {
+  const t = juntar();
+  const basico = [['tarefas', null, 'visualizar'], ['tarefas', null, 'cadastrar'], ['tarefas', null, 'alterar'], ['tarefas', null, 'excluir'], ['tarefas', null, 'historico']];
+  const ana = await criarUsuario('ana2', 3, basico);
+  const bia = await criarUsuario('bia2', 3, basico);
+  const caio = await criarUsuario('caio2', 3, basico);
+  const corpoEd = (titulo) => ({ titulo, processo_id: F.proc, data_vencimento: dia(3) });
+  // Ana cria uma tarefa para a Bia: Ana (criou), Bia (responsável) e o admin podem; Caio não
+  const paraBia = await nova({ titulo: 'Ana para Bia', atribuida_para: bia.id }, ana.token);
+  t.checar((await api(caio.token).put(`/api/tarefas/${paraBia}`).send(corpoEd('Caio'))).status === 403, 'Caio editou');
+  t.checar((await api(caio.token).get(`/api/tarefas/${paraBia}/historico`)).status === 403, 'Caio viu o histórico');
+  t.checar((await api(caio.token).delete(`/api/tarefas/${paraBia}`).send()).status === 403, 'Caio excluiu');
+  t.checar((await api(ana.token).put(`/api/tarefas/${paraBia}`).send({ ...corpoEd('Ana editou'), atribuida_para: bia.id })).status === 200, 'quem criou não editou');
+  t.checar((await api(bia.token).put(`/api/tarefas/${paraBia}`).send({ ...corpoEd('Bia editou'), atribuida_para: bia.id })).status === 200, 'o responsável não editou');
+  t.checar((await api(admin).put(`/api/tarefas/${paraBia}`).send({ ...corpoEd('Admin editou'), atribuida_para: bia.id })).status === 200, 'o admin não editou');
+  t.checar((await api(bia.token).get(`/api/tarefas/${paraBia}/historico`)).status === 200, 'o responsável não viu o histórico');
+  t.checar((await api(bia.token).delete(`/api/tarefas/${paraBia}`).send()).status === 200, 'o responsável não excluiu');
+  // tarefa do escritório criada pela Ana
+  const esc = await nova({ titulo: 'Escritório da Ana' }, ana.token);
+  t.checar((await api(bia.token).put(`/api/tarefas/${esc}`).send(corpoEd('Bia'))).status === 403, 'Bia editou tarefa do escritório de outra pessoa');
+  t.checar((await api(bia.token).delete(`/api/tarefas/${esc}`).send()).status === 403, 'Bia excluiu tarefa do escritório de outra pessoa');
+  t.checar((await api(bia.token).put(`/api/tarefas/${esc}/concluir`).send()).status === 200, 'qualquer um conclui tarefa do escritório');
+  t.checar((await api(ana.token).delete(`/api/tarefas/${esc}`).send()).status === 200, 'quem criou não excluiu a do escritório');
   t.fim();
 });
 

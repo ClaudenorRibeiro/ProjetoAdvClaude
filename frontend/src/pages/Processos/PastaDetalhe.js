@@ -397,6 +397,9 @@ export default function PastaDetalhe() {
     });
   }
 
+  // Editar, ver o histórico e excluir: só o responsável, quem criou ou o administrador (o servidor confere também).
+  const souDonoTarefa = (t) => ehAdmin || Number(t.criado_por) === Number(usuario?.id) || (t.atribuida_para != null && Number(t.atribuida_para) === Number(usuario?.id));
+
   function excluirTarefa(t) {
     setConfirmar({
       titulo: 'Excluir Tarefa',
@@ -415,12 +418,21 @@ export default function PastaDetalhe() {
     const minhaSeq = ++tarefasSeqRef.current;
     const ids = idsParaBuscar();
     try {
-      const resultados = await Promise.all(
-        ids.map(pid => tarefasAPI.listar({ processo_id: pid, ...filtrosTarefa, limite: 100 }))
-      );
+      // O servidor entrega no máximo 100 por vez: busca página por página até trazer TODAS as tarefas de cada processo.
+      const buscarTodas = async (pid) => {
+        const acumulado = [];
+        for (let pagina = 1; pagina <= 100; pagina++) {
+          const r = await tarefasAPI.listar({ processo_id: pid, ...filtrosTarefa, limite: 100, pagina });
+          if (!r.data.ok) break;
+          const { registros, total } = r.data.dados;
+          acumulado.push(...registros);
+          if (!registros.length || acumulado.length >= Number(total)) break;
+        }
+        return acumulado;
+      };
+      const resultados = await Promise.all(ids.map(buscarTodas));
       if (minhaSeq !== tarefasSeqRef.current) return; // já saiu outra busca de tarefas depois desta
-      const todos = resultados.flatMap(r => r.data.ok ? r.data.dados.registros : []);
-      setTarefas(todos);
+      setTarefas(resultados.flat());
     } catch {}
   }
 
@@ -434,7 +446,10 @@ export default function PastaDetalhe() {
         toast.success('Tarefa concluída!');
       }
       carregarTarefas();
-    } catch { toast.error('Erro ao alterar tarefa'); }
+    } catch (err) {
+      toast.error(err.response?.data?.mensagem || 'Erro ao alterar tarefa');
+      carregarTarefas();                                                          // outra tela pode ter mudado a tarefa: mostra o estado de agora
+    }
   }
 
   async function carregarAudiencias() {
@@ -1305,7 +1320,7 @@ export default function PastaDetalhe() {
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">Mostrar</label>
                 {/* "Atrasadas" é atalho: só as pendentes já vencidas (o backend aplica a regra). */}
-                <select className="form-control"
+                <select aria-label="Mostrar" className="form-control"
                   value={filtrosTarefa.atrasadas === '1' ? 'atrasadas' : filtrosTarefa.concluida}
                   onChange={e => {
                     const v = e.target.value;
@@ -1352,10 +1367,13 @@ export default function PastaDetalhe() {
                 onClick={() => setFiltrosTarefa({ concluida: '0', prioridade: '', atrasadas: '', usuario_id: '', data_de: '', data_ate: '' })}>
                 ✕ Limpar filtros
               </button>
-              <button className="btn btn-primary"
-                onClick={() => { setTarefaEditando(null); setModalTarefa(true); }}>
-                + Nova Tarefa
-              </button>
+              {/* Sem um processo escolhido não há onde ligar a tarefa (ela viraria "Rotina Interna" e sumiria desta aba). */}
+              {processoSelecionado && temPermissao('tarefas', 'cadastrar') && (
+                <button className="btn btn-primary"
+                  onClick={() => { setTarefaEditando(null); setModalTarefa(true); }}>
+                  + Nova Tarefa
+                </button>
+              )}
             </div>
             <div className="tabela-wrapper">
               <table className="tabela">
@@ -1369,7 +1387,7 @@ export default function PastaDetalhe() {
                   {tarefas.map(t => {
                     const PRIO_COR = { urgente: 'badge-vermelho', normal: 'badge-laranja', baixa: 'badge-verde' };
                     return (
-                      <tr key={t.id} style={t.concluida ? { opacity: 0.6 } : {}}>
+                      <tr key={t.id}>
                         <td>
                           <strong style={t.concluida ? { textDecoration: 'line-through' } : {}}>
                             {t.titulo}
@@ -1402,13 +1420,13 @@ export default function PastaDetalhe() {
                             { label: t.concluida ? 'Reabrir' : 'Concluir', icone: t.concluida ? '↩️' : '✅',
                               onClick: () => toggleConcluirTarefa(t) },
                             { label: 'Editar', icone: '✏️',
-                              oculto: !(temPermissao('tarefas','alterar') && !t.concluida),
+                              oculto: !(temPermissao('tarefas','alterar') && !t.concluida && souDonoTarefa(t)),
                               onClick: () => { setTarefaEditando(t); setModalTarefa(true); } },
                             { label: 'Histórico', icone: '📋',
-                              oculto: !temPermissao('tarefas','historico'),
+                              oculto: !(temPermissao('tarefas','historico') && souDonoTarefa(t)),
                               onClick: () => setTarefaHistorico(t) },
                             { label: 'Excluir', icone: '🗑️', perigo: true,
-                              oculto: !temPermissao('tarefas','excluir'),
+                              oculto: !(temPermissao('tarefas','excluir') && souDonoTarefa(t)),
                               onClick: () => excluirTarefa(t) },
                           ]} />
                         </td>

@@ -122,8 +122,14 @@ export default function Tarefas() {
         toast.success('Tarefa concluída!');
       }
       carregar();
-    } catch { toast.error('Erro ao alterar tarefa'); }
+    } catch (err) {
+      toast.error(err.response?.data?.mensagem || 'Erro ao alterar tarefa');
+      carregar();
+    }
   }
+
+  // Editar, ver o histórico e excluir: só o responsável, quem criou ou o administrador (o servidor confere também).
+  const souDono = (t) => ehAdmin || Number(t.criado_por) === Number(usuario?.id) || (t.atribuida_para != null && Number(t.atribuida_para) === Number(usuario?.id));
 
   function confirmarExcluir(tarefa) {
     setConfirmar({
@@ -335,16 +341,16 @@ export default function Tarefas() {
                         { label: t.concluida ? 'Reabrir' : 'Concluir', icone: t.concluida ? '↩️' : '✅',
                           onClick: () => toggleConcluir(t) },
                         { label: 'Editar', icone: '✏️',
-                          oculto: !(temPermissao('tarefas','alterar') && !t.concluida),
+                          oculto: !(temPermissao('tarefas','alterar') && !t.concluida && souDono(t)),
                           onClick: () => { setEditando(t); setModalAberto(true); } },
                         { label: 'Histórico', icone: '📋',
-                          oculto: !temPermissao('tarefas','historico'),
+                          oculto: !(temPermissao('tarefas','historico') && souDono(t)),
                           onClick: () => setTarefaHistorico(t) },
                         { label: 'Ver publicação de origem', icone: '📄',
                           oculto: !t.publicacao_id || !temPermissao('publicacoes','visualizar'),
                           onClick: () => setTarefaVerPub(t.publicacao_id) },
                         { label: 'Excluir', icone: '🗑️', perigo: true,
-                          oculto: !temPermissao('tarefas','excluir'),
+                          oculto: !(temPermissao('tarefas','excluir') && souDono(t)),
                           onClick: () => confirmarExcluir(t) },
                       ]} />
                     </td>
