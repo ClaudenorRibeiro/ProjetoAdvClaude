@@ -2205,6 +2205,7 @@ export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtuali
                 {/* Busca: some com listas curtas de propósito? Não — sempre visível, custa
                     nada e ajuda até com poucos itens; quem mais precisa é Fóruns/Varas (150+). */}
                 <input
+                  aria-label={`Buscar em ${cfg.titulo}`}
                   className="form-control"
                   style={{ fontSize: '13px', marginBottom: '8px' }}
                   placeholder={`Buscar em ${itens.length} ${itens.length === 1 ? 'item' : 'itens'}...`}
@@ -2253,14 +2254,14 @@ export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtuali
                     </span>
                     <div style={{ display: 'flex', gap: '6px' }}>
                       {podeAlterar && (
-                        <button className="btn btn-outline"
-                          style={{ fontSize: '11px', padding: '3px 8px', color: '#2d6be4', borderColor: '#2d6be4' }}
+                        <button className="btn btn-outline" aria-label={`Editar ${item.nome}`}
+                          style={{ fontSize: '11px', padding: '3px 8px', color: '#1d4ed8', borderColor: '#1d4ed8' }}
                           onClick={() => iniciarEdicao(item)}>
                           Editar
                         </button>
                       )}
                       {podeExcluir && (
-                        <button className="btn btn-danger"
+                        <button className="btn btn-danger" aria-label={`Excluir ${item.nome}`}
                           style={{ fontSize: '11px', padding: '3px 8px' }}
                           onClick={() => excluir(item)}>
                           ✕
@@ -2296,14 +2297,15 @@ export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtuali
                         <input type="checkbox" checked={!!form[c.key]}
                           onChange={e => setForm(f => ({ ...f, [c.key]: e.target.checked }))} />
                         {c.label}
-                        {c.hint && <span style={{ color: '#aaa', fontWeight: '400', marginLeft: '4px' }}>({c.hint})</span>}
+                        {c.hint && <span style={{ color: '#5b6472', fontWeight: '400', marginLeft: '4px' }}>({c.hint})</span>}
                       </label>
                     ) : (<>
-                    <label className="form-label" style={{ fontSize: '11px' }}>
+                    <label className="form-label" htmlFor={`aux-${tipo}-${c.key}`} style={{ fontSize: '11px' }}>
                       {c.label}{c.required ? ' *' : ''}
-                      {c.hint && <span style={{ color: '#aaa', fontWeight: '400', marginLeft: '4px' }}>({c.hint})</span>}
+                      {c.hint && <span style={{ color: '#5b6472', fontWeight: '400', marginLeft: '4px' }}>({c.hint})</span>}
                     </label>
                     <input
+                      id={`aux-${tipo}-${c.key}`}
                       ref={el => (camposRef.current[c.key] = el)}
                       className="form-control"
                       style={{ fontSize: '13px', ...(c.style || {}) }}

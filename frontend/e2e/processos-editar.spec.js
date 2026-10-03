@@ -18,7 +18,7 @@ async function semViolacoes(page, rotulo) {
 const aviso = (page, texto) => expect(page.getByText(texto).first()).toBeVisible();
 const erroDeTela = (page) => expect(page.getByText('Não foi possível carregar esta tela')).toHaveCount(0);
 const janela = (page) => page.locator('.modal-box').first();
-const grupo = (page, titulo) => janela(page).locator('.form-group').filter({ hasText: titulo }).first();
+const grupo = (page, titulo) => janela(page).locator('.form-group').filter({ has: page.locator('label', { hasText: titulo }) }).first();   // pelo rótulo (não pelo texto de opções de listas)
 const rotulo = (page, nome) => janela(page).getByLabel(nome, { exact: true });          // campos pelo nome acessível (igualdade exata)
 const motivoJanela = (page) => page.locator('.modal-box').filter({ has: page.getByRole('heading', { name: 'Motivo da mudança de status' }) }).last();
 const TITULO = 'Alberto Autor E2E X Empresa Alfa E2E Ltda';

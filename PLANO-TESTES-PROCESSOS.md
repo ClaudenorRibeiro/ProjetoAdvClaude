@@ -57,7 +57,7 @@ BEGIN/COMMIT/ROLLBACK; nenhum registro órfão ao excluir; nomes de tabela em mi
 - [x] **B1 (concluído em 02/10/2026)** Tela: busca, filtros, ordenação, paginação, etiquetas, menu de cada linha, "Abrir pasta", estados vazio/erro.
 - [x] **B2** Janela "Novo processo": todos os campos, assuntos, OABs, partes, cadastro rápido de parte, CEP, validações.
 - [x] **B3** "Editar processo" (e modo Detalhes, somente leitura — todo campo travado), "Motivo do status", "Histórico".
-- [ ] **B4** Excluir processo, renumerar, "Gerenciar auxiliares" (fóruns, varas, tipos, status, instâncias, assuntos).
+- [x] **B4** Excluir processo, renumerar, "Gerenciar auxiliares" (fóruns, varas, tipos, status, instâncias, assuntos).
 
 ### Fase C — Tela da pasta (`PastaDetalhe.js`, aba por aba)
 - [ ] **C1** Cabeçalho e partes: voltar, editar número da pasta, painel de partes e contatos (e-mail, SMS, WhatsApp,
@@ -186,7 +186,7 @@ Teste: `frontend/e2e/processos-editar.spec.js` (10 testes: Detalhes, Editar, par
 3. O motivo do status é gravado (`logs_auditoria.dados_novos`), mas NADA no código lê/mostra `dados_novos`: o Histórico mostra só "Mudou status — Processo <nº>", sem status anterior/novo nem o motivo, embora a janela diga "O motivo ficará salvo no histórico/auditoria do processo".
 4. Observações (não são erro): no Editar o réu começa em "Física" (no Novo Processo começa em "Jurídica"); os seletores Física/Jurídica do Editar têm o mesmo nome acessível do grupo ("Autores — polo ativo"…).
 
-### Achados do B4 (03/10/2026) — AGUARDANDO decisão do usuário (nada corrigido ainda)
+### Achados do B4 (03/10/2026) — CORRIGIDOS com autorização do usuário (itens 1–5)
 Testes: `frontend/e2e/processos-excluir-renumerar.spec.js` (8) e `frontend/e2e/processos-auxiliares-ui.spec.js` (11). Passam: excluir processo (confirmação, bloqueio por andamento, erro, permissão), renumerar (exceto a acessibilidade do campo), "Encerra o processo", erro/ESC/fechar e as permissões de editar/excluir/assuntos; falham só na acessibilidade:
 1. Janelas "Gerenciar" (Tipos, Status, Instâncias, Assuntos, Fóruns, Varas): TODO campo do formulário e a caixa de busca sem rótulo associado (o `<label>` não está ligado ao campo) — regra `label`.
 2. Dicas em cinza #aaa (2,2:1) nessas janelas: "Abreviação (Exibida nos dropdowns…)", "Complemento End. (Ex: 4º andar…)", caixa "Encerra o processo (ex.: Arquivado…)". Também ainda existem `#aaa` em "Sem processos" etc. (já tratado) — conferir.
@@ -196,7 +196,7 @@ Testes: `frontend/e2e/processos-excluir-renumerar.spec.js` (8) e `frontend/e2e/p
 
 ## Estado atual
 
-Plano criado em 02/10/2026. **B3 concluído (10 testes). Próximo passo: B4** (excluir processo, renumerar pasta, janelas de gerenciar auxiliares — incluindo dicas em #aaa). (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
+Plano criado em 02/10/2026. **B4 concluído (8 + 11 testes). Próximo passo: C1** (pasta: cabeçalho, partes, aba Processos; as demais abas C2–C8). (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
 `rascunho` para saber o que já foi feito (marque `[x]` acima ao concluir cada passo).
 
 Nota B2: o ESC que fecha janelas está em DOIS lugares — `hooks/useEscFechar.js` e um ouvinte global em `App.js`; ambos usam `escEhDeListaAberta` (lista aberta = ESC só fecha a lista). Textos de aviso em `#aaa` ainda existem em `Processos.js` (dicas das janelas de auxiliares) — tratar no B4.

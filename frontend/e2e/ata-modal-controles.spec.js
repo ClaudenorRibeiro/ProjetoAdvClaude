@@ -32,6 +32,7 @@ async function abrirAta(page, request, horario, preparo) {
 const marcar = (ata, nome) => ata.getByRole('checkbox', { name: nome, exact: true });
 const aviso = (ata, texto) => expect(ata.getByText(texto)).toBeVisible();
 async function semViolacoes(page, rotulo) {
+  await expect(page.locator('.Toastify__toast')).toHaveCount(0, { timeout: 10000 });   // um aviso ainda sumindo (transparente) é lido com contraste falso
   const v = await violacoesGraves(page);
   expect(v, `acessibilidade — ${rotulo}: ${JSON.stringify(v, null, 1)}`).toEqual([]);
 }

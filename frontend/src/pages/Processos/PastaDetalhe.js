@@ -707,7 +707,7 @@ export default function PastaDetalhe() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ fontSize: '13px', fontWeight: '600', color: '#555' }}>Pasta</span>
                   <input
-                    type="number" min="1"
+                    type="number" min="1" aria-label="Novo número da pasta"
                     className="form-control"
                     style={{ width: '80px', fontSize: '13px', padding: '2px 8px', height: '28px' }}
                     value={novaNrPasta}

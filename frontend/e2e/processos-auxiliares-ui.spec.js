@@ -127,18 +127,18 @@ for (const c of SIMPLES) {
     expect(await noBanco(`SELECT id FROM ${c.tabela} WHERE nome = 'Aux Ui Renomeado'`)).toHaveLength(1);
     await esperarSemAviso(page);
     // excluir: Cancelar e ESC não apagam; confirmar apaga (some da lista, fica ativo=0 e há auditoria)
-    await linhaItem(jan, 'Aux Ui Segundo').getByRole('button', { name: '✕' }).click();
+    await linhaItem(jan, 'Aux Ui Segundo').getByRole('button', { name: /^Excluir / }).click();
     await expect(confirmacao(page)).toBeVisible();
     await expect(confirmacao(page).getByText('Excluir "Aux Ui Segundo"? Esta ação não pode ser desfeita.')).toBeVisible();
     await semViolacoes(page, `confirmação de exclusão em ${c.titulo}`);
     await confirmacao(page).getByRole('button', { name: 'Cancelar' }).click();
     await expect(confirmacao(page)).toHaveCount(0);
-    await linhaItem(jan, 'Aux Ui Segundo').getByRole('button', { name: '✕' }).click();
+    await linhaItem(jan, 'Aux Ui Segundo').getByRole('button', { name: /^Excluir / }).click();
     await page.keyboard.press('Escape');
     await expect(confirmacao(page)).toHaveCount(0);
     await expect(jan).toBeVisible();                                                                // ESC fechou só a confirmação
     expect(await noBanco(`SELECT ativo FROM ${c.tabela} WHERE nome = 'Aux Ui Segundo'`)).toEqual([{ ativo: 1 }]);
-    await linhaItem(jan, 'Aux Ui Segundo').getByRole('button', { name: '✕' }).click();
+    await linhaItem(jan, 'Aux Ui Segundo').getByRole('button', { name: /^Excluir / }).click();
     await confirmacao(page).getByRole('button', { name: /Excluir/ }).click();
     await aviso(page, 'Excluído com sucesso!');
     await expect(jan.getByText('Aux Ui Segundo', { exact: true })).toHaveCount(0);
@@ -149,7 +149,7 @@ for (const c of SIMPLES) {
     const pasta = (await noBanco('INSERT INTO tblpasta (numPasta, criado_por) VALUES (7301, 1)')).insertId;
     await c.usar(idUso, pasta);
     const jan2 = await abrirAux(page, c);
-    await linhaItem(jan2, 'Aux Ui Em Uso').getByRole('button', { name: '✕' }).click();
+    await linhaItem(jan2, 'Aux Ui Em Uso').getByRole('button', { name: /^Excluir / }).click();
     await confirmacao(page).getByRole('button', { name: /Excluir/ }).click();
     await aviso(page, c.msgUso);
     await expect(confirmacao(page)).toBeVisible();                                                   // fica aberta para ler o motivo
@@ -243,14 +243,14 @@ test('@critical Gerenciar Fóruns: todos os campos, CEP (acha, não acha, incomp
   const idForum = (await noBanco("SELECT id FROM tblforum WHERE nome = 'Aux Ui Forum Central'"))[0].id;
   await noBanco("INSERT INTO tblvara (forum_id, nome, ativo) VALUES (?, 'Aux Ui Vara Do Forum', 1)", [idForum]);
   const jan2 = await abrirAux(page, FORUNS);
-  await linhaItem(jan2, 'AUX/FC').getByRole('button', { name: '✕' }).click();
+  await linhaItem(jan2, 'AUX/FC').getByRole('button', { name: /^Excluir / }).click();
   await confirmacao(page).getByRole('button', { name: /Excluir/ }).click();
   await aviso(page, 'Não é possível excluir este fórum — ele possui 1 vara(s) vinculada(s). Exclua as varas primeiro.');
   await confirmacao(page).getByRole('button', { name: 'Cancelar' }).click();
   expect((await noBanco('SELECT ativo FROM tblforum WHERE id = ?', [idForum]))[0].ativo).toBe(1);
   await noBanco('DELETE FROM tblvara WHERE nome = ?', ['Aux Ui Vara Do Forum']);
   const jan3 = await abrirAux(page, FORUNS);
-  await linhaItem(jan3, 'AUX/FC').getByRole('button', { name: '✕' }).click();
+  await linhaItem(jan3, 'AUX/FC').getByRole('button', { name: /^Excluir / }).click();
   await confirmacao(page).getByRole('button', { name: /Excluir/ }).click();
   await aviso(page, 'Excluído com sucesso!');
   expect((await noBanco('SELECT ativo FROM tblforum WHERE id = ?', [idForum]))[0].ativo).toBe(0);
@@ -293,14 +293,14 @@ test('@critical Gerenciar Varas: exige o fórum, grava todos os campos, edita, m
   // vara com processo: exclusão bloqueada
   const pasta = (await noBanco('INSERT INTO tblpasta (numPasta, criado_por) VALUES (7301, 1)')).insertId;
   await noBanco("INSERT INTO tblproc (pasta_id, numProc, NomeTituloProc, tipo_id, status_id, vara_id, ativo, criado_por) VALUES (?, '9300001-00.2026.5.15.0001', 'EM USO AUX', 1, 1, ?, 1, 1)", [pasta, v.id]);
-  await linhaItem(jan, 'AUX/V1').getByRole('button', { name: '✕' }).click();
+  await linhaItem(jan, 'AUX/V1').getByRole('button', { name: /^Excluir / }).click();
   await confirmacao(page).getByRole('button', { name: /Excluir/ }).click();
   await aviso(page, 'Não é possível excluir esta vara — ela possui 1 processo(s) vinculado(s). Desvincule os processos antes de excluir a vara.');
   await confirmacao(page).getByRole('button', { name: 'Cancelar' }).click();
   expect((await noBanco('SELECT ativo FROM tblvara WHERE id = ?', [v.id]))[0].ativo).toBe(1);
   // sem o processo, a vara é excluída
   await noBanco("DELETE FROM tblproc WHERE numProc = '9300001-00.2026.5.15.0001'");
-  await linhaItem(jan, 'AUX/V1').getByRole('button', { name: '✕' }).click();
+  await linhaItem(jan, 'AUX/V1').getByRole('button', { name: /^Excluir / }).click();
   await confirmacao(page).getByRole('button', { name: /Excluir/ }).click();
   await aviso(page, 'Excluído com sucesso!');
   expect((await noBanco('SELECT ativo FROM tblvara WHERE id = ?', [v.id]))[0].ativo).toBe(0);
@@ -346,7 +346,7 @@ test('@critical Gerenciar auxiliares: só cadastrar → formulário sem Editar/�
   await expect(jan.getByRole('button', { name: 'Adicionar' })).toBeVisible();
   await expect(linhaItem(jan, 'Aux Ui Tipo Fixo')).toBeVisible();
   await expect(linhaItem(jan, 'Aux Ui Tipo Fixo').getByRole('button', { name: 'Editar' })).toHaveCount(0);
-  await expect(linhaItem(jan, 'Aux Ui Tipo Fixo').getByRole('button', { name: '✕' })).toHaveCount(0);
+  await expect(linhaItem(jan, 'Aux Ui Tipo Fixo').getByRole('button', { name: /^Excluir / })).toHaveCount(0);
   await expect(page.locator('.modal-box').first().getByRole('button', { name: 'Gerenciar assuntos', exact: true })).toHaveCount(0);   // assunto tem permissão própria
   await semViolacoes(page, 'janela Tipos para quem só cadastra');
 });
@@ -357,15 +357,15 @@ test('@critical Gerenciar auxiliares: com "alterar" aparece o Editar (e o formul
   await loginPelaTela(page, login);
   const jan = await abrirAux(page, SIMPLES[0]);
   await expect(linhaItem(jan, 'Aux Ui Tipo Fixo').getByRole('button', { name: 'Editar' })).toBeVisible();
-  await expect(linhaItem(jan, 'Aux Ui Tipo Fixo').getByRole('button', { name: '✕' })).toBeVisible();
+  await expect(linhaItem(jan, 'Aux Ui Tipo Fixo').getByRole('button', { name: /^Excluir / })).toBeVisible();
 });
 
 test('@critical Gerenciar Assuntos: com a permissão própria de assuntos aparece o "…" e o Editar, sem o ✕ se não puder excluir', async ({ page }) => {
   await noBanco("INSERT INTO tblassuntoproc (nome, ativo) VALUES ('Aux Ui Assunto Fixo', 1)");
-  const login = await criarUsuarioComPermissoes('aux_assuntos_altera', [['processos', null, 'visualizar'], ['processos', null, 'cadastrar'], ['processos', 'assuntos', 'alterar']]);
+  const login = await criarUsuarioComPermissoes('aux_assunto_altera', [['processos', null, 'visualizar'], ['processos', null, 'cadastrar'], ['processos', 'assuntos', 'alterar']]);
   await loginPelaTela(page, login);
   const jan = await abrirAux(page, SIMPLES[3]);
   await expect(linhaItem(jan, 'Aux Ui Assunto Fixo').getByRole('button', { name: 'Editar' })).toBeVisible();
-  await expect(linhaItem(jan, 'Aux Ui Assunto Fixo').getByRole('button', { name: '✕' })).toHaveCount(0);
+  await expect(linhaItem(jan, 'Aux Ui Assunto Fixo').getByRole('button', { name: /^Excluir / })).toHaveCount(0);
   await expect(jan.getByRole('button', { name: 'Adicionar' })).toHaveCount(0);                        // sem "cadastrar" de assuntos não há formulário de novo item
 });
