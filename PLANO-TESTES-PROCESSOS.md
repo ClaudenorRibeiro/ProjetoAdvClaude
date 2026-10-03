@@ -66,7 +66,7 @@ BEGIN/COMMIT/ROLLBACK; nenhum registro órfão ao excluir; nomes de tabela em mi
 - [x] **C3** Aba **Andamentos** (janela de andamento).
 - [x] **C4** Aba **Prazos** (novo, editar, cancelar, concluir/fazer/liberar, histórico).
 - [x] **C5** Aba **Tarefas** (nova, editar, concluir, histórico).
-- [ ] **C6** Aba **Audiências** (nova, editar, cancelar, remarcar, histórico, resultado; ata já coberta) — inclui o
+- [x] **C6** Aba **Audiências** (nova, editar, cancelar, remarcar, histórico, resultado; ata já coberta) — inclui o
       problema já confirmado da data (ver "Achados").
 - [ ] **C7** Aba **Perícias** (nova, editar, cancelar, remarcar, marcar realizada/remarcada, histórico).
 - [ ] **C8** Aba **Financeiro** da pasta (blocos reaproveitados do Financeiro: lançamento, acordo, histórico).
@@ -243,9 +243,12 @@ Observações: a aba busca no máximo 50 prazos por processo (limite fixo, sem a
 ### Achados do C5 (03/10/2026) — CORRIGIDOS com autorização do usuário
 Servidor: título só com espaços/número/lista/>300 (criava vazio ou erro interno); descrição e prioridade inválidas aceitas; data impossível/texto, processo/responsável em texto e processo excluído; editar tarefa inexistente dizia "atualizada", aceitava título vazio e não aparava espaços; concluir duas vezes duplicava o andamento (e sobrava solto ao reabrir; agora responde 409); página negativa dava erro interno. Regra nova (decisão do usuário): editar, excluir e ver o histórico só o responsável, quem criou ou o administrador (tarefa do escritório: só quem criou e o administrador); concluir/reabrir continuam abertos. Tela: "Mostrar" sem nome acessível; linha esmaecida de tarefa concluída (contraste baixo e menu ⋮ coberto pela linha de baixo — sem esmaecer agora); "+ Nova Tarefa" só com processo escolhido e permissão de cadastrar (o mesmo vale: em "Todos os processos" a tarefa ficava sem vínculo); mais de 100 tarefas por processo (agora busca todas as páginas); botões Editar/Histórico/Excluir seguem a regra do dono (aba da pasta e tela Tarefas). Decisão do usuário: NÃO mexer no hover global dos botões cinza (contraste 3,6 só com o mouse parado em cima).
 
+### Achados do C6 (03/10/2026) — CORRIGIDOS com autorização do usuário (limites: motivo 300, observação 2.000)
+Servidor (criar/editar/remarcar/cancelar/excluir/histórico/listar): data impossível/texto/lista/número, hora "25:00"/texto/número, processo em texto ou já excluído, observação/plataforma (100)/link (500) que não eram texto ou eram longos demais, responsável sem formato, lista de testemunhas inválida e vara inexistente (erro interno ou gravação indevida → mensagem clara); motivo de cancelar/remarcar aceitava número/lista e texto enorme (agora ≤300); salvar sem mudar gravava "observações mudou" por causa dos espaços; histórico de audiência inexistente/id em texto devolvia lista vazia (agora 404); página negativa dava erro interno; "só administrador pode excluir" respondia 400 (agora 403). Tela: data da audiência agora pode ser DIGITADA (dd/mm/aaaa, máscara, calendário ao lado; também na perícia da ata — `SeletorData`); janela Detalhes sem acesso por teclado à área rolável; aviso claro sem permissão de ver audiências; a aba busca todas as páginas (antes cortava em 50).
+
 ## Estado atual
 
-Plano criado em 02/10/2026. **C5 concluído (10 de tela + 16 de servidor). Próximo passo: C6** (aba Audiências — inclui o problema já confirmado da data no modal de audiência, `SeletorData` só no calendário —; depois C7, C8, D1). Lembrar as pendências P1–P8 e a varredura da ficha da pessoa ao fechar a Fase D. Veja o `git log` do
+Plano criado em 02/10/2026. **C6 concluído (15 de tela + 11 de servidor). Próximo passo: C7** (aba Perícias; depois C8, D1). A data da perícia na ata usa o mesmo `SeletorData` (já digitável). Lembrar as pendências P1–P8 e a varredura da ficha da pessoa ao fechar a Fase D. Veja o `git log` do
 `rascunho` para saber o que já foi feito (marque `[x]` acima ao concluir cada passo).
 
 Nota B2: o ESC que fecha janelas está em DOIS lugares — `hooks/useEscFechar.js` e um ouvinte global em `App.js`; ambos usam `escEhDeListaAberta` (lista aberta = ESC só fecha a lista). Textos de aviso em `#aaa` ainda existem em `Processos.js` (dicas das janelas de auxiliares) — tratar no B4.

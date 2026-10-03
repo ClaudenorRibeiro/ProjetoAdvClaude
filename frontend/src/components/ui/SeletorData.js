@@ -12,6 +12,29 @@ export default function SeletorData({ value, onChange, disabled = false, ariaLab
   const [aberto, setAberto] = useState(false);
   const [mes, setMes] = useState(new Date());
   const ref = useRef(null);
+  // O que a pessoa está digitando (dd/mm/aaaa). Fora da digitação, o campo mostra a data escolhida.
+  const [texto, setTexto] = useState(selecionada ? format(selecionada, 'dd/MM/yyyy') : '');
+  const digitando = useRef(false);
+  useEffect(() => { if (!digitando.current) setTexto(selecionada ? format(selecionada, 'dd/MM/yyyy') : ''); }, [value]); // eslint-disable-line
+
+  // Máscara: só números, com as barras entrando sozinhas. Data completa e real vira valor; apagar tudo limpa o valor.
+  function digitar(bruto) {
+    digitando.current = true;
+    const n = String(bruto).replace(/\D/g, '').slice(0, 8);
+    const mascarado = n.length > 4 ? `${n.slice(0, 2)}/${n.slice(2, 4)}/${n.slice(4)}` : n.length > 2 ? `${n.slice(0, 2)}/${n.slice(2)}` : n;
+    setTexto(mascarado);
+    if (!n) { onChange(''); return; }
+    const iso = n.length === 8 ? `${n.slice(4)}-${n.slice(2, 4)}-${n.slice(0, 2)}` : '';
+    if (iso && paraData(iso) && format(paraData(iso), 'yyyy-MM-dd') === iso) onChange(iso);
+  }
+  // Ao sair do campo: data incompleta ou impossível (31/02, 2203) não fica — volta ao valor escolhido, ou vazio.
+  function confirmarDigitacao() {
+    digitando.current = false;
+    const n = texto.replace(/\D/g, '');
+    const iso = n.length === 8 ? `${n.slice(4)}-${n.slice(2, 4)}-${n.slice(0, 2)}` : '';
+    const valida = iso && paraData(iso) && format(paraData(iso), 'yyyy-MM-dd') === iso;
+    if (!valida) { setTexto(''); onChange(''); } else setTexto(format(paraData(iso), 'dd/MM/yyyy'));
+  }
 
   useEffect(() => {
     function fora(event) { if (ref.current && !ref.current.contains(event.target)) setAberto(false); }
@@ -22,19 +45,27 @@ export default function SeletorData({ value, onChange, disabled = false, ariaLab
   const inicio = startOfWeek(startOfMonth(mes), { weekStartsOn: 0 });
   const fim = endOfWeek(endOfMonth(mes), { weekStartsOn: 0 });
   const dias = eachDayOfInterval({ start: inicio, end: fim });
-  function escolher(dia) { onChange(dataParaIsoLocal(dia)); setAberto(false); }
-  function hoje() { const data = new Date(); setMes(data); onChange(dataParaIsoLocal(data)); setAberto(false); }
+  function escolher(dia) { digitando.current = false; onChange(dataParaIsoLocal(dia)); setAberto(false); }
+  function hoje() { const data = new Date(); digitando.current = false; setMes(data); onChange(dataParaIsoLocal(data)); setAberto(false); }
 
   return (
     <div ref={ref} style={{ position: 'relative', width: '100%' }}>
-      <button type="button" className="form-control" disabled={disabled} aria-label={ariaLabel}
-        onClick={() => setAberto(a => { if (!a) setMes(new Date()); return !a; })}
-        style={{ display:'flex', alignItems:'center', justifyContent:'space-between', textAlign:'left', cursor: disabled ? 'not-allowed' : 'pointer', background:'#fff', fontFamily:'inherit', fontSize:'14px', fontWeight:400 }}>
-        <span style={{ color: value ? '#111827' : '#6b7280', fontFamily:'inherit', fontSize:'14px', fontWeight: destaque && value ? 700 : 400 }}>{selecionada ? format(selecionada, 'dd/MM/yyyy') : 'dd/mm/aaaa'}</span>
-        <span aria-hidden="true" style={{ display:'inline-flex', color:'#374151' }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-        </span>
-      </button>
+      <div style={{ display: 'flex', gap: '6px' }}>
+        <input type="text" className="form-control" inputMode="numeric" autoComplete="off" maxLength={10}
+          disabled={disabled} aria-label={ariaLabel} placeholder="dd/mm/aaaa"
+          value={texto}
+          onChange={e => digitar(e.target.value)}
+          onBlur={confirmarDigitacao}
+          style={{ fontFamily: 'inherit', fontSize: '14px', fontWeight: destaque && value ? 700 : 400 }} />
+        <button type="button" className="btn btn-outline" disabled={disabled}
+          aria-label={`Abrir calendário da ${String(ariaLabel).toLowerCase()}`}
+          onClick={() => setAberto(a => { if (!a) setMes(selecionada || new Date()); return !a; })}
+          style={{ padding: '0 10px', display: 'inline-flex', alignItems: 'center' }}>
+          <span aria-hidden="true" style={{ display: 'inline-flex', color: '#374151' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          </span>
+        </button>
+      </div>
       {aberto && !disabled && (
         <div onWheel={e => { e.preventDefault(); setMes(m => addMonths(m, e.deltaY > 0 ? 1 : -1)); }}
           style={{ position:'absolute', zIndex:200, top:'calc(100% + 4px)', left:0, width:'280px', padding:'10px', background:'#fff', border:'1px solid #cbd5e1', borderRadius:'7px', boxShadow:'0 8px 20px rgba(0,0,0,.18)' }}>

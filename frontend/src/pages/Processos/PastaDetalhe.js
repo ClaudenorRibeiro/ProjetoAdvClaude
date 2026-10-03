@@ -60,6 +60,7 @@ export default function PastaDetalhe() {
   const podeEtiquetarEscritorio = temPermissao('processos.etiqueta_escritorio', 'alterar');
   // Andamentos têm permissões próprias (submódulo): só mostra o botão de quem pode usá-lo
   const podeVerAndamentos      = temPermissao('processos.andamentos', 'visualizar');
+  const podeVerAudiencias      = temPermissao('audiencias', 'visualizar');
   const podeCadastrarAndamento = temPermissao('processos.andamentos', 'cadastrar');
   const podeAlterarAndamento   = temPermissao('processos.andamentos', 'alterar');
   const podeExcluirAndamento   = temPermissao('processos.andamentos', 'excluir');
@@ -457,12 +458,25 @@ export default function PastaDetalhe() {
     const ids = idsParaBuscar();
     try {
       // Carrega audiências e tipos em paralelo (tipos necessários para o modal de edição)
-      const [resultados, tiposResp] = await Promise.all([
-        Promise.all(ids.map(pid => audienciasAPI.listar({ processo_id: pid, limite: 50 }))),
+      if (!podeVerAudiencias) { setAudiencias([]); return; }   // sem permissão: nem pergunta ao servidor (a tela mostra o aviso)
+      // O servidor entrega no máximo 100 por vez: busca página por página até trazer TODAS as audiências de cada processo.
+      const buscarTodas = async (pid) => {
+        const acumulado = [];
+        for (let pagina = 1; pagina <= 100; pagina++) {
+          const r = await audienciasAPI.listar({ processo_id: pid, limite: 100, pagina });
+          if (!r.data.ok) break;
+          const { registros, total } = r.data.dados;
+          acumulado.push(...registros);
+          if (!registros.length || acumulado.length >= Number(total)) break;
+        }
+        return acumulado;
+      };
+      const [porProcesso, tiposResp] = await Promise.all([
+        Promise.all(ids.map(buscarTodas)),
         tiposAudiencia.length ? Promise.resolve(null) : audienciasAPI.tipos(),
       ]);
       if (minhaSeq !== audienciasSeqRef.current) return; // já saiu outra busca de audiências depois desta
-      const todos = resultados.flatMap(r => r.data.ok ? r.data.dados.registros : []);
+      const todos = porProcesso.flat();
       // "Agendada" sempre no topo; dentro de cada grupo, por data/hora crescente (igual à tela principal de Audiências)
       todos.sort((a, b) => {
         const pa = a.status === 'agendada' ? 0 : 1;
@@ -1507,7 +1521,8 @@ export default function PastaDetalhe() {
                   })}
                 </tbody>
               </table>
-              {audiencias.length === 0 && <p className="lista-vazia">Nenhuma audiência encontrada</p>}
+              {!podeVerAudiencias && <p className="lista-vazia">Você não tem permissão para ver as audiências deste processo.</p>}
+              {podeVerAudiencias && audiencias.length === 0 && <p className="lista-vazia">Nenhuma audiência encontrada</p>}
             </div>
           </div>
         )}

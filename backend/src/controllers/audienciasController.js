@@ -8,7 +8,84 @@ const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response
 const auditoria = require('../middleware/auditoria');
 const agendaGoogle = require('../services/agendaGoogleService');
 const { enviarComunicadoPericia, enviarEmailPeritoPericia } = require('../services/comunicadoService');
-const { pastaFormatadaSql } = require('../utils/helpers');
+const { pastaFormatadaSql, paginacao } = require('../utils/helpers');
+const { texto, dataIso, inteiroPositivo } = require('../utils/camposTexto');
+
+const LIMITE_OBS_AUDIENCIA = 2000;
+const LIMITE_PLATAFORMA_AUDIENCIA = 100;   // tamanho da coluna audiencia.plataforma_virtual
+const LIMITE_LINK_AUDIENCIA = 500;         // tamanho da coluna audiencia.link_virtual
+const LIMITE_MOTIVO_AUDIENCIA = 300;       // motivo de cancelar / remarcar (mesmo limite dos prazos)
+const HORA_VALIDA = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
+
+// Id da rota (":id") como número; null quando não é um inteiro positivo (a audiência "abc" simplesmente não existe).
+function lerIdAudiencia(bruto) {
+  const r = inteiroPositivo(bruto, { rotulo: 'Audiência' });
+  return r.erro ? null : r.valor;
+}
+
+// Motivo de cancelamento / remarcação: obrigatório, só texto, até 300 caracteres. Devolve { valor } ou { erro }.
+function lerMotivoAudiencia(bruto, rotulo) {
+  return texto(bruto, { rotulo, max: LIMITE_MOTIVO_AUDIENCIA, obrigatorio: true });
+}
+
+// Confere os campos que vêm da tela (criar, editar e remarcar) e devolve os valores já limpos para substituir os do corpo
+// da requisição: { dados } ou { erro, status }. Textos aparados, data real, hora HH:MM, números inteiros, listas de verdade.
+async function lerCamposAudiencia(c, { exigeProcesso = false } = {}) {
+  const corpo = c || {};
+  const faltando = (exigeProcesso && !corpo.processo_id) || !corpo.tipo_audiencia_id || !corpo.data || !corpo.hora;
+  if (faltando) {
+    return { erro: exigeProcesso ? 'Processo, tipo de audiência, data e hora são obrigatórios' : 'Tipo de audiência, data e hora são obrigatórios', status: 400 };
+  }
+  const dados = {};
+  if (exigeProcesso) {
+    const proc = inteiroPositivo(corpo.processo_id, { rotulo: 'Processo' });
+    if (proc.erro) return { erro: proc.erro, status: 400 };
+    const [achou] = await pool.execute('SELECT id FROM tblproc WHERE id = ? AND ativo = 1', [proc.valor]);
+    if (!achou.length) return { erro: 'Processo não encontrado', status: 404 };
+    dados.processo_id = proc.valor;
+  }
+  const tipo = inteiroPositivo(corpo.tipo_audiencia_id, { rotulo: 'Tipo de audiência' });
+  if (tipo.erro) return { erro: tipo.erro, status: 400 };
+  dados.tipo_audiencia_id = tipo.valor;
+  const dia = dataIso(corpo.data, { rotulo: 'Data da audiência' });
+  if (dia.erro) return { erro: dia.erro, status: 400 };
+  dados.data = dia.valor;
+  if (typeof corpo.hora !== 'string' || !HORA_VALIDA.test(corpo.hora.trim())) return { erro: 'Hora inválida (use HH:MM)', status: 400 };
+  dados.hora = corpo.hora.trim();
+  if (corpo.modalidade !== undefined && corpo.modalidade !== null && corpo.modalidade !== '' && typeof corpo.modalidade !== 'string') {
+    return { erro: 'Selecione uma modalidade de audiência válida', status: 400 };
+  }
+  for (const [chave, opcoes] of [
+    ['observacoes', { rotulo: 'As observações', max: LIMITE_OBS_AUDIENCIA }],
+    ['plataforma_virtual', { rotulo: 'A plataforma', max: LIMITE_PLATAFORMA_AUDIENCIA }],
+    ['link_virtual', { rotulo: 'O link', max: LIMITE_LINK_AUDIENCIA }],
+  ]) {
+    const r = texto(corpo[chave], opcoes);
+    if (r.erro) return { erro: r.erro, status: 400 };
+    dados[chave] = r.valor;
+  }
+  const vara = inteiroPositivo(corpo.vara_id, { rotulo: 'Vara' });
+  if (vara.erro) return { erro: vara.erro, status: 400 };
+  // Sem comparecimento não tem local: a vara enviada é ignorada (e descartada na gravação), então nem é conferida.
+  if (vara.valor && corpo.modalidade !== 'sem_comparecimento') {
+    const [achou] = await pool.execute('SELECT id FROM tblvara WHERE id = ?', [vara.valor]);
+    if (!achou.length) return { erro: 'Vara não encontrada', status: 404 };
+  }
+  dados.vara_id = vara.valor;
+  if (corpo.testemunhas !== undefined && corpo.testemunhas !== null) {
+    if (!Array.isArray(corpo.testemunhas) || corpo.testemunhas.some(t => !t || typeof t !== 'object' || Array.isArray(t))) {
+      return { erro: 'Lista de testemunhas inválida', status: 400 };
+    }
+    dados.testemunhas = corpo.testemunhas;
+  }
+  if (corpo.responsaveis !== undefined && corpo.responsaveis !== null && !Array.isArray(corpo.responsaveis)) {
+    return { erro: 'Lista de responsáveis inválida', status: 400 };
+  }
+  if (Array.isArray(corpo.responsaveis) && corpo.responsaveis.some(v => !/^(usuario|freela):\d+$/.test(String(v)))) {
+    return { erro: 'Responsável inválido', status: 400 };
+  }
+  return { dados };
+}
 
 const MODALIDADES_AUDIENCIA = new Set(['presencial', 'virtual', 'sem_comparecimento']);
 
@@ -166,7 +243,7 @@ async function listarAdvogados(req, res) {
 // GET /api/audiencias — Lista audiências com filtros
 async function listar(req, res) {
   try {
-    const { processo_id, data_de, data_ate, status, sem_ata, responsavel_id, pagina = 1, limite = 30, ordenar, direcao } = req.query;
+    const { processo_id, data_de, data_ate, status, sem_ata, responsavel_id, ordenar, direcao } = req.query;
     const params = [];
     let where = 'WHERE 1=1';
 
@@ -188,8 +265,7 @@ async function listar(req, res) {
       params.push(req.usuario.id, etqSlot);
     }
 
-    const limitInt  = Math.min(parseInt(limite) || 30, 100);
-    const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
+    const { limite: limitInt, offset: offsetInt } = paginacao(req.query, { limitePadrao: 30, limiteMax: 100 });
 
     const ordenacoes = {
       processo: 'pr.numProc', pasta: 'pa.numPasta', titulo: 'pr.NomeTituloProc', tipo: 'ta.nome',
@@ -249,7 +325,8 @@ async function listar(req, res) {
 // GET /api/audiencias/:id — Busca audiência completa com ata e testemunhas
 async function buscar(req, res) {
   try {
-    const { id } = req.params;
+    const id = lerIdAudiencia(req.params.id);
+    if (!id) return naoEncontrado(res, 'Audiência não encontrada');
 
     const [rows] = await pool.execute(
       `SELECT a.*, ta.nome AS tipo_nome, pr.numProc AS processo_numero,
@@ -504,6 +581,9 @@ async function resolverNomeResponsavel(valor) {
 async function criar(req, res) {
   const conn = await pool.getConnection();
   try {
+    const lido = await lerCamposAudiencia(req.body, { exigeProcesso: true });
+    if (lido.erro) return erro(res, lido.erro, lido.status);
+    Object.assign(req.body, lido.dados);          // a partir daqui, só valores já conferidos e limpos
     const {
       processo_id, tipo_audiencia_id, data, hora, modalidade,
       vara_id, plataforma_virtual, link_virtual, observacoes,
@@ -609,7 +689,11 @@ async function criar(req, res) {
 async function atualizar(req, res) {
   const conn = await pool.getConnection();
   try {
-    const { id } = req.params;
+    const id = lerIdAudiencia(req.params.id);
+    if (!id) return naoEncontrado(res, 'Audiência não encontrada');
+    const lido = await lerCamposAudiencia(req.body);
+    if (lido.erro) return erro(res, lido.erro, lido.status);
+    Object.assign(req.body, lido.dados);
     const {
       tipo_audiencia_id, data, hora, modalidade, vara_id,
        plataforma_virtual, link_virtual, observacoes, responsavel_id: responsavelRaw, responsaveis,
@@ -795,14 +879,16 @@ async function atualizar(req, res) {
 // PUT /api/audiencias/:id/cancelar — Cancela audiência com motivo
 async function cancelar(req, res) {
   try {
-    const { id } = req.params;
+    const id = lerIdAudiencia(req.params.id);
+    if (!id) return naoEncontrado(res, 'Audiência não encontrada');
     const { motivo, processo_id, tipo_audiencia_id, data, hora, modalidade, vara_id, plataforma_virtual, link_virtual, observacoes, responsavel_id: responsavelRaw } = req.body;
 
     // Verifica permissão no banco — não confia apenas no frontend
     const permitido = await temPermissaoBackend(req.usuario.id, req.usuario.nivel, 'audiencias', 'alterar');
     if (!permitido) return erro(res, 'Sem permissão para cancelar audiências', 403);
 
-    if (!motivo?.trim()) return erro(res, 'Motivo do cancelamento é obrigatório');
+    const motivoLido = lerMotivoAudiencia(motivo, 'Motivo do cancelamento');
+    if (motivoLido.erro) return erro(res, motivoLido.erro);
 
     const [antes] = await pool.execute('SELECT status FROM audiencia WHERE id = ?', [id]);
     if (!antes.length) return naoEncontrado(res, 'Audiência não encontrada');
@@ -819,7 +905,7 @@ async function cancelar(req, res) {
       await conn.execute(
         `UPDATE audiencia SET status = 'cancelada', motivo_status = ?, alterado_por = ?, alterado_em = NOW()
          WHERE id = ?`,
-        [motivo.trim(), req.usuario.id, id]
+        [motivoLido.valor, req.usuario.id, id]
       );
       await conn.execute(
         `INSERT INTO auditoria_audiencia (audiencia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
@@ -848,7 +934,11 @@ async function remarcar(req, res) {
   const conn = await pool.getConnection();
   let transacaoAberta = false;
   try {
-    const { id } = req.params;
+    const id = lerIdAudiencia(req.params.id);
+    if (!id) return naoEncontrado(res, 'Audiência não encontrada');
+    const lido = await lerCamposAudiencia(req.body, { exigeProcesso: true });
+    if (lido.erro && !/são obrigatórios/.test(lido.erro)) return erro(res, lido.erro, lido.status);
+    if (!lido.erro) Object.assign(req.body, lido.dados);
     const {
       motivo, processo_id, tipo_audiencia_id, data, hora, modalidade, vara_id,
       plataforma_virtual, link_virtual, observacoes, responsavel_id: responsavelRaw,
@@ -859,7 +949,8 @@ async function remarcar(req, res) {
     const permitido = await temPermissaoBackend(req.usuario.id, req.usuario.nivel, 'audiencias', 'alterar');
     if (!permitido) return erro(res, 'Sem permissão para remarcar audiências', 403);
 
-    if (!motivo?.trim()) return erro(res, 'Motivo da remarcação é obrigatório');
+    const motivoLido = lerMotivoAudiencia(motivo, 'Motivo da remarcação');
+    if (motivoLido.erro) return erro(res, motivoLido.erro);
     if (!processo_id || !tipo_audiencia_id || !data || !hora) return erro(res, 'Processo, tipo de audiência, data e hora são obrigatórios');
     const modalidadeNormalizada = normalizarModalidadeAudiencia(modalidade);
     if (!modalidadeAudienciaValida(modalidadeNormalizada)) return erro(res, 'Selecione uma modalidade de audiência válida');
@@ -908,7 +999,7 @@ async function remarcar(req, res) {
     await conn.execute(
       `UPDATE audiencia SET status = 'remarcada', motivo_status = ?, alterado_por = ?, alterado_em = NOW()
        WHERE id = ?`,
-      [motivo.trim(), req.usuario.id, id]
+      [motivoLido.valor, req.usuario.id, id]
     );
 
     await conn.execute(
@@ -919,7 +1010,7 @@ async function remarcar(req, res) {
     await conn.execute(
       `INSERT INTO auditoria_audiencia (audiencia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
        VALUES (?, 'motivo_status', ?, ?, ?)`,
-      [id, antes[0].motivo_status || '', motivo.trim(), req.usuario.id]
+      [id, antes[0].motivo_status || '', motivoLido.valor, req.usuario.id]
     );
     await conn.execute(
       `INSERT INTO auditoria_audiencia (audiencia_id, campo_alterado, valor_anterior, valor_novo, usuario_id)
@@ -1529,7 +1620,8 @@ async function atualizarTipo(req, res) {
 async function excluir(req, res) {
   const conn = await pool.getConnection();
   try {
-    const { id } = req.params;
+    const id = lerIdAudiencia(req.params.id);
+    if (!id) return naoEncontrado(res, 'Audiência não encontrada');
 
     // Verifica permissão de exclusão no banco — não confia apenas no frontend
     const permitido = await temPermissaoBackend(req.usuario.id, req.usuario.nivel, 'audiencias', 'excluir');
@@ -1562,7 +1654,7 @@ async function excluir(req, res) {
     // PORÉM só quando NÃO houver nenhuma amarração (nem ata, nem testemunha).
     if (aud.status === 'cancelada' || aud.status === 'remarcada') {
       if (req.usuario.nivel > 1) {
-        return erro(res, 'Audiência cancelada ou remarcada só pode ser excluída por um administrador');
+        return erro(res, 'Audiência cancelada ou remarcada só pode ser excluída por um administrador', 403);
       }
       if (temAta || temTestemunha) {
         return erro(res, 'Esta audiência tem ata ou testemunha vinculada e não pode ser excluída (ela faz parte do histórico).');
@@ -1570,7 +1662,7 @@ async function excluir(req, res) {
     } else {
       // Demais status (regra de hoje): audiência com ata só pode ser excluída por admin.
       if (temAta && req.usuario.nivel > 1) {
-        return erro(res, 'Audiência com ata registrada só pode ser excluída por um administrador');
+        return erro(res, 'Audiência com ata registrada só pode ser excluída por um administrador', 403);
       }
     }
 
@@ -1615,14 +1707,17 @@ async function excluir(req, res) {
 // Os valores já estão gravados com nomes legíveis desde a escrita — sem resolução necessária aqui
 async function buscarHistorico(req, res) {
   try {
-    const { id } = req.params;
+    const id = lerIdAudiencia(req.params.id);
+    if (!id) return naoEncontrado(res, 'Audiência não encontrada');
+    const [existe] = await pool.execute('SELECT id FROM audiencia WHERE id = ?', [id]);
+    if (!existe.length) return naoEncontrado(res, 'Audiência não encontrada');
     const [rows] = await pool.execute(
       `SELECT aa.id, aa.campo_alterado, aa.valor_anterior, aa.valor_novo,
               aa.alterado_em, u.nome AS usuario_nome
        FROM auditoria_audiencia aa
        LEFT JOIN usuarios u ON aa.usuario_id = u.id
        WHERE aa.audiencia_id = ?
-       ORDER BY aa.alterado_em ASC`,
+       ORDER BY aa.alterado_em ASC, aa.id ASC`,
       [id]
     );
     return sucesso(res, rows);
@@ -1634,7 +1729,8 @@ async function buscarHistorico(req, res) {
 // GET /api/audiencias/:id/detalhes-ata — consulta operacional da ATA, separada do histórico técnico.
 async function buscarDetalhesAta(req, res) {
   try {
-    const { id } = req.params;
+    const id = lerIdAudiencia(req.params.id);
+    if (!id) return naoEncontrado(res, 'Audiência não encontrada');
     const [atas] = await pool.execute(
       `SELECT aa.id, aa.resultado, aa.observacoes, aa.criado_em,
               aa.houve_acordo, aa.nova_audiencia, aa.teve_prazo, aa.teve_pericia,

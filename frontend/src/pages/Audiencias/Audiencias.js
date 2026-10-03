@@ -1894,7 +1894,7 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
           <h3>{leitura ? 'Detalhes da Audiência' : 'Editar Audiência'}</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
         </div>
-        <div className="modal-body">
+        <div className="modal-body" tabIndex={leitura ? 0 : undefined}>
 
           {/* Aviso se audiência tem ata e é admin editando */}
           {audiencia.ata_resultado && ehAdmin && (
