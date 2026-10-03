@@ -93,7 +93,7 @@ export default function NumeroProcessoCopiavel({ numero, onAbrir, href, tamanhoI
         <span style={{
           position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
           marginBottom: '4px', whiteSpace: 'nowrap',
-          background: copiado ? '#16a34a' : '#334155', color: '#fff',
+          background: copiado ? '#15803d' : '#334155', color: '#fff',
           fontSize: '11px', fontWeight: 600, padding: '3px 8px', borderRadius: '4px',
           zIndex: 20, pointerEvents: onAbrir ? 'none' : 'none', boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
           border: 0, cursor: 'default'

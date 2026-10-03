@@ -1204,7 +1204,7 @@ function TelefoneCopiavel({ telefone, pessoaId, tipo, onMultiplos }) {
       </span>
       {mostrarBalao && (
         <span style={{ position:'absolute', bottom:'100%', left:'50%', transform:'translateX(-50%)',
-          marginBottom:'4px', whiteSpace:'nowrap', background: copiado ? '#16a34a' : '#334155',
+          marginBottom:'4px', whiteSpace:'nowrap', background: copiado ? '#15803d' : '#334155',
           color:'#fff', fontSize:'11px', fontWeight:600, padding:'3px 8px', borderRadius:'4px',
           zIndex:20, pointerEvents:'none', boxShadow:'0 2px 6px rgba(0,0,0,0.2)' }}>
           {copiado ? 'Copiado!!' : 'Copiar?'}
@@ -1310,7 +1310,7 @@ function EmailCopiavel({ email, pessoaId, tipo, onMultiplos }) {
       </span>
       {mostrarBalao && (
         <span style={{ position:'absolute', bottom:'100%', left:'50%', transform:'translateX(-50%)',
-          marginBottom:'4px', whiteSpace:'nowrap', background: copiado ? '#16a34a' : '#334155',
+          marginBottom:'4px', whiteSpace:'nowrap', background: copiado ? '#15803d' : '#334155',
           color:'#fff', fontSize:'11px', fontWeight:600, padding:'3px 8px', borderRadius:'4px',
           zIndex:20, pointerEvents:'none', boxShadow:'0 2px 6px rgba(0,0,0,0.2)' }}>
           {copiado ? 'Copiado!!' : 'Copiar?'}
