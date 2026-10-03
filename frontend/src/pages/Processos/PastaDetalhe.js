@@ -62,6 +62,7 @@ export default function PastaDetalhe() {
   const podeVerAndamentos      = temPermissao('processos.andamentos', 'visualizar');
   const podeVerAudiencias      = temPermissao('audiencias', 'visualizar');
   const podeVerPericias        = temPermissao('pericias', 'visualizar');
+  const podeVerFinanceiro      = temPermissao('financeiro', 'visualizar');
   const podeCadastrarAndamento = temPermissao('processos.andamentos', 'cadastrar');
   const podeAlterarAndamento   = temPermissao('processos.andamentos', 'alterar');
   const podeExcluirAndamento   = temPermissao('processos.andamentos', 'excluir');
@@ -628,7 +629,7 @@ export default function PastaDetalhe() {
   async function carregarFinanceiro() {
     const minhaSeq = ++financeiroSeqRef.current;
     const procId = processoFiltro !== 'todos' ? parseInt(processoFiltro) : null;
-    if (!procId) { setContaCorrente(null); setAcordosFin([]); return; }
+    if (!procId || !podeVerFinanceiro) { setContaCorrente(null); setAcordosFin([]); return; }   // sem permissão: nem pergunta ao servidor (a tela mostra o aviso)
     try {
       const [c, a] = await Promise.all([
         financeiroAPI.buscarConta(procId, {}),
@@ -1620,9 +1621,10 @@ export default function PastaDetalhe() {
               )}
             </div>
 
-            {!processoSelecionado && <p className="lista-vazia">Selecione um processo para ver o financeiro</p>}
+            {!podeVerFinanceiro && <p className="lista-vazia">Você não tem permissão para ver o financeiro deste processo.</p>}
+            {podeVerFinanceiro && !processoSelecionado && <p className="lista-vazia">Selecione um processo para ver o financeiro</p>}
 
-            {processoSelecionado && contaCorrente && (
+            {podeVerFinanceiro && processoSelecionado && contaCorrente && (
               <>
                 {acordosFin.length > 0 && (
                   <div style={{ marginBottom: '16px' }}>

@@ -10,12 +10,75 @@
 const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const { hojeBrasilia } = require('../utils/helpers');
+const { texto, dataIso, inteiroPositivo: inteiroEstrito } = require('../utils/camposTexto');
 const { proximoDiaUtil } = require('../services/calendarioService');
 const auditoria = require('../middleware/auditoria');
 
 // ---------- helpers de cálculo ----------
 const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
+const LIMITE_TEXTO_FIN = 300;               // descrição do lançamento/acordo, observação da parcela e motivo de cancelar (tamanho das colunas / padrão dos outros módulos)
+const LIMITE_PARCELAS = 360;                // 30 anos de parcelas mensais
+const VALOR_MAXIMO = 9999999999999.99;      // limite da coluna decimal(15,2)
 const fmtReal = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Id da rota como número; null quando não é um inteiro positivo (o registro "abc" simplesmente não existe).
+function lerIdFin(bruto) {
+  const r = inteiroEstrito(bruto, { rotulo: 'Id' });
+  return r.erro ? null : r.valor;
+}
+
+// Valor em dinheiro: número (ou texto numérico) finito, dentro do limite da coluna. Devolve { valor } ou { erro }.
+// permiteZero: honorário/parceria fixos podem ser 0; valor de lançamento e parcela não.
+function lerDinheiro(bruto, rotulo, { permiteZero = false } = {}) {
+  const ok = (typeof bruto === 'number') || (typeof bruto === 'string' && /^\d+(\.\d+)?$/.test(bruto.trim()));
+  const n = ok ? Number(bruto) : NaN;
+  if (!Number.isFinite(n)) return { erro: `${rotulo} inválido` };
+  if (n < 0 || (n === 0 && !permiteZero)) return { erro: permiteZero ? `${rotulo} inválido` : `${rotulo} deve ser maior que zero` };
+  if (n > VALOR_MAXIMO) return { erro: `${rotulo} muito grande (máximo ${fmtReal(VALOR_MAXIMO)})` };
+  return { valor: n };
+}
+
+// Percentual de 0 a 100 (vazio = não informado → null). Devolve { valor } ou { erro }.
+function lerPercentual(bruto, rotulo) {
+  if (bruto === undefined || bruto === null || bruto === '') return { valor: null };
+  const ok = (typeof bruto === 'number') || (typeof bruto === 'string' && /^\d+(\.\d+)?$/.test(bruto.trim()));
+  const n = ok ? Number(bruto) : NaN;
+  if (!Number.isFinite(n) || n < 0 || n > 100) return { erro: `${rotulo} deve estar entre 0 e 100` };
+  return { valor: n };
+}
+
+// Processo existente e ativo (o excluído "não existe" para o financeiro). Devolve o id ou null.
+async function processoAtivoFin(bruto) {
+  const id = lerIdFin(bruto);
+  if (!id) return null;
+  const [r] = await pool.execute('SELECT id FROM tblproc WHERE id = ? AND ativo = 1', [id]);
+  return r.length ? id : null;
+}
+
+// Confere a lista de parcelas que vem da tela (criar e editar acordo) ANTES de calcular: lista de objetos (até 360),
+// número, vencimento real e parceiro existente. Devolve null (ok) ou { erro, status }.
+async function conferirParcelasEntrada(parcelas) {
+  if (parcelas.length > LIMITE_PARCELAS) return { erro: `Um acordo pode ter no máximo ${LIMITE_PARCELAS} parcelas`, status: 400 };
+  for (let i = 0; i < parcelas.length; i++) {
+    const p = parcelas[i];
+    const rotulo = `Parcela ${i + 1}`;
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return { erro: `${rotulo} inválida`, status: 400 };
+    if (p.numero !== undefined && p.numero !== null && p.numero !== '' && inteiroEstrito(p.numero, { rotulo }).erro) return { erro: `${rotulo}: número inválido`, status: 400 };
+    if (p.vencimento === undefined || p.vencimento === null || p.vencimento === '') return { erro: `${rotulo}: informe o vencimento`, status: 400 };
+    const venc = dataIso(p.vencimento, { rotulo: `${rotulo}: vencimento` });
+    if (venc.erro) return { erro: venc.erro, status: 400 };
+    const mul = lerPercentual(p.multa_percentual, `${rotulo}: a multa`);
+    if (mul.erro) return { erro: mul.erro, status: 400 };
+    if (p.parceria_pessoa_id) {
+      if (!tiposPessoa.has(p.parceria_pessoa_tipo)) return { erro: `${rotulo}: tipo de parceiro inválido`, status: 400 };
+      const idPar = inteiroEstrito(p.parceria_pessoa_id, { rotulo: 'Parceiro' });
+      if (idPar.erro) return { erro: `${rotulo}: ${idPar.erro}`, status: 400 };
+      const [achou] = await pool.execute(`SELECT id FROM ${tabelaPessoa(p.parceria_pessoa_tipo)} WHERE id = ?`, [idPar.valor]);
+      if (!achou.length) return { erro: `${rotulo}: parceiro não encontrado`, status: 404 };
+    }
+  }
+  return null;
+}
 
 // Erro de validação financeira: mensagem específica (nunca "erro interno") quando um
 // valor de parcela/acordo fere uma regra de negócio. O backend nunca confia no cálculo
@@ -293,20 +356,26 @@ function somarMeses(dataStr, n) {
 // negativo, percentual negativo, e parceria negativa ou maior que o honorário da parcela.
 // `rotulo` identifica a parcela na mensagem de erro quando há mais de uma (ex.: "Parcela 2").
 function calcularValoresParcela(p, rotulo = 'A parcela') {
-  const bruto = round2(p.valor_bruto);
-  if (bruto <= 0) throw erroValidacaoFinanceiro(`${rotulo}: informe um valor bruto maior que zero.`);
+  const brutoLido = lerDinheiro(p.valor_bruto, 'Valor bruto');
+  if (brutoLido.erro) {
+    const semValor = typeof p.valor_bruto === 'number' && p.valor_bruto <= 0;
+    throw erroValidacaoFinanceiro(`${rotulo}: ${semValor ? 'informe um valor bruto maior que zero' : 'o valor bruto é inválido'}.`);
+  }
+  const bruto = round2(brutoLido.valor);
 
   const honorTipo = ['percent', 'fixo', 'sem'].includes(p.honor_tipo) ? p.honor_tipo : 'percent';
 
   let honorPct = null;
   let honorValor = 0;
   if (honorTipo === 'percent') {
-    honorPct = Number(p.honor_percentual) || 0;
-    if (honorPct < 0) throw erroValidacaoFinanceiro(`${rotulo}: o percentual de honorário não pode ser negativo.`);
+    const pctLido = lerPercentual(p.honor_percentual, 'O percentual de honorário');
+    if (pctLido.erro) throw erroValidacaoFinanceiro(`${rotulo}: ${pctLido.erro.charAt(0).toLowerCase()}${pctLido.erro.slice(1)}.`);
+    honorPct = pctLido.valor || 0;
     honorValor = round2(bruto * honorPct / 100);
   } else if (honorTipo === 'fixo') {
-    honorValor = round2(p.honor_valor);
-    if (honorValor < 0) throw erroValidacaoFinanceiro(`${rotulo}: o valor do honorário não pode ser negativo.`);
+    const hv = p.honor_valor === undefined || p.honor_valor === null || p.honor_valor === '' ? { valor: 0 } : lerDinheiro(p.honor_valor, 'Valor do honorário', { permiteZero: true });
+    if (hv.erro) throw erroValidacaoFinanceiro(`${rotulo}: o valor do honorário é inválido.`);
+    honorValor = round2(hv.valor);
   } // 'sem' => 0
   if (honorValor > bruto) honorValor = bruto;          // honorário nunca passa do bruto
   const liquido = round2(bruto - honorValor);
@@ -318,17 +387,22 @@ function calcularValoresParcela(p, rotulo = 'A parcela') {
   let parcValor = null;
   if (temParceria) {
     if (parcTipo === 'fixo') {
-      parcValor = round2(p.parceria_valor);
-      if (parcValor < 0) throw erroValidacaoFinanceiro(`${rotulo}: o valor da parceria não pode ser negativo.`);
+      const pv = p.parceria_valor === undefined || p.parceria_valor === null || p.parceria_valor === '' ? { valor: 0 } : lerDinheiro(p.parceria_valor, 'Valor da parceria', { permiteZero: true });
+      if (pv.erro) throw erroValidacaoFinanceiro(`${rotulo}: o valor da parceria é inválido.`);
+      parcValor = round2(pv.valor);
       if (parcValor > honorValor) {
         throw erroValidacaoFinanceiro(`${rotulo}: a parceria (${fmtReal(parcValor)}) não pode ser maior que o honorário desta parcela (${fmtReal(honorValor)}).`);
       }
     } else {
-      parcPct = Number(p.parceria_percentual) || 0;
-      if (parcPct < 0 || parcPct > 100) throw erroValidacaoFinanceiro(`${rotulo}: o percentual de parceria deve estar entre 0 e 100.`);
+      const ppLido = lerPercentual(p.parceria_percentual, 'O percentual de parceria');
+      if (ppLido.erro) throw erroValidacaoFinanceiro(`${rotulo}: o percentual de parceria deve estar entre 0 e 100.`);
+      parcPct = ppLido.valor || 0;
       parcValor = round2(honorValor * parcPct / 100);
     }
   }
+
+  const obs = texto(p.observacao, { rotulo: 'A observação', max: LIMITE_TEXTO_FIN });
+  if (obs.erro) throw erroValidacaoFinanceiro(`${rotulo}: ${obs.erro.charAt(0).toLowerCase()}${obs.erro.slice(1)}.`);
 
   return {
     valor_bruto: bruto,
@@ -341,7 +415,7 @@ function calcularValoresParcela(p, rotulo = 'A parcela') {
     parceria_tipo: parcTipo,
     parceria_percentual: parcTipo === 'percent' ? parcPct : null,
     parceria_valor: parcValor,
-    observacao: p.observacao ? String(p.observacao).trim() : null,
+    observacao: obs.valor,
   };
 }
 
@@ -352,8 +426,13 @@ function calcularValoresParcela(p, rotulo = 'A parcela') {
 // GET /api/financeiro/processo/:processoId — extrato + saldo
 async function buscarContaCorrente(req, res) {
   try {
-    const { processoId } = req.params;
-    const { data_de, data_ate } = req.query;
+    const processoId = await processoAtivoFin(req.params.processoId);
+    if (!processoId) return naoEncontrado(res, 'Processo não encontrado');
+    const de = dataIso(req.query.data_de, { rotulo: 'Data inicial' });
+    if (de.erro) return erro(res, de.erro);
+    const ate = dataIso(req.query.data_ate, { rotulo: 'Data final' });
+    if (ate.erro) return erro(res, ate.erro);
+    const data_de = de.valor; const data_ate = ate.valor;
     const params = [processoId];
     let where = 'WHERE cc.processo_id = ?';
     if (data_de)  { where += ' AND cc.data >= ?'; params.push(data_de); }
@@ -381,14 +460,27 @@ async function buscarContaCorrente(req, res) {
   }
 }
 
+// Lê os campos do lançamento que vêm da tela (criar e editar): descrição (≤300), valor, tipo e data reais.
+// Devolve { dados: { data (null = não informada), descricao, valor, tipo } } ou { erro }.
+function lerLancamento(corpo) {
+  const c = corpo || {};
+  const desc = texto(c.descricao, { rotulo: 'A descrição', max: LIMITE_TEXTO_FIN, obrigatorio: true });
+  if (desc.erro) return { erro: desc.erro.replace('A descrição é obrigatório', 'Descrição é obrigatória') };
+  const valor = lerDinheiro(c.valor, 'Valor');
+  if (valor.erro) return { erro: valor.erro };
+  if (c.tipo !== 'entrada' && c.tipo !== 'saida') return { erro: 'Tipo deve ser "entrada" ou "saida"' };
+  const dia = dataIso(c.data, { rotulo: 'Data do lançamento' });
+  if (dia.erro) return { erro: dia.erro };
+  return { dados: { data: dia.valor, descricao: desc.valor, valor: round2(valor.valor), tipo: c.tipo } };
+}
+
 // POST /api/financeiro/processo/:processoId/lancamento — nova entrada/saída manual
 async function lancar(req, res) {
-  const { processoId } = req.params;
-  const { data, descricao, valor, tipo } = req.body;
-
-  if (!descricao || !descricao.trim()) return erro(res, 'Descrição é obrigatória');
-  if (!valor || Number(valor) <= 0)     return erro(res, 'Valor deve ser maior que zero');
-  if (!['entrada', 'saida'].includes(tipo)) return erro(res, 'Tipo deve ser "entrada" ou "saida"');
+  const processoId = await processoAtivoFin(req.params.processoId);
+  if (!processoId) return naoEncontrado(res, 'Processo não encontrado');
+  const lido = lerLancamento(req.body);
+  if (lido.erro) return erro(res, lido.erro);
+  const { data, descricao, valor, tipo } = lido.dados;
 
   const conn = await pool.getConnection();
   try {
@@ -396,7 +488,7 @@ async function lancar(req, res) {
     const [result] = await conn.execute(
       `INSERT INTO conta_corrente (processo_id, data, descricao, tipo, valor, origem, usuario_id)
        VALUES (?, ?, ?, ?, ?, 'manual', ?)`,
-      [processoId, data || hojeBrasilia(), descricao.trim(), tipo, round2(valor), req.usuario.id]
+      [processoId, data || hojeBrasilia(), descricao, tipo, valor, req.usuario.id]
     );
     await logCC(conn, result.insertId, req.usuario.id, 'criado', null, null, 'Lançamento criado');
     await auditoria.registrar(req.usuario.id, 'conta_corrente', 'criar', result.insertId, null, null, conn);
@@ -412,12 +504,11 @@ async function lancar(req, res) {
 
 // PUT /api/financeiro/lancamento/:id — edita um lançamento MANUAL (os de acordo são intocáveis aqui)
 async function editarLancamento(req, res) {
-  const { id } = req.params;
-  const { data, descricao, valor, tipo } = req.body;
-
-  if (!descricao || !descricao.trim()) return erro(res, 'Descrição é obrigatória');
-  if (!valor || Number(valor) <= 0)     return erro(res, 'Valor deve ser maior que zero');
-  if (!['entrada', 'saida'].includes(tipo)) return erro(res, 'Tipo deve ser "entrada" ou "saida"');
+  const id = lerIdFin(req.params.id);
+  if (!id) return naoEncontrado(res, 'Lançamento não encontrado');
+  const lido = lerLancamento(req.body);
+  if (lido.erro) return erro(res, lido.erro);
+  const { data, descricao, valor, tipo } = lido.dados;
 
   const conn = await pool.getConnection();
   try {
@@ -428,7 +519,7 @@ async function editarLancamento(req, res) {
       await conn.rollback();
       return erro(res, 'Este lançamento veio de uma parcela de acordo. Desfaça o recebimento (ou o repasse) da parcela para alterá-lo.');
     }
-    const novo = { data: data || rows[0].data, descricao: descricao.trim(), tipo, valor: round2(valor) };
+    const novo = { data: data || rows[0].data, descricao, tipo, valor };
     // Registra no histórico cada campo que mudou (campo a campo, De → Para)
     for (const [k, label] of CAMPOS_CC) {
       if (normCC(k, rows[0][k]) !== normCC(k, novo[k])) {
@@ -452,7 +543,8 @@ async function editarLancamento(req, res) {
 
 // DELETE /api/financeiro/lancamento/:id — exclui lançamento MANUAL
 async function excluirLancamento(req, res) {
-  const { id } = req.params;
+  const id = lerIdFin(req.params.id);
+  if (!id) return naoEncontrado(res, 'Lançamento não encontrado');
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -481,7 +573,8 @@ async function excluirLancamento(req, res) {
 // GET /api/financeiro/processo/:processoId/acordos — lista acordos do processo (com resumo)
 async function listarAcordos(req, res) {
   try {
-    const { processoId } = req.params;
+    const processoId = await processoAtivoFin(req.params.processoId);
+    if (!processoId) return naoEncontrado(res, 'Processo não encontrado');
     const [acordos] = await pool.execute(
       `SELECT a.*,
               (SELECT COUNT(*) FROM acordo_parcela ap WHERE ap.acordo_id = a.id) AS total_parcelas_real,
@@ -506,16 +599,25 @@ async function listarAcordos(req, res) {
 async function gerarPreviaParcelas(req, res) {
   try {
     const { valor_total, qtd_parcelas, data_primeira, honor_percentual, multa_percentual } = req.body;
-    const total = round2(valor_total);
-    const qtd = parseInt(qtd_parcelas, 10);
-    if (!total || total <= 0) return erro(res, 'Valor total deve ser maior que zero');
-    if (!qtd || qtd < 1)      return erro(res, 'Quantidade de parcelas inválida');
+    const totalLido = lerDinheiro(valor_total, 'Valor total');
+    if (totalLido.erro) return erro(res, totalLido.erro);
+    const total = round2(totalLido.valor);
+    const qtdLida = inteiroEstrito(qtd_parcelas, { rotulo: 'Quantidade de parcelas' });
+    if (qtdLida.erro || !qtdLida.valor) return erro(res, 'Quantidade de parcelas inválida');
+    if (qtdLida.valor > LIMITE_PARCELAS) return erro(res, `Quantidade de parcelas inválida (máximo ${LIMITE_PARCELAS})`);
+    const qtd = qtdLida.valor;
     if (!data_primeira)       return erro(res, 'Data da primeira parcela é obrigatória');
+    const dia = dataIso(data_primeira, { rotulo: 'Data da primeira parcela' });
+    if (dia.erro) return erro(res, dia.erro);
 
-    const pct = honor_percentual != null && honor_percentual !== '' ? Number(honor_percentual) : 30; // padrão 30%
+    const pctLido = lerPercentual(honor_percentual, 'O honorário padrão');
+    if (pctLido.erro) return erro(res, pctLido.erro);
+    const pct = pctLido.valor != null ? pctLido.valor : 30; // padrão 30%
     // Multa por atraso: sem valor padrão (nem todo acordo tem cláusula de multa judicial) —
     // só entra na parcela se o usuário informar algo no cabeçalho do acordo.
-    const multaPct = multa_percentual != null && multa_percentual !== '' ? Number(multa_percentual) : null;
+    const multaLida = lerPercentual(multa_percentual, 'A multa por atraso');
+    if (multaLida.erro) return erro(res, multaLida.erro);
+    const multaPct = multaLida.valor;
 
     // Divide o total: todas iguais (round2) e a ÚLTIMA absorve a diferença de centavos
     const base = round2(total / qtd);
@@ -537,13 +639,23 @@ async function gerarPreviaParcelas(req, res) {
 
 // POST /api/financeiro/processo/:processoId/acordo — cria acordo + parcelas (tabela já editada)
 async function criarAcordo(req, res) {
-  const { processoId } = req.params;
-  const { descricao, valor_total, qtd_parcelas, data_primeira, parcelas, tipo,
+  const { qtd_parcelas, data_primeira, parcelas, tipo,
     beneficiario_cliente_tipo, beneficiario_cliente_id, beneficiario_cliente_conta_id } = req.body;
   const tipoAcordo = tipo === 'alvara' ? 'alvara' : 'acordo';   // mesma estrutura serve a acordo e alvará
 
   if (!Array.isArray(parcelas) || !parcelas.length) return erro(res, 'Informe as parcelas');
-  if (!valor_total || Number(valor_total) <= 0)      return erro(res, 'Valor total inválido');
+  const totalLido = lerDinheiro(req.body.valor_total, 'Valor total');
+  if (totalLido.erro) return erro(res, 'Valor total inválido');
+  const valor_total = totalLido.valor;
+  const desc = texto(req.body.descricao, { rotulo: 'A descrição', max: LIMITE_TEXTO_FIN });
+  if (desc.erro) return erro(res, desc.erro);
+  const descricao = desc.valor;
+  const processoId = await processoAtivoFin(req.params.processoId);
+  if (!processoId) return naoEncontrado(res, 'Processo não encontrado');
+  const entrada = await conferirParcelasEntrada(parcelas);
+  if (entrada) return erro(res, entrada.erro, entrada.status);
+  const primeira = dataIso(data_primeira, { rotulo: 'Data da primeira parcela' });
+  if (primeira.erro) return erro(res, primeira.erro);
 
   const conn = await pool.getConnection();
   try {
@@ -683,7 +795,8 @@ async function inserirParcelas(conn, acordoId, parcelas, usuarioId, valorTotal, 
 // GET /api/financeiro/acordo/:id — acordo + parcelas
 async function buscarAcordo(req, res) {
   try {
-    const { id } = req.params;
+    const id = lerIdFin(req.params.id);
+    if (!id) return naoEncontrado(res, 'Acordo não encontrado');
     const [acordo] = await pool.execute('SELECT * FROM acordo WHERE id = ?', [id]);
     if (!acordo.length) return naoEncontrado(res, 'Acordo não encontrado');
     const [parcelas] = await pool.execute(
@@ -724,10 +837,21 @@ async function buscarAcordo(req, res) {
 // PUT /api/financeiro/acordo/:id — atualiza acordo + regrava parcelas.
 // Parcelas já recebidas são imutáveis; as pendentes do mesmo acordo continuam editáveis.
 async function atualizarAcordo(req, res) {
-  const { id } = req.params;
-  const { descricao, valor_total, qtd_parcelas, data_primeira, parcelas,
+  const id = lerIdFin(req.params.id);
+  if (!id) return naoEncontrado(res, 'Acordo não encontrado');
+  const { qtd_parcelas, data_primeira, parcelas,
     beneficiario_cliente_tipo, beneficiario_cliente_id, beneficiario_cliente_conta_id } = req.body;
   if (!Array.isArray(parcelas) || !parcelas.length) return erro(res, 'Informe as parcelas do acordo');
+  const totalLido = lerDinheiro(req.body.valor_total, 'Valor total');
+  if (totalLido.erro) return erro(res, 'Valor total inválido');
+  const valor_total = totalLido.valor;
+  const desc = texto(req.body.descricao, { rotulo: 'A descrição', max: LIMITE_TEXTO_FIN });
+  if (desc.erro) return erro(res, desc.erro);
+  const descricao = desc.valor;
+  const entrada = await conferirParcelasEntrada(parcelas);
+  if (entrada) return erro(res, entrada.erro, entrada.status);
+  const primeira = dataIso(data_primeira, { rotulo: 'Data da primeira parcela' });
+  if (primeira.erro) return erro(res, primeira.erro);
 
   const conn = await pool.getConnection();
   try {
@@ -868,7 +992,8 @@ async function atualizarAcordo(req, res) {
 
 // DELETE /api/financeiro/acordo/:id — exclui acordo (CASCADE nas parcelas). Bloqueado se houver parcela paga.
 async function excluirAcordo(req, res) {
-  const { id } = req.params;
+  const id = lerIdFin(req.params.id);
+  if (!id) return naoEncontrado(res, 'Acordo não encontrado');
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -913,9 +1038,11 @@ async function excluirAcordo(req, res) {
 // PUT /api/financeiro/acordo/:id/cancelar — cancela o acordo e as parcelas PENDENTES (as pagas permanecem).
 // Cancelamento é DEFINITIVO; o acordo vira registro permanente (não edita/exclui mais). Exige motivo.
 async function cancelarAcordo(req, res) {
-  const { id } = req.params;
-  const { motivo } = req.body;
-  if (!motivo || !motivo.trim()) return erro(res, 'Informe o motivo do cancelamento');
+  const id = lerIdFin(req.params.id);
+  if (!id) return naoEncontrado(res, 'Acordo não encontrado');
+  const lidoMotivo = texto(req.body.motivo, { rotulo: 'O motivo do cancelamento', max: LIMITE_TEXTO_FIN, obrigatorio: true });
+  if (lidoMotivo.erro) return erro(res, lidoMotivo.erro);
+  const motivo = lidoMotivo.valor;
 
   const conn = await pool.getConnection();
   try {
@@ -929,7 +1056,7 @@ async function cancelarAcordo(req, res) {
       `SELECT id FROM acordo_parcela WHERE acordo_id = ? AND status = 'pendente'`, [id]
     );
     for (const p of pendentes) {
-      await logParcela(conn, p.id, req.usuario.id, 'cancelada', null, null, `Cancelada — ${motivo.trim()}`);
+      await logParcela(conn, p.id, req.usuario.id, 'cancelada', null, null, `Cancelada — ${motivo}`);
       await conn.execute(`UPDATE acordo_parcela SET status = 'cancelada' WHERE id = ?`, [p.id]);
     }
     await conn.execute(
@@ -1921,7 +2048,10 @@ async function exportarConsultaFinanceiro(req, res) {
 // GET /api/financeiro/lancamento/:id/historico — eventos do lançamento (criado/editado)
 async function buscarHistoricoLancamento(req, res) {
   try {
-    const { id } = req.params;
+    const id = lerIdFin(req.params.id);
+    if (!id) return naoEncontrado(res, 'Lançamento não encontrado');
+    const [existe] = await pool.execute('SELECT id FROM conta_corrente WHERE id = ?', [id]);
+    if (!existe.length) return naoEncontrado(res, 'Lançamento não encontrado');
     const [rows] = await pool.execute(
       `SELECT a.id, a.acao, a.campo_alterado, a.valor_anterior, a.valor_novo, a.criado_em,
               u.nome AS usuario_nome

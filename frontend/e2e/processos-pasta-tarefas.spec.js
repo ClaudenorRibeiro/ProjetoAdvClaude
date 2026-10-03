@@ -158,7 +158,7 @@ test('@critical Nova tarefa com um processo escolhido: janela, obrigatórios, da
   await j2.getByRole('button', { name: 'Salvar Tarefa' }).click();
   await page.getByRole('button', { name: 'Agendar assim mesmo' }).click();
   await aviso(page, 'Tarefa criada!');
-  expect((await doBanco('Tarefa C5 Passada'))[0].venc).toBe(hojeMais(-2));
+  await expect.poll(async () => (await doBanco('Tarefa C5 Passada'))[0]?.venc, { timeout: 10000 }).toBe(hojeMais(-2));   // o aviso da criação anterior ainda pode estar na tela: espera a gravação
   // ESC e Cancelar fecham sem gravar
   await esperarSemAviso(page);
   await page.getByRole('button', { name: '+ Nova Tarefa' }).click();
