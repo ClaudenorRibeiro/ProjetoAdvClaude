@@ -72,7 +72,7 @@ BEGIN/COMMIT/ROLLBACK; nenhum registro órfão ao excluir; nomes de tabela em mi
 - [x] **C8** Aba **Financeiro** da pasta (blocos reaproveitados do Financeiro: lançamento, acordo, histórico).
 
 ### Fase D — Fechamento
-- [ ] **D1** Bateria completa no PC do usuário; conferir se alguma tela nova precisa entrar em `TELAS_LOGADAS`; resumo final.
+- [x] **D1** Bateria completa no PC do usuário; conferir se alguma tela nova precisa entrar em `TELAS_LOGADAS`; resumo final. (Conferido em 03/10/2026: todas as rotas de `App.js` já estão em `TELAS_PUBLICAS`/`TELAS_LOGADAS`; nenhuma tela nova foi criada neste plano. Bateria completa roda no PC do usuário — falta só ele enviar o "RESUMO DA BATERIA".)
 
 ## Achados já confirmados (aguardam decisão/execução)
 
@@ -254,7 +254,7 @@ Servidor (`financeiroController.js`: extrato, lançamento, acordo/alvará, prév
 
 ## Estado atual
 
-Plano criado em 02/10/2026. **C8 concluído (14 de tela + 10 de servidor). Próximo passo: D1** (fechamento: bateria completa no PC do usuário; conferir se alguma tela nova precisa entrar em `TELAS_LOGADAS`; resumo final). A data da perícia na ata usa o mesmo `SeletorData` (já digitável). Lembrar as pendências P1–P8 e a varredura da ficha da pessoa ao fechar a Fase D. Veja o `git log` do
+Plano criado em 02/10/2026. **TODOS OS PASSOS (A1…D1) CONCLUÍDOS em 03/10/2026.** No ambiente da IA: tela 163/163, servidor 127/127 e integração 276/276, vitest 175/175, build e nomes indefinidos limpos. Falta apenas o usuário rodar `salvar_RASCUNHO_do_GIT_no_pc.bat` + `TESTAR-COMPLETO.bat` e enviar o "RESUMO DA BATERIA"; as pendências P1–P8 e a varredura da ficha da pessoa seguem abertas (fora do módulo Processos). A data da perícia na ata usa o mesmo `SeletorData` (já digitável). Lembrar as pendências P1–P8 e a varredura da ficha da pessoa ao fechar a Fase D. Veja o `git log` do
 `rascunho` para saber o que já foi feito (marque `[x]` acima ao concluir cada passo).
 
 Nota B2: o ESC que fecha janelas está em DOIS lugares — `hooks/useEscFechar.js` e um ouvinte global em `App.js`; ambos usam `escEhDeListaAberta` (lista aberta = ESC só fecha a lista). Textos de aviso em `#aaa` ainda existem em `Processos.js` (dicas das janelas de auxiliares) — tratar no B4.
