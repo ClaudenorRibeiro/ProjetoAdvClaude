@@ -79,7 +79,7 @@ test('@critical Detalhes do Processo: mostra tudo do processo e TODO campo fica 
   await expect(rotulo(page, 'Data de Distribuição')).toHaveValue('2026-03-10');
   await expect(rotulo(page, 'Observações')).toHaveValue('Observação Original');
   // tudo travado: campos desabilitados, sem "×", sem "…", sem o seletor de OAB, assuntos sem lista
-  for (const nome of ['Autores — polo ativo', 'Réus — polo passivo', 'Cliente do escritório', 'Responsável pelo processo', 'Peritos do processo (opcional)', 'Tipo', 'Status', 'Instância', 'Fórum', 'Número do Processo (CNJ)', 'Número de Protocolo', 'Data de Distribuição', 'Observações'])
+  for (const nome of ['Tipo de pessoa do autor', 'Tipo de pessoa do réu', 'Cliente do escritório', 'Responsável pelo processo', 'Tipo de pessoa do perito', 'Tipo', 'Status', 'Instância', 'Fórum', 'Número do Processo (CNJ)', 'Número de Protocolo', 'Data de Distribuição', 'Observações'])
     await expect(rotulo(page, nome), nome).toBeDisabled();
   for (const ph of ['Buscar e adicionar autor...', 'Buscar e adicionar réu...', 'Buscar e adicionar perito...']) await expect(janela(page).getByPlaceholder(ph)).toBeDisabled();
   await expect(janela(page).locator('button', { hasText: /^×$/ })).toHaveCount(0);
@@ -192,7 +192,8 @@ test('@critical Editar Processo: partes, perito, assuntos e OABs — adicionar, 
   await salvar(page).click();
   await aviso(page, 'Adicione ao menos um réu (polo passivo)');
   await expect(page.locator('.Toastify__toast')).toHaveCount(0, { timeout: 10000 });
-  await rotulo(page, 'Réus — polo passivo').selectOption('juridica');                                // (aqui o réu começa em "Física"; na janela Novo Processo começa em "Jurídica")
+  await expect(rotulo(page, 'Tipo de pessoa do réu')).toHaveValue('juridica');                      // o réu começa em "Jurídica", como no Novo Processo
+  await expect(rotulo(page, 'Tipo de pessoa do autor')).toHaveValue('fisica');
   await adicionarParte(page, 'Réus — polo passivo', 'Buscar e adicionar réu...', 'Beta', 'Empresa Beta E2E Ltda');
   await expect(janela(page).getByText('Beatriz Autora E2E X Empresa Beta E2E Ltda')).toBeVisible();
   // a mesma pessoa não vai para o polo oposto
@@ -336,13 +337,19 @@ test('@critical Histórico do processo: lista quem fez o quê e quando; vazio; e
   await abrirMenuAcoes(page, linhaProcesso(page)); await page.getByRole('button', { name: /Editar/ }).click();
   await rotulo(page, 'Status').selectOption({ label: 'Recurso E2E' });
   await salvar(page).click();
-  await motivoJanela(page).getByRole('button', { name: 'Salvar sem motivo' }).click();
+  await motivoJanela(page).getByPlaceholder('Digite o motivo, se quiser...').fill('Decisão do juiz');
+  await motivoJanela(page).getByRole('button', { name: 'Salvar com motivo' }).click();
   await aviso(page, 'Processo atualizado com sucesso!');
   await expect(page.locator('.Toastify__toast')).toHaveCount(0, { timeout: 10000 });
   await abrirMenuAcoes(page, linhaProcesso(page)); await page.getByRole('button', { name: /Histórico/ }).click();
   await expect(janela(page).locator('tbody tr')).toHaveCount(3);
   const textos = await janela(page).locator('tbody tr').allInnerTexts();
   expect(textos.map(t => ['Mudou status', 'Editou', 'Cadastrou'].find(a => t.includes(a))).sort()).toEqual(['Cadastrou', 'Editou', 'Mudou status']);
+  const linhaStatus = janela(page).locator('tbody tr').filter({ hasText: 'Mudou status' });
+  await expect(linhaStatus).toContainText('De Conhecimento E2E para Recurso E2E');                  // de/para e motivo aparecem no histórico
+  await expect(linhaStatus).toContainText('Motivo: Decisão do juiz');
+  await expect(janela(page).locator('tbody tr').filter({ hasText: 'Editou' })).not.toContainText('Motivo');
+  await semViolacoes(page, 'Histórico do processo com as 3 ações');
   await janela(page).locator('.modal-fechar').click();
   await expect(page.locator('.modal-box')).toHaveCount(0);
   // sem registros

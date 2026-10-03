@@ -811,6 +811,7 @@ async function historicoProcesso(req, res) {
   try {
     const [rows] = await pool.execute(
       `SELECT l.id, l.acao, l.descricao, l.criado_em,
+              CASE WHEN l.acao = 'status' THEN l.dados_novos END AS dados_novos,
               COALESCE(u.nome, 'Usuário removido') AS usuario_nome
          FROM logs_auditoria l
          LEFT JOIN usuarios u ON u.id = l.usuario_id
@@ -819,6 +820,10 @@ async function historicoProcesso(req, res) {
         LIMIT 500`,
       [id]
     );
+    // dados_novos só vem nas linhas de mudança de status (status anterior/novo e motivo); garante objeto, não texto
+    for (const r of rows) {
+      if (typeof r.dados_novos === 'string') { try { r.dados_novos = JSON.parse(r.dados_novos); } catch { r.dados_novos = null; } }
+    }
     return sucesso(res, rows);
   } catch (err) {
     return erroInterno(res, err);

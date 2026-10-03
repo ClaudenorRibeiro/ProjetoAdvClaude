@@ -301,6 +301,13 @@ test('editar: mudança de status registra anterior, novo e motivo; sem mudança 
   assert.equal((await api().put(`/api/processos/${id}`).send({ ...base, status_id: null })).status, 200);    // tirar o status também é mudança
   const ultimo = (await auditoria(id, 'status')).length;
   assert.equal(ultimo, 2);
+  // o Histórico do processo devolve de/para e motivo nas linhas de status (objeto, não texto) e nada disso nas outras ações
+  const hist = (await api().get(`/api/processos/${id}/historico`)).body.dados;
+  const linhasStatus = hist.filter(h => h.acao === 'status');
+  assert.equal(linhasStatus.length, 2);
+  const comMotivo = linhasStatus.find(h => h.dados_novos.motivo);
+  assert.deepEqual({ ant: comMotivo.dados_novos.status_anterior, novo: comMotivo.dados_novos.status_novo, motivo: comMotivo.dados_novos.motivo }, { ant: 'Ativo', novo: 'Suspenso', motivo: 'Aguardando documentos' });
+  assert.ok(hist.filter(h => h.acao !== 'status').every(h => h.dados_novos === null));
 });
 
 // ------------------------------------------------------------------ excluir

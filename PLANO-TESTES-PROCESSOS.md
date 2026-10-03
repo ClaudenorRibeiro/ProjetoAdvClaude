@@ -56,7 +56,7 @@ BEGIN/COMMIT/ROLLBACK; nenhum registro órfão ao excluir; nomes de tabela em mi
 ### Fase B — Tela "lista de Processos" (`Processos.js`)
 - [x] **B1 (concluído em 02/10/2026)** Tela: busca, filtros, ordenação, paginação, etiquetas, menu de cada linha, "Abrir pasta", estados vazio/erro.
 - [x] **B2** Janela "Novo processo": todos os campos, assuntos, OABs, partes, cadastro rápido de parte, CEP, validações.
-- [ ] **B3** "Editar processo" (e modo Detalhes, somente leitura — todo campo travado), "Motivo do status", "Histórico".
+- [x] **B3** "Editar processo" (e modo Detalhes, somente leitura — todo campo travado), "Motivo do status", "Histórico".
 - [ ] **B4** Excluir processo, renumerar, "Gerenciar auxiliares" (fóruns, varas, tipos, status, instâncias, assuntos).
 
 ### Fase C — Tela da pasta (`PastaDetalhe.js`, aba por aba)
@@ -179,7 +179,7 @@ Teste: `frontend/e2e/processos-novo.spec.js` (12 testes; criar processo completo
 3. Tecla ESC com uma lista aberta (responsável, assuntos etc.) fecha a janela "Novo Processo" inteira e perde o que foi digitado (`hooks/useEscFechar.js` fecha a janela mais acima sem olhar se há lista aberta).
 4. Observação (não é erro): o "…" dos botões não tem nome descritivo (só "…") — sugestão de aria-label/title.
 
-### Achados do B3 (03/10/2026) — AGUARDANDO decisão do usuário (nada corrigido ainda)
+### Achados do B3 (03/10/2026) — CORRIGIDOS com autorização do usuário (itens 1–3 + réu "Jurídica" + nomes dos seletores)
 Teste: `frontend/e2e/processos-editar.spec.js` (10 testes: Detalhes, Editar, partes/assuntos/OABs, motivo do status, erros do servidor, Histórico, assuntos/ESC, permissões). 8 passam.
 1. Acessibilidade — "Detalhes do Processo" (somente leitura): a área rolável da janela não é alcançável pelo teclado (com todos os campos travados não há onde pôr o foco) — `scrollable-region-focusable` em `.modal-body`.
 2. Acessibilidade — "Histórico do processo": cores "Cadastrou" (#16a34a, 3,3:1) e "Mudou status" (#d97706, ~3,2:1) abaixo de 4,5:1.
@@ -188,7 +188,7 @@ Teste: `frontend/e2e/processos-editar.spec.js` (10 testes: Detalhes, Editar, par
 
 ## Estado atual
 
-Plano criado em 02/10/2026. **B2 concluído (13 testes). Próximo passo: B3** (editar/detalhes/motivo do status/histórico; reconferir assuntos e os mesmos padrões de acessibilidade na janela de edição, que tem os mesmos campos). (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
+Plano criado em 02/10/2026. **B3 concluído (10 testes). Próximo passo: B4** (excluir processo, renumerar pasta, janelas de gerenciar auxiliares — incluindo dicas em #aaa). (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
 `rascunho` para saber o que já foi feito (marque `[x]` acima ao concluir cada passo).
 
 Nota B2: o ESC que fecha janelas está em DOIS lugares — `hooks/useEscFechar.js` e um ouvinte global em `App.js`; ambos usam `escEhDeListaAberta` (lista aberta = ESC só fecha a lista). Textos de aviso em `#aaa` ainda existem em `Processos.js` (dicas das janelas de auxiliares) — tratar no B4.

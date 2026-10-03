@@ -1088,7 +1088,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
           <div className="form-group">
             <label className="form-label">Peritos do processo (opcional)</label>
             <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
-              <select aria-label="Peritos do processo (opcional)" className="form-control" style={{ maxWidth: '130px' }}
+              <select aria-label="Tipo de pessoa do perito" className="form-control" style={{ maxWidth: '130px' }}
                 value={tipoPerito}
                 onChange={e => { setTipoPerito(e.target.value); setResultPerito([]); setBuscaPerito(''); }}>
                 <option value="fisica">Física</option>
@@ -1339,7 +1339,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
 
   // Busca de pessoas
   const [tipoAutor, setTipoAutor]     = useState('fisica');
-  const [tipoReu, setTipoReu]         = useState('fisica');
+  const [tipoReu, setTipoReu]         = useState('juridica'); // padrão do réu = Jurídica, igual à janela Novo Processo
   const [buscaAutor, setBuscaAutor]   = useState('');
   const [buscaReu, setBuscaReu]       = useState('');
   const [resultAutor, setResultAutor] = useState([]);
@@ -1502,7 +1502,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
         </div>
 
-        <div className="modal-body">
+        <div className="modal-body" tabIndex={leitura ? 0 : undefined}>
           <fieldset disabled={leitura} style={{ border: 0, padding: 0, margin: 0 }}>
 
           {/* Preview do título gerado */}
@@ -1523,7 +1523,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
           <div className="form-group">
             <label className="form-label">Autores — polo ativo *</label>
             <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
-              <select aria-label="Autores — polo ativo" className="form-control" style={{ maxWidth: '130px' }} value={tipoAutor}
+              <select aria-label="Tipo de pessoa do autor" className="form-control" style={{ maxWidth: '130px' }} value={tipoAutor}
                 disabled={leitura}
                 onChange={e => { setTipoAutor(e.target.value); setResultAutor([]); setBuscaAutor(''); }}>
                 <option value="fisica">Física</option>
@@ -1577,7 +1577,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
           <div className="form-group">
             <label className="form-label">Réus — polo passivo *</label>
             <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
-              <select aria-label="Réus — polo passivo" className="form-control" style={{ maxWidth: '130px' }} value={tipoReu}
+              <select aria-label="Tipo de pessoa do réu" className="form-control" style={{ maxWidth: '130px' }} value={tipoReu}
                 disabled={leitura}
                 onChange={e => { setTipoReu(e.target.value); setResultReu([]); setBuscaReu(''); }}>
                 <option value="fisica">Física</option>
@@ -1663,7 +1663,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
           <div className="form-group">
             <label className="form-label">Peritos do processo (opcional)</label>
             <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
-              <select aria-label="Peritos do processo (opcional)" className="form-control" style={{ maxWidth: '130px' }}
+              <select aria-label="Tipo de pessoa do perito" className="form-control" style={{ maxWidth: '130px' }}
                 value={tipoPerito}
                 onChange={e => { setTipoPerito(e.target.value); setResultPerito([]); setBuscaPerito(''); }}>
                 <option value="fisica">Física</option>
@@ -1933,7 +1933,7 @@ export function ModalMotivoStatus({ anterior, novo, salvando, onCancelar, onSalv
 // MODAL: HISTÓRICO DO PROCESSO (quem fez, quando, o quê — sem "desfazer")
 // ============================================================
 const HISTORICO_PROCESSO_ACAO_LABEL = { criar: 'Cadastrou', editar: 'Editou', status: 'Mudou status', excluir: 'Excluiu' };
-const HISTORICO_PROCESSO_ACAO_COR   = { criar: '#16a34a', editar: '#2563eb', status: '#d97706', excluir: '#dc2626' };
+const HISTORICO_PROCESSO_ACAO_COR   = { criar: '#15803d', editar: '#2563eb', status: '#b45309', excluir: '#dc2626' };
 
 export function ModalHistoricoProcesso({ processo, onFechar }) {
   const [registros, setRegistros] = useState([]);
@@ -1969,6 +1969,12 @@ export function ModalHistoricoProcesso({ processo, onFechar }) {
                             {HISTORICO_PROCESSO_ACAO_LABEL[r.acao] || r.acao}
                           </span>
                           {r.descricao && <div style={{ fontSize: '11px', color: '#5b6472' }}>{r.descricao}</div>}
+                          {r.acao === 'status' && r.dados_novos && (
+                            <div style={{ fontSize: '11px', color: '#5b6472' }}>
+                              De <strong>{r.dados_novos.status_anterior || 'Sem status'}</strong> para <strong>{r.dados_novos.status_novo || 'Sem status'}</strong>
+                              {r.dados_novos.motivo ? <> — Motivo: {r.dados_novos.motivo}</> : null}
+                            </div>
+                          )}
                         </td>
                         <td style={{ fontSize: '12px' }}>{r.usuario_nome}</td>
                       </tr>
