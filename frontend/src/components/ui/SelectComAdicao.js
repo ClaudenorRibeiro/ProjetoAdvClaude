@@ -49,6 +49,7 @@ export function SelectComAdicao({ label, value, onChange, opcoes = [], tipo, onN
       {label && <label className="form-label">{label}</label>}
       <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
         <select
+          aria-label={typeof label === 'string' ? label : undefined}
           className="form-control"
           value={value}
           disabled={somenteLeitura}

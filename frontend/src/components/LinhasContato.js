@@ -28,7 +28,7 @@ export function LinhaFone({ tel, index, onChange, onRemove, somenteLeitura = fal
         ref={refNumero}
         className="form-control"
         style={{ flex: 2 }}
-        placeholder="(11) 99999-9999"
+        placeholder="(11) 99999-9999" aria-label={`Telefone ${index + 1}`}
         value={tel.numero}
         maxLength={15}
         disabled={somenteLeitura}
@@ -38,7 +38,7 @@ export function LinhaFone({ tel, index, onChange, onRemove, somenteLeitura = fal
       <input
         className="form-control"
         style={{ flex: 1 }}
-        placeholder="Descrição do Telefone"
+        placeholder="Descrição do Telefone" aria-label={`Descrição do telefone ${index + 1}`}
         value={tel.tipo || ''}
         disabled={somenteLeitura}
         onChange={e => onChange({ ...tel, tipo: e.target.value })}
@@ -97,7 +97,7 @@ export function LinhaEmail({ email, index, onChange, onRemove, somenteLeitura = 
           ref={refEmail}
           className={`form-control ${erroEmail ? 'is-invalid' : ''}`}
           style={{ flex: 1 }}
-          placeholder="email@exemplo.com"
+          placeholder="email@exemplo.com" aria-label={`E-mail ${index + 1}`}
           value={email}
           disabled={somenteLeitura}
           onChange={e => { setErroEmail(''); onChange(e.target.value.toLowerCase()); }}

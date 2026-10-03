@@ -834,7 +834,7 @@ export function ModalEnviarSMS({ pessoa, telefones, tipo, onFechar }) {
 
   return (
     <div className="modal-overlay">
-      <div className="modal-box">
+      <div className="modal-box" data-esc-proprio={confirmar ? '' : undefined}>
         <div className="modal-header">
           <h3>Enviar SMS — {nomePessoa}</h3>
           <button className="modal-fechar" onClick={onFechar}>✕</button>
@@ -849,7 +849,7 @@ export function ModalEnviarSMS({ pessoa, telefones, tipo, onFechar }) {
 
           <label style={rotulo}>Telefone</label>
           {telefones.length > 1 ? (
-            <select style={campo} value={numero} onChange={e => setNumero(e.target.value)}>
+            <select aria-label="Telefone" style={campo} value={numero} onChange={e => setNumero(e.target.value)}>
               {telefones.map((t, i) => <option key={i} value={t}>{formatarTelefone(t)}</option>)}
             </select>
           ) : (
@@ -998,7 +998,7 @@ export function ModalEnviarEmail({ pessoa, emails, tipo, onFechar }) {
           {/* Destinatário: se houver mais de um e-mail, permite escolher; o principal já vem selecionado */}
           <label style={rotulo}>Para</label>
           {emails.length > 1 ? (
-            <select value={para} onChange={e => setPara(e.target.value)} style={campo}>
+            <select aria-label="Para" value={para} onChange={e => setPara(e.target.value)} style={campo}>
               {emails.map((em, i) => <option key={i} value={em}>{em}</option>)}
             </select>
           ) : (
@@ -2181,7 +2181,7 @@ function CampoCPF({ value, onChange, pessoaIdAtual = null, onAbrirEdicao = null,
   return (
     <div className="form-group">
       <label className="form-label">{dispensado ? `CPF (não obrigatório — ${motivoDispensa})` : 'CPF *'}</label>
-      <input
+      <input aria-label="CPF"
         ref={refCampo}
         type="text"
         className={`form-control ${erroCpf ? 'is-invalid' : ''}`}
@@ -2485,7 +2485,7 @@ function CampoResponsavelLegal({ form, set, opcoesParentesco, onNovoParentesco, 
           ) : (
             <div style={{ display:'flex', gap:'6px' }}>
               <div style={{ flex:1, position:'relative' }}>
-                <input className="form-control" placeholder="Buscar pessoa já cadastrada..."
+                <input className="form-control" placeholder="Buscar pessoa já cadastrada..." aria-label="Buscar responsável legal"
                   value={busca} onChange={e => buscar(e.target.value)} />
                 {resultados.length > 0 && (
                   <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'#fff',
@@ -2692,14 +2692,14 @@ function CampoCTPS({ tipo, numero, serie, onChangeTipo, onChangeNumero, onChange
           <>
             <input
               className="form-control" style={{ flex: 1, minWidth: '100px' }}
-              placeholder="Núm. CTPS"
+              placeholder="Núm. CTPS" aria-label="Número da CTPS"
               value={numero}
               disabled={somenteLeitura}
               onChange={e => onChangeNumero(e.target.value)}
             />
             <input
               className="form-control" style={{ flex: '0 0 90px' }}
-              placeholder="Série"
+              placeholder="Série" aria-label="Série da CTPS"
               value={serie}
               disabled={somenteLeitura}
               onChange={e => onChangeSerie(e.target.value)}
@@ -2721,7 +2721,7 @@ const Campo = React.forwardRef(function Campo({ label, value, onChange, onBlur, 
   return (
     <div className="form-group">
       <label className="form-label">{label}</label>
-      <input ref={ref} type={type} autoComplete="off" className="form-control" value={value} disabled={somenteLeitura} onChange={e=>onChange(e.target.value)} onBlur={onBlur} placeholder={placeholder} />
+      <input ref={ref} type={type} aria-label={typeof label === 'string' ? label : undefined} autoComplete="off" className="form-control" value={value} disabled={somenteLeitura} onChange={e=>onChange(e.target.value)} onBlur={onBlur} placeholder={placeholder} />
     </div>
   );
 });
@@ -2729,7 +2729,7 @@ function Select({ label, value, onChange, opcoes=[] }) {
   return (
     <div className="form-group">
       <label className="form-label">{label}</label>
-      <select className="form-control" value={value} onChange={e=>onChange(e.target.value)}>
+      <select aria-label={typeof label === 'string' ? label : undefined} className="form-control" value={value} onChange={e=>onChange(e.target.value)}>
         <option value="">— Selecione —</option>
         {opcoes.map(o => <option key={o.id} value={o.id}>{o.nome}</option>)}
       </select>

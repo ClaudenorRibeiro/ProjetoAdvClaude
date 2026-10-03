@@ -60,7 +60,7 @@ BEGIN/COMMIT/ROLLBACK; nenhum registro órfão ao excluir; nomes de tabela em mi
 - [x] **B4** Excluir processo, renumerar, "Gerenciar auxiliares" (fóruns, varas, tipos, status, instâncias, assuntos).
 
 ### Fase C — Tela da pasta (`PastaDetalhe.js`, aba por aba)
-- [ ] **C1** Cabeçalho e partes: voltar, editar número da pasta, painel de partes e contatos (e-mail, SMS, WhatsApp,
+- [x] **C1** Cabeçalho e partes: voltar, editar número da pasta, painel de partes e contatos (e-mail, SMS, WhatsApp,
       copiar telefone/e-mail, anotações de atendimento, ver cadastro, gerar documento).
 - [ ] **C2** Aba **Processos**.
 - [ ] **C3** Aba **Andamentos** (janela de andamento).
@@ -194,7 +194,7 @@ Testes: `frontend/e2e/processos-excluir-renumerar.spec.js` (8) e `frontend/e2e/p
 4. Renumerar pasta (lápis ✎): o campo numérico sem rótulo.
 5. Observação: os botões "Editar" e "✕" de cada linha não dizem de qual item são (leitor de tela lê só "Editar"/"✕"); sugestão aria-label "Editar <nome>" / "Excluir <nome>".
 
-### Achados do C1 (03/10/2026) — AGUARDANDO decisão do usuário (nada corrigido ainda)
+### Achados do C1 (03/10/2026) — CORRIGIDOS com autorização do usuário (itens 1–5)
 Teste: `frontend/e2e/processos-pasta-partes.spec.js` (11 testes: cabeçalho, painel de partes, ver cadastro, copiar telefone/e-mail, WhatsApp, anotações, e-mail, SMS, permissão, ESC do SMS). Passam: cabeçalho, copiar e-mail, anotações; os demais falham pelos achados abaixo.
 1. Painel "Partes do processo": o cabeçalho que abre/fecha é um `div` clicável — não se alcança com Tab nem abre com Enter (só mouse).
 2. Fechar a ficha ("Ver cadastro") recarrega a pasta e o painel de partes volta a ficar FECHADO sozinho (o estado se perde).
@@ -204,7 +204,9 @@ Teste: `frontend/e2e/processos-pasta-partes.spec.js` (11 testes: cabeçalho, pai
 
 ## Estado atual
 
-Plano criado em 02/10/2026. **B4 concluído (8 + 11 testes). Próximo passo: C1** (pasta: cabeçalho, partes, aba Processos; as demais abas C2–C8). (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
+Plano criado em 02/10/2026. **C1 concluído (11 testes). Próximo passo: C2** (aba Processos da pasta; depois C3–C8). (Servidor completo no fim do A2: 121 rápidos + 175 banco + 175 frontend, tudo verde.) Antes de continuar, reler este arquivo e conferir o `git log` do
 `rascunho` para saber o que já foi feito (marque `[x]` acima ao concluir cada passo).
 
 Nota B2: o ESC que fecha janelas está em DOIS lugares — `hooks/useEscFechar.js` e um ouvinte global em `App.js`; ambos usam `escEhDeListaAberta` (lista aberta = ESC só fecha a lista). Textos de aviso em `#aaa` ainda existem em `Processos.js` (dicas das janelas de auxiliares) — tratar no B4.
+
+Nota C1: a ficha da pessoa (`ModalPessoa`, Pessoas.js) tem muitos campos só com `<label>` visual; ganharam `aria-label` os componentes `Campo`, `Select`, `SelectComAdicao`, CPF, CTPS, busca do responsável e as linhas de telefone/e-mail (`LinhasContato.js`). A varredura completa dessa ficha (todas as abas/estados) pertence ao módulo Pessoas — lembrar ao fechar a Fase D. O ESC global (`App.js`) agora respeita `data-esc-proprio` (janelas com etapa interna).

@@ -51,6 +51,7 @@ export default function PastaDetalhe() {
   const processoInicial = 'todos';
 
   const [pasta, setPasta]           = useState(null);
+  const pastaJaCarregada = useRef(false); // true depois da 1ª carga desta pasta
   const [carregando, setCarregando] = useState(true);
   const [abaAtiva, setAbaAtiva]     = useState(abaInicial);
 
@@ -211,15 +212,18 @@ export default function PastaDetalhe() {
 
   // ---- Carrega a pasta ----
   const carregarPasta = useCallback(async () => {
-    setCarregando(true);
+    // Só mostra "Carregando pasta..." na 1ª vez; nas recargas (depois de fechar uma ficha, salvar etc.) a tela
+    // fica como está — senão os painéis (ex.: "Partes do processo") se fecham sozinhos.
+    if (!pastaJaCarregada.current) setCarregando(true);
     try {
       const { data } = await processosAPI.buscarPasta(id);
-      if (data.ok) setPasta(data.dados);
+      if (data.ok) { setPasta(data.dados); pastaJaCarregada.current = true; }
     } catch { toast.error('Erro ao carregar pasta'); }
     finally { setCarregando(false); }
   }, [id]);
 
-  useEffect(() => { carregarPasta(); }, [carregarPasta]);
+  // Pasta diferente (outro id) volta a mostrar "Carregando pasta..." na 1ª carga
+  useEffect(() => { pastaJaCarregada.current = false; carregarPasta(); }, [carregarPasta]);
 
   // Lista de usuários do filtro "Responsável" da aba Prazos — só carrega para quem pode ver todos.
   useEffect(() => {
@@ -1826,13 +1830,14 @@ function PainelPartes({ processos, smsAtivo, onReload }) {
   return (
     <div className="card" style={{ marginBottom: '16px' }}>
       {/* Cabeçalho clicável: seta + título + contagem. Clica para abrir/fechar. */}
-      <div onClick={() => setAberto(a => !a)}
-        style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer',
-          fontSize: '13px', fontWeight: 600, color: '#5b6472', userSelect: 'none' }}>
+      <button type="button" onClick={() => setAberto(a => !a)} aria-expanded={aberto}
+        style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', width: '100%',
+          background: 'none', border: 'none', padding: 0, fontFamily: 'inherit',
+          fontSize: '13px', fontWeight: 600, color: '#5b6472', userSelect: 'none', textAlign: 'left' }}>
         <span aria-hidden="true" style={{ fontSize: '11px', color: '#5b6472' }}>{aberto ? '▼' : '▶'}</span>
         Partes do processo
         <span style={{ color: '#5b6472', fontWeight: 500 }}>({linhas.length})</span>
-      </div>
+      </button>
 
       {aberto && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '10px' }}>
@@ -1849,6 +1854,8 @@ function PainelPartes({ processos, smsAtivo, onReload }) {
 
 function ItemParteContato({ parte, smsAtivo, onReload }) {
   const { temPermissao } = useAuth();
+  // As ações de contato leem a ficha da pessoa, que o servidor só entrega a quem pode ver Pessoas: sem isso, nem aparecem.
+  const podePessoas = temPermissao('pessoas', 'visualizar');
   const info      = PAPEL_INFO[parte.papel] || { label: parte.papel, cls: 'badge-cinza' };
   const tipoAba   = parte.tipo_pessoa === 'juridica' ? 'juridicas' : 'fisicas';
   const pessoaObj = { id: parte.pessoa_id, nome: parte.nome, razao_social: parte.nome };
@@ -1925,6 +1932,7 @@ function ItemParteContato({ parte, smsAtivo, onReload }) {
         background: 'transparent', transition: 'background-color 0.15s' }}>
       <span className={`badge ${info.cls}`} style={{ minWidth: '58px', textAlign: 'center' }}>{info.label}</span>
       <span style={{ flex: 1, minWidth: 0 }}>
+        {podePessoas ? (
         <button type="button" onClick={() => setVerCadastro(true)}
           title="Ver cadastro"
           style={{ padding: 0, border: 'none', background: 'transparent', color: '#1e2a3a',
@@ -1934,22 +1942,23 @@ function ItemParteContato({ parte, smsAtivo, onReload }) {
           onMouseLeave={e => { e.currentTarget.style.color = '#1e2a3a'; e.currentTarget.style.textDecorationColor = 'transparent'; }}>
           {parte.nome}
         </button>
+        ) : <span style={{ color: '#1e2a3a', fontSize: '14px' }}>{parte.nome}</span>}
         {parte.responsavel_nome && (
-          <span style={{ display: 'block', fontSize: '12px', color: '#6b7280' }}>
+          <span style={{ display: 'block', fontSize: '12px', color: '#5b6472' }}>
             representado(a) por {parte.responsavel_nome}
             {parte.parentesco_nome ? ` — ${parte.parentesco_nome}` : ''}
           </span>
         )}
       </span>
       <MenuAcoes itens={[
-        { label: 'Ver cadastro',    icone: '👁️', onClick: () => setVerCadastro(true) },
-        { label: 'Anotações de atendimento', icone: '📝', onClick: () => setAnotacoes(true) },
-        { label: 'Copiar telefone', icone: '📋', onClick: acaoCopiarTel },
-        { label: 'Copiar e-mail',   icone: '📋', onClick: acaoCopiarEmail },
-        { label: 'Enviar e-mail',   icone: '✉️', onClick: acaoEmail },
-        { label: 'Enviar WhatsApp', icone: '🟢', onClick: acaoZap },
+        { label: 'Ver cadastro',    icone: '👁️', oculto: !podePessoas, onClick: () => setVerCadastro(true) },
+        { label: 'Anotações de atendimento', icone: '📝', oculto: !podePessoas, onClick: () => setAnotacoes(true) },
+        { label: 'Copiar telefone', icone: '📋', oculto: !podePessoas, onClick: acaoCopiarTel },
+        { label: 'Copiar e-mail',   icone: '📋', oculto: !podePessoas, onClick: acaoCopiarEmail },
+        { label: 'Enviar e-mail',   icone: '✉️', oculto: !podePessoas, onClick: acaoEmail },
+        { label: 'Enviar WhatsApp', icone: '🟢', oculto: !podePessoas, onClick: acaoZap },
         { label: 'Enviar SMS',      icone: '📱',
-          oculto: parte.tipo_pessoa !== 'fisica' || !smsAtivo || !temPermissao('sms', 'cadastrar'),
+          oculto: !podePessoas || parte.tipo_pessoa !== 'fisica' || !smsAtivo || !temPermissao('sms', 'cadastrar'),
           onClick: acaoSms },
       ]} />
 

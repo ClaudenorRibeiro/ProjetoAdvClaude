@@ -80,8 +80,8 @@ test('@critical Painel "Partes do processo": começa fechado, abre e fecha, most
   await expect(page.getByRole('button', { name: 'Alberto Autor E2E', exact: true })).toHaveCount(0);                    // fecha de novo
   // pelo teclado: o cabeçalho do painel precisa ser alcançável com Tab e abrir com Enter
   await page.keyboard.press('Tab');
-  for (let i = 0; i < 40; i++) {
-    const foco = await page.evaluate(() => (document.activeElement?.textContent || '').includes('Partes do processo'));
+  for (let i = 0; i < 150; i++) {
+    const foco = await page.evaluate(() => (document.activeElement?.textContent || '').includes('Partes do processo') && document.activeElement?.getAttribute('aria-expanded') === 'false');
     if (foco) break;
     await page.keyboard.press('Tab');
   }
@@ -356,13 +356,14 @@ test('@critical Partes: "Enviar SMS" só existe quando o SMS está ativo e só p
   await expect(page.locator('.modal-box')).toHaveCount(0);
 });
 
-test('@critical Painel de partes: quem só tem permissão de Processos (sem Pessoas) não recebe ações de contato que não funcionariam', async ({ page }) => {
+test('@critical Painel de partes: quem só tem permissão de Processos (sem Pessoas) vê as partes, mas não recebe ações de contato que não funcionariam', async ({ page }) => {
   const login = await criarUsuarioComPermissoes('so_processos_partes', [['processos', null, 'visualizar']]);
   await loginPelaTela(page, login);
-  await abrirPasta(page);
-  await abrirMenuAcoes(page, linhaParte(page, 'Perito Paulo E2E'));
-  for (const item of [/Ver cadastro/, /Anotações de atendimento/, /Copiar telefone/, /Copiar e-mail/, /Enviar e-mail/, /Enviar WhatsApp/])
-    await expect(page.getByRole('button', { name: item }), String(item)).toHaveCount(0);
+  await abrirPasta(page, false);
+  await painel(page).click();
+  await expect(page.getByText('Perito Paulo E2E', { exact: true }).first()).toBeVisible();              // as partes aparecem...
+  await expect(page.getByRole('button', { name: 'Perito Paulo E2E', exact: true })).toHaveCount(0);      // ...mas o nome não abre a ficha
+  await expect(page.getByTitle('Mais ações').filter({ visible: true })).toHaveCount(2);                  // só os menus dos 2 processos (aba Processos); nenhum por pessoa
 });
 
 test('@critical Partes: ESC na confirmação do SMS volta para o texto (não fecha a janela e não perde a mensagem)', async ({ page }) => {

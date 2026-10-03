@@ -220,6 +220,7 @@ export default function App() {
       const modais = document.querySelectorAll('.modal-overlay');
       const modalAtivo = modais[modais.length - 1];
       if (!modalAtivo) return;
+      if (modalAtivo.querySelector('[data-esc-proprio]')) return;   // janela com etapa interna (ex.: confirmação do SMS): o ESC é dela
       const fechar = [...modalAtivo.querySelectorAll('button:not(:disabled)')].find(botao =>
         botao.classList.contains('modal-fechar') || ['Cancelar', 'Fechar', 'Voltar'].includes(botao.textContent.trim())
       );
