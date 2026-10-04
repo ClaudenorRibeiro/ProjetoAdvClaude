@@ -103,6 +103,39 @@ test('resultado sem comparecimento exige texto e permite texto sem providência 
   assert.deepEqual(detalhes.body.dados.itens, []);
 });
 
+test('ata: prazo com quantidade 0 usa a data final; com as duas, a data final manda; só com quantidade 0 recusa', async () => {
+  const conn = await conectarBancoTeste();
+  let subtipo;
+  try { subtipo = (await conn.execute('SELECT id FROM prazo_subtipo ORDER BY id LIMIT 1'))[0][0].id; } finally { await conn.end(); }
+  const domingo = '2030-06-02';
+  const ata = async (hora, prazos) => {
+    const criada = await criar(audiencia({ modalidade: 'presencial', tipo_audiencia_id: 4, hora }));
+    assert.equal(criada.status, 201, JSON.stringify(criada.body));
+    const r = await request(app).post(`/api/audiencias/${criada.body.dados.id}/ata`).set('Authorization', `Bearer ${tokenAdmin}`)
+      .send({ advogado_acompanhante: 'ninguem', teve_prazo: true, prazos });
+    return { r, id: criada.body.dados.id };
+  };
+  const base = { data_inicio: domingo, subtipo_id: subtipo, tipo_dias: 'uteis', descricao: 'Prazo da ata' };
+  // 1) zero dias úteis (início e final no mesmo domingo): grava com a data final e sem quantidade
+  const a = await ata('10:21', [{ ...base, data_final: domingo, quantidade: '0' }]);
+  assert.equal(a.r.status, 201, JSON.stringify(a.r.body));
+  // 2) quantidade e data final diferentes: a data final digitada manda
+  const b = await ata('10:22', [{ ...base, data_inicio: '2030-06-03', data_final: '2030-06-28', quantidade: '3', tipo_dias: 'corridos', descricao: 'Final manda' }]);
+  assert.equal(b.r.status, 201, JSON.stringify(b.r.body));
+  const c2 = await conectarBancoTeste();
+  try {
+    const [r1] = await c2.execute("SELECT quantidade, data_vencimento FROM prazos_processo WHERE descricao = 'Prazo da ata' ORDER BY id DESC LIMIT 1");
+    assert.equal(r1[0].quantidade, null);
+    assert.equal(String(r1[0].data_vencimento instanceof Date ? r1[0].data_vencimento.toISOString() : r1[0].data_vencimento).slice(0, 10), domingo);
+    const [r2] = await c2.execute("SELECT quantidade, data_vencimento FROM prazos_processo WHERE descricao = 'Final manda' ORDER BY id DESC LIMIT 1");
+    assert.equal(String(r2[0].data_vencimento instanceof Date ? r2[0].data_vencimento.toISOString() : r2[0].data_vencimento).slice(0, 10), '2030-06-28');
+  } finally { await c2.end(); }
+  // 3) só com quantidade 0 e sem data final: recusa com a mensagem da ata e não cria a ata
+  const d = await ata('10:23', [{ ...base, quantidade: 0 }]);
+  assert.equal(d.r.status, 400, JSON.stringify(d.r.body));
+  assert.match(d.r.body.mensagem, /data final ou quantidade de dias/i);
+});
+
 test('audiência presencial mantém a exigência de ao menos um acontecimento', async () => {
   const criada = await criar(audiencia({ modalidade: 'presencial', tipo_audiencia_id: 4, hora: '10:05' }));
   const resposta = await request(app).post(`/api/audiencias/${criada.body.dados.id}/ata`)

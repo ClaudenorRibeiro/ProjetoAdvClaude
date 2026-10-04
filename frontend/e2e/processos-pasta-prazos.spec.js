@@ -364,6 +364,17 @@ test('@critical Novo Prazo (pasta travada): processo e título já preenchidos, 
   await expect(jan.getByLabel('Quantidade de dias', { exact: true })).toHaveValue('15');                      // 15 dias úteis entre 02/03 e 20/03 (inclusive)
   await jan.getByLabel('Tipo de dias', { exact: true }).selectOption('corridos');
   await expect(jan.getByLabel('Quantidade de dias', { exact: true })).toHaveValue('19');
+  // início e final no mesmo domingo, em dias úteis: zero dias úteis → a quantidade fica VAZIA (não "0"); com corridos volta a contar 1
+  await jan.getByLabel('Tipo de dias', { exact: true }).selectOption('uteis');
+  await jan.getByLabel('Data início', { exact: true }).fill('2026-03-08');                                   // domingo
+  await jan.getByLabel('Data final', { exact: true }).fill('2026-03-08');
+  await expect(jan.getByLabel('Quantidade de dias', { exact: true })).toHaveValue('');
+  await jan.getByLabel('Tipo de dias', { exact: true }).selectOption('corridos');
+  await expect(jan.getByLabel('Quantidade de dias', { exact: true })).toHaveValue('1');
+  // volta aos valores usados nos passos seguintes
+  await jan.getByLabel('Data início', { exact: true }).fill('2026-03-02');
+  await jan.getByLabel('Data final', { exact: true }).fill('2026-03-20');
+  await expect(jan.getByLabel('Quantidade de dias', { exact: true })).toHaveValue('19');
   // delegar: o aviso de conclusão só vale com um responsável
   const avisar = jan.getByRole('checkbox', { name: /Avisar-me quando este prazo for concluído/ });
   await expect(avisar).toBeDisabled();
@@ -463,6 +474,41 @@ test('@critical Editar Prazo: abre com os dados, não recalcula sozinho, salva, 
   const p = await statusNoBanco(d.futuro);
   expect({ desc: p.descricao, venc: String(p.data_vencimento.toISOString ? p.data_vencimento.toISOString().slice(0, 10) : p.data_vencimento).slice(0, 10) }).toEqual({ desc: 'Descrição Editada do Prazo', venc: dia(12) });
   expect(await noBanco("SELECT id FROM logs_auditoria WHERE tabela = 'prazos_processo' AND acao = 'editar' AND registro_id = ?", [d.futuro])).toHaveLength(1);
+});
+
+test('@critical Prazo que começa e termina no mesmo domingo (zero dias úteis): salva sem a quantidade, novo e editar — a data final manda', async ({ page }) => {
+  await loginPelaTela(page);
+  await abrirNovoPrazo(page);
+  const jan = novoPrazo(page);
+  await escolherNa(page, 'Tipo de prazo *', 'Recurso C4');
+  await escolherNa(page, 'Subtipo *', 'Apelação C4');
+  await jan.getByLabel('Descrição', { exact: true }).fill('prazo domingo');
+  await jan.getByLabel('Data início', { exact: true }).fill('2026-03-08');                                   // domingo
+  await jan.getByLabel('Data final', { exact: true }).fill('2026-03-08');
+  await expect(jan.getByLabel('Tipo de dias', { exact: true })).toHaveValue('uteis');
+  await expect(jan.getByLabel('Quantidade de dias', { exact: true })).toHaveValue('');
+  await jan.getByRole('button', { name: 'Salvar Prazo' }).click();
+  await aviso(page, 'Prazo criado com sucesso!');
+  await expect(page.locator('.modal-box')).toHaveCount(0);
+  await expect(linha(page, '08/03/2026')).toBeVisible();
+  const p = (await noBanco("SELECT * FROM prazos_processo WHERE descricao = 'Prazo Domingo'"))[0];
+  expect({ qtd: p.quantidade, tipo: p.tipo_dias, venc: String(p.data_vencimento.toISOString ? p.data_vencimento.toISOString().slice(0, 10) : p.data_vencimento).slice(0, 10) })
+    .toEqual({ qtd: null, tipo: 'uteis', venc: '2026-03-08' });
+  // editar: abre com a quantidade vazia, e salvar de novo (mesmo dia, outra descrição) também funciona
+  await esperarSemAviso(page);
+  await menu(page, '08/03/2026'); await item(page, 'Editar').click();
+  const ed = janela(page, 'Editar Prazo');
+  await expect(ed).toBeVisible();
+  await expect(ed.getByLabel('Quantidade de dias', { exact: true })).toHaveValue('');
+  await expect(ed.getByLabel('Data final', { exact: true })).toHaveValue('2026-03-08');
+  await ed.getByLabel('Descrição', { exact: true }).fill('prazo domingo editado');
+  await ed.getByLabel('Descrição', { exact: true }).blur();
+  await ed.getByLabel('Data final', { exact: true }).fill('2026-03-08');                                     // mexe na data: recalcula → continua vazio
+  await expect(ed.getByLabel('Quantidade de dias', { exact: true })).toHaveValue('');
+  await ed.getByRole('button', { name: 'Salvar Alterações' }).click();
+  await aviso(page, 'Prazo atualizado!');
+  const e = (await noBanco('SELECT * FROM prazos_processo WHERE id = ?', [p.id]))[0];
+  expect({ desc: e.descricao, qtd: e.quantidade }).toEqual({ desc: 'Prazo Domingo Editado', qtd: null });
 });
 
 // ------------------------------------------------------------------ permissões

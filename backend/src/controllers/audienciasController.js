@@ -1299,19 +1299,22 @@ async function registrarAta(req, res) {
 
     for (const p of prazos) {
       const dataFinalInformada = p.data_final || p.data_vencimento;
-      if (!p.data_inicio || !p.subtipo_id || (!p.quantidade && !dataFinalInformada)) {
+      // Mesma regra do módulo Prazos: a data final digitada MANDA; a quantidade é só referência e "0"
+      // (zero dias úteis entre início e final) vale como "sem quantidade".
+      const qtdInformada = /^0+$/.test(String(p.quantidade ?? '').trim()) ? null : p.quantidade;
+      if (!p.data_inicio || !p.subtipo_id || (!qtdInformada && !dataFinalInformada)) {
         throw erroDaAta('Cada prazo da ata precisa de data inicial, tipo, subtipo e data final ou quantidade de dias.');
       }
       const { calcularVencimento } = require('../services/calendarioService');
-      const vencimento = p.quantidade
-        ? await calcularVencimento(p.data_inicio, p.quantidade, p.tipo_dias || 'uteis')
-        : dataFinalInformada;
+      const vencimento = dataFinalInformada
+        ? dataFinalInformada
+        : await calcularVencimento(p.data_inicio, qtdInformada, p.tipo_dias || 'uteis');
       const [prazoResult] = await conn.execute(
         `INSERT INTO prazos_processo (processo_id, subtipo_id, descricao, data_inicio,
           quantidade, tipo_dias, data_vencimento, delegado_para, criado_por)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [processoId, p.subtipo_id, p.descricao || null, p.data_inicio,
-         p.quantidade || null, p.tipo_dias || 'uteis', vencimento,
+         qtdInformada || null, p.tipo_dias || 'uteis', vencimento,
          p.delegado_para || null, req.usuario.id]
       );
       await auditoria.registrar(req.usuario.id, 'prazos_processo', 'criar', prazoResult.insertId, null, null, conn);

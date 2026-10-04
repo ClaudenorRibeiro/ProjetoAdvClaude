@@ -50,7 +50,12 @@ function lerCamposPrazo(corpo) {
   const df = dataIso(c.data_final, { rotulo: 'Data final' });
   if (df.erro) return { erro: df.erro };
   if (df.valor && df.valor < di.valor) return { erro: 'A data final não pode ser anterior à data de início' };
-  const qtd = inteiroPositivo(c.quantidade, { rotulo: 'Quantidade de dias', max: 3650 });
+  // A data final digitada é a que MANDA; a quantidade é só referência. "0" (ex.: início e final no mesmo
+  // sábado/domingo em dias úteis = zero dias úteis) vale como "sem quantidade" — nunca é erro. Negativo,
+  // texto, decimal e número absurdo continuam recusados.
+  const qtdZero = (typeof c.quantidade === 'number' && c.quantidade === 0)
+    || (typeof c.quantidade === 'string' && /^0+$/.test(c.quantidade.trim()));
+  const qtd = qtdZero ? { valor: null } : inteiroPositivo(c.quantidade, { rotulo: 'Quantidade de dias', max: 3650 });
   if (qtd.erro) return { erro: qtd.erro };
   let tipoDias = 'uteis';
   if (c.tipo_dias !== undefined && c.tipo_dias !== null && c.tipo_dias !== '') {

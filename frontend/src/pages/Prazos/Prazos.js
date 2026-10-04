@@ -29,6 +29,13 @@ const STATUS_COR = {
   cancelado: 'badge-cinza',
 };
 
+// Quantidade de dias calculada a partir das datas, em texto para o campo. Zero (nenhum dia útil entre
+// início e final, ex.: os dois num domingo) fica VAZIO: a data final é que manda e "0" não é uma quantidade.
+function textoQuantidade(n) {
+  const q = Number(n);
+  return Number.isInteger(q) && q > 0 ? String(q) : '';
+}
+
 // Aplica a máscara CNJ: 0000000-00.0000.0.00.0000
 function mascaraCNJ(valor) {
   const n = valor.replace(/\D/g, '').substring(0, 20);
@@ -502,9 +509,9 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
       const d = new Date(ini);
       while (d <= fim) { const wd = d.getDay(); if (wd !== 0 && wd !== 6) qtd++; d.setDate(d.getDate() + 1); }
     }
-    setForm(f => ({ ...f, quantidade: String(qtd) }));
+    setForm(f => ({ ...f, quantidade: textoQuantidade(qtd) }));
     prazosAPI.calcularDias(form.data_inicio, form.data_final, form.tipo_dias)
-      .then(r => { if (r.data.ok && r.data.dados.quantidade != null) setForm(f => ({ ...f, quantidade: String(r.data.dados.quantidade) })); })
+      .then(r => { if (r.data.ok && r.data.dados.quantidade != null) setForm(f => ({ ...f, quantidade: textoQuantidade(r.data.dados.quantidade) })); })
       .catch(() => {});
   }, [modo, form.data_inicio, form.data_final, form.tipo_dias]);
 
@@ -827,9 +834,9 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
       const d = new Date(ini);
       while (d <= fim) { const wd = d.getDay(); if (wd !== 0 && wd !== 6) qtd++; d.setDate(d.getDate() + 1); }
     }
-    setForm(f => ({ ...f, quantidade: String(qtd) }));
+    setForm(f => ({ ...f, quantidade: textoQuantidade(qtd) }));
     prazosAPI.calcularDias(form.data_inicio, form.data_final, form.tipo_dias)
-      .then(r => { if (r.data.ok && r.data.dados.quantidade != null) setForm(f => ({ ...f, quantidade: String(r.data.dados.quantidade) })); })
+      .then(r => { if (r.data.ok && r.data.dados.quantidade != null) setForm(f => ({ ...f, quantidade: textoQuantidade(r.data.dados.quantidade) })); })
       .catch(() => {});
   }, [modo, form.data_inicio, form.data_final, form.tipo_dias]);
 

@@ -85,6 +85,39 @@ test('criar: grava com a data final que veio, delega, registra auditoria e vale 
   assert.match(msg(semDatas), /data final/i);
 });
 
+test('quantidade 0 (início e final no mesmo domingo, dias úteis) não é erro: a data final manda e a quantidade fica vazia — criar e editar', async () => {
+  const domingo = '2030-06-02';                                     // domingo: zero dias úteis entre início e final
+  const t = juntar();
+  for (const zero of [0, '0', '00']) {
+    const r = await api().post('/api/prazos').send(corpo({ data_inicio: domingo, data_final: domingo, quantidade: zero, tipo_dias: 'uteis' }));
+    t.checar(r.status === 201, `criar com quantidade ${JSON.stringify(zero)} → ${r.status} ${JSON.stringify(r.body).slice(0, 110)} (esperado 201)`);
+    if (r.status !== 201) continue;
+    const p = await prazo(r.body.dados.id);
+    t.checar(p.quantidade === null && String(p.data_vencimento.toISOString ? p.data_vencimento.toISOString().slice(0, 10) : p.data_vencimento).slice(0, 10) === domingo && p.tipo_dias === 'uteis',
+      `criar com quantidade ${JSON.stringify(zero)}: gravou quantidade=${p.quantidade}, vencimento=${p.data_vencimento}, tipo=${p.tipo_dias} (esperado quantidade vazia, vencimento ${domingo}, uteis)`);
+  }
+  const id = await criarPrazo();
+  const ed = await api().put(`/api/prazos/${id}`).send({ subtipo_id: F.subtipo, descricao: 'No domingo', data_inicio: domingo, data_final: domingo, quantidade: '0', tipo_dias: 'uteis' });
+  t.checar(ed.status === 200, `editar com quantidade "0" → ${ed.status} ${JSON.stringify(ed.body).slice(0, 110)} (esperado 200)`);
+  const pe = await prazo(id);
+  t.checar(pe.quantidade === null && pe.descricao === 'No domingo', `editar com quantidade "0": gravou quantidade=${pe.quantidade}, descrição=${pe.descricao}`);
+  // sem data final, o zero não calcula nada: pede a data final (ou uma quantidade maior que zero) e não grava
+  const antes = await total('SELECT COUNT(*) AS n FROM prazos_processo');
+  for (const zero of [0, '0']) {
+    const r = await api().post('/api/prazos').send(corpo({ data_final: undefined, quantidade: zero }));
+    t.checar(r.status === 400 && /data final/i.test(msg(r)), `criar só com quantidade ${JSON.stringify(zero)} e sem data final → ${r.status} ${msg(r)} (esperado 400 pedindo a data final)`);
+    const e = await api().put(`/api/prazos/${id}`).send({ subtipo_id: F.subtipo, descricao: 'X', data_inicio: dia(0), quantidade: zero, tipo_dias: 'corridos' });
+    t.checar(e.status === 400 && /data final/i.test(msg(e)), `editar só com quantidade ${JSON.stringify(zero)} e sem data final → ${e.status} ${msg(e)} (esperado 400 pedindo a data final)`);
+  }
+  t.checar(await total('SELECT COUNT(*) AS n FROM prazos_processo') === antes, 'um prazo sem data final foi gravado');
+  // o que continua inválido de verdade: negativo, texto, decimal, enorme (e "-0" não vira zero)
+  for (const ruim of [-1, '-0', 'abc', 1.5, '1.5', 99999999999]) {
+    const r = await api().post('/api/prazos').send(corpo({ quantidade: ruim }));
+    t.checar(r.status === 400, `criar com quantidade ${JSON.stringify(ruim)} → ${r.status} (esperado 400)`);
+  }
+  t.fim();
+});
+
 test('criar: entradas inválidas dão aviso claro (400/404) — nunca erro interno nem prazo gravado', async () => {
   const antes = await total('SELECT COUNT(*) AS n FROM prazos_processo');
   const t = juntar();
