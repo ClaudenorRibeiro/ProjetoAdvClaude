@@ -74,6 +74,11 @@ Nada de descrever de memória ou "por dedução" do nome de uma coluna ou variá
   na barra de endereço e Enter para abrir o Prompt de Comando ali; nunca
   sugerir "Abrir janela do PowerShell aqui" nem sintaxe de PowerShell).
 
+- **Procedimentos sempre em SEQUÊNCIA DE EXECUÇÃO (pedido do usuário, 04/10/2026):**
+  toda vez que a IA passar instruções de o que fazer (atualizar sistema, rodar scripts, testar, etc.), entregar uma lista numerada na ORDEM EXATA em que o usuário
+  executa, cada passo dizendo onde (HeidiSQL/cmd/tela) e o resultado esperado. Condições ("só se...") ficam dentro do passo, no lugar certo da sequência — nunca
+  espalhadas em texto solto fora de ordem.
+
 ## 2. Git — fluxo de branches
 
 - **`main`**: versão oficial em produção. A IA só envia (push) para `main`
@@ -292,15 +297,16 @@ perguntar "o que falta". Só tirar da lista com o OK dele. Detalhes de cada item
 
 **Regra do usuário:** Erick e Antônio são PRODUÇÃO e ficam por ÚLTIMO: só são atualizados depois que o LOCAL estiver 100% ok e testado. A IA mantém esta lista
 atualizada (acrescentar item a cada script/mudança nova que precise ir para produção; marcar como feito só com o OK do usuário) e a mostra quando ele perguntar
-"o que falta" ou for atualizar produção. Em CADA uma das duas instâncias, na ordem:
-1. Backup do banco (Exportar como SQL) e do sistema.
+"o que falta" ou for atualizar produção. Em CADA uma das duas instâncias, SEMPRE nesta sequência de execução (cada passo numerado, na ordem exata em que o usuário executa):
+1. Backup do banco (HeidiSQL: Exportar como SQL) e do sistema.
 2. Atualizar o sistema (versão testada do local) e reiniciar.
-3. Rodar no HeidiSQL, banco do sistema selecionado, tudo com F9 (todos seguros para rodar de novo):
-   - `sql_atualizar_financeiro_para_heidi.sql` — (5 tabelas e 23 colunas do Financeiro) rodar o `sql_diagnostico_estrutura_para_heidi.sql` ANTES para ver se falta; só o local foi confirmado.
-   - `sql_contas_bancarias_pessoas_para_heidi.sql` — só se o diagnóstico mostrar que falta.
-   - `sql_relatorios_fase1_para_heidi.sql` e `sql_relatorios_fase7_para_heidi.sql` — ainda NÃO rodados em nenhum dos dois (fase6 é opcional).
-   - `sql_remover_area_direito_da_pasta_para_heidi.sql` — SÓ depois do passo 2 (irreversível; backup antes).
-4. Rodar de novo o `sql_diagnostico_estrutura_para_heidi.sql`: os resultados devem vir vazios.
+3. Rodar `sql_diagnostico_estrutura_para_heidi.sql` (só lê) para ver o que falta no banco.
+4. Rodar `sql_atualizar_financeiro_para_heidi.sql` (5 tabelas e 23 colunas do Financeiro) — só se o passo 3 mostrou que falta (só o local foi confirmado).
+5. Rodar `sql_contas_bancarias_pessoas_para_heidi.sql` — só se o passo 3 mostrou que falta.
+6. Rodar `sql_relatorios_fase1_para_heidi.sql` e depois `sql_relatorios_fase7_para_heidi.sql` — ainda NÃO rodados em nenhum dos dois (fase6 é opcional).
+7. Rodar `sql_remover_area_direito_da_pasta_para_heidi.sql` — só depois do passo 2 (irreversível; backup do passo 1).
+8. Rodar `sql_diagnostico_estrutura_para_heidi.sql` de novo: os resultados devem vir vazios.
+(Cada script: HeidiSQL com o banco do sistema selecionado, executar TUDO com F9; todos são seguros para rodar de novo.)
 
 Só no **Antônio**: o `sql_limpar_pastas_vazias_para_heidi.sql` (pastas 9999 e 928804) JÁ foi rodado (04/10/2026). Erick não precisa dele. Depois de atualizar o Antônio,
 testar a troca de número 8926 → 9999.
