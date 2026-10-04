@@ -10,7 +10,7 @@ nunca é tocado.
 Itens abertos que NÃO fazem parte de um passo (A1…D1) e ficam fora do módulo Processos. Só tirar da lista com a decisão/OK do usuário.
 Ao fechar a Fase D (ou quando o usuário pedir), **lembrar o usuário destas pendências**.
 
-- [ ] **P1 — Validações específicas, módulo a módulo.** A rede de segurança (A3) só impede a QUEDA do servidor. Falta verificar, em cada módulo, se o
+- [ ] **P1 — Validações específicas, módulo a módulo.** (Já feitos: Processos, Tarefas, Audiências, Perícias, Financeiro da pasta. O usuário vai tratar P1–P8 depois de ajustar erros atuais do sistema — 04/10/2026.) A rede de segurança (A3) só impede a QUEDA do servidor. Falta verificar, em cada módulo, se o
       servidor trata com aviso claro (400) e não com "Erro interno" (500): nome/campo que não é texto, texto longo demais (limites das colunas do banco),
       campo só com espaços, e demais entradas inválidas. Módulos: Pessoas, Prazos, Tarefas, Audiências, Perícias, Publicações, Documentos, Pendências de
       Docs., Dashboard, Relatórios, Configurações, Controle (e conferir o Financeiro). Modelo pronto: `backend/src/utils/camposTexto.js`.

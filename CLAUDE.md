@@ -254,11 +254,25 @@ renomear ou remover um script. Nenhum teste pode depender de arquivo que não es
   (`omit=optional`) impediria a instalação do programa nativo dele.
 
 
-## 9. Plano em andamento: bateria completa do módulo Processos (pedido do usuário, 02/10/2026)
+## 9. Plano de testes de Processos (CONCLUÍDO em 03/10/2026) e PENDÊNCIAS ABERTAS (pedido do usuário)
 
-O usuário pediu que **TUDO** da tela de Processos entre na bateria. O plano numerado (A1…D1), o protocolo de cada
-passo e os achados estão em `PLANO-TESTES-PROCESSOS.md` (raiz). **Qualquer sessão deve ler esse arquivo antes de
-continuar**, conferir o `git log` do `rascunho` para saber o que já foi feito e seguir do primeiro passo sem `[x]`.
-**Há uma seção "PENDÊNCIAS GERAIS — NÃO ESQUECER" (P1…P7) nesse arquivo** (validações por módulo, curingas do LIKE, paginação, ids não numéricos,
-react-router 7…): o usuário pediu que não sejam esquecidas — lembrá-lo delas ao fechar a Fase D. Regra do protocolo: ao achar erro, PARAR e combinar o ajuste com o usuário antes de corrigir. Nada de desmembrar
-arquivos agora (decisão dele) e nada no `main`.
+O plano numerado (A1…D1) de `PLANO-TESTES-PROCESSOS.md` (raiz) foi concluído: tudo da tela de Processos entrou na bateria. Falta só o usuário rodar
+`salvar_RASCUNHO_do_GIT_no_pc.bat` + `TESTAR-COMPLETO.bat` e enviar o "RESUMO DA BATERIA". Regra do protocolo (vale para trabalhos parecidos): ao achar erro,
+PARAR e combinar o ajuste com o usuário antes de corrigir. Nada de desmembrar arquivos grandes (decisão dele) e nada no `main`.
+
+**LEMBRETE OBRIGATÓRIO (pedido do usuário, 04/10/2026):** o usuário disse que vai tratar as pendências abaixo **mais para frente, depois de ajustar alguns erros
+que o sistema está apresentando**. A IA deve **lembrá-lo delas** no início de uma sessão nova assim que ele terminar de falar dos erros atuais, e sempre que ele
+perguntar "o que falta". Só tirar da lista com o OK dele. Detalhes de cada item: seção "PENDÊNCIAS GERAIS" do `PLANO-TESTES-PROCESSOS.md`.
+
+- **P1** — Validações específicas, módulo a módulo (servidor responde 400 claro, nunca "Erro interno": campo que não é texto, texto longo demais, só espaços,
+  datas/valores/ids inválidos, processo/registro inexistente = 404). Já feitos: Processos, Tarefas, Audiências, Perícias, Financeiro (aba da pasta).
+  **Faltam: Pessoas, Prazos, Publicações, Documentos, Pendências de Docs., Dashboard, Relatórios, Configurações, Controle** (e conferir o resto do Financeiro:
+  repasses, multa, contas, consulta). Modelo pronto: `backend/src/utils/camposTexto.js`.
+- **P2** — Curingas do LIKE (`%` e `_`) nas buscas de todos os módulos fora de Processos (usar `escaparLike` em `utils/helpers.js`).
+- **P3** — Paginação sem validação (`pagina`/`limite` inválidos → 500) nos outros módulos (usar `paginacao()` de `utils/helpers.js`).
+- **P4** — Id que não é número (`/modulo/abc`) dando 500 nos outros módulos (devolver 404).
+- **P5** — Migração do react-router para a versão 7 (adiada por decisão do usuário; `npm audit` do frontend mostra 2 avisos "média").
+- **P6** — Informativo, sem ação (`log_documentos_gerados` sem chave declarada; busca por poucos dígitos casa CPF/CNPJ/telefone).
+- **P7** — Verificar no servidor real se o PM2 reinicia sozinho após queda.
+- **P8** — Decidir (só se ele quiser) o recurso "ver só os meus processos" (coluna `usuarios.ver_todos_processos` é vestigial).
+- **Varredura da ficha da pessoa** (`ModalPessoa`, `Pessoas.js`, todas as abas/estados) — acessibilidade e validações; pertence ao módulo Pessoas.
