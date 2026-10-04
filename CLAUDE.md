@@ -287,3 +287,21 @@ perguntar "o que falta". Só tirar da lista com o OK dele. Detalhes de cada item
   A coluna `tblpasta.area_direito` foi removida do código e do `estrutura_banco.sql`; o relatório e a variável de documento "área" passam a usar o Tipo do processo
   (`{{area_direito}}` continua funcionando em modelos antigos, devolvendo o Tipo). Falta, em CADA instância, depois de atualizar o sistema, rodar
   `sql_remover_area_direito_da_pasta_para_heidi.sql` (local já tem o banco sem a coluna só depois de rodar; Antônio/Erick idem). Antes do script, a coluna ainda existe nos bancos — é inofensivo.
+
+## 10. PENDÊNCIAS DE PRODUÇÃO — AWS-Erick e AWS-Antônio (pedido do usuário, 04/10/2026)
+
+**Regra do usuário:** Erick e Antônio são PRODUÇÃO e ficam por ÚLTIMO: só são atualizados depois que o LOCAL estiver 100% ok e testado. A IA mantém esta lista
+atualizada (acrescentar item a cada script/mudança nova que precise ir para produção; marcar como feito só com o OK do usuário) e a mostra quando ele perguntar
+"o que falta" ou for atualizar produção. Em CADA uma das duas instâncias, na ordem:
+1. Backup do banco (Exportar como SQL) e do sistema.
+2. Atualizar o sistema (versão testada do local) e reiniciar.
+3. Rodar no HeidiSQL, banco do sistema selecionado, tudo com F9 (todos seguros para rodar de novo):
+   - `sql_atualizar_financeiro_para_heidi.sql` — (5 tabelas e 23 colunas do Financeiro) rodar o `sql_diagnostico_estrutura_para_heidi.sql` ANTES para ver se falta; só o local foi confirmado.
+   - `sql_contas_bancarias_pessoas_para_heidi.sql` — só se o diagnóstico mostrar que falta.
+   - `sql_relatorios_fase1_para_heidi.sql` e `sql_relatorios_fase7_para_heidi.sql` — ainda NÃO rodados em nenhum dos dois (fase6 é opcional).
+   - `sql_remover_area_direito_da_pasta_para_heidi.sql` — SÓ depois do passo 2 (irreversível; backup antes).
+4. Rodar de novo o `sql_diagnostico_estrutura_para_heidi.sql`: os resultados devem vir vazios.
+
+Só no **Antônio**: o `sql_limpar_pastas_vazias_para_heidi.sql` (pastas 9999 e 928804) JÁ foi rodado (04/10/2026). Erick não precisa dele. Depois de atualizar o Antônio,
+testar a troca de número 8926 → 9999.
+Itens ainda sem decisão (não são script): as ~2.700 pastas vazias antigas do Antônio (ver seção 9) e conferir o PM2 (P7) nos servidores reais.
