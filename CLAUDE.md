@@ -277,6 +277,7 @@ perguntar "o que falta". Só tirar da lista com o OK dele. Detalhes de cada item
 - **P3** — Paginação sem validação (`pagina`/`limite` inválidos → 500) nos outros módulos (usar `paginacao()` de `utils/helpers.js`).
 - **P4** — Id que não é número (`/modulo/abc`) dando 500 nos outros módulos (devolver 404).
 - **P5** — Migração do react-router para a versão 7 (adiada por decisão do usuário; `npm audit` do frontend mostra 2 avisos "média").
+  Os 2 avisos "React Router Future Flag" do console/testes ficam como estão até lá: **NÃO silenciar com as opções `future` (gambiarra — o usuário já recusou mais de uma vez)**; resolvem-se na migração de verdade, a próxima manutenção depois de fechar os testes.
 - **P6** — Informativo, sem ação (`log_documentos_gerados` sem chave declarada; busca por poucos dígitos casa CPF/CNPJ/telefone).
 - **P7** — Verificar no servidor real se o PM2 reinicia sozinho após queda.
 - **P8** — Decidir (só se ele quiser) o recurso "ver só os meus processos" (coluna `usuarios.ver_todos_processos` é vestigial).
