@@ -1,3 +1,4 @@
+-- SUBSTITUÍDO (04/10/2026) pelo script único sql_atualizar_banco_para_heidi.sql — NÃO rode mais este arquivo; ele fica só como histórico.
 -- IMPORTANTE — NÃO APAGAR. Atualiza o banco do FINANCEIRO que está atrasado em relação ao estrutura_banco.sql.
 -- Cria 5 tabelas (instituicao_financeira, conta_financeira, contas_bancarias_pf, contas_bancarias_pj, acordo_parcela_multa) e
 -- acrescenta 23 colunas (acordo, acordo_parcela, conta_corrente, forma_pagamento, advogados_freela) com seus índices e chaves.

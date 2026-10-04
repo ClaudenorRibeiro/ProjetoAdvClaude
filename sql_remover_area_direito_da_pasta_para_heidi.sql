@@ -1,3 +1,4 @@
+-- SUBSTITUÍDO (04/10/2026) pelo script único sql_atualizar_banco_para_heidi.sql — NÃO rode mais este arquivo; ele fica só como histórico.
 -- IMPORTANTE — NÃO APAGAR. Remove a coluna antiga "area_direito" da tabela tblpasta (decisão do usuário, 04/10/2026: a área é do PROCESSO, pelo campo "Tipo"; a pasta só organiza).
 -- Nenhuma tela do sistema gravava nessa coluna. O sistema novo (a versão que vem junto com este script) também não lê mais.
 -- ORDEM OBRIGATÓRIA em cada instância (local, AWS-Antônio, AWS-Erick): 1º) atualizar o sistema com a versão nova e reiniciar; 2º) rodar este script.

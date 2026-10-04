@@ -1,3 +1,4 @@
+-- SUBSTITUÍDO (04/10/2026) pelo script único sql_atualizar_banco_para_heidi.sql — NÃO rode mais este arquivo; ele fica só como histórico.
 -- IMPORTANTE — NÃO APAGAR. Cria as tabelas de contas bancárias das pessoas (contas_bancarias_pf e contas_bancarias_pj),
 -- caso o banco ainda não as tenha. Quem roda: o usuário, no HeidiSQL, com o BANCO DO SISTEMA selecionado, em CADA instância
 -- (local, AWS-Antônio, AWS-Erick) que acuse "Table ... contas_bancarias_pf doesn't exist" ou "Erro ao carregar contas do beneficiário".

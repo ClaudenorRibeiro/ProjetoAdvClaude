@@ -1,3 +1,4 @@
+-- SUBSTITUÍDO (04/10/2026) pelo script único sql_atualizar_banco_para_heidi.sql — NÃO rode mais este arquivo; ele fica só como histórico.
 -- IMPORTANTE — NÃO APAGAR. OBRIGATÓRIO: cria a tabela do agendamento/envio de relatórios por e-mail.
 -- Rodar em CADA instância (local e AWS), depois do script da Fase 1. Pode rodar de novo sem problema.
 -- ============================================================================

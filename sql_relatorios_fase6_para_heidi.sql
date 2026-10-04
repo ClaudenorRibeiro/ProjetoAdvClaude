@@ -1,3 +1,4 @@
+-- SUBSTITUÍDO (04/10/2026) pelo script único sql_atualizar_banco_para_heidi.sql — NÃO rode mais este arquivo; ele fica só como histórico.
 -- IMPORTANTE — NÃO APAGAR até rodar em todas as instâncias. OPCIONAL: só ajusta o comentário de uma coluna (documentação).
 -- ============================================================================
 -- RELATÓRIOS (tela nova) — FASE 6: acerto do COMENTÁRIO de uma coluna (OPCIONAL, só documentação)

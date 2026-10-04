@@ -291,23 +291,24 @@ perguntar "o que falta". Só tirar da lista com o OK dele. Detalhes de cada item
   dizendo o motivo (nunca descarta informação). Excluir o último processo de uma pasta continua deixando a pasta no banco, vazia.
   **"Área do direito" saiu da pasta (decisão do usuário, 04/10/2026 — "não existe pasta trabalhista, existe processo trabalhista"):** a área é do PROCESSO (campo "Tipo").
   A coluna `tblpasta.area_direito` foi removida do código e do `estrutura_banco.sql`; o relatório e a variável de documento "área" passam a usar o Tipo do processo
-  (`{{area_direito}}` continua funcionando em modelos antigos, devolvendo o Tipo). Falta, em CADA instância, depois de atualizar o sistema, rodar
-  `sql_remover_area_direito_da_pasta_para_heidi.sql` (local já tem o banco sem a coluna só depois de rodar; Antônio/Erick idem). Antes do script, a coluna ainda existe nos bancos — é inofensivo.
+  (`{{area_direito}}` continua funcionando em modelos antigos, devolvendo o Tipo). A remoção da coluna agora faz parte do script único `sql_atualizar_banco_para_heidi.sql` (seção 10); o banco local já está sem ela (confirmado no dump de 04/10/2026 19:28).
 
 ## 10. PENDÊNCIAS DE PRODUÇÃO — AWS-Erick e AWS-Antônio (pedido do usuário, 04/10/2026)
 
 **Regra do usuário:** Erick e Antônio são PRODUÇÃO e ficam por ÚLTIMO: só são atualizados depois que o LOCAL estiver 100% ok e testado. A IA mantém esta lista
 atualizada (acrescentar item a cada script/mudança nova que precise ir para produção; marcar como feito só com o OK do usuário) e a mostra quando ele perguntar
-"o que falta" ou for atualizar produção. Em CADA uma das duas instâncias, SEMPRE nesta sequência de execução (cada passo numerado, na ordem exata em que o usuário executa):
-1. Backup do banco (HeidiSQL: Exportar como SQL) e do sistema.
-2. Atualizar o sistema (versão testada do local) e reiniciar.
-3. Rodar `sql_diagnostico_estrutura_para_heidi.sql` (só lê) para ver o que falta no banco.
-4. Rodar `sql_atualizar_financeiro_para_heidi.sql` (5 tabelas e 23 colunas do Financeiro) — só se o passo 3 mostrou que falta (só o local foi confirmado).
-5. Rodar `sql_contas_bancarias_pessoas_para_heidi.sql` — só se o passo 3 mostrou que falta.
-6. Rodar `sql_relatorios_fase1_para_heidi.sql` e depois `sql_relatorios_fase7_para_heidi.sql` — ainda NÃO rodados em nenhum dos dois (fase6 é opcional).
-7. Rodar `sql_remover_area_direito_da_pasta_para_heidi.sql` — só depois do passo 2 (irreversível; backup do passo 1).
-8. Rodar `sql_diagnostico_estrutura_para_heidi.sql` de novo: os resultados devem vir vazios.
-(Cada script: HeidiSQL com o banco do sistema selecionado, executar TUDO com F9; todos são seguros para rodar de novo.)
+"o que falta" ou for atualizar produção.
+
+**Banco: UM script só, `sql_atualizar_banco_para_heidi.sql`** (criado em 04/10/2026; substitui os antigos de Relatórios fase1/6/7, Financeiro, contas bancárias e remoção
+de `area_direito`, que ficam só como histórico). Ele confere se o banco é o do sistema (pelas tabelas, pois o nome muda: `sistema_advocacia` no Antônio, `erick_adv` no Erick),
+exige MySQL 8.0.16+ (recusa MariaDB), só cria o que falta, pode rodar várias vezes, registra a versão em `controle_versao_banco` (nº 1) e termina com UMA linha de resultado
+("PRONTO ..." / "ABORTADO ..." / "ATENCAO ..."). Testado em cópias dos dumps de 04/10/2026 do Antônio, do Erick e do local (2 rodadas cada, estrutura final igual ao
+`estrutura_banco.sql`, contagem de linhas de todas as tabelas inalterada). **Se o `estrutura_banco.sql` mudar de novo, o script único precisa ser atualizado e retestado**.
+Em CADA instância (Antônio e Erick), de preferência de noite sem ninguém usando, nesta sequência de execução:
+1. Parar o sistema na instância e fazer o backup do banco (HeidiSQL: Exportar como SQL).
+2. HeidiSQL: selecionar o BANCO DO SISTEMA e executar `sql_atualizar_banco_para_heidi.sql` inteiro (F9). A linha de resultado deve dizer "PRONTO" com tudo 0 (se disser ABORTADO/ATENCAO, parar e avisar a IA).
+3. Atualizar o código do sistema (versão testada do local) e iniciar de novo. (O script apaga `tblpasta.area_direito`: o sistema ANTIGO quebra sem ela, por isso o código novo entra logo em seguida.)
+4. Opcional: rodar `sql_diagnostico_estrutura_para_heidi.sql` (só lê): os resultados devem vir vazios.
 
 Só no **Antônio**: o `sql_limpar_pastas_vazias_para_heidi.sql` (pastas 9999 e 928804) JÁ foi rodado (04/10/2026). Erick não precisa dele. Depois de atualizar o Antônio,
 testar a troca de número 8926 → 9999.
