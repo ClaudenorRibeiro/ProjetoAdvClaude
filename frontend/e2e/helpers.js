@@ -1,6 +1,5 @@
 import { createRequire } from 'node:module';
 import AxeBuilder from '@axe-core/playwright';
-import { expect } from '@playwright/test';
 
 export async function loginPelaTela(page, login = 'admteste', senha = 'TesteSeguro123!') {
   await page.goto('/login');
@@ -55,29 +54,35 @@ export async function abrirMenuAcoes(page, linha) {
 
 export const criarAudienciaSemComparecimento = (request, hora) => criarAudiencia(request, hora, 'sem_comparecimento');
 
-// Espera a tela terminar de carregar (sem requisição em andamento e sem "Carregando..."), para a análise
-// de acessibilidade nunca ler uma tela pela metade — isso fazia o teste passar sem verificar nada.
-// O aviso "rede quieta" do navegador (networkidle) sozinho já travou 2,5 minutos com a tela pronta e nenhuma requisição
-// pendente (a página recarregou no meio): por isso ele espera no máximo 15 s, e quem garante a tela pronta são as
-// verificações abaixo (requisições em andamento contadas pelo próprio teste + texto "Carregando").
-const requisicoesEmAndamento = new WeakMap();
-function vigiarRequisicoes(page) {
-  if (!requisicoesEmAndamento.has(page)) {
-    const pendentes = new Set();
-    const fim = (r) => pendentes.delete(r);
-    page.on('request', (r) => pendentes.add(r));
-    page.on('requestfinished', fim);
-    page.on('requestfailed', fim);
-    requisicoesEmAndamento.set(page, pendentes);
+// Espera a tela terminar de carregar, para a análise de acessibilidade nunca ler uma tela pela metade (isso fazia o teste
+// passar sem verificar nada). Três garantias, nesta ordem:
+//  1) rede quieta (networkidle) — no MÁXIMO 15 s: no Windows o navegador às vezes nunca dá esse aviso mesmo com a tela pronta
+//     (já travou 2,5 min; a página recarregou sozinha no meio e requisições canceladas ficaram "pendentes" para sempre);
+//  2) nenhum "Carregando..." na tela;
+//  3) a tela parou de mudar (nenhuma alteração na página por 500 ms) — vale igual em Windows e Linux, não depende de aviso do navegador.
+// Se a página recarregar durante a espera 3, a espera recomeça (não é erro).
+async function telaParouDeMudar(page) {
+  for (let tentativa = 0; tentativa < 4; tentativa += 1) {
+    try {
+      await page.evaluate(() => new Promise((resolve) => {
+        let parada; let limite;
+        const fim = () => { clearTimeout(parada); clearTimeout(limite); observador.disconnect(); resolve(); };
+        const observador = new MutationObserver(() => { clearTimeout(parada); parada = setTimeout(fim, 500); });
+        observador.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
+        parada = setTimeout(fim, 500);
+        limite = setTimeout(fim, 8000);          // tela que nunca para (ex.: relógio na tela) não prende o teste; as verificações 1 e 2 já valeram
+      }));
+      return;
+    } catch (e) {
+      if (!/Execution context was destroyed|navigat|Target page, context or browser has been closed/i.test(String(e.message)) || tentativa === 3) throw e;
+      await page.waitForLoadState('load');
+    }
   }
-  return requisicoesEmAndamento.get(page);
 }
 export async function aguardarTelaPronta(page) {
-  const pendentes = vigiarRequisicoes(page);
   await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
-  await expect.poll(() => pendentes.size, { message: 'ainda há requisição em andamento', timeout: 15_000 }).toBe(0);
   await page.waitForFunction(() => !document.querySelector('.loading') && !/Carregando/i.test(document.body.innerText));
-  await page.waitForTimeout(300);
+  await telaParouDeMudar(page);
 }
 
 // Coloca uma pessoa como AUTOR do processo 1 do banco de teste (o processo de teste nasce sem partes, e a
