@@ -276,3 +276,7 @@ perguntar "o que falta". Só tirar da lista com o OK dele. Detalhes de cada item
 - **P7** — Verificar no servidor real se o PM2 reinicia sozinho após queda.
 - **P8** — Decidir (só se ele quiser) o recurso "ver só os meus processos" (coluna `usuarios.ver_todos_processos` é vestigial).
 - **Varredura da ficha da pessoa** (`ModalPessoa`, `Pessoas.js`, todas as abas/estados) — acessibilidade e validações; pertence ao módulo Pessoas.
+- **Pastas vazias antigas (achado de 04/10/2026, decisão pendente do usuário):** no local e no Antônio existem 2.702 pastas SEM processo; 2.700 foram criadas de uma vez em
+  28/06/2026 (números 1 a 8935, criador 24) e 2.627 têm "área do direito" preenchida — parecem pastas antigas importadas sem os processos. O Erick não tem nenhuma.
+  Não apagar em lote sem a decisão dele. O sistema trata pasta vazia como "disponível" ao criar processo, mas a troca de número (`renumerarPasta`) a trata como ocupada.
+  O script `sql_limpar_pastas_vazias_para_heidi.sql` só apaga os números listados nele (hoje o 9999).
