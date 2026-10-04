@@ -332,7 +332,7 @@ export async function prepararExcluirRenumerar() {
   return d;
 }
 async function _idsExcluirRenumerar(conn, d) {
-  const r = await conn.execute("SELECT id FROM tblpasta WHERE numPasta IN (7201, 7202, 7203, 7290)");
+  const r = await conn.execute("SELECT id FROM tblpasta WHERE numPasta IN (7201, 7202, 7203, 7290, 7291, 7292, 7293)");
   const ids = r[0].map(x => x.id);
   d.pastas = ids;
   return ids;
@@ -352,10 +352,12 @@ export async function limparExcluirRenumerar(d) {
         await conn.execute(`DELETE FROM logs_auditoria WHERE tabela = 'tblproc' AND registro_id IN (${pp})`, pids);
         await conn.execute(`DELETE FROM tblproc WHERE id IN (${pp})`, pids);
       }
+      await conn.execute(`DELETE FROM tarefas WHERE pasta_id IN (${ph})`, ids);
       await conn.execute(`DELETE FROM logs_auditoria WHERE tabela = 'tblpasta' AND registro_id IN (${ph})`, ids);
       await conn.execute(`DELETE FROM tblpasta WHERE id IN (${ph})`, ids);
     }
     await conn.execute("DELETE FROM logs_auditoria WHERE tabela = 'tblproc' AND acao = 'excluir' AND descricao LIKE 'Processo 92%'");
+    await conn.execute("DELETE FROM logs_auditoria WHERE tabela = 'tblpasta' AND acao = 'excluir' AND descricao LIKE 'Pasta vazia 729%'");
   } finally { await conn.end(); }
   await restaurarNovoProcesso();
 }

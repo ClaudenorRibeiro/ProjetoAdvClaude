@@ -314,9 +314,13 @@ async function listarPastas(req, res) {
 }
 
 // PUT /api/processos/pastas/:id/renumerar — Altera o numPasta de uma pasta.
-// O número escolhido precisa estar LIVRE: se já pertencer a qualquer outra pasta,
-// a troca é recusada com mensagem explicativa. O sistema nunca apaga uma pasta aqui
-// (o banco já tem UNIQUE em numPasta — duas pastas jamais dividem um número).
+// O número escolhido precisa estar LIVRE. Se pertencer a outra pasta:
+//  - com processo ativo → recusa ("já pertence a outra pasta");
+//  - TOTALMENTE VAZIA (sem nenhum processo, sem tarefa ligada e sem área do direito) → o número é reaproveitado: essa pasta vazia é
+//    removida (as etiquetas pessoais dela saem junto, por cascata) e a troca segue, tudo na mesma transação;
+//  - vazia de processos ativos mas com algo preso a ela (processo inativado, tarefa ou área do direito) → recusa dizendo o que prende,
+//    porque apagá-la perderia informação (ou o banco não deixaria).
+// (O banco tem UNIQUE em numPasta — duas pastas jamais dividem um número.)
 async function renumerarPasta(req, res) {
   const { id } = req.params;
   const num = numeroPastaValido(req.body.numPasta);
@@ -330,13 +334,33 @@ async function renumerarPasta(req, res) {
     if (!pasta.length) { await conn.rollback(); return naoEncontrado(res, 'Pasta não encontrada'); }
     if (pasta[0].numPasta === num) { await conn.rollback(); return erro(res, 'A pasta já possui este número'); }
 
+    const numTxt = String(num).padStart(4, '0');
     const jaPertence = () => erro(res,
-      `O número ${String(num).padStart(4,'0')} já pertence a outra pasta. ` +
+      `O número ${numTxt} já pertence a outra pasta. ` +
       `Escolha um número que não esteja em uso.`
     );
-    // O número precisa estar livre — tanto faz se a outra pasta tem processos ou não.
-    const [existente] = await conn.execute('SELECT id FROM tblpasta WHERE numPasta = ? AND id != ?', [num, id]);
-    if (existente.length) { await conn.rollback(); return jaPertence(); }
+    const preso = (motivo) => erro(res, `O número ${numTxt} pertence a uma pasta sem processos ativos, mas ${motivo}. Escolha outro número.`);
+
+    // FOR UPDATE: quem cria um processo nesse número ao mesmo tempo espera esta transação (e vice-versa).
+    const [existente] = await conn.execute(
+      'SELECT id, area_direito FROM tblpasta WHERE numPasta = ? AND id != ? FOR UPDATE', [num, id]
+    );
+    if (existente.length) {
+      const outra = existente[0];
+      const [[{ ativos, todos }]] = await conn.execute(
+        'SELECT COALESCE(SUM(ativo = 1), 0) AS ativos, COUNT(*) AS todos FROM tblproc WHERE pasta_id = ?', [outra.id]
+      );
+      if (Number(ativos) > 0) { await conn.rollback(); return jaPertence(); }
+      if (Number(todos) > 0) { await conn.rollback(); return preso(`ela ainda guarda ${todos} processo(s) inativado(s)`); }
+      const [[{ tarefas }]] = await conn.execute('SELECT COUNT(*) AS tarefas FROM tarefas WHERE pasta_id = ?', [outra.id]);
+      if (Number(tarefas) > 0) { await conn.rollback(); return preso(`ela tem ${tarefas} tarefa(s) ligada(s)`); }
+      const area = String(outra.area_direito ?? '').trim();
+      if (area) { await conn.rollback(); return preso(`ela tem a área do direito preenchida (${area})`); }
+      // Totalmente vazia: libera o número removendo a pasta vazia (etiquetas pessoais saem em cascata) — com auditoria.
+      await conn.execute('DELETE FROM tblpasta WHERE id = ?', [outra.id]);
+      await auditoria.registrar(req.usuario.id, 'tblpasta', 'excluir', outra.id, { numPasta: num, motivo: 'pasta vazia reaproveitada na renumeração' }, null, conn,
+        `Pasta vazia ${numTxt} removida (número reaproveitado na renumeração)`);
+    }
 
     // Renumera a pasta. Se outra pessoa pegou o MESMO número no mesmo instante, o banco (UNIQUE em numPasta)
     // deixa só uma vencer: quem perdeu recebe o mesmo aviso de "número em uso", não um erro interno.

@@ -278,5 +278,8 @@ perguntar "o que falta". Só tirar da lista com o OK dele. Detalhes de cada item
 - **Varredura da ficha da pessoa** (`ModalPessoa`, `Pessoas.js`, todas as abas/estados) — acessibilidade e validações; pertence ao módulo Pessoas.
 - **Pastas vazias antigas (achado de 04/10/2026, decisão pendente do usuário):** no local e no Antônio existem 2.702 pastas SEM processo; 2.700 foram criadas de uma vez em
   28/06/2026 (números 1 a 8935, criador 24) e 2.627 têm "área do direito" preenchida — parecem pastas antigas importadas sem os processos. O Erick não tem nenhuma.
-  Não apagar em lote sem a decisão dele. O sistema trata pasta vazia como "disponível" ao criar processo, mas a troca de número (`renumerarPasta`) a trata como ocupada.
-  O script `sql_limpar_pastas_vazias_para_heidi.sql` só apaga os números listados nele (hoje o 9999).
+  Não apagar em lote sem a decisão dele. O script `sql_limpar_pastas_vazias_para_heidi.sql` só apaga os números listados nele (hoje 9999 e 928804, só no Antônio).
+  **Regra decidida pelo usuário (04/10/2026) e já implementada:** pasta TOTALMENTE vazia (sem nenhum processo, sem tarefa ligada e sem área do direito) é reaproveitável.
+  Ao criar processo nesse número o sistema já reaproveitava a pasta; agora a troca de número (`renumerarPasta`) também: remove a pasta vazia (etiquetas pessoais saem em
+  cascata, com auditoria) e faz a troca na mesma transação. Se a pasta vazia de processos ativos tiver processo inativado, tarefa ou área do direito, a troca é recusada
+  dizendo o motivo (nunca descarta informação). Excluir o último processo de uma pasta continua deixando a pasta no banco, vazia.

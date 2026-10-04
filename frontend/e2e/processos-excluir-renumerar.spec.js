@@ -147,11 +147,12 @@ test('@critical Renumerar pasta: o lápis abre o campo com o número atual; Ente
   await page.getByRole('button', { name: 'OK', exact: true }).click();
   await aviso(page, 'A pasta já possui este número');
   await expect(page.locator('.Toastify__toast')).toHaveCount(0, { timeout: 10000 });
-  // número que já é de outra pasta (com processo) e de pasta vazia (só processo inativo = 7002 do B2)
-  for (const emUso of ['7203', '7002']) {
+  // número que já é de outra pasta com processo ativo, e de pasta sem processos ativos mas com um processo inativado (7002 do B2): cada um com o seu motivo
+  for (const [emUso, texto] of [['7203', 'O número 7203 já pertence a outra pasta. Escolha um número que não esteja em uso.'],
+    ['7002', 'O número 7002 pertence a uma pasta sem processos ativos, mas ela ainda guarda 1 processo(s) inativado(s). Escolha outro número.']]) {
     await campoNumero(page).fill(emUso);
     await page.getByRole('button', { name: 'OK', exact: true }).click();
-    await aviso(page, `O número ${emUso} já pertence a outra pasta. Escolha um número que não esteja em uso.`);
+    await aviso(page, texto);
     await expect(page.locator('.Toastify__toast')).toHaveCount(0, { timeout: 10000 });
   }
   expect((await noBanco('SELECT numPasta FROM tblpasta WHERE id = ?', [d.pastaDuas]))[0].numPasta).toBe(7201);
@@ -173,6 +174,33 @@ test('@critical Renumerar pasta: o lápis abre o campo com o número atual; Ente
   // a lista de processos mostra o número novo
   await page.goto('/processos'); await aguardarTelaPronta(page);
   await expect(page.getByRole('row').filter({ hasText: 'CASCA VAZIA E2E' }).or(page.getByRole('row').filter({ hasText: '7201' })).first()).toBeVisible();
+});
+
+test('@critical Renumerar pasta para o número de uma pasta TOTALMENTE vazia: reaproveita (a vazia sai); com área do direito ou tarefa ligada recusa dizendo o motivo', async ({ page }) => {
+  const vazia = (await noBanco('INSERT INTO tblpasta (numPasta, criado_por) VALUES (7291, 1)')).insertId;
+  const comArea = (await noBanco("INSERT INTO tblpasta (numPasta, area_direito, criado_por) VALUES (7292, 'Trabalhista', 1)")).insertId;
+  const comTarefa = (await noBanco('INSERT INTO tblpasta (numPasta, criado_por) VALUES (7293, 1)')).insertId;
+  await noBanco("INSERT INTO tarefas (titulo, criado_por, pasta_id) VALUES ('Tarefa presa E2E', 1, ?)", [comTarefa]);
+  await loginPelaTela(page);
+  await abrirPasta(page, d.pastaDuas);
+  await lapis(page).click();
+  for (const [num, texto] of [['7292', 'O número 7292 pertence a uma pasta sem processos ativos, mas ela tem a área do direito preenchida (Trabalhista). Escolha outro número.'],
+    ['7293', 'O número 7293 pertence a uma pasta sem processos ativos, mas ela tem 1 tarefa(s) ligada(s). Escolha outro número.']]) {
+    await campoNumero(page).fill(num);
+    await page.getByRole('button', { name: 'OK', exact: true }).click();
+    await aviso(page, texto);
+    await expect(page.locator('.Toastify__toast')).toHaveCount(0, { timeout: 10000 });
+  }
+  expect((await noBanco('SELECT id FROM tblpasta WHERE id IN (?, ?)', [comArea, comTarefa])).length).toBe(2);        // as recusadas continuam
+  expect((await noBanco('SELECT numPasta FROM tblpasta WHERE id = ?', [d.pastaDuas]))[0].numPasta).toBe(7201);       // e a pasta não mudou
+  await campoNumero(page).fill('7291');
+  await page.getByRole('button', { name: 'OK', exact: true }).click();
+  await aviso(page, 'Número da pasta atualizado!');
+  await expect(BADGE(page, 7291)).toBeVisible();
+  expect((await noBanco('SELECT numPasta FROM tblpasta WHERE id = ?', [d.pastaDuas]))[0].numPasta).toBe(7291);
+  expect(await noBanco('SELECT id FROM tblpasta WHERE id = ?', [vazia])).toHaveLength(0);                            // a vazia saiu
+  expect(await noBanco('SELECT id FROM tblproc WHERE pasta_id = ?', [d.pastaDuas])).toHaveLength(2);                 // os processos continuam na pasta
+  expect(await noBanco("SELECT id FROM logs_auditoria WHERE tabela = 'tblpasta' AND acao = 'excluir' AND registro_id = ?", [vazia])).toHaveLength(1);
 });
 
 test('@critical Renumerar pasta: durante a gravação o botão fica travado ("...") e erro do servidor mantém o campo aberto', async ({ page }) => {

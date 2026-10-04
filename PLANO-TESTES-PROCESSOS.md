@@ -260,3 +260,9 @@ Plano criado em 02/10/2026. **TODOS OS PASSOS (A1…D1) CONCLUÍDOS em 03/10/202
 Nota B2: o ESC que fecha janelas está em DOIS lugares — `hooks/useEscFechar.js` e um ouvinte global em `App.js`; ambos usam `escEhDeListaAberta` (lista aberta = ESC só fecha a lista). Textos de aviso em `#aaa` ainda existem em `Processos.js` (dicas das janelas de auxiliares) — tratar no B4.
 
 Nota C1: a ficha da pessoa (`ModalPessoa`, Pessoas.js) tem muitos campos só com `<label>` visual; ganharam `aria-label` os componentes `Campo`, `Select`, `SelectComAdicao`, CPF, CTPS, busca do responsável e as linhas de telefone/e-mail (`LinhasContato.js`). A varredura completa dessa ficha (todas as abas/estados) pertence ao módulo Pessoas — lembrar ao fechar a Fase D. O ESC global (`App.js`) agora respeita `data-esc-proprio` (janelas com etapa interna).
+
+### Ajuste pós-plano (04/10/2026): trocar o número da pasta para o de uma pasta totalmente vazia
+Pedido do usuário após o caso real da pasta 9999 (pasta vazia invisível que prendia o número). Regra: pasta TOTALMENTE vazia (sem processo algum, sem tarefa, sem área do direito) é reaproveitada na
+renumeração (`renumerarPasta`): a vazia é removida e a troca segue, na mesma transação, com auditoria "excluir" da pasta vazia. Com processo ativo → "já pertence a outra pasta"; sem ativos mas com processo inativado,
+tarefa ou área do direito → recusa com o motivo. Testes: 2 novos de servidor (`processos-pastas.integration.test.js`, incl. corrida com criação de processo) e 1 novo de tela
+(`processos-excluir-renumerar.spec.js`); o teste antigo que exigia recusa de pasta vazia foi ajustado. Banco do Antônio: script `sql_limpar_pastas_vazias_para_heidi.sql` com 9999 e 928804.
