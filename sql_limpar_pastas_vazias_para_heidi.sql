@@ -6,15 +6,15 @@
 -- 28/06/2026 (números 1 a 8935, criador 24) e 2.627 têm "área do direito" preenchida. Não sei por que existem (parecem pastas antigas importadas
 -- sem os processos), então este script NUNCA as apaga em lote: só apaga os números escritos na lista abaixo.
 --
--- COMO USAR: a lista fica no comando "SET @numeros". Hoje só tem o 9999. Para incluir outro número, escreva-o dentro dos parênteses
--- (ex.: '9999,928804'). Seguro para rodar mais de uma vez e em bancos onde o número não existe (não faz nada).
+-- COMO USAR: a lista fica no comando "SET @numeros". Hoje tem o 9999 e o 928804 (decisão do usuário em 04/10/2026: rodar SÓ NO ANTÔNIO).
+-- Para incluir outro número, escreva-o dentro das aspas, separado por vírgula. Seguro para rodar mais de uma vez e em bancos onde o número não existe (não faz nada).
 -- Mesmo estando na lista, a pasta só é apagada se TODAS as condições forem verdadeiras:
 --   1) não tem nenhum processo (nem excluído);  2) não tem nenhuma tarefa ligada;  3) não tem "área do direito" preenchida.
 -- As etiquetas pessoais da pasta vazia saem junto (o banco faz isso sozinho). Nada mais é tocado.
 -- Resultado 1 = o que será apagado. Resultado 2 = quantas foram apagadas. Resultado 3 = números da lista que NÃO foram apagados e o motivo.
 -- ============================================================================================================
 
-SET @numeros := '9999';
+SET @numeros := '9999,928804';
 
 -- Resultado 1: o que será apagado
 SELECT pa.id, pa.numPasta, pa.criado_em
