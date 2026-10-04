@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import AxeBuilder from '@axe-core/playwright';
+import { expect } from '@playwright/test';
 
 export async function loginPelaTela(page, login = 'admteste', senha = 'TesteSeguro123!') {
   await page.goto('/login');
@@ -54,10 +55,27 @@ export async function abrirMenuAcoes(page, linha) {
 
 export const criarAudienciaSemComparecimento = (request, hora) => criarAudiencia(request, hora, 'sem_comparecimento');
 
-// Espera a tela terminar de carregar (rede quieta e sem "Carregando..."), para a análise
+// Espera a tela terminar de carregar (sem requisição em andamento e sem "Carregando..."), para a análise
 // de acessibilidade nunca ler uma tela pela metade — isso fazia o teste passar sem verificar nada.
+// O aviso "rede quieta" do navegador (networkidle) sozinho já travou 2,5 minutos com a tela pronta e nenhuma requisição
+// pendente (a página recarregou no meio): por isso ele espera no máximo 15 s, e quem garante a tela pronta são as
+// verificações abaixo (requisições em andamento contadas pelo próprio teste + texto "Carregando").
+const requisicoesEmAndamento = new WeakMap();
+function vigiarRequisicoes(page) {
+  if (!requisicoesEmAndamento.has(page)) {
+    const pendentes = new Set();
+    const fim = (r) => pendentes.delete(r);
+    page.on('request', (r) => pendentes.add(r));
+    page.on('requestfinished', fim);
+    page.on('requestfailed', fim);
+    requisicoesEmAndamento.set(page, pendentes);
+  }
+  return requisicoesEmAndamento.get(page);
+}
 export async function aguardarTelaPronta(page) {
-  await page.waitForLoadState('networkidle');
+  const pendentes = vigiarRequisicoes(page);
+  await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+  await expect.poll(() => pendentes.size, { message: 'ainda há requisição em andamento', timeout: 15_000 }).toBe(0);
   await page.waitForFunction(() => !document.querySelector('.loading') && !/Carregando/i.test(document.body.innerText));
   await page.waitForTimeout(300);
 }

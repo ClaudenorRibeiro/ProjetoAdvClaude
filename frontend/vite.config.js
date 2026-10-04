@@ -17,6 +17,13 @@ export default defineConfig({
   },
 
   optimizeDeps: {
+    // Prepara TODAS as bibliotecas de uma vez ao ligar o servidor de desenvolvimento. Sem isto, o Vite descobre
+    // react-select/date-fns só quando a tela que os usa abre e RECARREGA a página no meio (derrubava testes de tela).
+    // Só vale para o servidor de desenvolvimento (testes e uso local); o build de produção não muda.
+    include: [
+      'react', 'react/jsx-dev-runtime', 'react-dom', 'react-dom/client', 'react-router-dom', 'react-toastify', 'axios',
+      'react-select', 'react-big-calendar', 'date-fns', 'date-fns/locale', 'date-fns/locale/pt-BR',
+    ],
     esbuildOptions: {
       loader: { '.js': 'jsx' },
     },
