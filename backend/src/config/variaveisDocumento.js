@@ -70,7 +70,6 @@ const CATALOGO = {
       { tag: 'numero_processo',   descricao: 'Número do processo (CNJ)' },
       { tag: 'titulo_processo',   descricao: 'Título do processo (Autor X Réu)' },
       { tag: 'numero_pasta',      descricao: 'Número da pasta (0000)' },
-      { tag: 'area_direito',      descricao: 'Área do direito da pasta' },
       { tag: 'vara',              descricao: 'Vara' },
       { tag: 'forum',             descricao: 'Fórum' },
       { tag: 'endereco_forum',    descricao: 'Endereço completo do fórum/vara (montado)' },

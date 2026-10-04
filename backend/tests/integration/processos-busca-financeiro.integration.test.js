@@ -39,7 +39,7 @@ test.before(async () => {
   admin = token(1, 1, 'sessao-admin');
 
   // Segunda pasta/processo, COM lançamento financeiro (a #1 do seed fica sem, de controle).
-  const pasta = await executar("INSERT INTO tblpasta (numPasta, area_direito, criado_por) VALUES (9002, 'Testes', 1)");
+  const pasta = await executar("INSERT INTO tblpasta (numPasta, criado_por) VALUES (9002, 1)");
   pastaComFinanceiroId = pasta.insertId;
   const proc = await executar(
     `INSERT INTO tblproc (pasta_id, numProc, cliente_polo, NomeTituloProc, tipo_id, status_id, ativo, criado_por)

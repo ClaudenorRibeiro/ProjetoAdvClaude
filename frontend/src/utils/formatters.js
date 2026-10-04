@@ -314,14 +314,3 @@ export function toTitleCase(str) {
     })
     .join(' ');
 }
-
-// Retorna rótulo de área do direito
-export function labelAreaDireito(area) {
-  const map = {
-    trabalhista:     'Trabalhista',
-    previdenciario:  'Previdenciário',
-    familia:         'Família',
-    outro:           'Outro',
-  };
-  return map[area] || area;
-}

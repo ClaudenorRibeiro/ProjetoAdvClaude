@@ -52,7 +52,7 @@ async function semearDadosBase(conn) {
     [senhaHash, senhaHash, senhaHash]
   );
   await conn.execute("INSERT INTO configuracoes_escritorio (id, nome, setup_concluido) VALUES (1, 'Escritório Automatizado', 1)");
-  await conn.execute("INSERT INTO tblpasta (id, numPasta, area_direito, criado_por) VALUES (1, 99001, 'Testes', 1)");
+  await conn.execute("INSERT INTO tblpasta (id, numPasta, criado_por) VALUES (1, 99001, 1)");
   await conn.execute("INSERT INTO tblstatusproc (id, nome, ativo, criado_por) VALUES (1, 'Ativo', 1, 1)");
   await conn.execute("INSERT INTO tbltipoproc (id, nome, codTipoProc, ativo, criado_por) VALUES (1, 'Judicial', 'J', 1, 1)");
   await conn.execute(

@@ -1782,8 +1782,6 @@ SELECT esperado.tabela AS tabela, esperado.coluna AS coluna_que_falta
     UNION ALL
     SELECT 'tblpasta' AS tabela, 'numPasta' AS coluna
     UNION ALL
-    SELECT 'tblpasta' AS tabela, 'area_direito' AS coluna
-    UNION ALL
     SELECT 'tblpasta' AS tabela, 'criado_por' AS coluna
     UNION ALL
     SELECT 'tblpasta' AS tabela, 'criado_em' AS coluna

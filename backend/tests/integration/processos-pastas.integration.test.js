@@ -291,7 +291,7 @@ test('renumerar: recusa número igual ao atual, em uso (com processo ativo), inv
 
 test('renumerar: número de pasta TOTALMENTE vazia é reaproveitado (a vazia sai, etiqueta junto, auditoria); com algo preso nela é recusado com o motivo e nada muda', async () => {
   const put = (id, numPasta) => api().put(`/api/processos/pastas/${id}/renumerar`).send({ numPasta });
-  const pasta = (num, area = null) => sql('INSERT INTO tblpasta (numPasta, area_direito, criado_por) VALUES (?, ?, 1)', [num, area]).then(r => r.insertId);
+  const pasta = (num) => sql('INSERT INTO tblpasta (numPasta, criado_por) VALUES (?, 1)', [num]).then(r => r.insertId);
   const a = await novoProc(130);
 
   // 1) totalmente vazia (com etiqueta pessoal): libera o número
@@ -309,9 +309,6 @@ test('renumerar: número de pasta TOTALMENTE vazia é reaproveitado (a vazia sai
   assert.equal(await total('SELECT COUNT(*) AS n FROM tblproc WHERE pasta_id = ?', [a.pastaId]), 1);
 
   // 2) vazia de processos ativos mas com algo preso: recusa, diz o motivo, e a pasta continua
-  const comArea = await pasta(132, 'Trabalhista');
-  const r1 = await put(a.pastaId, 132);
-  assert.equal(r1.status, 400); assert.match(msg(r1), /O número 0132 pertence a uma pasta sem processos ativos, mas ela tem a área do direito preenchida \(Trabalhista\)\. Escolha outro número\./);
   const comTarefa = await pasta(133);
   await sql("INSERT INTO tarefas (titulo, criado_por, pasta_id) VALUES ('Tarefa presa', 1, ?)", [comTarefa]);
   const r2 = await put(a.pastaId, 133);
@@ -320,13 +317,13 @@ test('renumerar: número de pasta TOTALMENTE vazia é reaproveitado (a vazia sai
   await sql("INSERT INTO tblproc (pasta_id, numProc, NomeTituloProc, tipo_id, status_id, ativo, criado_por) VALUES (?, '0000134-00.2026.5.15.0001', 'INATIVO', 1, 1, 0, 1)", [comInativo]);
   const r3 = await put(a.pastaId, 134);
   assert.equal(r3.status, 400); assert.match(msg(r3), /O número 0134 pertence a uma pasta sem processos ativos, mas ela ainda guarda 1 processo\(s\) inativado\(s\)\. Escolha outro número\./);
-  const espacos = await pasta(135, '   ');                                  // área só com espaços = vazia
+  const outraVazia = await pasta(135);                                       // a "área" é do processo, nunca da pasta: vazia é vazia
   assert.equal((await put(a.pastaId, 135)).status, 200);
-  assert.equal(await total('SELECT COUNT(*) AS n FROM tblpasta WHERE id = ?', [espacos]), 0);
+  assert.equal(await total('SELECT COUNT(*) AS n FROM tblpasta WHERE id = ?', [outraVazia]), 0);
   // nada foi apagado nos casos recusados
-  for (const idp of [comArea, comTarefa, comInativo]) assert.equal(await total('SELECT COUNT(*) AS n FROM tblpasta WHERE id = ?', [idp]), 1, `a pasta ${idp} foi apagada indevidamente`);
+  for (const idp of [comTarefa, comInativo]) assert.equal(await total('SELECT COUNT(*) AS n FROM tblpasta WHERE id = ?', [idp]), 1, `a pasta ${idp} foi apagada indevidamente`);
   assert.equal((await um('SELECT numPasta FROM tblpasta WHERE id = ?', [a.pastaId])).numPasta, 135);                // as recusas não mudaram a pasta
-  assert.equal(await total("SELECT COUNT(*) AS n FROM logs_auditoria WHERE tabela = 'tblpasta' AND acao = 'excluir' AND registro_id IN (?, ?, ?)", [comArea, comTarefa, comInativo]), 0);
+  assert.equal(await total("SELECT COUNT(*) AS n FROM logs_auditoria WHERE tabela = 'tblpasta' AND acao = 'excluir' AND registro_id IN (?, ?)", [comTarefa, comInativo]), 0);
 });
 
 test('renumerar: pasta vazia e criação de processo no MESMO número ao mesmo tempo — ou o processo entra na pasta ou a troca vence, nunca os dois e nunca erro interno', async () => {

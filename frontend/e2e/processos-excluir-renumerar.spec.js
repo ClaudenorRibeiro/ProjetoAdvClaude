@@ -176,22 +176,20 @@ test('@critical Renumerar pasta: o lápis abre o campo com o número atual; Ente
   await expect(page.getByRole('row').filter({ hasText: 'CASCA VAZIA E2E' }).or(page.getByRole('row').filter({ hasText: '7201' })).first()).toBeVisible();
 });
 
-test('@critical Renumerar pasta para o número de uma pasta TOTALMENTE vazia: reaproveita (a vazia sai); com área do direito ou tarefa ligada recusa dizendo o motivo', async ({ page }) => {
+test('@critical Renumerar pasta para o número de uma pasta TOTALMENTE vazia: reaproveita (a vazia sai); com tarefa ligada recusa dizendo o motivo', async ({ page }) => {
   const vazia = (await noBanco('INSERT INTO tblpasta (numPasta, criado_por) VALUES (7291, 1)')).insertId;
-  const comArea = (await noBanco("INSERT INTO tblpasta (numPasta, area_direito, criado_por) VALUES (7292, 'Trabalhista', 1)")).insertId;
   const comTarefa = (await noBanco('INSERT INTO tblpasta (numPasta, criado_por) VALUES (7293, 1)')).insertId;
   await noBanco("INSERT INTO tarefas (titulo, criado_por, pasta_id) VALUES ('Tarefa presa E2E', 1, ?)", [comTarefa]);
   await loginPelaTela(page);
   await abrirPasta(page, d.pastaDuas);
   await lapis(page).click();
-  for (const [num, texto] of [['7292', 'O número 7292 pertence a uma pasta sem processos ativos, mas ela tem a área do direito preenchida (Trabalhista). Escolha outro número.'],
-    ['7293', 'O número 7293 pertence a uma pasta sem processos ativos, mas ela tem 1 tarefa(s) ligada(s). Escolha outro número.']]) {
+  for (const [num, texto] of [['7293', 'O número 7293 pertence a uma pasta sem processos ativos, mas ela tem 1 tarefa(s) ligada(s). Escolha outro número.']]) {
     await campoNumero(page).fill(num);
     await page.getByRole('button', { name: 'OK', exact: true }).click();
     await aviso(page, texto);
     await expect(page.locator('.Toastify__toast')).toHaveCount(0, { timeout: 10000 });
   }
-  expect((await noBanco('SELECT id FROM tblpasta WHERE id IN (?, ?)', [comArea, comTarefa])).length).toBe(2);        // as recusadas continuam
+  expect((await noBanco('SELECT id FROM tblpasta WHERE id = ?', [comTarefa])).length).toBe(1);        // as recusadas continuam
   expect((await noBanco('SELECT numPasta FROM tblpasta WHERE id = ?', [d.pastaDuas]))[0].numPasta).toBe(7201);       // e a pasta não mudou
   await campoNumero(page).fill('7291');
   await page.getByRole('button', { name: 'OK', exact: true }).click();

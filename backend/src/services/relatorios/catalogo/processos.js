@@ -36,7 +36,6 @@ module.exports = {
   visibilidade: () => ({ sql: 'pr.ativo = 1', params: [], juncoes: [] }),
   campos: {
     pasta:            { rotulo: 'Pasta',               tipo: 'texto', agrupavel: true, expr: PASTA_EXPR, formato: 'pasta' },
-    area_direito:     { rotulo: 'Área do direito',     tipo: 'texto', agrupavel: true, expr: 'pa.area_direito' },
     processo:         { rotulo: 'Processo',            tipo: 'texto', agrupavel: true, expr: 'pr.numProc', formato: 'processo' },
     protocolo:        { rotulo: 'Protocolo',           tipo: 'texto', expr: 'pr.protocolo' },
     titulo:           { rotulo: 'Título',              tipo: 'texto', agrupavel: true, expr: 'pr.NomeTituloProc' },

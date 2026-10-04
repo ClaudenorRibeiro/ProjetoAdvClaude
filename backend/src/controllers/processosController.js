@@ -343,7 +343,7 @@ async function renumerarPasta(req, res) {
 
     // FOR UPDATE: quem cria um processo nesse número ao mesmo tempo espera esta transação (e vice-versa).
     const [existente] = await conn.execute(
-      'SELECT id, area_direito FROM tblpasta WHERE numPasta = ? AND id != ? FOR UPDATE', [num, id]
+      'SELECT id FROM tblpasta WHERE numPasta = ? AND id != ? FOR UPDATE', [num, id]
     );
     if (existente.length) {
       const outra = existente[0];
@@ -354,8 +354,6 @@ async function renumerarPasta(req, res) {
       if (Number(todos) > 0) { await conn.rollback(); return preso(`ela ainda guarda ${todos} processo(s) inativado(s)`); }
       const [[{ tarefas }]] = await conn.execute('SELECT COUNT(*) AS tarefas FROM tarefas WHERE pasta_id = ?', [outra.id]);
       if (Number(tarefas) > 0) { await conn.rollback(); return preso(`ela tem ${tarefas} tarefa(s) ligada(s)`); }
-      const area = String(outra.area_direito ?? '').trim();
-      if (area) { await conn.rollback(); return preso(`ela tem a área do direito preenchida (${area})`); }
       // Totalmente vazia: libera o número removendo a pasta vazia (etiquetas pessoais saem em cascata) — com auditoria.
       await conn.execute('DELETE FROM tblpasta WHERE id = ?', [outra.id]);
       await auditoria.registrar(req.usuario.id, 'tblpasta', 'excluir', outra.id, { numPasta: num, motivo: 'pasta vazia reaproveitada na renumeração' }, null, conn,

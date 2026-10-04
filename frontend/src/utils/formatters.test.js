@@ -102,8 +102,6 @@ describe('formatadores e validadores compartilhados', () => {
     expect(f.labelPrioridade('customizada')).toBe('customizada');
     expect(f.labelStatusPrazo('concluido')).toBe('Concluído');
     expect(f.labelStatusPrazo('novo')).toBe('novo');
-    expect(f.labelAreaDireito('previdenciario')).toBe('Previdenciário');
-    expect(f.labelAreaDireito('ambiental')).toBe('ambiental');
   });
 
   it('mascaraDocumento alterna entre CPF e CNPJ pelo número de dígitos (conta bancária de terceiro)', () => {

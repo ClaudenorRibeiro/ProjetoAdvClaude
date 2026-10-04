@@ -34,14 +34,15 @@ const filtro = (campo, operador, valor = null) => ({ op: 'E', itens: [{ campo, o
 test.before(async () => {
   await recriarBancoTeste();
   // Processos: P1 (já existe, pasta 99001), P2 e P5 na mesma pasta, P3 arquivado, P4 INATIVO (nunca aparece)
-  await sql("INSERT INTO tblpasta (id, numPasta, area_direito, criado_por) VALUES (2, 5, 'Trabalhista', 1), (3, 1234, 'Cível', 1), (4, 7, 'Trabalhista', 1)");
+  await sql("INSERT INTO tblpasta (id, numPasta, criado_por) VALUES (2, 5, 1), (3, 1234, 1), (4, 7, 1)");
+  await sql("INSERT INTO tbltipoproc (id, nome, codTipoProc, ativo, criado_por) VALUES (2, 'Trabalhista', 'T', 1, 1), (3, 'Cível', 'C', 1, 1)");
   await sql("INSERT INTO tblstatusproc (id, nome, encerra_processo, ativo, criado_por) VALUES (2, 'Arquivado', 1, 1, 1)");
   await sql("INSERT INTO tblinstanciaproc (id, nome, ativo) VALUES (1, 'Primeira instância', 1)");
   await sql(`INSERT INTO tblproc (id, pasta_id, numProc, cliente_polo, NomeTituloProc, tipo_id, status_id, instancia_id, data_distribuicao, responsavel_id, ativo, criado_por, criado_em) VALUES
-    (2, 2, '0000002-02.2026.5.15.0001', 'reu',   'PROCESSO DOIS',  1, 1,    1,    '2025-03-10', 2,    1, 1, '2020-01-01 10:00:00'),
-    (3, 3, '0000003-03.2026.5.15.0001', 'autor', 'PROCESSO TRES',  1, 2,    NULL, NULL,         NULL, 1, 1, '2020-01-01 10:00:00'),
+    (2, 2, '0000002-02.2026.5.15.0001', 'reu',   'PROCESSO DOIS',  2, 1,    1,    '2025-03-10', 2,    1, 1, '2020-01-01 10:00:00'),
+    (3, 3, '0000003-03.2026.5.15.0001', 'autor', 'PROCESSO TRES',  3, 2,    NULL, NULL,         NULL, 1, 1, '2020-01-01 10:00:00'),
     (4, 4, '0000004-04.2026.5.15.0001', 'autor', 'PROCESSO QUATRO',1, 1,    NULL, NULL,         NULL, 0, 1, '2020-01-01 10:00:00'),
-    (5, 2, '0000005-05.2026.5.15.0001', 'autor', 'PROCESSO CINCO', 1, NULL, NULL, NULL,         1,    1, 1, '2020-06-01 10:00:00')`);
+    (5, 2, '0000005-05.2026.5.15.0001', 'autor', 'PROCESSO CINCO', 2, NULL, NULL, NULL,         1,    1, 1, '2020-06-01 10:00:00')`);
   await sql("INSERT INTO andamento_processual (processo_id, data, descricao, fonte) VALUES (2, '2025-01-01', 'a', 'manual'), (5, '2024-06-01', 'b', 'manual')");
 
   // Pessoas físicas: Ana (cliente, mar), Bruno (autor em processo cujo cliente é o réu → não cliente), Carla (réu-cliente, sem nascimento), Dario INATIVO
@@ -108,8 +109,8 @@ test('processos: filtros e agrupamentos batem com o gabarito', async () => {
   assert.equal(await total(filtro('titulo', 'contem', 'DOIS')), 1);
   assert.equal(await total(filtro('encerrado', 'verdadeiro')), 1);
 
-  const porArea = await rodar(admin, { receita: receita('processos', { agrupar: [{ campo: 'area_direito' }] }) });
-  assert.deepEqual(grupos(porArea), { Testes: 1, Trabalhista: 2, 'Cível': 1 });
+  const porTipo = await rodar(admin, { receita: receita('processos', { agrupar: [{ campo: 'tipo' }] }) });
+  assert.deepEqual(grupos(porTipo), { 1: 1, 2: 2, 3: 1 });                  // a "área" do processo é o Tipo (a pasta não tem área)
   const porStatus = await rodar(admin, { receita: receita('processos', { agrupar: [{ campo: 'status' }] }) });
   assert.deepEqual(grupos(porStatus), { 1: 2, 2: 1, null: 1 });
   const porPolo = await rodar(admin, { receita: receita('processos', { agrupar: [{ campo: 'polo' }] }) });
@@ -134,9 +135,9 @@ test('processos: "dias sem movimentação" = regra de Processos parados (mesmo r
   assert.deepEqual(nova.body.dados.linhas.map(l => l.processo).sort(), idsAntiga);
   assert.ok(idsAntiga.length >= 1 && !idsAntiga.includes('0000003-03.2026.5.15.0001'));      // arquivado fica de fora
 
-  const medias = await rodar(admin, { receita: receita('processos', { agrupar: [{ campo: 'area_direito' }], metricas: [{ funcao: 'contagem' }, { funcao: 'maximo', campo: 'dias_parado' }] }) });
+  const medias = await rodar(admin, { receita: receita('processos', { agrupar: [{ campo: 'tipo' }], metricas: [{ funcao: 'contagem' }, { funcao: 'maximo', campo: 'dias_parado' }] }) });
   assert.equal(medias.status, 200);
-  const trab = medias.body.dados.linhas.find(l => l.tipo === 'grupo' && l.chaves[0] === 'Trabalhista');
+  const trab = medias.body.dados.linhas.find(l => l.tipo === 'grupo' && String(l.chaves[0]) === '2');
   const gabMax = (await sql("SELECT GREATEST(DATEDIFF(CURDATE(), '2025-01-01'), DATEDIFF(CURDATE(), '2024-06-01')) m"))[0].m;
   assert.deepEqual(trab.valores.map(Number), [2, Number(gabMax)]);
 });
@@ -213,7 +214,7 @@ test('pessoas jurídicas: só as ativas, recuperação judicial, telefone princi
 });
 
 test('recusas e Excel: totais só em campos numéricos; Excel com os dados certos', async () => {
-  assert.equal((await rodar(admin, { receita: receita('processos', { agrupar: [{ campo: 'area_direito' }], metricas: [{ funcao: 'soma', campo: 'titulo' }] }) })).status, 422);
+  assert.equal((await rodar(admin, { receita: receita('processos', { agrupar: [{ campo: 'tipo' }], metricas: [{ funcao: 'soma', campo: 'titulo' }] }) })).status, 422);
   assert.equal((await rodar(admin, { receita: receita('processos', { agrupar: [{ campo: 'observacoes' }] }) })).status, 422);
   assert.equal((await rodar(admin, { receita: receita('pessoas_fisicas', { colunas: ['razao_social'] }) })).status, 422);
   assert.equal((await rodar(admin, { receita: receita('pessoas_juridicas', { colunas: ['cpf'] }) })).status, 422);

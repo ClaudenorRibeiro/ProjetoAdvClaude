@@ -279,7 +279,7 @@ async function blocoClienteDeParte(parte) {
 async function blocoProcessoECliente(processoId) {
   const [pr] = await pool.execute(
     `SELECT p.id, p.numProc, p.NomeTituloProc, p.data_distribuicao, p.cliente_polo,
-            pa.numPasta, pa.area_direito,
+            pa.numPasta,
             v.nome AS vara_nome,
             f.nome AS forum_nome, f.cep AS forum_cep, f.logradouro AS forum_log, f.num_end AS forum_num,
             f.compl_end AS forum_compl, f.bairro AS forum_bairro, f.cidade AS forum_cidade, f.uf AS forum_uf,
@@ -315,7 +315,8 @@ async function blocoProcessoECliente(processoId) {
     numero_processo: p.numProc || '',
     titulo_processo: p.NomeTituloProc || '',
     numero_pasta: (p.numPasta != null) ? String(p.numPasta).padStart(4, '0') : '',
-    area_direito: p.area_direito || '',
+    // Apelido antigo (modelos feitos quando a pasta tinha "área do direito"): a área é o Tipo do processo.
+    area_direito: p.tipo_nome || '',
     vara: p.vara_nome || '',
     forum: p.forum_nome || '',
     // Endereço do fórum/vara (endereçamento ao juízo e cartas ao fórum) — vem do cadastro de fórum.

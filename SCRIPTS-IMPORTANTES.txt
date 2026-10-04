@@ -19,6 +19,7 @@ PARA RODAR NO HEIDISQL (banco)
   sql_atualizar_financeiro_para_heidi.sql       IMPORTANTE  OBRIGATÓRIO em cada instância com banco atrasado: cria 5 tabelas do Financeiro e 23 colunas (seguro rodar de novo).
   sql_contas_bancarias_pessoas_para_heidi.sql   IMPORTANTE  Cria contas_bancarias_pf/pj se o banco não as tiver (só cria o que falta; pode rodar de novo).
   sql_limpar_pastas_vazias_para_heidi.sql       IMPORTANTE  Apaga SÓ as pastas 9999 e 928804 (fixos: 9999 e 928804 — rodar SÓ no Antônio). Nunca em lote.
+  sql_remover_area_direito_da_pasta_para_heidi.sql IMPORTANTE Apaga a coluna antiga tblpasta.area_direito. SÓ DEPOIS de atualizar o sistema na instância (backup antes; seguro rodar de novo).
   sql_diagnostico_estrutura_para_heidi.sql      IMPORTANTE  Só lê. Mostra o que falta no banco comparado ao estrutura_banco.sql.
   quality/sql/CRIAR_BANCO_TESTE_HEIDISQL.sql    IMPORTANTE  Cria o banco isolado de testes (necessário para a bateria completa).
 

@@ -279,7 +279,11 @@ perguntar "o que falta". Só tirar da lista com o OK dele. Detalhes de cada item
 - **Pastas vazias antigas (achado de 04/10/2026, decisão pendente do usuário):** no local e no Antônio existem 2.702 pastas SEM processo; 2.700 foram criadas de uma vez em
   28/06/2026 (números 1 a 8935, criador 24) e 2.627 têm "área do direito" preenchida — parecem pastas antigas importadas sem os processos. O Erick não tem nenhuma.
   Não apagar em lote sem a decisão dele. O script `sql_limpar_pastas_vazias_para_heidi.sql` apaga SÓ as pastas 9999 e 928804 (fixas no script; rodar só no Antônio — o Erick não tem pastas vazias).
-  **Regra decidida pelo usuário (04/10/2026) e já implementada:** pasta TOTALMENTE vazia (sem nenhum processo, sem tarefa ligada e sem área do direito) é reaproveitável.
+  **Regra decidida pelo usuário (04/10/2026) e já implementada:** pasta TOTALMENTE vazia (sem nenhum processo e sem tarefa ligada) é reaproveitável.
   Ao criar processo nesse número o sistema já reaproveitava a pasta; agora a troca de número (`renumerarPasta`) também: remove a pasta vazia (etiquetas pessoais saem em
-  cascata, com auditoria) e faz a troca na mesma transação. Se a pasta vazia de processos ativos tiver processo inativado, tarefa ou área do direito, a troca é recusada
+  cascata, com auditoria) e faz a troca na mesma transação. Se a pasta vazia de processos ativos tiver processo inativado ou tarefa, a troca é recusada
   dizendo o motivo (nunca descarta informação). Excluir o último processo de uma pasta continua deixando a pasta no banco, vazia.
+  **"Área do direito" saiu da pasta (decisão do usuário, 04/10/2026 — "não existe pasta trabalhista, existe processo trabalhista"):** a área é do PROCESSO (campo "Tipo").
+  A coluna `tblpasta.area_direito` foi removida do código e do `estrutura_banco.sql`; o relatório e a variável de documento "área" passam a usar o Tipo do processo
+  (`{{area_direito}}` continua funcionando em modelos antigos, devolvendo o Tipo). Falta, em CADA instância, depois de atualizar o sistema, rodar
+  `sql_remover_area_direito_da_pasta_para_heidi.sql` (local já tem o banco sem a coluna só depois de rodar; Antônio/Erick idem). Antes do script, a coluna ainda existe nos bancos — é inofensivo.

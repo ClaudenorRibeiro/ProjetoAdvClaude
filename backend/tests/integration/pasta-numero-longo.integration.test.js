@@ -32,7 +32,7 @@ test.before(async () => {
   app = criarApp();
   admin = jwt.sign({ id: 1, nome: 'Teste 1', nivel: 1, tipo: 'advogado', sessao: 'sessao-admin' }, process.env.JWT_SECRET, { expiresIn: '1h' });
   // pasta curta (42) com um processo ativo; a pasta 99001 já vem do banco de teste
-  pastaCurtaId = (await executar("INSERT INTO tblpasta (numPasta, area_direito, criado_por) VALUES (42, 'Testes', 1)")).insertId;
+  pastaCurtaId = (await executar("INSERT INTO tblpasta (numPasta, criado_por) VALUES (42, 1)")).insertId;
   await executar(
     `INSERT INTO tblproc (pasta_id, numProc, cliente_polo, NomeTituloProc, tipo_id, status_id, ativo, criado_por)
      VALUES (?, '0000042-02.2026.5.15.0042', 'autor', 'PROCESSO DA PASTA CURTA', 1, 1, 1, 1)`, [pastaCurtaId]);

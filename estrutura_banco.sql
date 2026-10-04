@@ -2219,7 +2219,6 @@ DROP TABLE IF EXISTS `tblpasta`;
 CREATE TABLE `tblpasta` (
   `id` int NOT NULL AUTO_INCREMENT,
   `numPasta` int NOT NULL,
-  `area_direito` varchar(50) DEFAULT NULL COMMENT 'Ex: Trabalhista, Previdenciária, Família',
   `criado_por` int DEFAULT NULL,
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   `alterado_por` int DEFAULT NULL,
