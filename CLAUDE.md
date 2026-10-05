@@ -295,11 +295,9 @@ perguntar "o que falta". Só tirar da lista com o OK dele. Detalhes de cada item
 
 ## 10. PENDÊNCIAS DE PRODUÇÃO — AWS-Erick e AWS-Antônio (pedido do usuário, 04/10/2026)
 
-**Regra do usuário:** Erick e Antônio são PRODUÇÃO e ficam por ÚLTIMO: só são atualizados depois que o LOCAL estiver 100% ok e testado. A IA mantém esta lista
-
 **REGRA ABSOLUTA (pedido do usuário, 04/10/2026, em maiúsculas): NUNCA MEXER NA AWS.** A IA não tem acesso aos servidores e não conduz o usuário a mexer neles por iniciativa própria: não sugere "rode isto no servidor", não manda enviar arquivos, não monta o próximo passo de produção sozinha. Só entrega script ou passo de AWS quando o usuário PEDIR, na hora que ele decidir. Os scripts e passos abaixo ficam apenas como material pronto, guardado.
-atualizada (acrescentar item a cada script/mudança nova que precise ir para produção; marcar como feito só com o OK do usuário) e a mostra quando ele perguntar
-"o que falta" ou for atualizar produção.
+
+**Regra do usuário:** Erick e Antônio são PRODUÇÃO e ficam por ÚLTIMO: só são atualizados depois que o LOCAL estiver 100% ok e testado. A IA mantém esta lista atualizada (acrescentar item a cada script/mudança nova que precise ir para produção; marcar como feito só com o OK do usuário) e a mostra quando ele perguntar "o que falta" ou for atualizar produção.
 
 **Banco: UM script só, `sql_atualizar_banco_para_heidi.sql`** (criado em 04/10/2026; substitui os antigos de Relatórios fase1/6/7, Financeiro, contas bancárias e remoção
 de `area_direito`, que ficam só como histórico). Ele confere se o banco é o do sistema (pelas tabelas, pois o nome muda: `sistema_advocacia` no Antônio, `erick_adv` no Erick),
