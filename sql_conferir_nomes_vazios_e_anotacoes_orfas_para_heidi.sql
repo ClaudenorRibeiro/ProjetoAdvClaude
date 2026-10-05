@@ -6,7 +6,7 @@
 --   Resultado 1 = pessoas FÍSICAS com nome vazio ou só espaços
 --   Resultado 2 = pessoas JURÍDICAS com razão social vazia ou só espaços
 --   Resultado 3 = anotações de atendimento ÓRFÃS (a pessoa a que pertencem não existe)
---   Resultado 4 = pessoas (física/jurídica) com OBSERVAÇÕES acima de 15.000 caracteres (limite novo do pacote B de 05/10/2026)
+--   Resultado 4 = pessoas (física/jurídica) com OBSERVAÇÕES acima de 5.000 caracteres (limite novo do pacote B de 05/10/2026, escolhido pelo usuário)
 -- Se os quatro vierem vazios, não há nada a tratar. Se vier alguma linha, me avise ANTES de qualquer limpeza.
 -- ============================================================================
 
@@ -25,8 +25,8 @@ SELECT 'ANOTACAO orfa' AS problema, h.id, h.tipo_pessoa, h.pessoa_id, LEFT(h.des
 
 SELECT 'FISICA com observacoes muito longas' AS problema, id, nome, CHAR_LENGTH(observacoes) AS tamanho
   FROM pessoas_fisicas
- WHERE CHAR_LENGTH(observacoes) > 15000
+ WHERE CHAR_LENGTH(observacoes) > 5000
 UNION ALL
 SELECT 'JURIDICA com observacoes muito longas', id, razao_social, CHAR_LENGTH(observacoes)
   FROM pessoas_juridicas
- WHERE CHAR_LENGTH(observacoes) > 15000;
+ WHERE CHAR_LENGTH(observacoes) > 5000;

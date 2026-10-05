@@ -8,8 +8,8 @@
 const { texto, dataIso, inteiroPositivo } = require('./camposTexto');
 
 const LIMITE_NOME = 200;
-// Observações: a coluna é "text" (65.535 bytes); 15.000 caracteres cabem mesmo no pior caso (4 bytes por caractere = 60.000 bytes).
-const LIMITE_OBSERVACOES = 15000;
+// Observações: limite escolhido pelo usuário (05/10/2026): 5.000 caracteres (a coluna é "text", 65.535 bytes: cabe com folga).
+const LIMITE_OBSERVACOES = 5000;
 
 // Endereço e observações (iguais na física e na jurídica)
 const CAMPOS_ENDERECO = {

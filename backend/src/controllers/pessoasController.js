@@ -6,7 +6,7 @@
 const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
-const { hojeBrasilia, pastaFormatadaSql } = require('../utils/helpers');
+const { hojeBrasilia, pastaFormatadaSql, escaparLike, paginacao } = require('../utils/helpers');
 const { enviarEmail } = require('../utils/email');
 const { registrarComunicacao } = require('../utils/logComunicacao');
 const smsService = require('../services/smsService');
@@ -85,7 +85,7 @@ function conferirConta(c) {
     chave_pix: ler(c.chave_pix, { rotulo: 'A chave PIX', max: 150, feminino: true }),
     titular: ler(c.titular, { rotulo: 'O titular', max: 200 }) || '',
     documento_titular: documento,
-    observacao: ler(c.observacao, { rotulo: 'A observação da conta', max: 15000, feminino: true }),
+    observacao: ler(c.observacao, { rotulo: 'A observação da conta', max: 5000, feminino: true }),
   };
 }
 function normalizarDigitoConta(valor) {
@@ -187,11 +187,32 @@ function uploadAnexosEmail(req, res, next) {
 
 // ---- Filtros de busca reutilizáveis (listagem E exportação) — evita duplicar a mesma condição ----
 
+// Lê o termo de busca que veio na URL: precisa ser TEXTO (?busca[]=a vira lista e antes derrubava a tela com erro interno),
+// com espaços das pontas tirados e no máximo 200 caracteres. Vazio = sem busca ({ valor: null }).
+function lerBusca(bruto) {
+  return texto(bruto, { rotulo: 'A busca', max: 200, feminino: true });
+}
+
+// Padrões de busca (LIKE) de um termo digitado. O texto é procurado COMO FOI DIGITADO: "%" e "_" não são curingas.
+//  - texto:    o termo como veio (nome, endereço, e o telefone/RG/PIS exatamente como foram gravados, com máscara)
+//  - digitos:  só os números do termo — para CPF e CNPJ, que o sistema guarda só com dígitos (com ou sem pontuação, acha)
+//  - numerica: só quando o termo é um NÚMERO digitado com ou sem máscara ("(19) 98877-6655", "19988776655", "529.982.247-25") e tem
+//              ao menos 3 dígitos: os números do termo, para comparar com telefone/RG/PIS ignorando a máscara de quem foi gravado.
+//              (Termo com letras, como um nome, não entra aqui — senão "Maria 2" acharia todo telefone com 2.)
+function padroesDeBusca(busca) {
+  const digitos = busca.replace(/\D/g, '');
+  const termoNumerico = /^[\d\s().\-/+]+$/.test(busca) && digitos.length >= 3;
+  return {
+    texto: `%${escaparLike(busca)}%`,
+    inicio: `${escaparLike(busca)}%`,
+    digitos: `%${escaparLike(digitos || busca)}%`,
+    numerica: termoNumerico ? `%${digitos}%` : null,
+  };
+}
+
 // Condição de busca de PESSOA FÍSICA (nome, CPF, RG, PIS, endereço, telefone). Retorna { cond, params }.
 function condBuscaFisica(busca, selecao = false) {
-  const buscaDigitos = busca.replace(/\D/g, '');
-  const b  = `%${busca}%`;
-  const bD = `%${buscaDigitos || busca}%`;
+  const p = padroesDeBusca(busca);
 
   // MODO "ESCOLHER PESSOA" (autocompletar de testemunha, autor/réu/perito e responsável
   // legal): procura SÓ em nome e CPF. Com a busca ampla, digitar "maria" trazia também
@@ -199,9 +220,11 @@ function condBuscaFisica(busca, selecao = false) {
   // em ordem alfabética, as Marias de verdade ficavam de fora. A tela de Pessoas continua
   // usando a busca ampla (o campo dela promete endereço, RG e PIS).
   if (selecao) {
-    return { cond: ' AND (pf.nome LIKE ? OR pf.cpf LIKE ?)', params: [b, bD] };
+    return { cond: ' AND (pf.nome LIKE ? OR pf.cpf LIKE ?)', params: [p.texto, p.digitos] };
   }
 
+  // Termo numérico: RG e PIS são comparados sem a máscara (só números/letras) e o telefone também (só números).
+  const num = p.numerica !== null;
   const cond = ` AND (
         pf.nome       LIKE ? OR
         pf.cpf        LIKE ? OR
@@ -209,29 +232,35 @@ function condBuscaFisica(busca, selecao = false) {
         pf.pis        LIKE ? OR
         pf.logradouro LIKE ? OR
         pf.bairro     LIKE ? OR
-        pf.cidade     LIKE ? OR
+        pf.cidade     LIKE ? OR${num ? `
+        REGEXP_REPLACE(pf.rg, '[^0-9A-Za-z]', '')  LIKE ? OR
+        REGEXP_REPLACE(pf.pis, '[^0-9]', '')       LIKE ? OR` : ''}
         EXISTS (
           SELECT 1 FROM telefones_pf t
-          WHERE t.pessoa_id = pf.id AND t.ativo = 1 AND t.numero LIKE ?
+          WHERE t.pessoa_id = pf.id AND t.ativo = 1
+            AND (t.numero LIKE ?${num ? " OR REGEXP_REPLACE(t.numero, '[^0-9]', '') LIKE ?" : ''})
         )
       )`;
-  return { cond, params: [b, bD, b, b, b, b, b, b] };
+  const params = [p.texto, p.digitos, p.texto, p.texto, p.texto, p.texto, p.texto];
+  if (num) params.push(p.numerica, p.numerica);
+  params.push(p.texto);
+  if (num) params.push(p.numerica);
+  return { cond, params };
 }
 
 // Condição de busca de PESSOA JURÍDICA (razão social, CNPJ, fantasia, endereço, telefone).
 function condBuscaJuridica(busca, selecao = false) {
-  const buscaDigitos = busca.replace(/\D/g, '');
-  const b  = `%${busca}%`;
-  const bD = `%${buscaDigitos || busca}%`;
+  const p = padroesDeBusca(busca);
 
   // Modo "escolher empresa" — ver o comentário em condBuscaFisica.
   if (selecao) {
     return {
       cond: ' AND (pj.razao_social LIKE ? OR pj.nome_fantasia LIKE ? OR pj.cnpj LIKE ?)',
-      params: [b, b, bD],
+      params: [p.texto, p.texto, p.digitos],
     };
   }
 
+  const num = p.numerica !== null;
   const cond = ` AND (
         pj.razao_social        LIKE ? OR
         pj.cnpj                LIKE ? OR
@@ -241,10 +270,13 @@ function condBuscaJuridica(busca, selecao = false) {
         pj.cidade              LIKE ? OR
         EXISTS (
           SELECT 1 FROM telefones_pj t
-          WHERE t.pessoa_id = pj.id AND t.ativo = 1 AND t.numero LIKE ?
+          WHERE t.pessoa_id = pj.id AND t.ativo = 1
+            AND (t.numero LIKE ?${num ? " OR REGEXP_REPLACE(t.numero, '[^0-9]', '') LIKE ?" : ''})
         )
       )`;
-  return { cond, params: [b, bD, b, b, b, b, b] };
+  const params = [p.texto, p.digitos, p.texto, p.texto, p.texto, p.texto, p.texto];
+  if (num) params.push(p.numerica);
+  return { cond, params };
 }
 
 // ---- PESSOAS FÍSICAS ----
@@ -252,12 +284,15 @@ function condBuscaJuridica(busca, selecao = false) {
 // GET /api/pessoas/fisicas — Lista todas as pessoas físicas
 async function listarFisicas(req, res) {
   try {
-    const { busca, pagina = 1, limite = 20, somente_advogados, somente_peritos, selecao } = req.query;
+    const { somente_advogados, somente_peritos, selecao } = req.query;
+    // Busca: precisa ser texto (lista/objeto na URL = aviso 400, não erro interno)
+    const lidaBusca = lerBusca(req.query.busca);
+    if (lidaBusca.erro) return erro(res, lidaBusca.erro);
+    const busca = lidaBusca.valor;
     // selecao=1: chamada de um campo de ESCOLHER pessoa, não da tela de Pessoas.
     const modoSelecao = selecao === '1' || selecao === 'true' || selecao === true;
-    // parseInt garante valores inteiros seguros para uso direto na query
-    const limitInt  = Math.min(parseInt(limite) || 20, 100);
-    const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
+    // Página e limite sempre inteiros seguros: ausente, texto, zero ou negativo viram o padrão (20 por página, no máximo 100)
+    const { limite: limitInt, pagina, offset: offsetInt } = paginacao(req.query, { limitePadrao: 20, limiteMax: 100 });
     const params = [];
     let where = 'WHERE pf.ativo = 1';
 
@@ -296,9 +331,9 @@ async function listarFisicas(req, res) {
     // O parâmetro extra entra SÓ nesta consulta (o COUNT abaixo não tem ORDER BY).
     const ordem = (modoSelecao && busca) ? 'ORDER BY (pf.nome LIKE ?) DESC, pf.nome ASC'
                                          : 'ORDER BY pf.nome ASC';
-    const paramsOrdem = (modoSelecao && busca) ? [`${busca}%`] : [];
+    const paramsOrdem = (modoSelecao && busca) ? [padroesDeBusca(busca).inicio] : [];
 
-    // Nota: LIMIT e OFFSET são inseridos diretamente na query (já sanitizados com parseInt)
+    // Nota: LIMIT e OFFSET são inseridos diretamente na query (já sanitizados por paginacao())
     // pois o MySQL 8 tem incompatibilidade com parâmetros ? em LIMIT/OFFSET via prepared statements
     const [rows] = await pool.execute(
       `SELECT pf.id, pf.nome, pf.cpf, pf.data_nascimento,
@@ -340,7 +375,7 @@ async function listarFisicas(req, res) {
       params
     );
 
-    return sucesso(res, { registros: rows, total: total[0].total, pagina: parseInt(pagina), limite: parseInt(limite) });
+    return sucesso(res, { registros: rows, total: total[0].total, pagina, limite: limitInt });
   } catch (err) {
     return erroInterno(res, err);
   }
@@ -1391,11 +1426,12 @@ async function excluirHistorico(req, res) {
 // GET /api/pessoas/juridicas — Lista todas as pessoas jurídicas
 async function listarJuridicas(req, res) {
   try {
-    const { busca, pagina = 1, limite = 20, selecao } = req.query;
+    const { selecao } = req.query;
+    const lidaBusca = lerBusca(req.query.busca);   // ver listarFisicas
+    if (lidaBusca.erro) return erro(res, lidaBusca.erro);
+    const busca = lidaBusca.valor;
     const modoSelecao = selecao === '1' || selecao === 'true' || selecao === true; // ver listarFisicas
-    // parseInt garante valores inteiros seguros para uso direto na query
-    const limitInt  = Math.min(parseInt(limite) || 20, 100);
-    const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
+    const { limite: limitInt, offset: offsetInt } = paginacao(req.query, { limitePadrao: 20, limiteMax: 100 });
     const params = [];
     let where = 'WHERE pj.ativo = 1';
 
@@ -1416,9 +1452,9 @@ async function listarJuridicas(req, res) {
     // Quem COMEÇA pelo termo primeiro, só no modo "escolher empresa" — ver listarFisicas.
     const ordem = (modoSelecao && busca) ? 'ORDER BY (pj.razao_social LIKE ?) DESC, pj.razao_social ASC'
                                          : 'ORDER BY pj.razao_social ASC';
-    const paramsOrdem = (modoSelecao && busca) ? [`${busca}%`] : [];
+    const paramsOrdem = (modoSelecao && busca) ? [padroesDeBusca(busca).inicio] : [];
 
-    // Nota: LIMIT e OFFSET inseridos diretamente (sanitizados com parseInt — MySQL 8 não aceita ? em LIMIT/OFFSET)
+    // Nota: LIMIT e OFFSET inseridos diretamente (sanitizados por paginacao() — MySQL 8 não aceita ? em LIMIT/OFFSET)
     const [rows] = await pool.execute(
       `SELECT pj.id, pj.razao_social, pj.nome_fantasia, pj.cnpj,
               (SELECT t.numero FROM telefones_pj t WHERE t.pessoa_id = pj.id AND t.ativo = 1
@@ -1967,7 +2003,10 @@ async function gerarExcelPessoas(res, { rows, ordem, mapa, aba, nomeArquivo }) {
 // GET /api/pessoas/fisicas/exportar — exporta a busca atual (ou tudo) em Excel
 async function exportarFisicas(req, res) {
   try {
-    const { busca, campos } = req.query;
+    const { campos } = req.query;
+    const lidaBusca = lerBusca(req.query.busca);
+    if (lidaBusca.erro) return erro(res, lidaBusca.erro);
+    const busca = lidaBusca.valor;
     // valida os campos pedidos contra a lista branca; mantém a ordem canônica do mapa
     const pedidos = (campos ? String(campos).split(',') : []);
     let ordem = Object.keys(CAMPOS_PF).filter(k => pedidos.includes(k));
@@ -1995,7 +2034,10 @@ async function exportarFisicas(req, res) {
 // GET /api/pessoas/juridicas/exportar — exporta a busca atual (ou tudo) em Excel
 async function exportarJuridicas(req, res) {
   try {
-    const { busca, campos } = req.query;
+    const { campos } = req.query;
+    const lidaBusca = lerBusca(req.query.busca);
+    if (lidaBusca.erro) return erro(res, lidaBusca.erro);
+    const busca = lidaBusca.valor;
     const pedidos = (campos ? String(campos).split(',') : []);
     let ordem = Object.keys(CAMPOS_PJ).filter(k => pedidos.includes(k));
     if (!ordem.length) ordem = ['razao_social'];

@@ -32,7 +32,7 @@ test('lerDadosFisica: limpa e confere (nome obrigatório, limites das colunas, i
   assert.equal(lerDadosFisica({ nome: 'a', estado: 'SPX' }).erro, 'A UF muito longa (máximo 2 caracteres)');
   assert.equal(lerDadosFisica({ nome: 'a', profissao_id: 'abc' }).erro, 'O campo profissão inválido');
   assert.equal(lerDadosFisica({ nome: 'a', telefones: {} }).erro, 'A lista de telefones é inválida');
-  assert.equal(lerDadosFisica({ nome: 'a', observacoes: 'x'.repeat(15001) }).erro, 'O campo Observações muito longo (máximo 15000 caracteres)');
+  assert.equal(lerDadosFisica({ nome: 'a', observacoes: 'x'.repeat(5001) }).erro, 'O campo Observações muito longo (máximo 5000 caracteres)');
 });
 
 test('lerDadosJuridica: razão social obrigatória (feminino), CNPJ até 14 números, inscrição estadual só conferida no cadastro', () => {

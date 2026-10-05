@@ -788,7 +788,7 @@ const tiposErrados = [123, ['x'], { a: 1 }, true];
 async function banco() { return (await api().post('/api/pessoas/auxiliares/instituicoes_financeiras').send({ nome: `Banco B ${Date.now()} ${++seq}` })).body.dados.id; }
 
 test('física — campos do cadastro: tudo no limite da coluna passa (e é guardado aparado); 1 acima do limite dá aviso 400 com o máximo, em criar e em editar, sem gravar nada', async () => {
-  const limites = { rg: 20, rg_orgao: 20, pis: 20, ctps_numero: 30, ctps_serie: 20, nome_pai: 200, nome_mae: 200, cep: 9, logradouro: 200, numero: 10, complemento: 100, bairro: 100, cidade: 100, estado: 2, observacoes: 15000 };
+  const limites = { rg: 20, rg_orgao: 20, pis: 20, ctps_numero: 30, ctps_serie: 20, nome_pai: 200, nome_mae: 200, cep: 9, logradouro: 200, numero: 10, complemento: 100, bairro: 100, cidade: 100, estado: 2, observacoes: 5000 };
   const noLimite = {}; for (const [campo, max] of Object.entries(limites)) noLimite[campo] = campo === 'estado' ? 'SP' : (campo === 'cep' ? '123456789' : grande(max));
   const ok = await api().post('/api/pessoas/fisicas').send(fisica({ ...noLimite, cidade: `  ${grande(100)}  ` }));
   assert.equal(ok.status, 201, JSON.stringify(ok.body));
@@ -888,7 +888,7 @@ test('contas bancárias: cada campo no limite da coluna (agência 20, número 30
   await recusa({ agencia: grande(21) }, /A agência muito longa \(máximo 20 caracteres\)/);
   await recusa({ numero: grande(31) }, /O número da conta muito longo \(máximo 30 caracteres\)/);
   await recusa({ chave_pix: grande(151) }, /A chave PIX muito longa \(máximo 150 caracteres\)/);
-  await recusa({ observacao: grande(15001) }, /A observação da conta muito longa/);
+  await recusa({ observacao: grande(5001) }, /A observação da conta muito longa/);
   await recusa({ agencia: ['1'] }, /A agência inválida/);
   await recusa({ instituicao_financeira_id: 'abc' }, /Instituição financeira inválida/);
   await recusa({ instituicao_financeira_id: { a: 1 } }, /Instituição financeira inválida/);
@@ -897,7 +897,7 @@ test('contas bancárias: cada campo no limite da coluna (agência 20, número 30
   await recusa({ conta_terceiro: true, titular: 'Terceiro', documento_titular: '1'.repeat(19) }, /O documento do titular deve ter no máximo 18 números/);
   await recusa({ conta_terceiro: true, titular: 'Terceiro', documento_titular: 39053344705 }, /O documento do titular é inválido/);
   // no limite, passa
-  const ok = await tenta({ agencia: grande(20), numero: grande(30), chave_pix: grande(150), observacao: grande(15000) });
+  const ok = await tenta({ agencia: grande(20), numero: grande(30), chave_pix: grande(150), observacao: grande(5000) });
   assert.equal(ok.status, 201, JSON.stringify(ok.body));
   const conta = await um('SELECT agencia, numero, chave_pix FROM contas_bancarias_pf WHERE pessoa_id = ?', [ok.body.dados.id]);
   assert.deepEqual([conta.agencia.length, conta.numero.length, conta.chave_pix.length], [20, 30, 150]);
@@ -906,7 +906,7 @@ test('contas bancárias: cada campo no limite da coluna (agência 20, número 30
 });
 
 test('jurídica — campos do cadastro: no limite passa; 1 acima (razão 200, fantasia 200, inscrição 30, CEP 9, logradouro 200, número 10, complemento 100, bairro/cidade 100, UF 2) e CNPJ longo ou que não é texto dão aviso 400', async () => {
-  const limites = { nome_fantasia: 200, inscricao_estadual: 30, cep: 9, logradouro: 200, numero: 10, complemento: 100, bairro: 100, cidade: 100, estado: 2, observacoes: 15000 };
+  const limites = { nome_fantasia: 200, inscricao_estadual: 30, cep: 9, logradouro: 200, numero: 10, complemento: 100, bairro: 100, cidade: 100, estado: 2, observacoes: 5000 };
   const noLimite = {}; for (const [campo, max] of Object.entries(limites)) noLimite[campo] = campo === 'estado' ? 'SP' : (campo === 'cep' ? '123456789' : grande(max));
   assert.equal((await api().post('/api/pessoas/juridicas').send(juridica(noLimite))).status, 201);
   const id = await criarPJ();
@@ -986,4 +986,114 @@ test('ida e volta da ficha: o que a tela recebe ao abrir a pessoa (GET) volta no
   assert.equal(Number(pjDepois.em_recuperacao_judicial), 1);
   assert.deepEqual(pjDepois.contas_bancarias.map(c => c.id), pjAntes.contas_bancarias.map(c => c.id));
   assert.equal(pjDepois.telefones.length, 1); assert.equal(pjDepois.emails.length, 1);
+});
+
+// ------------------------------------------------------------------ listas e buscas (pacote C)
+test('listas: página e limite negativos, zero ou lixo viram o padrão (200, nunca erro); limite acima de 100 é cortado em 100; física e jurídica', async () => {
+  for (const rota of ['fisicas', 'juridicas']) {
+    for (const qs of ['pagina=-1&limite=-5', 'pagina=0&limite=0', 'pagina=abc&limite=abc', 'pagina=99999999999&limite=100', 'limite=-1', 'pagina=1.5&limite=2.7', 'pagina[]=1&limite[]=2', 'pagina=1e3&limite=1e2']) {
+      const r = await api().get(`/api/pessoas/${rota}?${qs}`);
+      assert.equal(r.status, 200, `${rota}?${qs} → ${r.status} ${JSON.stringify(r.body).slice(0, 100)}`);
+      assert.ok(Array.isArray(r.body.dados.registros) && r.body.dados.registros.length <= 100, `${rota}?${qs}`);
+    }
+  }
+  const fisicas = (await api().get('/api/pessoas/fisicas?pagina=-3&limite=-9')).body.dados;
+  assert.equal(fisicas.pagina, 1); assert.equal(fisicas.limite, 20); assert.ok(fisicas.registros.length <= 20);           // padrão: página 1, 20 por página
+  assert.equal((await api().get('/api/pessoas/fisicas?limite=100000')).body.dados.limite, 100);
+  assert.equal((await api().get('/api/pessoas/fisicas?pagina=2&limite=3')).body.dados.pagina, 2);
+});
+
+test('busca: precisa ser texto (lista ou objeto na URL = aviso 400), até 200 caracteres, espaços das pontas não contam; vale nas listas, no "escolher pessoa" e nas duas exportações', async () => {
+  const falhas = [];
+  for (const caminho of ['/api/pessoas/fisicas?busca[]=a&busca[]=b', '/api/pessoas/juridicas?busca[]=a', '/api/pessoas/fisicas?busca[x]=a', '/api/pessoas/juridicas?busca[x]=a&selecao=1',
+    '/api/pessoas/fisicas/exportar?busca[]=a', '/api/pessoas/juridicas/exportar?busca[x]=a', `/api/pessoas/fisicas?busca=${'a'.repeat(201)}`, `/api/pessoas/juridicas/exportar?busca=${'a'.repeat(201)}`]) {
+    const r = await api().get(caminho);
+    if (r.status !== 400) falhas.push(`${caminho.slice(0, 70)} → ${r.status}`);
+  }
+  assert.deepEqual(falhas, []);
+  const nome = `Espaco${Date.now() % 100000}`;
+  await criarPF({ nome });
+  assert.deepEqual((await api().get(`/api/pessoas/fisicas?busca=%20%20${nome}%20%20`)).body.dados.registros.map(r => r.nome), [nome]);
+  assert.equal((await api().get(`/api/pessoas/fisicas?busca=${'a'.repeat(200)}`)).status, 200);                           // 200 passa
+  assert.equal((await api().get('/api/pessoas/fisicas?busca=')).status, 200);                                              // vazio = sem busca
+});
+
+test('busca: "%" e "_" são procurados como texto, não como "qualquer coisa" (física, jurídica, escolher pessoa e exportação)', async () => {
+  const unico = `Curinga${Date.now() % 100000}`;
+  await criarPF({ nome: `${unico} Alfa` }); await criarPF({ nome: `${unico} Beta`, cidade: '100% Campinas' });
+  await criarPJ({ razao_social: `${unico} Gama Ltda` }); await criarPJ({ razao_social: `${unico} Delta Ltda`, cidade: 'Mil_Rios' });
+  const n = async (rota, q, extra = '') => (await api().get(`/api/pessoas/${rota}?busca=${encodeURIComponent(q)}${extra}`)).body.dados.total;
+  assert.equal(await n('fisicas', '%'), 1, 'busca "%" deve achar só quem tem % no texto');
+  assert.equal(await n('fisicas', '_'), 0, 'busca "_" não deve achar todo mundo');
+  assert.equal(await n('fisicas', `${unico} A_fa`), 0);
+  assert.equal(await n('fisicas', `${unico} A%`), 0);
+  assert.equal(await n('fisicas', '% Camp'), 1);                                                                        // o "%" é procurado no meio do texto (cidade "100% Campinas")
+  assert.equal(await n('fisicas', '%', '&selecao=1'), 0);                                                                  // escolher pessoa: nome/CPF, nenhum tem %
+  assert.equal(await n('juridicas', '_'), 1);                                                                              // só quem tem "_" mesmo (Mil_Rios)
+  assert.equal(await n('juridicas', 'Mil_R'), 1); assert.equal(await n('juridicas', 'Mil.R'), 0); assert.equal(await n('juridicas', 'Mil%'), 0);
+  assert.equal(await n('juridicas', '%', '&selecao=1'), 0);
+  const xlsx = async (caminho) => { const r = await api().get(caminho).buffer(true).parse(binario); const wb = new ExcelJS.Workbook(); await wb.xlsx.load(r.body); return wb.worksheets[0].rowCount - 1; };
+  assert.equal(await xlsx(`/api/pessoas/fisicas/exportar?busca=${encodeURIComponent('%')}`), 1);
+  assert.equal(await xlsx(`/api/pessoas/juridicas/exportar?busca=${encodeURIComponent('_')}`), 1);
+});
+
+test('busca COM OU SEM MÁSCARA: telefone, CPF, CNPJ, RG e PIS são achados digitados de qualquer jeito (física, jurídica, escolher pessoa e exportação)', async () => {
+  const u = String(Date.now()).slice(-8);                                          // 8 dígitos únicos desta rodada
+  const fone = `(41) 9${u.slice(0, 4)}-${u.slice(4)}`;                              // gravado COM máscara
+  const foneSem = `4291${u}`;                                                      // gravado SEM máscara
+  const cpfMasc = cpfComMascara(); const cpfDigitos = cpfMasc.replace(/\D/g, '');
+  const v = u.split('').reverse().join('');                                        // outros 8 dígitos, para RG e PIS (não repetir os do telefone)
+  const rg = `${v.slice(0, 2)}.${v.slice(2, 5)}.${v.slice(5)}-X`; const pisDigitos = `7${v}88`; const pis = `${pisDigitos.slice(0, 3)}.${pisDigitos.slice(3, 8)}.${pisDigitos.slice(8, 10)}-${pisDigitos.slice(10)}`;
+  const a = await criarPF({ nome: `Mascara A ${u}`, cpf: cpfMasc, rg, pis, telefones: [{ numero: fone }] });
+  const b = await criarPF({ nome: `Mascara B ${u}`, telefones: [{ numero: foneSem }] });
+  const cnpjMasc = (() => { const d = cnpjDe(++seq); return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`; })();
+  const pj = await criarPJ({ razao_social: `Mascara PJ ${u} Ltda`, cnpj: cnpjMasc, telefones: [{ numero: `(11) 3${u.slice(0, 3)}-${u.slice(3, 7)}` }] });
+  const ids = async (rota, q, extra = '') => (await api().get(`/api/pessoas/${rota}?busca=${encodeURIComponent(q)}${extra}`)).body.dados.registros.map(r => r.id);
+  const so = async (rota, q, esperado, extra = '') => assert.deepEqual((await ids(rota, q, extra)).sort((x, y) => x - y), [].concat(esperado).sort((x, y) => x - y), `${rota}?busca=${q}${extra}`);
+  // telefone gravado COM máscara: acha com máscara completa, só com números, com pedaço e com a máscara parcial
+  await so('fisicas', fone, a);
+  await so('fisicas', `419${u}`, a);
+  await so('fisicas', `9${u.slice(0, 4)}-${u.slice(4)}`, a);
+  await so('fisicas', `9${u}`, a);
+  await so('fisicas', u, [a, b]);                                                                                          // os 8 números do meio: aparecem nos dois telefones (com e sem máscara)
+  await so('fisicas', `(41) 9${u.slice(0, 4)}`, a);
+  // telefone gravado SEM máscara: acha digitado COM máscara
+  await so('fisicas', foneSem, b);
+  await so('fisicas', `(42) 91${u.slice(0, 4)}-${u.slice(4)}`, b);
+  await so('fisicas', `42 91${u.slice(0, 4)} ${u.slice(4)}`, b);
+  // CPF: com e sem pontuação, na tela e no "escolher pessoa"
+  await so('fisicas', cpfMasc, a); await so('fisicas', cpfDigitos, a);
+  await so('fisicas', cpfMasc, a, '&selecao=1'); await so('fisicas', cpfDigitos, a, '&selecao=1');
+  // RG e PIS gravados com máscara: acha só com números (o RG também com a máscara completa)
+  await so('fisicas', v, a);                                                                                              // RG sem máscara (e o PIS também contém esses números: é a mesma pessoa)
+  await so('fisicas', rg, a);
+  await so('fisicas', pis, a);
+  await so('fisicas', pisDigitos, a);
+  // jurídica: CNPJ com e sem pontuação, telefone com e sem máscara
+  await so('juridicas', cnpjMasc, pj); await so('juridicas', cnpjMasc.replace(/\D/g, ''), pj);
+  await so('juridicas', cnpjMasc, pj, '&selecao=1'); await so('juridicas', cnpjMasc.replace(/\D/g, ''), pj, '&selecao=1');
+  await so('juridicas', `(11) 3${u.slice(0, 3)}-${u.slice(3, 7)}`, pj); await so('juridicas', `113${u.slice(0, 7)}`, pj);
+  // nome com número no meio NÃO é tratado como telefone (senão "Maria 2" acharia todo telefone com 2)
+  assert.deepEqual(await ids('fisicas', `Mascara A ${u}`), [a]);
+  // exportar usa a mesma busca: com e sem máscara
+  const nomes = async (caminho) => { const r = await api().get(caminho).buffer(true).parse(binario); const wb = new ExcelJS.Workbook(); await wb.xlsx.load(r.body); const ws = wb.worksheets[0]; const v = []; ws.eachRow((row, i) => { if (i > 1) v.push(row.getCell(1).value); }); return v; };
+  assert.deepEqual(await nomes(`/api/pessoas/fisicas/exportar?busca=${encodeURIComponent(`419${u}`)}`), [`Mascara A ${u}`]);
+  assert.deepEqual(await nomes(`/api/pessoas/fisicas/exportar?busca=${encodeURIComponent(cpfMasc)}`), [`Mascara A ${u}`]);
+  assert.deepEqual(await nomes(`/api/pessoas/juridicas/exportar?busca=${encodeURIComponent(cnpjMasc.replace(/\D/g, ''))}`), [`Mascara PJ ${u} Ltda`]);
+});
+
+test('outras rotas de Pessoas: valores que não são texto em unificar, WhatsApp, SMS, e-mail avulso, parabéns e aniversariantes dão aviso, nunca erro interno', async () => {
+  const falhas = [];
+  const pf = await criarPF();
+  for (const rota of ['fisicas', 'juridicas']) for (const corpo of [{ principal_id: 'abc', duplicados_ids: [1] }, { principal_id: 1, duplicados_ids: 'abc' }, { principal_id: 1, duplicados_ids: [{}] }, { principal_id: { a: 1 }, duplicados_ids: [2] }]) {
+    const r = await api().post(`/api/pessoas/${rota}/unificar`).send(corpo); if (r.status >= 500) falhas.push(`unificar ${rota} ${JSON.stringify(corpo)} → ${r.status}`);
+  }
+  for (const [rot, metodo, caminho, corpo] of [
+    ['zap telefone objeto', 'post', '/api/pessoas/registrar-zap', { telefone: { a: 1 } }], ['zap telefone lista', 'post', '/api/pessoas/registrar-zap', { telefone: ['1'] }],
+    ['sms número objeto', 'post', '/api/pessoas/enviar-sms', { numero: { a: 1 }, mensagem: 'x' }], ['email para lista', 'post', '/api/pessoas/enviar-email', { para: ['a@b.com'], assunto: 'a', mensagem: 'b' }],
+    ['parabéns canal objeto', 'post', `/api/pessoas/${pf}/parabens`, { canal: { a: 1 } }], ['parabéns id abc', 'post', '/api/pessoas/abc/parabens', { canal: 'whatsapp' }], ['parabéns id abc GET', 'get', '/api/pessoas/abc/parabens', undefined],
+    ['aniversariantes mês lixo', 'get', '/api/pessoas/aniversariantes?filtro=mes&mes=abc', undefined], ['aniversariantes filtro lista', 'get', '/api/pessoas/aniversariantes?filtro[]=x', undefined]]) {
+    const r = await api()[metodo](caminho).send(corpo); if (r.status >= 500) falhas.push(`${rot} → ${r.status}`);
+  }
+  assert.deepEqual(falhas, []);
 });
