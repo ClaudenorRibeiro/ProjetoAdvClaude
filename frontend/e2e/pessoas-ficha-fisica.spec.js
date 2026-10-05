@@ -168,6 +168,7 @@ test('@critical Nova Pessoa Física: cada validação do salvar, na ordem — no
   await salvar(page); await faixa(page, 'está repetido. Cada e-mail só pode aparecer uma vez neste cadastro');
   await j.getByLabel('E-mail 2', { exact: true }).fill('email-sem-arroba'); await j.getByLabel('E-mail 2', { exact: true }).blur();
   await expect(j.getByText('⚠️ E-mail inválido', { exact: true })).toBeVisible();          // aviso embaixo do campo, ao sair dele
+  await semViolacoes(page, 'ficha com o aviso "E-mail inválido" aberto (contraste do texto de erro)');
   await salvar(page); await faixa(page, 'E-mail inválido: "email-sem-arroba". Corrija antes de salvar.');
   await removerLinha(j, 'E-mail 2');
   // data futura
@@ -358,6 +359,11 @@ test('@critical Listas com "…" (gênero, estado civil, profissão, nacionalida
   await novo.getByRole('button', { name: 'Salvar', exact: true }).click();
   await expect(novo.getByText('"Feminino ficha e2e" já está cadastrado na lista')).toBeVisible();
   await novo.getByPlaceholder('Ex.: Não binário').fill('Genero Novo Ficha Teste');
+  await novo.getByPlaceholder('Ex.: Não binário').press('Escape');                          // ESC fecha SÓ o mini formulário: a ficha e o que foi digitado continuam
+  await expect(novo.getByText('Novo(a) Gênero')).toHaveCount(0); await expect(ficha(page)).toBeVisible();
+  await expect(j.getByLabel('Nome completo')).toBeVisible();
+  await novo.getByTitle(/Cadastrar novo\(a\) Gênero/).click();
+  await novo.getByPlaceholder('Ex.: Não binário').fill('Genero Novo Ficha Teste');
   await novo.getByPlaceholder('Ex.: Não binário').press('Enter');
   await aviso(page, '"Genero novo ficha teste" cadastrado com sucesso!');
   await expect(j.getByLabel('Gênero', { exact: true }).locator('option:checked')).toHaveText('Genero novo ficha teste');   // já escolhido
@@ -422,16 +428,22 @@ test('@critical Contas bancárias: "+ Financeiro", banco novo pelo "…", própr
   for (const [campo, valor] of [['Agência', '1234'], ['Conta', '56789'], ['Dígito', '123'], ['Chave PIX', 'conta@ficha.invalid']])
     await expect(conta.getByPlaceholder(campo, { exact: true }), `${campo} depois de cadastrar o banco novo`).toHaveValue(valor);
   await semViolacoes(page, 'janela da ficha com uma conta bancária preenchida');
-  // (o aviso "dígito com mais de 2 caracteres" NÃO é testado aqui: a tela nunca o mostra ao clicar em Salvar — achado entregue ao usuário, aguardando decisão)
+  // dígito com mais de 2 caracteres: pede confirmação ANTES de qualquer outro aviso (Cancelar volta para a ficha)
   await j.getByLabel('Telefone 1', { exact: true }).fill('19955554444');
+  await salvar(page);
+  const c = confirmacao(page, 'Confirmar dígito da conta');
+  await expect(c.getByText('conta 1: 123')).toBeVisible();
+  await c.getByRole('button', { name: 'Cancelar' }).click(); await expect(c).toHaveCount(0);
   // aviso do servidor (agência acima de 20 caracteres) aparece na faixa da janela, que continua com tudo preenchido
   await conta.getByPlaceholder('Agência', { exact: true }).fill('A'.repeat(21));
-  await salvar(page); await confirmacao(page, 'Campos sem informação').getByRole('button', { name: 'Salvar assim' }).click();
+  await salvar(page); await confirmacao(page, 'Confirmar dígito da conta').getByRole('button', { name: 'Salvar mesmo assim' }).click();
+  await confirmacao(page, 'Campos sem informação').getByRole('button', { name: 'Salvar assim' }).click();
   await faixa(page, 'A agência muito longa (máximo 20 caracteres)');
   await expect(ficha(page).getByLabel('Nome completo')).toHaveValue('Conta Bancaria Ficha Teste');
   expect(await noBanco("SELECT id FROM pessoas_fisicas WHERE nome = 'Conta Bancaria Ficha Teste'")).toHaveLength(0);
   await conta.getByPlaceholder('Agência', { exact: true }).fill('1234');
-  await salvar(page); await confirmacao(page, 'Campos sem informação').getByRole('button', { name: 'Salvar assim' }).click();
+  await salvar(page); await confirmacao(page, 'Confirmar dígito da conta').getByRole('button', { name: 'Salvar mesmo assim' }).click();
+  await confirmacao(page, 'Campos sem informação').getByRole('button', { name: 'Salvar assim' }).click();
   await aviso(page, 'Pessoa cadastrada com sucesso!');
   const [p] = await noBanco("SELECT id FROM pessoas_fisicas WHERE nome = 'Conta Bancaria Ficha Teste'");
   const [cb] = await noBanco('SELECT * FROM contas_bancarias_pf WHERE pessoa_id = ?', [p.id]);
@@ -515,9 +527,12 @@ test('@critical Editar: Cancelar, ✕ e ESC não gravam; um aviso do servidor (o
   await expect(ficha(page).getByRole('heading', { name: 'Editar Pessoa Física' })).toBeVisible();
   await ficha(page).getByLabel('Observações', { exact: true }).fill('x'.repeat(5000));
   await ficha(page).getByLabel('Cidade', { exact: true }).fill('Campinas');
-  await ficha(page).getByLabel('Observações', { exact: true }).fill('Observação da Ficha Completa');
+  await ficha(page).getByLabel('Observações', { exact: true }).fill('texto livre com SIGLA e minúsculas');
+  await ficha(page).getByLabel('Observações', { exact: true }).blur();
+  await expect(ficha(page).getByLabel('Observações', { exact: true })).toHaveValue('texto livre com SIGLA e minúsculas');   // Observações não é convertida para "Title Case"
   await salvar(page); await aviso(page, 'Pessoa atualizada com sucesso!');
-  expect((await noBanco('SELECT observacoes FROM pessoas_fisicas WHERE id = ?', [d.completa]))[0].observacoes).toBe('Observação da Ficha Completa');
+  expect((await noBanco('SELECT observacoes FROM pessoas_fisicas WHERE id = ?', [d.completa]))[0].observacoes).toBe('texto livre com SIGLA e minúsculas');
+  await noBanco("UPDATE pessoas_fisicas SET observacoes = 'Observação da Ficha Completa' WHERE id = ?", [d.completa]);
 });
 
 test('@critical Detalhes: clicar no nome abre a ficha TRAVADA (nenhum campo editável, sem "+ Adicionar", sem ✕), com Fechar e Editar; WhatsApp nos telefones; Editar destrava; sem violação de acessibilidade', async ({ page }) => {

@@ -40,7 +40,7 @@ export function LinhaContaBancaria({
             placeholderNovo="Ex.: Nubank"
           />
         </div>
-        <select className="form-control" style={{ flex: 1, minWidth: '110px' }}
+        <select className="form-control" style={{ flex: 1, minWidth: '110px' }} aria-label="Tipo da conta"
           value={conta.tipo || 'corrente'} disabled={somenteLeitura}
           onChange={e => alterar('tipo', e.target.value)}>
           <option value="corrente">Conta corrente</option>

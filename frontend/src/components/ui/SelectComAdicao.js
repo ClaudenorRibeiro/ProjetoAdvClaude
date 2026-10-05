@@ -74,8 +74,9 @@ export function SelectComAdicao({ label, value, onChange, opcoes = [], tipo, onN
       </div>
 
       {/* Mini formulário inline — aparece abaixo do select quando "..." é clicado */}
+      {/* data-esc-lista-aberta: o ESC aqui fecha só o mini formulário (o onKeyDown do campo), nunca a janela inteira */}
       {miniFormAberto && (
-        <div style={{
+        <div data-esc-lista-aberta style={{
           marginTop: '8px', padding: '10px 12px',
           background: '#f0f4ff', border: '1px solid #c5d0e6',
           borderRadius: '4px'

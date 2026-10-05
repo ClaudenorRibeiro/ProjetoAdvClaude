@@ -1862,7 +1862,8 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
 
   return (
     <div className="modal-overlay" ref={overlayRef}>
-      {confirmar && <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(null)} />}
+      {/* Fecha só A PRÓPRIA confirmação: se a ação dela abriu outra (dígito da conta -> campos sem informação), a nova continua aberta */}
+      {confirmar && <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(atual => (atual === confirmar ? null : atual))} />}
       <div className="modal-box modal-grande">
         <div className="modal-header">
           <h3>{leitura ? 'Detalhes da' : (pessoa ? 'Editar' : 'Nova')} {tipo === 'fisicas' ? 'Pessoa Física' : 'Pessoa Jurídica'}</h3>
@@ -2105,7 +2106,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
           {/* Observações */}
           <div className="form-group" style={{marginTop:'16px'}}>
             <label className="form-label">Observações</label>
-            <textarea aria-label="Observações" className="form-control" rows={3} value={form.observacoes||''} disabled={leitura} onChange={e=>set('observacoes',e.target.value)} onBlur={()=>set('observacoes', toTitleCase(form.observacoes))} />
+            <textarea aria-label="Observações" className="form-control" rows={3} value={form.observacoes||''} disabled={leitura} onChange={e=>set('observacoes',e.target.value)} />
           </div>
         </div>
 
@@ -2118,7 +2119,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
           ) : (
             <>
               <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+              <button className="btn btn-primary" onClick={() => salvar()} disabled={salvando}>
                 {salvando ? 'Salvando...' : 'Salvar'}
               </button>
             </>
