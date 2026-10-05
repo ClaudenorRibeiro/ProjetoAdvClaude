@@ -103,8 +103,12 @@ async function buscarNaLista(page, nome) {
   return page.locator('tbody tr').filter({ hasText: nome });
 }
 async function abrirEdicao(page, nome) {
-  const linha = await buscarNaLista(page, nome);
-  await abrirMenuAcoes(page, linha);
+  // a lista recarrega logo depois de fechar uma janela: se a linha for trocada no meio do clique, o menu fecha — tenta de novo
+  await expect(async () => {
+    const linha = await buscarNaLista(page, nome);
+    await abrirMenuAcoes(page, linha);
+    await expect(page.getByRole('button', { name: 'Editar', exact: true })).toBeVisible({ timeout: 2000 });
+  }).toPass({ timeout: 20000 });
   const dadosDoServidor = page.waitForResponse(r => r.request().method() === 'GET' && /\/api\/pessoas\/fisicas\/\d+$/.test(r.url()));
   await page.getByRole('button', { name: 'Editar', exact: true }).click();
   await dadosDoServidor;
@@ -112,10 +116,12 @@ async function abrirEdicao(page, nome) {
   await expect(ficha(page).getByLabel('Nome completo')).toHaveValue(nome);               // espera os dados chegarem do servidor
 }
 async function abrirDetalhes(page, nome) {
-  const linha = await buscarNaLista(page, nome);
-  const dadosDoServidor = page.waitForResponse(r => r.request().method() === 'GET' && /\/api\/pessoas\/fisicas\/\d+$/.test(r.url()));
-  await linha.getByTitle('Ver detalhes').click();
-  await dadosDoServidor;
+  await expect(async () => {                                      // mesma proteção: a linha pode ser trocada pelo recarregamento da lista
+    const linha = await buscarNaLista(page, nome);
+    const dadosDoServidor = page.waitForResponse(r => r.request().method() === 'GET' && /\/api\/pessoas\/fisicas\/\d+$/.test(r.url()), { timeout: 5000 });
+    await linha.getByTitle('Ver detalhes').click({ timeout: 5000 });
+    await dadosDoServidor;
+  }).toPass({ timeout: 20000 });
   await expect(ficha(page).getByRole('heading', { name: 'Detalhes da Pessoa Física' })).toBeVisible();
   await expect(ficha(page).getByLabel('Nome completo')).toHaveValue(nome);
 }
