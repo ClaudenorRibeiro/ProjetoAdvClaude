@@ -112,7 +112,7 @@ export function LinhaEmail({ email, index, onChange, onRemove, somenteLeitura = 
           >✕</button>
         )}
       </div>
-      {erroEmail && <small style={{ color: '#e74c3c', fontSize: '12px' }}>⚠️ {erroEmail}</small>}
+      {erroEmail && <small style={{ color: '#b91c1c', fontSize: '12px' }}>⚠️ {erroEmail}</small>}
     </div>
   );
 }

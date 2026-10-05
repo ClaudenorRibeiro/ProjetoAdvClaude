@@ -2202,7 +2202,7 @@ export function ModalNovoFreela({ onFechar, onSalvo, profissoes = [], exigirProf
                 onChange={e => { setErroCep(''); set('cep', mascaraCEP(e.target.value)); }}
                 onBlur={e => buscarCep(e.target.value)} />
               {buscandoCep && <small style={{ color: '#5b6472', fontSize: '12px' }}>🔍 Buscando...</small>}
-              {erroCep && <small style={{ color: '#e74c3c', fontSize: '12px' }}>⚠️ {erroCep}</small>}
+              {erroCep && <small style={{ color: '#b91c1c', fontSize: '12px' }}>⚠️ {erroCep}</small>}
             </div>
             <div className="form-group">
               <label className="form-label">Logradouro</label>

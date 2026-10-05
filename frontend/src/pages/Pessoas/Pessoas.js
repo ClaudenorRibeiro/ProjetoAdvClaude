@@ -2198,7 +2198,7 @@ function CampoCPF({ value, onChange, pessoaIdAtual = null, onAbrirEdicao = null,
         <small style={{ color: '#5b6472', fontSize: '12px' }}>⏳ Verificando CPF...</small>
       )}
       {erroCpf && (
-        <small style={{ color: '#e74c3c', fontSize: '12px' }}>⚠️ {erroCpf}</small>
+        <small style={{ color: '#b91c1c', fontSize: '12px' }}>⚠️ {erroCpf}</small>
       )}
       {/* Alerta de CPF duplicado com opção de abrir edição */}
       {duplicata && (
@@ -2274,7 +2274,7 @@ function CampoCNPJ({ value, onChange, somenteLeitura = false }) {
         maxLength={18}
       />
       {erroCnpj && (
-        <small style={{ color: '#e74c3c', fontSize: '12px' }}>⚠️ {erroCnpj}</small>
+        <small style={{ color: '#b91c1c', fontSize: '12px' }}>⚠️ {erroCnpj}</small>
       )}
     </div>
   );
@@ -2309,7 +2309,7 @@ function CampoDataNascimento({ value, onChange, somenteLeitura = false, refCampo
         disabled={somenteLeitura}
         onChange={e => handleChange(e.target.value)}
       />
-      {erroData && <small style={{ color: '#e74c3c', fontSize: '12px' }}>⚠️ {erroData}</small>}
+      {erroData && <small style={{ color: '#b91c1c', fontSize: '12px' }}>⚠️ {erroData}</small>}
     </div>
   );
 }
@@ -2587,7 +2587,7 @@ function CampoNomeCompleto({ value, onChange, somenteLeitura = false, refCampo }
         onBlur={handleBlur}
         placeholder="Nome e Sobrenome"
       />
-      {erroNome && <small style={{ color: '#e74c3c', fontSize: '12px' }}>⚠️ {erroNome}</small>}
+      {erroNome && <small style={{ color: '#b91c1c', fontSize: '12px' }}>⚠️ {erroNome}</small>}
     </div>
   );
 }
@@ -2658,7 +2658,7 @@ function CampoCEP({ value, onChange, onAutoFill, somenteLeitura = false }) {
         maxLength={9}
       />
       {buscando && <small style={{ color: '#5b6472', fontSize: '12px' }}>🔍 Buscando endereço...</small>}
-      {erroCep  && <small style={{ color: '#e74c3c', fontSize: '12px' }}>⚠️ {erroCep}</small>}
+      {erroCep  && <small style={{ color: '#b91c1c', fontSize: '12px' }}>⚠️ {erroCep}</small>}
     </div>
   );
 }

@@ -295,7 +295,7 @@ export default function Foruns() {
                         onBlur={handleCepBlur}
                       />
                       {buscandoCep && <small style={{ color: '#5b6472', fontSize: 12 }}>🔍 Buscando endereço...</small>}
-                      {erroCep     && <small style={{ color: '#e74c3c', fontSize: 12 }}>⚠️ {erroCep}</small>}
+                      {erroCep     && <small style={{ color: '#b91c1c', fontSize: 12 }}>⚠️ {erroCep}</small>}
                     </div>
                     <div className="form-group">
                       <label className="form-label">Cidade</label>
