@@ -304,11 +304,15 @@ de `area_direito`, que ficam só como histórico). Ele confere se o banco é o d
 exige MySQL 8.0.16+ (recusa MariaDB), só cria o que falta, pode rodar várias vezes, registra a versão em `controle_versao_banco` (nº 1) e termina com UMA linha de resultado
 ("PRONTO ..." / "ABORTADO ..." / "ATENCAO ..."). Testado em cópias dos dumps de 04/10/2026 do Antônio, do Erick e do local (2 rodadas cada, estrutura final igual ao
 `estrutura_banco.sql`, contagem de linhas de todas as tabelas inalterada). **Se o `estrutura_banco.sql` mudar de novo, o script único precisa ser atualizado e retestado**.
-Em CADA instância (Antônio e Erick), de preferência de noite sem ninguém usando, nesta sequência de execução:
-1. Parar o sistema na instância e fazer o backup do banco (HeidiSQL: Exportar como SQL).
-2. HeidiSQL: selecionar o BANCO DO SISTEMA e executar `sql_atualizar_banco_para_heidi.sql` inteiro (F9). A linha de resultado deve dizer "PRONTO" com tudo 0 (se disser ABORTADO/ATENCAO, parar e avisar a IA).
-3. Atualizar o código do sistema (versão testada do local) e iniciar de novo. (O script apaga `tblpasta.area_direito`: o sistema ANTIGO quebra sem ela, por isso o código novo entra logo em seguida.)
-4. Opcional: rodar `sql_diagnostico_estrutura_para_heidi.sql` (só lê): os resultados devem vir vazios.
+Em CADA instância (Antônio e Erick), de preferência de noite sem ninguém usando, nesta sequência de execução (SSH do Lightsail como usuário ubuntu, sem sudo):
+1. Fazer o backup do banco (HeidiSQL: Exportar como SQL) e conferir que o arquivo não está com 0 KB.
+2. Guardar uma cópia do CÓDIGO: colocar `aws_<instancia>_codigo_salvar_e_voltar.sh` no servidor (WinSCP, em /home/ubuntu) e rodar `bash aws_<instancia>_codigo_salvar_e_voltar.sh salvar`. Deve terminar com "PRONTO" mostrando o arquivo da cópia (fica em ~/backups_codigo).
+3. Parar o sistema na instância.
+4. HeidiSQL: selecionar o BANCO DO SISTEMA e executar `sql_atualizar_banco_para_heidi.sql` inteiro (F9). A linha de resultado deve dizer "PRONTO" com tudo 0 (se disser ABORTADO/ATENCAO, parar e avisar a IA).
+5. Atualizar o código do sistema (versão testada do local) e iniciar de novo. (O script apaga `tblpasta.area_direito`: o sistema ANTIGO quebra sem ela, por isso o código novo entra logo em seguida.)
+6. Opcional: rodar `sql_diagnostico_estrutura_para_heidi.sql` (só lê): os resultados devem vir vazios.
+**Para VOLTAR ATRÁS (só se a atualização der problema):** (a) `bash aws_<instancia>_codigo_salvar_e_voltar.sh voltar` (pede SIM; para o sistema, guarda a pasta atual ao lado como `...antes_da_volta_DATA`, devolve o código da cópia e religa no PM2); (b) restaurar o banco pelo HeidiSQL com o backup do passo 1 (mesma hora). Os dois juntos: código antigo não funciona com o banco novo.
+Os scripts de código foram testados só em pasta simulada com PM2 de mentira (salvar, listar, voltar, instância errada, sem cópia, cópia com defeito, sem confirmar); o primeiro uso real é o passo 2 ("salvar"), que não altera nada no sistema.
 
 Só no **Antônio**: o `sql_limpar_pastas_vazias_para_heidi.sql` (pastas 9999 e 928804) JÁ foi rodado (04/10/2026). Erick não precisa dele. Depois de atualizar o Antônio,
 testar a troca de número 8926 → 9999.

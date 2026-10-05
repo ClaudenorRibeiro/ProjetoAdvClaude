@@ -8,6 +8,8 @@
 *.jsx  text eol=lf
 *.json text eol=lf
 *.sql  text eol=lf
+# Scripts .sh rodam no Linux das instâncias AWS: CRLF quebraria ("\r: comando não encontrado"), por isso sempre LF.
+*.sh   text eol=lf
 *.md   text eol=lf
 *.css  text eol=lf
 *.html text eol=lf

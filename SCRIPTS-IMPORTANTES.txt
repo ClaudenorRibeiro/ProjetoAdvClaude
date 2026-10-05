@@ -22,6 +22,10 @@ PARA RODAR NO HEIDISQL (banco)
   sql_diagnostico_estrutura_para_heidi.sql      IMPORTANTE  Só lê. Mostra o que falta no banco comparado ao estrutura_banco.sql.
   quality/sql/CRIAR_BANCO_TESTE_HEIDISQL.sql    IMPORTANTE  Cria o banco isolado de testes (necessário para a bateria completa).
 
+PARA RODAR NO SSH DA AWS (Lightsail, como usuário ubuntu, SEM sudo)
+  aws_antonio_codigo_salvar_e_voltar.sh         IMPORTANTE  Antônio: 'salvar' guarda uma cópia do CÓDIGO antes de atualizar; 'listar' mostra as cópias; 'voltar' devolve a cópia
+  aws_erick_codigo_salvar_e_voltar.sh           IMPORTANTE  Erick: o mesmo. Não mexem no banco (o banco volta pelo HeidiSQL). Cada um recusa rodar na instância errada.
+
 REFERÊNCIA
   estrutura_banco.sql                           IMPORTANTE  Estrutura oficial do banco; os testes leem este arquivo.
   quality/ (run.mjs, check-nomes-indefinidos.mjs...)  IMPORTANTE  Motor da bateria de testes (inclui a conferência de nomes indefinidos no código).
