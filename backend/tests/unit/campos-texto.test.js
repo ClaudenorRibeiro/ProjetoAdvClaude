@@ -33,3 +33,15 @@ test('lerTextos: lê vários campos e devolve o primeiro erro', () => {
   assert.deepEqual(lerTextos({}, campos), { erro: 'Nome é obrigatório' });
   assert.deepEqual(lerTextos(undefined, campos), { erro: 'Nome é obrigatório' });
 });
+
+test('texto: rótulo feminino ("feminino: true") concorda — obrigatória, longa, inválida', () => {
+  const op = { rotulo: 'A razão social', max: 5, obrigatorio: true, feminino: true };
+  assert.deepEqual(texto('  ', op), { erro: 'A razão social é obrigatória' });
+  assert.deepEqual(texto(123, op), { erro: 'A razão social é obrigatória' });
+  assert.deepEqual(texto('ABCDEF', op), { erro: 'A razão social muito longa (máximo 5 caracteres)' });
+  assert.deepEqual(texto('ABCDE', op), { valor: 'ABCDE' });
+  assert.deepEqual(texto(['x'], { rotulo: 'A cidade', feminino: true }), { erro: 'A cidade inválida' });
+  assert.deepEqual(texto('  ', { rotulo: 'A cidade', feminino: true }), { valor: null });
+  // sem a opção, continua masculino (nada muda para quem já usa)
+  assert.deepEqual(texto('  ', { rotulo: 'O nome', obrigatorio: true }), { erro: 'O nome é obrigatório' });
+});

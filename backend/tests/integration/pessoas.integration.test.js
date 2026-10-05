@@ -450,7 +450,7 @@ test('anotações: adicionar (física e jurídica), texto aparado, vazio recusad
   const vazias = ['', '   '];
   for (const descricao of vazias) {
     const r = await api().post(`/api/pessoas/fisicas/${pf}/historico`).send({ descricao });
-    assert.equal(r.status, 400); assert.match(msg(r), /A anotação não pode ficar em branco/);
+    assert.equal(r.status, 400); assert.match(msg(r), /A anotação é obrigatória/);
   }
   assert.equal((await api().post(`/api/pessoas/fisicas/${pf}/historico`).send({})).status, 400);
   assert.equal((await usu().post(`/api/pessoas/fisicas/${pf}/historico`).send({ descricao: '  anotação do usuário  ' })).status, 201);
@@ -706,4 +706,77 @@ test('WhatsApp, SMS e e-mail avulso: validações (telefone, mensagem, destino, 
   const executavel = await request(app).post('/api/pessoas/enviar-email').set('Authorization', `Bearer ${T.admin}`)
     .field('para', 'a@b.com').field('assunto', 'a').field('mensagem', 'b').attach('anexos', Buffer.from('MZ'), 'virus.exe');
   assert.equal(executavel.status, 400); assert.match(msg(executavel), /Tipo de arquivo não permitido/);
+});
+
+// ------------------------------------------------------------------ integridade dos dados (pacote A)
+test('nome em branco NUNCA é gravado: criar e editar (física e jurídica) recusam vazio, só espaços, não-texto, ausente e acima de 200; 200 passa', async () => {
+  const brancos = [undefined, '', '    ', 123, ['x'], { a: 1 }, true];
+  const antesPF = await total('SELECT COUNT(*) AS n FROM pessoas_fisicas'); const antesPJ = await total('SELECT COUNT(*) AS n FROM pessoas_juridicas');
+  for (const nome of brancos) {
+    const r = await api().post('/api/pessoas/fisicas').send({ cpf: cpfDe(++seq), nome });
+    assert.equal(r.status, 400, `criar física nome=${JSON.stringify(nome)} → ${r.status}`); assert.match(msg(r), /O nome é obrigatório/);
+    const j = await api().post('/api/pessoas/juridicas').send({ cnpj: cnpjDe(++seq), razao_social: nome });
+    assert.equal(j.status, 400, `criar jurídica razão=${JSON.stringify(nome)} → ${j.status}`); assert.match(msg(j), /A razão social é obrigatória/);
+  }
+  const longaPF = await api().post('/api/pessoas/fisicas').send({ cpf: cpfDe(++seq), nome: 'A'.repeat(201) });
+  assert.equal(longaPF.status, 400); assert.match(msg(longaPF), /O nome muito longo \(máximo 200 caracteres\)/);
+  const longaPJ = await api().post('/api/pessoas/juridicas').send({ cnpj: cnpjDe(++seq), razao_social: 'A'.repeat(201) });
+  assert.equal(longaPJ.status, 400); assert.match(msg(longaPJ), /A razão social muito longa \(máximo 200 caracteres\)/);
+  assert.equal(await total('SELECT COUNT(*) AS n FROM pessoas_fisicas'), antesPF); assert.equal(await total('SELECT COUNT(*) AS n FROM pessoas_juridicas'), antesPJ);
+  assert.equal(await total("SELECT COUNT(*) AS n FROM pessoas_fisicas WHERE TRIM(nome) = ''"), 0); assert.equal(await total("SELECT COUNT(*) AS n FROM pessoas_juridicas WHERE TRIM(razao_social) = ''"), 0);
+  // no limite (200) passa
+  assert.equal((await api().post('/api/pessoas/fisicas').send({ cpf: cpfDe(++seq), nome: 'B'.repeat(200) })).status, 201);
+  assert.equal((await api().post('/api/pessoas/juridicas').send({ cnpj: cnpjDe(++seq), razao_social: 'B'.repeat(200) })).status, 201);
+  // editar: o nome que já existe NUNCA é apagado nem trocado por branco
+  const pf = await criarPF({ nome: 'Nome Que Deve Ficar' }); const pj = await criarPJ({ razao_social: 'Razão Que Deve Ficar Ltda' });
+  for (const nome of brancos) {
+    const r = await api().put(`/api/pessoas/fisicas/${pf}`).send(nome === undefined ? { cidade: 'X' } : { nome, cidade: 'X' });
+    assert.equal(r.status, 400, `editar física nome=${JSON.stringify(nome)} → ${r.status}`); assert.match(msg(r), /O nome é obrigatório/);
+    const j = await api().put(`/api/pessoas/juridicas/${pj}`).send(nome === undefined ? { cidade: 'X' } : { razao_social: nome, cidade: 'X' });
+    assert.equal(j.status, 400, `editar jurídica razão=${JSON.stringify(nome)} → ${j.status}`); assert.match(msg(j), /A razão social é obrigatória/);
+  }
+  assert.equal((await api().put(`/api/pessoas/fisicas/${pf}`).send({ nome: 'A'.repeat(201) })).status, 400);
+  assert.equal((await api().put(`/api/pessoas/juridicas/${pj}`).send({ razao_social: 'A'.repeat(201) })).status, 400);
+  assert.equal((await um('SELECT nome FROM pessoas_fisicas WHERE id = ?', [pf])).nome, 'Nome Que Deve Ficar');
+  assert.equal((await um('SELECT razao_social FROM pessoas_juridicas WHERE id = ?', [pj])).razao_social, 'Razão Que Deve Ficar Ltda');
+  assert.equal(await total("SELECT COUNT(*) AS n FROM pessoas_fisicas WHERE id = ? AND cidade = 'X'", [pf]), 0);        // nada mudou
+});
+
+test('anotações: só para pessoa que EXISTE (404 e nada gravado), o tipo vem da rota, o texto é de verdade (até 2.000) — sem anotação órfã', async () => {
+  const antes = await total('SELECT COUNT(*) AS n FROM historico_atendimento');
+  for (const [rota, id] of [['fisicas', '999999'], ['juridicas', '999999'], ['fisicas', 'abc'], ['juridicas', 'abc'], ['fisicas', '0'], ['fisicas', '-3']]) {
+    const r = await api().post(`/api/pessoas/${rota}/${id}/historico`).send({ descricao: 'para ninguém' });
+    assert.equal(r.status, 404, `${rota}/${id} → ${r.status}`); assert.match(msg(r), /Pessoa não encontrada/);
+  }
+  const pf = await criarPF(); const pj = await criarPJ();
+  // um id que só existe do OUTRO tipo também é "não encontrado" (PF e PJ têm numerações separadas)
+  const soDaJuridica = (await um('SELECT MAX(id) + 1000 AS n FROM pessoas_juridicas')).n;
+  assert.equal((await api().post(`/api/pessoas/fisicas/${soDaJuridica}/historico`).send({ descricao: 'x' })).status, 404);
+  assert.equal(await total('SELECT COUNT(*) AS n FROM historico_atendimento'), antes);                                    // nenhuma anotação órfã
+  // o tipo é decidido pela rota, mesmo que o corpo diga outra coisa (ou nada)
+  assert.equal((await api().post(`/api/pessoas/juridicas/${pj}/historico`).send({ descricao: 'sem tipo no corpo' })).status, 201);
+  assert.equal((await api().post(`/api/pessoas/juridicas/${pj}/historico`).send({ descricao: 'tipo errado no corpo', tipo_pessoa: 'fisica' })).status, 201);
+  assert.equal((await api().post(`/api/pessoas/fisicas/${pf}/historico`).send({ descricao: 'física com tipo errado', tipo_pessoa: 'juridica' })).status, 201);
+  assert.equal(await total("SELECT COUNT(*) AS n FROM historico_atendimento WHERE pessoa_id = ? AND tipo_pessoa = 'juridica'", [pj]), 2);
+  assert.equal(await total("SELECT COUNT(*) AS n FROM historico_atendimento WHERE pessoa_id = ? AND tipo_pessoa = 'fisica'", [pj]), 0);
+  assert.equal(await total("SELECT COUNT(*) AS n FROM historico_atendimento WHERE pessoa_id = ? AND tipo_pessoa = 'fisica'", [pf]), 1);
+  assert.equal(await total("SELECT COUNT(*) AS n FROM historico_atendimento WHERE pessoa_id = ? AND tipo_pessoa = 'juridica'", [pf]), 0);
+  assert.equal((await api().get(`/api/pessoas/juridicas/${pj}`)).body.dados.historico.length, 2);                         // a ficha da empresa mostra as suas
+  // texto de verdade
+  for (const descricao of [undefined, '', '   ', 123, ['x'], { a: 1 }, true]) {
+    const r = await api().post(`/api/pessoas/fisicas/${pf}/historico`).send(descricao === undefined ? {} : { descricao });
+    assert.equal(r.status, 400, `descricao=${JSON.stringify(descricao)} → ${r.status}`); assert.match(msg(r), /A anotação é obrigatória/);
+  }
+  const limite = await api().post(`/api/pessoas/fisicas/${pf}/historico`).send({ descricao: 'a'.repeat(2000) });
+  assert.equal(limite.status, 201);                                                                                       // 2.000 passa
+  const passou = await api().post(`/api/pessoas/fisicas/${pf}/historico`).send({ descricao: `  ${'a'.repeat(2001)}  ` });
+  assert.equal(passou.status, 400); assert.match(msg(passou), /A anotação muito longa \(máximo 2000 caracteres\)/);
+  assert.equal((await api().post(`/api/pessoas/fisicas/${pf}/historico`).send({ descricao: ` ${'a'.repeat(2000)} ` })).status, 201);   // o limite vale depois de tirar os espaços
+  // editar: mesma regra de texto
+  const nota = await um("SELECT id FROM historico_atendimento WHERE pessoa_id = ? AND tipo_pessoa = 'fisica' ORDER BY id LIMIT 1", [pf]);
+  for (const descricao of [undefined, '', '  ', 123, ['x'], { a: 1 }, 'a'.repeat(2001)]) {
+    const r = await api().put(`/api/pessoas/historico/${nota.id}`).send(descricao === undefined ? {} : { descricao });
+    assert.equal(r.status, 400, `editar descricao=${String(JSON.stringify(descricao)).slice(0, 30)} → ${r.status}`);
+  }
+  assert.equal((await um('SELECT descricao FROM historico_atendimento WHERE id = ?', [nota.id])).descricao, 'física com tipo errado');
 });

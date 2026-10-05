@@ -1,0 +1,231 @@
+// PENDENTE — NÃO É EXECUTADO PELA BATERIA (a extensão é .js.txt de propósito: o arquivo contém testes que HOJE FALHAM).
+// IMPORTANTE — NÃO APAGAR: guarda os testes prontos dos PACOTES B e C de Pessoas (pedido do usuário em 05/10/2026: "não deixe os outros pacotes serem esquecidos").
+//   Pacote B = aviso claro (400) no lugar de "Erro interno" (tipo errado, campos maiores que a coluna, datas, listas, auxiliares/profissões)  → testes 3, 4, 5, 6, 7 e 12.
+//   Pacote C = listas e buscas (paginação negativa, busca como lista, curingas % e _, telefone/CPF/processo com ou sem máscara)            → testes 9, 10, 11 e 14.
+// Já CORRIGIDOS e cobertos em backend/tests/integration/pessoas.integration.test.js (pacote A): testes 1, 2 e 8 (nome em branco; anotação órfã; tipo da anotação).
+// Os testes 13 e 15 já passam (ficam como reforço).
+// COMO USAR: ao corrigir um pacote, copie os testes dele para um arquivo *.integration.test.js em backend/tests/integration/, rode até passar e apague daqui o que entrou.
+// (Nos testes 6 e 7 os itens de "nome/razão social" já passam; os de campo grande demais, ainda não.)
+// ACHADOS (temporário, fora do projeto) — servidor de PESSOAS: o que o sistema deveria fazer e hoje NÃO faz.
+// (cópia do cabeçalho do teste de Pessoas)
+// Teste de servidor do módulo PESSOAS (físicas e jurídicas), contra MySQL real isolado.
+// Cobre: permissões de cada rota, cadastrar/editar/buscar/listar/excluir (com os bloqueios por vínculo, sem órfãos),
+// responsável legal, avisos de idade, anotações de atendimento, listas auxiliares, profissões (Controle), unificar
+// cadastros duplicados, exportar para Excel, processos da pessoa, parabéns, WhatsApp/SMS/e-mail (só as validações).
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const jwt = require('jsonwebtoken');
+const request = require('supertest');
+const ExcelJS = require('exceljs');
+
+const { carregarAmbienteTeste } = require('../support/testEnvironment');
+const { recriarBancoTeste, conectarBancoTeste } = require('../support/testDatabase');
+
+carregarAmbienteTeste();
+const { criarApp } = require('../../src/app');
+const { pool } = require('../../src/config/database');
+
+let app;
+const T = {};   // tokens
+const F = {};   // ids fixos criados no começo
+
+const token = (id, nivel, sessao) => jwt.sign({ id, nome: `Teste ${id}`, nivel, tipo: 'advogado', sessao }, process.env.JWT_SECRET, { expiresIn: '1h' });
+const como = (t) => ({
+  get: p => request(app).get(p).set('Authorization', `Bearer ${t}`),
+  post: p => request(app).post(p).set('Authorization', `Bearer ${t}`),
+  put: p => request(app).put(p).set('Authorization', `Bearer ${t}`),
+  delete: p => request(app).delete(p).set('Authorization', `Bearer ${t}`),
+});
+const api = () => como(T.admin);          // administrador (nível 1)
+const usu = () => como(T.usuario);        // usuário comum com todas as permissões de Pessoas
+const binario = (res, cb) => { const p = []; res.on('data', c => p.push(c)); res.on('end', () => cb(null, Buffer.concat(p))); };
+
+async function sql(q, params = []) {
+  const conn = await conectarBancoTeste();
+  try { return (await conn.execute(q, params))[0]; } finally { await conn.end(); }
+}
+const um = async (q, p) => (await sql(q, p))[0];
+const total = async (q, p) => Number((await um(q, p)).n);
+const msg = (r) => String(r.body.mensagem || '');
+const auditoria = (tabela, id, acao) => sql('SELECT * FROM logs_auditoria WHERE tabela = ? AND registro_id = ? AND acao = ?', [tabela, id, acao]);
+
+let seq = 0;
+const cpfDe = (n) => String(10000000000 + n);                       // 11 dígitos únicos (o servidor não valida o dígito verificador)
+const cnpjDe = (n) => String(10000000000000 + n);                   // 14 dígitos únicos
+const fisica = (extra = {}) => { seq += 1; return { nome: `Pessoa Teste ${seq}`, cpf: cpfDe(seq), ...extra }; };
+const juridica = (extra = {}) => { seq += 1; return { razao_social: `Empresa Teste ${seq} Ltda`, cnpj: cnpjDe(seq), ...extra }; };
+async function criarPF(extra = {}) {
+  const r = await api().post('/api/pessoas/fisicas').send(fisica(extra));
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  return r.body.dados.id;
+}
+async function criarPJ(extra = {}) {
+  const r = await api().post('/api/pessoas/juridicas').send(juridica(extra));
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  return r.body.dados.id;
+}
+// Processo de teste (cliente = parte do polo escolhido), direto no banco
+let seqProc = 0;
+async function novoProcesso({ autores = [], reus = [], polo = 'autor', ativo = 1 } = {}) {
+  seqProc += 1;
+  const pasta = (await sql('INSERT INTO tblpasta (numPasta, criado_por) VALUES (?, 1)', [7000 + seqProc])).insertId;
+  const proc = (await sql(
+    "INSERT INTO tblproc (pasta_id, numProc, cliente_polo, NomeTituloProc, tipo_id, status_id, ativo, criado_por) VALUES (?, ?, ?, ?, 1, 1, ?, 1)",
+    [pasta, `99${String(seqProc).padStart(5, '0')}-00.2026.5.15.0001`, polo, `PROCESSO PESSOAS ${seqProc}`, ativo]
+  )).insertId;
+  for (const [tipo, id] of autores) await sql('INSERT INTO tbltituloprocautor (proc_id, tipo_pessoa, pessoa_id, criado_por) VALUES (?, ?, ?, 1)', [proc, tipo, id]);
+  for (const [tipo, id] of reus) await sql('INSERT INTO tbltituloprocreu (proc_id, tipo_pessoa, pessoa_id, criado_por) VALUES (?, ?, ?, 1)', [proc, tipo, id]);
+  return proc;
+}
+
+test.before(async () => {
+  await recriarBancoTeste();
+  app = criarApp();
+  T.admin = token(1, 1, 'sessao-admin');
+  T.usuario = token(2, 2, 'sessao-usuario');
+  T.semPermissao = token(3, 2, 'sessao-sem-permissao');
+  // usuário 4: só pode VISUALIZAR Pessoas
+  await sql("INSERT INTO usuarios (id, nome, login, senha_hash, email, tipo, nivel, ativo, ver_todos_processos, sessao_atual, notif_email, google_agenda_ativo) VALUES (4, 'Só Visualiza', 'sovisualiza', 'x', 'sovisualiza@example.invalid', 'advogado', 2, 1, 0, 'sessao-so-visualiza', 0, 0)");
+  await sql("INSERT INTO permissoes (usuario_id, modulo, submodulo, acao, permitido) VALUES (4, 'pessoas', NULL, 'visualizar', 1)");
+  T.soVisualiza = token(4, 2, 'sessao-so-visualiza');
+  F.advogado = (await sql("INSERT INTO profissao (nome) VALUES ('Advogado')")).insertId;
+  F.perito = (await sql("INSERT INTO profissao (nome) VALUES ('Perícia Médica')")).insertId;
+  F.parentesco = (await sql("INSERT INTO parentesco (nome) VALUES ('Mãe')")).insertId;
+});
+test.after(async () => pool.end());
+
+
+const ruins = [123, ['x'], { a: 1 }, true];
+const grande = (n) => 'A'.repeat(n);
+async function status500(metodo, caminho, corpo) { const r = await api()[metodo](caminho).send(corpo); return r; }
+const nao500 = (r, rot) => assert.ok(r.status < 500, `${rot} → ${r.status} ${JSON.stringify(r.body).slice(0, 120)}`);
+
+test('ACHADO física criar: nome que não é texto (número, lista, objeto, booleano) dá aviso 400, não erro interno', async () => {
+  for (const nome of ruins) { const r = await status500('post', '/api/pessoas/fisicas', { nome, cpf: cpfDe(++seq) }); assert.equal(r.status, 400, `nome=${JSON.stringify(nome)} → ${r.status}`); }
+});
+test('ACHADO física criar: nome só com espaços é recusado (hoje grava nome vazio?)', async () => {
+  const r = await status500('post', '/api/pessoas/fisicas', { nome: '    ', cpf: cpfDe(++seq) });
+  assert.equal(r.status, 400, `→ ${r.status} ${JSON.stringify(r.body)}`);
+});
+test('ACHADO física criar: campo maior que a coluna do banco dá aviso 400 com o máximo (nome 200, rg 20, número 10, cep 9, UF 2, complemento 100, pai/mãe 200, logradouro 200, bairro/cidade 100, CTPS 30/20, PIS 20)', async () => {
+  const limites = { nome: 200, rg: 20, rg_orgao: 20, pis: 20, ctps_numero: 30, ctps_serie: 20, nome_pai: 200, nome_mae: 200, cep: 9, logradouro: 200, numero: 10, complemento: 100, bairro: 100, cidade: 100, estado: 2 };
+  const falhas = [];
+  for (const [campo, max] of Object.entries(limites)) {
+    const r = await status500('post', '/api/pessoas/fisicas', { ...fisica(), [campo]: grande(max + 1) });
+    if (r.status !== 400) falhas.push(`${campo}(${max}) → ${r.status}`);
+  }
+  assert.deepEqual(falhas, []);
+});
+test('ACHADO física criar: CPF que não é texto ou muito longo, e data de nascimento impossível, dão aviso 400', async () => {
+  const falhas = [];
+  for (const [rot, extra] of [['cpf número', { cpf: 12345678901 }], ['cpf lista', { cpf: ['1'] }], ['cpf 30 dígitos', { cpf: '1'.repeat(30) }], ['nascimento 2026-13-45', { data_nascimento: '2026-13-45' }], ['nascimento abc', { data_nascimento: 'abc' }], ['nascimento número', { data_nascimento: 123 }]]) {
+    const r = await status500('post', '/api/pessoas/fisicas', { ...fisica(), ...extra });
+    if (r.status !== 400) falhas.push(`${rot} → ${r.status}`);
+  }
+  assert.deepEqual(falhas, []);
+});
+test('ACHADO física criar: telefone/e-mail fora do tamanho ou do tipo errado, e listas que não são lista, dão aviso 400', async () => {
+  const falhas = [];
+  for (const [rot, extra] of [['telefone 21 dígitos', { telefones: [{ numero: '1'.repeat(21) }] }], ['tipo do telefone 101', { telefones: [{ numero: '1999', tipo: grande(101) }] }], ['telefone número', { telefones: [{ numero: 12345 }] }],
+    ['e-mail 151', { emails: [{ email: grande(145) + '@x.com' }] }], ['e-mail número', { emails: [{ email: 123 }] }], ['telefones objeto', { telefones: { a: 1 } }], ['emails objeto', { emails: { a: 1 } }], ['contas objeto', { contasBancarias: { a: 1 } }]]) {
+    const r = await status500('post', '/api/pessoas/fisicas', { ...fisica(), ...extra });
+    if (r.status >= 500) falhas.push(`${rot} → ${r.status}`);
+  }
+  assert.deepEqual(falhas, []);
+});
+test('ACHADO física editar: nome ausente, vazio ou que não é texto, e campos grandes demais, dão aviso 400', async () => {
+  const id = await criarPF();
+  const falhas = [];
+  for (const [rot, corpo] of [['sem nome', {}], ['nome vazio', { nome: '' }], ['nome só espaços', { nome: '   ' }], ['nome número', { nome: 123 }], ['nome 201', { nome: grande(201) }], ['cidade 101', { nome: 'x', cidade: grande(101) }], ['estado 3', { nome: 'x', estado: 'SPX' }]]) {
+    const r = await status500('put', `/api/pessoas/fisicas/${id}`, corpo);
+    if (r.status !== 400) falhas.push(`${rot} → ${r.status}`);
+  }
+  assert.deepEqual(falhas, []);
+  assert.notEqual((await um('SELECT nome FROM pessoas_fisicas WHERE id = ?', [id])).nome, '');
+});
+test('ACHADO jurídica criar/editar: razão social e campos que não são texto ou são grandes demais dão aviso 400', async () => {
+  const id = await criarPJ();
+  const falhas = [];
+  for (const nome of ruins) { const r = await status500('post', '/api/pessoas/juridicas', { razao_social: nome, cnpj: cnpjDe(++seq) }); if (r.status !== 400) falhas.push(`criar razão ${JSON.stringify(nome)} → ${r.status}`); }
+  for (const [rot, extra] of [['razão 201', { razao_social: grande(201) }], ['fantasia 201', { nome_fantasia: grande(201) }], ['cnpj 30', { cnpj: '1'.repeat(30) }], ['cnpj número', { cnpj: 123 }], ['IE 31', { inscricao_estadual: grande(31) }], ['UF 3', { estado: 'SPX' }], ['razão só espaços', { razao_social: '   ' }]]) {
+    const r = await status500('post', '/api/pessoas/juridicas', { ...juridica(), ...extra }); if (r.status !== 400) falhas.push(`criar ${rot} → ${r.status}`);
+    const e = await status500('put', `/api/pessoas/juridicas/${id}`, { ...juridica(), ...extra }); if (e.status !== 400) falhas.push(`editar ${rot} → ${e.status}`);
+  }
+  assert.deepEqual(falhas, []);
+});
+test('ACHADO anotações: pessoa que não existe = 404 (hoje grava anotação órfã); texto que não é texto ou grande demais = 400; rota da jurídica grava como jurídica', async () => {
+  const falhas = [];
+  const antes = await total('SELECT COUNT(*) AS n FROM historico_atendimento');
+  const r1 = await api().post('/api/pessoas/fisicas/999999/historico').send({ descricao: 'para ninguém' });
+  if (r1.status !== 404) falhas.push(`pessoa inexistente → ${r1.status}`);
+  const r2 = await api().post('/api/pessoas/fisicas/abc/historico').send({ descricao: 'para ninguém' });
+  if (r2.status !== 404) falhas.push(`id abc → ${r2.status}`);
+  if (await total('SELECT COUNT(*) AS n FROM historico_atendimento') !== antes) falhas.push('gravou anotação órfã');
+  const pf = await criarPF();
+  for (const descricao of ruins) { const r = await api().post(`/api/pessoas/fisicas/${pf}/historico`).send({ descricao }); if (r.status !== 400) falhas.push(`descricao ${JSON.stringify(descricao)} → ${r.status}`); }
+  const enorme = await api().post(`/api/pessoas/fisicas/${pf}/historico`).send({ descricao: grande(70000) }); if (enorme.status !== 400) falhas.push(`descricao 70000 letras → ${enorme.status}`);
+  const pj = await criarPJ();
+  await api().post(`/api/pessoas/juridicas/${pj}/historico`).send({ descricao: 'sem tipo no corpo' });
+  const tipo = await um('SELECT tipo_pessoa FROM historico_atendimento WHERE pessoa_id = ? ORDER BY id DESC LIMIT 1', [pj]);
+  if (!tipo || tipo.tipo_pessoa !== 'juridica') falhas.push(`rota /juridicas/:id/historico sem tipo_pessoa no corpo gravou como "${tipo && tipo.tipo_pessoa}"`);
+  const ed = await api().put('/api/pessoas/historico/1').send({ descricao: 123 }); if (ed.status >= 500) falhas.push(`editar descricao número → ${ed.status}`);
+  assert.deepEqual(falhas, []);
+});
+test('ACHADO listas: página e limite negativos, zero ou lixo viram o padrão (200), nunca erro (física e jurídica)', async () => {
+  const falhas = [];
+  for (const rota of ['fisicas', 'juridicas']) for (const qs of ['pagina=-1&limite=-5', 'pagina=0&limite=0', 'pagina=abc&limite=abc', 'pagina=99999999999&limite=100', 'limite=-1']) {
+    const r = await api().get(`/api/pessoas/${rota}?${qs}`); if (r.status !== 200) falhas.push(`${rota}?${qs} → ${r.status}`);
+  }
+  assert.deepEqual(falhas, []);
+});
+test('ACHADO listas: busca que vem como lista (busca[]=a) ou objeto não derruba a tela (física, jurídica e exportar)', async () => {
+  const falhas = [];
+  for (const caminho of ['/api/pessoas/fisicas?busca[]=a&busca[]=b', '/api/pessoas/juridicas?busca[]=a', '/api/pessoas/fisicas/exportar?busca[]=a', '/api/pessoas/juridicas/exportar?busca[x]=a', '/api/pessoas/fisicas?busca[x]=a']) {
+    const r = await api().get(caminho); if (r.status >= 500) falhas.push(`${caminho} → ${r.status}`);
+  }
+  assert.deepEqual(falhas, []);
+});
+test('ACHADO busca: "%" e "_" são procurados como texto (não como "qualquer coisa")', async () => {
+  const unico = `Curinga${Date.now() % 100000}`;
+  await criarPF({ nome: `${unico} Alfa` }); await criarPF({ nome: `${unico} Beta`, cidade: '100% Campinas' });
+  const n = async (q) => (await api().get(`/api/pessoas/fisicas?busca=${encodeURIComponent(q)}`)).body.dados.total;
+  assert.equal(await n('%'), 1, 'busca "%" deve achar só quem tem % no texto');
+  assert.equal(await n('_'), 0, 'busca "_" não deve achar todo mundo');
+  assert.equal(await n(`${unico} A_fa`), 0);
+});
+test('ACHADO auxiliares e profissões: nome que não é texto ou é maior que a coluna dá aviso 400', async () => {
+  const falhas = [];
+  for (const [rot, caminho, nome] of [['gênero 51', '/api/pessoas/auxiliares/generos', grande(51)], ['gênero número', '/api/pessoas/auxiliares/generos', 123], ['profissão 101', '/api/pessoas/auxiliares/profissoes', grande(101)],
+    ['estado civil lista', '/api/pessoas/auxiliares/estados_civis', ['x']], ['parentesco objeto', '/api/pessoas/auxiliares/parentescos', { a: 1 }],
+    ['Controle: profissão 101', '/api/controle/auxiliares/profissoes', grande(101)], ['Controle: profissão número', '/api/controle/auxiliares/profissoes', 123]]) {
+    const r = await api().post(caminho).send({ nome }); if (r.status !== 400) falhas.push(`${rot} → ${r.status}`);
+  }
+  const id = (await api().post('/api/controle/auxiliares/profissoes').send({ nome: 'Profissao para editar' })).body.dados.id;
+  for (const nome of [grande(101), 123]) { const r = await api().put(`/api/controle/auxiliares/profissoes/${id}`).send({ nome }); if (r.status !== 400) falhas.push(`editar profissão ${typeof nome} → ${r.status}`); }
+  assert.deepEqual(falhas, []);
+});
+test('ACHADO unificar: identificadores que não são número ou lista errada dão aviso 400/404, nunca erro interno', async () => {
+  const falhas = [];
+  for (const rota of ['fisicas', 'juridicas']) for (const corpo of [{ principal_id: 'abc', duplicados_ids: [1] }, { principal_id: 1, duplicados_ids: 'abc' }, { principal_id: 1, duplicados_ids: [{}] }, { principal_id: { a: 1 }, duplicados_ids: [2] }]) {
+    const r = await api().post(`/api/pessoas/${rota}/unificar`).send(corpo); if (r.status >= 500) falhas.push(`${rota} ${JSON.stringify(corpo)} → ${r.status}`);
+  }
+  assert.deepEqual(falhas, []);
+});
+test('ACHADO OBSERVAÇÃO busca de telefone: telefone digitado só com números acha o gravado com máscara "(19) 98877-6655"', async () => {
+  const unico = `Fone${Date.now() % 100000}`;
+  await criarPF({ nome: unico, telefones: [{ numero: '(19) 98877-6655' }] });
+  const r = await api().get('/api/pessoas/fisicas?busca=19988776655');
+  assert.ok(r.body.dados.registros.some(x => x.nome === unico), 'não achou pelo telefone só com dígitos');
+});
+test('ACHADO outras rotas: parabéns, WhatsApp, SMS e e-mail avulso com valores que não são texto dão 400, não erro interno', async () => {
+  const falhas = [];
+  const pf = await criarPF();
+  for (const [rot, metodo, caminho, corpo] of [
+    ['zap telefone objeto', 'post', '/api/pessoas/registrar-zap', { telefone: { a: 1 } }], ['zap telefone lista', 'post', '/api/pessoas/registrar-zap', { telefone: ['1'] }],
+    ['sms número objeto', 'post', '/api/pessoas/enviar-sms', { numero: { a: 1 }, mensagem: 'x' }], ['email para lista', 'post', '/api/pessoas/enviar-email', { para: ['a@b.com'], assunto: 'a', mensagem: 'b' }],
+    ['parabéns canal objeto', 'post', `/api/pessoas/${pf}/parabens`, { canal: { a: 1 } }], ['parabéns id abc', 'post', '/api/pessoas/abc/parabens', { canal: 'whatsapp' }], ['parabéns id abc GET', 'get', '/api/pessoas/abc/parabens', undefined],
+    ['aniversariantes mês lixo', 'get', '/api/pessoas/aniversariantes?filtro=mes&mes=abc', undefined], ['aniversariantes filtro lista', 'get', '/api/pessoas/aniversariantes?filtro[]=x', undefined]]) {
+    const r = await api()[metodo](caminho).send(corpo); if (r.status >= 500) falhas.push(`${rot} → ${r.status}`);
+  }
+  assert.deepEqual(falhas, []);
+});

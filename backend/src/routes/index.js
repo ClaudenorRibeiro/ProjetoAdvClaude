@@ -137,9 +137,9 @@ router.get('/pessoas/fisicas/:id',        autenticar, verificarPermissao('pessoa
 router.post('/pessoas/fisicas',           autenticar, verificarPermissao('pessoas','cadastrar'),  pessoasCtrl.criarFisica);
 router.put('/pessoas/fisicas/:id',        autenticar, verificarPermissao('pessoas','alterar'),    pessoasCtrl.atualizarFisica);
 router.delete('/pessoas/fisicas/:id',     autenticar, verificarPermissao('pessoas','excluir'),    pessoasCtrl.excluirFisica);
-router.post('/pessoas/fisicas/:id/historico', autenticar, verificarPermissao('pessoas','alterar'), pessoasCtrl.adicionarHistorico);
+router.post('/pessoas/fisicas/:id/historico', autenticar, verificarPermissao('pessoas','alterar'), pessoasCtrl.adicionarHistoricoFisica);
 // Anotações de atendimento (jurídica adicionar; editar/excluir por id da anotação — regra de dono+hoje/admin no controller)
-router.post('/pessoas/juridicas/:id/historico', autenticar, verificarPermissao('pessoas','alterar'), pessoasCtrl.adicionarHistorico);
+router.post('/pessoas/juridicas/:id/historico', autenticar, verificarPermissao('pessoas','alterar'), pessoasCtrl.adicionarHistoricoJuridica);
 router.put('/pessoas/historico/:histId',    autenticar, verificarPermissao('pessoas','alterar'), pessoasCtrl.editarHistorico);
 router.delete('/pessoas/historico/:histId', autenticar, verificarPermissao('pessoas','alterar'), pessoasCtrl.excluirHistorico);
 router.get('/pessoas/juridicas',          autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.listarJuridicas);

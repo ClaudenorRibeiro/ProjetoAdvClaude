@@ -12,6 +12,11 @@ const { registrarComunicacao } = require('../utils/logComunicacao');
 const smsService = require('../services/smsService');
 const multer = require('multer');
 const { criarBancoNoCatalogo } = require('./instituicaoFinanceiraController');
+const { texto, inteiroPositivo } = require('../utils/camposTexto');
+
+// Limites reais das colunas (estrutura_banco.sql): nome/razão social varchar(200). Anotação de atendimento: limite do sistema (a coluna é text).
+const LIMITE_NOME = 200;
+const LIMITE_ANOTACAO = 2000;
 
 // ---- Rede de segurança: sem telefone/e-mail repetido no MESMO cadastro ----
 // O front já bloqueia e avisa; aqui é a proteção do servidor (qualquer caminho).
@@ -513,7 +518,10 @@ async function criarFisica(req, res) {
     responsavel_id, parentesco_id, avisos_idade = []
   } = req.body;
 
-  if (!nome) return erro(res, 'O nome é obrigatório');
+  // Nome de verdade: texto, sem espaços nas pontas, não vazio e dentro do limite do banco (nunca grava cadastro de nome em branco)
+  const lidoNome = texto(nome, { rotulo: 'O nome', max: LIMITE_NOME, obrigatorio: true });
+  if (lidoNome.erro) return erro(res, lidoNome.erro);
+  const nomeLimpo = lidoNome.valor;
 
   const erroAvisos = validarAvisosIdade(avisos_idade);
   if (erroAvisos) return erro(res, erroAvisos);
@@ -553,7 +561,7 @@ async function criarFisica(req, res) {
           responsavel_id, parentesco_id, criado_por)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        nome.trim(), cpf?.replace(/\D/g, '') || null, rg || null, rg_orgao || null,
+        nomeLimpo, cpf?.replace(/\D/g, '') || null, rg || null, rg_orgao || null,
         pis || null, ctps_numero || null, ctps_serie || null,
         data_nascimento || null, estado_civil_id || null, profissao_id || null,
         genero_id || null, nacionalidade_id || null, nome_pai || null, nome_mae || null,
@@ -590,7 +598,7 @@ async function criarFisica(req, res) {
 
     // Contas bancárias/PIX (conta própria usa nome/CPF da própria pessoa, gravado agora)
     await gravarContasBancarias(conn, 'contas_bancarias_pf', pessoaId, contasBancarias,
-      nome.trim(), cpf?.replace(/\D/g, '') || null);
+      nomeLimpo, cpf?.replace(/\D/g, '') || null);
 
     // Avisos de idade ("me avise quando completar X anos")
     await gravarAvisosIdade(conn, pessoaId, avisos_idade, req.usuario.id);
@@ -623,6 +631,11 @@ async function atualizarFisica(req, res) {
     responsavel_id, parentesco_id, avisos_idade
   } = req.body;
 
+  // Mesma regra do cadastro: editar nunca pode apagar o nome nem deixá-lo em branco
+  const lidoNome = texto(nome, { rotulo: 'O nome', max: LIMITE_NOME, obrigatorio: true });
+  if (lidoNome.erro) return erro(res, lidoNome.erro);
+  const nomeLimpo = lidoNome.valor;
+
   const erroAvisos = validarAvisosIdade(avisos_idade);
   if (erroAvisos) return erro(res, erroAvisos);
 
@@ -650,7 +663,7 @@ async function atualizarFisica(req, res) {
          alterado_por=?, alterado_em=NOW()
        WHERE id = ?`,
       [
-        nome?.trim(), cpf?.replace(/\D/g, '') || null, rg || null, rg_orgao || null,
+        nomeLimpo, cpf?.replace(/\D/g, '') || null, rg || null, rg_orgao || null,
         pis || null, ctps_numero || null, ctps_serie || null,
         // Garante formato YYYY-MM-DD — frontend pode enviar ISO com horário (ex: 1972-03-27T03:00:00.000Z)
         data_nascimento ? data_nascimento.toString().slice(0, 10) : null,
@@ -690,7 +703,7 @@ async function atualizarFisica(req, res) {
     // Contas bancárias/PIX: mesma regra de telefones/e-mails — regrava a lista completa
     // (conta própria sempre usa nome/CPF atuais, mesmo que o formulário mande outra coisa)
     await gravarContasBancarias(conn, 'contas_bancarias_pf', id, contasBancarias,
-      nome?.trim(), cpf?.replace(/\D/g, '') || null);
+      nomeLimpo, cpf?.replace(/\D/g, '') || null);
 
     // Avisos de idade — só mexe se a tela mandou a lista (undefined = não alterar)
     await gravarAvisosIdade(conn, id, avisos_idade, req.usuario.id);
@@ -1270,23 +1283,29 @@ async function unificarFisicas(req, res) {
 }
 
 // POST /api/pessoas/(fisicas|juridicas)/:id/historico — Adiciona uma anotação de atendimento.
-// tipo_pessoa vem no corpo, mas é sempre normalizado para 'fisica' ou 'juridica' (nunca confia no
-// valor cru do cliente). Qualquer usuário logado pode registrar — quem atende, anota.
-async function adicionarHistorico(req, res) {
+// Quem decide se a anotação é de pessoa física ou jurídica é a ROTA (nunca o corpo da chamada): assim ela não
+// pode ser gravada com o tipo errado. Só grava se a pessoa EXISTE (a tabela não tem chave estrangeira: sem esta
+// conferência ficaria anotação órfã). O texto precisa ser texto, não vazio e ter até 2.000 caracteres.
+// Qualquer usuário com permissão de alterar Pessoas pode registrar — quem atende, anota.
+async function gravarAnotacao(req, res, tipoPessoa) {
   try {
-    const { id } = req.params;
-    const { descricao } = req.body;
-    const tipoPessoa = req.body.tipo_pessoa === 'juridica' ? 'juridica' : 'fisica';
+    const idPessoa = inteiroPositivo(req.params.id, { rotulo: 'Pessoa' });
+    if (idPessoa.erro || !idPessoa.valor) return naoEncontrado(res, 'Pessoa não encontrada');
 
-    if (!descricao || !descricao.trim()) return erro(res, 'A anotação não pode ficar em branco');
+    const lida = texto(req.body.descricao, { rotulo: 'A anotação', max: LIMITE_ANOTACAO, obrigatorio: true, feminino: true });
+    if (lida.erro) return erro(res, lida.erro);
 
+    const tabela = tipoPessoa === 'juridica' ? 'pessoas_juridicas' : 'pessoas_fisicas';
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
+      // FOR SHARE: a pessoa não pode ser apagada por outra operação enquanto esta anotação é gravada
+      const [existe] = await conn.execute(`SELECT id FROM ${tabela} WHERE id = ? FOR SHARE`, [idPessoa.valor]);
+      if (!existe.length) { await conn.rollback(); return naoEncontrado(res, 'Pessoa não encontrada'); }
       await conn.execute(
         `INSERT INTO historico_atendimento (tipo_pessoa, pessoa_id, descricao, usuario_id)
          VALUES (?, ?, ?, ?)`,
-        [tipoPessoa, id, descricao.trim(), req.usuario.id]
+        [tipoPessoa, idPessoa.valor, lida.valor, req.usuario.id]
       );
       await conn.commit();
     } catch (err) { await conn.rollback(); throw err; }
@@ -1297,6 +1316,8 @@ async function adicionarHistorico(req, res) {
     return erroInterno(res, err);
   }
 }
+const adicionarHistoricoFisica   = (req, res) => gravarAnotacao(req, res, 'fisica');
+const adicionarHistoricoJuridica = (req, res) => gravarAnotacao(req, res, 'juridica');
 
 // Regra de permissão das anotações (usada por editar e excluir):
 //   - Admin (nível <= 1): pode tudo, em qualquer data e de qualquer usuário.
@@ -1323,8 +1344,8 @@ async function podeAlterarAnotacao(histId, usuario) {
 async function editarHistorico(req, res) {
   try {
     const { histId } = req.params;
-    const { descricao } = req.body;
-    if (!descricao || !descricao.trim()) return erro(res, 'A anotação não pode ficar em branco');
+    const lida = texto(req.body.descricao, { rotulo: 'A anotação', max: LIMITE_ANOTACAO, obrigatorio: true, feminino: true });
+    if (lida.erro) return erro(res, lida.erro);
 
     const permissao = await podeAlterarAnotacao(histId, req.usuario);
     if (permissao.naoEncontrado) return naoEncontrado(res, 'Anotação não encontrada');
@@ -1335,7 +1356,7 @@ async function editarHistorico(req, res) {
       await conn.beginTransaction();
       await conn.execute(
         'UPDATE historico_atendimento SET descricao = ? WHERE id = ?',
-        [descricao.trim(), histId]
+        [lida.valor, histId]
       );
       await auditoria.registrar(req.usuario.id, 'historico_atendimento', 'alterar', histId, null, null, conn);
       await conn.commit();
@@ -1444,7 +1465,9 @@ async function criarJuridica(req, res) {
     em_recuperacao_judicial
   } = req.body;
 
-  if (!razao_social) return erro(res, 'A razão social é obrigatória');
+  const lidaRazao = texto(razao_social, { rotulo: 'A razão social', max: LIMITE_NOME, obrigatorio: true, feminino: true });
+  if (lidaRazao.erro) return erro(res, lidaRazao.erro);
+  const razaoLimpa = lidaRazao.valor;
 
   // Transação: garante que empresa, telefones e e-mails são gravados juntos ou nenhum é
   const conn = await pool.getConnection();
@@ -1458,7 +1481,7 @@ async function criarJuridica(req, res) {
           em_recuperacao_judicial, criado_por)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        razao_social.trim(), nome_fantasia || null,
+        razaoLimpa, nome_fantasia || null,
         cnpj?.replace(/\D/g, '') || null, inscricao_estadual || null,
         cep || null, logradouro || null,
         numero || null, complemento || null, bairro || null,
@@ -1492,7 +1515,7 @@ async function criarJuridica(req, res) {
 
     // Contas bancárias/PIX (conta própria usa razão social/CNPJ da própria empresa)
     await gravarContasBancarias(conn, 'contas_bancarias_pj', pessoaId, contasBancarias,
-      razao_social.trim(), cnpj?.replace(/\D/g, '') || null);
+      razaoLimpa, cnpj?.replace(/\D/g, '') || null);
 
     // Auditoria participa da MESMA transação (tudo ou nada): grava antes do commit, com conn
     await auditoria.registrar(req.usuario.id, 'pessoas_juridicas', 'criar', pessoaId, null, null, conn);
@@ -1574,7 +1597,9 @@ async function atualizarJuridica(req, res) {
     em_recuperacao_judicial   // ver comentário em criarJuridica
   } = req.body;
 
-  if (!razao_social) return erro(res, 'A razão social é obrigatória');
+  const lidaRazao = texto(razao_social, { rotulo: 'A razão social', max: LIMITE_NOME, obrigatorio: true, feminino: true });
+  if (lidaRazao.erro) return erro(res, lidaRazao.erro);
+  const razaoLimpa = lidaRazao.valor;
 
   // Transação: dados principais + telefones + e-mails + auditoria gravam juntos ou nada
   const conn = await pool.getConnection();
@@ -1592,7 +1617,7 @@ async function atualizarJuridica(req, res) {
          alterado_por=?, alterado_em=NOW()
        WHERE id = ?`,
       [
-        razao_social.trim(), nome_fantasia || null, cnpj?.replace(/\D/g, '') || null,
+        razaoLimpa, nome_fantasia || null, cnpj?.replace(/\D/g, '') || null,
         cep || null, logradouro || null, numero || null, complemento || null, bairro || null,
         cidade || null, estado || null, observacoes || null,
         em_recuperacao_judicial ? 1 : 0,
@@ -1623,7 +1648,7 @@ async function atualizarJuridica(req, res) {
 
     // Contas bancárias/PIX: regrava a lista completa (conta própria usa razão social/CNPJ atuais)
     await gravarContasBancarias(conn, 'contas_bancarias_pj', id, contasBancarias,
-      razao_social?.trim(), cnpj?.replace(/\D/g, '') || null);
+      razaoLimpa, cnpj?.replace(/\D/g, '') || null);
 
     await auditoria.registrar(req.usuario.id, 'pessoas_juridicas', 'editar', id, antes[0], null, conn);
     await conn.commit();
@@ -2379,7 +2404,7 @@ async function smsAtivo(req, res) {
 }
 
 module.exports = {
-  listarFisicas, buscarFisica, criarFisica, atualizarFisica, excluirFisica, unificarFisicas, adicionarHistorico, editarHistorico, excluirHistorico,
+  listarFisicas, buscarFisica, criarFisica, atualizarFisica, excluirFisica, unificarFisicas, adicionarHistoricoFisica, adicionarHistoricoJuridica, editarHistorico, excluirHistorico,
   listarJuridicas, buscarJuridica, criarJuridica, atualizarJuridica, excluirJuridica, unificarJuridicas, buscarAuxiliares, buscarPorCPF, criarAuxiliar,
   listarProfissoes, listarPessoasPorProfissao, criarProfissao, atualizarProfissao, excluirProfissao,
   processosDaPessoa, exportarFisicas, exportarJuridicas,
