@@ -21,6 +21,9 @@ Ao fechar a Fase D (ou quando o usuário pedir), **lembrar o usuário destas pen
       Já usam `paginacao()` (`utils/helpers.js`) e não deram erro: Audiências, Perícias, Processos, Tarefas.
 - [ ] **P4 — Identificador que não é número:** leituras com id ("abc", -1, número gigante) já não dão 500 em nenhuma rota. **Ainda dão 500 com id "abc"** (exclusões/alterações de auxiliares): Audiências (excluir tipo, excluir freela,
       "ata impressa"), Financeiro (excluir forma de pagamento, excluir instituição), Documentos (desativar/reativar modelo), Perícias (excluir tipo), Pendências de Docs. (excluir tipo).
+- [ ] **Correção pendente — corrida na renumeração de pasta (anotada em 05/10/2026; ajustar só quando o usuário avisar):** `renumerarPasta` pode falhar com erro 1451 se alguém criar processo na pasta vazia no mesmo instante;
+      nada se perde, mas o aviso ao usuário é enganoso (409 "não é possível excluir este item…"). Detalhes, prova e correção proposta: `CLAUDE.md`, seção 9.
+- Observação (não é defeito): os "Erro interno … Cannot add or update a child row" no log do teste de editar processo são esperados (o teste manda ids 999999 de propósito; o servidor responde 409 amigável). Ver `CLAUDE.md`, seção 9.
 - [ ] **P5 — Migração do react-router para a versão 7** (adiada por decisão do usuário; hoje o `npm audit` do frontend mostra 2 avisos "média").
 - [ ] **P6 — Informativo, sem ação:** `log_documentos_gerados` guarda a origem (processo, etc.) sem chave declarada; excluir o processo deixa o histórico
       apontando para um id que sumiu. Busca por poucos dígitos (ex.: "30") também casa CPF/CNPJ/telefone — é o desenho da busca.

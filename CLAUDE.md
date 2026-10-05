@@ -297,6 +297,16 @@ perguntar "o que falta". Só tirar da lista com o OK dele. Detalhes de cada item
   controlador o usa para filtrar — continua vestigial (só coluna).
 - **Varredura da ficha da pessoa** (`ModalPessoa`, `Pessoas.js`, todas as abas/estados) — acessibilidade e validações; pertence ao módulo Pessoas. Conferido em 05/10/2026: não há teste de tela nem de servidor dedicado a Pessoas;
   a tela só entra na varredura de acessibilidade com a LISTA aberta (a ficha e suas abas não aparecem em nenhum teste); e cadastrar pessoa dá 500 com tipo errado/texto longo (ver P1).
+- **CORREÇÃO PENDENTE — corrida na renumeração de pasta (anotada a pedido do usuário em 05/10/2026; SÓ AJUSTAR QUANDO ELE AVISAR):** em `renumerarPasta` (`processosController.js`), quando o número desejado é de uma pasta
+  vazia, a conferência "tem processo?" lê o banco pela "foto" do início da transação (REPEATABLE READ) e o `DELETE FROM tblpasta` olha a situação real. Se outra pessoa criar um processo nessa pasta no mesmo instante, a conferência
+  diz "vazia" e o banco recusa apagar (erro 1451, `tblproc_ibfk_1`). **Provado** num banco de teste do sandbox (contagem 0 e DELETE falhando com o mesmo código); o teste da corrida (`processos-pastas.integration.test.js`, ~linha 329) passou 6/6 aqui (depende de timing).
+  **Efeito real, pelo código:** a transação é desfeita (nada se perde, nenhum órfão) e `erroInterno` (`utils/response.js`) responde **409** com a mensagem "Não é possível excluir este item porque ele está vinculado a outros registros…" —
+  mensagem enganosa para uma renumeração (não é "erro interno" 500, e o teste, que só exige status < 500, passa). **Correção proposta (não feita):** (1) ler as contagens de processos/tarefas da pasta por leitura travada ("situação real"),
+  (2) tratar esse 1451 específico nessa função com o aviso "número em uso". Risco avaliado: baixo (só `renumerarPasta`, sem mudança de banco/tela); verificar com teste que force a sequência e rodar a bateria de Processos.
+  Não conferido: se o cadastro de processo, ao reaproveitar pasta vazia, tem a mesma fragilidade.
+- **RUÍDO ESPERADO NO LOG DOS TESTES (não é defeito):** linhas "Erro interno: ... Cannot add or update a child row ... tblproc_ibfk_2/3/4/5 (vara, tipo, status, instância) e processo_assunto_ibfk_2" em `atualizarProcesso`
+  (linhas ~926 e ~991) vêm do teste "editar: valores que o banco recusa" (`processos-crud.integration.test.js`, ~linha 272), que manda de propósito vara/tipo/status/instância/assunto com id 999999. O servidor responde **409** com
+  "Um dos itens escolhidos não existe mais… Recarregue a tela" (tradução em `erroInterno`) e o teste exige isso. O texto "Erro interno:" é só o rótulo do `console.error`, impresso antes da tradução.
 - **Pastas vazias antigas (achado de 04/10/2026, decisão pendente do usuário):** no local e no Antônio existem 2.702 pastas SEM processo; 2.700 foram criadas de uma vez em
   28/06/2026 (números 1 a 8935, criador 24) e 2.627 têm "área do direito" preenchida — parecem pastas antigas importadas sem os processos. O Erick não tem nenhuma.
   Não apagar em lote sem a decisão dele. O script `sql_limpar_pastas_vazias_para_heidi.sql` apaga SÓ as pastas 9999 e 928804 (fixas no script; rodar só no Antônio — o Erick não tem pastas vazias).
