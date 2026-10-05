@@ -10,6 +10,19 @@ const perfil = process.argv.includes('--profundo') ? 'profundo'
   : process.argv.includes('--completo') ? 'completo' : 'rapido';
 const resultados = [];
 
+// Tudo o que a bateria escreve na tela também vai para um arquivo (quality/test-results/ultima-bateria.txt, fora do Git):
+// se a janela fechar ou a tela rolar, o resultado completo continua guardado. Escrita síncrona: nada se perde nem com process.exit().
+const arquivoDaBateria = path.join(raiz, 'quality', 'test-results', 'ultima-bateria.txt');
+try {
+  fs.mkdirSync(path.dirname(arquivoDaBateria), { recursive: true });
+  fs.writeFileSync(arquivoDaBateria, `Bateria iniciada em ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })} (perfil: ${perfil})\n\n`);
+  const escreverNaTela = process.stdout.write.bind(process.stdout);
+  process.stdout.write = (pedaco, ...resto) => {
+    try { fs.appendFileSync(arquivoDaBateria, pedaco); } catch { /* o arquivo é só uma cópia: nunca derruba a bateria */ }
+    return escreverNaTela(pedaco, ...resto);
+  };
+} catch { /* sem pasta para gravar: segue só com a tela */ }
+
 // Roda um comando mostrando a saída em tempo real (como antes) e, nos comandos de teste,
 // lê essa mesma saída para reprovar se algum teste foi pulado.
 async function comando(binario, args, cwd, nome, obrigatorio = true, ehTeste = false) {

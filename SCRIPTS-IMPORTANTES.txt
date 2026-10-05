@@ -9,8 +9,9 @@ PARA RODAR NO PC (duplo clique)
   parar_pc_casa.bat / parar_pc_escrit.bat       IMPORTANTE  Desliga o sistema (fecha TODAS as janelas do Prompt de Comando).
   salvar_RASCUNHO_do_GIT_no_pc.bat              IMPORTANTE  Baixa o rascunho do GitHub para testar.
   salvar_pc_casa_no_Git.bat / ..._escrit_...    IMPORTANTE  ENVIA para o main (produção). Uso exclusivo do usuário.
-  TESTAR-SISTEMA.bat                            IMPORTANTE  Bateria de testes (rápida; "completo" ou "profundo" como argumento).
-  TESTAR-COMPLETO.bat                           IMPORTANTE  Bateria COMPLETA (uns 11 min). Instala sozinha o que faltar.
+  TESTAR-SISTEMA.bat                            IMPORTANTE  Bateria de testes (rápida; "completo" ou "profundo" como argumento). Ao terminar a janela só fecha no X.
+  TESTAR-COMPLETO.bat                           IMPORTANTE  Bateria COMPLETA (de 10 a 60 min, conforme o PC). Instala sozinha o que faltar. Ao terminar a janela só fecha no X (nenhuma
+                                                            tecla fecha) e o resultado todo fica salvo em quality\test-results\ultima-bateria.txt (fora do Git).
 
 PARA RODAR NO HEIDISQL (banco)
   sql_atualizar_banco_para_heidi.sql            IMPORTANTE  SCRIPT ÚNICO de atualização do banco (Antônio e Erick): cria tabelas/colunas do Financeiro, contas

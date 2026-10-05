@@ -1,11 +1,12 @@
 @echo off
-rem IMPORTANTE - NAO APAGAR. Roda a bateria COMPLETA de testes (uns 11 min): unidade, banco de teste e navegador. Nao publique antes de rodar.
+rem IMPORTANTE - NAO APAGAR. Roda a bateria COMPLETA de testes (de 10 a 60 min, conforme o PC): unidade, banco de teste e navegador. Nao publique antes de rodar.
+rem Ao terminar, a janela NAO fecha sozinha nem com tecla: so no X. O resultado tambem fica em quality\test-results\ultima-bateria.txt
 setlocal
 cd /d "%~dp0"
 title Teste COMPLETO do sistema
 
 echo ============================================================
-echo   TESTE COMPLETO DO SISTEMA (demora uns 11 minutos)
+echo   TESTE COMPLETO DO SISTEMA (demora de 10 a 60 minutos, conforme o PC)
 echo   Roda: testes rapidos + banco de teste + navegador
 echo ============================================================
 echo.
@@ -55,5 +56,10 @@ echo ============================================================
 
 :fim
 echo.
-pause
+echo   O resultado completo tambem foi salvo em: quality\test-results\ultima-bateria.txt
+echo.
+echo   ESTA JANELA FICA ABERTA. Para fechar, clique no X da janela.
+echo   ^(Nenhuma tecla fecha esta janela.^)
+echo.
+cmd /k
 exit /b %CODIGO%

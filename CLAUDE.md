@@ -252,6 +252,8 @@ renomear ou remover um script. Nenhum teste pode depender de arquivo que não es
   `uuid` por versões novas dentro do `exceljs`/`node-cron` (zera o `npm audit`). **Não** trocar o
   `archiver` do `exceljs` pela versão 7: ela quebra a exportação de Excel (testado). Depois de
   mexer em dependência, rodar a bateria completa — os testes de Excel, e-mail e upload pegam o problema.
+- **A janela da bateria NUNCA fecha sozinha (pedido do usuário, 05/10/2026):** ele esbarrou numa tecla no `pause` final e a janela fechou, perdendo o resultado. `TESTAR-COMPLETO.bat` e `TESTAR-SISTEMA.bat` agora terminam com `cmd /k` (só fecha no X) e
+  `quality/run.mjs` copia tudo o que aparece na tela para `quality/test-results/ultima-bateria.txt` (fora do Git; só a saída padrão, a de erro dos programas filhos fica só na tela). Os outros `.bat` (iniciar, parar, salvar) ainda terminam com `pause`.
 - **Nome indefinido no código = reprovado** (`quality/check-nomes-indefinidos.mjs`): o TypeScript, instalado
   no frontend, lê os `.js` do frontend e do backend e reprova qualquer função/variável/componente usado sem
   existir (erro "Cannot find name"). Origem: `impedirAlteracaoDataPorRoda` estava só chamada, nunca definida, e
