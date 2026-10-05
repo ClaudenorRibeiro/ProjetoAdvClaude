@@ -276,8 +276,14 @@ perguntar "o que falta". Só tirar da lista com o OK dele. Detalhes de cada item
 - **P2** — Curingas do LIKE (`%` e `_`) nas buscas de todos os módulos fora de Processos (usar `escaparLike` em `utils/helpers.js`).
 - **P3** — Paginação sem validação (`pagina`/`limite` inválidos → 500) nos outros módulos (usar `paginacao()` de `utils/helpers.js`).
 - **P4** — Id que não é número (`/modulo/abc`) dando 500 nos outros módulos (devolver 404).
-- **P5** — Migração do react-router para a versão 7 (adiada por decisão do usuário; `npm audit` do frontend mostra 2 avisos "média").
-  Os 2 avisos "React Router Future Flag" do console/testes ficam como estão até lá: **NÃO silenciar com as opções `future` (gambiarra — o usuário já recusou mais de uma vez)**; resolvem-se na migração de verdade, a próxima manutenção depois de fechar os testes.
+- **P5** — Migração do react-router para a versão 7 — **ADIADA POR DECISÃO DO USUÁRIO (05/10/2026): NÃO FAZER AGORA.** Ele avaliou que o retorno é pequeno e o risco, grande; o assunto passa a fazer parte do
+  "plano de modernização" (seção 11). Análise feita em 05/10/2026, numa cópia descartável fora do projeto (nada mudou no código): trocar `react-router-dom` `^6.21.0` → `^7.18.4` altera SÓ `package.json` e
+  `package-lock.json` (nenhum `.js` muda; todos os `navigate()`/`Link` do código usam caminho absoluto). Resultado na cópia: Vitest 175/175, build OK (pacote principal 316 → 334 kB), checagem de nomes igual, `npm audit` de
+  produção 0, os 2 avisos "Future Flag" somem, sem mexer em `vite.config.js`. Telas completas (166) rodadas 2 vezes na versão 7: 163/166 e 164/166 — as 2 falhas fixas são o defeito de teste de horário descrito abaixo (falham igual
+  na versão atual); 1 falha do "Novo Prazo" ocorreu UMA vez e não se repetiu (sozinho 3/3 na v7 e 1/1 na v6): causa NÃO conhecida. Advisories que justificam a troca: abertura de redirecionamento (`Link`/`useNavigate`, só corrigido a partir da 7.18.4)
+  e um de renderização no servidor (não se aplica a este SPA). Se for retomado: não silenciar os avisos com `future` (gambiarra); fazer a migração de verdade.
+- **Defeito de TESTE a corrigir (erro é erro; aguardando OK do usuário):** `frontend/e2e/processos-pasta-tarefas.spec.js` calcula "hoje" (`hojeMais`) com o relógio da máquina, enquanto o sistema usa o horário de Brasília. Em máquina em UTC
+  (como a da IA), entre 21h e meia-noite de Brasília, os testes "Nova tarefa" e "Editar tarefa" falham por 1 dia de diferença. No Windows do usuário (horário de Brasília) não aparece. Conserto: usar `America/Sao_Paulo`, como o teste de Prazos já faz.
 - **P6** — Informativo, sem ação (`log_documentos_gerados` sem chave declarada; busca por poucos dígitos casa CPF/CNPJ/telefone).
 - **P7** — Verificar no servidor real se o PM2 reinicia sozinho após queda.
 - **P8** — Decidir (só se ele quiser) o recurso "ver só os meus processos" (coluna `usuarios.ver_todos_processos` é vestigial).
@@ -317,3 +323,22 @@ Os scripts de código foram testados só em pasta simulada com PM2 de mentira (s
 Só no **Antônio**: o `sql_limpar_pastas_vazias_para_heidi.sql` (pastas 9999 e 928804) JÁ foi rodado (04/10/2026). Erick não precisa dele. Depois de atualizar o Antônio,
 testar a troca de número 8926 → 9999.
 Itens ainda sem decisão (não são script): as ~2.700 pastas vazias antigas do Antônio (ver seção 9) e conferir o PM2 (P7) nos servidores reais.
+
+## 11. POLÍTICA DE VERSÕES e PLANO DE MODERNIZAÇÃO (pedido do usuário, 05/10/2026)
+
+**Regra permanente:** o usuário sempre pediu as MELHORES soluções, as mais usadas nos grandes sistemas e a **versão estável mais recente, testada e com suporte** (no Node, a LTS ativa). Por isso:
+- **Nada novo entra no projeto em versão antiga.** Antes de instalar ou acrescentar qualquer biblioteca, ferramenta ou programa, a IA CONFERE a versão estável mais recente e o calendário de suporte (ex.: `npm view <pacote> dist-tags`,
+  `npm outdated`, calendário oficial do Node) e usa essa; se for usar outra, explica o motivo ao usuário ANTES.
+- A IA **avisa o usuário** quando encontrar versão ultrapassada ou sem suporte, em vez de deixar passar. Sistema pensado para virar SaaS: dívida de versões custa cada vez mais caro depois.
+- Atualizar versão grande é feito **uma de cada vez**, com a bateria completa (inclusive no Windows) como porteira. Nada de misturar várias trocas num commit só. Produção (AWS) só quando o usuário decidir.
+
+**Inventário conferido em 05/10/2026 (`npm outdated` + calendário do Node; o que está em produção hoje é o da esquerda):**
+- **Node:** o script de instalação dos servidores (`scripts/1_setup_servidor.sh`) instala o **Node 20 — fim do suporte em 30/04/2026 (já sem correções de segurança)**. Node 22 vai até 30/04/2027; **Node 24 (LTS ativa) até 30/04/2028**;
+  Node 26 vira LTS em 28/10/2026. A versão REAL de cada servidor e do PC do usuário nunca foi conferida (o sandbox da IA usa Node 22).
+- **Frontend (uma versão principal atrás):** React 18 → 19, Vite 5 → 8, Vitest 2 → 5, @vitejs/plugin-react 4 → 6, react-router-dom 6 → 7, date-fns 3 → 4, react-toastify 10 → 11, react-datepicker 6 → 9.
+- **Backend:** Express 4 → 5, helmet 7 → 8, express-rate-limit 7 → 8, node-cron 3 → 4, dotenv 16 → 18, bcryptjs 2 → 3, docx 8 → 9, pdfkit 0.14 → 0.20, pdfjs-dist 3 → 6.
+- `npm audit` completo (inclui ferramentas de desenvolvimento) mostra avisos em vite/vitest/esbuild/qs (só afetam o ambiente de desenvolvimento, não a produção; a bateria audita só produção). Correção exige vite 8/vitest 5 (troca grande).
+
+**Ordem proposta do plano (NADA disto foi feito; só começa com OK do usuário):** (1) Node → 24 LTS (servidores e PC; quase sem mudar código; a AWS só quando o usuário decidir); (2) ferramentas de teste/build (Vite, Vitest);
+(3) bibliotecas, uma por vez, bateria completa a cada uma (react-router 7 incluído aqui como o item mais simples; depois React 19, Express 5, etc.).
+
