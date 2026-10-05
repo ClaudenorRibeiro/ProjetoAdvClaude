@@ -24,4 +24,19 @@ describe('MenuAcoes', () => {
     await user.click(screen.getByRole('button', { name: 'Editar' }));
     expect(editar).toHaveBeenCalledOnce();
   });
+
+  it('ESC fecha o menu e devolve o foco ao botão ⋮, sem executar nenhuma ação', async () => {
+    const user = userEvent.setup();
+    const editar = vi.fn();
+    render(React.createElement(MenuAcoes, { itens: [{ label: 'Editar', onClick: editar }] }));
+    const botao = screen.getByTitle('Mais ações');
+    await user.click(botao);
+    expect(botao).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: 'Editar' })).toBeVisible();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('button', { name: 'Editar' })).not.toBeInTheDocument();
+    expect(botao).toHaveAttribute('aria-expanded', 'false');
+    expect(botao).toHaveFocus();
+    expect(editar).not.toHaveBeenCalled();
+  });
 });

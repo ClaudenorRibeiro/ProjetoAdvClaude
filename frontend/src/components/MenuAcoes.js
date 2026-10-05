@@ -54,10 +54,15 @@ export default function MenuAcoes({ itens = [], titulo = 'Mais ações' }) {
   useEffect(() => {
     if (!pos) return;
     const fechar = () => setPos(null);
+    // ESC fecha só o menu e devolve o foco ao botão ⋮ (o foco no botão com aria-expanded e o marcador data-esc-lista-aberta no menu
+    // fazem as janelas e o App ignorarem este mesmo ESC: uma janela aberta por baixo do menu não fecha junto)
+    const teclar = (e) => { if (e.key === 'Escape') { setPos(null); btnRef.current?.focus(); } };
     document.addEventListener('mousedown', fechar);
+    document.addEventListener('keydown', teclar);
     document.addEventListener('scroll', fechar, true);
     window.addEventListener('resize', fechar);
     return () => {
+      document.removeEventListener('keydown', teclar);
       document.removeEventListener('mousedown', fechar);
       document.removeEventListener('scroll', fechar, true);
       window.removeEventListener('resize', fechar);
@@ -71,6 +76,7 @@ export default function MenuAcoes({ itens = [], titulo = 'Mais ações' }) {
     // Posição inicial: abaixo do botão, alinhado à direita (sem sair pela esquerda).
     // O useLayoutEffect abaixo corrige o lado (cima/baixo) antes de a tela pintar.
     setPos({ top: r.bottom + 4, left: Math.max(8, r.right - 200) });
+    btnRef.current.focus();                         // o foco fica no botão (Safari não foca botão ao clicar): é ele que avisa "menu aberto" para o ESC
   }
 
   // Depois de abrir, mede a ALTURA REAL do menu e decide o lado:
@@ -106,7 +112,7 @@ export default function MenuAcoes({ itens = [], titulo = 'Mais ações' }) {
 
   return (
     <>
-      <button ref={btnRef} type="button" title={titulo} onClick={alternar}
+      <button ref={btnRef} type="button" title={titulo} onClick={alternar} aria-haspopup="true" aria-expanded={!!pos}
         onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
         style={{ background: realce ? '#e2e8f0' : '#fff',
           border: `1px solid ${realce ? '#94a3b8' : '#cbd5e1'}`, borderRadius: '5px',
@@ -116,7 +122,7 @@ export default function MenuAcoes({ itens = [], titulo = 'Mais ações' }) {
         ⋮
       </button>
       {pos && (
-        <div ref={menuRef} onMouseDown={e => e.stopPropagation()}
+        <div ref={menuRef} data-esc-lista-aberta onMouseDown={e => e.stopPropagation()}
           style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 1000, width: '200px',
             background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px',
             boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: '6px' }}>

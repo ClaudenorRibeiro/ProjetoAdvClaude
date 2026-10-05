@@ -250,7 +250,11 @@ test('@critical Menu ⋮ e "Qtde Proc": itens do menu, Editar, Anotações, Envi
   const alfa = linhaDe(page, `Alfa ${MARCA} Silva`);
   await menuDe(page, alfa);
   for (const item of ['Etiqueta', 'Anotações de atendimento', 'Enviar Email', 'Enviar WhatsApp', 'Editar', 'Excluir']) await expect(itemDoMenu(page, item), item).toBeVisible();
-  await page.mouse.click(5, 5); await expect(itemDoMenu(page, 'Editar')).toHaveCount(0);        // clicar fora fecha o menu (o ESC não fecha: ver o relatório)
+  await expect(alfa.getByTitle('Mais ações')).toHaveAttribute('aria-expanded', 'true');
+  await page.keyboard.press('Escape'); await expect(itemDoMenu(page, 'Editar')).toHaveCount(0);   // ESC fecha o menu...
+  await expect(alfa.getByTitle('Mais ações')).toBeFocused();                                     // ...e o foco volta ao botão ⋮
+  await expect(alfa.getByTitle('Mais ações')).toHaveAttribute('aria-expanded', 'false');
+  await menuDe(page, alfa); await page.mouse.click(5, 5); await expect(itemDoMenu(page, 'Editar')).toHaveCount(0);   // clicar fora também fecha
   // Editar abre a ficha e Cancelar volta para a lista
   await menuDe(page, alfa); await itemDoMenu(page, 'Editar').click();
   await expect(page.getByRole('heading', { name: 'Editar Pessoa Física' })).toBeVisible();
@@ -264,7 +268,8 @@ test('@critical Menu ⋮ e "Qtde Proc": itens do menu, Editar, Anotações, Envi
   await expect(page.getByRole('heading', { name: `Enviar e-mail — Alfa ${MARCA} Silva` })).toBeVisible();
   await page.keyboard.press('Escape'); await expect(page.locator('.modal-box')).toHaveCount(0);
   // Qtde Proc: abre a janela com o processo (e fecha por ✕ e por ESC)
-  await alfa.getByTitle('Ver os processos').click();
+  await alfa.getByRole('button', { name: 'Ver os processos (1)' }).focus();                    // o número é um botão: abre pelo teclado (Enter)
+  await page.keyboard.press('Enter');
   const procs = janela(page, `Processos — Alfa ${MARCA} Silva`);
   await expect(procs.getByText('1 processo(s).')).toBeVisible();
   await expect(procs.getByText('0000001-01.2026.5.15.0001')).toBeVisible();
@@ -296,6 +301,8 @@ test('@critical Excluir: a confirmação (Cancelar, ESC e clique fora NÃO apaga
   const aindaExiste = async () => (await noBanco('SELECT id FROM pessoas_fisicas WHERE id = ?', [d.zeta])).length === 1;
   await menuDe(page, zeta); await itemDoMenu(page, 'Excluir').click();
   await expect(confirmacao().getByText(`Tem certeza que deseja excluir Zeta ${MARCA} Para Excluir?`)).toBeVisible();
+  await expect(confirmacao().getByText('O cadastro será apagado e não poderá ser recuperado.')).toBeVisible();   // diz a verdade: o servidor apaga de verdade
+  await expect(confirmacao().getByText('ficará inativo')).toHaveCount(0);
   await semViolacoes(page, 'confirmação de exclusão');
   await confirmacao().getByRole('button', { name: 'Cancelar' }).click(); await expect(page.locator('.modal-box')).toHaveCount(0); expect(await aindaExiste()).toBe(true);
   await menuDe(page, zeta); await itemDoMenu(page, 'Excluir').click(); await page.keyboard.press('Escape');

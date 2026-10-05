@@ -445,7 +445,7 @@ export default function Pessoas() {
               Tem certeza que deseja excluir <strong>{confirmarExclusao.nome}</strong>?
               <br />
               <span style={{fontSize:'12px',color:'#5b6472'}}>
-                O registro ficará inativo e não aparecerá mais nas listagens.
+                O cadastro será apagado e não poderá ser recuperado. Se houver vínculos (processos, histórico, acordos...), a exclusão é recusada e nada é apagado.
               </span>
             </>
           }
@@ -1379,10 +1379,11 @@ function CelulaQtdeProc({ qtde, onClick }) {
   if (n === 0) return <td style={{textAlign:'center'}}>0</td>;
   return (
     <td style={{textAlign:'center'}}>
-      <span onClick={onClick} title="Ver os processos"
-        style={{color:'#2563eb', fontWeight:600, cursor:'pointer', textDecoration:'underline'}}>
+      <button type="button" onClick={onClick} title="Ver os processos" aria-label={`Ver os processos (${n})`}
+        style={{color:'#2563eb', cursor:'pointer', textDecoration:'underline',
+                background:'none', border:'none', padding:0, font:'inherit', fontWeight:600}}>
         {n}
-      </span>
+      </button>
     </td>
   );
 }
