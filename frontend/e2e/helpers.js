@@ -97,7 +97,16 @@ export async function adicionarAutorAoProcesso(nome = 'Autor Do Processo') {
 }
 
 // Violações SÉRIAS ou CRÍTICAS de acessibilidade da tela (ou janela) aberta agora; [] = tudo certo.
+// Se a página recarregar no meio da verificação (acontece em máquina lenta), espera carregar e repete — igual à espera "tela pronta".
 export async function violacoesGraves(page) {
+  for (let tentativa = 0; ; tentativa += 1) {
+    try { return await lerViolacoesGraves(page); } catch (e) {
+      if (!/Execution context was destroyed|navigat|Target page, context or browser has been closed/i.test(String(e.message)) || tentativa === 3) throw e;
+      await page.waitForLoadState('load');
+    }
+  }
+}
+async function lerViolacoesGraves(page) {
   // Espera as animações que têm fim (ex.: aviso "toast" entrando, com texto ainda meio transparente), senão o
   // verificador de contraste lê uma cor que existe só por uma fração de segundo.
   await page.evaluate(() => Promise.all(document.getAnimations()

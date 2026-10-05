@@ -99,12 +99,15 @@ test('@critical Aba Andamentos: mensagens do DataJud (já sincronizado, sem núm
   await expect(page.getByText('DataJud sincronizado hoje às 09:15.')).toHaveCount(0);
   await page.unroute('**/api/andamento/*/sincronizar');
   // consulta demorada: a tela mostra o aviso em tela cheia e deixa interromper
-  await page.route('**/api/andamento/*/sincronizar', async (rota) => { await new Promise(r => setTimeout(r, 4000)); await rota.abort(); });
+  // a consulta fica "pendurada" até o teste soltar (nada de tempo fixo: em máquina lenta a verificação de acessibilidade demora e a consulta acabaria antes do clique)
+  let soltarConsulta; const consultaPendurada = new Promise(r => { soltarConsulta = r; });
+  await page.route('**/api/andamento/*/sincronizar', async (rota) => { await consultaPendurada; await rota.abort().catch(() => {}); });
   await page.goto(`/processos/pasta/${d.pastaPartes}?aba=andamentos`);
   await expect(page.getByText('Consultando o DataJud…')).toBeVisible();
   await expect(page.getByText('Buscando a movimentação do processo no CNJ.')).toBeVisible();
   await semViolacoes(page, 'aviso Consultando o DataJud');
   await page.getByRole('button', { name: 'Parar consulta' }).click();
+  soltarConsulta();                                                                                          // agora a consulta pendurada pode terminar (a tela já a interrompeu)
   await expect(page.getByText('Consultando o DataJud…')).toHaveCount(0);
   await aviso(page, 'Consulta ao DataJud interrompida. Mostrando os andamentos já registrados.');
   await expect(page.locator('tbody tr')).toHaveCount(4);                                                      // a lista continua com o que já existe
