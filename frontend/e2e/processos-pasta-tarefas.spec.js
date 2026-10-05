@@ -52,7 +52,9 @@ async function abrirAba(page, processo = null) {
   await expect(page.locator('.aba-btn.ativa')).toHaveText('Tarefas');
   if (processo) { await filtroProcesso(page).selectOption({ label: processo }); await aguardarTelaPronta(page); }
 }
-const hojeMais = (n) => { const x = new Date(); x.setDate(x.getDate() + n); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
+// "Hoje" no horário de Brasília (o mesmo que o sistema usa), e não no relógio da máquina que roda o teste:
+// numa máquina em UTC, entre 21h e meia-noite de Brasília, o relógio local já está no dia seguinte.
+const hojeMais = (n) => { const x = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })); x.setDate(x.getDate() + n); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
 
 test('@critical Aba Tarefas: lista, filtros (Mostrar, Prioridade, Para, datas), "Limpar filtros", atraso em vermelho e acessibilidade', async ({ page }) => {
   await loginPelaTela(page);

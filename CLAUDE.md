@@ -282,8 +282,9 @@ perguntar "o que falta". Só tirar da lista com o OK dele. Detalhes de cada item
   produção 0, os 2 avisos "Future Flag" somem, sem mexer em `vite.config.js`. Telas completas (166) rodadas 2 vezes na versão 7: 163/166 e 164/166 — as 2 falhas fixas são o defeito de teste de horário descrito abaixo (falham igual
   na versão atual); 1 falha do "Novo Prazo" ocorreu UMA vez e não se repetiu (sozinho 3/3 na v7 e 1/1 na v6): causa NÃO conhecida. Advisories que justificam a troca: abertura de redirecionamento (`Link`/`useNavigate`, só corrigido a partir da 7.18.4)
   e um de renderização no servidor (não se aplica a este SPA). Se for retomado: não silenciar os avisos com `future` (gambiarra); fazer a migração de verdade.
-- **Defeito de TESTE a corrigir (erro é erro; aguardando OK do usuário):** `frontend/e2e/processos-pasta-tarefas.spec.js` calcula "hoje" (`hojeMais`) com o relógio da máquina, enquanto o sistema usa o horário de Brasília. Em máquina em UTC
-  (como a da IA), entre 21h e meia-noite de Brasília, os testes "Nova tarefa" e "Editar tarefa" falham por 1 dia de diferença. No Windows do usuário (horário de Brasília) não aparece. Conserto: usar `America/Sao_Paulo`, como o teste de Prazos já faz.
+- **Defeito de TESTE de horário — CORRIGIDO em 05/10/2026 (OK do usuário):** `frontend/e2e/processos-pasta-tarefas.spec.js` calculava "hoje" (`hojeMais`) com o relógio da máquina, enquanto o sistema usa o horário de Brasília; em máquina em UTC, entre 21h e meia-noite
+  de Brasília, "Nova tarefa" e "Editar tarefa" falhavam por 1 dia. Agora usa `America/Sao_Paulo`, como o teste de Prazos. Provado: com a máquina de teste num fuso atrasado (`TZ=Etc/GMT+12`) o teste antigo falhava e o novo passa (arquivo inteiro de Tarefas, 10/10).
+  **Ainda pendente (aguardando OK):** `frontend/e2e/processos-pasta-audiencias.spec.js` linha ~184 usa `new Date()` da máquina para escolher o mês seguinte; o mesmo tipo de defeito, mas só aparece no ÚLTIMO dia do mês, entre 21h e meia-noite de Brasília, em máquina em UTC.
 - **P6** — Informativo, sem ação (`log_documentos_gerados` sem chave declarada; busca por poucos dígitos casa CPF/CNPJ/telefone).
 - **P7** — Verificar no servidor real se o PM2 reinicia sozinho após queda.
 - **P8** — Decidir (só se ele quiser) o recurso "ver só os meus processos" (coluna `usuarios.ver_todos_processos` é vestigial).
