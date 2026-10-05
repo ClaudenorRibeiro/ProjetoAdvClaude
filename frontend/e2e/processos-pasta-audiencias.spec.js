@@ -181,7 +181,9 @@ test('@critical Data da audiência: dá para DIGITAR dd/mm/aaaa (e continua dand
   await j.getByRole('button', { name: 'Abrir calendário da data da audiência' }).click();
   await page.getByRole('button', { name: '›' }).click();
   await page.getByRole('button', { name: '15', exact: true }).click();
-  const hoje = new Date(); const alvo = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 15);
+  // "Hoje" no horário de Brasília (o do sistema e do navegador do teste), não o relógio da máquina: numa máquina em UTC,
+  // no último dia do mês entre 21h e meia-noite de Brasília, o relógio local já está no mês seguinte.
+  const hoje = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })); const alvo = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 15);
   await expect(dataDe(j)).toHaveValue(`15/${String(alvo.getMonth() + 1).padStart(2, '0')}/${alvo.getFullYear()}`);
   // digitando de novo, o valor muda
   await dataDe(j).fill(br(util(6))); await dataDe(j).blur();
