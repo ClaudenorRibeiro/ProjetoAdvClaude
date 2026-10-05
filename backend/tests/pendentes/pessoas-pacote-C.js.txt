@@ -1,0 +1,143 @@
+// PENDENTE — NÃO É EXECUTADO PELA BATERIA (a extensão é .js.txt de propósito: o arquivo contém testes que HOJE FALHAM).
+// IMPORTANTE — NÃO APAGAR: guarda os testes prontos do PACOTE C de Pessoas (pedido do usuário em 05/10/2026: "não deixe os outros pacotes serem esquecidos").
+//   Pacote C = listas e buscas: paginação negativa/zero, busca enviada como lista, curingas % e _, telefone/CPF/processo COM OU SEM MÁSCARA
+//   → testes "ACHADO listas" (2), "ACHADO busca" e "ACHADO OBSERVAÇÃO busca de telefone".
+// Já corrigidos e cobertos em backend/tests/integration/pessoas.integration.test.js: pacote A (nome em branco; anotação órfã) e pacote B (aviso 400 no lugar de
+// "Erro interno": campos, CPF/CNPJ, data, ids, contatos, contas, auxiliares, profissões).
+// Os testes "ACHADO unificar" e "ACHADO outras rotas" já passam (ficam como reforço).
+// COMO USAR: ao corrigir o pacote C, copie estes testes para um arquivo *.integration.test.js em backend/tests/integration/ (ou para o de Pessoas), rode até passar e apague daqui o que entrou.
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const jwt = require('jsonwebtoken');
+const request = require('supertest');
+const ExcelJS = require('exceljs');
+
+const { carregarAmbienteTeste } = require('../support/testEnvironment');
+const { recriarBancoTeste, conectarBancoTeste } = require('../support/testDatabase');
+
+carregarAmbienteTeste();
+const { criarApp } = require('../../src/app');
+const { pool } = require('../../src/config/database');
+
+let app;
+const T = {};   // tokens
+const F = {};   // ids fixos criados no começo
+
+const token = (id, nivel, sessao) => jwt.sign({ id, nome: `Teste ${id}`, nivel, tipo: 'advogado', sessao }, process.env.JWT_SECRET, { expiresIn: '1h' });
+const como = (t) => ({
+  get: p => request(app).get(p).set('Authorization', `Bearer ${t}`),
+  post: p => request(app).post(p).set('Authorization', `Bearer ${t}`),
+  put: p => request(app).put(p).set('Authorization', `Bearer ${t}`),
+  delete: p => request(app).delete(p).set('Authorization', `Bearer ${t}`),
+});
+const api = () => como(T.admin);          // administrador (nível 1)
+const usu = () => como(T.usuario);        // usuário comum com todas as permissões de Pessoas
+const binario = (res, cb) => { const p = []; res.on('data', c => p.push(c)); res.on('end', () => cb(null, Buffer.concat(p))); };
+
+async function sql(q, params = []) {
+  const conn = await conectarBancoTeste();
+  try { return (await conn.execute(q, params))[0]; } finally { await conn.end(); }
+}
+const um = async (q, p) => (await sql(q, p))[0];
+const total = async (q, p) => Number((await um(q, p)).n);
+const msg = (r) => String(r.body.mensagem || '');
+const auditoria = (tabela, id, acao) => sql('SELECT * FROM logs_auditoria WHERE tabela = ? AND registro_id = ? AND acao = ?', [tabela, id, acao]);
+
+let seq = 0;
+const cpfDe = (n) => String(10000000000 + n);                       // 11 dígitos únicos (o servidor não valida o dígito verificador)
+const cnpjDe = (n) => String(10000000000000 + n);                   // 14 dígitos únicos
+const fisica = (extra = {}) => { seq += 1; return { nome: `Pessoa Teste ${seq}`, cpf: cpfDe(seq), ...extra }; };
+const juridica = (extra = {}) => { seq += 1; return { razao_social: `Empresa Teste ${seq} Ltda`, cnpj: cnpjDe(seq), ...extra }; };
+async function criarPF(extra = {}) {
+  const r = await api().post('/api/pessoas/fisicas').send(fisica(extra));
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  return r.body.dados.id;
+}
+async function criarPJ(extra = {}) {
+  const r = await api().post('/api/pessoas/juridicas').send(juridica(extra));
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  return r.body.dados.id;
+}
+// Processo de teste (cliente = parte do polo escolhido), direto no banco
+let seqProc = 0;
+async function novoProcesso({ autores = [], reus = [], polo = 'autor', ativo = 1 } = {}) {
+  seqProc += 1;
+  const pasta = (await sql('INSERT INTO tblpasta (numPasta, criado_por) VALUES (?, 1)', [7000 + seqProc])).insertId;
+  const proc = (await sql(
+    "INSERT INTO tblproc (pasta_id, numProc, cliente_polo, NomeTituloProc, tipo_id, status_id, ativo, criado_por) VALUES (?, ?, ?, ?, 1, 1, ?, 1)",
+    [pasta, `99${String(seqProc).padStart(5, '0')}-00.2026.5.15.0001`, polo, `PROCESSO PESSOAS ${seqProc}`, ativo]
+  )).insertId;
+  for (const [tipo, id] of autores) await sql('INSERT INTO tbltituloprocautor (proc_id, tipo_pessoa, pessoa_id, criado_por) VALUES (?, ?, ?, 1)', [proc, tipo, id]);
+  for (const [tipo, id] of reus) await sql('INSERT INTO tbltituloprocreu (proc_id, tipo_pessoa, pessoa_id, criado_por) VALUES (?, ?, ?, 1)', [proc, tipo, id]);
+  return proc;
+}
+
+test.before(async () => {
+  await recriarBancoTeste();
+  app = criarApp();
+  T.admin = token(1, 1, 'sessao-admin');
+  T.usuario = token(2, 2, 'sessao-usuario');
+  T.semPermissao = token(3, 2, 'sessao-sem-permissao');
+  // usuário 4: só pode VISUALIZAR Pessoas
+  await sql("INSERT INTO usuarios (id, nome, login, senha_hash, email, tipo, nivel, ativo, ver_todos_processos, sessao_atual, notif_email, google_agenda_ativo) VALUES (4, 'Só Visualiza', 'sovisualiza', 'x', 'sovisualiza@example.invalid', 'advogado', 2, 1, 0, 'sessao-so-visualiza', 0, 0)");
+  await sql("INSERT INTO permissoes (usuario_id, modulo, submodulo, acao, permitido) VALUES (4, 'pessoas', NULL, 'visualizar', 1)");
+  T.soVisualiza = token(4, 2, 'sessao-so-visualiza');
+  F.advogado = (await sql("INSERT INTO profissao (nome) VALUES ('Advogado')")).insertId;
+  F.perito = (await sql("INSERT INTO profissao (nome) VALUES ('Perícia Médica')")).insertId;
+  F.parentesco = (await sql("INSERT INTO parentesco (nome) VALUES ('Mãe')")).insertId;
+});
+test.after(async () => pool.end());
+
+
+const ruins = [123, ['x'], { a: 1 }, true];
+const grande = (n) => 'A'.repeat(n);
+async function status500(metodo, caminho, corpo) { const r = await api()[metodo](caminho).send(corpo); return r; }
+const nao500 = (r, rot) => assert.ok(r.status < 500, `${rot} → ${r.status} ${JSON.stringify(r.body).slice(0, 120)}`);
+
+test('ACHADO listas: página e limite negativos, zero ou lixo viram o padrão (200), nunca erro (física e jurídica)', async () => {
+  const falhas = [];
+  for (const rota of ['fisicas', 'juridicas']) for (const qs of ['pagina=-1&limite=-5', 'pagina=0&limite=0', 'pagina=abc&limite=abc', 'pagina=99999999999&limite=100', 'limite=-1']) {
+    const r = await api().get(`/api/pessoas/${rota}?${qs}`); if (r.status !== 200) falhas.push(`${rota}?${qs} → ${r.status}`);
+  }
+  assert.deepEqual(falhas, []);
+});
+test('ACHADO listas: busca que vem como lista (busca[]=a) ou objeto não derruba a tela (física, jurídica e exportar)', async () => {
+  const falhas = [];
+  for (const caminho of ['/api/pessoas/fisicas?busca[]=a&busca[]=b', '/api/pessoas/juridicas?busca[]=a', '/api/pessoas/fisicas/exportar?busca[]=a', '/api/pessoas/juridicas/exportar?busca[x]=a', '/api/pessoas/fisicas?busca[x]=a']) {
+    const r = await api().get(caminho); if (r.status >= 500) falhas.push(`${caminho} → ${r.status}`);
+  }
+  assert.deepEqual(falhas, []);
+});
+test('ACHADO busca: "%" e "_" são procurados como texto (não como "qualquer coisa")', async () => {
+  const unico = `Curinga${Date.now() % 100000}`;
+  await criarPF({ nome: `${unico} Alfa` }); await criarPF({ nome: `${unico} Beta`, cidade: '100% Campinas' });
+  const n = async (q) => (await api().get(`/api/pessoas/fisicas?busca=${encodeURIComponent(q)}`)).body.dados.total;
+  assert.equal(await n('%'), 1, 'busca "%" deve achar só quem tem % no texto');
+  assert.equal(await n('_'), 0, 'busca "_" não deve achar todo mundo');
+  assert.equal(await n(`${unico} A_fa`), 0);
+});
+test('ACHADO unificar: identificadores que não são número ou lista errada dão aviso 400/404, nunca erro interno', async () => {
+  const falhas = [];
+  for (const rota of ['fisicas', 'juridicas']) for (const corpo of [{ principal_id: 'abc', duplicados_ids: [1] }, { principal_id: 1, duplicados_ids: 'abc' }, { principal_id: 1, duplicados_ids: [{}] }, { principal_id: { a: 1 }, duplicados_ids: [2] }]) {
+    const r = await api().post(`/api/pessoas/${rota}/unificar`).send(corpo); if (r.status >= 500) falhas.push(`${rota} ${JSON.stringify(corpo)} → ${r.status}`);
+  }
+  assert.deepEqual(falhas, []);
+});
+test('ACHADO OBSERVAÇÃO busca de telefone: telefone digitado só com números acha o gravado com máscara "(19) 98877-6655"', async () => {
+  const unico = `Fone${Date.now() % 100000}`;
+  await criarPF({ nome: unico, telefones: [{ numero: '(19) 98877-6655' }] });
+  const r = await api().get('/api/pessoas/fisicas?busca=19988776655');
+  assert.ok(r.body.dados.registros.some(x => x.nome === unico), 'não achou pelo telefone só com dígitos');
+});
+test('ACHADO outras rotas: parabéns, WhatsApp, SMS e e-mail avulso com valores que não são texto dão 400, não erro interno', async () => {
+  const falhas = [];
+  const pf = await criarPF();
+  for (const [rot, metodo, caminho, corpo] of [
+    ['zap telefone objeto', 'post', '/api/pessoas/registrar-zap', { telefone: { a: 1 } }], ['zap telefone lista', 'post', '/api/pessoas/registrar-zap', { telefone: ['1'] }],
+    ['sms número objeto', 'post', '/api/pessoas/enviar-sms', { numero: { a: 1 }, mensagem: 'x' }], ['email para lista', 'post', '/api/pessoas/enviar-email', { para: ['a@b.com'], assunto: 'a', mensagem: 'b' }],
+    ['parabéns canal objeto', 'post', `/api/pessoas/${pf}/parabens`, { canal: { a: 1 } }], ['parabéns id abc', 'post', '/api/pessoas/abc/parabens', { canal: 'whatsapp' }], ['parabéns id abc GET', 'get', '/api/pessoas/abc/parabens', undefined],
+    ['aniversariantes mês lixo', 'get', '/api/pessoas/aniversariantes?filtro=mes&mes=abc', undefined], ['aniversariantes filtro lista', 'get', '/api/pessoas/aniversariantes?filtro[]=x', undefined]]) {
+    const r = await api()[metodo](caminho).send(corpo); if (r.status >= 500) falhas.push(`${rot} → ${r.status}`);
+  }
+  assert.deepEqual(falhas, []);
+});

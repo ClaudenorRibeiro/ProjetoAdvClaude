@@ -13,9 +13,9 @@ const smsService = require('../services/smsService');
 const multer = require('multer');
 const { criarBancoNoCatalogo } = require('./instituicaoFinanceiraController');
 const { texto, inteiroPositivo } = require('../utils/camposTexto');
+const { lerDadosFisica, lerDadosJuridica } = require('../utils/dadosPessoa');
 
-// Limites reais das colunas (estrutura_banco.sql): nome/razão social varchar(200). Anotação de atendimento: limite do sistema (a coluna é text).
-const LIMITE_NOME = 200;
+// Anotação de atendimento: limite do sistema (a coluna é text).
 const LIMITE_ANOTACAO = 2000;
 
 // ---- Rede de segurança: sem telefone/e-mail repetido no MESMO cadastro ----
@@ -64,6 +64,30 @@ const chaveConta    = (c) => c?.instituicao_financeira_id
   ? `${c.instituicao_financeira_id}|${c.tipo || ''}|${String(c.agencia || '').replace(/\D/g, '')}|${String(c.numero || '').replace(/\D/g, '')}|${String(c.digito || '').replace(/\D/g, '')}|${String(c.chave_pix || '').trim().toLowerCase()}`
   : '';
 function erroContaBancaria(mensagem) { const e = new Error(mensagem); e.codigoContaBancaria = true; return e; }
+// Confere e limpa os campos de UMA conta (tipo, tamanho de cada coluna de contas_bancarias_pf/pj). Falha = erro 422 com a mensagem.
+function conferirConta(c) {
+  const ler = (bruto, opcoes) => { const r = texto(bruto, opcoes); if (r.erro) throw erroContaBancaria(r.erro); return r.valor; };
+  const id = c.id === undefined || c.id === null || c.id === '' ? { valor: null } : inteiroPositivo(c.id, { rotulo: 'A conta' });
+  if (id.erro) throw erroContaBancaria('Conta inválida');
+  const instituicao = inteiroPositivo(c.instituicao_financeira_id, { rotulo: 'A instituição financeira' });
+  if (instituicao.erro) throw erroContaBancaria('Instituição financeira inválida');
+  let documento = '';
+  if (c.documento_titular !== undefined && c.documento_titular !== null && c.documento_titular !== '') {
+    if (typeof c.documento_titular !== 'string') throw erroContaBancaria('O documento do titular é inválido');
+    documento = c.documento_titular.replace(/\D/g, '');
+    if (documento.length > 18) throw erroContaBancaria('O documento do titular deve ter no máximo 18 números');
+  }
+  return {
+    id: id.valor,
+    instituicao_financeira_id: instituicao.valor,
+    agencia: ler(c.agencia, { rotulo: 'A agência', max: 20, aceitaNumero: true, feminino: true }),
+    numero: ler(c.numero, { rotulo: 'O número da conta', max: 30, aceitaNumero: true }),
+    chave_pix: ler(c.chave_pix, { rotulo: 'A chave PIX', max: 150, feminino: true }),
+    titular: ler(c.titular, { rotulo: 'O titular', max: 200 }) || '',
+    documento_titular: documento,
+    observacao: ler(c.observacao, { rotulo: 'A observação da conta', max: 15000, feminino: true }),
+  };
+}
 function normalizarDigitoConta(valor) {
   const digito = String(valor ?? '').trim();
   if (digito.length > 4) throw erroContaBancaria('O dígito da conta pode ter no máximo 4 caracteres.');
@@ -96,26 +120,27 @@ async function gravarContasBancarias(conn, tabela, pessoaId, contas, nomeProprio
       }
       continue;
     }
+    const conta = conferirConta(c);
     const terceiro = c.conta_terceiro ? 1 : 0;
-    const titular = terceiro ? String(c.titular || '').trim() : (nomeProprio || '');
+    const titular = terceiro ? conta.titular : (nomeProprio || '');
     const documentoTitular = terceiro
-      ? String(c.documento_titular || '').replace(/\D/g, '')
+      ? conta.documento_titular
       : (documentoProprio || '');
     if (!titular || !documentoTitular) throw erroContaBancaria('Informe CPF/CNPJ da pessoa ou marque a conta como de terceiro e informe seu titular.');
     const digito = normalizarDigitoConta(c.digito);
     const valores = [
-      c.instituicao_financeira_id, c.tipo === 'poupanca' ? 'poupanca' : 'corrente',
-      c.agencia || null, c.numero || null, digito, c.chave_pix || null,
-      terceiro, titular, documentoTitular, c.observacao ? String(c.observacao).trim() : null, c.principal ? 1 : 0
+      conta.instituicao_financeira_id, c.tipo === 'poupanca' ? 'poupanca' : 'corrente',
+      conta.agencia, conta.numero, digito, conta.chave_pix,
+      terceiro, titular, documentoTitular, conta.observacao, c.principal ? 1 : 0
     ];
-    if (c.id) {
+    if (conta.id) {
       const [r] = await conn.execute(
         `UPDATE ${tabela} SET instituicao_financeira_id=?, tipo=?, agencia=?, numero=?, digito=?, chave_pix=?,
            conta_terceiro=?, titular=?, documento_titular=?, observacao=?, principal=?, ativo=1
-         WHERE id=? AND pessoa_id=?`, [...valores, c.id, pessoaId]
+         WHERE id=? AND pessoa_id=?`, [...valores, conta.id, pessoaId]
       );
       if (!r.affectedRows) throw erroContaBancaria('Uma das contas informadas não pertence a esta pessoa.');
-      idsRecebidos.push(Number(c.id));
+      idsRecebidos.push(Number(conta.id));
     } else {
       const [r] = await conn.execute(
         `INSERT INTO ${tabela}
@@ -509,37 +534,28 @@ async function validarResponsavel(db, { pessoaId, responsavel_id, parentesco_id 
 }
 
 async function criarFisica(req, res) {
-  const {
-    nome, cpf, rg, rg_orgao, pis, ctps_numero, ctps_serie,
-    data_nascimento, estado_civil_id, profissao_id,
-    genero_id, nacionalidade_id, nome_pai, nome_mae,
-    cep, logradouro, numero, complemento, bairro, cidade, estado,
-    observacoes, telefones = [], emails = [], contasBancarias = [],
-    responsavel_id, parentesco_id, avisos_idade = []
-  } = req.body;
-
-  // Nome de verdade: texto, sem espaços nas pontas, não vazio e dentro do limite do banco (nunca grava cadastro de nome em branco)
-  const lidoNome = texto(nome, { rotulo: 'O nome', max: LIMITE_NOME, obrigatorio: true });
-  if (lidoNome.erro) return erro(res, lidoNome.erro);
-  const nomeLimpo = lidoNome.valor;
+  // Lê e confere TODOS os campos de uma vez (tipo, tamanho de cada coluna, data, ids): dado inválido = aviso 400, nunca "Erro interno"
+  const lido = lerDadosFisica(req.body);
+  if (lido.erro) return erro(res, lido.erro);
+  const d = lido.dados;
+  const { avisos_idade = [] } = req.body;
 
   const erroAvisos = validarAvisosIdade(avisos_idade);
   if (erroAvisos) return erro(res, erroAvisos);
 
   // Responsável legal: confere ANTES de abrir a transação (só leitura)
   try {
-    const erroResp = await validarResponsavel(pool, { pessoaId: null, responsavel_id, parentesco_id });
+    const erroResp = await validarResponsavel(pool, { pessoaId: null, responsavel_id: d.responsavel_id, parentesco_id: d.parentesco_id });
     if (erroResp) return erro(res, erroResp);
   } catch (err) {
     return erroInterno(res, err);
   }
 
   // Verifica CPF duplicado antes de iniciar a transação (leitura simples, sem lock)
-  if (cpf) {
+  if (d.cpf) {
     try {
-      const cpfLimpo = cpf.replace(/\D/g, '');
       const [dup] = await pool.execute(
-        'SELECT id FROM pessoas_fisicas WHERE cpf = ?', [cpfLimpo]
+        'SELECT id FROM pessoas_fisicas WHERE cpf = ?', [d.cpf]
       );
       if (dup.length > 0) return erro(res, 'CPF já cadastrado no sistema');
     } catch (err) {
@@ -561,44 +577,38 @@ async function criarFisica(req, res) {
           responsavel_id, parentesco_id, criado_por)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        nomeLimpo, cpf?.replace(/\D/g, '') || null, rg || null, rg_orgao || null,
-        pis || null, ctps_numero || null, ctps_serie || null,
-        data_nascimento || null, estado_civil_id || null, profissao_id || null,
-        genero_id || null, nacionalidade_id || null, nome_pai || null, nome_mae || null,
-        cep || null, logradouro || null, numero || null,
-        complemento || null, bairro || null, cidade || null, estado || null,
-        observacoes || null,
-        responsavel_id || null, parentesco_id || null,
+        d.nome, d.cpf, d.rg, d.rg_orgao, d.pis, d.ctps_numero, d.ctps_serie,
+        d.data_nascimento, d.estado_civil_id, d.profissao_id,
+        d.genero_id, d.nacionalidade_id, d.nome_pai, d.nome_mae,
+        d.cep, d.logradouro, d.numero,
+        d.complemento, d.bairro, d.cidade, d.estado,
+        d.observacoes,
+        d.responsavel_id, d.parentesco_id,
         req.usuario.id
       ]
     );
 
     const pessoaId = result.insertId;
 
-    // Insere telefones vinculados à pessoa
-    for (const tel of semRepetidos(telefones, chaveTelefone)) {
-      if (tel.numero) {
-        await conn.execute(
-          'INSERT INTO telefones_pf (pessoa_id, numero, tipo, principal) VALUES (?, ?, ?, ?)',
-          [pessoaId, tel.numero, tel.tipo || 'celular', tel.principal ? 1 : 0]
-        );
-      }
+    // Insere telefones vinculados à pessoa (já lidos e conferidos; o repetido, pelos dígitos, é ignorado)
+    for (const tel of semRepetidos(d.telefones, chaveTelefone)) {
+      await conn.execute(
+        'INSERT INTO telefones_pf (pessoa_id, numero, tipo, principal) VALUES (?, ?, ?, ?)',
+        [pessoaId, tel.numero, tel.tipo || 'celular', tel.principal ? 1 : 0]
+      );
     }
 
-    // Insere e-mails vinculados à pessoa
-    for (const em of semRepetidos(emails, chaveEmail)) {
-      const emailNorm = em.email ? em.email.trim().toLowerCase() : '';
-      if (emailNorm) {
-        await conn.execute(
-          'INSERT INTO emails_pf (pessoa_id, email, principal) VALUES (?, ?, ?)',
-          [pessoaId, emailNorm, em.principal ? 1 : 0]
-        );
-      }
+    // Insere e-mails vinculados à pessoa (já em minúsculas)
+    for (const em of semRepetidos(d.emails, chaveEmail)) {
+      await conn.execute(
+        'INSERT INTO emails_pf (pessoa_id, email, principal) VALUES (?, ?, ?)',
+        [pessoaId, em.email, em.principal ? 1 : 0]
+      );
     }
 
     // Contas bancárias/PIX (conta própria usa nome/CPF da própria pessoa, gravado agora)
-    await gravarContasBancarias(conn, 'contas_bancarias_pf', pessoaId, contasBancarias,
-      nomeLimpo, cpf?.replace(/\D/g, '') || null);
+    await gravarContasBancarias(conn, 'contas_bancarias_pf', pessoaId, d.contasBancarias,
+      d.nome, d.cpf);
 
     // Avisos de idade ("me avise quando completar X anos")
     await gravarAvisosIdade(conn, pessoaId, avisos_idade, req.usuario.id);
@@ -622,19 +632,11 @@ async function criarFisica(req, res) {
 // PUT /api/pessoas/fisicas/:id — Atualiza pessoa física
 async function atualizarFisica(req, res) {
   const { id } = req.params;
-  const {
-    nome, cpf, rg, rg_orgao, pis, ctps_numero, ctps_serie,
-    data_nascimento, estado_civil_id, profissao_id,
-    genero_id, nacionalidade_id, nome_pai, nome_mae,
-    cep, logradouro, numero, complemento, bairro, cidade, estado, observacoes,
-    telefones = [], emails = [], contasBancarias = [],
-    responsavel_id, parentesco_id, avisos_idade
-  } = req.body;
-
-  // Mesma regra do cadastro: editar nunca pode apagar o nome nem deixá-lo em branco
-  const lidoNome = texto(nome, { rotulo: 'O nome', max: LIMITE_NOME, obrigatorio: true });
-  if (lidoNome.erro) return erro(res, lidoNome.erro);
-  const nomeLimpo = lidoNome.valor;
+  // Mesma leitura e conferência do cadastro (editar nunca apaga o nome nem aceita dado inválido)
+  const lido = lerDadosFisica(req.body);
+  if (lido.erro) return erro(res, lido.erro);
+  const d = lido.dados;
+  const { avisos_idade } = req.body;
 
   const erroAvisos = validarAvisosIdade(avisos_idade);
   if (erroAvisos) return erro(res, erroAvisos);
@@ -649,7 +651,7 @@ async function atualizarFisica(req, res) {
     if (!antes.length) { await conn.rollback(); return naoEncontrado(res, 'Pessoa não encontrada'); }
 
     // Responsável legal: mesma validação da criação, agora sabendo quem é a pessoa editada
-    const erroResp = await validarResponsavel(conn, { pessoaId: id, responsavel_id, parentesco_id });
+    const erroResp = await validarResponsavel(conn, { pessoaId: id, responsavel_id: d.responsavel_id, parentesco_id: d.parentesco_id });
     if (erroResp) { await conn.rollback(); return erro(res, erroResp); }
 
     await conn.execute(
@@ -663,16 +665,14 @@ async function atualizarFisica(req, res) {
          alterado_por=?, alterado_em=NOW()
        WHERE id = ?`,
       [
-        nomeLimpo, cpf?.replace(/\D/g, '') || null, rg || null, rg_orgao || null,
-        pis || null, ctps_numero || null, ctps_serie || null,
-        // Garante formato YYYY-MM-DD — frontend pode enviar ISO com horário (ex: 1972-03-27T03:00:00.000Z)
-        data_nascimento ? data_nascimento.toString().slice(0, 10) : null,
-        estado_civil_id || null, profissao_id || null,
-        genero_id || null, nacionalidade_id || null, nome_pai || null, nome_mae || null,
-        cep || null, logradouro || null, numero || null,
-        complemento || null, bairro || null, cidade || null, estado || null,
-        observacoes || null,
-        responsavel_id || null, parentesco_id || null,
+        d.nome, d.cpf, d.rg, d.rg_orgao, d.pis, d.ctps_numero, d.ctps_serie,
+        d.data_nascimento,
+        d.estado_civil_id, d.profissao_id,
+        d.genero_id, d.nacionalidade_id, d.nome_pai, d.nome_mae,
+        d.cep, d.logradouro, d.numero,
+        d.complemento, d.bairro, d.cidade, d.estado,
+        d.observacoes,
+        d.responsavel_id, d.parentesco_id,
         req.usuario.id,   // alterado_por — id de quem fez o update
         id
       ]
@@ -681,29 +681,24 @@ async function atualizarFisica(req, res) {
     // Telefones e e-mails: a tela de edição carrega a lista COMPLETA (via buscarFisica),
     // então regrava exatamente o que está no formulário — o que o usuário vê é o que fica salvo.
     await conn.execute('DELETE FROM telefones_pf WHERE pessoa_id = ?', [id]);
-    for (const tel of semRepetidos(telefones, chaveTelefone)) {
-      if (tel.numero) {
-        await conn.execute(
-          'INSERT INTO telefones_pf (pessoa_id, numero, tipo, principal) VALUES (?, ?, ?, ?)',
-          [id, tel.numero, tel.tipo || 'celular', tel.principal ? 1 : 0]
-        );
-      }
+    for (const tel of semRepetidos(d.telefones, chaveTelefone)) {
+      await conn.execute(
+        'INSERT INTO telefones_pf (pessoa_id, numero, tipo, principal) VALUES (?, ?, ?, ?)',
+        [id, tel.numero, tel.tipo || 'celular', tel.principal ? 1 : 0]
+      );
     }
     await conn.execute('DELETE FROM emails_pf WHERE pessoa_id = ?', [id]);
-    for (const em of semRepetidos(emails, chaveEmail)) {
-      const emailNorm = em.email ? em.email.trim().toLowerCase() : '';
-      if (emailNorm) {
-        await conn.execute(
-          'INSERT INTO emails_pf (pessoa_id, email, principal) VALUES (?, ?, ?)',
-          [id, emailNorm, em.principal ? 1 : 0]
-        );
-      }
+    for (const em of semRepetidos(d.emails, chaveEmail)) {
+      await conn.execute(
+        'INSERT INTO emails_pf (pessoa_id, email, principal) VALUES (?, ?, ?)',
+        [id, em.email, em.principal ? 1 : 0]
+      );
     }
 
     // Contas bancárias/PIX: mesma regra de telefones/e-mails — regrava a lista completa
     // (conta própria sempre usa nome/CPF atuais, mesmo que o formulário mande outra coisa)
-    await gravarContasBancarias(conn, 'contas_bancarias_pf', id, contasBancarias,
-      nomeLimpo, cpf?.replace(/\D/g, '') || null);
+    await gravarContasBancarias(conn, 'contas_bancarias_pf', id, d.contasBancarias,
+      d.nome, d.cpf);
 
     // Avisos de idade — só mexe se a tela mandou a lista (undefined = não alterar)
     await gravarAvisosIdade(conn, id, avisos_idade, req.usuario.id);
@@ -1456,18 +1451,12 @@ async function listarJuridicas(req, res) {
 
 // POST /api/pessoas/juridicas — Cadastra pessoa jurídica
 async function criarJuridica(req, res) {
-  const {
-    razao_social, nome_fantasia, cnpj, inscricao_estadual,
-    cep, logradouro, numero, complemento, bairro, cidade, estado,
-    observacoes, telefones = [], emails = [], contasBancarias = [],
-    // Marca "Em Recuperação Judicial": fica no cadastro da EMPRESA. É dela que nasce
-    // o aviso vermelho na pasta de todo processo em que ela é parte.
-    em_recuperacao_judicial
-  } = req.body;
-
-  const lidaRazao = texto(razao_social, { rotulo: 'A razão social', max: LIMITE_NOME, obrigatorio: true, feminino: true });
-  if (lidaRazao.erro) return erro(res, lidaRazao.erro);
-  const razaoLimpa = lidaRazao.valor;
+  const lido = lerDadosJuridica(req.body);
+  if (lido.erro) return erro(res, lido.erro);
+  const d = lido.dados;
+  // Marca "Em Recuperação Judicial": fica no cadastro da EMPRESA. É dela que nasce
+  // o aviso vermelho na pasta de todo processo em que ela é parte.
+  const { em_recuperacao_judicial } = req.body;
 
   // Transação: garante que empresa, telefones e e-mails são gravados juntos ou nenhum é
   const conn = await pool.getConnection();
@@ -1481,41 +1470,35 @@ async function criarJuridica(req, res) {
           em_recuperacao_judicial, criado_por)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        razaoLimpa, nome_fantasia || null,
-        cnpj?.replace(/\D/g, '') || null, inscricao_estadual || null,
-        cep || null, logradouro || null,
-        numero || null, complemento || null, bairro || null,
-        cidade || null, estado || null, observacoes || null,
+        d.razao_social, d.nome_fantasia, d.cnpj, d.inscricao_estadual,
+        d.cep, d.logradouro,
+        d.numero, d.complemento, d.bairro,
+        d.cidade, d.estado, d.observacoes,
         em_recuperacao_judicial ? 1 : 0, req.usuario.id
       ]
     );
 
     const pessoaId = result.insertId;
 
-    // Insere telefones vinculados à empresa
-    for (const tel of semRepetidos(telefones, chaveTelefone)) {
-      if (tel.numero) {
-        await conn.execute(
-          'INSERT INTO telefones_pj (pessoa_id, numero, tipo, principal) VALUES (?, ?, ?, ?)',
-          [pessoaId, tel.numero, tel.tipo || 'comercial', tel.principal ? 1 : 0]
-        );
-      }
+    // Insere telefones vinculados à empresa (já lidos e conferidos; o repetido, pelos dígitos, é ignorado)
+    for (const tel of semRepetidos(d.telefones, chaveTelefone)) {
+      await conn.execute(
+        'INSERT INTO telefones_pj (pessoa_id, numero, tipo, principal) VALUES (?, ?, ?, ?)',
+        [pessoaId, tel.numero, tel.tipo || 'comercial', tel.principal ? 1 : 0]
+      );
     }
 
-    // Insere e-mails vinculados à empresa
-    for (const em of semRepetidos(emails, chaveEmail)) {
-      const emailNorm = em.email ? em.email.trim().toLowerCase() : '';
-      if (emailNorm) {
-        await conn.execute(
-          'INSERT INTO emails_pj (pessoa_id, email, principal) VALUES (?, ?, ?)',
-          [pessoaId, emailNorm, em.principal ? 1 : 0]
-        );
-      }
+    // Insere e-mails vinculados à empresa (já em minúsculas)
+    for (const em of semRepetidos(d.emails, chaveEmail)) {
+      await conn.execute(
+        'INSERT INTO emails_pj (pessoa_id, email, principal) VALUES (?, ?, ?)',
+        [pessoaId, em.email, em.principal ? 1 : 0]
+      );
     }
 
     // Contas bancárias/PIX (conta própria usa razão social/CNPJ da própria empresa)
-    await gravarContasBancarias(conn, 'contas_bancarias_pj', pessoaId, contasBancarias,
-      razaoLimpa, cnpj?.replace(/\D/g, '') || null);
+    await gravarContasBancarias(conn, 'contas_bancarias_pj', pessoaId, d.contasBancarias,
+      d.razao_social, d.cnpj);
 
     // Auditoria participa da MESMA transação (tudo ou nada): grava antes do commit, com conn
     await auditoria.registrar(req.usuario.id, 'pessoas_juridicas', 'criar', pessoaId, null, null, conn);
@@ -1590,16 +1573,10 @@ async function buscarJuridica(req, res) {
 // (não há campo na tela para ela — gravá-la apagaria o valor existente).
 async function atualizarJuridica(req, res) {
   const { id } = req.params;
-  const {
-    razao_social, nome_fantasia, cnpj,
-    cep, logradouro, numero, complemento, bairro, cidade, estado, observacoes,
-    telefones = [], emails = [], contasBancarias = [],
-    em_recuperacao_judicial   // ver comentário em criarJuridica
-  } = req.body;
-
-  const lidaRazao = texto(razao_social, { rotulo: 'A razão social', max: LIMITE_NOME, obrigatorio: true, feminino: true });
-  if (lidaRazao.erro) return erro(res, lidaRazao.erro);
-  const razaoLimpa = lidaRazao.valor;
+  const lido = lerDadosJuridica(req.body, { atualizando: true });
+  if (lido.erro) return erro(res, lido.erro);
+  const d = lido.dados;
+  const { em_recuperacao_judicial } = req.body;   // ver comentário em criarJuridica
 
   // Transação: dados principais + telefones + e-mails + auditoria gravam juntos ou nada
   const conn = await pool.getConnection();
@@ -1617,9 +1594,9 @@ async function atualizarJuridica(req, res) {
          alterado_por=?, alterado_em=NOW()
        WHERE id = ?`,
       [
-        razaoLimpa, nome_fantasia || null, cnpj?.replace(/\D/g, '') || null,
-        cep || null, logradouro || null, numero || null, complemento || null, bairro || null,
-        cidade || null, estado || null, observacoes || null,
+        d.razao_social, d.nome_fantasia, d.cnpj,
+        d.cep, d.logradouro, d.numero, d.complemento, d.bairro,
+        d.cidade, d.estado, d.observacoes,
         em_recuperacao_judicial ? 1 : 0,
         req.usuario.id, id
       ]
@@ -1627,28 +1604,23 @@ async function atualizarJuridica(req, res) {
 
     // Regrava telefones e e-mails conforme o formulário (que carregou a lista completa)
     await conn.execute('DELETE FROM telefones_pj WHERE pessoa_id = ?', [id]);
-    for (const tel of semRepetidos(telefones, chaveTelefone)) {
-      if (tel.numero) {
-        await conn.execute(
-          'INSERT INTO telefones_pj (pessoa_id, numero, tipo, principal) VALUES (?, ?, ?, ?)',
-          [id, tel.numero, tel.tipo || 'comercial', tel.principal ? 1 : 0]
-        );
-      }
+    for (const tel of semRepetidos(d.telefones, chaveTelefone)) {
+      await conn.execute(
+        'INSERT INTO telefones_pj (pessoa_id, numero, tipo, principal) VALUES (?, ?, ?, ?)',
+        [id, tel.numero, tel.tipo || 'comercial', tel.principal ? 1 : 0]
+      );
     }
     await conn.execute('DELETE FROM emails_pj WHERE pessoa_id = ?', [id]);
-    for (const em of semRepetidos(emails, chaveEmail)) {
-      const emailNorm = em.email ? em.email.trim().toLowerCase() : '';
-      if (emailNorm) {
-        await conn.execute(
-          'INSERT INTO emails_pj (pessoa_id, email, principal) VALUES (?, ?, ?)',
-          [id, emailNorm, em.principal ? 1 : 0]
-        );
-      }
+    for (const em of semRepetidos(d.emails, chaveEmail)) {
+      await conn.execute(
+        'INSERT INTO emails_pj (pessoa_id, email, principal) VALUES (?, ?, ?)',
+        [id, em.email, em.principal ? 1 : 0]
+      );
     }
 
     // Contas bancárias/PIX: regrava a lista completa (conta própria usa razão social/CNPJ atuais)
-    await gravarContasBancarias(conn, 'contas_bancarias_pj', id, contasBancarias,
-      razaoLimpa, cnpj?.replace(/\D/g, '') || null);
+    await gravarContasBancarias(conn, 'contas_bancarias_pj', id, d.contasBancarias,
+      d.razao_social, d.cnpj);
 
     await auditoria.registrar(req.usuario.id, 'pessoas_juridicas', 'editar', id, antes[0], null, conn);
     await conn.commit();
@@ -1664,14 +1636,14 @@ async function atualizarJuridica(req, res) {
   }
 }
 
+// Tamanho real da coluna `nome` de cada lista auxiliar (estrutura_banco.sql)
+const LIMITES_NOME_AUXILIAR = { genero: 50, estado_civil: 50, profissao: 100, nacionalidade: 50, parentesco: 50, instituicao_financeira: 100 };
+
 // POST /api/pessoas/auxiliares/:tipo — Cadastra novo item em genero, estado_civil ou profissao
 // tipo aceito: "generos" | "estados_civis" | "profissoes"
 async function criarAuxiliar(req, res) {
   try {
     const { tipo } = req.params;
-    const { nome } = req.body;
-
-    if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
 
     // Whitelist de tabelas — evita SQL injection via parâmetro de rota
     const tabelas = {
@@ -1685,6 +1657,11 @@ async function criarAuxiliar(req, res) {
 
     const tabela = tabelas[tipo];
     if (!tabela) return erro(res, 'Tipo inválido. Use: generos, estados_civis, profissoes, nacionalidades, parentescos ou instituicoes_financeiras');
+
+    // Nome de verdade (texto, não vazio) e dentro do limite da coluna de cada lista
+    const lidoNome = texto(req.body.nome, { rotulo: 'O nome', max: LIMITES_NOME_AUXILIAR[tabela], obrigatorio: true });
+    if (lidoNome.erro) return erro(res, lidoNome.erro);
+    const nome = lidoNome.valor;
 
     // Banco (instituicao_financeira) tem regra própria — mesma usada pela tela dedicada de
     // Controle (preserva a grafia digitada e só compara contra bancos ATIVOS), em vez da
@@ -1701,8 +1678,7 @@ async function criarAuxiliar(req, res) {
     }
 
     // Normaliza: primeira letra maiúscula, demais minúsculas
-    const nomeTrimmed = nome.trim();
-    const nomeNormalizado = nomeTrimmed.charAt(0).toUpperCase() + nomeTrimmed.slice(1).toLowerCase();
+    const nomeNormalizado = normalizarNomeAuxiliar(nome);
 
     // Verifica se já existe o mesmo nome (case-insensitive)
     const [dup] = await pool.execute(
@@ -1775,10 +1751,10 @@ async function listarPessoasPorProfissao(req, res) {
 
 async function criarProfissao(req, res) {
   try {
-    const { nome } = req.body;
-    if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
+    const lidoNome = texto(req.body.nome, { rotulo: 'O nome', max: LIMITES_NOME_AUXILIAR.profissao, obrigatorio: true });
+    if (lidoNome.erro) return erro(res, lidoNome.erro);
 
-    const nomeNormalizado = normalizarNomeAuxiliar(nome);
+    const nomeNormalizado = normalizarNomeAuxiliar(lidoNome.valor);
     const [dup] = await pool.execute(
       'SELECT id FROM profissao WHERE LOWER(nome) = LOWER(?) LIMIT 1',
       [nomeNormalizado]
@@ -1806,10 +1782,10 @@ async function criarProfissao(req, res) {
 async function atualizarProfissao(req, res) {
   try {
     const { id } = req.params;
-    const { nome } = req.body;
-    if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
+    const lidoNome = texto(req.body.nome, { rotulo: 'O nome', max: LIMITES_NOME_AUXILIAR.profissao, obrigatorio: true });
+    if (lidoNome.erro) return erro(res, lidoNome.erro);
 
-    const nomeNormalizado = normalizarNomeAuxiliar(nome);
+    const nomeNormalizado = normalizarNomeAuxiliar(lidoNome.valor);
     const [atual] = await pool.execute('SELECT id FROM profissao WHERE id = ?', [id]);
     if (!atual.length) return erro(res, 'Profissão não encontrada', 404);
 

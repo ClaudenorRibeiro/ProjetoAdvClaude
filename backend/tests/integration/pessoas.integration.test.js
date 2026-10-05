@@ -780,3 +780,210 @@ test('anotações: só para pessoa que EXISTE (404 e nada gravado), o tipo vem d
   }
   assert.equal((await um('SELECT descricao FROM historico_atendimento WHERE id = ?', [nota.id])).descricao, 'física com tipo errado');
 });
+
+// ------------------------------------------------------------------ aviso claro no lugar de "Erro interno" (pacote B)
+const grande = (n) => 'A'.repeat(n);
+const cpfComMascara = () => { const d = cpfDe(++seq); return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`; };   // CPF único, digitado com pontuação
+const tiposErrados = [123, ['x'], { a: 1 }, true];
+async function banco() { return (await api().post('/api/pessoas/auxiliares/instituicoes_financeiras').send({ nome: `Banco B ${Date.now()} ${++seq}` })).body.dados.id; }
+
+test('física — campos do cadastro: tudo no limite da coluna passa (e é guardado aparado); 1 acima do limite dá aviso 400 com o máximo, em criar e em editar, sem gravar nada', async () => {
+  const limites = { rg: 20, rg_orgao: 20, pis: 20, ctps_numero: 30, ctps_serie: 20, nome_pai: 200, nome_mae: 200, cep: 9, logradouro: 200, numero: 10, complemento: 100, bairro: 100, cidade: 100, estado: 2, observacoes: 15000 };
+  const noLimite = {}; for (const [campo, max] of Object.entries(limites)) noLimite[campo] = campo === 'estado' ? 'SP' : (campo === 'cep' ? '123456789' : grande(max));
+  const ok = await api().post('/api/pessoas/fisicas').send(fisica({ ...noLimite, cidade: `  ${grande(100)}  ` }));
+  assert.equal(ok.status, 201, JSON.stringify(ok.body));
+  assert.equal((await um('SELECT cidade FROM pessoas_fisicas WHERE id = ?', [ok.body.dados.id])).cidade, grande(100));      // aparado
+  const id = await criarPF();
+  const antes = await total('SELECT COUNT(*) AS n FROM pessoas_fisicas');
+  for (const [campo, max] of Object.entries(limites)) {
+    const valor = campo === 'estado' ? 'SPX' : grande(max + 1);
+    const c = await api().post('/api/pessoas/fisicas').send(fisica({ [campo]: valor }));
+    assert.equal(c.status, 400, `criar ${campo}(${max}) → ${c.status} ${JSON.stringify(c.body)}`); assert.match(msg(c), new RegExp(`muito long[oa] \\(máximo ${max} caracteres\\)`), campo);
+    const e = await api().put(`/api/pessoas/fisicas/${id}`).send({ nome: 'Editada B', [campo]: valor });
+    assert.equal(e.status, 400, `editar ${campo}(${max}) → ${e.status}`); assert.match(msg(e), /muito long[oa]/, campo);
+  }
+  assert.equal(await total('SELECT COUNT(*) AS n FROM pessoas_fisicas'), antes);
+  assert.notEqual((await um('SELECT nome FROM pessoas_fisicas WHERE id = ?', [id])).nome, 'Editada B');                    // nada mudou
+  // o que não é texto (lista, objeto, booleano) também é aviso; número só vale em campos de código (RG, CEP, número...)
+  for (const campo of ['nome_pai', 'nome_mae', 'logradouro', 'bairro', 'cidade', 'estado', 'rg_orgao', 'observacoes']) {
+    for (const ruim of [['x'], { a: 1 }, true, 123]) {
+      const r = await api().post('/api/pessoas/fisicas').send(fisica({ [campo]: ruim }));
+      assert.equal(r.status, 400, `${campo}=${JSON.stringify(ruim)} → ${r.status}`);
+    }
+  }
+  assert.equal((await api().post('/api/pessoas/fisicas').send(fisica({ rg: 1234567, numero: 100, cep: 13010000 }))).status, 201);   // número em campo de código vira texto
+});
+
+test('física — CPF e data de nascimento: só texto, no máximo 11 números, dia que existe; vazio e 0 nos campos de escolha viram "não informado"; id errado é aviso; id que não existe mais é 409', async () => {
+  const recusa = async (extra, regex) => {
+    const c = await api().post('/api/pessoas/fisicas').send(fisica(extra));
+    assert.equal(c.status, 400, `${JSON.stringify(extra).slice(0, 80)} → ${c.status} ${JSON.stringify(c.body)}`); assert.match(msg(c), regex, JSON.stringify(extra).slice(0, 80));
+  };
+  await recusa({ cpf: 12345678901 }, /O CPF inválido/);                               // número perderia o zero da frente
+  await recusa({ cpf: ['1'] }, /O CPF inválido/);
+  await recusa({ cpf: '1'.repeat(30) }, /O CPF deve ter no máximo 11 números/);
+  await recusa({ data_nascimento: '2026-13-45' }, /A data de nascimento inválida/);
+  await recusa({ data_nascimento: '2026-02-30' }, /A data de nascimento inválida/);
+  await recusa({ data_nascimento: 'abc' }, /A data de nascimento inválida/);
+  await recusa({ data_nascimento: 123 }, /A data de nascimento inválida/);
+  await recusa({ data_nascimento: '1990-05-17 lixo' }, /A data de nascimento inválida/);
+  for (const [campo, rotulo] of [['profissao_id', 'profissão'], ['estado_civil_id', 'estado civil'], ['genero_id', 'gênero'], ['nacionalidade_id', 'nacionalidade'], ['parentesco_id', 'parentesco']]) {
+    for (const ruim of ['abc', { a: 1 }, ['1'], -1, 1.5, true]) {
+      const r = await api().post('/api/pessoas/fisicas').send(fisica({ [campo]: ruim }));
+      assert.equal(r.status, 400, `${campo}=${JSON.stringify(ruim)} → ${r.status}`);
+    }
+    // vazio, 0 e "0" = não informado
+    for (const vazio of ['', 0, '0', null]) assert.equal((await api().post('/api/pessoas/fisicas').send(fisica({ [campo]: vazio }))).status, 201, `${campo}=${JSON.stringify(vazio)} (${rotulo})`);
+    // número válido mas que não existe: aviso de "recarregue", nunca erro interno
+    if (campo !== 'parentesco_id') {
+      const inexistente = await api().post('/api/pessoas/fisicas').send(fisica({ [campo]: 999999 }));
+      assert.equal(inexistente.status, 409, `${campo}=999999 → ${inexistente.status}`); assert.match(msg(inexistente), /não existe mais/);
+    }
+  }
+  const resp = await api().post('/api/pessoas/fisicas').send(fisica({ responsavel_id: { a: 1 }, parentesco_id: F.parentesco }));
+  assert.equal(resp.status, 400); assert.match(msg(resp), /O responsável legal inválido/);
+  // data: o dia certo, e a hora que a tela às vezes manda é descartada
+  const cpfMascarado = cpfComMascara();
+  const ok = await api().post('/api/pessoas/fisicas').send(fisica({ data_nascimento: '1972-03-27T03:00:00.000Z', cpf: cpfMascarado }));
+  assert.equal(ok.status, 201, JSON.stringify(ok.body));
+  const linha = await um('SELECT cpf, data_nascimento FROM pessoas_fisicas WHERE id = ?', [ok.body.dados.id]);
+  assert.equal(linha.cpf, cpfMascarado.replace(/\D/g, '')); assert.equal(String(linha.data_nascimento).slice(0, 10), '1972-03-27');
+});
+
+test('telefones, e-mails e contas bancárias: têm que ser lista; telefone até 20, tipo até 100, e-mail até 150; número vira texto; linha vazia é ignorada (física e jurídica)', async () => {
+  for (const [rota, base] of [['fisicas', fisica], ['juridicas', juridica]]) {
+    const recusa = async (extra, regex) => {
+      const r = await api().post(`/api/pessoas/${rota}`).send(base(extra));
+      assert.equal(r.status, 400, `${rota} ${JSON.stringify(extra).slice(0, 90)} → ${r.status} ${JSON.stringify(r.body)}`); assert.match(msg(r), regex);
+    };
+    await recusa({ telefones: { a: 1 } }, /A lista de telefones é inválida/);
+    await recusa({ telefones: 'abc' }, /A lista de telefones é inválida/);
+    await recusa({ telefones: [5] }, /A lista de telefones é inválida/);
+    await recusa({ telefones: [null] }, /A lista de telefones é inválida/);
+    await recusa({ telefones: [{ numero: '1'.repeat(21) }] }, /O telefone muito longo \(máximo 20 caracteres\)/);
+    await recusa({ telefones: [{ numero: ['1'] }] }, /O telefone inválido/);
+    await recusa({ telefones: [{ numero: '1999', tipo: grande(101) }] }, /O tipo do telefone muito longo \(máximo 100 caracteres\)/);
+    await recusa({ emails: { a: 1 } }, /A lista de e-mails é inválida/);
+    await recusa({ emails: [{ email: grande(145) + '@x.com' }] }, /O e-mail muito longo \(máximo 150 caracteres\)/);
+    await recusa({ emails: [{ email: 123 }] }, /O e-mail inválido/);
+    await recusa({ contasBancarias: { a: 1 } }, /A lista de contas bancárias é inválida/);
+    const ok = await api().post(`/api/pessoas/${rota}`).send(base({
+      telefones: [{ numero: 19988887777 }, { numero: '' }, { numero: '  ' }, { numero: '1'.repeat(20), tipo: grande(100) }], emails: [{ email: '' }, { email: grande(138) + '@x.com' }],
+    }));
+    assert.equal(ok.status, 201, `${rota}: ${JSON.stringify(ok.body)}`);
+    const tabelaTel = rota === 'fisicas' ? 'telefones_pf' : 'telefones_pj'; const tabelaEm = rota === 'fisicas' ? 'emails_pf' : 'emails_pj';
+    assert.deepEqual((await sql(`SELECT numero FROM ${tabelaTel} WHERE pessoa_id = ? ORDER BY id`, [ok.body.dados.id])).map(t => t.numero), ['19988887777', '1'.repeat(20)]);
+    assert.equal(await total(`SELECT COUNT(*) AS n FROM ${tabelaEm} WHERE pessoa_id = ?`, [ok.body.dados.id]), 1);
+  }
+});
+
+test('contas bancárias: cada campo no limite da coluna (agência 20, número 30, chave PIX 150, titular 200, documento até 18 números, observação), id e banco que não são número = 422', async () => {
+  const b = await banco();
+  const base = { instituicao_financeira_id: b, tipo: 'corrente', agencia: '1234', numero: '5678', digito: '9' };
+  const tenta = (conta, corpo = fisica({ cpf: cpfComMascara() })) => api().post('/api/pessoas/fisicas').send({ ...corpo, contasBancarias: [{ ...base, ...conta }] });
+  const recusa = async (conta, regex) => {
+    const r = await tenta(conta, fisica({ cpf: cpfComMascara() }));
+    assert.equal(r.status, 422, `${JSON.stringify(conta).slice(0, 80)} → ${r.status} ${JSON.stringify(r.body)}`); assert.match(msg(r), regex);
+  };
+  await recusa({ agencia: grande(21) }, /A agência muito longa \(máximo 20 caracteres\)/);
+  await recusa({ numero: grande(31) }, /O número da conta muito longo \(máximo 30 caracteres\)/);
+  await recusa({ chave_pix: grande(151) }, /A chave PIX muito longa \(máximo 150 caracteres\)/);
+  await recusa({ observacao: grande(15001) }, /A observação da conta muito longa/);
+  await recusa({ agencia: ['1'] }, /A agência inválida/);
+  await recusa({ instituicao_financeira_id: 'abc' }, /Instituição financeira inválida/);
+  await recusa({ instituicao_financeira_id: { a: 1 } }, /Instituição financeira inválida/);
+  await recusa({ id: 'abc' }, /Conta inválida/);
+  await recusa({ conta_terceiro: true, titular: grande(201), documento_titular: '39053344705' }, /O titular muito longo \(máximo 200 caracteres\)/);
+  await recusa({ conta_terceiro: true, titular: 'Terceiro', documento_titular: '1'.repeat(19) }, /O documento do titular deve ter no máximo 18 números/);
+  await recusa({ conta_terceiro: true, titular: 'Terceiro', documento_titular: 39053344705 }, /O documento do titular é inválido/);
+  // no limite, passa
+  const ok = await tenta({ agencia: grande(20), numero: grande(30), chave_pix: grande(150), observacao: grande(15000) });
+  assert.equal(ok.status, 201, JSON.stringify(ok.body));
+  const conta = await um('SELECT agencia, numero, chave_pix FROM contas_bancarias_pf WHERE pessoa_id = ?', [ok.body.dados.id]);
+  assert.deepEqual([conta.agencia.length, conta.numero.length, conta.chave_pix.length], [20, 30, 150]);
+  const terceiro = await api().post('/api/pessoas/fisicas').send({ ...fisica({ cpf: cpfComMascara() }), contasBancarias: [{ ...base, conta_terceiro: true, titular: grande(200), documento_titular: '1'.repeat(18) }] });
+  assert.equal(terceiro.status, 201, JSON.stringify(terceiro.body));
+});
+
+test('jurídica — campos do cadastro: no limite passa; 1 acima (razão 200, fantasia 200, inscrição 30, CEP 9, logradouro 200, número 10, complemento 100, bairro/cidade 100, UF 2) e CNPJ longo ou que não é texto dão aviso 400', async () => {
+  const limites = { nome_fantasia: 200, inscricao_estadual: 30, cep: 9, logradouro: 200, numero: 10, complemento: 100, bairro: 100, cidade: 100, estado: 2, observacoes: 15000 };
+  const noLimite = {}; for (const [campo, max] of Object.entries(limites)) noLimite[campo] = campo === 'estado' ? 'SP' : (campo === 'cep' ? '123456789' : grande(max));
+  assert.equal((await api().post('/api/pessoas/juridicas').send(juridica(noLimite))).status, 201);
+  const id = await criarPJ();
+  const antes = await total('SELECT COUNT(*) AS n FROM pessoas_juridicas');
+  for (const [campo, max] of Object.entries(limites)) {
+    const valor = campo === 'estado' ? 'SPX' : grande(max + 1);
+    const c = await api().post('/api/pessoas/juridicas').send(juridica({ [campo]: valor }));
+    assert.equal(c.status, 400, `criar ${campo}(${max}) → ${c.status} ${JSON.stringify(c.body)}`); assert.match(msg(c), /muito long[oa]/, campo);
+    if (campo === 'inscricao_estadual') continue;                      // na edição da empresa a inscrição estadual não é gravada (não há campo na tela)
+    const e = await api().put(`/api/pessoas/juridicas/${id}`).send({ razao_social: 'Editada B Ltda', [campo]: valor });
+    assert.equal(e.status, 400, `editar ${campo}(${max}) → ${e.status}`); assert.match(msg(e), /muito long[oa]/, campo);
+  }
+  assert.equal(await total('SELECT COUNT(*) AS n FROM pessoas_juridicas'), antes);
+  for (const [rot, extra, regex] of [['cnpj 30', { cnpj: '1'.repeat(30) }, /O CNPJ deve ter no máximo 14 números/], ['cnpj número', { cnpj: 11222333000181 }, /O CNPJ inválido/], ['cnpj lista', { cnpj: ['1'] }, /O CNPJ inválido/]]) {
+    for (const [metodo, caminho] of [['post', '/api/pessoas/juridicas'], ['put', `/api/pessoas/juridicas/${id}`]]) {
+      const r = await api()[metodo](caminho).send(juridica(extra)); assert.equal(r.status, 400, `${metodo} ${rot} → ${r.status}`); assert.match(msg(r), regex);
+    }
+  }
+  assert.equal((await um('SELECT razao_social FROM pessoas_juridicas WHERE id = ?', [id])).razao_social.startsWith('Empresa Teste'), true);   // nada mudou
+});
+
+test('auxiliares (gênero, estado civil, nacionalidade, parentesco, profissão, banco) e profissões do Controle: nome de texto e no limite da coluna (50 / 100); acima é aviso 400', async () => {
+  const grupos = [['generos', 50], ['estados_civis', 50], ['nacionalidades', 50], ['parentescos', 50], ['profissoes', 100], ['instituicoes_financeiras', 100]];
+  for (const [tipo, max] of grupos) {
+    const rota = `/api/pessoas/auxiliares/${tipo}`;
+    const longo = await api().post(rota).send({ nome: grande(max + 1) });
+    assert.equal(longo.status, 400, `${tipo} ${max + 1} → ${longo.status}`); assert.match(msg(longo), new RegExp(`O nome muito longo \\(máximo ${max} caracteres\\)`));
+    for (const ruim of tiposErrados) { const r = await api().post(rota).send({ nome: ruim }); assert.equal(r.status, 400, `${tipo} nome=${JSON.stringify(ruim)} → ${r.status}`); assert.match(msg(r), /O nome é obrigatório/); }
+    const ok = await api().post(rota).send({ nome: `x${grande(max - 1)}${tipo.slice(0, 1)}`.slice(0, max) + (tipo === 'generos' ? '' : '') });
+    assert.equal(ok.status, 201, `${tipo} no limite (${max}) → ${ok.status} ${JSON.stringify(ok.body)}`);
+  }
+  // profissões da tela de Controle
+  const lista = '/api/controle/auxiliares/profissoes';
+  assert.equal((await api().post(lista).send({ nome: grande(101) })).status, 400);
+  for (const ruim of tiposErrados) assert.equal((await api().post(lista).send({ nome: ruim })).status, 400, `Controle nome=${JSON.stringify(ruim)}`);
+  const id = (await api().post(lista).send({ nome: 'Profissao para editar B' })).body.dados.id;
+  for (const ruim of [grande(101), ...tiposErrados]) { const r = await api().put(`${lista}/${id}`).send({ nome: ruim }); assert.equal(r.status, 400, `editar ${String(JSON.stringify(ruim)).slice(0, 20)} → ${r.status}`); }
+  assert.equal((await um('SELECT nome FROM profissao WHERE id = ?', [id])).nome, 'Profissao para editar b');
+  assert.equal((await api().put(`${lista}/${id}`).send({ nome: grande(100) })).status, 200);
+});
+
+test('ida e volta da ficha: o que a tela recebe ao abrir a pessoa (GET) volta no salvar (PUT) sem erro e sem perder nada — física e jurídica, com contatos, conta bancária, avisos, responsável e datas', async () => {
+  const b = await banco();
+  const resp = await criarPF({ cpf: '' });
+  const pf = await api().post('/api/pessoas/fisicas').send(fisica({
+    cpf: cpfComMascara(), nome: 'Ficha Ida e Volta', data_nascimento: '1990-05-17', profissao_id: F.advogado, responsavel_id: resp, parentesco_id: F.parentesco,
+    rg: '12.345.678-9', cep: '13010-000', numero: '100', estado: 'SP', observacoes: 'obs',
+    telefones: [{ numero: '(19) 99999-0000', principal: true }, { numero: '(19) 3333-4444', tipo: 'comercial' }], emails: [{ email: 'ida@volta.com', principal: true }],
+    contasBancarias: [{ instituicao_financeira_id: b, tipo: 'corrente', agencia: '1234', numero: '5678', digito: '9', chave_pix: 'ida@volta.com', principal: true }],
+    avisos_idade: [18, 21],
+  }));
+  assert.equal(pf.status, 201, JSON.stringify(pf.body));
+  const antes = (await api().get(`/api/pessoas/fisicas/${pf.body.dados.id}`)).body.dados;
+  assert.equal(antes.telefones.length, 2); assert.equal(antes.contas_bancarias.length, 1); assert.equal(antes.avisos_idade.length, 2);
+  // a tela guarda o objeto recebido e o devolve ao salvar (as contas voltam em "contasBancarias")
+  const volta = await api().put(`/api/pessoas/fisicas/${antes.id}`).send({ ...antes, contasBancarias: antes.contas_bancarias });
+  assert.equal(volta.status, 200, JSON.stringify(volta.body));
+  const depois = (await api().get(`/api/pessoas/fisicas/${antes.id}`)).body.dados;
+  for (const campo of ['nome', 'cpf', 'rg', 'cep', 'numero', 'estado', 'observacoes', 'profissao_id', 'responsavel_id', 'parentesco_id']) assert.equal(depois[campo], antes[campo], campo);
+  assert.equal(String(depois.data_nascimento).slice(0, 10), String(antes.data_nascimento).slice(0, 10));
+  assert.deepEqual(depois.telefones.map(t => [t.numero, t.tipo, Number(t.principal)]), antes.telefones.map(t => [t.numero, t.tipo, Number(t.principal)]));
+  assert.deepEqual(depois.emails.map(e => e.email), antes.emails.map(e => e.email));
+  assert.deepEqual(depois.contas_bancarias.map(c => c.id), antes.contas_bancarias.map(c => c.id));                          // a conta mantém o mesmo id
+  assert.deepEqual(depois.avisos_idade.map(a => a.idade), [18, 21]);
+  // jurídica
+  const pj = await api().post('/api/pessoas/juridicas').send(juridica({
+    razao_social: 'Empresa Ida e Volta Ltda', nome_fantasia: 'Ida e Volta', em_recuperacao_judicial: true, cep: '13010-000', estado: 'SP',
+    telefones: [{ numero: '(19) 3333-0000', principal: true }], emails: [{ email: 'contato@idavolta.com' }],
+    contasBancarias: [{ instituicao_financeira_id: b, tipo: 'corrente', agencia: '1', numero: '2', digito: '3', principal: true }],
+  }));
+  assert.equal(pj.status, 201, JSON.stringify(pj.body));
+  const pjAntes = (await api().get(`/api/pessoas/juridicas/${pj.body.dados.id}`)).body.dados;
+  const pjVolta = await api().put(`/api/pessoas/juridicas/${pjAntes.id}`).send({ ...pjAntes, contasBancarias: pjAntes.contas_bancarias });
+  assert.equal(pjVolta.status, 200, JSON.stringify(pjVolta.body));
+  const pjDepois = (await api().get(`/api/pessoas/juridicas/${pjAntes.id}`)).body.dados;
+  for (const campo of ['razao_social', 'nome_fantasia', 'cnpj', 'cep', 'estado']) assert.equal(pjDepois[campo], pjAntes[campo], campo);
+  assert.equal(Number(pjDepois.em_recuperacao_judicial), 1);
+  assert.deepEqual(pjDepois.contas_bancarias.map(c => c.id), pjAntes.contas_bancarias.map(c => c.id));
+  assert.equal(pjDepois.telefones.length, 1); assert.equal(pjDepois.emails.length, 1);
+});
