@@ -269,13 +269,18 @@ PARAR e combinar o ajuste com o usuário antes de corrigir. Nada de desmembrar a
 que o sistema está apresentando**. A IA deve **lembrá-lo delas** no início de uma sessão nova assim que ele terminar de falar dos erros atuais, e sempre que ele
 perguntar "o que falta". Só tirar da lista com o OK dele. Detalhes de cada item: seção "PENDÊNCIAS GERAIS" do `PLANO-TESTES-PROCESSOS.md`.
 
-- **P1** — Validações específicas, módulo a módulo (servidor responde 400 claro, nunca "Erro interno": campo que não é texto, texto longo demais, só espaços,
-  datas/valores/ids inválidos, processo/registro inexistente = 404). Já feitos: Processos, Tarefas, Audiências, Perícias, Financeiro (aba da pasta).
-  **Faltam: Pessoas, Prazos, Publicações, Documentos, Pendências de Docs., Dashboard, Relatórios, Configurações, Controle** (e conferir o resto do Financeiro:
-  repasses, multa, contas, consulta). Modelo pronto: `backend/src/utils/camposTexto.js`.
-- **P2** — Curingas do LIKE (`%` e `_`) nas buscas de todos os módulos fora de Processos (usar `escaparLike` em `utils/helpers.js`).
-- **P3** — Paginação sem validação (`pagina`/`limite` inválidos → 500) nos outros módulos (usar `paginacao()` de `utils/helpers.js`).
-- **P4** — Id que não é número (`/modulo/abc`) dando 500 nos outros módulos (devolver 404).
+- **CONFERÊNCIA REAL de 05/10/2026 (rascunho `8e1aa4b`)** — banco de teste descartável criado do `estrutura_banco.sql` + servidor do projeto, 886 chamadas em 316 rotas com entradas ruins (tipo errado, texto de 6.000 letras,
+  id "abc", paginação negativa). Base de teste quase vazia: rota que NÃO deu 500 não está provada perfeita, só não deu "Erro interno". Estado exato das pendências abaixo (a lista antiga estava desatualizada):
+- **P1** — Validações específicas (servidor responde 400 claro, nunca "Erro interno"). **Fluxos principais já sem 500:** Processos, Tarefas, Perícias, Audiências, Prazos, Publicações, Dashboard, Relatórios.
+  **Ainda dão 500 (tipo errado e/ou texto longo demais):** Pessoas (cadastrar física e jurídica, 3 rotas de histórico, auxiliares); Prazos (tipos e subtipos); Audiências (tipos, freelas, "reverter");
+  Perícias (tipos); Financeiro (formas de pagamento, instituições financeiras); Documentos (modelos); Pendências de Docs. (tipos); Controle (profissões); Configurações (dados do escritório, texto longo); Agenda (novo compromisso).
+  Ou seja: Audiências, Perícias e Financeiro estão só PARCIALMENTE feitos (fluxo principal sim, cadastros auxiliares não). Modelo pronto: `backend/src/utils/camposTexto.js`.
+- **P2** — Curingas do LIKE (`%` e `_`): **aberta**. `escaparLike` só é usada em Processos. Montam `%termo%` direto: Pessoas, Tarefas, Publicações, Perícias, Pendências de Docs., Audiências (freelas), Financeiro.
+  A busca de Prazos usa só dígitos, então NÃO é afetada.
+- **P3** — Paginação inválida: **aberta** em Pessoas físicas e jurídicas, Prazos, Publicações, Documentos (histórico) e Financeiro (consulta): `pagina`/`limite` negativos dão 500 (Pessoas e Prazos também com zero);
+  texto como "abc" não dá erro. Já usam `paginacao()` e não deram erro: Audiências, Perícias, Processos, Tarefas.
+- **P4** — Id que não é número: **quase feita**. Em todas as rotas de LEITURA com id ("abc", -1, número gigante) nenhuma deu 500. **Ainda dão 500 com id "abc"**, em exclusões/alterações de cadastros auxiliares:
+  Audiências (excluir tipo, excluir freela, "ata impressa"), Financeiro (excluir forma de pagamento, excluir instituição), Documentos (desativar/reativar modelo), Perícias (excluir tipo), Pendências de Docs. (excluir tipo).
 - **P5** — Migração do react-router para a versão 7 — **ADIADA POR DECISÃO DO USUÁRIO (05/10/2026): NÃO FAZER AGORA.** Ele avaliou que o retorno é pequeno e o risco, grande; o assunto passa a fazer parte do
   "plano de modernização" (seção 11). Análise feita em 05/10/2026, numa cópia descartável fora do projeto (nada mudou no código): trocar `react-router-dom` `^6.21.0` → `^7.18.4` altera SÓ `package.json` e
   `package-lock.json` (nenhum `.js` muda; todos os `navigate()`/`Link` do código usam caminho absoluto). Resultado na cópia: Vitest 175/175, build OK (pacote principal 316 → 334 kB), checagem de nomes igual, `npm audit` de
@@ -288,8 +293,10 @@ perguntar "o que falta". Só tirar da lista com o OK dele. Detalhes de cada item
   Provado com "agora" simulado em 31/10 23:30 de Brasília numa máquina em UTC (expressão antiga dava 12/2026; a nova dá 11/2026, certo); arquivo inteiro de Audiências 15/15.
 - **P6** — Informativo, sem ação (`log_documentos_gerados` sem chave declarada; busca por poucos dígitos casa CPF/CNPJ/telefone).
 - **P7** — Verificar no servidor real se o PM2 reinicia sozinho após queda.
-- **P8** — Decidir (só se ele quiser) o recurso "ver só os meus processos" (coluna `usuarios.ver_todos_processos` é vestigial).
-- **Varredura da ficha da pessoa** (`ModalPessoa`, `Pessoas.js`, todas as abas/estados) — acessibilidade e validações; pertence ao módulo Pessoas.
+- **P8** — Decidir (só se ele quiser) o recurso "ver só os meus processos". Conferido em 05/10/2026: `usuarios.ver_todos_processos` é lido no login/middleware e gravado pela tela de usuários, mas NÃO existe no frontend e nenhum
+  controlador o usa para filtrar — continua vestigial (só coluna).
+- **Varredura da ficha da pessoa** (`ModalPessoa`, `Pessoas.js`, todas as abas/estados) — acessibilidade e validações; pertence ao módulo Pessoas. Conferido em 05/10/2026: não há teste de tela nem de servidor dedicado a Pessoas;
+  a tela só entra na varredura de acessibilidade com a LISTA aberta (a ficha e suas abas não aparecem em nenhum teste); e cadastrar pessoa dá 500 com tipo errado/texto longo (ver P1).
 - **Pastas vazias antigas (achado de 04/10/2026, decisão pendente do usuário):** no local e no Antônio existem 2.702 pastas SEM processo; 2.700 foram criadas de uma vez em
   28/06/2026 (números 1 a 8935, criador 24) e 2.627 têm "área do direito" preenchida — parecem pastas antigas importadas sem os processos. O Erick não tem nenhuma.
   Não apagar em lote sem a decisão dele. O script `sql_limpar_pastas_vazias_para_heidi.sql` apaga SÓ as pastas 9999 e 928804 (fixas no script; rodar só no Antônio — o Erick não tem pastas vazias).

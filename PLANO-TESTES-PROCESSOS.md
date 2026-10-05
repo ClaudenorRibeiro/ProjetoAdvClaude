@@ -10,21 +10,22 @@ nunca é tocado.
 Itens abertos que NÃO fazem parte de um passo (A1…D1) e ficam fora do módulo Processos. Só tirar da lista com a decisão/OK do usuário.
 Ao fechar a Fase D (ou quando o usuário pedir), **lembrar o usuário destas pendências**.
 
-- [ ] **P1 — Validações específicas, módulo a módulo.** (Já feitos: Processos, Tarefas, Audiências, Perícias, Financeiro da pasta. O usuário vai tratar P1–P8 depois de ajustar erros atuais do sistema — 04/10/2026.) A rede de segurança (A3) só impede a QUEDA do servidor. Falta verificar, em cada módulo, se o
-      servidor trata com aviso claro (400) e não com "Erro interno" (500): nome/campo que não é texto, texto longo demais (limites das colunas do banco),
-      campo só com espaços, e demais entradas inválidas. Módulos: Pessoas, Prazos, Tarefas, Audiências, Perícias, Publicações, Documentos, Pendências de
-      Docs., Dashboard, Relatórios, Configurações, Controle (e conferir o Financeiro). Modelo pronto: `backend/src/utils/camposTexto.js`.
-- [ ] **P2 — Varredura de curingas do LIKE** (`%` e `_` tratados como "qualquer coisa") em TODAS as buscas do servidor, fora de Processos. Usar
-      `escaparLike` (`backend/src/utils/helpers.js`). Já corrigido: busca de processos (`/processos/buscar`), listagem de pastas e Relatórios.
-- [ ] **P3 — Paginação sem validação** (`pagina`/`limite` inválidos → erro 500) nas listagens dos outros módulos. Usar `paginacao()` (`utils/helpers.js`).
-      Já corrigido: `listarPastas`.
-- [ ] **P4 — Identificador que não é número** (ex.: `/modulo/abc`) dando 500 em outras rotas. Em Processos (processo/pasta/auxiliares) já responde 404.
-      Verificar os demais módulos (ex.: `comIdNumerico` em `processosController.js`).
+> **Estado conferido de verdade em 05/10/2026** (rascunho `8e1aa4b`): servidor do projeto + banco de teste descartável, 886 chamadas em 316 rotas com entradas ruins. Base quase vazia: "não deu 500" não prova perfeição.
+
+- [ ] **P1 — Validações específicas.** Fluxos principais já sem "Erro interno": Processos, Tarefas, Perícias, Audiências, Prazos, Publicações, Dashboard, Relatórios. **Ainda dão 500 (tipo errado e/ou texto longo):** Pessoas (cadastrar
+      física e jurídica, 3 rotas de histórico, auxiliares); Prazos (tipos e subtipos); Audiências (tipos, freelas, "reverter"); Perícias (tipos); Financeiro (formas de pagamento, instituições financeiras); Documentos (modelos);
+      Pendências de Docs. (tipos); Controle (profissões); Configurações (dados do escritório, texto longo); Agenda (novo compromisso). Audiências, Perícias e Financeiro estão só PARCIALMENTE feitos. Modelo: `backend/src/utils/camposTexto.js`.
+- [ ] **P2 — Curingas do LIKE** (`%` e `_`): `escaparLike` (`backend/src/utils/helpers.js`) só é usada em Processos. Ainda montam `%termo%` direto: Pessoas, Tarefas, Publicações, Perícias, Pendências de Docs.,
+      Audiências (freelas), Financeiro. Prazos NÃO é afetado (busca só por dígitos).
+- [ ] **P3 — Paginação inválida:** `pagina`/`limite` negativos dão 500 em Pessoas físicas e jurídicas, Prazos, Publicações, Documentos (histórico) e Financeiro (consulta); Pessoas e Prazos também com zero. Texto ("abc") não dá erro.
+      Já usam `paginacao()` (`utils/helpers.js`) e não deram erro: Audiências, Perícias, Processos, Tarefas.
+- [ ] **P4 — Identificador que não é número:** leituras com id ("abc", -1, número gigante) já não dão 500 em nenhuma rota. **Ainda dão 500 com id "abc"** (exclusões/alterações de auxiliares): Audiências (excluir tipo, excluir freela,
+      "ata impressa"), Financeiro (excluir forma de pagamento, excluir instituição), Documentos (desativar/reativar modelo), Perícias (excluir tipo), Pendências de Docs. (excluir tipo).
 - [ ] **P5 — Migração do react-router para a versão 7** (adiada por decisão do usuário; hoje o `npm audit` do frontend mostra 2 avisos "média").
 - [ ] **P6 — Informativo, sem ação:** `log_documentos_gerados` guarda a origem (processo, etc.) sem chave declarada; excluir o processo deixa o histórico
       apontando para um id que sumiu. Busca por poucos dígitos (ex.: "30") também casa CPF/CNPJ/telefone — é o desenho da busca.
 - [ ] **P8 — Decidir (só se o usuário quiser): "ver só os meus processos".** Hoje todo usuário com a permissão de Processos vê todos os processos. A coluna
-      `usuarios.ver_todos_processos` é vestigial (sem tela e sem uso). Seria um RECURSO NOVO (permissão nova em Processos, tela de Permissões e regra no
+      `usuarios.ver_todos_processos` é vestigial (conferido em 05/10/2026: sem tela, e nenhum controlador a usa para filtrar). Seria um RECURSO NOVO (permissão nova em Processos, tela de Permissões e regra no
       servidor) — não é conserto. Se a coluna for removida, precisa de script SQL para o HeidiSQL e atualizar o `estrutura_banco.sql`.
 - [ ] **P7 — Verificar no servidor real** se o PM2 reinicia sozinho após queda (o código menciona PM2; não foi verificado).
 
