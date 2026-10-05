@@ -284,7 +284,8 @@ perguntar "o que falta". Só tirar da lista com o OK dele. Detalhes de cada item
   e um de renderização no servidor (não se aplica a este SPA). Se for retomado: não silenciar os avisos com `future` (gambiarra); fazer a migração de verdade.
 - **Defeito de TESTE de horário — CORRIGIDO em 05/10/2026 (OK do usuário):** `frontend/e2e/processos-pasta-tarefas.spec.js` calculava "hoje" (`hojeMais`) com o relógio da máquina, enquanto o sistema usa o horário de Brasília; em máquina em UTC, entre 21h e meia-noite
   de Brasília, "Nova tarefa" e "Editar tarefa" falhavam por 1 dia. Agora usa `America/Sao_Paulo`, como o teste de Prazos. Provado: com a máquina de teste num fuso atrasado (`TZ=Etc/GMT+12`) o teste antigo falhava e o novo passa (arquivo inteiro de Tarefas, 10/10).
-  **Ainda pendente (aguardando OK):** `frontend/e2e/processos-pasta-audiencias.spec.js` linha ~184 usa `new Date()` da máquina para escolher o mês seguinte; o mesmo tipo de defeito, mas só aparece no ÚLTIMO dia do mês, entre 21h e meia-noite de Brasília, em máquina em UTC.
+  **Mesmo defeito em `frontend/e2e/processos-pasta-audiencias.spec.js` (~linha 184, escolha do "mês seguinte") — CORRIGIDO em 05/10/2026 (OK do usuário):** só aparecia no último dia do mês, entre 21h e meia-noite de Brasília, em máquina em UTC.
+  Provado com "agora" simulado em 31/10 23:30 de Brasília numa máquina em UTC (expressão antiga dava 12/2026; a nova dá 11/2026, certo); arquivo inteiro de Audiências 15/15.
 - **P6** — Informativo, sem ação (`log_documentos_gerados` sem chave declarada; busca por poucos dígitos casa CPF/CNPJ/telefone).
 - **P7** — Verificar no servidor real se o PM2 reinicia sozinho após queda.
 - **P8** — Decidir (só se ele quiser) o recurso "ver só os meus processos" (coluna `usuarios.ver_todos_processos` é vestigial).
