@@ -95,17 +95,15 @@ async function buscarNaLista(page, razao) {
   await expect(page.locator('tbody tr').filter({ hasText: razao })).toHaveCount(1);
   return page.locator('tbody tr').filter({ hasText: razao });
 }
-const respostaDaFicha = (page) => page.waitForResponse(r => r.request().method() === 'GET' && /\/api\/pessoas\/juridicas\/\d+$/.test(r.url()));
+const respostaDaFicha = (page, timeout) => page.waitForResponse(r => r.request().method() === 'GET' && /\/api\/pessoas\/juridicas\/\d+$/.test(r.url()), timeout ? { timeout } : undefined);
 async function abrirEdicao(page, razao) {
-  // a lista recarrega logo depois de fechar uma janela: tenta de novo se a linha foi trocada no meio do clique
+  // a lista recarrega logo depois de fechar uma janela: abrir o menu, clicar em Editar e esperar os dados do servidor
+  // ficam JUNTOS na mesma tentativa — se o menu sumir no meio do clique, recomeça.
   await expect(async () => {
     const linha = await buscarNaLista(page, razao);
     await abrirMenuAcoes(page, linha);
-    await expect(page.getByRole('button', { name: 'Editar', exact: true })).toBeVisible({ timeout: 2000 });
-  }).toPass({ timeout: 20000 });
-  const dadosDoServidor = respostaDaFicha(page);                  // só mexe na ficha depois que os dados do servidor chegaram
-  await page.getByRole('button', { name: 'Editar', exact: true }).click();
-  await dadosDoServidor;
+    await Promise.all([respostaDaFicha(page, 8000), page.getByRole('button', { name: 'Editar', exact: true }).click({ timeout: 4000 })]);
+  }).toPass({ timeout: 40000 });
   await expect(ficha(page).getByRole('heading', { name: 'Editar Pessoa Jurídica' })).toBeVisible();
   await expect(ficha(page).getByLabel(RAZAO, { exact: true })).toHaveValue(razao);
 }
