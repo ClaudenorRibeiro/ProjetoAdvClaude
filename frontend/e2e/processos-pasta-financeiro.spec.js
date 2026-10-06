@@ -395,13 +395,20 @@ test('Sem lançamentos nem acordos: a aba mostra "Nenhum lançamento neste proce
 
 // ---- Repasse DESTA parcela, direto do menu ⋮ da parcela (a aba "Repasses pendentes" da tela Financeiro continua igual) ----
 // Prepara: caixa e forma de dinheiro, cliente e parceiro; a parcela 1 do acordo vira "recebida" com o cliente como beneficiário padrão.
+// CPF válido que não colide com os de outros testes (o banco de teste é compartilhado): 9 dígitos vindos do relógio + 2 dígitos verificadores.
+function cpfUnico(deslocamento) {
+  const base = String((Date.now() + deslocamento) % 1000000000).padStart(9, '0').split('').map(Number);
+  const dv = (lista, peso) => { const r = (lista.reduce((t, x, i) => t + x * (peso - i), 0) * 10) % 11; return r === 10 ? 0 : r; };
+  const d1 = dv(base, 10); const d2 = dv([...base, d1], 11);
+  return [...base, d1, d2].join('');
+}
 async function prepararRepasse({ comParceiro = false } = {}) {
   // cadastros de apoio ficam entre os testes deste bloco (limpos no afterAll): cria só se ainda não existir
   const achaOuCria = async (sqlBusca, sqlInsere) => (await noBanco(sqlBusca))[0]?.id ?? (await noBanco(sqlInsere)).insertId;
   const caixa = await achaOuCria("SELECT id FROM conta_financeira WHERE nome = 'Caixa C8'", "INSERT INTO conta_financeira (nome, tipo, ativo, principal) VALUES ('Caixa C8', 'especie', 1, 0)");
   const forma = await achaOuCria("SELECT id FROM forma_pagamento WHERE nome = 'Dinheiro C8'", "INSERT INTO forma_pagamento (nome, uso_permitido) VALUES ('Dinheiro C8', 'especie')");
-  const cliente = await achaOuCria("SELECT id FROM pessoas_fisicas WHERE nome = 'Cliente Repasse C8'", "INSERT INTO pessoas_fisicas (nome, cpf) VALUES ('Cliente Repasse C8', '52998224725')");
-  const parceiro = await achaOuCria("SELECT id FROM pessoas_fisicas WHERE nome = 'Parceiro Repasse C8'", "INSERT INTO pessoas_fisicas (nome, cpf) VALUES ('Parceiro Repasse C8', '11144477735')");
+  const cliente = await achaOuCria("SELECT id FROM pessoas_fisicas WHERE nome = 'Cliente Repasse C8'", `INSERT INTO pessoas_fisicas (nome, cpf) VALUES ('Cliente Repasse C8', '${cpfUnico(1)}')`);
+  const parceiro = await achaOuCria("SELECT id FROM pessoas_fisicas WHERE nome = 'Parceiro Repasse C8'", `INSERT INTO pessoas_fisicas (nome, cpf) VALUES ('Parceiro Repasse C8', '${cpfUnico(2)}')`);
   await noBanco("UPDATE acordo_parcela SET status = 'pago', recebido_em = '2099-03-15', repasse_cliente_tipo = 'fisica', repasse_cliente_pessoa_id = ? WHERE id = ?", [cliente, d.pa1]);
   if (comParceiro) await noBanco("UPDATE acordo_parcela SET parceria_pessoa_tipo = 'fisica', parceria_pessoa_id = ?, parceria_tipo = 'valor', parceria_valor = 100 WHERE id = ?", [parceiro, d.pa1]);
   return { caixa, forma, cliente, parceiro };
