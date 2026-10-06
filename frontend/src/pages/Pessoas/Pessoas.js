@@ -1772,6 +1772,19 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
     } finally { setSalvando(false); }
   }
 
+  // Formato do e-mail (física e jurídica): só confere o que foi preenchido; avisa e devolve false se algum estiver inválido.
+  function emailsConferem() {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    for (let i = 0; i < emails.length; i++) {
+      const valor = (emails[i].email || '').trim();
+      if (valor && !emailRegex.test(valor)) {
+        avisar(`E-mail inválido: "${valor}". Corrija antes de salvar.`, refsEmail.current[i]);
+        return false;
+      }
+    }
+    return true;
+  }
+
   async function salvar(digitoConfirmado = false) {
     // ── Bloqueio: mesmo telefone ou mesmo e-mail repetido no MESMO cadastro (PF e PJ) ──
     // Telefone compara só os dígitos (ignora máscara); e-mail compara em minúsculas. Linhas em branco não contam.
@@ -1817,14 +1830,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
       }
 
       // ── Validações de FORMATO (mantidas — só disparam se o campo estiver preenchido) ──
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      for (let i = 0; i < emails.length; i++) {
-        const valor = (emails[i].email || '').trim();
-        if (valor && !emailRegex.test(valor)) {
-          avisar(`E-mail inválido: "${valor}". Corrija antes de salvar.`, refsEmail.current[i]);
-          return;
-        }
-      }
+      if (!emailsConferem()) return;
       const hoje = hojeLocal();
       if (form.data_nascimento && form.data_nascimento > hoje) {
         avisar('Data de nascimento não pode ser uma data futura.', refDataNasc.current);
@@ -1858,6 +1864,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
 
     // Jurídica
     if (!form.razao_social) { avisar('Razão social é obrigatória.', refRazao.current); return; }
+    if (!emailsConferem()) return;
     return executarSalvar();
   }
 

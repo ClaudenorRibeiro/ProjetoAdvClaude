@@ -163,6 +163,7 @@ test('@critical Nova Pessoa Jurídica: validações do salvar — razão social 
   await j.getByLabel('E-mail 2', { exact: true }).fill('email-sem-arroba'); await j.getByLabel('E-mail 2', { exact: true }).blur();
   await expect(j.getByText('⚠️ E-mail inválido', { exact: true })).toBeVisible();          // aviso embaixo do campo, ao sair dele
   await semViolacoes(page, 'ficha da empresa com o aviso "E-mail inválido" aberto');
+  await salvar(page); await faixa(page, 'E-mail inválido: "email-sem-arroba". Corrija antes de salvar.');   // e-mail fora do formato não grava (igual à pessoa física)
   expect(await quantas()).toBe(antes);
   await expect(page.locator('.Toastify__toast')).toHaveCount(0);                         // todo aviso é na faixa da janela, nunca no canto
 });
