@@ -129,7 +129,8 @@ router.put('/controle/auxiliares/profissoes/:id',    autenticar, apenasAdmin, pe
 router.delete('/controle/auxiliares/profissoes/:id', autenticar, apenasAdmin, pessoasCtrl.excluirProfissao);
 router.get('/pessoas/fisicas',            autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.listarFisicas);
 // IMPORTANTE: /exportar e /cpf/:cpf devem ficar ANTES de /:id para o Express não capturar a palavra como id
-router.get('/pessoas/fisicas/exportar',   autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.exportarFisicas);
+// Exportar para Excel: permissão PRÓPRIA (módulo pessoas, sub-módulo exportar, ação visualizar); quem só visualiza a lista não exporta
+router.get('/pessoas/fisicas/exportar',   autenticar, verificarPermissao('pessoas','exportar','visualizar'), pessoasCtrl.exportarFisicas);
 router.get('/pessoas/fisicas/cpf/:cpf',   autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.buscarPorCPF);
 // Unifica cadastros duplicados de pessoa física (rota estática ANTES de :id) — SOMENTE admin e superadmin
 router.post('/pessoas/fisicas/unificar',  autenticar, apenasAdmin,                                 pessoasCtrl.unificarFisicas);
@@ -143,7 +144,7 @@ router.post('/pessoas/juridicas/:id/historico', autenticar, verificarPermissao('
 router.put('/pessoas/historico/:histId',    autenticar, verificarPermissao('pessoas','alterar'), pessoasCtrl.editarHistorico);
 router.delete('/pessoas/historico/:histId', autenticar, verificarPermissao('pessoas','alterar'), pessoasCtrl.excluirHistorico);
 router.get('/pessoas/juridicas',          autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.listarJuridicas);
-router.get('/pessoas/juridicas/exportar', autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.exportarJuridicas);
+router.get('/pessoas/juridicas/exportar', autenticar, verificarPermissao('pessoas','exportar','visualizar'), pessoasCtrl.exportarJuridicas);
 // Busca 1 empresa com telefones/e-mails (edição) — DEPOIS de /exportar para não capturar a palavra como id
 router.get('/pessoas/juridicas/:id',      autenticar, verificarPermissao('pessoas','visualizar'), pessoasCtrl.buscarJuridica);
 router.post('/pessoas/juridicas',         autenticar, verificarPermissao('pessoas','cadastrar'),  pessoasCtrl.criarJuridica);

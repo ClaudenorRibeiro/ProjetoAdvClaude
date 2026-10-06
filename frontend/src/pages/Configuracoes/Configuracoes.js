@@ -20,6 +20,7 @@ import { useAuth } from '../../context/AuthContext';
 const MODULOS_PERM = [
   { chave: 'pessoas',      label: 'Pessoas', submodulos: [
     { chave: 'pessoas.etiqueta_escritorio', label: 'Etiqueta do escritório (aplicar) — marque Alterar' },
+    { chave: 'pessoas.exportar', label: 'Exportar para Excel — marque Visualizar' },
   ]},
   { chave: 'processos',    label: 'Processos', submodulos: [
     { chave: 'processos.andamentos', label: 'Andamentos' },

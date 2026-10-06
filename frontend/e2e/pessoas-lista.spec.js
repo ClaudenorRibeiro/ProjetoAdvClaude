@@ -416,16 +416,16 @@ test('@critical Falha do servidor ao carregar a lista mostra aviso e a tela não
   await expect(contador(page)).toHaveText('1 registro(s)');
 });
 
-test('@critical Quem não é administrador não vê "Unificar duplicadas"; quem só visualiza vê a lista e a busca funciona', async ({ page }) => {
+test('@critical Quem não é administrador não vê "Unificar duplicadas"; quem só visualiza vê a lista e a busca funciona, mas NÃO vê "Exportar Excel" (permissão própria)', async ({ page }) => {
   const login = await criarUsuarioComPermissoes('sovisualizapessoas', [['pessoas', null, 'visualizar']]);
   await irParaPessoas(page, login);
   await buscar(page, `Alfa ${MARCA} Silva`, 1);
-  await expect(page.getByRole('button', { name: 'Exportar Excel' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Exportar Excel' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Unificar duplicadas' })).toHaveCount(0);       // só administrador
   await semViolacoes(page, 'lista de Pessoas para quem só visualiza');
 });
 
-test('@critical Quem só VISUALIZA Pessoas não vê "+ Nova", "Editar" nem "Excluir" (nas duas abas, nem o "Editar" dos detalhes); continua vendo a lista, os detalhes, as anotações e "Exportar Excel"', async ({ page }) => {
+test('@critical Quem só VISUALIZA Pessoas não vê "+ Nova", "Editar" nem "Excluir" (nas duas abas, nem o "Editar" dos detalhes); continua vendo a lista, os detalhes e as anotações (sem "Exportar Excel")', async ({ page }) => {
   const login = await criarUsuarioComPermissoes('sovisualizapessoas2', [['pessoas', null, 'visualizar']]);
   await irParaPessoas(page, login);
   await buscar(page, `Alfa ${MARCA} Silva`, 1);
@@ -445,5 +445,36 @@ test('@critical Quem só VISUALIZA Pessoas não vê "+ Nova", "Editar" nem "Excl
   await page.getByRole('button', { name: 'Pessoas Jurídicas', exact: true }).click();
   await expect(page.getByPlaceholder(/Buscar por razão social/)).toBeVisible();
   await expect(page.getByRole('button', { name: /^\+ Nova Pessoa/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Exportar Excel' })).toHaveCount(0);   // sem a permissão "Exportar para Excel" o botão não existe, nas duas abas
+});
+
+test('@critical Quem tem a permissão "Exportar para Excel" (pessoas.exportar) vê o botão nas duas abas', async ({ page }) => {
+  const login = await criarUsuarioComPermissoes('podeexportarpessoas', [['pessoas', null, 'visualizar'], ['pessoas', 'exportar', 'visualizar']]);
+  await irParaPessoas(page, login);
+  await buscar(page, `Alfa ${MARCA} Silva`, 1);
+  await expect(page.getByRole('button', { name: 'Exportar Excel' })).toBeVisible();
+  await page.getByRole('button', { name: 'Pessoas Jurídicas', exact: true }).click();
+  await expect(page.getByPlaceholder(/Buscar por razão social/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Exportar Excel' })).toBeVisible();
+});
+
+test('@critical Configurações > Permissões: o administrador vê "Exportar para Excel" dentro de Pessoas, marca para um usuário, salva, e esse usuário passa a ver o botão', async ({ page }) => {
+  const login = await criarUsuarioComPermissoes('liberaexportapessoas', [['pessoas', null, 'visualizar']]);
+  await loginPelaTela(page, 'admteste');
+  await page.goto('/configuracoes'); await aguardarTelaPronta(page);
+  await page.getByRole('button', { name: 'Permissões', exact: true }).click();
+  await page.getByLabel('Selecionar usuário', { exact: true }).selectOption({ label: `Usuário ${login} (${login})` });
+  await page.locator('td', { hasText: /^▶\s*Pessoas$/ }).click();     // expande os sub-itens de Pessoas
+  const caixa = page.getByLabel('Exportar para Excel — marque Visualizar: visualizar', { exact: true });
+  await expect(caixa).toBeVisible();
+  await expect(caixa).not.toBeChecked();                                  // começa SEM a permissão
+  await caixa.check();
+  await page.getByRole('button', { name: 'Salvar Permissões' }).click();
+  await aviso(page, 'Permissões salvas!');
+  const linhas = await noBanco("SELECT p.permitido FROM permissoes p JOIN usuarios u ON u.id = p.usuario_id WHERE u.login = ? AND p.modulo = 'pessoas' AND p.submodulo = 'exportar' AND p.acao = 'visualizar'", [login]);
+  expect(linhas.map((l) => Number(l.permitido))).toEqual([1]);
+  await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });   // sai da conta do administrador
+  await irParaPessoas(page, login);
+  await buscar(page, `Alfa ${MARCA} Silva`, 1);
   await expect(page.getByRole('button', { name: 'Exportar Excel' })).toBeVisible();
 });

@@ -285,7 +285,7 @@ export default function Pessoas() {
           {/* Gera documento que usa várias pessoas (autores × réus); só aparece com permissão de documentos */}
           <GerarDocumentoPartesBotao />
           {/* Exporta a busca atual (ou tudo) para Excel — abre modal para escolher os campos */}
-          <button className="btn btn-outline" onClick={abrirExport}>Exportar Excel</button>
+          {temPermissao('pessoas.exportar', 'visualizar') && <button className="btn btn-outline" onClick={abrirExport}>Exportar Excel</button>}
           {/* Unificar cadastros duplicados — nas duas abas (física e jurídica), só para admin/superadmin */}
           {ehAdmin && !modoUnificar && (
             <button className="btn btn-outline" onClick={() => setModoUnificar(true)}>

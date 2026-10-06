@@ -604,6 +604,24 @@ test('unificar jurídicas: valida a seleção, move partes/telefones/e-mails/ano
 });
 
 // ------------------------------------------------------------------ exportar para Excel
+test('exportar Excel tem permissão PRÓPRIA: só visualizar Pessoas = 403; com "Exportar" = 200; administrador sempre pode; ter só "Exportar" sem visualizar também é 403', async () => {
+  // usuário 5: visualiza Pessoas E tem o sub-módulo "exportar" (marcado em Visualizar, como a tela de Permissões grava)
+  await sql("INSERT INTO usuarios (id, nome, login, senha_hash, email, tipo, nivel, ativo, ver_todos_processos, sessao_atual, notif_email, google_agenda_ativo) VALUES (5, 'Pode Exportar', 'podeexportar', 'x', 'podeexportar@example.invalid', 'advogado', 2, 1, 0, 'sessao-pode-exportar', 0, 0)");
+  await sql("INSERT INTO permissoes (usuario_id, modulo, submodulo, acao, permitido) VALUES (5, 'pessoas', NULL, 'visualizar', 1), (5, 'pessoas', 'exportar', 'visualizar', 1)");
+  const pode = token(5, 2, 'sessao-pode-exportar');
+  for (const caminho of ['/api/pessoas/fisicas/exportar?campos=nome', '/api/pessoas/juridicas/exportar?campos=razao_social']) {
+    assert.equal((await como(T.soVisualiza).get(caminho)).status, 403, `só visualiza: ${caminho}`);
+    assert.equal((await como(T.semPermissao).get(caminho)).status, 403, `sem permissão: ${caminho}`);
+    assert.equal((await como(pode).get(caminho)).status, 200, `com Exportar: ${caminho}`);
+    assert.equal((await como(T.admin).get(caminho)).status, 200, `administrador: ${caminho}`);
+  }
+  // "Exportar" desmarcado (permitido = 0) também recusa
+  await sql("UPDATE permissoes SET permitido = 0 WHERE usuario_id = 5 AND submodulo = 'exportar'");
+  assert.equal((await como(pode).get('/api/pessoas/fisicas/exportar?campos=nome')).status, 403);
+  // a lista continua aberta a quem visualiza (a nova permissão só trata do arquivo)
+  assert.equal((await como(pode).get('/api/pessoas/fisicas')).status, 200);
+});
+
 test('exportar Excel (física e jurídica): arquivo legível, só os campos permitidos, mesma busca da lista, só ativos', async () => {
   const marca = `Exp${Date.now() % 100000}`;
   await criarPF({ nome: `${marca} Bruno`, cpf: '39053344706', data_nascimento: '1985-12-01', telefones: [{ numero: '19900007777' }] });
