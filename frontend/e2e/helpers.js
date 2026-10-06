@@ -81,7 +81,22 @@ async function telaParouDeMudar(page) {
 }
 export async function aguardarTelaPronta(page) {
   await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
-  await page.waitForFunction(() => !document.querySelector('.loading') && !/Carregando/i.test(document.body.innerText));
+  // Limite próprio de 30 s (antes esperava até o teste inteiro ser cortado, sem dizer o que travou). Se estourar, o erro já traz
+  // o retrato da tela: endereço, quantos "carregando" há, e o trecho do texto onde aparece "Carregando".
+  try {
+    await page.waitForFunction(() => !document.querySelector('.loading') && !/Carregando/i.test(document.body.innerText), undefined, { timeout: 30_000 });
+  } catch (e) {
+    let retrato = '(a página já não responde)';
+    try {
+      retrato = await page.evaluate(() => {
+        const texto = document.body.innerText || '';
+        const i = texto.search(/Carregando/i);
+        return `endereço=${location.pathname}${location.search}; elementos .loading=${document.querySelectorAll('.loading').length}; ` +
+               `trecho="${i >= 0 ? texto.slice(Math.max(0, i - 80), i + 80).replace(/\s+/g, ' ') : '(sem a palavra Carregando)'}"`;
+      });
+    } catch { /* página fechada ou recarregando: segue só com a mensagem de tempo */ }
+    throw new Error(`A tela não terminou de carregar em 30 s — ${retrato}. Detalhe: ${String(e.message).split('\n')[0]}`);
+  }
   await telaParouDeMudar(page);
 }
 
