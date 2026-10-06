@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { abrirMenuAcoes, aguardarTelaPronta, bloquearRedeExterna, loginPelaTela, violacoesGraves } from './helpers.js';
+import { abrirMenuAcoes, aguardarRespostaProcessada, aguardarTelaPronta, bloquearRedeExterna, loginPelaTela, violacoesGraves } from './helpers.js';
 import { createRequire } from 'node:module';
 
 // Teste de TELA da ficha da PESSOA FÍSICA (janela "Nova / Editar / Detalhes da Pessoa Física", aberta pela tela Pessoas):
@@ -105,22 +105,25 @@ async function buscarNaLista(page, nome) {
 async function abrirEdicao(page, nome) {
   // a lista recarrega logo depois de fechar uma janela: se a linha for trocada no meio do clique, o menu fecha.
   // Abrir o menu, clicar em Editar e esperar os dados do servidor ficam JUNTOS na mesma tentativa — se o menu sumir, recomeça.
+  let resposta;
   await expect(async () => {
     const linha = await buscarNaLista(page, nome);
     await abrirMenuAcoes(page, linha);
     const dadosDoServidor = page.waitForResponse(r => r.request().method() === 'GET' && /\/api\/pessoas\/fisicas\/\d+$/.test(r.url()), { timeout: 8000 });
-    await Promise.all([dadosDoServidor, page.getByRole('button', { name: 'Editar', exact: true }).click({ timeout: 4000 })]);
+    [resposta] = await Promise.all([dadosDoServidor, page.getByRole('button', { name: 'Editar', exact: true }).click({ timeout: 4000 })]);
   }).toPass({ timeout: 40000 });
+  await aguardarRespostaProcessada(page, resposta);                       // só mexe na ficha depois que a página usou os dados recebidos
   await expect(ficha(page).getByRole('heading', { name: 'Editar Pessoa Física' })).toBeVisible();
-  await expect(ficha(page).getByLabel('Nome completo')).toHaveValue(nome);               // espera os dados chegarem do servidor
+  await expect(ficha(page).getByLabel('Nome completo')).toHaveValue(nome);
 }
 async function abrirDetalhes(page, nome) {
+  let resposta;
   await expect(async () => {                                      // mesma proteção: a linha pode ser trocada pelo recarregamento da lista
     const linha = await buscarNaLista(page, nome);
     const dadosDoServidor = page.waitForResponse(r => r.request().method() === 'GET' && /\/api\/pessoas\/fisicas\/\d+$/.test(r.url()), { timeout: 5000 });
-    await linha.getByTitle('Ver detalhes').click({ timeout: 5000 });
-    await dadosDoServidor;
+    [resposta] = await Promise.all([dadosDoServidor, linha.getByTitle('Ver detalhes').click({ timeout: 5000 })]);
   }).toPass({ timeout: 20000 });
+  await aguardarRespostaProcessada(page, resposta);
   await expect(ficha(page).getByRole('heading', { name: 'Detalhes da Pessoa Física' })).toBeVisible();
   await expect(ficha(page).getByLabel('Nome completo')).toHaveValue(nome);
 }

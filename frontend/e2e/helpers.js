@@ -519,3 +519,11 @@ export async function criarUsuarioComPermissoes(login, permissoes) {
   } finally { await conn.end(); }
   return login;
 }
+
+// Depois que o teste recebe a resposta do servidor (ex.: os dados de uma ficha), a PÁGINA ainda precisa processá-la e desenhar na tela.
+// Em máquina lenta o teste seguia adiante antes disso, digitava, e os dados que chegavam depois apagavam o que foi digitado.
+// Espera o corpo da resposta terminar de chegar e a página desenhar dois quadros (mais uma folga curta).
+export async function aguardarRespostaProcessada(page, resposta) {
+  await resposta.finished();
+  await page.evaluate(() => new Promise((fim) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(fim, 100)))));
+}

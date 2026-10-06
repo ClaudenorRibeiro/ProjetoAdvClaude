@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { abrirMenuAcoes, aguardarTelaPronta, bloquearRedeExterna, loginPelaTela, violacoesGraves } from './helpers.js';
+import { abrirMenuAcoes, aguardarRespostaProcessada, aguardarTelaPronta, bloquearRedeExterna, loginPelaTela, violacoesGraves } from './helpers.js';
 import { createRequire } from 'node:module';
 
 // Teste de TELA da ficha da PESSOA JURÍDICA (janela "Nova / Editar / Detalhes da Pessoa Jurídica", aberta pela aba "Pessoas Jurídicas" da tela Pessoas):
@@ -99,11 +99,13 @@ const respostaDaFicha = (page, timeout) => page.waitForResponse(r => r.request()
 async function abrirEdicao(page, razao) {
   // a lista recarrega logo depois de fechar uma janela: abrir o menu, clicar em Editar e esperar os dados do servidor
   // ficam JUNTOS na mesma tentativa — se o menu sumir no meio do clique, recomeça.
+  let resposta;
   await expect(async () => {
     const linha = await buscarNaLista(page, razao);
     await abrirMenuAcoes(page, linha);
-    await Promise.all([respostaDaFicha(page, 8000), page.getByRole('button', { name: 'Editar', exact: true }).click({ timeout: 4000 })]);
+    [resposta] = await Promise.all([respostaDaFicha(page, 8000), page.getByRole('button', { name: 'Editar', exact: true }).click({ timeout: 4000 })]);
   }).toPass({ timeout: 40000 });
+  await aguardarRespostaProcessada(page, resposta);                 // só mexe na ficha depois que a página usou os dados recebidos
   await expect(ficha(page).getByRole('heading', { name: 'Editar Pessoa Jurídica' })).toBeVisible();
   await expect(ficha(page).getByLabel(RAZAO, { exact: true })).toHaveValue(razao);
 }
@@ -111,7 +113,7 @@ async function abrirDetalhes(page, razao) {
   const linha = await buscarNaLista(page, razao);
   const dadosDoServidor = respostaDaFicha(page);
   await linha.getByTitle('Ver detalhes').click();
-  await dadosDoServidor;
+  await aguardarRespostaProcessada(page, await dadosDoServidor);
   await expect(ficha(page).getByRole('heading', { name: 'Detalhes da Pessoa Jurídica' })).toBeVisible();
   await expect(ficha(page).getByLabel(RAZAO, { exact: true })).toHaveValue(razao);
 }
