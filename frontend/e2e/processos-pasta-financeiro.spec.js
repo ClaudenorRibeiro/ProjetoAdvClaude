@@ -477,6 +477,14 @@ test('@critical Repassar pelo menu da parcela: com cliente E parceiro pendentes 
   await page.getByRole('button', { name: /^\S*\s*Repassar/ }).first().hover();
   await expect(page.getByRole('button', { name: /Repassar ao cliente/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /Repassar ao parceiro \(Parceiro Repasse C8\)/ })).toBeVisible();
+  // o painel do submenu acompanha o tamanho do texto e NÃO invade o menu principal (antes o texto comprido passava da borda e ficava por cima de "Histórico")
+  const painelSub = page.getByRole('button', { name: /Repassar ao parceiro/ }).locator('..');
+  const menuPrincipal = page.getByRole('button', { name: /Desfazer recebimento/ }).locator('..');
+  const caixaSub = await painelSub.boundingBox(); const caixaMenu = await menuPrincipal.boundingBox();
+  const textoParceiro = await page.getByRole('button', { name: /Repassar ao parceiro/ }).boundingBox();
+  expect(textoParceiro.x).toBeGreaterThanOrEqual(caixaSub.x); expect(textoParceiro.x + textoParceiro.width).toBeLessThanOrEqual(caixaSub.x + caixaSub.width + 1);   // o texto cabe dentro do painel
+  const seCruzam = caixaSub.x < caixaMenu.x + caixaMenu.width - 3 && caixaSub.x + caixaSub.width > caixaMenu.x + 3;
+  expect(seCruzam).toBe(false);                                                                                                                                       // um painel ao lado do outro, sem se sobrepor
   await page.getByRole('button', { name: /Repassar ao parceiro/ }).click();
   const j = janela(page, 'Repassar ao parceiro (Parceiro Repasse C8)');
   await expect(j).toBeVisible();

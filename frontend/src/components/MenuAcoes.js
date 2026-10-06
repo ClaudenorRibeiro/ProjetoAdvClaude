@@ -32,6 +32,7 @@ export default function MenuAcoes({ itens = [], titulo = 'Mais ações' }) {
   const [sub, setSub] = useState(null); // { idx, top, left } do submenu aberto (item com .submenu)
   const btnRef = useRef(null);
   const menuRef = useRef(null);
+  const subRef = useRef(null);   // painel do submenu aberto (para medir a largura real do texto)
 
   // Fecha o submenu sempre que o menu principal fecha.
   useEffect(() => { if (!pos) setSub(null); }, [pos]);
@@ -40,16 +41,28 @@ export default function MenuAcoes({ itens = [], titulo = 'Mais ações' }) {
   // couber à direita (borda da tela) e sobe se estourar embaixo. Funciona no
   // hover (PC) e no clique/toque (celular/tablet), pois é chamado por ambos.
   function abrirSub(idx, el, qtd) {
-    const r = el.getBoundingClientRect();
+    const r = menuRef.current ? menuRef.current.getBoundingClientRect() : el.getBoundingClientRect();   // o painel encosta na borda do MENU, não do botão (o menu tem margem interna)
+    const rItem = el.getBoundingClientRect();
     const largura = 210;
     let left = r.right - 2;
     if (left + largura > window.innerWidth - 8) left = r.left - largura + 2;
     if (left < 8) left = 8;
     const estAltura = qtd * 36 + 12;
-    let top = Math.min(r.top, window.innerHeight - estAltura - 8);
+    let top = Math.min(rItem.top, window.innerHeight - estAltura - 8);
     top = Math.max(8, top);
-    setSub({ idx, top, left });
+    setSub({ idx, top, left, ancora: { left: r.left, right: r.right } });
   }
+
+  // O painel do submenu acompanha o tamanho do texto (mínimo 210 px, máximo 340 px; acima disso o texto quebra em 2 linhas).
+  // Depois de desenhado, mede a largura REAL e acerta o lado: abre à direita do item e, se não couber, à esquerda — sem invadir o menu principal.
+  useLayoutEffect(() => {
+    if (!sub || !subRef.current) return;
+    const largura = subRef.current.offsetWidth;
+    let left = sub.ancora.right - 2;
+    if (left + largura > window.innerWidth - 8) left = sub.ancora.left - largura + 2;
+    left = Math.max(8, left);
+    if (Math.abs(left - sub.left) > 1) setSub(s => (s ? { ...s, left } : s));
+  }, [sub]);
 
   useEffect(() => {
     if (!pos) return;
@@ -145,8 +158,8 @@ export default function MenuAcoes({ itens = [], titulo = 'Mais ações' }) {
                     <span aria-hidden="true" style={{ color: '#5b6472' }}>▸</span>
                   </button>
                   {aberto && (
-                    <div onMouseDown={e => e.stopPropagation()}
-                      style={{ position: 'fixed', top: sub.top, left: sub.left, zIndex: 1001, width: '210px',
+                    <div ref={subRef} onMouseDown={e => e.stopPropagation()}
+                      style={{ position: 'fixed', top: sub.top, left: sub.left, zIndex: 1001, width: 'max-content', minWidth: '210px', maxWidth: 'min(340px, calc(100vw - 16px))',
                         background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px',
                         boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: '6px' }}>
                       {subVis.map((s, j) => (
@@ -154,7 +167,7 @@ export default function MenuAcoes({ itens = [], titulo = 'Mais ações' }) {
                           onClick={() => { setPos(null); if (s.gerarDoc) { setDocCtx(s.gerarDoc); } else { s.onClick(); } }}
                           style={{ display: 'flex', gap: '8px', alignItems: 'center', width: '100%', textAlign: 'left',
                             background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', padding: '8px 10px',
-                            borderRadius: '6px', color: s.perigo ? '#dc2626' : '#334155', whiteSpace: 'nowrap' }}
+                            borderRadius: '6px', color: s.perigo ? '#dc2626' : '#334155', whiteSpace: 'normal', overflowWrap: 'anywhere' }}
                           onMouseEnter={e => (e.currentTarget.style.background = '#dbeafe')}
                           onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
                           {s.icone && <span aria-hidden="true">{s.icone}</span>}{s.label}
