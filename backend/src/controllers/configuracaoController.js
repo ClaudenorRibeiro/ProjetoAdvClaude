@@ -10,6 +10,7 @@ const auditoria = require('../middleware/auditoria');
 const { ehDiaUtil, proximoDiaUtil, calcularVencimento } = require('../services/calendarioService');
 const { reagendarCronPrazos } = require('../services/alertasService');
 const multer = require('multer');
+const { lerTextos, horaDoDia } = require('../utils/camposTexto');
 
 // ============================================================
 // UPLOAD DO LOGO DO ESCRITÓRIO
@@ -124,35 +125,63 @@ async function buscarEscritorio(req, res) {
 }
 
 // PUT /api/configuracoes/escritorio — Atualiza dados do escritório
+// Campos de texto do escritório, com os limites das colunas de configuracoes_escritorio.
+const CAMPOS_ESCRITORIO = {
+  nome: { rotulo: 'Nome do escritório', max: 200, obrigatorio: true }, cnpj_cpf: { rotulo: 'CNPJ/CPF', max: 20 },
+  email: { rotulo: 'E-mail', max: 150 }, telefone: { rotulo: 'Telefone', max: 20 }, cep: { rotulo: 'CEP', max: 9 },
+  logradouro: { rotulo: 'Logradouro', max: 200 }, numero: { rotulo: 'Número', max: 20, aceitaNumero: true },
+  bairro: { rotulo: 'Bairro', max: 100 }, cidade: { rotulo: 'Cidade', max: 100 }, estado: { rotulo: 'Estado', max: 2 },
+  cor_principal: { rotulo: 'Cor principal', max: 7 }, titulo_aba: { rotulo: 'Título da aba', max: 100 },
+  alerta_emails: { rotulo: 'E-mails de alerta', max: 5000 }, mensagem_aniversario: { rotulo: 'Mensagem de aniversário', max: 5000, feminino: true },
+};
+// Número inteiro de dias/minutos: ausente, texto ou zero volta ao padrão (como antes); negativo ou acima do teto = erro claro (o banco recusaria).
+const TETO_DIAS_ESCRITORIO = 100000;
+function inteiroOuPadrao(bruto, padrao, rotulo) {
+  const n = parseInt(bruto, 10);
+  if (!Number.isFinite(n) || n === 0) return { valor: padrao };
+  if (n < 0 || n > TETO_DIAS_ESCRITORIO) return { erro: `${rotulo} inválido (use um número entre 1 e ${TETO_DIAS_ESCRITORIO})` };
+  return { valor: n };
+}
 async function atualizarEscritorio(req, res) {
   try {
+    const corpo = req.body || {};
+    const textos = lerTextos(corpo, CAMPOS_ESCRITORIO);
+    if (textos.erro) return erro(res, textos.erro);
+    const { nome, cnpj_cpf, email, telefone, cep, logradouro, numero, bairro, cidade, estado, cor_principal, titulo_aba, alerta_emails, mensagem_aniversario } = textos.dados;
     const {
-      nome, cnpj_cpf, email, telefone,
-      cep, logradouro, numero, bairro, cidade, estado,
-      cor_principal, horario_alerta_prazos, horario_alerta_prazos_2,
-      alerta_atrasado_ativo, alerta_emails,
-      dias_alerta_audiencia, dias_alerta_pericia, dias_sem_movimentacao,
-      dias_processo_parado,
-      prazo_fazendo_timeout, dias_audiencia_sem_adv,
-      titulo_aba, mensagem_aniversario, tempo_inatividade_min,
+      horario_alerta_prazos, horario_alerta_prazos_2,
+      alerta_atrasado_ativo,
       ata_advogado_obrigatorio,
       advogado_principal_id
-    } = req.body;
-
-    if (!nome) return erro(res, 'Nome do escritório é obrigatório');
-
+    } = corpo;
+    const horario1 = horaDoDia(horario_alerta_prazos, { rotulo: 'Horário do alerta de prazos' });
+    if (horario1.erro) return erro(res, horario1.erro);
+    const horario2 = horaDoDia(horario_alerta_prazos_2, { rotulo: 'Segundo horário do alerta de prazos' });
+    if (horario2.erro) return erro(res, horario2.erro);
+    const numeros = {};
+    for (const [chave, padrao, rotulo] of [
+      ['dias_alerta_audiencia', 3, 'Dias de alerta de audiência'], ['dias_alerta_pericia', 2, 'Dias de alerta de perícia'],
+      ['dias_sem_movimentacao', 30, 'Dias sem movimentação'], ['dias_processo_parado', 365, 'Dias de processo parado'],
+      ['prazo_fazendo_timeout', 60, 'Tempo de "fazendo" do prazo'], ['dias_audiencia_sem_adv', 7, 'Dias de audiência sem advogado'],
+    ]) {
+      const lido = inteiroOuPadrao(corpo[chave], padrao, rotulo);
+      if (lido.erro) return erro(res, lido.erro);
+      numeros[chave] = lido.valor;
+    }
     // Piso de 15 minutos no tempo de inatividade (defesa no servidor, além da tela).
-    const tempoInat = Math.max(15, parseInt(tempo_inatividade_min, 10) || 15);
+    const inatividade = inteiroOuPadrao(corpo.tempo_inatividade_min, 15, 'Tempo de inatividade');
+    if (inatividade.erro) return erro(res, inatividade.erro);
+    const tempoInat = Math.max(15, inatividade.valor);
 
     // Validação: se os DOIS horários de alerta estiverem preenchidos, eles
     // precisam ter no mínimo 1 hora (60 min) de diferença entre si.
     // (comparação só por horário, dentro do mesmo dia — sem lógica de data)
-    if (horario_alerta_prazos && horario_alerta_prazos_2) {
+    if (horario1.valor && horario2.valor) {
       const emMinutos = h => {
         const [hh, mm] = String(h).split(':');
         return parseInt(hh, 10) * 60 + parseInt(mm, 10);
       };
-      if (Math.abs(emMinutos(horario_alerta_prazos) - emMinutos(horario_alerta_prazos_2)) < 60) {
+      if (Math.abs(emMinutos(horario1.valor) - emMinutos(horario2.valor)) < 60) {
         return erro(res, 'Os dois horários de alerta devem ter no mínimo 1 hora de diferença');
       }
     }
@@ -198,14 +227,14 @@ async function atualizarEscritorio(req, res) {
          advogado_principal_id=VALUES(advogado_principal_id),
          setup_concluido=1`,
       [
-        nome, cnpj_cpf || null, email || null, telefone || null,
-        cep || null, logradouro || null, numero || null, bairro || null, cidade || null, estado || null,
-        cor_principal || '#1a56db', horario_alerta_prazos || '18:00:00', horario_alerta_prazos_2 || null,
-        alerta_atrasado_ativo ? 1 : 0, alerta_emails || null,
-        dias_alerta_audiencia || 3, dias_alerta_pericia || 2, dias_sem_movimentacao || 30,
-        parseInt(dias_processo_parado, 10) || 365,
-        parseInt(prazo_fazendo_timeout) || 60, parseInt(dias_audiencia_sem_adv) || 7,
-        titulo_aba || null, mensagem_aniversario || null, tempoInat,
+        nome, cnpj_cpf, email, telefone,
+        cep, logradouro, numero, bairro, cidade, estado,
+        cor_principal || '#1a56db', horario1.valor || '18:00:00', horario2.valor,
+        alerta_atrasado_ativo ? 1 : 0, alerta_emails,
+        numeros.dias_alerta_audiencia, numeros.dias_alerta_pericia, numeros.dias_sem_movimentacao,
+        numeros.dias_processo_parado,
+        numeros.prazo_fazendo_timeout, numeros.dias_audiencia_sem_adv,
+        titulo_aba, mensagem_aniversario, tempoInat,
         ata_advogado_obrigatorio ? 1 : 0,
         advogadoPrincipalId
       ]

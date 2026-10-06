@@ -10,8 +10,9 @@ const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response
 const auditoria = require('../middleware/auditoria');
 const { enviarComunicadoPericia } = require('../services/comunicadoService');
 const agendaGoogle = require('../services/agendaGoogleService');
-const { paginacao } = require('../utils/helpers');
+const { paginacao, escaparLike } = require('../utils/helpers');
 const { texto, dataIso, inteiroPositivo } = require('../utils/camposTexto');
+const { comIdNumerico } = require('../utils/rotasSeguras');
 const { lerBuscaFrase, condBuscaFrase } = require('../utils/buscaFrase');
 
 const LIMITE_MOTIVO_PERICIA = 300;           // motivo de cancelar / remarcar (mesmo limite dos prazos e audiências)
@@ -529,8 +530,8 @@ async function buscarPeritosParaAta(req, res) {
       ? Math.min(Math.max(limiteInformado, 1), 20)
       : 10;
     const buscaDigitos = busca.replace(/\D/g, '');
-    const porTexto = `%${busca}%`;
-    const porTelefone = `%${buscaDigitos || busca}%`;
+    const porTexto = `%${escaparLike(busca)}%`;                          // "%" e "_" digitados são procurados como texto
+    const porTelefone = `%${buscaDigitos || escaparLike(busca)}%`;
 
     const [rows] = await pool.execute(
       `SELECT pf.id, pf.nome, pr.nome AS profissao,
@@ -556,7 +557,7 @@ async function buscarPeritosParaAta(req, res) {
           )
         ORDER BY (pf.nome LIKE ?) DESC, pf.nome ASC
         LIMIT ${limite}`,
-      [porTexto, porTelefone, porTexto, `${busca}%`]
+      [porTexto, porTelefone, porTexto, `${escaparLike(busca)}%`]
     );
     return sucesso(res, rows);
   } catch (e) {
@@ -573,7 +574,7 @@ async function relatorioPeritos(req, res) {
     const busca = String(req.query.busca || '').trim();
     const data_de = String(req.query.data_de || '').trim();
     const data_ate = String(req.query.data_ate || '').trim();
-    const like = `%${busca}%`;
+    const like = `%${escaparLike(busca)}%`;
     const params = [];
     const filtraPeriodo = !!(data_de || data_ate);
 
@@ -1352,12 +1353,13 @@ async function tipos(req, res) {
 // Operação de escrita única (INSERT) — a consulta anterior é só validação de duplicidade.
 async function criarTipo(req, res) {
   try {
-    const { nome } = req.body;
-    if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
+    const lido = texto(req.body?.nome, { rotulo: 'Nome', max: 100, obrigatorio: true });
+    if (lido.erro) return erro(res, lido.erro);
+    const nome = lido.valor;
     // Evita nome duplicado entre os tipos ativos
     const [existe] = await pool.execute(
       'SELECT id FROM tipo_pericia WHERE nome = ? AND ativo = 1 LIMIT 1',
-      [nome.trim()]
+      [nome]
     );
     if (existe.length) return erro(res, 'Já existe um tipo com esse nome');
     // ativo tem DEFAULT 1 no banco — o tipo já nasce ativo
@@ -1365,7 +1367,7 @@ async function criarTipo(req, res) {
     let r;
     try {
       await conn.beginTransaction();
-      [r] = await conn.execute('INSERT INTO tipo_pericia (nome) VALUES (?)', [nome.trim()]);
+      [r] = await conn.execute('INSERT INTO tipo_pericia (nome) VALUES (?)', [nome]);
       await conn.commit();
     } catch (err) { await conn.rollback(); throw err; }
     finally { conn.release(); }
@@ -1379,18 +1381,19 @@ async function criarTipo(req, res) {
 async function atualizarTipo(req, res) {
   try {
     const { id } = req.params;
-    const { nome } = req.body;
-    if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
+    const lido = texto(req.body?.nome, { rotulo: 'Nome', max: 100, obrigatorio: true });
+    if (lido.erro) return erro(res, lido.erro);
+    const nome = lido.valor;
     // Duplicidade ignorando o próprio registro
     const [existe] = await pool.execute(
       'SELECT id FROM tipo_pericia WHERE nome = ? AND ativo = 1 AND id <> ? LIMIT 1',
-      [nome.trim(), id]
+      [nome, id]
     );
     if (existe.length) return erro(res, 'Já existe um tipo com esse nome');
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
-      await conn.execute('UPDATE tipo_pericia SET nome = ? WHERE id = ?', [nome.trim(), id]);
+      await conn.execute('UPDATE tipo_pericia SET nome = ? WHERE id = ?', [nome, id]);
       await conn.commit();
     } catch (err) { await conn.rollback(); throw err; }
     finally { conn.release(); }
@@ -1450,7 +1453,8 @@ async function enviarComunicado(req, res) {
 
 module.exports = {
   listar, buscar, criar, atualizar, tipos,
-  criarTipo, atualizarTipo, excluirTipo,
+  criarTipo,
+  atualizarTipo: comIdNumerico(atualizarTipo, 'Tipo de perícia não encontrado'), excluirTipo: comIdNumerico(excluirTipo, 'Tipo de perícia não encontrado'),
   reusDoProcesso, peritosDoProcesso, buscarPeritosParaAta, relatorioPeritos, marcarRealizada, cancelar, remarcar, marcarRemarcada, excluir,
   buscarHistorico, enviarComunicado,
 };

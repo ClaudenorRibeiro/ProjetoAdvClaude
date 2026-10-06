@@ -9,7 +9,7 @@
 
 const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
-const { hojeBrasilia } = require('../utils/helpers');
+const { hojeBrasilia, paginacao, escaparLike } = require('../utils/helpers');
 const { texto, dataIso, inteiroPositivo: inteiroEstrito } = require('../utils/camposTexto');
 const { proximoDiaUtil } = require('../services/calendarioService');
 const auditoria = require('../middleware/auditoria');
@@ -1914,7 +1914,7 @@ const CONSULTA_SELECT = `SELECT ap.id, ap.numero, ap.vencimento, ap.valor_bruto,
 function montarFiltroConsulta(q) {
   const cond = ['1=1'];
   const params = [];
-  const like = v => `%${String(v).trim()}%`;
+  const like = v => `%${escaparLike(String(v).trim())}%`;   // "%" e "_" digitados são procurados como texto
 
   if (q.venc_de)  { cond.push('ap.vencimento >= ?'); params.push(q.venc_de); }
   if (q.venc_ate) { cond.push('ap.vencimento <= ?'); params.push(q.venc_ate); }
@@ -1956,8 +1956,7 @@ function montarFiltroConsulta(q) {
 async function consultarFinanceiro(req, res) {
   try {
     const { where, params } = montarFiltroConsulta(req.query);
-    const limitInt  = Math.min(parseInt(req.query.limite) || 50, 100);
-    const offsetInt = ((parseInt(req.query.pagina) || 1) - 1) * limitInt;
+    const { limite: limitInt, offset: offsetInt } = paginacao(req.query, { limitePadrao: 50 });   // página/limite ruins viram o padrão
 
     const [rows] = await pool.execute(
       `${CONSULTA_SELECT} WHERE ${where} ORDER BY ap.vencimento ASC, p.numProc ASC LIMIT ${limitInt} OFFSET ${offsetInt}`,

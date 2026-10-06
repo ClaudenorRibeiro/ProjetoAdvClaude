@@ -5,7 +5,7 @@
 const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
-const { bloqueiaAgendarPassado, hojeBrasilia, pastaFormatadaSql, paginacao } = require('../utils/helpers');
+const { bloqueiaAgendarPassado, hojeBrasilia, pastaFormatadaSql, paginacao, escaparLike } = require('../utils/helpers');
 const { texto, dataIso, inteiroPositivo } = require('../utils/camposTexto');
 
 const PRIORIDADES_TAREFA = ['urgente', 'normal', 'baixa'];
@@ -205,7 +205,7 @@ async function listar(req, res) {
     // (processo, pasta ou Rotina Interna). Mantém numero_processo como compatibilidade com chamadas antigas.
     const termoBusca = String(busca ?? numero_processo ?? '').trim();
     if (termoBusca) {
-      const likeBusca = `%${termoBusca}%`;
+      const likeBusca = `%${escaparLike(termoBusca)}%`;      // "%" e "_" digitados são procurados como texto
       const digitosBusca = termoBusca.replace(/\D/g, '');
       const likeDigitos = `%${digitosBusca}%`;
       where += ` AND (
@@ -224,7 +224,7 @@ async function listar(req, res) {
         likeBusca, digitosBusca ? likeDigitos : likeBusca,
         likeBusca, likeBusca,
         likeBusca, likeBusca,
-        termoBusca.toLowerCase()
+        escaparLike(termoBusca.toLowerCase())
       );
     }
 

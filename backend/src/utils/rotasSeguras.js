@@ -27,4 +27,13 @@ function protegerRotas(roteador) {
   return roteador;
 }
 
-module.exports = { seguro, protegerRotas };
+// Identificador na rota que não é número (ex.: /tipos/abc, /tipos/-1) é "não encontrado" — antes o banco recusava a comparação e dava erro 500.
+// Usado nos controladores: `excluirTipo: comIdNumerico(excluirTipo, 'Tipo não encontrado')`.
+function comIdNumerico(handler, mensagemNaoEncontrado, parametro = 'id') {
+  return (req, res, ...resto) => {
+    if (/^\d{1,15}$/.test(String(req.params[parametro]))) return handler(req, res, ...resto);
+    return res.status(404).json({ ok: false, mensagem: mensagemNaoEncontrado });
+  };
+}
+
+module.exports = { seguro, protegerRotas, comIdNumerico };

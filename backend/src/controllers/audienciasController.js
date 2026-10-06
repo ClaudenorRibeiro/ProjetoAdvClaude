@@ -8,8 +8,9 @@ const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response
 const auditoria = require('../middleware/auditoria');
 const agendaGoogle = require('../services/agendaGoogleService');
 const { enviarComunicadoPericia, enviarEmailPeritoPericia } = require('../services/comunicadoService');
-const { pastaFormatadaSql, paginacao } = require('../utils/helpers');
-const { texto, dataIso, inteiroPositivo } = require('../utils/camposTexto');
+const { pastaFormatadaSql, paginacao, escaparLike } = require('../utils/helpers');
+const { texto, lerTextos, dataIso, inteiroPositivo } = require('../utils/camposTexto');
+const { comIdNumerico } = require('../utils/rotasSeguras');
 const { lerBuscaFrase, condBuscaFrase } = require('../utils/buscaFrase');
 
 const LIMITE_OBS_AUDIENCIA = 2000;
@@ -1595,19 +1596,20 @@ async function buscarTipos(req, res) {
 // POST /api/audiencias/tipos
 async function criarTipo(req, res) {
   try {
-    const { nome } = req.body;
-    if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
+    const lido = texto(req.body?.nome, { rotulo: 'Nome', max: 100, obrigatorio: true });
+    if (lido.erro) return erro(res, lido.erro);
+    const nome = lido.valor;
     // Verifica duplicidade
     const [existe] = await pool.execute(
       'SELECT id FROM tipo_audiencia WHERE nome = ? AND ativo = 1 LIMIT 1',
-      [nome.trim()]
+      [nome]
     );
     if (existe.length) return erro(res, 'Já existe um tipo com esse nome');
     const conn = await pool.getConnection();
     let r;
     try {
       await conn.beginTransaction();
-      [r] = await conn.execute('INSERT INTO tipo_audiencia (nome) VALUES (?)', [nome.trim()]);
+      [r] = await conn.execute('INSERT INTO tipo_audiencia (nome) VALUES (?)', [nome]);
       await conn.commit();
     } catch (err) { await conn.rollback(); throw err; }
     finally { conn.release(); }
@@ -1621,18 +1623,19 @@ async function criarTipo(req, res) {
 async function atualizarTipo(req, res) {
   try {
     const { id } = req.params;
-    const { nome } = req.body;
-    if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
+    const lido = texto(req.body?.nome, { rotulo: 'Nome', max: 100, obrigatorio: true });
+    if (lido.erro) return erro(res, lido.erro);
+    const nome = lido.valor;
     // Verifica duplicidade ignorando o próprio registro
     const [existe] = await pool.execute(
       'SELECT id FROM tipo_audiencia WHERE nome = ? AND ativo = 1 AND id <> ? LIMIT 1',
-      [nome.trim(), id]
+      [nome, id]
     );
     if (existe.length) return erro(res, 'Já existe um tipo com esse nome');
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
-      await conn.execute('UPDATE tipo_audiencia SET nome = ? WHERE id = ?', [nome.trim(), id]);
+      await conn.execute('UPDATE tipo_audiencia SET nome = ? WHERE id = ?', [nome, id]);
       await conn.commit();
     } catch (err) { await conn.rollback(); throw err; }
     finally { conn.release(); }
@@ -1819,10 +1822,11 @@ async function excluirTipo(req, res) {
 // GET /api/audiencias/freelas
 async function listarFreelas(req, res) {
   try {
-    const { q } = req.query;
+    const busca = texto(req.query.q, { rotulo: 'A busca', max: 200, feminino: true });
+    if (busca.erro) return erro(res, busca.erro);
     let where = 'WHERE 1=1';
     const params = [];
-    if (q) { where += ' AND (nome LIKE ? OR oab LIKE ?)'; params.push(`%${q}%`, `%${q}%`); }
+    if (busca.valor) { where += ' AND (nome LIKE ? OR oab LIKE ?)'; params.push(`%${escaparLike(busca.valor)}%`, `%${escaparLike(busca.valor)}%`); }
     const [rows] = await pool.execute(
       `SELECT * FROM advogados_freela ${where} ORDER BY nome LIMIT 20`, params
     );
@@ -1832,13 +1836,31 @@ async function listarFreelas(req, res) {
   }
 }
 
+
+// Campos do freelancer com os limites das colunas de advogados_freela. Devolve { dados } ou { erro }.
+const CAMPOS_FREELA = {
+  nome: { rotulo: 'Nome', max: 200, obrigatorio: true }, oab: { rotulo: 'OAB', max: 30 },
+  email: { rotulo: 'E-mail', max: 150, obrigatorio: true }, telefone: { rotulo: 'Telefone', max: 20 },
+  cep: { rotulo: 'CEP', max: 9 }, logradouro: { rotulo: 'Logradouro', max: 200 },
+  numero: { rotulo: 'Número', max: 10, aceitaNumero: true }, complemento: { rotulo: 'Complemento', max: 100 },
+  bairro: { rotulo: 'Bairro', max: 100 }, cidade: { rotulo: 'Cidade', max: 100 }, estado: { rotulo: 'Estado', max: 2 },
+};
+function lerDadosFreela(corpo) {
+  const lido = lerTextos(corpo, CAMPOS_FREELA);
+  if (lido.erro) return lido;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lido.dados.email)) return { erro: 'Informe um e-mail válido' };
+  return lido;
+}
+
 // POST /api/audiencias/freelas
 async function criarFreela(req, res) {
   try {
-    const { nome, oab, profissao_id, email, telefone, cep, logradouro, numero, complemento, bairro, cidade, estado } = req.body;
-    if (!nome?.trim())  return erro(res, 'Nome é obrigatório');
-    if (!email?.trim()) return erro(res, 'E-mail é obrigatório');
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return erro(res, 'Informe um e-mail válido');
+    const lido = lerDadosFreela(req.body);
+    if (lido.erro) return erro(res, lido.erro);
+    const { nome, oab, email, telefone, cep, logradouro, numero, complemento, bairro, cidade, estado } = lido.dados;
+    const profLido = inteiroPositivo(req.body?.profissao_id, { rotulo: 'Profissão' });
+    if (profLido.erro) return erro(res, profLido.erro);
+    const profissao_id = profLido.valor;
     const conn = await pool.getConnection();
     let r;
     try {
@@ -1847,8 +1869,8 @@ async function criarFreela(req, res) {
         `INSERT INTO advogados_freela
            (nome, oab, profissao_id, email, telefone, cep, logradouro, numero, complemento, bairro, cidade, estado, criado_por)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [nome.trim(), oab||null, profissao_id || null, email.trim().toLowerCase(), telefone||null, cep||null, logradouro||null,
-         numero||null, complemento||null, bairro||null, cidade||null, estado||null, req.usuario.id]
+        [nome, oab, profissao_id, email.toLowerCase(), telefone, cep, logradouro,
+         numero, complemento, bairro, cidade, estado, req.usuario.id]
       );
       await conn.commit();
     } catch (err) { await conn.rollback(); throw err; }
@@ -1863,10 +1885,9 @@ async function criarFreela(req, res) {
 async function atualizarFreela(req, res) {
   try {
     const { id } = req.params;
-    const { nome, oab, email, telefone, cep, logradouro, numero, complemento, bairro, cidade, estado } = req.body;
-    if (!nome?.trim())  return erro(res, 'Nome é obrigatório');
-    if (!email?.trim()) return erro(res, 'E-mail é obrigatório');
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return erro(res, 'Informe um e-mail válido');
+    const lido = lerDadosFreela(req.body);
+    if (lido.erro) return erro(res, lido.erro);
+    const { nome, oab, email, telefone, cep, logradouro, numero, complemento, bairro, cidade, estado } = lido.dados;
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
@@ -1874,8 +1895,8 @@ async function atualizarFreela(req, res) {
         `UPDATE advogados_freela
          SET nome=?, oab=?, email=?, telefone=?, cep=?, logradouro=?, numero=?, complemento=?, bairro=?, cidade=?, estado=?
          WHERE id=?`,
-        [nome.trim(), oab||null, email.trim().toLowerCase(), telefone||null, cep||null, logradouro||null,
-         numero||null, complemento||null, bairro||null, cidade||null, estado||null, id]
+        [nome, oab, email.toLowerCase(), telefone, cep, logradouro,
+         numero, complemento, bairro, cidade, estado, id]
       );
       await conn.commit();
     } catch (err) { await conn.rollback(); throw err; }
@@ -1934,8 +1955,9 @@ async function excluirFreela(req, res) {
 // Exige motivo (fica no motivo_status e embutido no histórico).
 async function reverterStatus(req, res) {
   const { id } = req.params;
-  const { motivo } = req.body;
-  if (!motivo || !motivo.trim()) return erro(res, 'Informe o motivo da reversão');
+  const motivoLido = lerMotivoAudiencia(req.body?.motivo, 'Motivo da reversão');
+  if (motivoLido.erro) return erro(res, motivoLido.erro);
+  const motivo = motivoLido.valor;
 
   const conn = await pool.getConnection();
   try {
@@ -1954,7 +1976,7 @@ async function reverterStatus(req, res) {
     await conn.execute(
       `UPDATE audiencia SET status = 'agendada', motivo_status = ?, ata_impressa = 0,
               alterado_por = ?, alterado_em = NOW() WHERE id = ?`,
-      [motivo.trim(), req.usuario.id, id]
+      [motivo, req.usuario.id, id]
     );
 
     // Histórico (com o motivo embutido, para ficar visível no "Histórico")
@@ -1979,10 +2001,14 @@ async function reverterStatus(req, res) {
 module.exports = {
   listarAdvogados,
   listar, buscar, criar, atualizar, excluir, cancelar, remarcar,
-  registrarAta, marcarAtaImpressa, reverterStatus,
+  registrarAta,
+  marcarAtaImpressa: comIdNumerico(marcarAtaImpressa, 'Audiência não encontrada'),
+  reverterStatus: comIdNumerico(reverterStatus, 'Audiência não encontrada'),
   buscarHistorico, buscarDetalhesAta,
   buscarPartesProcesso,
   adicionarTestemunha, editarTestemunha, excluirTestemunha,
-  buscarTipos, criarTipo, atualizarTipo, excluirTipo,
-  listarFreelas, criarFreela, atualizarFreela, excluirFreela,
+  buscarTipos, criarTipo,
+  atualizarTipo: comIdNumerico(atualizarTipo, 'Tipo de audiência não encontrado'), excluirTipo: comIdNumerico(excluirTipo, 'Tipo de audiência não encontrado'),
+  listarFreelas, criarFreela,
+  atualizarFreela: comIdNumerico(atualizarFreela, 'Freelancer não encontrado'), excluirFreela: comIdNumerico(excluirFreela, 'Freelancer não encontrado'),
 };

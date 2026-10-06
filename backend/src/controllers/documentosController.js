@@ -13,7 +13,9 @@ const PizZip = require('pizzip');
 
 const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
-const { hojeBrasilia } = require('../utils/helpers');
+const { hojeBrasilia, paginacao } = require('../utils/helpers');
+const { lerTextos } = require('../utils/camposTexto');
+const { comIdNumerico } = require('../utils/rotasSeguras');
 const s3Service = require('../services/s3Service');
 const docxModeloService = require('../services/docxModeloService');
 const variaveisResolver = require('../services/variaveisResolver');
@@ -169,11 +171,18 @@ async function baixarModelo(req, res) {
   }
 }
 
+// Campos de texto do modelo, com os limites das colunas de modelo_documento.
+const CAMPOS_MODELO = {
+  nome: { rotulo: 'O nome do modelo', max: 150, obrigatorio: true },
+  descricao: { rotulo: 'A descrição', max: 300, feminino: true },
+};
+
 // POST /api/documentos/modelos — cria um modelo (recebe o .docx via multipart)
 async function criarModelo(req, res) {
   try {
-    const { nome, descricao } = req.body;
-    if (!nome || !nome.trim()) return erro(res, 'O nome do modelo é obrigatório');
+    const textos = lerTextos(req.body, CAMPOS_MODELO);
+    if (textos.erro) return erro(res, textos.erro);
+    const { nome, descricao } = textos.dados;
     if (!req.file) return erro(res, 'Envie o arquivo .docx do modelo');
     if (!docxModeloService.ehDocxValido(req.file.buffer)) {
       return erro(res, 'Arquivo inválido: envie um documento .docx válido');
@@ -205,8 +214,8 @@ async function criarModelo(req, res) {
               arquivo_s3_key, blocos_exigidos, variaveis_usadas, minutos_antes, criado_por)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
-            nome.trim(),
-            descricao && descricao.trim() ? descricao.trim() : null,
+            nome,
+            descricao,
             d.destino, d.tipo_audiencia_id, d.modalidade, d.tipo_pericia_id, d.subtipo_prazo_id,
             key,
             analise.blocos.join(',') || null,
@@ -237,8 +246,9 @@ async function criarModelo(req, res) {
 async function atualizarModelo(req, res) {
   try {
     const { id } = req.params;
-    const { nome, descricao } = req.body;
-    if (!nome || !nome.trim()) return erro(res, 'O nome do modelo é obrigatório');
+    const textos = lerTextos(req.body, CAMPOS_MODELO);
+    if (textos.erro) return erro(res, textos.erro);
+    const { nome, descricao } = textos.dados;
 
     const [rows] = await pool.execute(
       'SELECT arquivo_s3_key FROM modelo_documento WHERE id = ?', [id]
@@ -248,7 +258,7 @@ async function atualizarModelo(req, res) {
     const d = normalizarDestino(req.body);
     const erroDest = validarDestino(d);
     if (erroDest) return erro(res, erroDest);
-    const desc = descricao && descricao.trim() ? descricao.trim() : null;
+    const desc = descricao;
     let desconhecidas = [];
 
     if (req.file) {
@@ -274,7 +284,7 @@ async function atualizarModelo(req, res) {
                    arquivo_s3_key=?, blocos_exigidos=?, variaveis_usadas=?, minutos_antes=?, alterado_por=?, alterado_em=NOW()
              WHERE id=?`,
             [
-              nome.trim(), desc, d.destino, d.tipo_audiencia_id, d.modalidade, d.tipo_pericia_id, d.subtipo_prazo_id,
+              nome, desc, d.destino, d.tipo_audiencia_id, d.modalidade, d.tipo_pericia_id, d.subtipo_prazo_id,
               novaKey,
               analise.blocos.join(',') || null,
               analise.conhecidas.join(',') || null,
@@ -304,7 +314,7 @@ async function atualizarModelo(req, res) {
              SET nome=?, descricao=?, destino=?, tipo_audiencia_id=?, modalidade=?, tipo_pericia_id=?, subtipo_prazo_id=?,
                  minutos_antes=?, alterado_por=?, alterado_em=NOW()
            WHERE id=?`,
-          [nome.trim(), desc, d.destino, d.tipo_audiencia_id, d.modalidade, d.tipo_pericia_id, d.subtipo_prazo_id, d.minutos_antes, req.usuario.id, id]
+          [nome, desc, d.destino, d.tipo_audiencia_id, d.modalidade, d.tipo_pericia_id, d.subtipo_prazo_id, d.minutos_antes, req.usuario.id, id]
         );
         await conn.commit();
       } catch (err) { await conn.rollback(); throw err; }
@@ -934,8 +944,7 @@ async function gerarLote(req, res) {
 async function historicoDocumentos(req, res) {
   try {
     const { de, ate } = req.query;
-    const limitInt  = Math.min(parseInt(req.query.limite) || 50, 100);  // 50 por página, teto 100
-    const offsetInt = ((parseInt(req.query.pagina) || 1) - 1) * limitInt;
+    const { limite: limitInt, offset: offsetInt } = paginacao(req.query, { limitePadrao: 50 });   // 50 por página, teto 100; valor ruim vira o padrão
     const cond = [];
     const params = [];
     if (de)  { cond.push('gerado_em >= ?'); params.push(`${de} 00:00:00`); }
@@ -966,13 +975,13 @@ module.exports = {
   catalogoVariaveisPartes,
   destinosOpcoes,
   listarModelos,
-  buscarModelo,
-  baixarModelo,
+  buscarModelo: comIdNumerico(buscarModelo, 'Modelo não encontrado'),
+  baixarModelo: comIdNumerico(baixarModelo, 'Modelo não encontrado'),
   criarModelo,
-  atualizarModelo,
-  desativarModelo,
-  reativarModelo,
-  excluirModelo,
+  atualizarModelo: comIdNumerico(atualizarModelo, 'Modelo não encontrado'),
+  desativarModelo: comIdNumerico(desativarModelo, 'Modelo não encontrado'),
+  reativarModelo: comIdNumerico(reativarModelo, 'Modelo não encontrado'),
+  excluirModelo: comIdNumerico(excluirModelo, 'Modelo não encontrado'),
   modelosParaGerar,
   gerar,
   gerarEEnviarEmail,

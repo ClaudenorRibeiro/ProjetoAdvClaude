@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const express = require('express');
 const request = require('supertest');
-const { protegerRotas, seguro } = require('../../src/utils/rotasSeguras');
+const { protegerRotas, seguro, comIdNumerico } = require('../../src/utils/rotasSeguras');
 
 function montar() {
   const router = protegerRotas(express.Router());
@@ -49,4 +49,20 @@ test('seguro: não mexe em handler de erro (4 parâmetros), em sub-roteador nem 
   assert.equal(seguro(sub), sub);
   const [a, b] = seguro([(req, res, next) => next(), '/x']);
   assert.equal(typeof a, 'function'); assert.equal(b, '/x');
+});
+
+test('comIdNumerico: id só de dígitos segue para a rota; "abc", negativo, decimal, vazio e número gigante viram 404 sem chamar a rota', async () => {
+  const app = express();
+  let chamadas = 0;
+  app.get('/item/:id', comIdNumerico((req, res) => { chamadas++; res.json({ ok: true, id: req.params.id }); }, 'Item não encontrado'));
+  app.get('/outro/:codigo', comIdNumerico((req, res) => res.json({ ok: true }), 'Outro não encontrado', 'codigo'));
+  assert.equal((await request(app).get('/item/42')).status, 200);
+  for (const ruim of ['abc', '-1', '1.5', '0x10', '99999999999999999999', '12abc']) {
+    const r = await request(app).get(`/item/${ruim}`);
+    assert.equal(r.status, 404, ruim);
+    assert.equal(r.body.mensagem, 'Item não encontrado');
+  }
+  assert.equal(chamadas, 1);
+  assert.equal((await request(app).get('/outro/7')).status, 200);
+  assert.equal((await request(app).get('/outro/x')).status, 404);
 });

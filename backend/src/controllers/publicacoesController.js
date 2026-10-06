@@ -24,6 +24,8 @@ const aaspService = require('../services/aaspService');
 const cnjService = require('../services/cnjService');
 const iaService = require('../services/iaService');
 const { enviarEmail } = require('../utils/email');
+const { paginacao, escaparLike } = require('../utils/helpers');
+const { texto } = require('../utils/camposTexto');
 
 // "Impressão digital" (SHA-256) do texto EXATO da publicação — base da dedup fiel.
 function hashTexto(texto) {
@@ -311,9 +313,13 @@ function montarFiltroPublicacoes(q, usuario, ehBuscadorFlag) {
   }
 
   // Pesquisa por conteúdo (e, de brinde, pelo número do processo). Vale p/ ambos.
-  if (q.busca && q.busca.trim()) {
+  // A busca precisa ser TEXTO (até 200 caracteres); "%" e "_" digitados são procurados como texto.
+  // Busca inválida aqui NUNCA vira "sem filtro" (na exclusão em lote isso apagaria mais do que a tela mostrava): não casa nada.
+  const buscaLida = texto(q.busca, { rotulo: 'A busca', max: 200, feminino: true });
+  if (buscaLida.erro) cond.push('1 = 0');
+  else if (buscaLida.valor) {
     cond.push('(p.texto LIKE ? OR p.numero_processo LIKE ?)');
-    params.push(`%${q.busca.trim()}%`, `%${q.busca.trim()}%`);
+    params.push(`%${escaparLike(buscaLida.valor)}%`, `%${escaparLike(buscaLida.valor)}%`);
   }
 
   return { where: 'WHERE ' + cond.join(' AND '), params, fonte };
@@ -324,8 +330,9 @@ function montarFiltroPublicacoes(q, usuario, ehBuscadorFlag) {
 //          escopo ('todas' = tudo que o usuário pode ver | 'minhas' = só as direcionadas a ele).
 async function listar(req, res) {
   try {
-    const limitInt  = Math.min(parseInt(req.query.limite) || 30, 100);
-    const offsetInt = ((parseInt(req.query.pagina) || 1) - 1) * limitInt;
+    const { limite: limitInt, offset: offsetInt } = paginacao(req.query, { limitePadrao: 30 });   // página/limite ruins viram o padrão
+    const buscaLida = texto(req.query.busca, { rotulo: 'A busca', max: 200, feminino: true });
+    if (buscaLida.erro) return erro(res, buscaLida.erro);
 
     // Trava de 3 meses na pesquisa (defesa no servidor, além da tela).
     if (periodoExcede(req.query.dataInicio, req.query.dataFim)) {
@@ -1002,6 +1009,10 @@ async function excluirLote(req, res) {
     return proibido(res, 'Você não pode excluir publicações — apenas trabalhar as que foram atribuídas a você.');
   }
   const todas = !!body.todas;
+  if (todas) {
+    const buscaLida = texto(body.busca, { rotulo: 'A busca', max: 200, feminino: true });
+    if (buscaLida.erro) return erro(res, buscaLida.erro);
+  }
 
   // Modo "todas": usa todos os filtros da tela. Modo "seleção": só fonte + visibilidade
   // (as ids escolhidas valem por si, independentemente de data/status/busca da tela).

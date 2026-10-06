@@ -15,6 +15,8 @@
 
 const { pool } = require('../config/database');
 const { sucesso, erro, erroInterno } = require('../utils/response');
+const { texto } = require('../utils/camposTexto');
+const { comIdNumerico } = require('../utils/rotasSeguras');
 const usosPermitidos = new Set(['financeira', 'especie', 'ambos']);
 
 function usoValido(uso) {
@@ -36,22 +38,23 @@ async function listar(req, res) {
 // POST /api/financeiro/formas-pagamento — cria uma forma de pagamento
 async function criar(req, res) {
   try {
-    const { nome, uso_permitido } = req.body;
-    if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
-    const uso = usoValido(uso_permitido);
+    const lido = texto(req.body?.nome, { rotulo: 'Nome', max: 60, obrigatorio: true });
+    if (lido.erro) return erro(res, lido.erro);
+    const nome = lido.valor;
+    const uso = usoValido(req.body?.uso_permitido);
     if (!uso) return erro(res, 'Informe onde esta forma pode ser usada.');
     // Confere ANTES de gravar, só para dar a mensagem cedo (evita a viagem ao banco
     // no caso comum). A trava que garante isso de verdade — mesmo com duas gravações
     // simultâneas — é o índice único (nome, ativo) no banco; ver catch abaixo.
     const [existe] = await pool.execute(
-      'SELECT id FROM forma_pagamento WHERE nome = ? AND ativo = 1 LIMIT 1', [nome.trim()]
+      'SELECT id FROM forma_pagamento WHERE nome = ? AND ativo = 1 LIMIT 1', [nome]
     );
     if (existe.length) return erro(res, 'Já existe uma forma de pagamento com esse nome');
     const conn = await pool.getConnection();
     let r;
     try {
       await conn.beginTransaction();
-      [r] = await conn.execute('INSERT INTO forma_pagamento (nome, uso_permitido) VALUES (?, ?)', [nome.trim(), uso]);
+      [r] = await conn.execute('INSERT INTO forma_pagamento (nome, uso_permitido) VALUES (?, ?)', [nome, uso]);
       await conn.commit();
     } catch (err) { await conn.rollback(); throw err; }
     finally { conn.release(); }
@@ -66,19 +69,20 @@ async function criar(req, res) {
 async function atualizar(req, res) {
   try {
     const { id } = req.params;
-    const { nome, uso_permitido } = req.body;
-    if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
-    const uso = usoValido(uso_permitido);
+    const lido = texto(req.body?.nome, { rotulo: 'Nome', max: 60, obrigatorio: true });
+    if (lido.erro) return erro(res, lido.erro);
+    const nome = lido.valor;
+    const uso = usoValido(req.body?.uso_permitido);
     if (!uso) return erro(res, 'Informe onde esta forma pode ser usada.');
     // Duplicidade ignorando o próprio registro (mesma observação do criar acima)
     const [existe] = await pool.execute(
-      'SELECT id FROM forma_pagamento WHERE nome = ? AND ativo = 1 AND id <> ? LIMIT 1', [nome.trim(), id]
+      'SELECT id FROM forma_pagamento WHERE nome = ? AND ativo = 1 AND id <> ? LIMIT 1', [nome, id]
     );
     if (existe.length) return erro(res, 'Já existe uma forma de pagamento com esse nome');
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
-      await conn.execute('UPDATE forma_pagamento SET nome = ?, uso_permitido = ? WHERE id = ?', [nome.trim(), uso, id]);
+      await conn.execute('UPDATE forma_pagamento SET nome = ?, uso_permitido = ? WHERE id = ?', [nome, uso, id]);
       await conn.commit();
     } catch (err) { await conn.rollback(); throw err; }
     finally { conn.release(); }
@@ -106,4 +110,8 @@ async function excluir(req, res) {
   }
 }
 
-module.exports = { listar, criar, atualizar, excluir };
+module.exports = {
+  listar, criar,
+  atualizar: comIdNumerico(atualizar, 'Forma de pagamento não encontrada'),
+  excluir: comIdNumerico(excluir, 'Forma de pagamento não encontrada'),
+};

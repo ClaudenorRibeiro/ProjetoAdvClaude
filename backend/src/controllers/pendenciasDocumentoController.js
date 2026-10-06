@@ -17,7 +17,9 @@ const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
 const { enviarEmail } = require('../utils/email');
-const { hojeBrasilia } = require('../utils/helpers');
+const { hojeBrasilia, escaparLike } = require('../utils/helpers');
+const { texto } = require('../utils/camposTexto');
+const { comIdNumerico } = require('../utils/rotasSeguras');
 
 // Expressão SQL que resolve o nome do cliente (PF ou PJ) a partir de tipo_pessoa/pessoa_id.
 // `alias` é o alias da tabela pendencia_documento na consulta.
@@ -159,9 +161,11 @@ async function listar(req, res) {
                                 AND r.data_aviso IS NOT NULL AND r.avisado_em IS NULL
                                 AND r.data_aviso <= CURDATE())`;
     }
-    if (busca && busca.trim()) {
+    const buscaLida = texto(busca, { rotulo: 'A busca', max: 200, feminino: true });
+    if (buscaLida.erro) return erro(res, buscaLida.erro);
+    if (buscaLida.valor) {
       where += ` AND (${nomeClienteSQL('pd')}) LIKE ?`;
-      params.push(`%${busca.trim()}%`);
+      params.push(`%${escaparLike(buscaLida.valor)}%`);        // "%" e "_" digitados são procurados como texto
     }
 
     const [rows] = await pool.execute(
@@ -615,8 +619,8 @@ async function buscarClientes(req, res) {
   try {
     const termo = String(req.query.busca || '').trim();
     if (termo.length < 2) return sucesso(res, []);
-    const like = `%${termo}%`;
-    const inicio = `${termo}%`;
+    const like = `%${escaparLike(termo)}%`;                    // "%" e "_" digitados são procurados como texto
+    const inicio = `${escaparLike(termo)}%`;
     const digitos = termo.replace(/\D/g, '');        // só entra na busca se o usuário digitou números
     const likeDig = digitos ? `%${digitos}%` : null;
 
@@ -673,8 +677,9 @@ async function listarTipos(req, res) {
 // POST /api/pendencias-documento/tipos — cadastra um tipo novo (reaproveitável nos próximos casos)
 async function criarTipo(req, res) {
   try {
-    const nome = (req.body.nome || '').trim();
-    if (!nome) return erro(res, 'Nome é obrigatório');
+    const lido = texto(req.body?.nome, { rotulo: 'Nome', max: 150, obrigatorio: true });
+    if (lido.erro) return erro(res, lido.erro);
+    const nome = lido.valor;
     const [existe] = await pool.execute(
       'SELECT id FROM tipo_documento_pendencia WHERE nome = ? LIMIT 1', [nome]
     );
@@ -700,8 +705,9 @@ async function criarTipo(req, res) {
 // Documento em uso em alguma pendência NÃO pode ser renomeado nem excluído.
 async function atualizarTipo(req, res) {
   try {
-    const nome = (req.body.nome || '').trim();
-    if (!nome) return erro(res, 'Nome é obrigatório');
+    const lido = texto(req.body?.nome, { rotulo: 'Nome', max: 150, obrigatorio: true });
+    if (lido.erro) return erro(res, lido.erro);
+    const nome = lido.valor;
     const [uso] = await pool.execute(
       'SELECT id FROM pendencia_documento_item WHERE tipo_documento_id = ? LIMIT 1',
       [req.params.id]
@@ -758,5 +764,6 @@ async function excluirTipo(req, res) {
 module.exports = {
   listar, buscar, criar, atualizar, marcarItem, cancelar, excluir,
   listarUsuarios, buscarClientes,
-  listarTipos, criarTipo, atualizarTipo, excluirTipo,
+  listarTipos, criarTipo,
+  atualizarTipo: comIdNumerico(atualizarTipo, 'Documento não encontrado'), excluirTipo: comIdNumerico(excluirTipo, 'Documento não encontrado'),
 };

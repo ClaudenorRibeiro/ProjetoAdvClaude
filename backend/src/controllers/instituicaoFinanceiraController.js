@@ -18,6 +18,8 @@
 const { pool } = require('../config/database');
 const { sucesso, erro, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
+const { texto } = require('../utils/camposTexto');
+const { comIdNumerico } = require('../utils/rotasSeguras');
 
 // GET /api/financeiro/instituicoes-financeiras — lista os bancos ativos (selects + gestão)
 async function listar(req, res) {
@@ -38,12 +40,13 @@ async function listar(req, res) {
 // para permitir recriar um nome que já foi desativado (auditoria 23/09: os dois
 // caminhos tinham regra de duplicidade e capitalização diferentes entre si).
 async function criarBancoNoCatalogo(nome, usuarioId) {
-  const nomeTrim = String(nome || '').trim();
-  if (!nomeTrim) {
-    const e = new Error('Nome é obrigatório');
+  const lido = texto(nome, { rotulo: 'Nome', max: 100, obrigatorio: true });   // a coluna aceita 100 caracteres
+  if (lido.erro) {
+    const e = new Error(lido.erro);
     e.codigoValidacaoAuxiliar = true;
     throw e;
   }
+  const nomeTrim = lido.valor;
   const [existe] = await pool.execute(
     'SELECT id FROM instituicao_financeira WHERE nome = ? AND ativo = 1 LIMIT 1', [nomeTrim]
   );
@@ -67,7 +70,7 @@ async function criarBancoNoCatalogo(nome, usuarioId) {
 // POST /api/financeiro/instituicoes-financeiras — cria um banco
 async function criar(req, res) {
   try {
-    const banco = await criarBancoNoCatalogo(req.body.nome, req.usuario.id);
+    const banco = await criarBancoNoCatalogo(req.body?.nome, req.usuario.id);
     return sucesso(res, { id: banco.id }, 'Banco criado', 201);
   } catch (e) {
     if (e.codigoValidacaoAuxiliar) return erro(res, e.message);
@@ -80,17 +83,18 @@ async function criar(req, res) {
 async function atualizar(req, res) {
   try {
     const { id } = req.params;
-    const { nome } = req.body;
-    if (!nome?.trim()) return erro(res, 'Nome é obrigatório');
+    const lido = texto(req.body?.nome, { rotulo: 'Nome', max: 100, obrigatorio: true });
+    if (lido.erro) return erro(res, lido.erro);
+    const nome = lido.valor;
     const [antes] = await pool.execute('SELECT * FROM instituicao_financeira WHERE id = ?', [id]);
     const [existe] = await pool.execute(
-      'SELECT id FROM instituicao_financeira WHERE nome = ? AND ativo = 1 AND id <> ? LIMIT 1', [nome.trim(), id]
+      'SELECT id FROM instituicao_financeira WHERE nome = ? AND ativo = 1 AND id <> ? LIMIT 1', [nome, id]
     );
     if (existe.length) return erro(res, 'Já existe um banco com esse nome');
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
-      await conn.execute('UPDATE instituicao_financeira SET nome = ? WHERE id = ?', [nome.trim(), id]);
+      await conn.execute('UPDATE instituicao_financeira SET nome = ? WHERE id = ?', [nome, id]);
       await auditoria.registrar(req.usuario.id, 'instituicao_financeira', 'editar', id, antes[0], null, conn);
       await conn.commit();
     } catch (err) { await conn.rollback(); throw err; }
@@ -122,4 +126,8 @@ async function excluir(req, res) {
   }
 }
 
-module.exports = { listar, criar, atualizar, excluir, criarBancoNoCatalogo };
+module.exports = {
+  listar, criar, criarBancoNoCatalogo,
+  atualizar: comIdNumerico(atualizar, 'Banco não encontrado'),
+  excluir: comIdNumerico(excluir, 'Banco não encontrado'),
+};

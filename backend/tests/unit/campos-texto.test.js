@@ -1,7 +1,7 @@
 // Leitura segura de campos de texto vindos da tela (nome obrigatório, limite do banco, não-texto).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { texto, lerTextos } = require('../../src/utils/camposTexto');
+const { texto, lerTextos, horaDoDia } = require('../../src/utils/camposTexto');
 
 test('texto: limpa espaços; vazio obrigatório é erro; vazio opcional vira nulo', () => {
   assert.deepEqual(texto('  Fórum  ', { rotulo: 'Nome', max: 50, obrigatorio: true }), { valor: 'Fórum' });
@@ -44,4 +44,12 @@ test('texto: rótulo feminino ("feminino: true") concorda — obrigatória, long
   assert.deepEqual(texto('  ', { rotulo: 'A cidade', feminino: true }), { valor: null });
   // sem a opção, continua masculino (nada muda para quem já usa)
   assert.deepEqual(texto('  ', { rotulo: 'O nome', obrigatorio: true }), { erro: 'O nome é obrigatório' });
+});
+
+test('horaDoDia: aceita HH:MM e HH:MM:SS que existem; vazia = não informada; o resto é erro claro', () => {
+  assert.deepEqual(horaDoDia('09:30'), { valor: '09:30' });
+  assert.deepEqual(horaDoDia('23:59:59'), { valor: '23:59:59' });
+  assert.deepEqual(horaDoDia(''), { valor: null });
+  assert.deepEqual(horaDoDia(undefined), { valor: null });
+  for (const ruim of ['24:00', '12:60', '9:30', 'abc', 930, ['09:30'], '09:30:99']) assert.deepEqual(horaDoDia(ruim, { rotulo: 'Hora de início' }), { erro: 'Hora de início inválida (use HH:MM)' });
 });

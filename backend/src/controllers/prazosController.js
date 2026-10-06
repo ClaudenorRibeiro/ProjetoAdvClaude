@@ -7,9 +7,10 @@ const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const { calcularVencimento, calcularQuantidade } = require('../services/calendarioService');
 const { criarNotificacao, notificarConclusao, emailPrazoDelegado } = require('../services/notificacaoService');
-const { hojeBrasilia, pastaFormatadaSql } = require('../utils/helpers');
+const { hojeBrasilia, pastaFormatadaSql, paginacao } = require('../utils/helpers');
 const auditoria = require('../middleware/auditoria');
 const { texto, dataIso, inteiroPositivo } = require('../utils/camposTexto');
+const { comIdNumerico } = require('../utils/rotasSeguras');
 const { lerBuscaFrase, condBuscaFrase } = require('../utils/buscaFrase');
 
 function responderErroCalendario(res, err) {
@@ -165,7 +166,7 @@ async function liberarFazendoExpirados() {
 // Status é calculado dinamicamente pela data (concluido/cancelado são armazenados)
 async function listar(req, res) {
   try {
-    const { processo_id, usuario_id, status, data_de, data_ate, mostrar_encerrados, pagina = 1, limite = 30 } = req.query;
+    const { processo_id, usuario_id, status, data_de, data_ate, mostrar_encerrados } = req.query;
     const params = [];
     let where = 'WHERE 1=1';
 
@@ -239,8 +240,7 @@ async function listar(req, res) {
       params.push(req.usuario.id, etqSlot);
     }
 
-    const limitInt  = Math.min(parseInt(limite) || 30, 100);
-    const offsetInt = parseInt((pagina - 1) * limitInt) || 0;
+    const { limite: limitInt, offset: offsetInt } = paginacao(req.query, { limitePadrao: 30 });   // página/limite ruins viram o padrão (nunca erro de SQL)
 
     const [rows] = await pool.execute(
       `SELECT pp.id, pp.descricao, pp.data_inicio, pp.data_vencimento,
@@ -525,11 +525,11 @@ async function buscarTipos(req, res) {
 // Só insere (a tabela já existe); dedup pelo nome (case-insensitive).
 async function criarTipo(req, res) {
   try {
-    const { nome } = req.body;
-    if (!nome?.trim()) return erro(res, 'Nome do tipo é obrigatório');
+    const lido = texto(req.body?.nome, { rotulo: 'Nome do tipo', max: 100, obrigatorio: true });
+    if (lido.erro) return erro(res, lido.erro);
 
     // Mantém o texto digitado, apenas garante a 1ª letra maiúscula
-    const nomeTrimmed     = nome.trim();
+    const nomeTrimmed     = lido.valor;
     const nomeNormalizado = nomeTrimmed.charAt(0).toUpperCase() + nomeTrimmed.slice(1);
 
     const [dup] = await pool.execute(
@@ -558,15 +558,18 @@ async function criarTipo(req, res) {
 // A duplicata é conferida DENTRO do mesmo tipo (o mesmo nome pode existir em outro tipo).
 async function criarSubtipo(req, res) {
   try {
-    const { nome, tipo_prazo_id } = req.body;
-    if (!nome?.trim())   return erro(res, 'Nome do subtipo é obrigatório');
-    if (!tipo_prazo_id)  return erro(res, 'Selecione o tipo de prazo antes de cadastrar o subtipo');
+    const lido = texto(req.body?.nome, { rotulo: 'Nome do subtipo', max: 150, obrigatorio: true });
+    if (lido.erro) return erro(res, lido.erro);
+    const tipoLido = inteiroPositivo(req.body?.tipo_prazo_id, { rotulo: 'Tipo de prazo' });
+    if (tipoLido.erro) return erro(res, tipoLido.erro);
+    if (!tipoLido.valor) return erro(res, 'Selecione o tipo de prazo antes de cadastrar o subtipo');
+    const tipo_prazo_id = tipoLido.valor;
 
     // Confere que o tipo informado existe (a FK exige um tipo_prazo_id válido)
     const [tipoRow] = await pool.execute('SELECT id FROM tipo_prazo WHERE id = ?', [tipo_prazo_id]);
     if (!tipoRow.length) return erro(res, 'Tipo de prazo informado não existe');
 
-    const nomeTrimmed     = nome.trim();
+    const nomeTrimmed     = lido.valor;
     const nomeNormalizado = nomeTrimmed.charAt(0).toUpperCase() + nomeTrimmed.slice(1);
 
     const [dup] = await pool.execute(
@@ -598,13 +601,13 @@ async function criarSubtipo(req, res) {
 async function editarTipo(req, res) {
   try {
     const { id } = req.params;
-    const { nome } = req.body;
-    if (!nome?.trim()) return erro(res, 'Nome do tipo é obrigatório');
+    const lido = texto(req.body?.nome, { rotulo: 'Nome do tipo', max: 100, obrigatorio: true });
+    if (lido.erro) return erro(res, lido.erro);
 
     const [tipoRow] = await pool.execute('SELECT id FROM tipo_prazo WHERE id = ?', [id]);
     if (!tipoRow.length) return naoEncontrado(res, 'Tipo de prazo não encontrado');
 
-    const nomeTrimmed     = nome.trim();
+    const nomeTrimmed     = lido.valor;
     const nomeNormalizado = nomeTrimmed.charAt(0).toUpperCase() + nomeTrimmed.slice(1);
 
     const [dup] = await pool.execute(
@@ -657,13 +660,13 @@ async function excluirTipo(req, res) {
 async function editarSubtipo(req, res) {
   try {
     const { id } = req.params;
-    const { nome } = req.body;
-    if (!nome?.trim()) return erro(res, 'Nome do subtipo é obrigatório');
+    const lido = texto(req.body?.nome, { rotulo: 'Nome do subtipo', max: 150, obrigatorio: true });
+    if (lido.erro) return erro(res, lido.erro);
 
     const [subtipoRow] = await pool.execute('SELECT id, tipo_prazo_id FROM prazo_subtipo WHERE id = ?', [id]);
     if (!subtipoRow.length) return naoEncontrado(res, 'Subtipo não encontrado');
 
-    const nomeTrimmed     = nome.trim();
+    const nomeTrimmed     = lido.valor;
     const nomeNormalizado = nomeTrimmed.charAt(0).toUpperCase() + nomeTrimmed.slice(1);
 
     const [dup] = await pool.execute(
@@ -1091,4 +1094,6 @@ async function listarUsuariosFiltro(req, res) {
   }
 }
 
-module.exports = { listar, criar, editar, excluir, mudarStatus, buscarTipos, criarTipo, editarTipo, excluirTipo, criarSubtipo, editarSubtipo, excluirSubtipo, vencemHoje, calcularDataFinal, calcularDias, marcarFazendo, liberarFazendo, liberarFazendoExpirados, buscarHistorico, listarUsuariosFiltro };
+module.exports = { listar, criar, editar, excluir, mudarStatus, buscarTipos, criarTipo, criarSubtipo,
+  editarTipo: comIdNumerico(editarTipo, 'Tipo de prazo não encontrado'), excluirTipo: comIdNumerico(excluirTipo, 'Tipo de prazo não encontrado'),
+  editarSubtipo: comIdNumerico(editarSubtipo, 'Subtipo não encontrado'), excluirSubtipo: comIdNumerico(excluirSubtipo, 'Subtipo não encontrado'), vencemHoje, calcularDataFinal, calcularDias, marcarFazendo, liberarFazendo, liberarFazendoExpirados, buscarHistorico, listarUsuariosFiltro };

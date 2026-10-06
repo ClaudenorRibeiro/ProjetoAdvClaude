@@ -9,6 +9,7 @@ const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response
 const auditoria = require('../middleware/auditoria');
 const { parseMoeda, pastaFormatadaSql, escaparLike, paginacao, numeroPastaValido } = require('../utils/helpers');
 const { texto, lerTextos } = require('../utils/camposTexto');
+const { comIdNumerico } = require('../utils/rotasSeguras');
 
 // Confere que TODA parte (autor/réu/perito) enviada aponta para uma pessoa que
 // existe e está ativa. tbltituloproc* e processo_perito são polimórficos SEM
@@ -107,7 +108,10 @@ async function sugerirNumeroPasta(req, res) {
 // GET /api/processos/pastas — Lista pastas com resumo do processo mais recente
 async function listarPastas(req, res) {
   try {
-    const { busca, etiqueta, etiquetaEscritorio, assuntos } = req.query;
+    const { etiqueta, etiquetaEscritorio, assuntos } = req.query;
+    const buscaLida = texto(req.query.busca, { rotulo: 'A busca', max: 200, feminino: true });   // precisa ser texto (?busca[]=a dava erro 500)
+    if (buscaLida.erro) return erro(res, buscaLida.erro);
+    const busca = buscaLida.valor;
     const { limite: limitInt, offset: offsetInt } = paginacao(req.query);
     const params = [];
     let where = 'WHERE 1=1';
@@ -1103,11 +1107,6 @@ async function _nomeJaExiste(executor, tabela, nome, ignorarId = null) {
   return r.length > 0;
 }
 const _mensagemNomeRepetido = (tabela) => `Já existe ${_ROTULO_AUX[tabela][0]} ${_ROTULO_AUX[tabela][1]} com este nome`;
-
-// Identificador que não é número (ex.: /foruns/abc) é "não encontrado" — antes o banco recusava a comparação e dava erro 500.
-function comIdNumerico(handler, mensagemNaoEncontrado) {
-  return (req, res) => (/^\d+$/.test(String(req.params.id)) ? handler(req, res) : naoEncontrado(res, mensagemNaoEncontrado));
-}
 
 // Resposta padrão quando a tela escolheu um fórum que não existe mais (ou foi excluído).
 const _forumInexistente = (res) => res.status(409).json({

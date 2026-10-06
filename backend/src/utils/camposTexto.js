@@ -38,6 +38,13 @@ function dataIso(bruto, { rotulo = 'Data' } = {}) {
   return { valor: bruto };
 }
 
+// Hora do dia "HH:MM" ou "HH:MM:SS" que existe (rejeita 25:00, 12:99, números, listas...). Vazia = não informada ({ valor: null }).
+function horaDoDia(bruto, { rotulo = 'Hora' } = {}) {
+  if (bruto === undefined || bruto === null || bruto === '') return { valor: null };
+  if (typeof bruto !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(bruto)) return { erro: `${rotulo} inválida (use HH:MM)` };
+  return { valor: bruto };
+}
+
 // Número inteiro positivo (aceita número ou texto só de dígitos, como vem dos campos da tela). Vazio = não informado ({ valor: null }).
 function inteiroPositivo(bruto, { rotulo = 'Valor', max = 2147483647 } = {}) {
   if (bruto === undefined || bruto === null || bruto === '') return { valor: null };
@@ -48,4 +55,4 @@ function inteiroPositivo(bruto, { rotulo = 'Valor', max = 2147483647 } = {}) {
   return { valor: n };
 }
 
-module.exports = { texto, lerTextos, dataIso, inteiroPositivo };
+module.exports = { texto, lerTextos, dataIso, horaDoDia, inteiroPositivo };

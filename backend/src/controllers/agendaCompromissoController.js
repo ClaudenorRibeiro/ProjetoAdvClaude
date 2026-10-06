@@ -14,6 +14,8 @@ const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const { bloqueiaAgendarPassado } = require('../utils/helpers');
 const agendaGoogle = require('../services/agendaGoogleService');
+const { texto, dataIso, horaDoDia, inteiroPositivo } = require('../utils/camposTexto');
+const { comIdNumerico } = require('../utils/rotasSeguras');
 
 // Envia o compromisso para o Google Agenda do DONO (delegado, ou o criador se não
 // houver delegado), se ele ativou a opção no menu dele. "Melhor esforço": roda em
@@ -103,21 +105,31 @@ async function listar(req, res) {
   }
 }
 
-// Normaliza os campos do corpo (hora só quando NÃO for dia todo).
-function dadosDoCorpo(body) {
+// Normaliza os campos do corpo (hora só quando NÃO for dia todo) e confere tipo e tamanho de cada um
+// (limites das colunas de agenda_compromisso). Em caso de dado inválido devolve { erro } com a mensagem.
+function dadosDoCorpo(body = {}) {
   const diaTodo = body.dia_todo ? 1 : 0;
+  const titulo = texto(body.titulo, { rotulo: 'O título', max: 150 });
+  const descricao = texto(body.descricao, { rotulo: 'A descrição', max: 5000, feminino: true });
+  const data = dataIso(body.data, { rotulo: 'Data' });
+  const horaInicio = horaDoDia(body.hora_inicio, { rotulo: 'Hora de início' });
+  const horaFim = horaDoDia(body.hora_fim, { rotulo: 'Hora de término' });
+  const delegado = inteiroPositivo(body.delegado_para, { rotulo: 'Usuário delegado' });
+  const publicacao = inteiroPositivo(body.publicacao_id, { rotulo: 'Publicação' });
+  const invalido = [titulo, descricao, data, horaInicio, horaFim, delegado, publicacao].find(r => r.erro);
+  if (invalido) return { erro: invalido.erro };
   return {
-    titulo: (body.titulo || '').trim(),
-    descricao: body.descricao && body.descricao.trim() ? body.descricao.trim() : null,
-    data: body.data || null,
+    titulo: titulo.valor || '',
+    descricao: descricao.valor,
+    data: data.valor,
     dia_todo: diaTodo,
-    hora_inicio: diaTodo ? null : (body.hora_inicio || null),
-    hora_fim: diaTodo ? null : (body.hora_fim || null),
+    hora_inicio: diaTodo ? null : horaInicio.valor,
+    hora_fim: diaTodo ? null : horaFim.valor,
     escritorio: body.escritorio ? 1 : 0,
     // Delegado: para quem é o compromisso. Vazio/0 → null (compromisso do próprio criador).
-    delegado_para: body.delegado_para ? Number(body.delegado_para) : null,
+    delegado_para: delegado.valor,
     // Origem opcional: publicação que gerou este compromisso (só na criação). Vazio → null.
-    publicacao_id: body.publicacao_id ? Number(body.publicacao_id) : null,
+    publicacao_id: publicacao.valor,
   };
 }
 
@@ -125,6 +137,7 @@ function dadosDoCorpo(body) {
 async function criar(req, res) {
   try {
     const d = dadosDoCorpo(req.body);
+    if (d.erro) return erro(res, d.erro);
     if (!d.titulo) return erro(res, 'Informe o título do compromisso');
     if (!d.data)   return erro(res, 'Informe a data');
     if (bloqueiaAgendarPassado(req.usuario, d.data)) {
@@ -161,6 +174,7 @@ async function atualizar(req, res) {
     if (!podeMexer(rows[0], req.usuario)) return erro(res, 'Você não tem permissão para editar este compromisso');
 
     const d = dadosDoCorpo(req.body);
+    if (d.erro) return erro(res, d.erro);
     if (!d.titulo) return erro(res, 'Informe o título do compromisso');
     if (!d.data)   return erro(res, 'Informe a data');
     if (bloqueiaAgendarPassado(req.usuario, d.data)) {
@@ -276,4 +290,9 @@ async function listarUsuariosAtivos(req, res) {
   }
 }
 
-module.exports = { listar, criar, atualizar, excluir, darBaixa, listarUsuariosAtivos };
+module.exports = {
+  listar, criar, listarUsuariosAtivos,
+  atualizar: comIdNumerico(atualizar, 'Compromisso não encontrado'),
+  excluir: comIdNumerico(excluir, 'Compromisso não encontrado'),
+  darBaixa: comIdNumerico(darBaixa, 'Compromisso não encontrado'),
+};
