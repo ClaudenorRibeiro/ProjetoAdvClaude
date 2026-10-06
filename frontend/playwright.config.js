@@ -6,7 +6,7 @@ export default defineConfig({
   forbidOnly: true,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : 1,
-  timeout: 45_000,
+  timeout: 90_000,   // máquina lenta (Windows): vários testes longos passavam de 40 s; o limite de cada verificação continua 8 s (expect abaixo)
   expect: { timeout: 8_000 },
   reporter: [
     ['list'],
