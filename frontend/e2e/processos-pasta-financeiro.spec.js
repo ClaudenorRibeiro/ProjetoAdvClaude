@@ -396,10 +396,12 @@ test('Sem lançamentos nem acordos: a aba mostra "Nenhum lançamento neste proce
 // ---- Repasse DESTA parcela, direto do menu ⋮ da parcela (a aba "Repasses pendentes" da tela Financeiro continua igual) ----
 // Prepara: caixa e forma de dinheiro, cliente e parceiro; a parcela 1 do acordo vira "recebida" com o cliente como beneficiário padrão.
 async function prepararRepasse({ comParceiro = false } = {}) {
-  const caixa = (await noBanco("INSERT INTO conta_financeira (nome, tipo, ativo, principal) VALUES ('Caixa C8', 'especie', 1, 0)")).insertId;
-  const forma = (await noBanco("INSERT INTO forma_pagamento (nome, uso_permitido) VALUES ('Dinheiro C8', 'especie')")).insertId;
-  const cliente = (await noBanco("INSERT INTO pessoas_fisicas (nome, cpf) VALUES ('Cliente Repasse C8', '16899535009')")).insertId;
-  const parceiro = (await noBanco("INSERT INTO pessoas_fisicas (nome, cpf) VALUES ('Parceiro Repasse C8', '39053344705')")).insertId;
+  // cadastros de apoio ficam entre os testes deste bloco (limpos no afterAll): cria só se ainda não existir
+  const achaOuCria = async (sqlBusca, sqlInsere) => (await noBanco(sqlBusca))[0]?.id ?? (await noBanco(sqlInsere)).insertId;
+  const caixa = await achaOuCria("SELECT id FROM conta_financeira WHERE nome = 'Caixa C8'", "INSERT INTO conta_financeira (nome, tipo, ativo, principal) VALUES ('Caixa C8', 'especie', 1, 0)");
+  const forma = await achaOuCria("SELECT id FROM forma_pagamento WHERE nome = 'Dinheiro C8'", "INSERT INTO forma_pagamento (nome, uso_permitido) VALUES ('Dinheiro C8', 'especie')");
+  const cliente = await achaOuCria("SELECT id FROM pessoas_fisicas WHERE nome = 'Cliente Repasse C8'", "INSERT INTO pessoas_fisicas (nome, cpf) VALUES ('Cliente Repasse C8', '52998224725')");
+  const parceiro = await achaOuCria("SELECT id FROM pessoas_fisicas WHERE nome = 'Parceiro Repasse C8'", "INSERT INTO pessoas_fisicas (nome, cpf) VALUES ('Parceiro Repasse C8', '11144477735')");
   await noBanco("UPDATE acordo_parcela SET status = 'pago', recebido_em = '2099-03-15', repasse_cliente_tipo = 'fisica', repasse_cliente_pessoa_id = ? WHERE id = ?", [cliente, d.pa1]);
   if (comParceiro) await noBanco("UPDATE acordo_parcela SET parceria_pessoa_tipo = 'fisica', parceria_pessoa_id = ?, parceria_tipo = 'valor', parceria_valor = 100 WHERE id = ?", [parceiro, d.pa1]);
   return { caixa, forma, cliente, parceiro };
@@ -486,5 +488,9 @@ test('@critical Repassar pelo menu da parcela: quem só VISUALIZA o financeiro n
   await abrirAba(page, CNJ1);
   await abrirParcelas(page);
   await expect(parcelaRecebida(page).getByText('Falta repassar ao cliente')).toBeVisible();
-  await expect(parcelaRecebida(page).getByTitle('Mais ações')).toHaveCount(0);   // sem permissão de alterar não há menu de ações nas parcelas
+  // o menu existe (tem "Histórico"), mas sem permissão de alterar não oferece Repassar nem Desfazer recebimento
+  await abrirMenuAcoes(page, parcelaRecebida(page));
+  await expect(page.getByRole('button', { name: /Histórico/ }).last()).toBeVisible();
+  await expect(page.getByRole('button', { name: /Repassar/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Desfazer recebimento/ })).toHaveCount(0);
 });
