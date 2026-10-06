@@ -1047,6 +1047,7 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
   const [historicoDe, setHistoricoDe] = useState(null); // parcela com histórico aberto
   const [cancelando, setCancelando] = useState(false); // modal de cancelar acordo (pede motivo)
   const [recibosAcordo, setRecibosAcordo] = useState(false);
+  const [repassandoParcela, setRepassandoParcela] = useState(null); // { parcela, tipo, ... } aguardando a janela de repasse desta parcela
   const [multaEditando, setMultaEditando] = useState(null); // parcela lançando/editando a multa
   const [recebendoMulta, setRecebendoMulta] = useState(null); // parcela aguardando a data do recebimento da multa
   const [confirmar, setConfirmar] = useState(null); // confirmação genérica (ex.: remover multa)
@@ -1082,6 +1083,23 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
     catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao desfazer'); }
   }
   // (O desfazer de repasse fica na aba Repasses → Concluídos, não na linha da parcela.)
+
+  // Repasse DESTA parcela direto do menu dela (a aba "Repasses pendentes" continua igual): reaproveita a mesma janela (ModalRepasse)
+  // e a mesma chamada. `tipo` = 'cliente' ou 'parceiro'. A parcela do acordo não traz o processo; a janela precisa dele para listar os beneficiários.
+  function pedirRepasse(p, tipo) {
+    setRepassandoParcela({
+      key: `${tipo}-${p.id}`, origem: 'parcela', tipo,
+      beneficiario: tipo === 'cliente' ? 'Cliente' : (p.parceria_nome || 'Parceiro'),
+      valor: tipo === 'cliente' ? p.valor_liquido : p.parceria_valor,
+      parcela: { ...p, processo_id: acordo.processo_id },
+    });
+  }
+  async function confirmarRepasseDaParcela(dados) {
+    try {
+      await financeiroAPI.registrarRepasse(repassandoParcela.parcela.id, { tipo: repassandoParcela.tipo, ...dados });
+      toast.success('Repasse registrado'); setRepassandoParcela(null); setParcelas(null); setAberto(false); onMudou();
+    } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao repassar'); }
+  }
 
   // Multa por atraso desta parcela: lançar/editar (mesmo modal), remover, receber, desfazer.
   // Ainda não recebida: fica "lançada" e não mexe na conta corrente. "Receber multa" é o
@@ -1215,6 +1233,16 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
                       // Uma vez lançada, o restante do ciclo (editar/receber/remover/desfazer) não
                       // depende mais do status da parcela em si — a parcela pode até já ter sido
                       // recebida depois (ela só destrava quando a multa é recebida).
+                      // Repasse desta parcela: só recebida e com repasse pendente. Um só pendente → abre direto; cliente E parceiro → submenu.
+                      { label: 'Repassar', icone: '💸',
+                        oculto: !(podeAlterar && cicloDaParcela(p)?.length === 1),
+                        onClick: () => pedirRepasse(p, cicloDaParcela(p)[0]) },
+                      { label: 'Repassar', icone: '💸',
+                        oculto: !(podeAlterar && cicloDaParcela(p)?.length === 2),
+                        submenu: [
+                          { label: 'Repassar ao cliente', icone: '💸', onClick: () => pedirRepasse(p, 'cliente') },
+                          { label: `Repassar ao parceiro${p.parceria_nome ? ` (${p.parceria_nome})` : ''}`, icone: '💸', onClick: () => pedirRepasse(p, 'parceiro') },
+                        ] },
                       { label: 'Lançar multa', icone: '⚠️',
                         oculto: !(podeAlterar && p.status === 'pendente' && !p.multa),
                         onClick: () => setMultaEditando(p) },
@@ -1312,6 +1340,9 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
       )}
       {historicoDe && (
         <ModalHistoricoParcela parcela={historicoDe} onFechar={() => setHistoricoDe(null)} />
+      )}
+      {repassandoParcela && (
+        <ModalRepasse linha={repassandoParcela} onCancelar={() => setRepassandoParcela(null)} onConfirmar={confirmarRepasseDaParcela} />
       )}
       {cancelando && (
         <ModalCancelarAcordo onCancelar={() => setCancelando(false)} onConfirmar={cancelar} />

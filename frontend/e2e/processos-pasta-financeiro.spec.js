@@ -49,6 +49,9 @@ test.afterAll(async () => {
   await noBanco("DELETE FROM conta_financeira WHERE nome = 'Conta C8'");
   await noBanco("DELETE FROM instituicao_financeira WHERE nome = 'Banco C8'");
   await noBanco("DELETE FROM forma_pagamento WHERE nome = 'Pix C8'");
+  await noBanco("DELETE FROM conta_financeira WHERE nome = 'Caixa C8'");
+  await noBanco("DELETE FROM forma_pagamento WHERE nome = 'Dinheiro C8'");
+  await noBanco("DELETE FROM pessoas_fisicas WHERE nome IN ('Cliente Repasse C8', 'Parceiro Repasse C8')");
   await noBanco("DELETE FROM logs_auditoria WHERE tabela IN ('conta_corrente', 'acordo', 'acordo_parcela')");
   await noBanco("DELETE FROM calendario WHERE data >= '2099-03-01' AND data <= '2099-07-31'");
   await noBanco("DELETE FROM calendario WHERE data >= '2001-01-01' AND data <= '2001-01-31'");
@@ -388,4 +391,100 @@ test('Sem lançamentos nem acordos: a aba mostra "Nenhum lançamento neste proce
   await expect(page.getByText('Nenhum lançamento neste processo')).toBeVisible();
   await expect(page.getByText(/R\$\s?0,00/).first()).toBeVisible();
   await semViolacoes(page, 'aba Financeiro vazia');
+});
+
+// ---- Repasse DESTA parcela, direto do menu ⋮ da parcela (a aba "Repasses pendentes" da tela Financeiro continua igual) ----
+// Prepara: caixa e forma de dinheiro, cliente e parceiro; a parcela 1 do acordo vira "recebida" com o cliente como beneficiário padrão.
+async function prepararRepasse({ comParceiro = false } = {}) {
+  const caixa = (await noBanco("INSERT INTO conta_financeira (nome, tipo, ativo, principal) VALUES ('Caixa C8', 'especie', 1, 0)")).insertId;
+  const forma = (await noBanco("INSERT INTO forma_pagamento (nome, uso_permitido) VALUES ('Dinheiro C8', 'especie')")).insertId;
+  const cliente = (await noBanco("INSERT INTO pessoas_fisicas (nome, cpf) VALUES ('Cliente Repasse C8', '16899535009')")).insertId;
+  const parceiro = (await noBanco("INSERT INTO pessoas_fisicas (nome, cpf) VALUES ('Parceiro Repasse C8', '39053344705')")).insertId;
+  await noBanco("UPDATE acordo_parcela SET status = 'pago', recebido_em = '2099-03-15', repasse_cliente_tipo = 'fisica', repasse_cliente_pessoa_id = ? WHERE id = ?", [cliente, d.pa1]);
+  if (comParceiro) await noBanco("UPDATE acordo_parcela SET parceria_pessoa_tipo = 'fisica', parceria_pessoa_id = ?, parceria_tipo = 'valor', parceria_valor = 100 WHERE id = ?", [parceiro, d.pa1]);
+  return { caixa, forma, cliente, parceiro };
+}
+const parcelaRecebida = (page) => linha(page, 'Recebida').first();
+async function abrirParcelas(page) {
+  const bloco = blocoAcordo(page, 'Acordo C8');
+  await bloco.getByRole('button', { name: /Parcelas/ }).click();
+  await expect(parcelaRecebida(page)).toBeVisible();
+}
+
+test('@critical Repassar pelo menu da parcela: só aparece na recebida com repasse pendente; abre a janela do repasse ao cliente; Cancelar não grava; em mãos grava e some do menu', async ({ page }) => {
+  await prepararRepasse();
+  await loginPelaTela(page);
+  await abrirAba(page, CNJ1);
+  await abrirParcelas(page);
+  await expect(parcelaRecebida(page).getByText('Falta repassar ao cliente')).toBeVisible();
+  // a parcela PENDENTE não oferece repasse (só a recebida)
+  await abrirMenuAcoes(page, linha(page, 'Pendente').first());
+  await expect(page.getByRole('button', { name: /Receber/ }).last()).toBeVisible();
+  await expect(page.getByRole('button', { name: /Repassar/ })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  // a recebida oferece "Repassar" (um só repasse pendente: abre direto, sem submenu)
+  await abrirMenuAcoes(page, parcelaRecebida(page));
+  await expect(page.getByRole('button', { name: /Desfazer recebimento/ })).toBeVisible();   // o que já existia continua
+  await expect(page.getByRole('button', { name: /Histórico/ }).last()).toBeVisible();
+  await page.getByRole('button', { name: /^\S*\s*Repassar$/ }).click();
+  const j = janela(page, 'Repassar ao cliente');
+  await expect(j).toBeVisible();
+  await semViolacoes(page, 'janela Repassar (pelo menu da parcela)');
+  // Cancelar não grava nada
+  await j.getByRole('button', { name: 'Cancelar', exact: true }).click();
+  await expect(j).toHaveCount(0);
+  expect((await noBanco('SELECT repasse_cliente_em FROM acordo_parcela WHERE id = ?', [d.pa1]))[0].repasse_cliente_em).toBeNull();
+  // repasse em dinheiro em mãos desta parcela
+  await abrirMenuAcoes(page, parcelaRecebida(page));
+  await page.getByRole('button', { name: /^\S*\s*Repassar$/ }).click();
+  await j.getByLabel('Conta ou caixa de saída', { exact: true }).selectOption({ label: 'Caixa C8' });
+  await j.getByLabel('Destino do repasse', { exact: true }).selectOption({ label: 'Dinheiro em espécie — em mãos' });
+  await j.getByLabel('Forma do repasse', { exact: true }).selectOption({ label: 'Dinheiro C8' });
+  await j.getByRole('button', { name: 'Confirmar repasse' }).click();
+  await aviso(page, 'Repasse registrado');
+  const par = (await noBanco('SELECT repasse_cliente_em, repasse_cliente_destino_tipo FROM acordo_parcela WHERE id = ?', [d.pa1]))[0];
+  expect(par.repasse_cliente_em).not.toBeNull();
+  expect(par.repasse_cliente_destino_tipo).toBe('em_maos');
+  expect((await noBanco('SELECT COUNT(*) AS n FROM acordo_parcela WHERE id <> ? AND repasse_cliente_em IS NOT NULL AND acordo_id = (SELECT acordo_id FROM acordo_parcela WHERE id = ?)', [d.pa1, d.pa1]))[0].n).toBe(0);   // só ESTA parcela
+  // depois: a parcela mostra o repasse feito e o menu não oferece mais "Repassar"
+  await abrirParcelas(page);
+  await expect(parcelaRecebida(page).getByText(/Cliente/)).toBeVisible();
+  await expect(parcelaRecebida(page).getByText('Falta repassar ao cliente')).toHaveCount(0);
+  await abrirMenuAcoes(page, parcelaRecebida(page));
+  await expect(page.getByRole('button', { name: /Desfazer recebimento/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^\S*\s*Repassar$/ })).toHaveCount(0);
+  // a aba "Repasses pendentes" da tela Financeiro continua mostrando o que ainda falta (a parcela 2 ainda não foi recebida: nada dela)
+  await page.keyboard.press('Escape');
+});
+
+test('@critical Repassar pelo menu da parcela: com cliente E parceiro pendentes vira submenu (ao cliente / ao parceiro) e cada item abre a janela do repasse certo', async ({ page }) => {
+  await prepararRepasse({ comParceiro: true });
+  await loginPelaTela(page);
+  await abrirAba(page, CNJ1);
+  await abrirParcelas(page);
+  await expect(parcelaRecebida(page).getByText('Falta repassar ao cliente')).toBeVisible();
+  await expect(parcelaRecebida(page).getByText('Falta repassar ao parceiro')).toBeVisible();
+  await abrirMenuAcoes(page, parcelaRecebida(page));
+  await page.getByRole('button', { name: /^\S*\s*Repassar/ }).first().hover();
+  await expect(page.getByRole('button', { name: /Repassar ao cliente/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Repassar ao parceiro \(Parceiro Repasse C8\)/ })).toBeVisible();
+  await page.getByRole('button', { name: /Repassar ao parceiro/ }).click();
+  const j = janela(page, 'Repassar ao parceiro (Parceiro Repasse C8)');
+  await expect(j).toBeVisible();
+  await j.getByRole('button', { name: 'Cancelar', exact: true }).click();
+  await abrirMenuAcoes(page, parcelaRecebida(page));
+  await page.getByRole('button', { name: /^\S*\s*Repassar/ }).first().hover();
+  await page.getByRole('button', { name: /Repassar ao cliente/ }).click();
+  await expect(janela(page, 'Repassar ao cliente')).toBeVisible();
+  expect((await noBanco('SELECT repasse_cliente_em, repasse_parceiro_em FROM acordo_parcela WHERE id = ?', [d.pa1]))[0]).toEqual({ repasse_cliente_em: null, repasse_parceiro_em: null });
+});
+
+test('@critical Repassar pelo menu da parcela: quem só VISUALIZA o financeiro não vê o item', async ({ page }) => {
+  await prepararRepasse();
+  const so = await criarUsuarioComPermissoes('so_ve_financeiro_c8', [['processos', null, 'visualizar'], ['financeiro', null, 'visualizar']]);
+  await loginPelaTela(page, so);
+  await abrirAba(page, CNJ1);
+  await abrirParcelas(page);
+  await expect(parcelaRecebida(page).getByText('Falta repassar ao cliente')).toBeVisible();
+  await expect(parcelaRecebida(page).getByTitle('Mais ações')).toHaveCount(0);   // sem permissão de alterar não há menu de ações nas parcelas
 });
