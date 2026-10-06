@@ -12,6 +12,7 @@ const { enviarComunicadoPericia } = require('../services/comunicadoService');
 const agendaGoogle = require('../services/agendaGoogleService');
 const { paginacao } = require('../utils/helpers');
 const { texto, dataIso, inteiroPositivo } = require('../utils/camposTexto');
+const { lerBuscaFrase, condBuscaFrase } = require('../utils/buscaFrase');
 
 const LIMITE_MOTIVO_PERICIA = 300;           // motivo de cancelar / remarcar (mesmo limite dos prazos e audiências)
 const LIMITE_OBS_AUDITORIA = 2000;           // texto da confirmação com senha (dia/horário incomum)
@@ -330,6 +331,18 @@ async function listar(req, res) {
     const params = [];
     let where = 'WHERE 1=1';
 
+    // Campo "Pesquisar": a frase inteira, em partes do processo, título, nº do processo, pasta, tipo, perito, assistente,
+    // responsável e local (peça única em utils/buscaFrase.js, a mesma de Audiências e Prazos).
+    const lidaBusca = lerBuscaFrase(req.query.busca);
+    if (lidaBusca.erro) return erro(res, lidaBusca.erro);
+    if (lidaBusca.valor) {
+      const f = condBuscaFrase(lidaBusca.valor, {
+        colunas: ['pr.NomeTituloProc', 'pr.numProc', 'tp.nome', 'pf.nome', 'pj.razao_social', 'u.nome', 'af.nome', 'ur.nome', 'rf.nome', 'pe.local'],
+        pasta: 'pa', partesDe: 'pr',
+      });
+      where += f.cond; params.push(...f.params);
+    }
+
     if (processo_id)   { where += ' AND pe.processo_id = ?';           params.push(processo_id); }
     if (data_de)       { where += ' AND pe.data >= ?';                  params.push(data_de); }
     if (data_ate)      { where += ' AND pe.data <= ?';                  params.push(data_ate); }
@@ -381,8 +394,21 @@ async function listar(req, res) {
       LIMIT ${limitInt} OFFSET ${offsetInt}
     `, [req.usuario.id, ...params]);
 
+    // O COUNT leva as mesmas junções da lista (o "Pesquisar" usa tipo, perito, assistente, responsável, processo e pasta);
+    // todas são N:1, então a contagem continua batendo com as linhas.
     const [[{ total }]] = await pool.execute(
-      `SELECT COUNT(*) AS total FROM pericia pe ${where}`,
+      `SELECT COUNT(*) AS total
+         FROM pericia pe
+         LEFT JOIN tipo_pericia      tp ON pe.tipo_pericia_id = tp.id
+         LEFT JOIN pessoas_fisicas   pf ON pe.perito_tipo = 'fisica'   AND pe.perito_id = pf.id
+         LEFT JOIN pessoas_juridicas pj ON pe.perito_tipo = 'juridica' AND pe.perito_id = pj.id
+         LEFT JOIN usuarios u  ON pe.assistente_tecnico_id   = u.id
+         LEFT JOIN advogados_freela af ON pe.assistente_tecnico_freela_id = af.id
+         LEFT JOIN usuarios ur ON pe.responsavel_id          = ur.id
+         LEFT JOIN advogados_freela rf ON pe.responsavel_freela_id = rf.id
+         LEFT JOIN tblproc pr ON pe.processo_id = pr.id
+         LEFT JOIN tblpasta pa ON pr.pasta_id   = pa.id
+         ${where}`,
       params
     );
 

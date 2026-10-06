@@ -13,6 +13,7 @@ import ModalGerarLote from '../../components/GerarLote';
 import MenuAcoes from '../../components/MenuAcoes';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
 import SeletorData from '../../components/ui/SeletorData';
+import CampoPesquisa from '../../components/ui/CampoPesquisa';
 import { ModalAcordo } from '../Financeiro/Financeiro';
 import { ModalNovoPrazo } from '../Prazos/Prazos';
 import { ModalTarefa } from '../Tarefas/Tarefas';
@@ -92,6 +93,7 @@ export default function Audiencias() {
     status: params.get('status') || '',
     data_de: params.get('data_de') || '',
     data_ate: params.get('data_ate') || '',
+    busca: '',
     pagina: 1,
   });
   const [tipos, setTipos] = useState([]);
@@ -194,13 +196,14 @@ export default function Audiencias() {
   }
 
   function setFiltro(k, v) { setAtalhoAtivo(''); setFiltros(f => ({ ...f, [k]: v, pagina: 1 })); }
+  const aplicarBusca = useCallback((termo) => setFiltros(f => ({ ...f, busca: termo, pagina: 1 })), []);
 
   function setDataInicialFiltro(data) {
     setAtalhoAtivo(''); setFiltros(f => ({ ...f, data_de: data, data_ate: data, pagina: 1 }));
   }
 
   function limparFiltros() {
-    setAtalhoAtivo(''); setFiltros({ status: '', data_de: '', data_ate: '', etiqueta: '', pagina: 1 });
+    setAtalhoAtivo(''); setFiltros({ status: '', data_de: '', data_ate: '', etiqueta: '', busca: '', pagina: 1 });
   }
 
   function filtrarHoje() {
@@ -245,6 +248,7 @@ export default function Audiencias() {
             <label className="form-label">Até</label>
             <SeletorData value={filtros.data_ate} onChange={v => setFiltro('data_ate', v)} ariaLabel="Data final" />
           </div>
+          <CampoPesquisa valor={filtros.busca} onChange={aplicarBusca} placeholder="Partes, processo, pasta, tipo, vara..." />
           <button className="btn btn-outline" style={{ marginBottom: '1px' }} onClick={limparFiltros}>Limpar filtros</button>
           <button className={`btn ${atalhoAtivo === 'hoje' ? 'btn-primary' : 'btn-outline'}`} style={{ marginBottom: '1px' }} onClick={filtrarHoje}>Hoje</button>
           <button className={`btn ${atalhoAtivo === '7uteis' ? 'btn-primary' : 'btn-outline'}`} style={{ marginBottom: '1px' }} onClick={() => filtrarProximosDiasUteis(7)}>7 dias úteis</button>

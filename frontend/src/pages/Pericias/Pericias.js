@@ -20,6 +20,7 @@ import { ModalNovoFreela } from '../Audiencias/Audiencias';
 import useEscFechar from '../../hooks/useEscFechar';
 import SelectPesquisavel from '../../components/ui/SelectPesquisavel';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
+import CampoPesquisa from '../../components/ui/CampoPesquisa';
 
 // Cor/label do badge conforme o status
 function badgeStatus(status) {
@@ -53,7 +54,7 @@ export default function Pericias() {
   const [lista, setLista]         = useState([]);
   const { defs: etqDefs, marcar: marcarEtq } = useEtiquetasPessoais('pericias', lista, setLista);
   const [total, setTotal]         = useState(0);
-  const [filtros, setFiltros]     = useState({ status: '', data_de: '', data_ate: '', pagina: 1 });
+  const [filtros, setFiltros]     = useState({ status: '', data_de: '', data_ate: '', busca: '', pagina: 1 });
   const [tipos, setTipos]         = useState([]);
   const [carregando, setCarregando] = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
@@ -154,6 +155,7 @@ export default function Pericias() {
   }
 
   function setFiltro(k, v) { setFiltros(f => ({...f, [k]: v, pagina: 1})); }
+  const aplicarBusca = useCallback((termo) => setFiltros(f => ({ ...f, busca: termo, pagina: 1 })), []);
 
   return (
     <div>
@@ -181,6 +183,7 @@ export default function Pericias() {
             <input aria-label="Até" type="date" className="form-control" value={filtros.data_ate}
               onChange={e => setFiltro('data_ate', e.target.value)} />
           </div>
+          <CampoPesquisa valor={filtros.busca} onChange={aplicarBusca} placeholder="Partes, processo, pasta, tipo, perito, local..." />
           <button className="btn btn-primary" style={{marginBottom:'1px'}}
             onClick={() => { setEditando(null); setModalAberto(true); }}>
             + Nova Perícia

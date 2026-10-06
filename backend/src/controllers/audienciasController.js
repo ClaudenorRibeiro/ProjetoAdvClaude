@@ -10,6 +10,7 @@ const agendaGoogle = require('../services/agendaGoogleService');
 const { enviarComunicadoPericia, enviarEmailPeritoPericia } = require('../services/comunicadoService');
 const { pastaFormatadaSql, paginacao } = require('../utils/helpers');
 const { texto, dataIso, inteiroPositivo } = require('../utils/camposTexto');
+const { lerBuscaFrase, condBuscaFrase } = require('../utils/buscaFrase');
 
 const LIMITE_OBS_AUDIENCIA = 2000;
 const LIMITE_PLATAFORMA_AUDIENCIA = 100;   // tamanho da coluna audiencia.plataforma_virtual
@@ -247,6 +248,18 @@ async function listar(req, res) {
     const params = [];
     let where = 'WHERE 1=1';
 
+    // Campo "Pesquisar": a frase inteira, em partes do processo, título, nº do processo, pasta, tipo, modalidade,
+    // responsável, vara e fórum (peça única em utils/buscaFrase.js, a mesma de Perícias e Prazos).
+    const lidaBusca = lerBuscaFrase(req.query.busca);
+    if (lidaBusca.erro) return erro(res, lidaBusca.erro);
+    if (lidaBusca.valor) {
+      const f = condBuscaFrase(lidaBusca.valor, {
+        colunas: ['pr.NomeTituloProc', 'pr.numProc', 'ta.nome', "REPLACE(a.modalidade, '_', ' ')", 'ur.nome', 'rf.nome', 'vr.nome', 'vr.abrev_nome', 'fr.nome'],
+        pasta: 'pa', partesDe: 'pr',
+      });
+      where += f.cond; params.push(...f.params);
+    }
+
     if (processo_id)    { where += ' AND a.processo_id = ?';   params.push(processo_id); }
     if (data_de)        { where += ' AND a.data >= ?';          params.push(data_de); }
     if (data_ate)       { where += ' AND a.data <= ?';          params.push(data_ate); }
@@ -312,8 +325,19 @@ async function listar(req, res) {
       [req.usuario.id, ...params]
     );
 
+    // O COUNT leva as mesmas junções da lista (o "Pesquisar" usa tipo, responsável, vara, fórum, processo e pasta);
+    // todas são N:1, então a contagem continua batendo com as linhas.
     const [total] = await pool.execute(
-      `SELECT COUNT(*) as total FROM audiencia a ${where}`, params
+      `SELECT COUNT(*) as total
+         FROM audiencia a
+         LEFT JOIN tipo_audiencia ta    ON a.tipo_audiencia_id    = ta.id
+         LEFT JOIN usuarios ur          ON a.responsavel_id        = ur.id
+         LEFT JOIN advogados_freela rf  ON a.responsavel_freela_id = rf.id
+         LEFT JOIN tblvara vr           ON a.vara_id               = vr.id
+         LEFT JOIN tblforum fr          ON vr.forum_id             = fr.id
+         JOIN tblproc pr ON a.processo_id = pr.id
+         JOIN tblpasta pa ON pr.pasta_id = pa.id
+         ${where}`, params
     );
 
     return sucesso(res, { registros: rows, total: total[0].total });
