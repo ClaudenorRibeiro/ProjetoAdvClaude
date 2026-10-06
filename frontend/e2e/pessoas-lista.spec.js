@@ -424,3 +424,26 @@ test('@critical Quem não é administrador não vê "Unificar duplicadas"; quem 
   await expect(page.getByRole('button', { name: 'Unificar duplicadas' })).toHaveCount(0);       // só administrador
   await semViolacoes(page, 'lista de Pessoas para quem só visualiza');
 });
+
+test('@critical Quem só VISUALIZA Pessoas não vê "+ Nova", "Editar" nem "Excluir" (nas duas abas, nem o "Editar" dos detalhes); continua vendo a lista, os detalhes, as anotações e "Exportar Excel"', async ({ page }) => {
+  const login = await criarUsuarioComPermissoes('sovisualizapessoas2', [['pessoas', null, 'visualizar']]);
+  await irParaPessoas(page, login);
+  await buscar(page, `Alfa ${MARCA} Silva`, 1);
+  await expect(page.getByRole('button', { name: /^\+ Nova Pessoa/ })).toHaveCount(0);
+  const linha = page.locator('tbody tr').filter({ hasText: `Alfa ${MARCA} Silva` });
+  await menuDe(page, linha);
+  await expect(itemDoMenu(page, 'Anotações de atendimento')).toBeVisible();
+  await expect(itemDoMenu(page, 'Editar')).toHaveCount(0);
+  await expect(itemDoMenu(page, 'Excluir')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await linha.getByText(`Alfa ${MARCA} Silva`).first().click();
+  const ficha = page.locator('.modal-box');
+  await expect(ficha.getByText('Detalhes da Pessoa Física')).toBeVisible();
+  await expect(ficha.getByRole('button', { name: 'Fechar', exact: true })).toBeVisible();
+  await expect(ficha.getByRole('button', { name: 'Editar', exact: true })).toHaveCount(0);
+  await ficha.getByRole('button', { name: 'Fechar', exact: true }).click();
+  await page.getByRole('button', { name: 'Pessoas Jurídicas', exact: true }).click();
+  await expect(page.getByPlaceholder(/Buscar por razão social/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /^\+ Nova Pessoa/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Exportar Excel' })).toBeVisible();
+});

@@ -277,9 +277,11 @@ export default function Pessoas() {
           {buscaInput && (
             <button className="btn btn-outline" onClick={limparBusca}>Limpar pesquisa</button>
           )}
-          <button className="btn btn-primary" onClick={abrirNovoCadastro}>
-            + {aba==='fisicas' ? 'Nova Pessoa Física' : 'Nova Pessoa Jurídica'}
-          </button>
+          {temPermissao('pessoas', 'cadastrar') && (
+            <button className="btn btn-primary" onClick={abrirNovoCadastro}>
+              + {aba==='fisicas' ? 'Nova Pessoa Física' : 'Nova Pessoa Jurídica'}
+            </button>
+          )}
           {/* Gera documento que usa várias pessoas (autores × réus); só aparece com permissão de documentos */}
           <GerarDocumentoPartesBotao />
           {/* Exporta a busca atual (ou tudo) para Excel — abre modal para escolher os campos */}
@@ -1436,8 +1438,8 @@ function TabelaFisicas({ lista, onEditar, onVerDetalhes, onExcluir, onVerProcess
                 { label: 'Enviar SMS', icone: '📱',
                   oculto: !smsAtivo || !temPermissao('sms','cadastrar'),
                   onClick: () => onEnviarSMS(p) },
-                { label: 'Editar',  icone: '✏️', onClick: () => onEditar(p) },
-                { label: 'Excluir', icone: '🗑️', perigo: true, onClick: () => onExcluir(p) },
+                { label: 'Editar',  icone: '✏️', oculto: !temPermissao('pessoas','alterar'), onClick: () => onEditar(p) },
+                { label: 'Excluir', icone: '🗑️', perigo: true, oculto: !temPermissao('pessoas','excluir'), onClick: () => onExcluir(p) },
               ]} />
             </td>
           </tr>
@@ -1493,8 +1495,8 @@ function TabelaJuridicas({ lista, onEditar, onVerDetalhes, onExcluir, onVerProce
                 { label: 'Anotações de atendimento', icone: '📝', onClick: () => onAnotacoes(p) },
                 { label: 'Enviar Email', icone: '✉️', onClick: () => onEnviarEmail(p) },
                 { label: 'Enviar WhatsApp', icone: '🟢', onClick: () => onEnviarZap(p) },
-                { label: 'Editar',  icone: '✏️', onClick: () => onEditar(p) },
-                { label: 'Excluir', icone: '🗑️', perigo: true, onClick: () => onExcluir(p) },
+                { label: 'Editar',  icone: '✏️', oculto: !temPermissao('pessoas','alterar'), onClick: () => onEditar(p) },
+                { label: 'Excluir', icone: '🗑️', perigo: true, oculto: !temPermissao('pessoas','excluir'), onClick: () => onExcluir(p) },
               ]} />
             </td>
           </tr>
@@ -1616,7 +1618,8 @@ function ModalUnificarPessoas({ tipo, selecionados, onFechar }) {
 // Modal de cadastro / edição de pessoa
 export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeitura = false, onSalvo = null }) {
   // leitura = true → todos os campos travados e rodapé só com "Editar"/"Fechar".
-  // Ao clicar em "Editar", destrava para o modo de edição normal.
+  // Ao clicar em "Editar", destrava para o modo de edição normal (só quem tem permissão de alterar vê esse botão).
+  const { temPermissao } = useAuth();
   const [leitura, setLeitura]   = useState(somenteLeitura);
   const [form, setForm]         = useState(pessoa || {});
   const [auxiliares, setAux]    = useState({ estados_civis: [], generos: [], profissoes: [], nacionalidades: [], parentescos: [], instituicoes_financeiras: [] });
@@ -2122,7 +2125,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
           {leitura ? (
             <>
               <button className="btn btn-secondary" onClick={() => onFechar(false)}>Fechar</button>
-              <button className="btn btn-primary" onClick={() => setLeitura(false)}>Editar</button>
+              {temPermissao('pessoas', 'alterar') && <button className="btn btn-primary" onClick={() => setLeitura(false)}>Editar</button>}
             </>
           ) : (
             <>
