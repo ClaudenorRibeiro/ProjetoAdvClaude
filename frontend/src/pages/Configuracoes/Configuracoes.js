@@ -1280,7 +1280,7 @@ function TabFeriados() {
     if (!form.data || !form.descricao) return toast.error('Data e descrição são obrigatórias');
     setSalvando(true);
     try {
-      await configuracaoAPI.criarFeriado(form);
+      await configuracaoAPI.criarFeriado({ data: form.data, descricao: form.descricao, tipo: form.nacional ? 'nacional' : 'local' });   // o servidor lê "tipo" (antes a tela mandava "nacional" e a escolha Local era ignorada)
       toast.success('Feriado adicionado!');
       setForm({ data: '', descricao: '', nacional: true });
       carregar();
@@ -1358,8 +1358,8 @@ function TabFeriados() {
                   <td>{formatarData(f.data)}</td>
                   <td>{f.descricao}</td>
                   <td>
-                    <span className={`badge ${f.nacional ? 'badge-azul' : 'badge-laranja'}`}>
-                      {f.nacional ? 'Nacional' : 'Local'}
+                    <span className={`badge ${f.tipo === 'nacional' ? 'badge-azul' : 'badge-laranja'}`}>
+                      {f.tipo === 'nacional' ? 'Nacional' : 'Local'}
                     </span>
                   </td>
                   <td>

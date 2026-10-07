@@ -263,6 +263,22 @@ test('feriado com dado ruim (data que não existe, descrição que não é texto
   assert.equal((await sql('SELECT COUNT(*) AS n FROM feriados'))[0].n, antes);
 });
 
+test('feriado: o tipo (nacional ou local) é gravado como foi escolhido, o padrão é nacional, tipo desconhecido é recusado e a lista devolve o tipo', async () => {
+  try {
+    const nac = await feriado('2026-04-03', 'Sexta-feira Santa');                          // sem tipo = nacional
+    const loc = await feriado('2026-04-21', 'Aniversário da cidade', 'local');
+    const expl = await feriado('2026-05-01', 'Dia do Trabalho', 'nacional');
+    const lista = (await get('/api/configuracoes/feriados?ano=2026')).body.dados;
+    assert.deepEqual(lista.map(f => [f.id, f.tipo]), [[nac, 'nacional'], [loc, 'local'], [expl, 'nacional']]);
+    for (const tipo of ['estadual', 'NACIONAL', 'municipal', 5, ['local']]) {
+      const r = await post('/api/configuracoes/feriados').send({ data: '2026-06-04', descricao: 'Corpus Christi', tipo });
+      assert.equal(r.status, 400, `tipo ${JSON.stringify(tipo)} → ${r.status}`);
+    }
+    assert.equal(await diaUtilNoBanco('2026-06-04'), 1);                                   // recusado = nada mudou
+    assert.equal(await diaUtilNoBanco('2026-04-21'), 0);                                   // feriado local também tira o dia do calendário
+  } finally { await limparFeriados(); }
+});
+
 test('"é dia útil?" com data que não é uma data não responde "feriado": avisa 400', async () => {
   for (const ruim of ['abc', '2026-13-45', '2026-02-30', '03/04/2026', '']) {
     const r = await get(`/api/calendario/dia-util?data=${encodeURIComponent(ruim)}`);

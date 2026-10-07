@@ -10,7 +10,7 @@ const auditoria = require('../middleware/auditoria');
 const { ehDiaUtil, proximoDiaUtil, calcularVencimento } = require('../services/calendarioService');
 const { reagendarCronPrazos } = require('../services/alertasService');
 const multer = require('multer');
-const { lerTextos, horaDoDia } = require('../utils/camposTexto');
+const { lerTextos, horaDoDia, texto, dataIso } = require('../utils/camposTexto');
 
 // ============================================================
 // UPLOAD DO LOGO DO ESCRITÓRIO
@@ -351,8 +351,15 @@ async function listarFeriados(req, res) {
 
 // POST /api/configuracoes/feriados — Cadastra feriado e atualiza calendário
 async function criarFeriado(req, res) {
-  const { data, descricao, tipo } = req.body;
+  const { data, descricao, tipo } = req.body || {};
   if (!data || !descricao) return erro(res, 'Data e descrição são obrigatórias');
+  // Confere TUDO antes de gravar: data que existe, descrição em texto (até 200) e tipo conhecido — nunca "Erro interno" nem lixo gravado.
+  const dataLida = dataIso(data, { rotulo: 'Data' });
+  if (dataLida.erro) return erro(res, dataLida.erro);
+  const descLida = texto(descricao, { rotulo: 'Descrição', max: 200, obrigatorio: true, feminino: true });
+  if (descLida.erro) return erro(res, descLida.erro);
+  const tipoLido = (tipo === undefined || tipo === null || tipo === '') ? 'nacional' : tipo;
+  if (!['nacional', 'local'].includes(tipoLido)) return erro(res, 'Tipo de feriado inválido (use nacional ou local)');
 
   // Transação: INSERT no feriado + UPDATE no calendário — ambos ou nenhum
   const conn = await pool.getConnection();
@@ -361,12 +368,12 @@ async function criarFeriado(req, res) {
 
     await conn.execute(
       'INSERT INTO feriados (data, descricao, tipo, criado_por) VALUES (?, ?, ?, ?)',
-      [data, descricao.trim(), tipo || 'nacional', req.usuario.id]
+      [dataLida.valor, descLida.valor, tipoLido, req.usuario.id]
     );
 
     // Marca o dia como não útil no calendário dentro da mesma transação
     await conn.execute(
-      'UPDATE calendario SET dia_util = 0 WHERE data = ?', [data]
+      'UPDATE calendario SET dia_util = 0 WHERE data = ?', [dataLida.valor]
     );
 
     await conn.commit();         // Grava feriado + calendário de uma vez
@@ -392,9 +399,11 @@ async function excluirFeriado(req, res) {
 
     await conn.execute('DELETE FROM feriados WHERE id = ?', [id]);
 
-    // Se o dia não é fim de semana, volta a ser útil no calendário
+    // O dia só volta a ser útil se NÃO é fim de semana e NÃO sobrou outro feriado cadastrado na mesma data
+    // (a mesma data pode ter dois cadastros: nacional e local, ou cadastro repetido).
     const diaSemana = new Date(fer[0].data + 'T12:00:00').getDay();
-    if (diaSemana !== 0 && diaSemana !== 6) {
+    const [[sobrou]] = await conn.execute('SELECT COUNT(*) AS n FROM feriados WHERE data = ?', [fer[0].data]);
+    if (diaSemana !== 0 && diaSemana !== 6 && Number(sobrou.n) === 0) {
       await conn.execute('UPDATE calendario SET dia_util = 1 WHERE data = ?', [fer[0].data]);
     }
 
@@ -1004,6 +1013,8 @@ async function verificarDiaUtil(req, res) {
   try {
     const { data } = req.query;
     if (!data) return erro(res, 'Data é obrigatória');
+    const dataLida = dataIso(data, { rotulo: 'Data' });      // "abc", "2026-02-30" etc. não são datas: aviso, em vez de responder "feriado"
+    if (dataLida.erro) return erro(res, dataLida.erro);
     const util = await ehDiaUtil(data);
     // Busca descrição do feriado se não for dia útil
     let descricao = null;
