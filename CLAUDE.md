@@ -263,6 +263,12 @@ renomear ou remover um script. Nenhum teste pode depender de arquivo que não es
 
 ## 9. Plano de testes de Processos (CONCLUÍDO em 03/10/2026) e PENDÊNCIAS ABERTAS (pedido do usuário)
 
+**>>> STATUS ATUAL — LEIA ISTO PRIMEIRO (atualizado em 07/10/2026; pedido do usuário: não gastar token/tempo com itens já resolvidos). O resto desta seção é HISTÓRICO e só deve ser lido se o assunto voltar. <<<**
+- **Última bateria completa no Windows: 07/10/2026, 12/12 aprovadas** (rascunho com tudo até a correção da renumeração de pasta). Nada pendente de bateria.
+- **ÚNICAS pendências abertas:** (1) **P7** — conferir o PM2 no servidor real, FIM DE SEMANA, só quando o usuário avisar (falta saber: qual servidor primeiro e se inclui reiniciar a máquina); (2) **Plano de modernização** (seção 11), começando pelo Node 24 — só com OK dele; (3) opcional/sem urgência: conferir se o CADASTRO de processo ao reaproveitar pasta vazia tem fragilidade parecida com a da renumeração (já corrigida); (4) futuro, NÃO agora: permissão "Exportar para Excel" também em Processos, Prazos, Tarefas, Audiências e Perícias.
+- **RESOLVIDO/DESCARTADO — NÃO mencionar como pendência:** P1–P4, P5 (vai para a modernização), P6 (informativo), P8 (descartado), P9 (descartado), pastas vazias antigas do Antônio (resolvido), achados (d)/(e) da lista de Pessoas e as pendências manuais do usuário (exportar Excel, `sql_atualizar_banco_para_heidi.sql`, Repassar, permissão) — o usuário disse em 07/10/2026 que fez todas as pendências dele.
+- **Regra de trabalho:** testes rápidos e dirigidos a cada ajuste; bateria completa só depois de muitas alterações (usuário roda `TESTAR-COMPLETO.bat`).
+
 O plano numerado (A1…D1) de `PLANO-TESTES-PROCESSOS.md` (raiz) foi concluído: tudo da tela de Processos entrou na bateria. Falta só o usuário rodar
 `salvar_RASCUNHO_do_GIT_no_pc.bat` + `TESTAR-COMPLETO.bat` e enviar o "RESUMO DA BATERIA". Regra do protocolo (vale para trabalhos parecidos): ao achar erro,
 PARAR e combinar o ajuste com o usuário antes de corrigir. Nada de desmembrar arquivos grandes (decisão dele) e nada no `main`.
@@ -338,7 +344,7 @@ Os 3 caminhos: endereço do réu, endereço do perito e endereço novo (local ma
 - **DICA OPERACIONAL (testar telas no ambiente da IA, 05/10/2026):** o Playwright do projeto (1.63) procura um Chromium que não existe no ambiente da nuvem, mas o Chromium 1194 já está em `/opt/pw-browsers`. Para rodar um teste de tela lá, criar TEMPORARIAMENTE
   `frontend/playwright.sandbox.tmp.config.js` (importa o config do projeto e acrescenta `use.launchOptions.executablePath` apontando para `/opt/pw-browsers/chromium-1194/chrome-linux/chrome` com `--no-sandbox`), rodar `npx playwright test -c <esse arquivo> <spec>` e APAGAR o arquivo depois (nunca commitar).
   Também precisa de MySQL local (`apt-get install mysql-server`) com um banco `*_test` e usuário de testes (não root). A bateria oficial continua sendo a do Windows do usuário.
-- **Pastas vazias antigas (achado de 04/10/2026, decisão pendente do usuário):** no local e no Antônio existem 2.702 pastas SEM processo; 2.700 foram criadas de uma vez em
+- **Pastas vazias antigas (achado de 04/10/2026) — RESOLVIDO, segundo o usuário (07/10/2026: "já fizemos isso"); o que exatamente foi feito NÃO foi conferido pela IA no banco — NÃO listar como pendência nem perguntar de novo.** Histórico do achado: no local e no Antônio existem 2.702 pastas SEM processo; 2.700 foram criadas de uma vez em
   28/06/2026 (números 1 a 8935, criador 24) e 2.627 têm "área do direito" preenchida — parecem pastas antigas importadas sem os processos. O Erick não tem nenhuma.
   Não apagar em lote sem a decisão dele. O script `sql_limpar_pastas_vazias_para_heidi.sql` apaga SÓ as pastas 9999 e 928804 (fixas no script; rodar só no Antônio — o Erick não tem pastas vazias).
   **Regra decidida pelo usuário (04/10/2026) e já implementada:** pasta TOTALMENTE vazia (sem nenhum processo e sem tarefa ligada) é reaproveitável.
@@ -372,7 +378,7 @@ Os scripts de código foram testados só em pasta simulada com PM2 de mentira (s
 
 Só no **Antônio**: o `sql_limpar_pastas_vazias_para_heidi.sql` (pastas 9999 e 928804) JÁ foi rodado (04/10/2026). Erick não precisa dele. Depois de atualizar o Antônio,
 testar a troca de número 8926 → 9999.
-Itens ainda sem decisão (não são script): as ~2.700 pastas vazias antigas do Antônio (ver seção 9) e conferir o PM2 (P7) nos servidores reais.
+Item ainda aberto (não é script): conferir o PM2 (P7) nos servidores reais. (Pastas vazias antigas do Antônio: resolvido, ver seção 9.)
 
 ## 11. POLÍTICA DE VERSÕES e PLANO DE MODERNIZAÇÃO (pedido do usuário, 05/10/2026)
 
