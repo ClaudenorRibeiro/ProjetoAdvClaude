@@ -22,7 +22,6 @@ PARA RODAR NO HEIDISQL (banco)
   sql_limpar_pastas_vazias_para_heidi.sql       IMPORTANTE  Apaga SÓ as pastas 9999 e 928804 (fixos: 9999 e 928804 — rodar SÓ no Antônio). Nunca em lote.
   sql_diagnostico_estrutura_para_heidi.sql      IMPORTANTE  Só lê. Mostra o que falta no banco comparado ao estrutura_banco.sql.
   sql_conferir_nomes_vazios_e_anotacoes_orfas_para_heidi.sql  TEMPORÁRIO  Só lê. Mostra pessoas com nome em branco e anotações de atendimento sem pessoa. Pode apagar depois de conferir.
-  sql_conferir_pastas_vazias_para_heidi.sql  TEMPORÁRIO  Só lê. Conta as pastas totalmente vazias (sem processo e sem tarefa) e mostra se as pastas 9999 e 928804 ainda existem. Pode apagar depois de conferir.
   quality/sql/CRIAR_BANCO_TESTE_HEIDISQL.sql    IMPORTANTE  Cria o banco isolado de testes (necessário para a bateria completa).
 
 PARA RODAR NO SSH DA AWS (Lightsail, como usuário ubuntu, SEM sudo)
