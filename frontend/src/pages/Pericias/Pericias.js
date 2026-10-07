@@ -49,7 +49,7 @@ function localDoPerito(end) {
   if (!end) return null;
   const digitos = String(end.cep || '').replace(/\D/g, '');
   return {
-    local: `Consultório do perito ${end.nome}`,
+    local: '',   // o local é só o endereço (sem nome de referência)
     cep: digitos.length === 8 ? digitos.replace(/(\d{5})(\d)/, '$1-$2') : (end.cep || ''),
     logradouro: end.logradouro || '', numero: end.numero || '', complemento: end.complemento || '',
     bairro: end.bairro || '', cidade: end.cidade || '', estado: end.estado || '',
@@ -549,14 +549,16 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
   }
 
   function alternarEnderecoPerito() {
-    if (usandoEnderecoPerito) { limparLocalManual(); return; }
+    if (usandoEnderecoPerito) return;
     if (!enderecoPerito || enderecoPerito.endereco_incompleto) return;
     if (temEnderecoManual(form)) {
-      setAvisoPericia('O local manual já está preenchido. Limpe-o (ou desmarque "Adicionar outro local manual") antes de usar o endereço do perito.');
+      setAvisoPericia('O endereço digitado já está preenchido. Apague-o antes de usar o endereço do perito.');
       return;
     }
     const copia = localDoPerito(enderecoPerito);
     copiaPeritoRef.current = copia;
+    setLocaisReus([]);
+    setAvisoPericia('');
     setForm(f => ({ ...f, ...copia }));
     setLocalManualAtivo(true);
   }
@@ -572,17 +574,22 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
 
   function alternarLocalReu(reu) {
     const chave = chavePessoaLocal(reu);
-    setLocaisReus(atual => {
-      if (atual.some(x => chavePessoaLocal(x) === chave)) {
-        return atual.filter(x => chavePessoaLocal(x) !== chave);
-      }
-      if (reu.endereco_incompleto) {
-        setAvisoPericia(`O réu "${reu.nome}" está sem endereço completo. Atualize o cadastro antes de usar como local.`);
-        return atual;
-      }
-      setAvisoPericia('');
-      return [...atual, { tipo_pessoa: reu.tipo_pessoa, pessoa_id: reu.pessoa_id, nome: reu.nome }];
-    });
+    // Uma perícia acontece em UM só lugar: escolher um réu troca qualquer outra escolha (outro réu, perito ou endereço digitado).
+    if (reu.endereco_incompleto) {
+      setAvisoPericia(`O réu "${reu.nome}" está sem endereço completo. Atualize o cadastro antes de usar como local.`);
+      return;
+    }
+    if (locaisReus.some(x => chavePessoaLocal(x) === chave)) return;
+    setAvisoPericia('');
+    if (localManualAtivo) { limparLocalManual(); copiaPeritoRef.current = null; }
+    setLocaisReus([{ tipo_pessoa: reu.tipo_pessoa, pessoa_id: reu.pessoa_id, nome: reu.nome }]);
+  }
+
+  function escolherEnderecoDigitado() {
+    if (usandoEnderecoPerito) { limparLocalManual(); copiaPeritoRef.current = null; }
+    setAvisoPericia('');
+    setLocaisReus([]);
+    setLocalManualAtivo(true);
   }
 
   function abrirCadastroReuPendente() {
@@ -625,7 +632,11 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
       return;
     }
     if (localManualAtivo && !temEnderecoManual(form)) {
-      setAvisoPericia('Preencha o local manual ou desmarque a opção "Adicionar outro local manual"');
+      setAvisoPericia('Preencha o endereço digitado ou escolha outro local');
+      return;
+    }
+    if (locaisReus.length > 1 || (locaisReus.length > 0 && localManualAtivo && temEnderecoManual(form))) {
+      setAvisoPericia('A perícia só pode ter um local. Escolha apenas um endereço (réu, perito ou endereço digitado).');
       return;
     }
     setAvisoPericia('');
@@ -872,7 +883,7 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
                   const marcado = locaisReus.some(x => chavePessoaLocal(x) === chavePessoaLocal(r));
                   return (
                     <label key={chavePessoaLocal(r)} style={{display:'block',padding:'8px 4px',borderBottom:'1px solid #eef2f7'}}>
-                      <input type="checkbox" checked={marcado} disabled={r.endereco_incompleto}
+                      <input type="radio" name="local-pericia" checked={marcado} disabled={r.endereco_incompleto}
                         onChange={() => alternarLocalReu(r)} style={{marginRight:8}} />
                       <strong>{r.nome}</strong>
                       <small style={{display:'block',marginLeft:24,color:r.endereco_incompleto ? '#b45309' : '#5b6472'}}>
@@ -892,7 +903,7 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
             {form.perito_id && enderecoPerito && (
               <div style={{border:'1px solid #e5e7eb',borderRadius:8,padding:10,background:'#fbfdff',marginTop:10}}>
                 <label style={{display:'block',padding:'4px'}}>
-                  <input type="checkbox" checked={usandoEnderecoPerito} disabled={enderecoPerito.endereco_incompleto}
+                  <input type="radio" name="local-pericia" checked={usandoEnderecoPerito} disabled={enderecoPerito.endereco_incompleto}
                     onChange={alternarEnderecoPerito} style={{marginRight:8}} />
                   <strong>Endereço do perito — {enderecoPerito.nome}</strong>
                   <small style={{display:'block',marginLeft:24,color:enderecoPerito.endereco_incompleto ? '#b45309' : '#5b6472'}}>
@@ -907,8 +918,8 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
 
           <div className="form-group">
             <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
-              <input type="checkbox" checked={localManualAtivo} onChange={e => setLocalManualAtivo(e.target.checked)} />
-              <span>Adicionar outro local manual</span>
+              <input type="radio" name="local-pericia" checked={localManualAtivo && !usandoEnderecoPerito} onChange={escolherEnderecoDigitado} />
+              <span>Digitar outro endereço</span>
             </label>
           </div>
 

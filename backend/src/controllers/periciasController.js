@@ -42,6 +42,7 @@ async function dadosPericiaParaGoogle(periciaId) {
   try {
     const [rows] = await pool.execute(
       `SELECT pe.responsavel_id, pe.data, pe.hora, pe.local,
+              pe.cep, pe.logradouro, pe.numero, pe.complemento, pe.bairro, pe.cidade, pe.estado,
               pr.numProc AS num_processo,
               CASE WHEN pe.perito_tipo = 'fisica'   THEN pf.nome
                    WHEN pe.perito_tipo = 'juridica' THEN pj.razao_social END AS perito_nome
@@ -54,7 +55,8 @@ async function dadosPericiaParaGoogle(periciaId) {
     const p = rows[0];
     if (!p) return null;
     const partes = [];
-    if (p.local)       partes.push(`Local: ${p.local}`);
+    const localTexto = montarEnderecoPartes(p) || p.local;
+    if (localTexto)    partes.push(`Local: ${localTexto}`);
     if (p.perito_nome) partes.push(`Perito: ${p.perito_nome}`);
     return {
       responsavel_id: p.responsavel_id,
@@ -195,6 +197,11 @@ async function buscarReusDoProcesso(processoId, conn = pool) {
 async function validarLocaisPericia({ processo_id, locais_reus, dados }) {
   if (locais_reus.length === 0 && !temLocalManual(dados)) {
     return 'Informe pelo menos um local para a perícia';
+  }
+
+  // Uma perícia acontece em UM só lugar: um réu, ou o endereço digitado (que também serve para o endereço do perito).
+  if (locais_reus.length > 1 || (locais_reus.length > 0 && temLocalManual(dados))) {
+    return 'A perícia só pode ter um local. Escolha apenas um endereço (réu, perito ou endereço digitado).';
   }
 
   if (locais_reus.length > 0) {
@@ -360,6 +367,7 @@ async function listar(req, res) {
     const [registros] = await pool.execute(`
       SELECT
         pe.id, pe.processo_id, pe.data, pe.hora, pe.local, pe.status,
+        pe.cep, pe.logradouro, pe.numero, pe.complemento, pe.bairro, pe.cidade, pe.estado,
         pe.perito_tipo, pe.perito_id, pe.assistente_tecnico_id, pe.assistente_tecnico_freela_id,
         pe.responsavel_id, pe.responsavel_freela_id,
         pe.comunicado_enviado, pe.criado_em,
@@ -413,9 +421,41 @@ async function listar(req, res) {
       params
     );
 
+    await acrescentarEnderecoDoLocal(registros);
     return sucesso(res, { registros, total: Number(total) });
   } catch (e) {
     return erroInterno(res, e);
+  }
+}
+
+// Coluna "Local" da lista = só o ENDEREÇO: o digitado (ou o do perito, que é copiado para os mesmos campos) ou o do réu escolhido.
+// Sem endereço nenhum, cai no nome de referência antigo (perícia antiga) — nunca fica em branco por isso.
+async function acrescentarEnderecoDoLocal(registros) {
+  const semManual = registros.filter(r => !montarEnderecoPartes(r));
+  const dosReus = new Map();
+  if (semManual.length) {
+    const ids = semManual.map(r => Number(r.id));
+    const [reus] = await pool.query(
+      `SELECT plr.pericia_id,
+              COALESCE(pf.cep, pj.cep) AS cep, COALESCE(pf.logradouro, pj.logradouro) AS logradouro,
+              COALESCE(pf.numero, pj.numero) AS numero, COALESCE(pf.complemento, pj.complemento) AS complemento,
+              COALESCE(pf.bairro, pj.bairro) AS bairro, COALESCE(pf.cidade, pj.cidade) AS cidade,
+              COALESCE(pf.estado, pj.estado) AS estado
+         FROM pericia_local_reu plr
+         LEFT JOIN pessoas_fisicas   pf ON plr.tipo_pessoa = 'fisica'   AND pf.id = plr.pessoa_id
+         LEFT JOIN pessoas_juridicas pj ON plr.tipo_pessoa = 'juridica' AND pj.id = plr.pessoa_id
+        WHERE plr.pericia_id IN (?)
+        ORDER BY plr.pericia_id, plr.pessoa_id`, [ids]
+    );
+    for (const r of reus) {
+      const txt = montarEnderecoPartes(r);
+      if (!txt) continue;
+      dosReus.set(r.pericia_id, [...(dosReus.get(r.pericia_id) || []), txt]);
+    }
+  }
+  for (const r of registros) {
+    r.local_endereco = montarEnderecoPartes(r) || (dosReus.get(r.id) || []).join(' | ') || r.local || null;
+    for (const c of ['cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado']) delete r[c];
   }
 }
 

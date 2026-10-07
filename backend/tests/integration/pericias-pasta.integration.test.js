@@ -321,3 +321,33 @@ test('endereço do perito (sugestão de local da perícia): só perito (profiss�
   t.checar((await api(ver.token).get(`/api/pericias/perito-endereco/${completo}`)).status === 200, 'só "ver Perícias" (sem Pessoas) basta');
   t.fim();
 });
+
+test('um só local: réu + endereço digitado, ou dois réus, é recusado (nada grava); um réu vale; a lista mostra só o ENDEREÇO do local', async () => {
+  const t = juntar();
+  await sql('DELETE FROM pericia');
+  const novoReu = async (nome, cpf, rua) => {
+    const id = (await sql("INSERT INTO pessoas_fisicas (nome, cpf, cep, logradouro, numero, bairro, cidade, estado) VALUES (?, ?, '13000-000', ?, '7', 'Centro', 'Campinas', 'SP')", [nome, cpf, rua])).insertId;
+    await sql("INSERT INTO tbltituloprocreu (proc_id, tipo_pessoa, pessoa_id) VALUES (?, 'fisica', ?)", [F.proc, id]);
+    return id;
+  };
+  const r1 = await novoReu('Réu Um Local', '86288366757', 'Rua Um');
+  const r2 = await novoReu('Réu Dois Local', '12345678909', 'Rua Dois');
+  const local = id => ({ tipo_pessoa: 'fisica', pessoa_id: id });
+  const antes = await nPer();
+  const enviar = extra => api().post('/api/pericias').send(corpo({ confirmar_nova: true, local: undefined, ...extra }));
+  const a = await enviar({ locais_reus: [local(r1), local(r2)] });
+  t.checar(a.status === 400 && /só pode ter um local/.test(msg(a)), `dois réus → ${a.status} ${msg(a)}`);
+  const b = await enviar({ locais_reus: [local(r1)], logradouro: 'Rua Digitada', numero: '1' });
+  t.checar(b.status === 400 && /só pode ter um local/.test(msg(b)), `réu + digitado → ${b.status} ${msg(b)}`);
+  t.checar(await nPer() === antes, 'gravou perícia com 2 locais');
+  const idReu = (await enviar({ locais_reus: [local(r1)] })).body.dados?.id;
+  t.checar(!!idReu, 'um réu deveria valer');
+  const idDig = await nova({ local: undefined, logradouro: 'Rua Digitada', numero: '1', bairro: 'Bairro X', cidade: 'Santos', estado: 'SP', data: util(3), tipo_pericia_id: F.tipoB });
+  const idNome = await nova({ local: 'Só o nome antigo', data: util(4), tipo_pericia_id: F.tipoB });
+  const reg = (await api().get(`/api/pericias?processo_id=${F.proc}`)).body.dados.registros;
+  const porId = i => reg.find(x => x.id === i);
+  t.checar(porId(idReu)?.local_endereco === 'Rua Um, 7 - Centro - Campinas/SP - 13000-000', `réu: ${porId(idReu)?.local_endereco}`);
+  t.checar(porId(idDig)?.local_endereco === 'Rua Digitada, 1 - Bairro X - Santos/SP', `digitado: ${porId(idDig)?.local_endereco}`);
+  t.checar(porId(idNome)?.local_endereco === 'Só o nome antigo', `só nome: ${porId(idNome)?.local_endereco}`);
+  t.fim();
+});

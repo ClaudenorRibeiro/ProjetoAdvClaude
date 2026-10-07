@@ -98,7 +98,7 @@ const preencherBasico = async (page, j, { tipo = 'Médica C7', data = util(8), h
   await escolher(page, j, 'Tipo de perícia', tipo);
   await j.getByLabel('Data', { exact: true }).fill(data);
   if (hora) await j.getByLabel('Hora', { exact: true }).fill(hora);
-  if (local) { await j.getByRole('checkbox', { name: 'Adicionar outro local manual' }).check(); await j.getByLabel('Nome/Referência do local', { exact: true }).fill(local); }
+  if (local) { await j.getByRole('radio', { name: 'Digitar outro endereço' }).check(); await j.getByLabel('Nome/Referência do local', { exact: true }).fill(local); }
 };
 
 test('@critical Aba Perícias: lista (mais recentes primeiro), colunas, perito/responsável/local, filtro por processo e acessibilidade', async ({ page }) => {
@@ -163,7 +163,7 @@ test('@critical Nova perícia: janela, obrigatórios, aviso de réus sem endere�
   await j.getByLabel('Data', { exact: true }).fill(util(8));
   await j.getByRole('button', { name: 'Salvar', exact: true }).click();
   await expect(j.getByText('Informe pelo menos um local para a perícia')).toBeVisible();
-  await j.getByRole('checkbox', { name: 'Adicionar outro local manual' }).check();
+  await j.getByRole('radio', { name: 'Digitar outro endereço' }).check();
   await j.getByRole('button', { name: 'Salvar', exact: true }).click();
   await expect(j.getByText('Informe pelo menos um local para a perícia')).toBeVisible();                   // marcou "outro local" mas não preencheu
   await semViolacoes(page, 'janela Nova Perícia com local manual');
@@ -193,9 +193,9 @@ test('Nova perícia: réu com endereço completo vira local (caixinha) e fica gr
   await loginPelaTela(page);
   const j = await abrirNova(page, CNJ1);
   await expect(j.getByText('Existe 1 réu sem endereço completo.')).toBeVisible();                           // só a Beta
-  await expect(j.getByRole('checkbox', { name: /Empresa Beta E2E Ltda/ })).toBeDisabled();
+  await expect(j.getByRole('radio', { name: /Empresa Beta E2E Ltda/ })).toBeDisabled();
   await expect(j.getByText('Rua das Flores, 100 - Centro - Campinas/SP - 13000000')).toBeVisible();
-  await j.getByRole('checkbox', { name: /Empresa Alfa E2E Ltda/ }).check();
+  await j.getByRole('radio', { name: /Empresa Alfa E2E Ltda/ }).check();
   await escolher(page, j, 'Tipo de perícia', 'Psicológica C7');
   await j.getByLabel('Data', { exact: true }).fill(util(9));
   await j.getByLabel('Hora', { exact: true }).fill('09:00');
@@ -472,7 +472,7 @@ test('@critical Nova perícia: ao escolher o perito, "Endereço do perito" vira 
   await enderecoDoPerito(true);
   await loginPelaTela(page);
   const j = await abrirNova(page, CNJ1);
-  const opcao = j.getByRole('checkbox', { name: /Endereço do perito/ });
+  const opcao = j.getByRole('radio', { name: /Endereço do perito/ });
   await expect(opcao).toHaveCount(0);                                                                       // sem perito escolhido, não há opção
   await escolher(page, j, 'Perito', 'Perito Paulo E2E');
   await expect(opcao).toBeVisible();
@@ -480,13 +480,15 @@ test('@critical Nova perícia: ao escolher o perito, "Endereço do perito" vira 
   await expect(j.getByText(ENDERECO_PERITO)).toBeVisible();
   await semViolacoes(page, 'janela Nova Perícia com a opção do perito');
   await opcao.check();
-  await expect(j.getByRole('checkbox', { name: 'Adicionar outro local manual' })).toBeChecked();            // o local manual abriu sozinho
-  await expect(j.getByLabel('Nome/Referência do local', { exact: true })).toHaveValue('Consultório do perito Perito Paulo E2E');
+  await expect(opcao).toBeChecked();
+  await expect(j.getByRole('radio', { name: 'Digitar outro endereço' })).not.toBeChecked();         // é a escolha do perito (os campos abrem para conferir/editar)
+  await expect(j.getByLabel('Nome/Referência do local', { exact: true })).toHaveValue('');                  // o local é só o endereço (sem nome de referência)
   await expect(j.getByLabel('Logradouro', { exact: true })).toHaveValue('Rua do Consultório');
   await expect(j.getByLabel('Número', { exact: true })).toHaveValue('45');
   await expect(j.getByLabel('Cidade', { exact: true })).toHaveValue('Campinas');
-  await opcao.uncheck();                                                                                    // desmarcar limpa a cópia
-  await expect(j.getByRole('checkbox', { name: 'Adicionar outro local manual' })).not.toBeChecked();
+  await j.getByRole('radio', { name: 'Digitar outro endereço' }).check();                                   // escolher "digitar outro" tira a cópia do perito
+  await expect(opcao).not.toBeChecked();
+  await expect(j.getByLabel('Logradouro', { exact: true })).toHaveValue('');
   await opcao.check();
   await j.getByLabel('Complemento', { exact: true }).fill('Sala 7');                                        // a cópia é editável
   await expect(opcao).not.toBeChecked();                                                                    // editou: já não é igual ao cadastro
@@ -495,9 +497,30 @@ test('@critical Nova perícia: ao escolher o perito, "Endereço do perito" vira 
   await escolher(page, j, 'Responsável pela condução', 'Administrador de Testes');
   await j.getByRole('button', { name: 'Salvar', exact: true }).click();
   await aviso(page, 'Perícia criada!');
-  const a = (await noBanco("SELECT * FROM pericia WHERE local = 'Consultório do perito Perito Paulo E2E' ORDER BY id DESC LIMIT 1"))[0];
+  const a = (await noBanco("SELECT * FROM pericia WHERE perito_id = ? AND logradouro = 'Rua do Consultório' ORDER BY id DESC LIMIT 1", [d.perito]))[0];
   expect({ perito: a.perito_id, log: a.logradouro, num: a.numero, compl: a.complemento, bairro: a.bairro, cidade: a.cidade, uf: a.estado, cep: a.cep })
     .toEqual({ perito: d.perito, log: 'Rua do Consultório', num: '45', compl: 'Sala 7', bairro: 'Centro', cidade: 'Campinas', uf: 'SP', cep: '13015-001' });
+  // a coluna "Local" da lista mostra só o ENDEREÇO (nada de nome de referência)
+  await expect(page.getByRole('cell', { name: 'Rua do Consultório, 45 - Sala 7 - Centro - Campinas/SP - 13015-001', exact: true })).toBeVisible();
+});
+
+test('Nova perícia: um só local — escolher réu, perito ou "digitar outro" troca a escolha anterior', async ({ page }) => {
+  await noBanco("UPDATE pessoas_juridicas SET cep = '13000000', logradouro = 'Rua das Flores', numero = '100', bairro = 'Centro', cidade = 'Campinas', estado = 'SP' WHERE razao_social = 'Empresa Alfa E2E Ltda'");
+  await enderecoDoPerito(true);
+  await loginPelaTela(page);
+  const j = await abrirNova(page, CNJ1);
+  const reu = j.getByRole('radio', { name: /Empresa Alfa E2E Ltda/ });
+  const perito = j.getByRole('radio', { name: /Endereço do perito/ });
+  const digitar = j.getByRole('radio', { name: 'Digitar outro endereço' });
+  await escolher(page, j, 'Perito', 'Perito Paulo E2E');
+  await reu.check();
+  await perito.check();
+  await expect(reu).not.toBeChecked(); await expect(perito).toBeChecked(); await expect(digitar).not.toBeChecked();
+  await reu.check();
+  await expect(perito).not.toBeChecked(); await expect(reu).toBeChecked();
+  await expect(j.getByLabel('Logradouro', { exact: true })).toHaveCount(0);                               // a cópia do perito saiu
+  await digitar.check();
+  await expect(reu).not.toBeChecked(); await expect(digitar).toBeChecked();
 });
 
 test('Nova perícia: perito com endereço incompleto aparece desabilitado com o aviso', async ({ page }) => {
@@ -505,7 +528,7 @@ test('Nova perícia: perito com endereço incompleto aparece desabilitado com o 
   await loginPelaTela(page);
   const j = await abrirNova(page, CNJ1);
   await escolher(page, j, 'Perito', 'Perito Paulo E2E');
-  await expect(j.getByRole('checkbox', { name: /Endereço do perito/ })).toBeDisabled();
+  await expect(j.getByRole('radio', { name: /Endereço do perito/ })).toBeDisabled();
   await expect(j.getByText('Endereço incompleto — complete o cadastro do perito antes de usar como local.')).toBeVisible();
 });
 
@@ -513,11 +536,11 @@ test('Nova perícia: local manual já preenchido não é sobrescrito pelo endere
   await enderecoDoPerito(true);
   await loginPelaTela(page);
   const j2 = await abrirNova(page, CNJ1);
-  await j2.getByRole('checkbox', { name: 'Adicionar outro local manual' }).check();
+  await j2.getByRole('radio', { name: 'Digitar outro endereço' }).check();
   await j2.getByLabel('Nome/Referência do local', { exact: true }).fill('IML Central');
   await escolher(page, j2, 'Perito', 'Perito Paulo E2E');
-  await j2.getByRole('checkbox', { name: /Endereço do perito/ }).click();                                  // (click: a caixa não muda de estado, por isso não é .check())
-  await expect(j2.getByText(/O local manual já está preenchido/)).toBeVisible();                            // avisa e NÃO sobrescreve
+  await j2.getByRole('radio', { name: /Endereço do perito/ }).click();                                  // (click: a caixa não muda de estado, por isso não é .check())
+  await expect(j2.getByText(/O endereço digitado já está preenchido/)).toBeVisible();                            // avisa e NÃO sobrescreve
   await expect(j2.getByLabel('Nome/Referência do local', { exact: true })).toHaveValue('Iml Central');   // (o sistema já arruma maiúsculas ao sair do campo)
-  await expect(j2.getByRole('checkbox', { name: /Endereço do perito/ })).not.toBeChecked();
+  await expect(j2.getByRole('radio', { name: /Endereço do perito/ })).not.toBeChecked();
 });

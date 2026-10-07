@@ -1153,6 +1153,9 @@ async function criarPericiaDaAta(conn, dados, processoId, usuarioId) {
   if (!aguardandoData && !temLocalManual && locaisReus.length === 0) {
     throw erroDaAta('Informe pelo menos um local para a perícia que já possui data.');
   }
+  if (!aguardandoData && (locaisReus.length > 1 || (locaisReus.length > 0 && temLocalManual))) {
+    throw erroDaAta('A perícia só pode ter um local. Escolha apenas um endereço.');
+  }
   const [result] = await conn.execute(
     `INSERT INTO pericia
       (processo_id, tipo_pericia_id, data, hora, local, cep, logradouro, numero, complemento, bairro, cidade, estado,

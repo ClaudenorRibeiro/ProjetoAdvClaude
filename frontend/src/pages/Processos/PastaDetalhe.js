@@ -1570,7 +1570,7 @@ export default function PastaDetalhe() {
                         <td>{p.data ? <>{formatarData(p.data)} {p.hora?.slice(0, 5)}</> : 'Aguardando data'}</td>
                         <td>{p.perito_nome || '—'}</td>
                         <td>{p.responsavel_nome || '—'}</td>
-                        <td>{p.local || '—'}</td>
+                        <td>{p.local_endereco || p.local || '—'}</td>
                         <td>
                           <span className={`badge ${STATUS_COR_PER[p.status] || 'badge-azul'}`}>
                             {STATUS_LABEL_PER[p.status] || 'Agendada'}
