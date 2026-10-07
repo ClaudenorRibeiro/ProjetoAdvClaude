@@ -367,6 +367,7 @@ router.get('/pericias/relatorio-peritos', autenticar, verificarPermissao('relato
 router.get('/pericias/reus-processo',     autenticar, verificarPermissao('pericias','visualizar'), periciasCtrl.reusDoProcesso);
 router.get('/pericias/peritos-processo',  autenticar, verificarPermissao('pericias','visualizar'), periciasCtrl.peritosDoProcesso);
 router.get('/pericias/busca-peritos',     autenticar, verificarPermissao('pericias','visualizar'), periciasCtrl.buscarPeritosParaAta);
+router.get('/pericias/perito-endereco/:id', autenticar, verificarPermissao('pericias','visualizar'), periciasCtrl.enderecoDoPerito);
 router.get('/pericias',                   autenticar, verificarPermissao('pericias','visualizar'), periciasCtrl.listar);
 router.get('/pericias/:id',               autenticar, verificarPermissao('pericias','visualizar'), periciasCtrl.buscar);
 router.get('/pericias/:id/historico',     autenticar, verificarPermissao('pericias','visualizar'), periciasCtrl.buscarHistorico);

@@ -481,6 +481,7 @@ export const periciasAPI = {
   reusProcesso:      (processoId) => api.get('/pericias/reus-processo', { params: { processo_id: processoId } }),
   peritosProcesso:   (processoId) => api.get('/pericias/peritos-processo', { params: { processo_id: processoId } }),
   buscarPeritosAta:  (busca) => api.get('/pericias/busca-peritos', { params: { busca, limite: 10 } }),
+  enderecoPerito:    (id) => api.get(`/pericias/perito-endereco/${id}`),
   marcarRealizada:   (id) => api.put(`/pericias/${id}/realizada`),
   cancelar:          (id, motivo) => api.put(`/pericias/${id}/cancelar`, { motivo }),
   remarcar:          (id, dados) => api.put(`/pericias/${id}/remarcar`, dados),

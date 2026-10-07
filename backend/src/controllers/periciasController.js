@@ -515,6 +515,29 @@ async function peritosDoProcesso(req, res) {
   }
 }
 
+// GET /api/pericias/perito-endereco/:id — endereço do perito (pessoa física cuja profissão começa com "Perícia"),
+// para a janela da perícia SUGERIR o consultório dele como local. Só leitura; vale para quem vê Perícias (sem exigir a permissão de Pessoas).
+async function enderecoDoPerito(req, res) {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT pf.id, pf.nome, pf.cep, pf.logradouro, pf.numero, pf.complemento, pf.bairro, pf.cidade, pf.estado
+         FROM pessoas_fisicas pf
+         JOIN profissao pr ON pr.id = pf.profissao_id AND pr.nome LIKE 'Perícia%'
+        WHERE pf.id = ? AND pf.ativo = 1`,
+      [req.params.id]
+    );
+    if (!rows.length) return naoEncontrado(res, 'Perito não encontrado');
+    const perito = rows[0];
+    return sucesso(res, {
+      ...perito,
+      endereco_completo: montarEnderecoPartes(perito),
+      endereco_incompleto: enderecoIncompleto(perito),
+    });
+  } catch (e) {
+    return erroInterno(res, e);
+  }
+}
+
 // GET /api/pericias/busca-peritos?busca=X — consulta exclusiva da ATA.
 // Não reutiliza a busca geral de Pessoas: nela, o modo de seleção procura apenas
 // nome/CPF e é usado por vários outros campos do sistema. Aqui a necessidade é
@@ -1455,6 +1478,7 @@ module.exports = {
   listar, buscar, criar, atualizar, tipos,
   criarTipo,
   atualizarTipo: comIdNumerico(atualizarTipo, 'Tipo de perícia não encontrado'), excluirTipo: comIdNumerico(excluirTipo, 'Tipo de perícia não encontrado'),
-  reusDoProcesso, peritosDoProcesso, buscarPeritosParaAta, relatorioPeritos, marcarRealizada, cancelar, remarcar, marcarRemarcada, excluir,
+  reusDoProcesso, peritosDoProcesso, buscarPeritosParaAta,
+  enderecoDoPerito: comIdNumerico(enderecoDoPerito, 'Perito não encontrado'), relatorioPeritos, marcarRealizada, cancelar, remarcar, marcarRemarcada, excluir,
   buscarHistorico, enviarComunicado,
 };

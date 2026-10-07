@@ -5,7 +5,7 @@
 // perito vindo do processo. NÃO tem "registrar ata".
 // ============================================================
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { periciasAPI, processosAPI, pessoasAPI, audienciasAPI, authAPI, calendarioAPI } from '../../services/api';
 import { formatarData, formatarDataHora, hojeLocal, toTitleCase, mascaraCNJ, mascaraTelefone } from '../../utils/formatters';
@@ -41,6 +41,22 @@ function enderecoResumo(item) {
   const linha1 = [item.logradouro, item.numero].filter(Boolean).join(', ');
   const cidadeUf = [item.cidade, item.estado].filter(Boolean).join('/');
   return [linha1, item.complemento, item.bairro, cidadeUf, item.cep].filter(Boolean).join(' - ');
+}
+
+// Endereço do PERITO como local da perícia: copiado para os campos do local manual (a perícia guarda o endereço próprio, como qualquer local manual).
+const CAMPOS_LOCAL_MANUAL = ['local', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado'];
+function localDoPerito(end) {
+  if (!end) return null;
+  const digitos = String(end.cep || '').replace(/\D/g, '');
+  return {
+    local: `Consultório do perito ${end.nome}`,
+    cep: digitos.length === 8 ? digitos.replace(/(\d{5})(\d)/, '$1-$2') : (end.cep || ''),
+    logradouro: end.logradouro || '', numero: end.numero || '', complemento: end.complemento || '',
+    bairro: end.bairro || '', cidade: end.cidade || '', estado: end.estado || '',
+  };
+}
+function localManualIgual(form, alvo) {
+  return !!alvo && CAMPOS_LOCAL_MANUAL.every(c => String(form[c] || '').trim() === String(alvo[c] || '').trim());
 }
 
 function temEnderecoManual(form) {
@@ -370,6 +386,8 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
   const [peritosProc, setPeritosProc] = useState([]);
   const [peritosBusca, setPeritosBusca] = useState([]);
   const [buscaPerito, setBuscaPerito] = useState(pericia?.perito_nome || '');
+  const [enderecoPerito, setEnderecoPerito] = useState(null);   // endereço do perito escolhido (para sugerir o consultório como local)
+  const copiaPeritoRef = useRef(null);                          // último endereço de perito copiado para o local manual
   // Selects de pessoas
   const [usuarios, setUsuarios] = useState([]);
   const [advogados, setAdvogados] = useState([]);
@@ -513,7 +531,39 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
 
   function set(k, v) { setForm(f => ({...f, [k]: v})); }
 
+  // Busca o endereço do perito escolhido (para a opção "Endereço do perito" na lista de locais).
+  useEffect(() => {
+    if (!form.perito_id) { setEnderecoPerito(null); return undefined; }
+    let vivo = true;
+    periciasAPI.enderecoPerito(form.perito_id)
+      .then(r => { if (vivo) setEnderecoPerito(r.data.ok ? r.data.dados : null); })
+      .catch(() => { if (vivo) setEnderecoPerito(null); });
+    return () => { vivo = false; };
+  }, [form.perito_id]);
+
+  const usandoEnderecoPerito = localManualAtivo && localManualIgual(form, localDoPerito(enderecoPerito));
+
+  function limparLocalManual() {
+    setForm(f => ({ ...f, ...Object.fromEntries(CAMPOS_LOCAL_MANUAL.map(c => [c, ''])) }));
+    setLocalManualAtivo(false);
+  }
+
+  function alternarEnderecoPerito() {
+    if (usandoEnderecoPerito) { limparLocalManual(); return; }
+    if (!enderecoPerito || enderecoPerito.endereco_incompleto) return;
+    if (temEnderecoManual(form)) {
+      setAvisoPericia('O local manual já está preenchido. Limpe-o (ou desmarque "Adicionar outro local manual") antes de usar o endereço do perito.');
+      return;
+    }
+    const copia = localDoPerito(enderecoPerito);
+    copiaPeritoRef.current = copia;
+    setForm(f => ({ ...f, ...copia }));
+    setLocalManualAtivo(true);
+  }
+
   function selecionarPerito(id, nome) {
+    // Trocou o perito: se o local manual ainda é a cópia do endereço do perito anterior, sai junto (não fica o consultório do perito errado).
+    if (String(id) !== String(form.perito_id || '') && localManualIgual(form, copiaPeritoRef.current)) { limparLocalManual(); copiaPeritoRef.current = null; }
     set('perito_tipo', 'fisica');
     set('perito_id', id);
     setBuscaPerito(nome);
@@ -789,6 +839,21 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
               </div>
             ) : (
               <small style={{color:'#5b6472'}}>Nenhum réu carregado para este processo.</small>
+            )}
+            {/* Endereço do PERITO (consultório): opção de local ao escolher o perito; copia o endereço para o local manual (editável) */}
+            {form.perito_id && enderecoPerito && (
+              <div style={{border:'1px solid #e5e7eb',borderRadius:8,padding:10,background:'#fbfdff',marginTop:10}}>
+                <label style={{display:'block',padding:'4px'}}>
+                  <input type="checkbox" checked={usandoEnderecoPerito} disabled={enderecoPerito.endereco_incompleto}
+                    onChange={alternarEnderecoPerito} style={{marginRight:8}} />
+                  <strong>Endereço do perito — {enderecoPerito.nome}</strong>
+                  <small style={{display:'block',marginLeft:24,color:enderecoPerito.endereco_incompleto ? '#b45309' : '#5b6472'}}>
+                    {enderecoPerito.endereco_incompleto
+                      ? 'Endereço incompleto — complete o cadastro do perito antes de usar como local.'
+                      : enderecoPerito.endereco_completo}
+                  </small>
+                </label>
+              </div>
             )}
           </div>
 

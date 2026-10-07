@@ -298,3 +298,26 @@ test('permissões: sem visualizar/cadastrar/alterar/excluir = 403 em cada ação
   t.checar((await per(id)).status === 'agendada', 'algo mudou sem permissão');
   t.fim();
 });
+
+test('endereço do perito (sugestão de local da perícia): só perito (profissão "Perícia…"), com o endereço por extenso e o aviso de endereço incompleto; id ruim = 404; precisa de login e de permissão de Perícias', async () => {
+  const t = juntar();
+  const prof = (await sql("INSERT INTO profissao (nome) VALUES ('Perícia Médica C7')")).insertId;
+  const completo = (await sql("INSERT INTO pessoas_fisicas (nome, cpf, profissao_id, cep, logradouro, numero, complemento, bairro, cidade, estado) VALUES ('Perito Com Consultório', '39053344705', ?, '13015-001', 'Rua do Consultório', '45', 'Sala 3', 'Centro', 'Campinas', 'SP')", [prof])).insertId;
+  const incompleto = (await sql("INSERT INTO pessoas_fisicas (nome, cpf, profissao_id, logradouro, bairro, cidade, estado) VALUES ('Perito Sem Número', '52998224725', ?, 'Rua Sem Número', 'Centro', 'Campinas', 'SP')", [prof])).insertId;
+  const inativo = (await sql("INSERT INTO pessoas_fisicas (nome, cpf, profissao_id, ativo) VALUES ('Perito Inativo', '16899535009', ?, 0)", [prof])).insertId;
+  const ok = await api().get(`/api/pericias/perito-endereco/${completo}`);
+  t.checar(ok.status === 200 && ok.body.dados.nome === 'Perito Com Consultório' && ok.body.dados.endereco_incompleto === false, `completo: ${ok.status} ${JSON.stringify(ok.body.dados)}`);
+  t.checar(ok.body.dados.endereco_completo === 'Rua do Consultório, 45 - Sala 3 - Centro - Campinas/SP - 13015-001', `endereço por extenso: ${ok.body.dados.endereco_completo}`);
+  t.checar(ok.body.dados.cep === '13015-001' && ok.body.dados.logradouro === 'Rua do Consultório' && ok.body.dados.numero === '45' && ok.body.dados.complemento === 'Sala 3' && ok.body.dados.estado === 'SP', 'campos do endereço');
+  const inc = await api().get(`/api/pericias/perito-endereco/${incompleto}`);
+  t.checar(inc.status === 200 && inc.body.dados.endereco_incompleto === true, `incompleto: ${inc.status} ${JSON.stringify(inc.body.dados)}`);
+  t.checar((await api().get(`/api/pericias/perito-endereco/${F.perito}`)).status === 404, 'pessoa que não é perito (sem profissão "Perícia") = 404');
+  t.checar((await api().get(`/api/pericias/perito-endereco/${inativo}`)).status === 404, 'perito inativo = 404');
+  for (const ruim of ['abc', '-1', '0', '99999999999999999999', '999999']) t.checar((await api().get(`/api/pericias/perito-endereco/${ruim}`)).status === 404, `id ${ruim} = 404`);
+  t.checar((await request(app).get(`/api/pericias/perito-endereco/${completo}`)).status === 401, 'sem login = 401');
+  const nada = await criarUsuario('semperm', 3, []);
+  const ver = await criarUsuario('soperiver', 3, [['pericias', null, 'visualizar']]);
+  t.checar((await api(nada.token).get(`/api/pericias/perito-endereco/${completo}`)).status === 403, 'sem permissão de Perícias = 403');
+  t.checar((await api(ver.token).get(`/api/pericias/perito-endereco/${completo}`)).status === 200, 'só "ver Perícias" (sem Pessoas) basta');
+  t.fim();
+});
