@@ -351,15 +351,22 @@ async function renumerarPasta(req, res) {
     );
     if (existente.length) {
       const outra = existente[0];
+      // FOR SHARE: a contagem lê a situação REAL (inclusive um processo que acabou de ser cadastrado nessa pasta), não a "foto" do início da transação.
       const [[{ ativos, todos }]] = await conn.execute(
-        'SELECT COALESCE(SUM(ativo = 1), 0) AS ativos, COUNT(*) AS todos FROM tblproc WHERE pasta_id = ?', [outra.id]
+        'SELECT COALESCE(SUM(ativo = 1), 0) AS ativos, COUNT(*) AS todos FROM tblproc WHERE pasta_id = ? FOR SHARE', [outra.id]
       );
       if (Number(ativos) > 0) { await conn.rollback(); return jaPertence(); }
       if (Number(todos) > 0) { await conn.rollback(); return preso(`ela ainda guarda ${todos} processo(s) inativado(s)`); }
-      const [[{ tarefas }]] = await conn.execute('SELECT COUNT(*) AS tarefas FROM tarefas WHERE pasta_id = ?', [outra.id]);
+      const [[{ tarefas }]] = await conn.execute('SELECT COUNT(*) AS tarefas FROM tarefas WHERE pasta_id = ? FOR SHARE', [outra.id]);
       if (Number(tarefas) > 0) { await conn.rollback(); return preso(`ela tem ${tarefas} tarefa(s) ligada(s)`); }
       // Totalmente vazia: libera o número removendo a pasta vazia (etiquetas pessoais saem em cascata) — com auditoria.
-      await conn.execute('DELETE FROM tblpasta WHERE id = ?', [outra.id]);
+      try {
+        await conn.execute('DELETE FROM tblpasta WHERE id = ?', [outra.id]);
+      } catch (e) {
+        // Rede de segurança: se mesmo assim algo passou a prender a pasta, o aviso certo é "número em uso" (nada foi apagado).
+        if (e && (e.code === 'ER_ROW_IS_REFERENCED_2' || e.errno === 1451)) { await conn.rollback(); return jaPertence(); }
+        throw e;
+      }
       await auditoria.registrar(req.usuario.id, 'tblpasta', 'excluir', outra.id, { numPasta: num, motivo: 'pasta vazia reaproveitada na renumeração' }, null, conn,
         `Pasta vazia ${numTxt} removida (número reaproveitado na renumeração)`);
     }

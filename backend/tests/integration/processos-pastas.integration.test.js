@@ -344,6 +344,27 @@ test('renumerar: pasta vazia e criação de processo no MESMO número ao mesmo t
   else assert.equal(await total('SELECT COUNT(*) AS n FROM tblproc WHERE pasta_id = ?', [pastaDo141.id]), 1);
 });
 
+test('renumerar: pasta "vazia" que ganha um processo no instante da troca — recusa com o aviso de número em uso (não "vinculado a outros registros") e não apaga nada', async () => {
+  const a = await novoProc(150);
+  const vazia = (await sql('INSERT INTO tblpasta (numPasta, criado_por) VALUES (151, 1)')).insertId;
+  // Conexão B cadastra um processo na pasta 151 e segura a transação aberta; a renumeração começa (tira a "foto" do banco) e fica esperando B.
+  const b = await conectarBancoTeste();
+  try {
+    await b.beginTransaction();
+    await b.execute("INSERT INTO tblproc (pasta_id, numProc, NomeTituloProc, tipo_id, status_id, ativo, criado_por) VALUES (?, '0000151-00.2026.5.15.0001', 'CHEGOU NA HORA', 1, 1, 1, 1)", [vazia]);
+    const resposta = api().put(`/api/processos/pastas/${a.pastaId}/renumerar`).send({ numPasta: 151 }).then(r => r);
+    await new Promise(ok => setTimeout(ok, 600));
+    await b.commit();
+    const r = await resposta;
+    assert.equal(r.status, 400, JSON.stringify(r.body));
+    assert.match(msg(r), /O número 0151 já pertence a outra pasta/);
+  } finally { await b.end(); }
+  assert.equal(await total('SELECT COUNT(*) AS n FROM tblpasta WHERE id = ?', [vazia]), 1, 'a pasta que ganhou processo foi apagada');
+  assert.equal(await total('SELECT COUNT(*) AS n FROM tblproc WHERE pasta_id = ?', [vazia]), 1, 'o processo novo se perdeu');
+  assert.equal((await um('SELECT numPasta FROM tblpasta WHERE id = ?', [a.pastaId])).numPasta, 150, 'a pasta foi renumerada mesmo com a recusa');
+  assert.equal(await total("SELECT COUNT(*) AS n FROM logs_auditoria WHERE tabela = 'tblpasta' AND acao IN ('excluir', 'renumerar') AND registro_id IN (?, ?)", [vazia, a.pastaId]), 0, 'sobrou auditoria de uma troca que não aconteceu');
+});
+
 test('renumerar: número com letras, decimal ou notação científica NÃO é aceito como se fosse outro número', async () => {
   const { pastaId } = await novoProc(70);
   for (const ruim of ['12abc', '12.7', '1e3', '0x10', 12.7, '9999999999']) {
