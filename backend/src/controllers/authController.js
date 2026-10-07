@@ -10,6 +10,7 @@ const { pool } = require('../config/database');
 const { sucesso, erro, erroInterno, naoAutorizado } = require('../utils/response');
 const { buscarPermissoesUsuario } = require('../middleware/permissoes');
 const { enviarEmail, templateResetSenha } = require('../utils/email');
+const { tokenResetValido, validarSenha, validarLogin } = require('../utils/credenciais');
 
 // Cores da agenda por usuário (guardadas como JSON em usuarios.cores_agenda).
 // Lê/valida com tolerância: só as 6 chaves conhecidas + hex válido; vazio/ inválido → null (padrão).
@@ -54,16 +55,6 @@ function parseCoresMenu(valor) {
   }
 }
 
-function validarSenha(senha) {
-  if (!senha || senha.length < 8)   return 'A senha deve ter no mínimo 8 caracteres';
-  if (senha.length > 20)            return 'A senha deve ter no máximo 20 caracteres';
-  if (!/[A-Z]/.test(senha))         return 'A senha deve conter pelo menos 1 letra maiúscula';
-  if (!/[a-z]/.test(senha))         return 'A senha deve conter pelo menos 1 letra minúscula';
-  if (!/[0-9]/.test(senha))         return 'A senha deve conter pelo menos 1 número';
-  if (!/[^A-Za-z0-9]/.test(senha))  return 'A senha deve conter pelo menos 1 caractere especial';
-  return null;
-}
-
 // Lê o tempo de inatividade (em minutos) configurado pelo escritório.
 // Piso de 15 min (regra do sistema) e TOLERANTE: se a coluna ainda não existir
 // num banco, ou vier inválida, assume 15 e não quebra o login/verificação.
@@ -83,7 +74,8 @@ async function login(req, res) {
   try {
     const { login: loginUsuario, senha, sessao: sessaoEnviada } = req.body;
 
-    if (!loginUsuario || !senha) {
+    // Login e senha precisam ser TEXTO (número, lista ou objeto no lugar do texto = aviso, nunca "Erro interno").
+    if (typeof loginUsuario !== 'string' || typeof senha !== 'string' || !loginUsuario.trim() || !senha) {
       return erro(res, 'Login e senha são obrigatórios');
     }
 
@@ -220,9 +212,12 @@ async function criarPrimeiroAdmin(req, res) {
     }
 
     const { nome, login: loginAdmin, senha, email } = req.body;
-    if (!nome || !loginAdmin || !senha) {
+    if (typeof nome !== 'string' || typeof loginAdmin !== 'string' || typeof senha !== 'string' || !nome.trim() || !loginAdmin.trim() || !senha) {
       return erro(res, 'Nome, login e senha são obrigatórios');
     }
+    // Mesma regra do cadastro de usuários: o login só tem letras.
+    const errLogin = validarLogin(loginAdmin);
+    if (errLogin) return erro(res, errLogin);
     const errSenha1 = validarSenha(senha);
     if (errSenha1) return erro(res, errSenha1);
 
@@ -424,7 +419,7 @@ async function salvarPublicacoesEscopo(req, res) {
 async function esqueciSenha(req, res) {
   try {
     const { loginOuEmail } = req.body;
-    if (!loginOuEmail?.trim()) return erro(res, 'Informe o login ou e-mail cadastrado');
+    if (typeof loginOuEmail !== 'string' || !loginOuEmail.trim()) return erro(res, 'Informe o login ou e-mail cadastrado');
 
     // Busca o usuário pelo login OU e-mail
     const [rows] = await pool.execute(
@@ -492,6 +487,8 @@ async function esqueciSenha(req, res) {
 async function validarToken(req, res) {
   try {
     const { token } = req.params;
+    // Só o formato que o sistema gera (64 letras/números em hexadecimal): qualquer outra coisa nem chega ao banco.
+    if (!tokenResetValido(token)) return erro(res, 'Link inválido ou expirado. Solicite um novo link.');
     const [rows] = await pool.execute(
       `SELECT rt.id, u.nome FROM reset_tokens rt
        JOIN usuarios u ON u.id = rt.usuario_id
@@ -511,6 +508,9 @@ async function redefinirSenha(req, res) {
   try {
     const { token, senha } = req.body;
     if (!token || !senha) return erro(res, 'Token e nova senha são obrigatórios');
+    // SEGURANÇA: o link precisa ser TEXTO no formato exato que o sistema gera. Um `true`, um número ou uma lista no lugar do link
+    // fazia o MySQL comparar pelo valor numérico e "casar" com o link de OUTRA pessoa (e trocar a senha dela).
+    if (!tokenResetValido(token)) return erro(res, 'Link inválido ou expirado. Solicite um novo link.');
     const errSenha2 = validarSenha(senha);
     if (errSenha2) return erro(res, errSenha2);
 
@@ -550,7 +550,7 @@ async function trocarSenha(req, res) {
   try {
     const { senha_atual, nova_senha, confirmar_senha } = req.body;
 
-    if (!senha_atual || !nova_senha || !confirmar_senha) {
+    if ([senha_atual, nova_senha, confirmar_senha].some(v => typeof v !== 'string' || !v)) {
       return erro(res, 'Preencha todos os campos');
     }
     const errSenha3 = validarSenha(nova_senha);
@@ -591,7 +591,7 @@ async function trocarSenha(req, res) {
 async function verificarSenha(req, res) {
   try {
     const { senha } = req.body;
-    if (!senha) return erro(res, 'Senha é obrigatória');
+    if (typeof senha !== 'string' || !senha) return erro(res, 'Senha é obrigatória');
     const [rows] = await pool.execute('SELECT senha_hash FROM usuarios WHERE id = ? AND ativo = 1', [req.usuario.id]);
     if (!rows.length) return erro(res, 'Usuário não encontrado');
     const correta = await bcrypt.compare(senha, rows[0].senha_hash);

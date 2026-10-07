@@ -11,6 +11,7 @@ const { ehDiaUtil, proximoDiaUtil, calcularVencimento } = require('../services/c
 const { reagendarCronPrazos } = require('../services/alertasService');
 const multer = require('multer');
 const { lerTextos, horaDoDia, texto, dataIso } = require('../utils/camposTexto');
+const { validarSenha, validarLogin } = require('../utils/credenciais');
 
 // ============================================================
 // UPLOAD DO LOGO DO ESCRITÓRIO
@@ -447,17 +448,6 @@ function normalizarNivel(nivel) {
   return [1, 2].includes(n) ? n : null; // null = inválido
 }
 
-// Valida requisitos de senha — retorna mensagem de erro ou null se válida
-function validarSenha(senha) {
-  if (!senha || senha.length < 8)   return 'A senha deve ter no mínimo 8 caracteres';
-  if (senha.length > 20)            return 'A senha deve ter no máximo 20 caracteres';
-  if (!/[A-Z]/.test(senha))         return 'A senha deve conter pelo menos 1 letra maiúscula';
-  if (!/[a-z]/.test(senha))         return 'A senha deve conter pelo menos 1 letra minúscula';
-  if (!/[0-9]/.test(senha))         return 'A senha deve conter pelo menos 1 número';
-  if (!/[^A-Za-z0-9]/.test(senha))  return 'A senha deve conter pelo menos 1 caractere especial';
-  return null;
-}
-
 // POST /api/configuracoes/usuarios — Cria usuário
 async function criarUsuario(req, res) {
   try {
@@ -465,9 +455,8 @@ async function criarUsuario(req, res) {
     if (!nome || !login || !senha) return erro(res, 'Nome, login e senha são obrigatórios');
 
     // Login só pode ter letras (sem números, espaços ou símbolos) — regra do sistema
-    if (!/^[A-Za-z]+$/.test((login || '').trim())) {
-      return erro(res, 'O login deve conter apenas letras (sem números, espaços ou símbolos).');
-    }
+    const errLogin = validarLogin(login);
+    if (errLogin) return erro(res, errLogin);
 
     const errSenha = validarSenha(senha);
     if (errSenha) return erro(res, errSenha);
