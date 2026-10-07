@@ -173,7 +173,7 @@ export default function Documentos() {
                 {modelos.map(m => {
                   const tipo = rotuloDestino(m);
                   return (
-                    <tr key={m.id} style={m.ativo ? {} : { opacity: 0.55 }}>
+                    <tr key={m.id} style={m.ativo ? {} : { color: '#5b6472' }}>   {/* desativado: cinza escuro legível (opacity deixava o contraste abaixo de 4,5:1); o status também aparece na etiqueta "Desativado" */}
                       <td>
                         <strong>{m.nome}</strong>
                         {m.descricao && <div style={{ fontSize: '11px', color: '#5b6472' }}>{m.descricao}</div>}
