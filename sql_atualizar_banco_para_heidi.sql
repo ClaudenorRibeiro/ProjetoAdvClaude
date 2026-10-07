@@ -20,6 +20,9 @@
 --   d) Registra a versão na tabela controle_versao_banco (número 1), só se tudo terminar certo.
 --   e) APAGA a coluna antiga tblpasta.area_direito (decisão do usuário, 04/10/2026: a área é o "Tipo" do processo).
 --      O sistema ANTIGO quebra sem essa coluna; por isso o passo 1 manda parar o sistema e o passo 5 manda atualizar o código logo depois.
+--   f) AUMENTA modelo_documento.destino de varchar(20) para varchar(40) (decisão do usuário, 07/10/2026): os tipos "Recibo consolidado do
+--      acordo: cliente/parceria" (recibo_acordo_cliente = 21 letras, recibo_acordo_parceria = 22) não cabiam em 20. Só aumenta o tamanho:
+--      nenhum modelo existente é alterado. Se a coluna já tiver 40 ou mais, não faz nada.
 -- SEGURANÇA:
 --   * Antes de tudo confere: há um banco selecionado, ele tem as tabelas principais do sistema, o MySQL é 8.0.16 ou mais novo
 --     (não aceita MariaDB) e tem a collation do sistema. Se algo não bater, NÃO faz nada e avisa.
@@ -403,6 +406,12 @@ SET @sql := IF(@ok = 1 AND (SELECT COUNT(*) FROM information_schema.COLUMNS WHER
  'DO 0');
 PREPARE st FROM @sql; EXECUTE st; DEALLOCATE PREPARE st;
 
+-- ---------- 5b) MODELOS DE DOCUMENTO: aumenta o tamanho da coluna "destino" (20 -> 40 letras). Só aumenta; mantém NOT NULL e o padrão 'comum'.
+SET @sql := IF(@ok = 1 AND (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'modelo_documento' AND COLUMN_NAME = 'destino' AND CHARACTER_MAXIMUM_LENGTH < 40) > 0,
+ 'ALTER TABLE `modelo_documento` MODIFY COLUMN `destino` varchar(40) NOT NULL DEFAULT ''comum''',
+ 'DO 0');
+PREPARE st FROM @sql; EXECUTE st; DEALLOCATE PREPARE st;
+
 -- ---------- 6) CONFERÊNCIA FINAL (só lê): conta o que ainda estiver faltando. Tudo deve ser 0.
 SET @falta_tab := IF(@ok = 1, (SELECT COUNT(*) FROM (
       SELECT 'instituicao_financeira' AS t
@@ -459,7 +468,8 @@ SET @falta_fk := IF(@ok = 1, (SELECT COUNT(*) FROM (
       UNION ALL SELECT 'advogados_freela' AS t, 'fk_freela_profissao' AS f
     ) x WHERE NOT EXISTS (SELECT 1 FROM information_schema.TABLE_CONSTRAINTS i WHERE i.TABLE_SCHEMA = @db AND i.TABLE_NAME = x.t AND i.CONSTRAINT_NAME = x.f AND i.CONSTRAINT_TYPE = 'FOREIGN KEY')), NULL);
 SET @area := IF(@ok = 1, (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'tblpasta' AND COLUMN_NAME = 'area_direito'), NULL);
-SET @tudo := IF(@ok = 1 AND @falta_tab = 0 AND @falta_col = 0 AND @falta_idx = 0 AND @falta_fk = 0 AND @area = 0, 1, 0);
+SET @destino_curto := IF(@ok = 1, (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'modelo_documento' AND COLUMN_NAME = 'destino' AND CHARACTER_MAXIMUM_LENGTH < 40), NULL);
+SET @tudo := IF(@ok = 1 AND @falta_tab = 0 AND @falta_col = 0 AND @falta_idx = 0 AND @falta_fk = 0 AND @area = 0 AND @destino_curto = 0, 1, 0);
 
 -- ---------- 7) REGISTRA A VERSÃO no próprio banco (tabela controle_versao_banco; só se tudo deu certo)
 SET @tem_versao := (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'controle_versao_banco');
@@ -484,4 +494,5 @@ SELECT IF(@tudo = 1, 'PRONTO: o banco esta igual ao estrutura_banco.sql. Pode at
        @falta_idx AS indices_faltando,
        @falta_fk AS chaves_faltando,
        @area AS area_direito_ainda_existe,
+       @destino_curto AS destino_modelo_ainda_curto,
        @versao_registrada AS versao_registrada;

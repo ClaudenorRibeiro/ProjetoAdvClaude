@@ -15,7 +15,7 @@ PARA RODAR NO PC (duplo clique)
 
 PARA RODAR NO HEIDISQL (banco)
   sql_atualizar_banco_para_heidi.sql            IMPORTANTE  SCRIPT ÚNICO de atualização do banco (Antônio e Erick): cria tabelas/colunas do Financeiro, contas
-                                                            bancárias e Relatórios, registra a versão e apaga tblpasta.area_direito. Confere banco/versão do MySQL, pode rodar
+                                                            bancárias e Relatórios, aumenta modelo_documento.destino para 40 letras (recibo consolidado do acordo), registra a versão e apaga tblpasta.area_direito. Confere banco/versão do MySQL, pode rodar
                                                             várias vezes. Parar o sistema + backup antes; atualizar o código logo depois de ver "PRONTO".
   SUBSTITUÍDOS pelo script único (só histórico, NÃO rodar): sql_relatorios_fase1/fase6/fase7, sql_atualizar_financeiro,
                                                             sql_contas_bancarias_pessoas, sql_remover_area_direito_da_pasta (_para_heidi.sql).

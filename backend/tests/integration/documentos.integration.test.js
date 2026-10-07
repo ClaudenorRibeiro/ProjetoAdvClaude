@@ -114,6 +114,8 @@ test.before(async () => {
   F.mComumSoEscritorio = await modelo('Procuração do Escritório', 'comum');
   F.mReciboCli = await modelo('Recibo do Cliente', 'recibo_cliente');
   F.mReciboPar = await modelo('Recibo do Parceiro', 'recibo_parceria');
+  F.mReciboAcordoCli = await modelo('Recibo Consolidado Cliente', 'recibo_acordo_cliente');
+  F.mReciboAcordoPar = await modelo('Recibo Consolidado Parceria', 'recibo_acordo_parceria');
   F.mPartes = await modelo('Documento de Partes', 'multipessoas');
 });
 test.after(async () => {
@@ -340,12 +342,14 @@ test('modelos-gerar: só os modelos ATIVOS do mesmo tipo e modalidade da audiên
   assert.deepEqual((await get('/api/documentos/modelos-gerar?ancora=audiencia&ancora_id=999999')).body.dados, []);
 });
 
-test('modelos-gerar: prazo (pelo subtipo), pessoa (só os que cabem numa pessoa), recibos de repasse (cliente x parceiro) e documento de partes', async () => {
+test('modelos-gerar: prazo (pelo subtipo), pessoa (só os que cabem numa pessoa), recibos de repasse e consolidados do acordo (cliente x parceria) e documento de partes', async () => {
   const nomes = async url => (await get(url)).body.dados.map(m => m.nome);
   assert.deepEqual(await nomes(`/api/documentos/modelos-gerar?ancora=prazo&ancora_id=${F.prazo}`), ['Minuta Contestação']);
   assert.deepEqual(await nomes(`/api/documentos/modelos-gerar?ancora=pessoa_fisica&ancora_id=${F.maria}`), ['Declaração de Comparecimento', 'Procuração do Escritório']);
   assert.deepEqual(await nomes('/api/documentos/modelos-gerar?ancora=pagamento&ancora_id=1'), ['Recibo do Cliente']);
   assert.deepEqual(await nomes('/api/documentos/modelos-gerar?ancora=pagamento&ancora_id=1&beneficiario=parceiro'), ['Recibo do Parceiro']);
+  assert.deepEqual(await nomes('/api/documentos/modelos-gerar?ancora=acordo&ancora_id=1'), ['Recibo Consolidado Cliente']);
+  assert.deepEqual(await nomes('/api/documentos/modelos-gerar?ancora=acordo&ancora_id=1&beneficiario=parceiro'), ['Recibo Consolidado Parceria']);
   assert.deepEqual(await nomes('/api/documentos/modelos-gerar?ancora=multipessoas'), ['Documento de Partes']);
   assert.deepEqual(await nomes('/api/documentos/modelos-gerar?ancora=origem_inventada&ancora_id=1'), []);
 });
@@ -387,6 +391,23 @@ test('lista e detalhe de modelos: só ativos por padrão, desativados com inclui
   assert.ok(!('arquivo_s3_key' in um.body.dados));
   assert.equal((await get('/api/documentos/modelos/999999')).status, 404);
   assert.equal((await get('/api/documentos/modelos/abc')).status, 404);
+});
+
+test('todo tipo (destino) de modelo que o sistema aceita ou oferece na tela CABE na coluna do banco (recibo consolidado do acordo tem 21 e 22 letras)', async () => {
+  const fs = require('node:fs'); const path = require('node:path');
+  const raiz = path.join(__dirname, '../../..');
+  const controlador = fs.readFileSync(path.join(raiz, 'backend/src/controllers/documentosController.js'), 'utf8');
+  const tela = fs.readFileSync(path.join(raiz, 'frontend/src/pages/Documentos/Documentos.js'), 'utf8');
+  const doServidor = [...controlador.match(/const validos = \[([^\]]+)\]/)[1].matchAll(/'([a-z_]+)'/g)].map(m => m[1]);
+  const daTela = [...tela.matchAll(/<option value="([a-z_]+)">(?:Comum|Documento|Recibo|Comunicado)/g)].map(m => m[1]);
+  assert.ok(doServidor.includes('recibo_acordo_parceria') && daTela.includes('recibo_acordo_parceria'), 'não achei os destinos no código (o teste precisa ser ajustado)');
+  const [col] = await sql("SELECT CHARACTER_MAXIMUM_LENGTH AS n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'modelo_documento' AND COLUMN_NAME = 'destino'");
+  for (const destino of new Set([...doServidor, ...daTela])) {
+    assert.ok(destino.length <= col.n, `o tipo "${destino}" tem ${destino.length} letras e a coluna destino aceita só ${col.n}`);
+  }
+  // e o banco de fato guarda e devolve o nome inteiro (sem cortar)
+  const guardados = await sql("SELECT destino FROM modelo_documento WHERE destino LIKE 'recibo_acordo%' ORDER BY destino");
+  assert.deepEqual(guardados.map(g => g.destino), ['recibo_acordo_cliente', 'recibo_acordo_parceria']);
 });
 
 test('catálogos de variáveis e opções de destino do modelo', async () => {

@@ -1184,7 +1184,7 @@ CREATE TABLE `modelo_documento` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nome` varchar(150) NOT NULL,
   `descricao` varchar(300) DEFAULT NULL,
-  `destino` varchar(20) NOT NULL DEFAULT 'comum',
+  `destino` varchar(40) NOT NULL DEFAULT 'comum',
   `tipo_audiencia_id` int DEFAULT NULL,
   `modalidade` varchar(20) DEFAULT NULL,
   `minutos_antes` int NOT NULL DEFAULT '0',
