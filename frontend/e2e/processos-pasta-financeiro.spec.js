@@ -476,7 +476,7 @@ test('@critical Repassar pelo menu da parcela: com cliente E parceiro pendentes 
   await abrirMenuAcoes(page, parcelaRecebida(page));
   await page.getByRole('button', { name: /^\S*\s*Repassar/ }).first().hover();
   await expect(page.getByRole('button', { name: /Repassar ao cliente/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Repassar ao parceiro \(Parceiro Repasse C8\)/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^\S*\s*Repassar ao parceiro$/ })).toBeVisible();   // o item do menu não leva o nome (a coluna Parceria e a janela do repasse já mostram quem é)
   // o painel do submenu acompanha o tamanho do texto e NÃO invade o menu principal (antes o texto comprido passava da borda e ficava por cima de "Histórico")
   const painelSub = page.getByRole('button', { name: /Repassar ao parceiro/ }).locator('..');
   const menuPrincipal = page.getByRole('button', { name: /Desfazer recebimento/ }).locator('..');

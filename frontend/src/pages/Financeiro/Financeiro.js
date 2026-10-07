@@ -1241,7 +1241,7 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
                         oculto: !(podeAlterar && cicloDaParcela(p)?.length === 2),
                         submenu: [
                           { label: 'Repassar ao cliente', icone: '💸', onClick: () => pedirRepasse(p, 'cliente') },
-                          { label: `Repassar ao parceiro${p.parceria_nome ? ` (${p.parceria_nome})` : ''}`, icone: '💸', onClick: () => pedirRepasse(p, 'parceiro') },
+                          { label: 'Repassar ao parceiro', icone: '💸', onClick: () => pedirRepasse(p, 'parceiro') },
                         ] },
                       { label: 'Lançar multa', icone: '⚠️',
                         oculto: !(podeAlterar && p.status === 'pendente' && !p.multa),
