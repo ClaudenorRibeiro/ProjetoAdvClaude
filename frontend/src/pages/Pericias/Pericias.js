@@ -791,6 +791,54 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
             </div>
           </div>
 
+          {/* Perito — pessoa física cuja profissão começa com "Perícia" */}
+          <div className="form-group">
+            <label className="form-label">Perito</label>
+            {peritosProc.length > 0 ? (
+              <SelectPesquisavel
+                ariaLabel="Perito"
+                className="form-control"
+                value={form.perito_id ? `fisica:${form.perito_id}` : ''}
+                onChange={valor => {
+                  if (!valor) { selecionarPerito('', ''); return; }
+                  const [tp, pid] = valor.split(':');
+                  const sel = peritosProc.find(x => x.tipo_pessoa === tp && String(x.pessoa_id) === pid);
+                  selecionarPerito(pid, sel ? sel.nome : '');
+                }}
+                opcoes={[{ value: '', label: '— Selecione um perito do processo —' }, ...peritosProc.map(x => ({ value: `${x.tipo_pessoa}:${x.pessoa_id}`, label: `${x.nome}${x.telefone ? ` · ${x.telefone}` : ''}${x.email ? ` · ${x.email}` : ''}` }))]}
+              />
+            ) : (
+              <small style={{color:'#5b6472'}}>
+                Nenhum perito vinculado a este processo. Busque abaixo ou cadastre pelo botão "...".
+              </small>
+            )}
+            {/* Busca avulsa (caso o perito ainda não esteja no processo) */}
+            <div style={{display:'flex',gap:'8px',marginTop:'8px'}}>
+              <div style={{flex:1,position:'relative'}}>
+                <input className="form-control" placeholder="Buscar perito por nome, telefone ou e-mail..."
+                  value={buscaPerito}
+                  onChange={e => { setBuscaPerito(e.target.value); buscarPeritos(e.target.value); }} />
+                {peritosBusca.length > 0 && (
+                  <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:'1px solid #ddd',borderRadius:'6px',zIndex:20,maxHeight:'130px',overflowY:'auto',boxShadow:'0 4px 12px rgba(0,0,0,0.1)'}}>
+                    {peritosBusca.map(p => (
+                      <div key={p.id} style={{padding:'8px 12px',cursor:'pointer',borderBottom:'1px solid #f0f0f0'}}
+                        onClick={() => selecionarPerito(p.id, p.nome)}>
+                        <strong>{p.nome}</strong>
+                        <small style={{display:'block',color:'#5b6472'}}>
+                          {p.telefone ? `Tel: ${p.telefone}` : 'Sem telefone principal'}
+                          {p.email ? ` · ${p.email}` : ''}
+                        </small>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button type="button" title="Cadastrar perito"
+                style={{padding:'0 12px',border:'1px solid #ddd',borderRadius:'6px',background:'#f8fafc',cursor:'pointer',fontSize:'18px'}}
+                onClick={() => setModalPeritoRapido(true)}>…</button>
+            </div>
+          </div>
+
           {/* Locais da perícia — réus do processo + local manual opcional */}
           <div className="form-group">
             <label className="form-label">Onde será realizada a perícia? *</label>
@@ -948,54 +996,6 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
                   opcoes={[{ value: '', label: '— Não definido —' }, ...usuarios.map(u => ({ value: `usuario:${u.id}`, label: u.nome })), ...advogados.filter(a => a.origem === 'freela').map(a => ({ value: `freela:${a.id}`, label: `${a.nome} (freelancer)` }))]} />
                 <button type="button" title="Cadastrar freelancer" className="btn btn-outline" style={{ padding: '0 10px' }} onClick={() => setModalAssistenteFreela(true)}>…</button>
               </div>
-            </div>
-          </div>
-
-          {/* Perito — pessoa física cuja profissão começa com "Perícia" */}
-          <div className="form-group">
-            <label className="form-label">Perito</label>
-            {peritosProc.length > 0 ? (
-              <SelectPesquisavel
-                ariaLabel="Perito"
-                className="form-control"
-                value={form.perito_id ? `fisica:${form.perito_id}` : ''}
-                onChange={valor => {
-                  if (!valor) { selecionarPerito('', ''); return; }
-                  const [tp, pid] = valor.split(':');
-                  const sel = peritosProc.find(x => x.tipo_pessoa === tp && String(x.pessoa_id) === pid);
-                  selecionarPerito(pid, sel ? sel.nome : '');
-                }}
-                opcoes={[{ value: '', label: '— Selecione um perito do processo —' }, ...peritosProc.map(x => ({ value: `${x.tipo_pessoa}:${x.pessoa_id}`, label: `${x.nome}${x.telefone ? ` · ${x.telefone}` : ''}${x.email ? ` · ${x.email}` : ''}` }))]}
-              />
-            ) : (
-              <small style={{color:'#5b6472'}}>
-                Nenhum perito vinculado a este processo. Busque abaixo ou cadastre pelo botão "...".
-              </small>
-            )}
-            {/* Busca avulsa (caso o perito ainda não esteja no processo) */}
-            <div style={{display:'flex',gap:'8px',marginTop:'8px'}}>
-              <div style={{flex:1,position:'relative'}}>
-                <input className="form-control" placeholder="Buscar perito por nome, telefone ou e-mail..."
-                  value={buscaPerito}
-                  onChange={e => { setBuscaPerito(e.target.value); buscarPeritos(e.target.value); }} />
-                {peritosBusca.length > 0 && (
-                  <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:'1px solid #ddd',borderRadius:'6px',zIndex:20,maxHeight:'130px',overflowY:'auto',boxShadow:'0 4px 12px rgba(0,0,0,0.1)'}}>
-                    {peritosBusca.map(p => (
-                      <div key={p.id} style={{padding:'8px 12px',cursor:'pointer',borderBottom:'1px solid #f0f0f0'}}
-                        onClick={() => selecionarPerito(p.id, p.nome)}>
-                        <strong>{p.nome}</strong>
-                        <small style={{display:'block',color:'#5b6472'}}>
-                          {p.telefone ? `Tel: ${p.telefone}` : 'Sem telefone principal'}
-                          {p.email ? ` · ${p.email}` : ''}
-                        </small>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <button type="button" title="Cadastrar perito"
-                style={{padding:'0 12px',border:'1px solid #ddd',borderRadius:'6px',background:'#f8fafc',cursor:'pointer',fontSize:'18px'}}
-                onClick={() => setModalPeritoRapido(true)}>…</button>
             </div>
           </div>
         </div>
