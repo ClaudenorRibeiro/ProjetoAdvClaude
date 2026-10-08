@@ -13,7 +13,8 @@
 --   c) configuracoes_escritorio: acrescenta os quadradinhos "mostrar avisos antes de enviar" (Perícia, Audiência e Parabéns; vêm LIGADOS)
 --      e os dias de antecedência dos Parabéns (0 = no dia do aniversário). Os dias de Audiência e Perícia já existiam.
 --   d) Cria a tabela avisos_cliente (a lista de avisos a conferir/enviar, com o resultado de cada um).
---   e) log_comunicacoes: acrescenta a coluna aviso_id (liga cada envio ao aviso que o originou).
+--   e) log_comunicacoes: acrescenta a coluna aviso_id (liga cada envio ao aviso que o originou). parabens_enviados.usuario_id passa a aceitar vazio
+--      (parabéns enviado sozinho pelo sistema não tem usuário).
 --   f) Registra a versão 2 na tabela controle_versao_banco, só se tudo terminar certo.
 -- SEGURANÇA: não apaga nada e não altera nenhum dado existente além da marcação do item (b). CREATE/ALTER fazem COMMIT automático no
 --   MySQL (não há ROLLBACK): o caminho de volta é o backup do banco feito antes.
@@ -100,11 +101,12 @@ SET @sql := IF(@ok = 1 AND (SELECT COUNT(*) FROM information_schema.COLUMNS WHER
  'ALTER TABLE `configuracoes_escritorio` ADD COLUMN `dias_aviso_parabens` int NOT NULL DEFAULT ''0'' COMMENT ''dias ANTES do aniversario para aparecer o aviso de parabens (0 = no proprio dia)''', 'DO 0');
 PREPARE st FROM @sql; EXECUTE st; DEALLOCATE PREPARE st;
 
--- ---------- d) tabela avisos_cliente (um aviso por ocorrência e por cliente: módulo + registro + data do evento + cliente; nunca repete)
+-- ---------- d) tabela avisos_cliente (um aviso por ocorrência, tipo e cliente: módulo + registro + data do evento + tipo + cliente; nunca repete)
 SET @sql := IF(@ok = 1,
  'CREATE TABLE IF NOT EXISTS `avisos_cliente` (
   `id` int NOT NULL AUTO_INCREMENT,
   `modulo` varchar(20) NOT NULL COMMENT ''pericia | audiencia | parabens'',
+  `tipo` varchar(15) NOT NULL COMMENT ''agendada | remarcada | cancelada | lembrete | aniversario'',
   `pericia_id` int DEFAULT NULL,
   `audiencia_id` int DEFAULT NULL,
   `pessoa_fisica_id` int DEFAULT NULL COMMENT ''so nos parabens: o aniversariante'',
@@ -124,7 +126,7 @@ SET @sql := IF(@ok = 1,
   `motivo_status` varchar(300) DEFAULT NULL,
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_aviso_ocorrencia` (`modulo`, `referencia_id`, `data_evento`, `cliente_tipo`, `cliente_id`),
+  UNIQUE KEY `uq_aviso_ocorrencia` (`modulo`, `referencia_id`, `data_evento`, `tipo`, `cliente_tipo`, `cliente_id`),
   KEY `idx_aviso_status` (`status`, `modulo`),
   KEY `idx_aviso_pericia` (`pericia_id`),
   KEY `idx_aviso_audiencia` (`audiencia_id`),
@@ -145,9 +147,15 @@ SET @sql := IF(@ok = 1 AND (SELECT COUNT(*) FROM information_schema.COLUMNS WHER
  'ALTER TABLE `log_comunicacoes` ADD COLUMN `aviso_id` int DEFAULT NULL, ADD KEY `idx_logcom_aviso` (`aviso_id`), ADD CONSTRAINT `fk_logcom_aviso` FOREIGN KEY (`aviso_id`) REFERENCES `avisos_cliente` (`id`) ON DELETE SET NULL', 'DO 0');
 PREPARE st FROM @sql; EXECUTE st; DEALLOCATE PREPARE st;
 
+-- ---------- e2) parabens_enviados.usuario_id passa a aceitar vazio (parabéns enviado SOZINHO pelo sistema não tem usuário)
+SET @sql := IF(@ok = 1 AND (SELECT IS_NULLABLE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'parabens_enviados' AND COLUMN_NAME = 'usuario_id') = 'NO',
+ 'ALTER TABLE `parabens_enviados` MODIFY COLUMN `usuario_id` int DEFAULT NULL', 'DO 0');
+PREPARE st FROM @sql; EXECUTE st; DEALLOCATE PREPARE st;
+SET @usuario_ainda_obrigatorio := IF(@ok = 1, (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'parabens_enviados' AND COLUMN_NAME = 'usuario_id' AND IS_NULLABLE = 'NO'), NULL);
+
 -- ---------- conferência: o que ainda falta?
 SET @falta_col := IF(@ok = 1, (SELECT COUNT(*) FROM (
-      SELECT 'telefones_pf' AS t, 'whatsapp' AS c UNION ALL SELECT 'telefones_pf', 'sms' UNION ALL SELECT 'telefones_pf', 'whatsapp_unico' UNION ALL SELECT 'telefones_pf', 'sms_unico'
+      SELECT 'avisos_cliente' AS t, 'tipo' AS c UNION ALL SELECT 'telefones_pf', 'whatsapp' UNION ALL SELECT 'telefones_pf', 'sms' UNION ALL SELECT 'telefones_pf', 'whatsapp_unico' UNION ALL SELECT 'telefones_pf', 'sms_unico'
       UNION ALL SELECT 'telefones_pj', 'whatsapp' UNION ALL SELECT 'telefones_pj', 'sms' UNION ALL SELECT 'telefones_pj', 'whatsapp_unico' UNION ALL SELECT 'telefones_pj', 'sms_unico'
       UNION ALL SELECT 'configuracoes_escritorio', 'avisos_pericia_mostrar' UNION ALL SELECT 'configuracoes_escritorio', 'avisos_audiencia_mostrar'
       UNION ALL SELECT 'configuracoes_escritorio', 'avisos_parabens_mostrar' UNION ALL SELECT 'configuracoes_escritorio', 'dias_aviso_parabens'
@@ -160,7 +168,7 @@ SET @falta_idx := IF(@ok = 1, (SELECT COUNT(*) FROM (
     ) x WHERE NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS i WHERE i.TABLE_SCHEMA = @db AND i.TABLE_NAME = x.t AND i.INDEX_NAME = x.i)), NULL);
 SET @falta_tab := IF(@ok = 1, (SELECT COUNT(*) FROM (SELECT 'avisos_cliente' AS t) x
                        WHERE NOT EXISTS (SELECT 1 FROM information_schema.TABLES i WHERE i.TABLE_SCHEMA = @db AND i.TABLE_NAME = x.t)), NULL);
-SET @tudo := IF(@ok = 1 AND @falta_col = 0 AND @falta_idx = 0 AND @falta_tab = 0, 1, 0);
+SET @tudo := IF(@ok = 1 AND @falta_col = 0 AND @falta_idx = 0 AND @falta_tab = 0 AND @usuario_ainda_obrigatorio = 0, 1, 0);
 
 -- ---------- f) registra a versão 2 (só se tudo deu certo)
 SET @sql := IF(@tudo = 1,

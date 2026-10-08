@@ -10,6 +10,8 @@ const { hojeBrasilia, pastaFormatadaSql, escaparLike, paginacao } = require('../
 const { enviarEmail } = require('../utils/email');
 const { registrarComunicacao } = require('../utils/logComunicacao');
 const smsService = require('../services/smsService');
+const { lerConfigComtele } = require('../utils/configComtele');
+const { lerConfigEscritorio, montarMensagemParabens } = require('../utils/mensagemParabens');
 const multer = require('multer');
 const { criarBancoNoCatalogo } = require('./instituicaoFinanceiraController');
 const { texto, inteiroPositivo } = require('../utils/camposTexto');
@@ -2126,29 +2128,6 @@ const PROX_ANIV = `
     INTERVAL (YEAR(CURDATE()) - YEAR(pf.data_nascimento)
       + IF(DATE_FORMAT(pf.data_nascimento,'%m%d') < DATE_FORMAT(CURDATE(),'%m%d'), 1, 0)) YEAR)`;
 
-// Lê nome do escritório + template da mensagem. Tolerante à coluna mensagem_aniversario
-// ainda não existir (se o ALTER não tiver sido rodado, usa o texto padrão).
-// Aceita 'pool' ou uma conexão de transação (ambos têm .execute).
-async function lerConfigEscritorio(exec) {
-  try {
-    const [r] = await exec.execute('SELECT nome, mensagem_aniversario FROM configuracoes_escritorio LIMIT 1');
-    return { nome: r[0]?.nome || '', template: r[0]?.mensagem_aniversario || '' };
-  } catch (_) {
-    const [r] = await exec.execute('SELECT nome FROM configuracoes_escritorio LIMIT 1');
-    return { nome: r[0]?.nome || '', template: '' };
-  }
-}
-
-// Monta a mensagem resolvendo {{nome}} (1º nome do cliente) e {{escritorio}}.
-function montarMensagemParabens(template, nomeCliente, nomeEscritorio) {
-  const primeiroNome = String(nomeCliente || '').trim().split(/\s+/)[0] || String(nomeCliente || '');
-  const padrao = 'Olá, {{nome}}! O escritório {{escritorio}} deseja a você um feliz aniversário! 🎂';
-  const txt = (template && template.trim()) ? template : padrao;
-  return txt
-    .replace(/\{\{\s*nome\s*\}\}/gi, primeiroNome)
-    .replace(/\{\{\s*escritorio\s*\}\}/gi, nomeEscritorio || '');
-}
-
 // Busca a lista de clientes aniversariantes conforme o filtro (usada pelo relatório e pelo dashboard).
 // Retorna registros já com a mensagem resolvida e o status "já parabenizado neste ano".
 async function buscarAniversariantes({ filtro = 'hoje', mes, pessoaId } = {}) {
@@ -2193,9 +2172,9 @@ async function buscarAniversariantes({ filtro = 'hoje', mes, pessoaId } = {}) {
   if (ids.length) {
     const ph = ids.map(() => '?').join(',');
     const [pbs] = await pool.execute(
-      `SELECT pe.pessoa_id, pe.ano, pe.canal, pe.enviado_em, u.nome AS usuario_nome
+      `SELECT pe.pessoa_id, pe.ano, pe.canal, pe.enviado_em, COALESCE(u.nome, 'Envio automático') AS usuario_nome
          FROM parabens_enviados pe
-         JOIN usuarios u ON u.id = pe.usuario_id
+         LEFT JOIN usuarios u ON u.id = pe.usuario_id
         WHERE pe.pessoa_id IN (${ph})
         ORDER BY pe.enviado_em ASC`,
       ids
@@ -2365,19 +2344,6 @@ async function registrarEnvioZap(req, res) {
   if (!telefone) return erro(res, 'Telefone é obrigatório');
   await registrarComunicacao({ canal: 'whatsapp', destinatario: telefone, enviado: 1, tipo_pessoa: tipoPessoa, pessoa_id: pessoaId, usuario_id: req.usuario.id });
   return sucesso(res, null, 'Registrado');
-}
-
-// Lê a config da Comtele (configuracoes_integracoes, modulo='comtele'). Retorna
-// { apiKey, route } — apiKey vazio quando a integração não está ativa/configurada.
-async function lerConfigComtele() {
-  const [rows] = await pool.execute(
-    "SELECT ativo, configuracoes FROM configuracoes_integracoes WHERE modulo = 'comtele' LIMIT 1"
-  );
-  if (!rows.length || !rows[0].ativo) return { apiKey: '', route: '' };
-  const cfg = rows[0].configuracoes
-    ? (typeof rows[0].configuracoes === 'string' ? JSON.parse(rows[0].configuracoes) : rows[0].configuracoes)
-    : {};
-  return { apiKey: cfg.api_key || '', route: cfg.route || '' };
 }
 
 // POST /pessoas/enviar-sms — envia 1 SMS pela Comtele e registra em log_comunicacoes.

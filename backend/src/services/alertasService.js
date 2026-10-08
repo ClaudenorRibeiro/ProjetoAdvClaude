@@ -5,12 +5,11 @@
 
 const cron = require('node-cron');
 const { pool } = require('../config/database');
-const { diasUteisAntes } = require('./calendarioService');
 const { emailPrazosPendentes, emailPrazosAtrasados, escaparHtml } = require('./notificacaoService');
 const { enviarEmail } = require('../utils/email');
 const { liberarFazendoExpirados } = require('../controllers/prazosController');
-const { dataParaIsoLocal, hojeBrasilia } = require('../utils/helpers');
-const { enviarComunicadoPericia } = require('./comunicadoService');
+const { hojeBrasilia } = require('../utils/helpers');
+const { gerarAvisos } = require('../avisos');
 const { executarVencidos: enviarRelatoriosAgendados } = require('./relatorios/agendamento/envio');
 
 // Fuso horário de todos os crons — sem isso, no servidor (Ubuntu/UTC) o cron
@@ -37,16 +36,10 @@ async function iniciarAlertas() {
     await enviarRelatoriosAgendados();
   }, OPCOES_CRON);
 
-  // Verifica audiências para alertar clientes (todo dia às 8h)
+  // Avisos aos clientes (Perícia, Audiência e Parabéns): lembretes e aniversários que já valem; envia sozinho o que não passa pela tela (todo dia às 8h)
   cron.schedule('0 8 * * *', async () => {
-    console.log('⏰ Cron: verificando alertas de audiências...');
-    await verificarAlertasAudiencias();
-  }, OPCOES_CRON);
-
-  // Verifica perícias para alertar clientes (todo dia às 8h05)
-  cron.schedule('5 8 * * *', async () => {
-    console.log('⏰ Cron: verificando alertas de perícias...');
-    await verificarAlertasPericias();
+    console.log('⏰ Cron: gerando avisos aos clientes...');
+    await rodarAvisosAosClientes();
   }, OPCOES_CRON);
 
   // Avisos de idade dos representados (todo dia às 8h10)
@@ -80,6 +73,8 @@ async function iniciarAlertas() {
       console.error('Erro na limpeza de reset_tokens:', err.message);
     }
   }, OPCOES_CRON);
+
+  setTimeout(rodarAvisosAosClientes, 30000);   // recuperação depois de servidor parado
 
   console.log('✅ Serviço de alertas iniciado');
 }
@@ -202,56 +197,13 @@ async function enviarAlertaAtrasados(destinatarios, escritorio) {
   return enviados;
 }
 
-// ── Alertas de audiências ─────────────────────────────────────────────────
-
-async function verificarAlertasAudiencias() {
+// ── Avisos aos clientes ───────────────────────────────────────────────────
+// Roda às 8h e também ao ligar o sistema (recupera o que ficou para trás se o servidor ficou parado).
+async function rodarAvisosAosClientes() {
   try {
-    const [config] = await pool.execute('SELECT dias_alerta_audiencia FROM configuracoes_escritorio LIMIT 1');
-    const diasAlerta = config[0]?.dias_alerta_audiencia || 3;
-    const hoje = hojeBrasilia();
-    const [audiencias] = await pool.execute(
-      `SELECT a.id, a.data FROM audiencia a
-        WHERE a.comunicado_enviado = 0 AND a.data > ? AND a.status IN ('agendada','adiada')
-        ORDER BY a.data ASC`,
-      [hoje]
-    );
-    for (const a of audiencias) {
-      const dataA      = typeof a.data === 'string' ? a.data.split('T')[0] : dataParaIsoLocal(a.data);
-      const dataAlerta = await diasUteisAntes(dataA, diasAlerta);
-      // TODO: audiência ainda não tem "comunicado ao cliente" no sistema (só perícia tem).
-      // Quando a feature existir, disparar aqui, igual ao de perícia abaixo.
-      if (dataAlerta === hoje) console.log(`📅 Alerta audiência ${a.id} em ${dataA} (comunicado de audiência ainda não implementado)`);
-    }
-  } catch (err) { console.error('Erro alertas audiências:', err.message); }
-}
-
-// ── Alertas de perícias ───────────────────────────────────────────────────
-// Ao chegar a "N dias úteis antes" (config dias_alerta_pericia), dispara o
-// comunicado ao cliente — o MESMO que o botão manual "Comunicar" já envia.
-// enviarComunicadoPericia marca comunicado_enviado = 1, então não repete.
-
-async function verificarAlertasPericias() {
-  try {
-    const [config] = await pool.execute('SELECT dias_alerta_pericia FROM configuracoes_escritorio LIMIT 1');
-    const diasAlerta = config[0]?.dias_alerta_pericia || 2;
-    const hoje = hojeBrasilia();
-    const [pericias] = await pool.execute(
-      `SELECT p.id, p.data FROM pericia p
-        WHERE p.comunicado_enviado = 0 AND p.data > ? AND p.status = 'agendada'`,
-      [hoje]
-    );
-    for (const p of pericias) {
-      const dataP      = typeof p.data === 'string' ? p.data.split('T')[0] : dataParaIsoLocal(p.data);
-      const dataAlerta = await diasUteisAntes(dataP, diasAlerta);
-      if (dataAlerta !== hoje) continue;
-      try {
-        await enviarComunicadoPericia(p.id, 'agendada', null); // null = disparo automático (cron)
-        console.log(`🔬 Comunicado antecipado de perícia ${p.id} enviado ao cliente (${dataP})`);
-      } catch (err) {
-        console.error(`Falha no comunicado antecipado da perícia ${p.id}:`, err.message);
-      }
-    }
-  } catch (err) { console.error('Erro alertas perícias:', err.message); }
+    const r = await gerarAvisos();
+    console.log(`📣 Avisos aos clientes: ${r.lembretes} lembrete(s), ${r.aniversarios} aniversário(s), ${r.enviadosSozinhos} enviado(s) sozinho(s)`);
+  } catch (err) { console.error('Erro ao gerar avisos aos clientes:', err.message); }
 }
 
 // ── AVISOS DE IDADE ───────────────────────────────────────────────────────
@@ -419,4 +371,4 @@ async function verificarAvisosPendenciaDocumento() {
   }
 }
 
-module.exports = { iniciarAlertas, reagendarCronPrazos, executarAlertasPrazos, verificarAlertasPericias, verificarAlertasAudiencias, verificarAvisosIdade, verificarAvisosPendenciaDocumento };
+module.exports = { iniciarAlertas, reagendarCronPrazos, executarAlertasPrazos, verificarAvisosIdade, verificarAvisosPendenciaDocumento };

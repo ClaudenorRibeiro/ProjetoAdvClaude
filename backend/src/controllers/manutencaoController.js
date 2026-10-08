@@ -47,7 +47,7 @@ const TABELAS_LIMPAR = [
   'pessoas_fisicas_etiquetas_escritorio', 'pessoas_juridicas_etiquetas_escritorio',
   'auditoria_etiqueta_escritorio',
   // Notificações / Logs / Tokens
-  'notificacoes', 'logs_auditoria', 'log_comunicacoes', 'log_emails', 'log_documentos_gerados',
+  'notificacoes', 'avisos_cliente', 'logs_auditoria', 'log_comunicacoes', 'log_emails', 'log_documentos_gerados',
   'reset_tokens',
   // Advogados freelancers (decisão do usuário em 22/06: tratar como massa de teste)
   'advogados_freela',

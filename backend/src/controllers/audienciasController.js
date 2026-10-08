@@ -7,7 +7,8 @@ const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
 const agendaGoogle = require('../services/agendaGoogleService');
-const { enviarComunicadoPericia, enviarEmailPeritoPericia } = require('../services/comunicadoService');
+const { enviarEmailPeritoPericia } = require('../services/comunicadoService');
+const avisos = require('../avisos');
 const { pastaFormatadaSql, paginacao, escaparLike } = require('../utils/helpers');
 const { texto, lerTextos, dataIso, inteiroPositivo } = require('../utils/camposTexto');
 const { comIdNumerico } = require('../utils/rotasSeguras');
@@ -697,6 +698,7 @@ async function criar(req, res) {
     await conn.commit();
     // Nova audiência (agendada) → entra na agenda do Google do responsável (se usuário).
     sincronizarAudienciaGoogle(audienciaId, {});
+    await avisos.registrarEvento({ modulo: 'audiencia', tipo: 'agendada', id: audienciaId });   // aviso ao cliente (tela de conferência ou envio sozinho)
     return sucesso(res, { id: audienciaId }, 'Audiência cadastrada com sucesso', 201);
   } catch (err) {
     await conn.rollback();
@@ -875,6 +877,7 @@ async function atualizar(req, res) {
     }
 
     await conn.commit();
+    await avisos.conciliarEvento('audiencia');   // mudou data/hora: o aviso pendente de antes deixa de valer
     // Reflete no Google. Se o responsável (usuário) mudou, migra: cancela no antigo e
     // cria no novo. Freelancer/sem responsável = ids nulos e o envio é ignorado.
     const seq = Math.floor(Date.now() / 1000);
@@ -947,6 +950,8 @@ async function cancelar(req, res) {
 
     // Cancelada → sai da agenda do Google do responsável. Depois do commit, best-effort.
     sincronizarAudienciaGoogle(id, { cancelar: true, sequence: Math.floor(Date.now() / 1000) });
+    await avisos.registrarEvento({ modulo: 'audiencia', tipo: 'cancelada', id });
+    await avisos.conciliarEvento('audiencia');   // avisos pendentes de agendada/lembrete desta audiência deixam de valer
     return sucesso(res, null, 'Audiência cancelada com sucesso');
   } catch (err) {
     return erroInterno(res, err);
@@ -1055,6 +1060,8 @@ async function remarcar(req, res) {
     transacaoAberta = false;
     sincronizarAudienciaGoogle(id, { cancelar: true, sequence: Math.floor(Date.now() / 1000) });
     sincronizarAudienciaGoogle(novaAudienciaId, {});
+    await avisos.registrarEvento({ modulo: 'audiencia', tipo: 'remarcada', id: novaAudienciaId });
+    await avisos.conciliarEvento('audiencia');   // o aviso pendente da data antiga deixa de valer
     return sucesso(res, { id: novaAudienciaId }, 'Audiência remarcada com sucesso');
   } catch (err) {
     if (transacaoAberta) await conn.rollback();
@@ -1412,7 +1419,10 @@ async function registrarAta(req, res) {
     // Auditoria na MESMA transação (tudo ou nada): antes do commit, com conn
     await auditoria.registrar(req.usuario.id, 'ata_audiencia', 'criar', result.insertId, null, null, conn);
     await conn.commit();
-    if (novaAudienciaId) sincronizarAudienciaGoogle(novaAudienciaId, {});
+    if (novaAudienciaId) {
+      sincronizarAudienciaGoogle(novaAudienciaId, {});
+      await avisos.registrarEvento({ modulo: 'audiencia', tipo: 'agendada', id: novaAudienciaId });
+    }
     // Comunicação externa é feita somente após o commit: nenhuma falha de SMTP pode deixar a ATA parcialmente salva.
     for (const pericia of periciasCriadas) {
       if (pericia.enviarEmailPerito && pericia.modeloEmailPeritoId) {
@@ -1421,8 +1431,7 @@ async function registrarAta(req, res) {
       }
       if (pericia.agendada) {
         sincronizarPericiaDaAtaGoogle(pericia.id);
-        enviarComunicadoPericia(pericia.id, 'agendada', req.usuario.id)
-          .catch(err => console.error('Falha ao enviar comunicado ao cliente da perícia:', err.message));
+        await avisos.registrarEvento({ modulo: 'pericia', tipo: 'agendada', id: pericia.id });
       }
     }
     return sucesso(res, { id: result.insertId }, 'Ata registrada com sucesso', 201);

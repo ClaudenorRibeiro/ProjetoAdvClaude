@@ -9,6 +9,7 @@ const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
 const { enviarComunicadoPericia } = require('../services/comunicadoService');
+const avisos = require('../avisos');
 const agendaGoogle = require('../services/agendaGoogleService');
 const { paginacao, escaparLike } = require('../utils/helpers');
 const { texto, dataIso, inteiroPositivo } = require('../utils/camposTexto');
@@ -947,9 +948,8 @@ async function criar(req, res) {
 
     await conn.commit();
 
-    // Comunicado automático ao cliente — best-effort (não derruba o cadastro se o e-mail falhar)
-    try { await enviarComunicadoPericia(periciaId, periciaRemarcada ? 'remarcada' : 'agendada', req.usuario.id); }
-    catch (err) { console.error('Falha ao enviar comunicado da perícia:', err.message); }
+    // Aviso ao cliente (vai para a tela de conferência ou sai sozinho, conforme a configuração) — nunca derruba o cadastro
+    await avisos.registrarEvento({ modulo: 'pericia', tipo: periciaRemarcada ? 'remarcada' : 'agendada', id: periciaId });
 
     // Remarcação: a antiga sai da agenda do Google; a nova (agendada) entra.
     if (periciaRemarcada) {
@@ -1077,9 +1077,10 @@ async function atualizar(req, res) {
 
     await conn.commit();
     if (antes.status === 'aguardando_data') {
-      // A perícia só passa a comunicar o cliente quando finalmente ganha uma data.
-      enviarComunicadoPericia(periciaId, 'agendada', req.usuario.id)
-        .catch(err => console.error('Falha ao comunicar cliente após informar data da perícia:', err.message));
+      // A perícia só passa a avisar o cliente quando finalmente ganha uma data.
+      await avisos.registrarEvento({ modulo: 'pericia', tipo: 'agendada', id: periciaId });
+    } else {
+      await avisos.conciliarEvento('pericia');   // mudou data/hora: o aviso pendente de antes deixa de valer
     }
     // Reflete no Google. Se o responsável (usuário) mudou, migra: cancela no antigo e
     // cria no novo. Freelancer/sem responsável = ids nulos e o envio é ignorado.
@@ -1183,9 +1184,9 @@ async function cancelar(req, res) {
       conn.release();
     }
 
-    // Avisa o cliente do cancelamento — best-effort
-    try { await enviarComunicadoPericia(id, 'cancelada', req.usuario.id); }
-    catch (err) { console.error('Falha ao enviar comunicado de cancelamento:', err.message); }
+    // Aviso de cancelamento ao cliente (tela de conferência ou envio sozinho) — nunca derruba o cancelamento
+    await avisos.registrarEvento({ modulo: 'pericia', tipo: 'cancelada', id });
+    await avisos.conciliarEvento('pericia');   // avisos pendentes de agendada/lembrete desta perícia deixam de valer
 
     // Cancelada → sai da agenda do Google do responsável.
     sincronizarPericiaGoogle(id, { cancelar: true, sequence: Math.floor(Date.now() / 1000) });
@@ -1272,9 +1273,9 @@ async function remarcar(req, res) {
 
     await conn.commit();
 
-    // Reenvia o comunicado ao cliente com a nova data — best-effort
-    try { await enviarComunicadoPericia(novaId, 'remarcada', req.usuario.id); }
-    catch (err) { console.error('Falha ao enviar comunicado de remarcação:', err.message); }
+    // Aviso de remarcação ao cliente, com a nova data (tela de conferência ou envio sozinho)
+    await avisos.registrarEvento({ modulo: 'pericia', tipo: 'remarcada', id: novaId });
+    await avisos.conciliarEvento('pericia');   // o aviso pendente da data antiga deixa de valer
 
     // Remarcação: a antiga sai do Google e a nova (agendada) entra.
     const seqRem = Math.floor(Date.now() / 1000);
@@ -1500,6 +1501,7 @@ async function enviarComunicado(req, res) {
                      : 'agendada';
 
     const r = await enviarComunicadoPericia(id, tipoEvento, req.usuario.id);
+    if (r.enviados > 0) await avisos.marcarEnviadoManual({ modulo: 'pericia', tipo: tipoEvento, id });   // o aviso pendente equivalente não precisa mais sair
     if (r.semCliente) {
       return erro(res, 'Defina no cadastro do processo qual parte é o cliente (autor ou réu) para enviar o comunicado');
     }

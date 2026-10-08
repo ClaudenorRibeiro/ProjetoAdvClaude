@@ -12,6 +12,7 @@ const { reagendarCronPrazos } = require('../services/alertasService');
 const multer = require('multer');
 const { lerTextos, horaDoDia, texto, dataIso } = require('../utils/camposTexto');
 const { validarSenha, validarLogin } = require('../utils/credenciais');
+const { lerConfig: lerConfigAvisos } = require('../avisos/config');
 
 // ============================================================
 // UPLOAD DO LOGO DO ESCRITÓRIO
@@ -143,6 +144,14 @@ function inteiroOuPadrao(bruto, padrao, rotulo) {
   if (n < 0 || n > TETO_DIAS_ESCRITORIO) return { erro: `${rotulo} inválido (use um número entre 1 e ${TETO_DIAS_ESCRITORIO})` };
   return { valor: n };
 }
+// Dias de antecedência dos avisos aos clientes: 0 vale ("no mesmo dia"); ausente/texto volta ao padrão; negativo ou acima do teto = erro claro.
+function inteiroDiasAviso(bruto, padrao, rotulo) {
+  if (bruto === undefined || bruto === null || bruto === '') return { valor: padrao };
+  const n = Number(bruto);
+  if (!Number.isInteger(n)) return { valor: padrao };
+  if (n < 0 || n > TETO_DIAS_ESCRITORIO) return { erro: `${rotulo} inválido (use um número entre 0 e ${TETO_DIAS_ESCRITORIO})` };
+  return { valor: n };
+}
 async function atualizarEscritorio(req, res) {
   try {
     const corpo = req.body || {};
@@ -160,8 +169,22 @@ async function atualizarEscritorio(req, res) {
     const horario2 = horaDoDia(horario_alerta_prazos_2, { rotulo: 'Segundo horário do alerta de prazos' });
     if (horario2.erro) return erro(res, horario2.erro);
     const numeros = {};
+    // Avisos aos clientes: dias de antecedência (0 = no mesmo dia) e "mostrar antes de enviar" de cada módulo (ausente = mantém o que está).
+    const atualAvisos = await lerConfigAvisos();
     for (const [chave, padrao, rotulo] of [
-      ['dias_alerta_audiencia', 3, 'Dias de alerta de audiência'], ['dias_alerta_pericia', 2, 'Dias de alerta de perícia'],
+      ['dias_alerta_audiencia', 3, 'Dias de alerta de audiência'], ['dias_alerta_pericia', 2, 'Dias de alerta de perícia'], ['dias_aviso_parabens', 0, 'Dias de aviso dos parabéns'],
+    ]) {
+      const lido = inteiroDiasAviso(corpo[chave], padrao, rotulo);
+      if (lido.erro) return erro(res, lido.erro);
+      numeros[chave] = lido.valor;
+    }
+    const mostrar = (valor, atual) => (valor === undefined || valor === null ? (atual ? 1 : 0) : (valor === true || valor === 1 || valor === '1' ? 1 : 0));
+    const avisosMostrar = {
+      pericia: mostrar(corpo.avisos_pericia_mostrar, atualAvisos.pericia.mostrar),
+      audiencia: mostrar(corpo.avisos_audiencia_mostrar, atualAvisos.audiencia.mostrar),
+      parabens: mostrar(corpo.avisos_parabens_mostrar, atualAvisos.parabens.mostrar),
+    };
+    for (const [chave, padrao, rotulo] of [
       ['dias_sem_movimentacao', 30, 'Dias sem movimentação'], ['dias_processo_parado', 365, 'Dias de processo parado'],
       ['prazo_fazendo_timeout', 60, 'Tempo de "fazendo" do prazo'], ['dias_audiencia_sem_adv', 7, 'Dias de audiência sem advogado'],
     ]) {
@@ -209,8 +232,9 @@ async function atualizarEscritorio(req, res) {
           alerta_atrasado_ativo, alerta_emails,
           dias_alerta_audiencia, dias_alerta_pericia, dias_sem_movimentacao, dias_processo_parado,
           prazo_fazendo_timeout, dias_audiencia_sem_adv, titulo_aba, mensagem_aniversario, tempo_inatividade_min,
-          ata_advogado_obrigatorio, advogado_principal_id, setup_concluido)
-       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+          ata_advogado_obrigatorio, advogado_principal_id,
+          avisos_pericia_mostrar, avisos_audiencia_mostrar, avisos_parabens_mostrar, dias_aviso_parabens, setup_concluido)
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
        ON DUPLICATE KEY UPDATE
          nome=VALUES(nome), cnpj_cpf=VALUES(cnpj_cpf), email=VALUES(email), telefone=VALUES(telefone),
          cep=VALUES(cep), logradouro=VALUES(logradouro), numero=VALUES(numero),
@@ -226,6 +250,8 @@ async function atualizarEscritorio(req, res) {
          tempo_inatividade_min=VALUES(tempo_inatividade_min),
          ata_advogado_obrigatorio=VALUES(ata_advogado_obrigatorio),
          advogado_principal_id=VALUES(advogado_principal_id),
+         avisos_pericia_mostrar=VALUES(avisos_pericia_mostrar), avisos_audiencia_mostrar=VALUES(avisos_audiencia_mostrar),
+         avisos_parabens_mostrar=VALUES(avisos_parabens_mostrar), dias_aviso_parabens=VALUES(dias_aviso_parabens),
          setup_concluido=1`,
       [
         nome, cnpj_cpf, email, telefone,
@@ -237,7 +263,8 @@ async function atualizarEscritorio(req, res) {
         numeros.prazo_fazendo_timeout, numeros.dias_audiencia_sem_adv,
         titulo_aba, mensagem_aniversario, tempoInat,
         ata_advogado_obrigatorio ? 1 : 0,
-        advogadoPrincipalId
+        advogadoPrincipalId,
+        avisosMostrar.pericia, avisosMostrar.audiencia, avisosMostrar.parabens, numeros.dias_aviso_parabens
       ]
     );
     await conn.commit();
@@ -895,6 +922,7 @@ const REFS_USUARIO = [
   ["relatorio_modelo_usuario", "usuario_id"],
   ["modelo_documento", "criado_por"],
   ["notificacoes", "usuario_id"],
+  ["avisos_cliente", "decidido_por"],
   ["pastas_etiquetas", "usuario_id"],
   ["pendencia_documento", "alterado_por"],
   ["pendencia_documento", "criado_por"],

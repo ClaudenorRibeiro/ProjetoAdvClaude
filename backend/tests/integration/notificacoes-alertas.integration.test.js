@@ -16,7 +16,6 @@ carregarAmbienteTeste();
 const { criarApp } = require('../../src/app');
 const { pool } = require('../../src/config/database');
 const alertas = require('../../src/services/alertasService');
-const cal = require('../../src/services/calendarioService');
 const { hojeBrasilia } = require('../../src/utils/helpers');
 
 let app; let smtp; let SEQ = 0; let senhaAceita = true;
@@ -493,36 +492,4 @@ test('aviso de pendência — sino + e-mail: o sino sai e o e-mail vai junto; e 
   assert.ok(recebeu || !marcado, 'ou o aviso chegou por algum canal, ou continua pendente — nunca "avisado" sem ninguém ter recebido nada');
 });
 
-// ============================================================ COMUNICADO DE PERÍCIA AO CLIENTE (alerta automático)
-test('alerta de perícia: no dia certo (N dias úteis antes) o cliente recebe o comunicado, uma única vez; perícia que não está agendada, já comunicada ou de outro dia não dispara; cliente sem e-mail não é dado como comunicado', async () => {
-  await sql("UPDATE configuracoes_escritorio SET dias_alerta_pericia = 2");
-  let dataCerta = null;
-  for (let n = 1; n <= 20 && !dataCerta; n += 1) if ((await cal.diasUteisAntes(dia(n), 2)) === HOJE) dataCerta = dia(n);
-  assert.ok(dataCerta, 'o calendário de teste precisa ter uma data cujo alerta (2 dias úteis antes) cai hoje');
-  const autor = (await sql("INSERT INTO pessoas_fisicas (nome) VALUES ('Cliente Pericia Alerta')")).insertId;
-  await sql("INSERT INTO emails_pf (pessoa_id, email, principal, ativo) VALUES (?, 'cliente.pericia@example.invalid', 1, 1)", [autor]);
-  await sql("INSERT INTO tbltituloprocautor (proc_id, tipo_pessoa, pessoa_id) VALUES (1, 'fisica', ?)", [autor]);
-  const pericia = async (data, status = 'agendada', comunicado = 0) => (await sql("INSERT INTO pericia (processo_id, data, hora, status, comunicado_enviado, criado_por) VALUES (1, ?, '09:00:00', ?, ?, 1)", [data, status, comunicado])).insertId;
-  const certa = await pericia(dataCerta);
-  const cancelada = await pericia(dataCerta, 'cancelada');
-  const jaComunicada = await pericia(dataCerta, 'agendada', 1);
-  const outroDia = await pericia(dia(30));
-  limparEmails();
-  await alertas.verificarAlertasPericias();
-  const m = emailsPara('cliente.pericia@example.invalid');
-  assert.equal(m.length, 1, 'só a perícia certa gera comunicado');
-  assert.match(assuntoDoEmail(m[0]), /Comunicado de Per/);
-  const estado = async (id) => (await sql('SELECT comunicado_enviado FROM pericia WHERE id = ?', [id]))[0].comunicado_enviado;
-  assert.equal(await estado(certa), 1);
-  assert.equal(await estado(cancelada), 0);
-  assert.equal(await estado(outroDia), 0);
-  assert.equal(await estado(jaComunicada), 1);
-  limparEmails();
-  await alertas.verificarAlertasPericias();
-  assert.equal(smtp.registro.mensagens.length, 0, 'segunda rodada não repete');
-  // cliente sem e-mail: nada sai e a perícia NÃO é dada como comunicada
-  await sql("UPDATE emails_pf SET ativo = 0 WHERE pessoa_id = ?", [autor]);
-  const semMail = await pericia(dataCerta);
-  await alertas.verificarAlertasPericias();
-  assert.equal((await sql('SELECT comunicado_enviado FROM pericia WHERE id = ?', [semMail]))[0].comunicado_enviado, 0);
-});
+// O comunicado/lembrete de perícia ao cliente passou para o módulo de avisos aos clientes (testes em avisos-*.integration.test.js).

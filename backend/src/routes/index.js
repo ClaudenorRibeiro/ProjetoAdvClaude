@@ -71,6 +71,7 @@ const dashboardCtrl     = require('../controllers/dashboardController');
 const periciasCtrl      = require('../controllers/periciasController');
 const agendaCompromissoCtrl = require('../controllers/agendaCompromissoController');
 const notificacoesCtrl  = require('../controllers/notificacoesController');
+const avisosCtrl        = require('../avisos/controller');
 const etiquetasCtrl     = require('../controllers/etiquetasController');
 const manutencaoCtrl    = require('../controllers/manutencaoController');
 const pendenciasDocCtrl = require('../controllers/pendenciasDocumentoController');
@@ -220,6 +221,16 @@ router.get('/notificacoes/contagem',     autenticar, notificacoesCtrl.contagem);
 router.get('/notificacoes/todas',        autenticar, notificacoesCtrl.listarTodas);
 router.get('/notificacoes',              autenticar, notificacoesCtrl.listar);
 router.put('/notificacoes/marcar-lidas', autenticar, notificacoesCtrl.marcarLidas);
+
+// Avisos aos clientes (Perícia, Audiência e Parabéns): tela de conferência antes de enviar.
+// A permissão é por módulo (avisos > pericia | audiencia | parabens) e é conferida dentro do controller (avisos/permissoes.js).
+router.get('/avisos',                  autenticar, avisosCtrl.listar);
+router.get('/avisos/contagem',         autenticar, avisosCtrl.contagem);
+router.get('/avisos/historico',        autenticar, avisosCtrl.historico);
+router.post('/avisos/atualizar',       autenticar, avisosCtrl.atualizar);
+router.put('/avisos/:id',              autenticar, comIdNumerico(avisosCtrl.editar, 'Aviso não encontrado'));
+router.post('/avisos/:id/enviar',      autenticar, comIdNumerico(avisosCtrl.enviar, 'Aviso não encontrado'));
+router.post('/avisos/:id/descartar',   autenticar, comIdNumerico(avisosCtrl.descartar, 'Aviso não encontrado'));
 
 // ---- TAREFAS ----
 router.get('/tarefas',             autenticar, verificarPermissao('tarefas','visualizar'), tarefasCtrl.listar);
