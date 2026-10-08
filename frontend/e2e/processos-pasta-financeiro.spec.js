@@ -346,7 +346,7 @@ test('@critical Excluir acordo: pede confirmação, "Cancelar" não apaga; com p
   await expect(page.getByText('Acordo 1')).toHaveCount(0);
 });
 
-test('Permissões: só visualizar vê tudo mas não tem nenhuma ação; com cadastrar, alterar e excluir aparecem todas', async ({ page }) => {
+test('@critical Permissões: só visualizar vê tudo mas não tem nenhuma ação; com cadastrar, alterar e excluir aparecem todas', async ({ page }) => {
   const ver = await criarUsuarioComPermissoes('ver_financeiro', [['processos', null, 'visualizar'], ['financeiro', null, 'visualizar']]);
   await loginPelaTela(page, ver);
   await abrirAba(page, CNJ1);
@@ -363,7 +363,7 @@ test('Permissões: só visualizar vê tudo mas não tem nenhuma ação; com cada
   for (const nome of [/Receber/, /Lançar multa/]) await expect(page.getByRole('button', { name: nome })).toHaveCount(0);
 });
 
-test('Permissões: com cadastrar, alterar e excluir aparecem todas as ações', async ({ page }) => {
+test('@critical Permissões: com cadastrar, alterar e excluir aparecem todas as ações', async ({ page }) => {
   const tudo = await criarUsuarioComPermissoes('tudo_financeiro', [['processos', null, 'visualizar'], ['financeiro', null, 'visualizar'], ['financeiro', null, 'cadastrar'], ['financeiro', null, 'alterar'], ['financeiro', null, 'excluir']]);
   await loginPelaTela(page, tudo);
   await abrirAba(page, CNJ1);
@@ -383,7 +383,7 @@ test('@critical Quem não tem permissão de ver o financeiro recebe um aviso cla
   await expect(page.getByText('Conta corrente')).toHaveCount(0);
 });
 
-test('Sem lançamentos nem acordos: a aba mostra "Nenhum lançamento neste processo" e saldo zero', async ({ page }) => {
+test('@critical Sem lançamentos nem acordos: a aba mostra "Nenhum lançamento neste processo" e saldo zero', async ({ page }) => {
   await noBanco('DELETE FROM conta_corrente WHERE processo_id = ?', [d.proc1]);
   await noBanco('DELETE FROM acordo WHERE processo_id = ?', [d.proc1]);
   await loginPelaTela(page);

@@ -188,7 +188,7 @@ test('@critical Nova perícia: janela, obrigatórios, aviso de réus sem endere�
   expect((await noBanco("SELECT COUNT(*) AS n FROM auditoria_pericia WHERE pericia_id = ? AND campo_alterado = 'cadastrado'", [a.id]))[0].n).toBe(1);
 });
 
-test('Nova perícia: réu com endereço completo vira local (caixinha) e fica gravado; réu sem endereço não pode ser escolhido', async ({ page }) => {
+test('@critical Nova perícia: réu com endereço completo vira local (caixinha) e fica gravado; réu sem endereço não pode ser escolhido', async ({ page }) => {
   await noBanco("UPDATE pessoas_juridicas SET cep = '13000000', logradouro = 'Rua das Flores', numero = '100', bairro = 'Centro', cidade = 'Campinas', estado = 'SP' WHERE razao_social = 'Empresa Alfa E2E Ltda'");
   await loginPelaTela(page);
   const j = await abrirNova(page, CNJ1);
@@ -360,7 +360,7 @@ test('@critical Remarcar perícia: nova data e motivo obrigatórios, sábado ped
   expect({ st: nova.status, local: nova.local, perito: nova.perito_id }).toEqual({ st: 'agendada', local: 'IML Central', perito: d.perito });
 });
 
-test('Marcar como remarcada: motivo obrigatório; só troca o status (nenhuma perícia nova)', async ({ page }) => {
+test('@critical Marcar como remarcada: motivo obrigatório; só troca o status (nenhuma perícia nova)', async ({ page }) => {
   await loginPelaTela(page);
   await abrirAba(page, CNJ1);
   const antes = (await noBanco('SELECT COUNT(*) AS n FROM pericia'))[0].n;
@@ -377,7 +377,7 @@ test('Marcar como remarcada: motivo obrigatório; só troca o status (nenhuma pe
   expect((await noBanco('SELECT COUNT(*) AS n FROM pericia'))[0].n).toBe(antes);
 });
 
-test('Histórico da perícia: tabela De/Para com quem e quando; vazio tem mensagem', async ({ page }) => {
+test('@critical Histórico da perícia: tabela De/Para com quem e quando; vazio tem mensagem', async ({ page }) => {
   await loginPelaTela(page);
   await abrirAba(page, CNJ1);
   await abrirMenuAcoes(page, linha(page, `${br(util(5))} 14:00`));
@@ -417,7 +417,7 @@ test('@critical Excluir perícia: confirma, "Cancelar" não apaga, apaga junto o
   expect((await noBanco('SELECT COUNT(*) AS n FROM auditoria_pericia WHERE pericia_id = ?', [d.p2]))[0].n).toBe(0);
 });
 
-test('Comunicar cliente: sem cliente/e-mail definidos o sistema explica o motivo (não fica mudo nem quebra)', async ({ page }) => {
+test('@critical Comunicar cliente: sem cliente/e-mail definidos o sistema explica o motivo (não fica mudo nem quebra)', async ({ page }) => {
   await loginPelaTela(page);
   await abrirAba(page, CNJ1);
   await abrirMenuAcoes(page, linha(page, `${br(util(1))} 10:00`));
@@ -437,7 +437,7 @@ test('@critical Permissões: só VISUALIZAR não recebe "+ Nova Perícia", Marca
   for (const nome of [/Marcar realizada/, /Editar/, /Remarcar/, /Cancelar$/, /Excluir/, /Comunicar cliente/]) await expect(page.getByRole('button', { name: nome })).toHaveCount(0);
 });
 
-test('Permissões: com cadastrar, alterar e excluir aparecem todas as ações', async ({ page }) => {
+test('@critical Permissões: com cadastrar, alterar e excluir aparecem todas as ações', async ({ page }) => {
   const tudo = await criarUsuarioComPermissoes('tudo_pericias', [['processos', null, 'visualizar'], ['pericias', null, 'visualizar'], ['pericias', null, 'cadastrar'], ['pericias', null, 'alterar'], ['pericias', null, 'excluir']]);
   await loginPelaTela(page, tudo);
   await abrirAba(page, CNJ1);
@@ -504,7 +504,7 @@ test('@critical Nova perícia: ao escolher o perito, "Endereço do perito" vira 
   await expect(page.getByRole('cell', { name: 'Rua do Consultório, 45 - Sala 7 - Centro - Campinas/SP - 13015-001', exact: true })).toBeVisible();
 });
 
-test('Nova perícia: um só local — escolher réu, perito ou "digitar outro" troca a escolha anterior', async ({ page }) => {
+test('@critical Nova perícia: um só local — escolher réu, perito ou "digitar outro" troca a escolha anterior', async ({ page }) => {
   await noBanco("UPDATE pessoas_juridicas SET cep = '13000000', logradouro = 'Rua das Flores', numero = '100', bairro = 'Centro', cidade = 'Campinas', estado = 'SP' WHERE razao_social = 'Empresa Alfa E2E Ltda'");
   await enderecoDoPerito(true);
   await loginPelaTela(page);
@@ -523,7 +523,7 @@ test('Nova perícia: um só local — escolher réu, perito ou "digitar outro" t
   await expect(reu).not.toBeChecked(); await expect(digitar).toBeChecked();
 });
 
-test('Nova perícia: perito com endereço incompleto aparece desabilitado com o aviso', async ({ page }) => {
+test('@critical Nova perícia: perito com endereço incompleto aparece desabilitado com o aviso', async ({ page }) => {
   await enderecoDoPerito(false);
   await loginPelaTela(page);
   const j = await abrirNova(page, CNJ1);
@@ -532,7 +532,7 @@ test('Nova perícia: perito com endereço incompleto aparece desabilitado com o 
   await expect(j.getByText('Endereço incompleto — complete o cadastro do perito antes de usar como local.')).toBeVisible();
 });
 
-test('Nova perícia: local manual já preenchido não é sobrescrito pelo endereço do perito (avisa e mantém)', async ({ page }) => {
+test('@critical Nova perícia: local manual já preenchido não é sobrescrito pelo endereço do perito (avisa e mantém)', async ({ page }) => {
   await enderecoDoPerito(true);
   await loginPelaTela(page);
   const j2 = await abrirNova(page, CNJ1);

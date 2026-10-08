@@ -233,7 +233,7 @@ test('@critical Avisos ao salvar: horário fora do expediente e data passada ped
   expect((await noBanco("SELECT valor_novo FROM auditoria_audiencia WHERE audiencia_id = ? AND campo_alterado = 'criacao'", [s.id]))[0].valor_novo).toContain('dia não útil');
 });
 
-test('Modalidade na janela Nova Audiência: virtual mostra Plataforma e Link; sem comparecimento esconde Local e Testemunhas e não guarda vara/link', async ({ page }) => {
+test('@critical Modalidade na janela Nova Audiência: virtual mostra Plataforma e Link; sem comparecimento esconde Local e Testemunhas e não guarda vara/link', async ({ page }) => {
   await loginPelaTela(page);
   const j = await abrirNova(page);
   await expect(j.getByText('Local da audiência')).toBeVisible();
@@ -295,7 +295,7 @@ test('@critical Detalhes (somente leitura) e Editar: clicar na linha abre travad
   await expect(janela(page, 'Editar Audiência')).toHaveCount(0);
 });
 
-test('Editar: audiência cancelada não tem "Editar" no menu e abre só em modo leitura (sem botão Editar)', async ({ page }) => {
+test('@critical Editar: audiência cancelada não tem "Editar" no menu e abre só em modo leitura (sem botão Editar)', async ({ page }) => {
   await loginPelaTela(page);
   await abrirAba(page);
   await abrirMenuAcoes(page, linha(page, '10/02/2001'));
@@ -363,7 +363,7 @@ test('@critical Remarcar: pede o motivo, abre a nova audiência com o processo t
   await expect(linha(page, `${br(util(1))} 10:00`).locator('td').nth(4)).toHaveText('Remarcada');
 });
 
-test('Histórico da audiência: mostra o que mudou, quem e quando; vazio tem mensagem; Esc e Fechar fecham', async ({ page }) => {
+test('@critical Histórico da audiência: mostra o que mudou, quem e quando; vazio tem mensagem; Esc e Fechar fecham', async ({ page }) => {
   await loginPelaTela(page);
   await abrirAba(page);
   await abrirMenuAcoes(page, linha(page, `${br(util(3))} 14:00`));
@@ -427,7 +427,7 @@ test('@critical Permissões: só VISUALIZAR não recebe "+ Nova Audiência", Can
   await expect(janela(page, 'Detalhes da Audiência').getByRole('button', { name: 'Editar' })).toHaveCount(0);
 });
 
-test('Permissões: com cadastrar e alterar (sem excluir) aparecem Nova, Cancelar, Remarcar e Editar, mas não Excluir', async ({ page }) => {
+test('@critical Permissões: com cadastrar e alterar (sem excluir) aparecem Nova, Cancelar, Remarcar e Editar, mas não Excluir', async ({ page }) => {
   const cad = await criarUsuarioComPermissoes('cad_alt_audiencias', [['processos', null, 'visualizar'], ['audiencias', null, 'visualizar'], ['audiencias', null, 'cadastrar'], ['audiencias', null, 'alterar']]);
   await loginPelaTela(page, cad);
   await abrirAba(page, CNJ1);

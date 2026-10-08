@@ -321,7 +321,7 @@ test('@critical Janela "Gerar documento" (pela pasta do processo): lista só os 
   });
 });
 
-test('Permissões: quem só VISUALIZA os modelos não vê "+ Novo Modelo", a CAIXA ALTA, Editar, Excluir, Desativar nem o histórico', async ({ page }) => {
+test('@critical Permissões: quem só VISUALIZA os modelos não vê "+ Novo Modelo", a CAIXA ALTA, Editar, Excluir, Desativar nem o histórico', async ({ page }) => {
   await abrirDocumentos(page, 'doc_so_ver');
   await expect(linha(page, 'Doc E2E Comum')).toBeVisible();
   await expect(page.getByRole('button', { name: '+ Novo Modelo' })).toHaveCount(0);
@@ -335,7 +335,7 @@ test('Permissões: quem só VISUALIZA os modelos não vê "+ Novo Modelo", a CAI
   await semViolacoes(page, 'Documentos para quem só visualiza');
 });
 
-test('Permissões: com a permissão de histórico, o histórico aparece (e a CAIXA ALTA continua só do administrador)', async ({ page }) => {
+test('@critical Permissões: com a permissão de histórico, o histórico aparece (e a CAIXA ALTA continua só do administrador)', async ({ page }) => {
   await abrirDocumentos(page, 'doc_ver_historico');
   await expect(page.getByRole('heading', { name: /Histórico de documentos gerados/ })).toBeVisible();
   await expect(page.getByRole('checkbox', { name: /CAIXA ALTA/ })).toHaveCount(0);

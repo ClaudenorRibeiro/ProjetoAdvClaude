@@ -88,6 +88,15 @@ function preflight() {
   }
   if (proibidos.length) throw new Error(`Há testes isolados/ignorados: ${proibidos.join(', ')}`);
 
+  // O Chromium da bateria só roda os testes marcados @critical: teste de tela sem a marca existe, mas nunca é executado aqui.
+  const semMarca = [];
+  for (const arquivo of arquivos.filter(a => a.includes(`${path.sep}e2e${path.sep}`) && a.endsWith('.spec.js'))) {
+    fs.readFileSync(arquivo, 'utf8').split('\n').forEach((linha, i) => {
+      if (/^\s*test\(\s*['"`]/.test(linha) && !linha.includes('@critical')) semMarca.push(`${path.relative(raiz, arquivo)}:${i + 1}`);
+    });
+  }
+  if (semMarca.length) throw new Error(`Teste de tela sem a marca @critical (a bateria não o executaria): ${semMarca.join(', ')}`);
+
   const estrutura = fs.readFileSync(path.join(raiz, 'estrutura_banco.sql'), 'utf8');
   const declaradas = Number(estrutura.match(/Contém\s+(\d+)\s+tabelas/i)?.[1]);
   const reais = (estrutura.match(/^CREATE TABLE/gm) || []).length;

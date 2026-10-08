@@ -257,7 +257,7 @@ test('@critical Excluir tarefa: pede confirmação, "Cancelar" não apaga, confi
   expect((await doBanco('Organizar Documentos')).length).toBe(0);
 });
 
-test('Histórico da tarefa: linha do tempo (cadastrada, concluída, reaberta), Esc e Fechar fecham só a janela do histórico', async ({ page }) => {
+test('@critical Histórico da tarefa: linha do tempo (cadastrada, concluída, reaberta), Esc e Fechar fecham só a janela do histórico', async ({ page }) => {
   await loginPelaTela(page);
   await abrirAba(page);
   await abrirMenuAcoes(page, linha(page, 'Organizar Documentos'));
@@ -300,7 +300,7 @@ test('@critical Permissões: quem só VISUALIZA tarefas não recebe "+ Nova Tare
   await expect(page.getByRole('button', { name: /Excluir/ })).toHaveCount(0);
 });
 
-test('Permissões: com alterar, histórico e excluir os itens aparecem só nas tarefas em que a pessoa é a responsável ou a criadora; com "ver todas" vê o filtro "Para" e as tarefas de todos', async ({ page }) => {
+test('@critical Permissões: com alterar, histórico e excluir os itens aparecem só nas tarefas em que a pessoa é a responsável ou a criadora; com "ver todas" vê o filtro "Para" e as tarefas de todos', async ({ page }) => {
   const login = await criarUsuarioComPermissoes('tudo_tarefas', [['processos', null, 'visualizar'], ['tarefas', null, 'visualizar'], ['tarefas', null, 'cadastrar'], ['tarefas', null, 'alterar'], ['tarefas', null, 'excluir'], ['tarefas', null, 'historico'], ['tarefas', 'ver_todos', 'visualizar']]);
   const eu = (await noBanco('SELECT id FROM usuarios WHERE login = ?', [login]))[0].id;
   await noBanco("UPDATE tarefas SET atribuida_para = ? WHERE titulo = 'Preparar Contestação'", [eu]);           // responsável: ele

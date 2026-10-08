@@ -10,7 +10,7 @@ const paginas = [
   '/controle/auxiliares', '/controle/formas-pagamento',
 ];
 
-test('todas as telas principais carregam sem tela branca ou erro de módulo', async ({ page }) => {
+test('@critical todas as telas principais carregam sem tela branca ou erro de módulo', async ({ page }) => {
   const errosPagina = [];
   page.on('pageerror', erro => errosPagina.push(erro.message));
   await loginPelaTela(page);

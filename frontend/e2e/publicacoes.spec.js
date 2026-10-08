@@ -381,7 +381,7 @@ test('@critical Publicações: janelas de E-mail, Criar prazo, tarefa e compromi
   expect((await noBanco('SELECT tratada FROM publicacoes WHERE id = ?', [x]))[0].tratada).toBe(0);   // cancelar não trata a publicação
 });
 
-test('Permissões: quem só VISUALIZA não vê Importar, "Ver", seleção, Atribuir nem Excluir, e vê só o que recebeu', async ({ page }) => {
+test('@critical Permissões: quem só VISUALIZA não vê Importar, "Ver", seleção, Atribuir nem Excluir, e vê só o que recebeu', async ({ page }) => {
   const meu = await nova({ data: '2026-02-17', numero_processo: PROC, texto: 'Pub E2E T9 recebida' });
   await nova({ data: '2026-02-17', numero_processo: PROC, texto: 'Pub E2E T9 alheia' });
   const u = (await noBanco("SELECT id FROM usuarios WHERE login = 'pub_outro'"))[0].id;

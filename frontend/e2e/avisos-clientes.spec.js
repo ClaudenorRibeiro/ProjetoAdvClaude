@@ -52,7 +52,7 @@ test('@critical Avisos: o pendente aparece com os canais do cliente (SMS desliga
   expect(v, `acessibilidade: ${JSON.stringify(v, null, 1)}`).toEqual([]);
 });
 
-test('Avisos: editar o texto grava; descartar tira da lista e vai para o histórico', async ({ page }) => {
+test('@critical Avisos: editar o texto grava; descartar tira da lista e vai para o histórico', async ({ page }) => {
   const { aviso } = await semear();
   await abrir(page);
   await cartao(page).getByRole('button', { name: 'Editar texto' }).click();
@@ -68,7 +68,7 @@ test('Avisos: editar o texto grava; descartar tira da lista e vai para o histór
   await expect(page.getByRole('cell', { name: 'Descartado' }).first()).toBeVisible();
 });
 
-test('Avisos: enviar com WhatsApp manda os canais marcados e abre o link do WhatsApp com a mensagem', async ({ page, context }) => {
+test('@critical Avisos: enviar com WhatsApp manda os canais marcados e abre o link do WhatsApp com a mensagem', async ({ page, context }) => {
   await semear();
   let corpo = null;
   await page.route('**/api/avisos/*/enviar', async (rota) => {
@@ -87,7 +87,7 @@ test('Avisos: enviar com WhatsApp manda os canais marcados e abre o link do What
   expect(corpo).toEqual({ canais: ['whatsapp'] });
 });
 
-test('Avisos: se outra pessoa já enviou, a tela mostra o aviso de conflito e atualiza a lista', async ({ page }) => {
+test('@critical Avisos: se outra pessoa já enviou, a tela mostra o aviso de conflito e atualiza a lista', async ({ page }) => {
   const { aviso } = await semear({ zap: false });
   await abrir(page);
   await expect(cartao(page)).toHaveCount(1);
@@ -97,7 +97,7 @@ test('Avisos: se outra pessoa já enviou, a tela mostra o aviso de conflito e at
   await expect(cartao(page)).toHaveCount(0);
 });
 
-test('Avisos: permissão por módulo — quem só tem Audiência não vê o aviso de parabéns; quem não tem nenhuma não vê o menu nem a tela', async ({ page }) => {
+test('@critical Avisos: permissão por módulo — quem só tem Audiência não vê o aviso de parabéns; quem não tem nenhuma não vê o menu nem a tela', async ({ page }) => {
   await semear();
   const so = await criarUsuarioComPermissoes('zzavisoaud', [['avisos', 'audiencia', 'visualizar']]);
   await abrir(page, so);
@@ -105,14 +105,14 @@ test('Avisos: permissão por módulo — quem só tem Audiência não vê o avis
   await expect(cartao(page)).toHaveCount(0);
 });
 
-test('Avisos: sem nenhuma permissão de avisos o menu não aparece e a tela volta ao painel', async ({ page }) => {
+test('@critical Avisos: sem nenhuma permissão de avisos o menu não aparece e a tela volta ao painel', async ({ page }) => {
   const sem = await criarUsuarioComPermissoes('zzavisosem', [['pessoas', null, 'visualizar']]);
   await abrir(page, sem);
   await expect(page).toHaveURL(/dashboard/);
   await expect(page.getByRole('link', { name: /Avisos aos clientes/ })).toHaveCount(0);
 });
 
-test('Avisos: Configurações — "mostrar antes de enviar" por módulo e dias aceitando 0 (mesmo dia) gravam no escritório', async ({ page }) => {
+test('@critical Avisos: Configurações — "mostrar antes de enviar" por módulo e dias aceitando 0 (mesmo dia) gravam no escritório', async ({ page }) => {
   const antes = (await noBanco('SELECT avisos_pericia_mostrar, avisos_audiencia_mostrar, avisos_parabens_mostrar, dias_alerta_pericia, dias_alerta_audiencia, dias_aviso_parabens FROM configuracoes_escritorio LIMIT 1'))[0];
   try {
     await loginPelaTela(page);

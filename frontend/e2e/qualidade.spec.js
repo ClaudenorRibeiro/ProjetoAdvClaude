@@ -44,7 +44,7 @@ test('@critical todas as telas não têm violações sérias ou críticas de ace
   expect(achados, `Violações de acessibilidade por tela: ${JSON.stringify(achados, null, 2)}`).toEqual({});
 });
 
-test('login permanece utilizável em tela pequena', async ({ page }) => {
+test('@critical login permanece utilizável em tela pequena', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 740 });
   await page.goto('/login');
   await expect(page.getByPlaceholder('Seu login')).toBeVisible();
