@@ -418,4 +418,4 @@ async function verificarAvisosPendenciaDocumento() {
   }
 }
 
-module.exports = { iniciarAlertas, reagendarCronPrazos, verificarAvisosIdade, verificarAvisosPendenciaDocumento };
+module.exports = { iniciarAlertas, reagendarCronPrazos, executarAlertasPrazos, verificarAlertasPericias, verificarAlertasAudiencias, verificarAvisosIdade, verificarAvisosPendenciaDocumento };
