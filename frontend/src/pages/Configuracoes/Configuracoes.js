@@ -11,6 +11,7 @@ import { formatarData, formatarDataHora, hojeLocal, toTitleCase, mascaraTelefone
 import { UFS } from '../../utils/ufs';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
+import AvisosConfig from './AvisosConfig';
 import LimitesRelatorios from './LimitesRelatorios';
 import { validarSenha, DICA_SENHA } from '../../utils/senha';
 import MenuAcoes from '../../components/MenuAcoes';
@@ -61,6 +62,11 @@ const MODULOS_PERM = [
     { chave: 'relatorios.criar', label: 'Criar e alterar os próprios relatórios — marque Cadastrar' },
   ]},
   { chave: 'sms',          label: 'SMS (enviar)' },
+  { chave: 'avisos', label: 'Avisos aos clientes — quem vê a tela de conferência de cada módulo (marque Visualizar)', submodulos: [
+    { chave: 'avisos.pericia',   label: 'Avisos de Perícia — marque Visualizar' },
+    { chave: 'avisos.audiencia', label: 'Avisos de Audiência — marque Visualizar' },
+    { chave: 'avisos.parabens',  label: 'Avisos de Parabéns de aniversário — marque Visualizar' },
+  ]},
 ];
 // 'historico' aparece para todos os módulos — futuras implementações de histórico
 // já encontram a permissão pronta; para módulos sem histórico, a coluna fica disponível mas inativa
@@ -574,18 +580,7 @@ function TabEscritorio() {
       </div>
 
       <h4 style={{margin:'20px 0 12px',fontSize:'13px',fontWeight:600,color:'#555'}}>Outros alertas automáticos</h4>
-      <div className="grid-2">
-        <div className="form-group">
-          <label className="form-label">Dias úteis antes da audiência para alertar cliente</label>
-          <input aria-label="Dias úteis antes da audiência para alertar cliente" type="number" min="1" className="form-control" value={form.dias_alerta_audiencia||''}
-            onChange={e => set('dias_alerta_audiencia', e.target.value)} />
-        </div>
-        <div className="form-group">
-          <label className="form-label">Dias úteis antes da perícia para alertar cliente</label>
-          <input aria-label="Dias úteis antes da perícia para alertar cliente" type="number" min="1" className="form-control" value={form.dias_alerta_pericia||''}
-            onChange={e => set('dias_alerta_pericia', e.target.value)} />
-        </div>
-      </div>
+      <AvisosConfig form={form} set={set} />
       <div className="form-group" style={{maxWidth:'300px'}}>
         <label className="form-label">Audiências sem advogado — alertar nos próximos (dias)</label>
         <input aria-label="Audiências sem advogado — alertar nos próximos (dias)" type="number" min="1" className="form-control" value={form.dias_audiencia_sem_adv||7}

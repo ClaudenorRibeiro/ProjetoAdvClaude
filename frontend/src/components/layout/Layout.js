@@ -14,6 +14,7 @@ import ModalGoogleAgenda from '../ModalGoogleAgenda';
 import { variaveisMenu } from '../../utils/coresMenu';
 import { variaveisLinha, variaveisLinhaLida } from '../../utils/coresLinha';
 import { formatarDataHora } from '../../utils/formatters';
+import { PERMISSOES_AVISOS } from '../../utils/permissoesAvisos';
 
 // Itens do menu lateral.
 // tipo: 'grupo' → item expansível com sub-itens (filhos[])
@@ -30,6 +31,7 @@ const MENU = [
   { path: '/documentos',    label: 'Documentos',    icone: '📄', modulo: 'documentos' },
   { path: '/publicacoes',   label: 'Publicações',   icone: '📰', modulo: 'publicacoes' },
   { path: '/pendencias-documento', label: 'Pendências de Docs.', icone: '📌', modulo: 'pendencias' },
+  { path: '/avisos',        label: 'Avisos aos clientes', icone: '📨', algumDe: PERMISSOES_AVISOS },
   { path: '/agenda',        label: 'Agenda',        icone: '📅', modulo: null },
   { path: '/relatorios',    label: 'Relatórios',    icone: '📊', modulo: 'relatorios' },
   {
@@ -198,6 +200,7 @@ export default function Layout({ children }) {
   function deveExibir(item) {
     if (item.apenasAdmin && !ehAdmin) return false;
     if (item.modulo && !temPermissao(item.modulo, 'visualizar') && !ehAdmin) return false;
+    if (item.algumDe && !item.algumDe.some(m => temPermissao(m, 'visualizar'))) return false;
     return true;
   }
 

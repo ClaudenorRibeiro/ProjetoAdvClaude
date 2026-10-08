@@ -14,6 +14,9 @@ const alvos = [
   'backend/src/routes/relatorios.js',
   'frontend/src/pages/Relatorios/novo',
   'frontend/src/pages/Configuracoes/LimitesRelatorios.js',
+  'backend/src/avisos',
+  'frontend/src/pages/Avisos',
+  'frontend/src/pages/Configuracoes/AvisosConfig.js',
 ];
 
 function arquivos(caminho) {

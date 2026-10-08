@@ -20,7 +20,7 @@ test('@critical login, proteção de rota e navegação principal', async ({ pag
 // (contraste de cor, campo sem rótulo, área de rolagem sem teclado etc.).
 const TELAS_PUBLICAS = ['/login', '/redefinir-senha'];
 const TELAS_LOGADAS = ['/dashboard', '/pessoas', '/processos', '/processos/pasta/1', '/prazos', '/tarefas', '/audiencias',
-  '/pericias', '/financeiro', '/documentos', '/publicacoes', '/pendencias-documento', '/agenda', '/relatorios',
+  '/pericias', '/financeiro', '/documentos', '/publicacoes', '/pendencias-documento', '/avisos', '/agenda', '/relatorios',
   '/configuracoes', '/controle/foruns', '/controle/varas', '/controle/auxiliares', '/controle/formas-pagamento',
   '/controle/instituicoes-financeiras'];
 

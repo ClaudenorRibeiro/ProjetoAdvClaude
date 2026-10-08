@@ -119,6 +119,8 @@ SELECT esperado.tabela AS tabela_que_falta
     UNION ALL
     SELECT 'permissoes' AS tabela
     UNION ALL
+    SELECT 'avisos_cliente' AS tabela
+    UNION ALL
     SELECT 'pessoas_avisos_idade' AS tabela
     UNION ALL
     SELECT 'pessoas_fisicas' AS tabela
@@ -1295,6 +1297,74 @@ SELECT esperado.tabela AS tabela, esperado.coluna AS coluna_que_falta
     SELECT 'permissoes' AS tabela, 'acao' AS coluna
     UNION ALL
     SELECT 'permissoes' AS tabela, 'permitido' AS coluna
+    UNION ALL
+    SELECT 'avisos_cliente' AS tabela, 'id' AS coluna
+    UNION ALL
+    SELECT 'avisos_cliente' AS tabela, 'modulo' AS coluna
+    UNION ALL
+    SELECT 'avisos_cliente' AS tabela, 'tipo' AS coluna
+    UNION ALL
+    SELECT 'avisos_cliente' AS tabela, 'pericia_id' AS coluna
+    UNION ALL
+    SELECT 'avisos_cliente' AS tabela, 'audiencia_id' AS coluna
+    UNION ALL
+    SELECT 'avisos_cliente' AS tabela, 'pessoa_fisica_id' AS coluna
+    UNION ALL
+    SELECT 'avisos_cliente' AS tabela, 'referencia_id' AS coluna
+    UNION ALL
+    SELECT 'avisos_cliente' AS tabela, 'cliente_tipo' AS coluna
+    UNION ALL
+    SELECT 'avisos_cliente' AS tabela, 'cliente_id' AS coluna
+    UNION ALL
+    SELECT 'avisos_cliente' AS tabela, 'processo_id' AS coluna
+    UNION ALL
+    SELECT 'avisos_cliente' AS tabela, 'data_evento' AS coluna
+    UNION ALL
+    SELECT 'avisos_cliente' AS tabela, 'data_aviso' AS coluna
+    UNION ALL
+    SELECT 'avisos_cliente' AS tabela, 'assunto' AS coluna
+    UNION ALL
+    SELECT 'avisos_cliente' AS tabela, 'texto' AS coluna
+    UNION ALL
+    SELECT 'avisos_cliente' AS tabela, 'texto_editado' AS coluna
+    UNION ALL
+    SELECT 'avisos_cliente' AS tabela, 'status' AS coluna
+    UNION ALL
+    SELECT 'avisos_cliente' AS tabela, 'modo' AS coluna
+    UNION ALL
+    SELECT 'avisos_cliente' AS tabela, 'decidido_por' AS coluna
+    UNION ALL
+    SELECT 'avisos_cliente' AS tabela, 'decidido_em' AS coluna
+    UNION ALL
+    SELECT 'avisos_cliente' AS tabela, 'motivo_status' AS coluna
+    UNION ALL
+    SELECT 'avisos_cliente' AS tabela, 'criado_em' AS coluna
+    UNION ALL
+    SELECT 'telefones_pf' AS tabela, 'whatsapp' AS coluna
+    UNION ALL
+    SELECT 'telefones_pf' AS tabela, 'sms' AS coluna
+    UNION ALL
+    SELECT 'telefones_pf' AS tabela, 'whatsapp_unico' AS coluna
+    UNION ALL
+    SELECT 'telefones_pf' AS tabela, 'sms_unico' AS coluna
+    UNION ALL
+    SELECT 'telefones_pj' AS tabela, 'whatsapp' AS coluna
+    UNION ALL
+    SELECT 'telefones_pj' AS tabela, 'sms' AS coluna
+    UNION ALL
+    SELECT 'telefones_pj' AS tabela, 'whatsapp_unico' AS coluna
+    UNION ALL
+    SELECT 'telefones_pj' AS tabela, 'sms_unico' AS coluna
+    UNION ALL
+    SELECT 'configuracoes_escritorio' AS tabela, 'avisos_pericia_mostrar' AS coluna
+    UNION ALL
+    SELECT 'configuracoes_escritorio' AS tabela, 'avisos_audiencia_mostrar' AS coluna
+    UNION ALL
+    SELECT 'configuracoes_escritorio' AS tabela, 'avisos_parabens_mostrar' AS coluna
+    UNION ALL
+    SELECT 'configuracoes_escritorio' AS tabela, 'dias_aviso_parabens' AS coluna
+    UNION ALL
+    SELECT 'log_comunicacoes' AS tabela, 'aviso_id' AS coluna
     UNION ALL
     SELECT 'pessoas_avisos_idade' AS tabela, 'id' AS coluna
     UNION ALL

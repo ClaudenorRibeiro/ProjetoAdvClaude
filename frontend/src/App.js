@@ -3,6 +3,7 @@
 // ============================================================
 
 import React, { useEffect, lazy, Suspense } from 'react';
+import { PERMISSOES_AVISOS } from './utils/permissoesAvisos';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -58,6 +59,7 @@ const Configuracoes   = lazyComRetry(() => import('./pages/Configuracoes/Configu
 const Processos       = lazyComRetry(() => import('./pages/Processos/Processos'));
 const PastaDetalhe    = lazyComRetry(() => import('./pages/Processos/PastaDetalhe'));
 const Publicacoes     = lazyComRetry(() => import('./pages/Publicacoes/Publicacoes'));
+const Avisos = lazyComRetry(() => import('./pages/Avisos/Avisos'));
 const PendenciasDocumento = lazyComRetry(() => import('./pages/Pendencias/PendenciasDocumento'));
 // Fase 5: Prazos e Tarefas (exportam modais reusados pela PastaDetalhe) + Agenda
 // (traz o calendário pesado) + Dashboard.
@@ -70,7 +72,7 @@ const Agenda          = lazyComRetry(() => import('./pages/Agenda/Agenda'));
 // Sem login → vai para /login. Logado mas sem acesso àquela tela → volta ao painel
 // (/dashboard, que todos veem). Espelha o menu lateral, que já esconde o que o usuário não pode usar.
 // Obs.: o backend continua sendo o guardião real dos dados; isto é defesa em profundidade na navegação.
-function RotaProtegida({ children, modulo = null, apenasAdmin = false }) {
+function RotaProtegida({ children, modulo = null, apenasAdmin = false, algumDe = null }) {
   const { usuario, carregando, temPermissao, ehAdmin } = useAuth();
 
   if (carregando) {
@@ -88,6 +90,11 @@ function RotaProtegida({ children, modulo = null, apenasAdmin = false }) {
   // Tela de um módulo e usuário sem permissão de visualizar → sem acesso
   // (temPermissao já libera admin/super automaticamente)
   if (modulo && !temPermissao(modulo, 'visualizar')) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  // Tela liberada por QUALQUER uma das permissões da lista (ex.: avisos de perícia, de audiência ou de parabéns)
+  if (algumDe && !algumDe.some(m => temPermissao(m, 'visualizar'))) {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -176,6 +183,7 @@ function AppRoutes() {
       <Route path="/documentos/*"  element={<RotaProtegida modulo="documentos"><Documentos /></RotaProtegida>} />
       <Route path="/publicacoes/*" element={<RotaProtegida modulo="publicacoes"><Publicacoes /></RotaProtegida>} />
       <Route path="/pendencias-documento/*" element={<RotaProtegida modulo="pendencias"><PendenciasDocumento /></RotaProtegida>} />
+      <Route path="/avisos"        element={<RotaProtegida algumDe={PERMISSOES_AVISOS}><Avisos /></RotaProtegida>} />
       <Route path="/agenda/*"      element={<RotaProtegida><Agenda /></RotaProtegida>} />
       <Route path="/relatorios/*"  element={<RotaProtegida modulo="relatorios"><RelatoriosNovo /></RotaProtegida>} />
       {/* endereço provisório usado durante a construção: quem tiver nos favoritos cai na tela definitiva */}

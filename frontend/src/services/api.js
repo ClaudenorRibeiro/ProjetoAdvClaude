@@ -255,6 +255,19 @@ export const notificacoesAPI = {
 };
 
 // ============================================================
+// AVISOS AOS CLIENTES (perícia, audiência, parabéns) — conferência antes de enviar
+// ============================================================
+export const avisosAPI = {
+  listar:    () => api.get('/avisos'),
+  contagem:  () => api.get('/avisos/contagem'),
+  historico: () => api.get('/avisos/historico'),
+  atualizar: () => api.post('/avisos/atualizar'),
+  editar:    (id, dados) => api.put(`/avisos/${id}`, dados),
+  enviar:    (id, dados) => api.post(`/avisos/${id}/enviar`, dados),
+  descartar: (id, dados) => api.post(`/avisos/${id}/descartar`, dados || {}),
+};
+
+// ============================================================
 // TAREFAS
 // ============================================================
 export const tarefasAPI = {
