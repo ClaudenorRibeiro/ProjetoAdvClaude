@@ -204,6 +204,10 @@ test('prazo delegado com descrição de 1.000 letras (o máximo que o prazo acei
   assert.equal(n.length, 1, 'a notificação não pode sumir');
   assert.ok(n[0].mensagem.length <= 300);
   assert.match(n[0].mensagem, /^Novo prazo atribuído a você: D+/);
+  const logs = await sql("SELECT assunto, status FROM log_emails WHERE para = ?", [a.email]);
+  assert.equal(logs.length, 1, 'o e-mail saiu e o registro dele em log_emails não pode se perder por causa do assunto longo');
+  assert.equal(logs[0].status, 'sucesso');
+  assert.ok(logs[0].assunto.length <= 255);
 });
 
 test('concluir prazo: o criador é avisado no sino SÓ se pediu o aviso ao criar e se não foi ele mesmo quem concluiu; cancelar não avisa', async () => {

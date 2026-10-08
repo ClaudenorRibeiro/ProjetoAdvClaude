@@ -43,9 +43,11 @@ function criarTransporte(extra = {}) {
 // de uma publicação (para o histórico da publicação ler daqui, sem tabela nova).
 async function registrarLog(para, assunto, status, erro, publicacaoId = null, destinatarioNome = null, mensagem = null) {
   try {
+    // Cortado no tamanho das colunas (para/assunto 255, destinatario_nome 200): um assunto longo não pode impedir o registro do envio.
+    const corta = (texto, max) => (texto == null ? texto : String(texto).slice(0, max));
     await pool.execute(
       'INSERT INTO log_emails (para, destinatario_nome, mensagem, assunto, status, erro, publicacao_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [para, destinatarioNome || null, mensagem || null, assunto, status, erro || null, publicacaoId || null]
+      [corta(para, 255), corta(destinatarioNome || null, 200), mensagem || null, corta(assunto, 255), status, erro || null, publicacaoId || null]
     );
   } catch (e) {
     console.error('Erro ao gravar log_emails:', e.message);
