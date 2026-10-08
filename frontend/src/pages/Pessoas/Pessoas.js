@@ -11,7 +11,7 @@ import MenuAcoes from '../../components/MenuAcoes';
 import { useAuth } from '../../context/AuthContext';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
-import { LinhaFone, LinhaEmail } from '../../components/LinhasContato';
+import { LinhaFone, LinhaEmail, atualizarTelefone } from '../../components/LinhasContato';
 import { LinhaContaBancaria } from '../../components/LinhaContaBancaria';
 import { SelectComAdicao } from '../../components/ui/SelectComAdicao';
 import { EtiquetaCelula, LegendaEtiquetasPessoais, useEtiquetasEscritorio, itemEtiquetaEscritorioSubmenu, ModalHistoricoEtiquetaEscritorio } from '../../components/Etiquetas';
@@ -2054,7 +2054,8 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
               index={i}
               somenteLeitura={leitura}
               onAbrirWhatsApp={leitura ? abrirWhatsAppTelefone : null}
-              onChange={v => setTelefones(t => t.map((x,j) => j===i ? v : x))}
+              mostrarCanais
+              onChange={v => setTelefones(t => atualizarTelefone(t, i, v))}
               onRemove={() => setTelefones(t => t.filter((_,j) => j!==i))}
             />
           ))}

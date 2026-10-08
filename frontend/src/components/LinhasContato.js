@@ -8,9 +8,31 @@ import React, { useState } from 'react';
 import { limparEspacos, limparEmail } from '../utils/formatters';
 
 // ------------------------------------------------------------
-// LINHA TELEFONE — número com máscara adaptativa + descrição livre
+// MARCADORES DE CANAL — "este número é o WhatsApp / o SMS da pessoa"
+// Regra do sistema: no máximo UM número com cada marcador (o mesmo número pode ter os dois). O servidor e o banco também conferem.
 // ------------------------------------------------------------
-export function LinhaFone({ tel, index, onChange, onRemove, somenteLeitura = false, refNumero, onAbrirWhatsApp = null }) {
+const soDigitos = (n) => String(n || '').replace(/\D/g, '');
+export const pareceCelular = (n) => { const d = soDigitos(n); return d.length === 11 && d[2] === '9'; };
+
+// Troca a linha `index` por `novo` e garante a regra do "um só": marcar um número desmarca o que estava marcado em outro.
+// Conveniência: quando o número digitado passa a ser um celular completo e ninguém na lista tem marcador, ele já vem marcado
+// (a pessoa pode desmarcar — só acontece no momento em que o número vira celular).
+export function atualizarTelefone(lista, index, novo) {
+  const antes = lista[index] || {};
+  let atual = { ...novo };
+  const alguemMarcado = lista.some((t, j) => j !== index && (t.whatsapp || t.sms)) || antes.whatsapp || antes.sms;
+  if (!alguemMarcado && pareceCelular(atual.numero) && !pareceCelular(antes.numero) && atual.whatsapp === undefined && atual.sms === undefined) atual = { ...atual, whatsapp: true, sms: true };
+  return lista.map((t, j) => {
+    if (j === index) return atual;
+    return { ...t, whatsapp: atual.whatsapp ? false : t.whatsapp, sms: atual.sms ? false : t.sms };
+  });
+}
+
+// ------------------------------------------------------------
+// LINHA TELEFONE — número com máscara adaptativa + descrição livre
+// `mostrarCanais`: mostra as caixinhas WhatsApp / SMS (usado na ficha da pessoa).
+// ------------------------------------------------------------
+export function LinhaFone({ tel, index, onChange, onRemove, somenteLeitura = false, refNumero, onAbrirWhatsApp = null, mostrarCanais = false }) {
   // Máscara adaptativa: fixo (xx) xxxx-xxxx ou celular (xx) xxxxx-xxxx
   function mascaraTelefone(value) {
     const limpo = value.replace(/\D/g, '').slice(0, 11);
@@ -44,6 +66,21 @@ export function LinhaFone({ tel, index, onChange, onRemove, somenteLeitura = fal
         onChange={e => onChange({ ...tel, tipo: e.target.value })}
         onBlur={() => onChange({ ...tel, tipo: limparEspacos(tel.tipo || '') })}
       />
+      {/* Canais dos avisos aos clientes: este número é o WhatsApp e/ou o SMS desta pessoa (no máximo um de cada) */}
+      {mostrarCanais && (
+        <div style={{ display: 'flex', gap: '10px', flexShrink: 0, fontSize: '12px', color: '#374151' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: somenteLeitura ? 'default' : 'pointer' }}>
+            <input type="checkbox" aria-label={`WhatsApp do telefone ${index + 1}`} checked={!!tel.whatsapp} disabled={somenteLeitura}
+              onChange={e => onChange({ ...tel, whatsapp: e.target.checked })} />
+            WhatsApp
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: somenteLeitura ? 'default' : 'pointer' }}>
+            <input type="checkbox" aria-label={`SMS do telefone ${index + 1}`} checked={!!tel.sms} disabled={somenteLeitura}
+              onChange={e => onChange({ ...tel, sms: e.target.checked })} />
+            SMS
+          </label>
+        </div>
+      )}
       {/* Na ficha em leitura, permite iniciar uma conversa sem liberar a edição. */}
       {somenteLeitura && tel.numero && onAbrirWhatsApp && (
         <button
