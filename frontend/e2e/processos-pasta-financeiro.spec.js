@@ -435,7 +435,7 @@ test('@critical Repassar pelo menu da parcela: só aparece na recebida com repas
   await abrirMenuAcoes(page, parcelaRecebida(page));
   await expect(page.getByRole('button', { name: /Desfazer recebimento/ })).toBeVisible();   // o que já existia continua
   await expect(page.getByRole('button', { name: /Histórico/ }).last()).toBeVisible();
-  await page.getByRole('button', { name: /^\S*\s*Repassar$/ }).click();
+  await page.getByRole('button', { name: /^\S*\s*Repassar ao cliente$/ }).click();
   const j = janela(page, 'Repassar ao cliente');
   await expect(j).toBeVisible();
   await semViolacoes(page, 'janela Repassar (pelo menu da parcela)');
@@ -445,7 +445,7 @@ test('@critical Repassar pelo menu da parcela: só aparece na recebida com repas
   expect((await noBanco('SELECT repasse_cliente_em FROM acordo_parcela WHERE id = ?', [d.pa1]))[0].repasse_cliente_em).toBeNull();
   // repasse em dinheiro em mãos desta parcela
   await abrirMenuAcoes(page, parcelaRecebida(page));
-  await page.getByRole('button', { name: /^\S*\s*Repassar$/ }).click();
+  await page.getByRole('button', { name: /^\S*\s*Repassar ao cliente$/ }).click();
   await j.getByLabel('Conta ou caixa de saída', { exact: true }).selectOption({ label: 'Caixa C8' });
   await j.getByLabel('Destino do repasse', { exact: true }).selectOption({ label: 'Dinheiro em espécie — em mãos' });
   await j.getByLabel('Forma do repasse', { exact: true }).selectOption({ label: 'Dinheiro C8' });
@@ -461,7 +461,7 @@ test('@critical Repassar pelo menu da parcela: só aparece na recebida com repas
   await expect(parcelaRecebida(page).getByText('Falta repassar ao cliente')).toHaveCount(0);
   await abrirMenuAcoes(page, parcelaRecebida(page));
   await expect(page.getByRole('button', { name: /Desfazer recebimento/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /^\S*\s*Repassar$/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Repassar ao/ })).toHaveCount(0);
   // a aba "Repasses pendentes" da tela Financeiro continua mostrando o que ainda falta (a parcela 2 ainda não foi recebida: nada dela)
   await page.keyboard.press('Escape');
 });
@@ -494,6 +494,19 @@ test('@critical Repassar pelo menu da parcela: com cliente E parceiro pendentes 
   await page.getByRole('button', { name: /Repassar ao cliente/ }).click();
   await expect(janela(page, 'Repassar ao cliente')).toBeVisible();
   expect((await noBanco('SELECT repasse_cliente_em, repasse_parceiro_em FROM acordo_parcela WHERE id = ?', [d.pa1]))[0]).toEqual({ repasse_cliente_em: null, repasse_parceiro_em: null });
+});
+
+test('@critical Repassar pelo menu da parcela: cliente já repassado e parceiro pendente — o item diz "Repassar ao parceiro" e abre a janela do parceiro', async ({ page }) => {
+  await prepararRepasse({ comParceiro: true });
+  await noBanco("UPDATE acordo_parcela SET repasse_cliente_em = '2099-03-16' WHERE id = ?", [d.pa1]);
+  await loginPelaTela(page);
+  await abrirAba(page, CNJ1);
+  await abrirParcelas(page);
+  await expect(parcelaRecebida(page).getByText('Falta repassar ao parceiro')).toBeVisible();
+  await abrirMenuAcoes(page, parcelaRecebida(page));
+  await expect(page.getByRole('button', { name: /Repassar ao cliente/ })).toHaveCount(0);
+  await page.getByRole('button', { name: /^\S*\s*Repassar ao parceiro$/ }).click();
+  await expect(janela(page, 'Repassar ao parceiro (Parceiro Repasse C8)')).toBeVisible();
 });
 
 test('@critical Repassar pelo menu da parcela: quem só VISUALIZA o financeiro não vê o item', async ({ page }) => {

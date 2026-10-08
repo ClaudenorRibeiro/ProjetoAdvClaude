@@ -1234,7 +1234,7 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
                       // depende mais do status da parcela em si — a parcela pode até já ter sido
                       // recebida depois (ela só destrava quando a multa é recebida).
                       // Repasse desta parcela: só recebida e com repasse pendente. Um só pendente → abre direto; cliente E parceiro → submenu.
-                      { label: 'Repassar', icone: '💸',
+                      { label: `Repassar ao ${cicloDaParcela(p)?.[0] || 'cliente'}`, icone: '💸',
                         oculto: !(podeAlterar && cicloDaParcela(p)?.length === 1),
                         onClick: () => pedirRepasse(p, cicloDaParcela(p)[0]) },
                       { label: 'Repassar', icone: '💸',
