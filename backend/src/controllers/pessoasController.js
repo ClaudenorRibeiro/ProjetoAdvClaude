@@ -12,6 +12,7 @@ const { registrarComunicacao } = require('../utils/logComunicacao');
 const smsService = require('../services/smsService');
 const { lerConfigComtele } = require('../utils/configComtele');
 const { lerConfigEscritorio, montarMensagemParabens } = require('../utils/mensagemParabens');
+const { consolidarMarcadoresTelefone } = require('../utils/marcadoresTelefone');
 const multer = require('multer');
 const { criarBancoNoCatalogo } = require('./instituicaoFinanceiraController');
 const { texto, inteiroPositivo } = require('../utils/camposTexto');
@@ -630,8 +631,8 @@ async function criarFisica(req, res) {
     // Insere telefones vinculados à pessoa (já lidos e conferidos; o repetido, pelos dígitos, é ignorado)
     for (const tel of semRepetidos(d.telefones, chaveTelefone)) {
       await conn.execute(
-        'INSERT INTO telefones_pf (pessoa_id, numero, tipo, principal) VALUES (?, ?, ?, ?)',
-        [pessoaId, tel.numero, tel.tipo || 'celular', tel.principal ? 1 : 0]
+        'INSERT INTO telefones_pf (pessoa_id, numero, tipo, principal, whatsapp, sms) VALUES (?, ?, ?, ?, ?, ?)',
+        [pessoaId, tel.numero, tel.tipo || 'celular', tel.principal ? 1 : 0, tel.whatsapp ? 1 : 0, tel.sms ? 1 : 0]
       );
     }
 
@@ -720,8 +721,8 @@ async function atualizarFisica(req, res) {
     await conn.execute('DELETE FROM telefones_pf WHERE pessoa_id = ?', [id]);
     for (const tel of semRepetidos(d.telefones, chaveTelefone)) {
       await conn.execute(
-        'INSERT INTO telefones_pf (pessoa_id, numero, tipo, principal) VALUES (?, ?, ?, ?)',
-        [id, tel.numero, tel.tipo || 'celular', tel.principal ? 1 : 0]
+        'INSERT INTO telefones_pf (pessoa_id, numero, tipo, principal, whatsapp, sms) VALUES (?, ?, ?, ?, ?, ?)',
+        [id, tel.numero, tel.tipo || 'celular', tel.principal ? 1 : 0, tel.whatsapp ? 1 : 0, tel.sms ? 1 : 0]
       );
     }
     await conn.execute('DELETE FROM emails_pf WHERE pessoa_id = ?', [id]);
@@ -1051,6 +1052,7 @@ async function unificarJuridicas(req, res) {
     // 5) "Filhos" do cadastro (telefones, e-mails e contas bancárias): move para o principal
     //    p/ não perder contatos (esses não têm tipo_pessoa; pertencem só à empresa).
     // contas_bancarias_pj é TOLERANTE (banco sem o script S3 ainda) — as demais são fixas.
+    await consolidarMarcadoresTelefone(conn, 'telefones_pj', principalId, duplicados);
     for (const tabela of ['telefones_pj', 'emails_pj']) {
       await conn.execute(
         `UPDATE ${tabela} SET pessoa_id = ? WHERE pessoa_id IN (${dupPh})`,
@@ -1273,6 +1275,7 @@ async function unificarFisicas(req, res) {
 
     // 6) Telefones, e-mails e contas bancárias (FK por pessoa_id): move para o principal.
     // contas_bancarias_pf é TOLERANTE (banco sem o script S3 ainda) — as demais são fixas.
+    await consolidarMarcadoresTelefone(conn, 'telefones_pf', principalId, duplicados);
     for (const tabela of ['telefones_pf', 'emails_pf']) {
       await conn.execute(
         `UPDATE ${tabela} SET pessoa_id = ? WHERE pessoa_id IN (${dupPh})`,
@@ -1521,8 +1524,8 @@ async function criarJuridica(req, res) {
     // Insere telefones vinculados à empresa (já lidos e conferidos; o repetido, pelos dígitos, é ignorado)
     for (const tel of semRepetidos(d.telefones, chaveTelefone)) {
       await conn.execute(
-        'INSERT INTO telefones_pj (pessoa_id, numero, tipo, principal) VALUES (?, ?, ?, ?)',
-        [pessoaId, tel.numero, tel.tipo || 'comercial', tel.principal ? 1 : 0]
+        'INSERT INTO telefones_pj (pessoa_id, numero, tipo, principal, whatsapp, sms) VALUES (?, ?, ?, ?, ?, ?)',
+        [pessoaId, tel.numero, tel.tipo || 'comercial', tel.principal ? 1 : 0, tel.whatsapp ? 1 : 0, tel.sms ? 1 : 0]
       );
     }
 
@@ -1644,8 +1647,8 @@ async function atualizarJuridica(req, res) {
     await conn.execute('DELETE FROM telefones_pj WHERE pessoa_id = ?', [id]);
     for (const tel of semRepetidos(d.telefones, chaveTelefone)) {
       await conn.execute(
-        'INSERT INTO telefones_pj (pessoa_id, numero, tipo, principal) VALUES (?, ?, ?, ?)',
-        [id, tel.numero, tel.tipo || 'comercial', tel.principal ? 1 : 0]
+        'INSERT INTO telefones_pj (pessoa_id, numero, tipo, principal, whatsapp, sms) VALUES (?, ?, ?, ?, ?, ?)',
+        [id, tel.numero, tel.tipo || 'comercial', tel.principal ? 1 : 0, tel.whatsapp ? 1 : 0, tel.sms ? 1 : 0]
       );
     }
     await conn.execute('DELETE FROM emails_pj WHERE pessoa_id = ?', [id]);

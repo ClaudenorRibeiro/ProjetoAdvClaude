@@ -82,7 +82,11 @@ function lerGrupo(corpo, campos, dados) {
   return null;
 }
 
-// Telefones: lista de { numero, tipo, principal }. Linha sem número é ignorada (como sempre foi).
+// Marcador de canal (WhatsApp / SMS) vindo da tela: verdadeiro, 1 ou "1" = marcado.
+const marcado = (v) => v === true || v === 1 || v === '1';
+
+// Telefones: lista de { numero, tipo, principal, whatsapp, sms }. Linha sem número é ignorada (como sempre foi).
+// WhatsApp e SMS: no máximo UM número de cada por pessoa (o mesmo número pode ser os dois). O mesmo número repetido junta os marcadores.
 function lerTelefones(bruto) {
   if (bruto === undefined || bruto === null) return { valor: [] };
   if (!Array.isArray(bruto)) return { erro: 'A lista de telefones é inválida' };
@@ -94,8 +98,13 @@ function lerTelefones(bruto) {
     if (!numero.valor) continue;
     const tipo = texto(t.tipo, { rotulo: 'O tipo do telefone', max: 100 });
     if (tipo.erro) return tipo;
-    saida.push({ numero: numero.valor, tipo: tipo.valor, principal: t.principal });
+    const digitos = numero.valor.replace(/\D/g, '');
+    const repetido = digitos && saida.find(x => x.numero.replace(/\D/g, '') === digitos);
+    if (repetido) { repetido.whatsapp = repetido.whatsapp || marcado(t.whatsapp); repetido.sms = repetido.sms || marcado(t.sms); continue; }
+    saida.push({ numero: numero.valor, tipo: tipo.valor, principal: t.principal, whatsapp: marcado(t.whatsapp), sms: marcado(t.sms) });
   }
+  if (saida.filter(x => x.whatsapp).length > 1) return { erro: 'Só um telefone pode ser marcado como WhatsApp' };
+  if (saida.filter(x => x.sms).length > 1) return { erro: 'Só um telefone pode ser marcado como SMS' };
   return { valor: saida };
 }
 
