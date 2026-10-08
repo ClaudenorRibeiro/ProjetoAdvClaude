@@ -37,6 +37,9 @@ async function abrirPasta(page) {
 }
 async function abrirEditar(page) {
   await abrirPasta(page);
+  await abrirEditarDaPasta(page);
+}
+async function abrirEditarDaPasta(page) {
   await abrirMenuAcoes(page, linhaProcesso(page));
   await page.getByRole('button', { name: /Editar/ }).click();
   await expect(janela(page).getByRole('heading', { name: 'Editar Processo' })).toBeVisible();
@@ -263,7 +266,7 @@ test('@critical Editar Processo: mudar o status pede o motivo — cancelar, ESC,
   expect({ de: novos.status_anterior, para: novos.status_novo, motivo: novos.motivo }).toEqual({ de: 'Conhecimento E2E', para: 'Recurso E2E', motivo: null });
   await expect(page.getByRole('row').filter({ hasText: CNJ }).getByText('Recurso E2E')).toBeVisible();     // a lista da pasta já mostra o novo status
   // salvar COM motivo (voltando para Conhecimento)
-  await abrirMenuAcoes(page, linhaProcesso(page)); await page.getByRole('button', { name: /Editar/ }).click();
+  await abrirEditarDaPasta(page);                                                                   // reabre e espera os dados chegarem (em máquina lenta eles sobrescreviam o status escolhido)
   await rotulo(page, 'Status').selectOption({ label: 'Conhecimento E2E' });
   await salvar(page).click();
   await motivoJanela(page).getByPlaceholder('Digite o motivo, se quiser...').fill('  Decisão do juiz  ');
@@ -274,7 +277,7 @@ test('@critical Editar Processo: mudar o status pede o motivo — cancelar, ESC,
   const ultimo = typeof logs[0].dados_novos === 'string' ? JSON.parse(logs[0].dados_novos) : logs[0].dados_novos;
   expect({ de: ultimo.status_anterior, para: ultimo.status_novo, motivo: ultimo.motivo }).toEqual({ de: 'Recurso E2E', para: 'Conhecimento E2E', motivo: 'Decisão do juiz' });
   // tirar o status ("Sem status") também pede motivo
-  await abrirMenuAcoes(page, linhaProcesso(page)); await page.getByRole('button', { name: /Editar/ }).click();
+  await abrirEditarDaPasta(page);                                                                   // reabre e espera os dados chegarem (em máquina lenta eles sobrescreviam o status escolhido)
   await rotulo(page, 'Status').selectOption('');
   await salvar(page).click();
   await expect(motivoJanela(page).getByText('O status foi alterado de Conhecimento E2E para Sem status.')).toBeVisible();
