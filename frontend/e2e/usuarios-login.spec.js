@@ -103,8 +103,10 @@ test('@critical Login: entrar certo leva ao Dashboard e grava a sessão; usuári
   expect((await linhaDoBanco(u.id)).sessao_atual).toBeTruthy();
   expect((await linhaDoBanco(u.id)).ultimo_acesso).toBeTruthy();
   // usuário sem permissão nenhuma: entra, mas as telas de módulo o mandam de volta (já coberto em qualidade.spec; aqui só a rota protegida sem sessão)
+  // Ao apagar a sessão, o próprio sistema já pode mandar a tela para /login no mesmo instante em que pedimos /pessoas
+  // (a abertura é interrompida pelo redirecionamento): o que importa é terminar no login.
   await page.evaluate(() => sessionStorage.clear());
-  await page.goto('/pessoas');
+  await page.goto('/pessoas').catch(erro => { if (!/interrupted by another navigation/i.test(String(erro))) throw erro; });
   await expect(page).toHaveURL(/\/login$/);
 });
 

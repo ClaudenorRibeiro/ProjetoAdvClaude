@@ -25,7 +25,7 @@ test('lerDadosFisica: limpa e confere (nome obrigatório, limites das colunas, i
     telefones: [{ numero: ' (19) 9999-0000 ', principal: true }, { numero: '' }], emails: [{ email: ' ANA@X.com ' }, {}], contasBancarias: [] });
   assert.equal(ok.erro, undefined);
   assert.deepEqual([ok.dados.nome, ok.dados.cpf, ok.dados.rg, ok.dados.cidade, ok.dados.profissao_id, ok.dados.genero_id, ok.dados.estado_civil_id], ['Ana', '52998224725', '123', 'Campinas', 3, null, null]);
-  assert.deepEqual(ok.dados.telefones, [{ numero: '(19) 9999-0000', tipo: null, principal: true }]);
+  assert.deepEqual(ok.dados.telefones, [{ numero: '(19) 9999-0000', tipo: null, principal: true, whatsapp: false, sms: false }]);
   assert.deepEqual(ok.dados.emails, [{ email: 'ana@x.com', principal: undefined }]);
   assert.deepEqual(lerDadosFisica({}), { erro: 'O nome é obrigatório' });
   assert.deepEqual(lerDadosFisica(undefined), { erro: 'O nome é obrigatório' });
