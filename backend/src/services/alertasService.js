@@ -6,7 +6,7 @@
 const cron = require('node-cron');
 const { pool } = require('../config/database');
 const { diasUteisAntes } = require('./calendarioService');
-const { emailPrazosPendentes, emailPrazosAtrasados } = require('./notificacaoService');
+const { emailPrazosPendentes, emailPrazosAtrasados, escaparHtml } = require('./notificacaoService');
 const { enviarEmail } = require('../utils/email');
 const { liberarFazendoExpirados } = require('../controllers/prazosController');
 const { dataParaIsoLocal, hojeBrasilia } = require('../utils/helpers');
@@ -335,9 +335,9 @@ async function enviarEmailPendencia(p) {
             <h2 style="color:#fff;margin:0">Pendência de documentos</h2>
           </div>
           <div style="padding:24px">
-            <p>Olá, <strong>${p.resp_nome || ''}</strong>.</p>
+            <p>Olá, <strong>${escaparHtml(p.resp_nome)}</strong>.</p>
             <p>Chegou a data que você agendou para cobrar os documentos do cliente
-               <strong>${p.cliente_nome || 'cliente'}</strong>.</p>
+               <strong>${escaparHtml(p.cliente_nome || 'cliente')}</strong>.</p>
             <p><strong>${p.pendentes_qtd}</strong> documento(s) ainda não foram entregues — o processo
                segue aguardando.</p>
             <p style="color:#555;font-size:13px">Acesse o sistema, em <strong>Pendências de Documentos</strong>, para ver a lista completa.</p>
@@ -375,8 +375,9 @@ async function verificarAvisosPendenciaDocumento() {
     if (!pendentes.length) return;
 
     for (const p of pendentes) {
-      const temSino  = Number(p.avisar_sino) === 1;
       const temEmail = Number(p.avisar_email) === 1 && !!p.resp_email;
+      // Sem e-mail utilizável, o sino é o canal que sobra: nunca dar o aviso como enviado sem ninguém ter recebido nada.
+      const temSino  = Number(p.avisar_sino) === 1 || !temEmail;
 
       // Caso "SÓ e-mail": o aviso só vale se o e-mail SAIR. Envia ANTES de marcar;
       // se falhar, deixa avisado_em nulo e o cron tenta de novo amanhã.

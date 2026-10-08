@@ -5,6 +5,12 @@
 
 const { pool }                        = require('../config/database');
 const { enviarEmail, enviarEmailColetivo } = require('../utils/email');
+const { truncar } = require('../utils/helpers');
+
+// A coluna notificacoes.mensagem guarda no máximo 300 caracteres. Texto digitado pelo usuário (descrição do prazo, título da
+// tarefa) pode ser maior; sem este corte o aviso se perdia em silêncio ou, na conclusão, desfazia a conclusão inteira.
+const LIMITE_MENSAGEM = 300;
+const caberNaColuna = (mensagem) => truncar(String(mensagem), LIMITE_MENSAGEM - 3);
 
 // ── Notificação na tela ────────────────────────────────────────────────────
 
@@ -16,7 +22,7 @@ async function criarNotificacao(usuario_id, prazo_id, mensagem) {
       await conn.beginTransaction();
       await conn.execute(
         'INSERT INTO notificacoes (usuario_id, prazo_id, mensagem) VALUES (?, ?, ?)',
-        [usuario_id, prazo_id, mensagem]
+        [usuario_id, prazo_id, caberNaColuna(mensagem)]
       );
       await conn.commit();
     } catch (err) { await conn.rollback(); throw err; }
@@ -32,7 +38,7 @@ async function criarNotificacao(usuario_id, prazo_id, mensagem) {
 async function notificarConclusao({ conn, usuario_id, prazo_id = null, tarefa_id = null, mensagem }) {
   await conn.execute(
     'INSERT INTO notificacoes (usuario_id, prazo_id, tarefa_id, mensagem) VALUES (?, ?, ?, ?)',
-    [usuario_id, prazo_id, tarefa_id, mensagem]
+    [usuario_id, prazo_id, tarefa_id, caberNaColuna(mensagem)]
   );
 }
 
@@ -217,4 +223,5 @@ module.exports = {
   emailTarefaAtribuida,
   emailPrazosPendentes,
   emailPrazosAtrasados,
+  escaparHtml,
 };

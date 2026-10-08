@@ -346,12 +346,12 @@ export default function Layout({ children }) {
                   </div>
                   <div style={{maxHeight:'320px',overflowY:'auto'}}>
                     {notifs.length === 0
-                      ? <p style={{padding:'20px',textAlign:'center',color:'#9ca3af',fontSize:'13px'}}>
+                      ? <p style={{padding:'20px',textAlign:'center',color:'#6b7280',fontSize:'13px'}}>
                           {verTodas ? 'Nenhuma notificação' : 'Nenhuma notificação nova'}
                         </p>
                       : notifs.map(n => {
                         // No histórico ("Ver todas"), as já lidas aparecem em cinza claro; as novas em preto.
-                        const cor = n.lida ? '#9ca3af' : '#111';
+                        const cor = n.lida ? '#6b7280' : '#111';
                         return (
                         <div key={n.id} style={{padding:'12px 16px',borderBottom:'1px solid #f3f4f6',fontSize:'13px'}}>
                           <div style={{color:cor}}>{n.mensagem}</div>

@@ -19,7 +19,7 @@ async function listar(req, res) {
        LEFT JOIN prazo_subtipo ps   ON pp.subtipo_id = ps.id
        LEFT JOIN tblproc pr         ON pp.processo_id = pr.id
        WHERE n.usuario_id = ? AND n.lida = 0
-       ORDER BY n.criado_em DESC
+       ORDER BY n.criado_em DESC, n.id DESC
        LIMIT 20`,
       [req.usuario.id]
     );
@@ -42,7 +42,7 @@ async function listarTodas(req, res) {
        LEFT JOIN prazo_subtipo ps   ON pp.subtipo_id = ps.id
        LEFT JOIN tblproc pr         ON pp.processo_id = pr.id
        WHERE n.usuario_id = ?
-       ORDER BY n.criado_em DESC
+       ORDER BY n.criado_em DESC, n.id DESC
        LIMIT 50`,
       [req.usuario.id]
     );
