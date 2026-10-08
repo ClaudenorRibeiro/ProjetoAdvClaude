@@ -12,6 +12,7 @@ import { UFS } from '../../utils/ufs';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import LimitesRelatorios from './LimitesRelatorios';
+import { validarSenha, DICA_SENHA } from '../../utils/senha';
 import MenuAcoes from '../../components/MenuAcoes';
 import { useAuth } from '../../context/AuthContext';
 
@@ -761,7 +762,7 @@ function ModalHistoricoUsuario({ usuario, onFechar }) {
   const [carregando, setCarregando] = useState(false);
 
   const ACAO_LABEL = { criar: 'Criou', editar: 'Editou', excluir: 'Excluiu', visualizar: 'Visualizou', login: 'Login', logout: 'Logout', rodar: 'Rodou', exportar: 'Exportou', compartilhar: 'Compartilhou', descompartilhar: 'Saiu do compartilhado', enviar: 'Enviou por e-mail' };
-  const ACAO_COR   = { criar: '#16a34a', editar: '#2563eb', excluir: '#dc2626', visualizar: '#6b7280', login: '#0891b2', logout: '#7c3aed', rodar: '#0d9488', exportar: '#b45309', compartilhar: '#7c3aed', descompartilhar: '#7c3aed', enviar: '#0369a1' };
+  const ACAO_COR   = { criar: '#166534', editar: '#1d4ed8', excluir: '#b91c1c', visualizar: '#4b5563', login: '#0e7490', logout: '#6d28d9', rodar: '#0f766e', exportar: '#92400e', compartilhar: '#6d28d9', descompartilhar: '#6d28d9', enviar: '#075985' };
 
   async function buscar() {
     setCarregando(true);
@@ -843,18 +844,6 @@ function ModalHistoricoUsuario({ usuario, onFechar }) {
   );
 }
 
-// Valida requisitos de senha — retorna mensagem de erro ou null se válida
-function validarSenha(senha) {
-  if (!senha || senha.length < 8)   return 'A senha deve ter no mínimo 8 caracteres';
-  if (senha.length > 20)            return 'A senha deve ter no máximo 20 caracteres';
-  if (!/[A-Z]/.test(senha))         return 'A senha deve conter pelo menos 1 letra maiúscula';
-  if (!/[a-z]/.test(senha))         return 'A senha deve conter pelo menos 1 letra minúscula';
-  if (!/[0-9]/.test(senha))         return 'A senha deve conter pelo menos 1 número';
-  if (!/[^A-Za-z0-9]/.test(senha))  return 'A senha deve conter pelo menos 1 caractere especial';
-  return null;
-}
-
-const DICA_SENHA = 'Entre 8 e 20 caracteres, com letra maiúscula, minúscula, número e caractere especial.';
 
 // Modal para admin redefinir senha de um usuário
 function ModalRedefinirSenha({ usuario, onFechar }) {
@@ -895,7 +884,7 @@ function ModalRedefinirSenha({ usuario, onFechar }) {
               value={senha} onChange={e => setSenha(e.target.value)}
               placeholder="Nova senha" autoFocus
               autoComplete="new-password" />
-            <small style={{ color: '#777', fontSize: '12px' }}>{DICA_SENHA}</small>
+            <small style={{ color: '#5b6472', fontSize: '12px' }}>{DICA_SENHA}</small>
           </div>
           <div className="form-group">
             <label className="form-label">Confirmar senha *</label>
@@ -974,7 +963,7 @@ function ModalUsuario({ usuario, onFechar }) {
               <input aria-label="Senha" type="password" className="form-control" value={form.senha||''}
                 onChange={e => set('senha', e.target.value)} placeholder="Senha"
                 autoComplete="new-password" />
-              <small style={{ color: '#777', fontSize: '12px' }}>{DICA_SENHA}</small>
+              <small style={{ color: '#5b6472', fontSize: '12px' }}>{DICA_SENHA}</small>
             </div>
           )}
           {usuario && (
@@ -983,7 +972,7 @@ function ModalUsuario({ usuario, onFechar }) {
               <input aria-label="Nova senha (deixe em branco para não alterar)" type="password" className="form-control" value={form.senha||''}
                 onChange={e => set('senha', e.target.value)} placeholder="Nova senha"
                 autoComplete="new-password" />
-              {form.senha && <small style={{ color: '#777', fontSize: '12px' }}>{DICA_SENHA}</small>}
+              {form.senha && <small style={{ color: '#5b6472', fontSize: '12px' }}>{DICA_SENHA}</small>}
             </div>
           )}
           <div className="grid-3">

@@ -23,8 +23,10 @@ export default function Login() {
 
   // Aviso guardado pelo interceptor quando a sessão foi encerrada por login em outro dispositivo.
   useEffect(() => {
+    // Lê SEM apagar: a página pode ser montada duas vezes seguidas (navegação interna + recarga do endereço) e a 1ª leitura
+    // consumia o aviso. Ele só é apagado quando a pessoa entra de novo (handleSubmit).
     const a = sessionStorage.getItem('avisoSessao');
-    if (a) { setAviso(a); sessionStorage.removeItem('avisoSessao'); }
+    if (a) setAviso(a);
   }, []);
 
   useEffect(() => {
@@ -84,6 +86,7 @@ export default function Login() {
     try {
       const resultado = await logar(login, senha);
       if (resultado.ok) {
+        sessionStorage.removeItem('avisoSessao');
         navigate('/dashboard');
       } else {
         setErro(resultado.mensagem || 'Login ou senha incorretos');

@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { authAPI } from '../../services/api';
+import { validarSenha, DICA_SENHA } from '../../utils/senha';
 
 export default function ResetSenha() {
   const [searchParams]  = useSearchParams();
@@ -32,7 +33,8 @@ export default function ResetSenha() {
   async function handleSubmit(e) {
     e.preventDefault();
     setErro('');
-    if (senha.length < 6)   { setErro('A senha deve ter no mínimo 6 caracteres'); return; }
+    const errSenha = validarSenha(senha);
+    if (errSenha)           { setErro(errSenha); return; }
     if (senha !== confirma)  { setErro('As senhas não coincidem'); return; }
 
     setSalvando(true);
@@ -106,7 +108,7 @@ export default function ResetSenha() {
                 <input aria-label="Nova senha"
                   type={verSenha ? 'text' : 'password'} className="form-control"
                   value={senha} onChange={e => setSenha(e.target.value)}
-                  placeholder="Mínimo 6 caracteres" autoFocus
+                  placeholder="8 a 20 caracteres" autoFocus
                   autoComplete="new-password"
                   style={{ paddingRight: '42px' }}
                 />
@@ -130,6 +132,7 @@ export default function ResetSenha() {
                   </svg>
                 </button>
               </div>
+              <small style={{ color: '#5b6472', fontSize: '12px' }}>{DICA_SENHA}</small>
             </div>
 
             <div className="form-group">

@@ -215,12 +215,12 @@ test('@critical Redefinir senha — link bom: mostra o nome, valida (curta, dife
   const erro = page.getByText(/A senha deve|As senhas não/).first();
   await page.getByLabel('Nova senha', { exact: true }).fill('Ab1!');
   await enviar.click();
-  await expect(page.getByText('A senha deve ter no mínimo 6 caracteres')).toBeVisible();
+  await expect(page.getByText('A senha deve ter no mínimo 8 caracteres')).toBeVisible();
   await page.getByLabel('Nova senha', { exact: true }).fill(novaSenhaOk);
   await page.getByLabel('Confirmar nova senha').fill('Diferente@9');
   await enviar.click();
   await expect(page.getByText('As senhas não coincidem')).toBeVisible();
-  // passa na tela (6 letras ou mais) mas o servidor exige a regra completa: o aviso do servidor aparece e nada muda
+  // a tela confere a regra completa (a mesma do servidor) antes de enviar: nada muda
   await page.getByLabel('Nova senha', { exact: true }).fill('abcdefgh');
   await page.getByLabel('Confirmar nova senha').fill('abcdefgh');
   await enviar.click();
