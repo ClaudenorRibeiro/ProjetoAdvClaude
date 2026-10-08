@@ -194,7 +194,7 @@ test('atualizar usuário: dados que faltam ou são ruins (nome/tipo ausentes, n�
   const antes = await linha(alvo.id);
   const base = { nome: 'Nome Ok', email: 'ok@example.invalid', oab: 'SP1', tipo: 'advogado', nivel: 2, ativo: 1 };
   const ruins = [
-    {}, { ...base, nome: undefined }, { ...base, nome: '' }, { ...base, nome: '   ' }, { ...base, tipo: undefined }, { ...base, nome: 123 }, { ...base, nome: ['a'] },
+    {}, { ...base, nome: undefined }, { ...base, nome: '' }, { ...base, nome: '   ' }, { ...base, nome: 123 }, { ...base, nome: ['a'] },
     { ...base, nome: 'n'.repeat(151) }, { ...base, email: 123 }, { ...base, email: 'e'.repeat(151) }, { ...base, oab: 'o'.repeat(31) }, { ...base, tipo: 't'.repeat(31) }, { ...base, tipo: 5 },
     { ...base, ativo: 'x' }, { ...base, ativo: 2 }, { ...base, ativo: [1] },
     { ...base, nivel: 0 }, { ...base, nivel: 'abc' },
@@ -207,6 +207,10 @@ test('atualizar usuário: dados que faltam ou são ruins (nome/tipo ausentes, n�
   }
   assert.deepEqual(f, []);
   assert.deepEqual(await linha(alvo.id), antes, 'nada pode ter mudado');
+  // tipo em branco ou ausente não é erro: mantém o tipo que o usuário já tinha
+  await sql("UPDATE usuarios SET tipo = 'estagiario' WHERE id = ?", [alvo.id]);
+  for (const tipo of [undefined, '']) assert.equal((await como(adm).put(`/api/configuracoes/usuarios/${alvo.id}`).send({ ...base, tipo })).status, 200);
+  assert.equal((await linha(alvo.id)).tipo, 'estagiario');
 });
 
 test('atualizar usuário: superusuário não pode ser alterado (403), inexistente = 404, e um id que só COMEÇA com número ("2abc") não mexe no usuário 2', async () => {

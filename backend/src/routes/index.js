@@ -3,7 +3,7 @@
 // ============================================================
 
 const express = require('express');
-const { protegerRotas } = require('../utils/rotasSeguras');
+const { protegerRotas, comIdNumerico } = require('../utils/rotasSeguras');
 const router = protegerRotas(express.Router());   // erro inesperado numa rota vira resposta 500, nunca derruba o servidor
 const rateLimit = require('express-rate-limit');
 
@@ -438,12 +438,12 @@ router.post('/configuracoes/feriados',            autenticar, apenasAdmin, confi
 router.delete('/configuracoes/feriados/:id',      autenticar, apenasAdmin, configuracaoCtrl.excluirFeriado);
 router.get('/configuracoes/usuarios',             autenticar, apenasAdmin, configuracaoCtrl.listarUsuarios);
 router.post('/configuracoes/usuarios',            autenticar, apenasAdmin, configuracaoCtrl.criarUsuario);
-router.put('/configuracoes/usuarios/:id',         autenticar, apenasAdmin, configuracaoCtrl.atualizarUsuario);
-router.put('/configuracoes/usuarios/:id/senha',      autenticar, apenasAdmin, configuracaoCtrl.redefinirSenhaAdmin);
-router.delete('/configuracoes/usuarios/:id',         autenticar, apenasAdmin, configuracaoCtrl.excluirUsuario);
-router.get('/configuracoes/usuarios/:id/historico',  autenticar, apenasAdmin, configuracaoCtrl.historicoUsuario);
-router.get('/configuracoes/permissoes/:usuarioId', autenticar, apenasAdmin, configuracaoCtrl.buscarPermissoes);
-router.put('/configuracoes/permissoes/:usuarioId', autenticar, apenasAdmin, configuracaoCtrl.salvarPermissoes);
+router.put('/configuracoes/usuarios/:id',         autenticar, apenasAdmin, comIdNumerico(configuracaoCtrl.atualizarUsuario, 'Usuário não encontrado'));
+router.put('/configuracoes/usuarios/:id/senha',      autenticar, apenasAdmin, comIdNumerico(configuracaoCtrl.redefinirSenhaAdmin, 'Usuário não encontrado'));
+router.delete('/configuracoes/usuarios/:id',         autenticar, apenasAdmin, comIdNumerico(configuracaoCtrl.excluirUsuario, 'Usuário não encontrado'));
+router.get('/configuracoes/usuarios/:id/historico',  autenticar, apenasAdmin, comIdNumerico(configuracaoCtrl.historicoUsuario, 'Usuário não encontrado'));
+router.get('/configuracoes/permissoes/:usuarioId', autenticar, apenasAdmin, comIdNumerico(configuracaoCtrl.buscarPermissoes, 'Usuário não encontrado', 'usuarioId'));
+router.put('/configuracoes/permissoes/:usuarioId', autenticar, apenasAdmin, comIdNumerico(configuracaoCtrl.salvarPermissoes, 'Usuário não encontrado', 'usuarioId'));
 router.get('/configuracoes/integracoes',          autenticar, apenasAdmin, configuracaoCtrl.buscarIntegracoes);
 router.put('/configuracoes/integracoes/:modulo',  autenticar, apenasAdmin, configuracaoCtrl.salvarIntegracao);
 router.get('/configuracoes/servidor-hora',        autenticar, apenasAdmin, configuracaoCtrl.horaServidor);

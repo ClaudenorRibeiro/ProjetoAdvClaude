@@ -444,15 +444,46 @@ async function listarUsuarios(req, res) {
 // um superusuário (que é "invisível para todos" e passa por qualquer permissão).
 function normalizarNivel(nivel) {
   if (nivel === undefined || nivel === null || nivel === '') return 2; // padrão: comum
+  if (typeof nivel !== 'number' && typeof nivel !== 'string') return null; // lista/objeto: Number([1]) viraria 1 (administrador)
   const n = Number(nivel);
   return [1, 2].includes(n) ? n : null; // null = inválido
+}
+
+// "Ativo" do usuário: só 0, 1, verdadeiro ou falso (ausente = ativo). Devolve 0/1, ou null se for inválido.
+function normalizarAtivo(ativo) {
+  if (ativo === undefined || ativo === null) return 1;
+  if (ativo === true || ativo === 1) return 1;
+  if (ativo === false || ativo === 0) return 0;
+  return null;
+}
+
+// Confere os textos do cadastro de usuário com o tamanho real das colunas (nome 150, e-mail 150, OAB 30, tipo 30).
+// Tudo precisa ser texto; vazio opcional vira nulo. Devolve { valores } ou { erro }.
+function lerDadosUsuario(corpo) {
+  const r = lerTextos(corpo, {
+    nome:  { rotulo: 'O nome', max: 150, obrigatorio: true },
+    email: { rotulo: 'O e-mail', max: 150 },
+    oab:   { rotulo: 'A OAB', max: 30, feminino: true },
+    tipo:  { rotulo: 'O tipo', max: 30 },
+  });
+  return r;
+}
+
+// Garante que, depois da mudança, ainda sobra OUTRO administrador ativo (nível 0 ou 1). Roda dentro da transação,
+// trancando as linhas, para dois administradores não se desativarem ao mesmo tempo.
+async function sobraOutroAdministrador(conn, idAtual) {
+  const [rest] = await conn.execute('SELECT id FROM usuarios WHERE nivel <= 1 AND ativo = 1 AND id <> ? FOR UPDATE', [idAtual]);
+  return rest.length > 0;
 }
 
 // POST /api/configuracoes/usuarios — Cria usuário
 async function criarUsuario(req, res) {
   try {
-    const { nome, login, senha, email, oab, tipo, nivel, ver_todos_processos } = req.body;
-    if (!nome || !login || !senha) return erro(res, 'Nome, login e senha são obrigatórios');
+    const { login, senha, nivel, ver_todos_processos } = req.body;
+    if (!req.body.nome || !login || !senha) return erro(res, 'Nome, login e senha são obrigatórios');
+    const lido = lerDadosUsuario(req.body);
+    if (lido.erro) return erro(res, lido.erro);
+    const { nome, email, oab, tipo } = lido.dados;
 
     // Login só pode ter letras (sem números, espaços ou símbolos) — regra do sistema
     const errLogin = validarLogin(login);
@@ -464,7 +495,7 @@ async function criarUsuario(req, res) {
     const nv = normalizarNivel(nivel);
     if (nv === null) return erro(res, 'Nível de usuário inválido. Escolha Administrador ou Comum.');
 
-    const [dup] = await pool.execute('SELECT id FROM usuarios WHERE login = ?', [login]);
+    const [dup] = await pool.execute('SELECT id FROM usuarios WHERE login = ?', [login.trim()]);
     if (dup.length) return erro(res, 'Login já está em uso');
 
     const senhaHash = await bcrypt.hash(senha, 12);
@@ -477,7 +508,7 @@ async function criarUsuario(req, res) {
         `INSERT INTO usuarios (nome, login, senha_hash, email, oab, tipo, nivel,
           ver_todos_processos, criado_por)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [nome.trim(), login.trim(), senhaHash, email || null, oab || null,
+        [nome, login.trim(), senhaHash, email, oab,
          tipo || 'advogado', nv, ver_todos_processos ? 1 : 0, req.usuario.id]
       );
       await auditoria.registrar(req.usuario.id, 'usuarios', 'criar', result.insertId, null, null, conn);
@@ -497,16 +528,23 @@ async function criarUsuario(req, res) {
 async function atualizarUsuario(req, res) {
   try {
     const { id } = req.params;
-    const { nome, email, oab, tipo, nivel, ativo, ver_todos_processos, senha } = req.body;
+    const { nivel, ativo, ver_todos_processos, senha } = req.body;
 
     // Não permite alterar o superusuário
-    const [usuario] = await pool.execute('SELECT nivel FROM usuarios WHERE id = ?', [id]);
+    const [usuario] = await pool.execute('SELECT nivel, ativo, tipo FROM usuarios WHERE id = ?', [id]);
     if (!usuario.length) return naoEncontrado(res, 'Usuário não encontrado');
     if (usuario[0].nivel === 0) return erro(res, 'Não é possível alterar o superusuário por aqui', 403);
 
     // Valida TUDO antes de gravar qualquer coisa (nível e senha, se enviada).
+    const lido = lerDadosUsuario(req.body);
+    if (lido.erro) return erro(res, lido.erro);
+    const { nome, email, oab } = lido.dados;
+    const tipo = lido.dados.tipo || usuario[0].tipo || 'advogado';   // tipo em branco = mantém o que já estava
+
     const nv = normalizarNivel(nivel);
     if (nv === null) return erro(res, 'Nível de usuário inválido. Escolha Administrador ou Comum.');
+    const ativoNovo = normalizarAtivo(ativo);
+    if (ativoNovo === null) return erro(res, 'Situação do usuário inválida (ativo ou inativo).');
 
     let novoHash = null;
     if (senha) {
@@ -520,14 +558,19 @@ async function atualizarUsuario(req, res) {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
+      // O último administrador ativo não pode ser desativado nem rebaixado: ninguém mais mexeria em usuários e permissões.
+      if (Number(usuario[0].nivel) === 1 && Number(usuario[0].ativo) === 1 && (nv !== 1 || ativoNovo === 0)
+          && !(await sobraOutroAdministrador(conn, id))) {
+        await conn.rollback();
+        return erro(res, 'Este é o último administrador ativo. Torne outro usuário administrador antes de desativar ou rebaixar este.');
+      }
       if (novoHash) {
         await conn.execute('UPDATE usuarios SET senha_hash = ? WHERE id = ?', [novoHash, id]);
       }
       await conn.execute(
         `UPDATE usuarios SET nome=?, email=?, oab=?, tipo=?, nivel=?, ativo=?, ver_todos_processos=?
          WHERE id = ?`,
-        [nome, email || null, oab || null, tipo, nv,
-         ativo !== undefined ? ativo : 1, ver_todos_processos ? 1 : 0, id]
+        [nome, email, oab, tipo, nv, ativoNovo, ver_todos_processos ? 1 : 0, id]
       );
       await auditoria.registrar(req.usuario.id, 'usuarios', 'editar', id, null, null, conn);
       await conn.commit();
@@ -549,6 +592,8 @@ async function atualizarUsuario(req, res) {
 async function buscarPermissoes(req, res) {
   try {
     const { usuarioId } = req.params;
+    const [existe] = await pool.execute('SELECT id FROM usuarios WHERE id = ?', [usuarioId]);
+    if (!existe.length) return naoEncontrado(res, 'Usuário não encontrado');
     const [rows] = await pool.execute(
       'SELECT modulo, submodulo, acao, permitido FROM permissoes WHERE usuario_id = ?',
       [usuarioId]
@@ -566,14 +611,34 @@ async function buscarPermissoes(req, res) {
   }
 }
 
+// Confere o formato das permissões recebidas (colunas: módulo e sub-módulo até 50, ação até 20). Devolve a mensagem de erro, ou null se estiver certo.
+function conferirPermissoes(permissoes) {
+  const objeto = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+  if (!objeto(permissoes)) return 'Nenhuma permissão recebida.';
+  for (const [chave, acoes] of Object.entries(permissoes)) {
+    const partes = chave.split('.');
+    if (partes.length > 2 || partes.some(p => p === '' || p.length > 50)) return `Módulo de permissão inválido: "${chave.slice(0, 60)}".`;
+    if (!objeto(acoes)) return `As permissões de "${chave}" estão em formato inválido.`;
+    for (const [acao, permitido] of Object.entries(acoes)) {
+      if (acao === '' || acao.length > 20) return `Ação de permissão inválida em "${chave}".`;
+      if (![true, false, 0, 1].includes(permitido)) return `O valor de "${chave}.${acao}" precisa ser verdadeiro ou falso.`;
+    }
+  }
+  return null;
+}
+
 // PUT /api/configuracoes/permissoes/:usuarioId — Salva permissões do usuário
 // Recebe: { 'pessoas': { visualizar: true }, 'processos.andamentos': { cadastrar: false }, ... }
 async function salvarPermissoes(req, res) {
   const { usuarioId } = req.params;
   const { permissoes } = req.body;
-  if (!permissoes || typeof permissoes !== 'object') {
-    return erro(res, 'Nenhuma permissão recebida.');
-  }
+  // Confere TUDO antes de apagar qualquer coisa: o corpo precisa ser { 'módulo' ou 'módulo.submódulo': { ação: verdadeiro/falso } }.
+  const erroCorpo = conferirPermissoes(permissoes);
+  if (erroCorpo) return erro(res, erroCorpo);
+
+  const [alvo] = await pool.execute('SELECT nivel FROM usuarios WHERE id = ?', [usuarioId]);
+  if (!alvo.length) return naoEncontrado(res, 'Usuário não encontrado');
+  if (alvo[0].nivel === 0) return erro(res, 'O superusuário não tem permissões para editar', 403);
 
   // Transação: o DELETE das permissões antigas e os INSERT das novas são um bloco
   // ÚNICO. Se qualquer INSERT falhar, o rollback devolve o usuário às permissões
@@ -946,6 +1011,11 @@ async function historicoUsuario(req, res) {
 
     const [usuario] = await pool.execute('SELECT nome FROM usuarios WHERE id = ?', [id]);
     if (!usuario.length) return naoEncontrado(res, 'Usuário não encontrado');
+    for (const [valor, rotulo] of [[data_de, 'A data inicial'], [data_ate, 'A data final']]) {
+      if (valor === undefined || valor === '') continue;
+      const d = dataIso(valor, { rotulo });
+      if (d.erro) return erro(res, d.erro);
+    }
 
     // Filtra e limita primeiro (derivada "l"); só então resolve o número da pasta.
     let filtro = 'WHERE usuario_id = ?';
