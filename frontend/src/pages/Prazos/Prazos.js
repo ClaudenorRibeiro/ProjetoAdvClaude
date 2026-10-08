@@ -470,9 +470,12 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
       }
     }
     setForm(f => ({ ...f, data_final: dataParaIsoLocal(data) }));
+    // Resposta atrasada não pode sobrescrever o que a pessoa digitou depois: ao mudar qualquer campo, esta consulta deixa de valer.
+    let vale = true;
     prazosAPI.calcularDataFinal(form.data_inicio, form.quantidade, form.tipo_dias)
-      .then(r => { if (r.data.ok) setForm(f => ({ ...f, data_final: r.data.dados.data_final })); })
+      .then(r => { if (vale && r.data.ok) setForm(f => ({ ...f, data_final: r.data.dados.data_final })); })
       .catch(() => {});
+    return () => { vale = false; };
   }, [modo, form.data_inicio, form.quantidade, form.tipo_dias]);
 
   // CAMINHO DATA → DIAS: quando o usuário digita a Data final, preenche a Quantidade (só referência).
@@ -492,9 +495,11 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
       while (d <= fim) { const wd = d.getDay(); if (wd !== 0 && wd !== 6) qtd++; d.setDate(d.getDate() + 1); }
     }
     setForm(f => ({ ...f, quantidade: textoQuantidade(qtd) }));
+    let vale = true; // resposta atrasada não sobrescreve o que a pessoa digitou depois
     prazosAPI.calcularDias(form.data_inicio, form.data_final, form.tipo_dias)
-      .then(r => { if (r.data.ok && r.data.dados.quantidade != null) setForm(f => ({ ...f, quantidade: textoQuantidade(r.data.dados.quantidade) })); })
+      .then(r => { if (vale && r.data.ok && r.data.dados.quantidade != null) setForm(f => ({ ...f, quantidade: textoQuantidade(r.data.dados.quantidade) })); })
       .catch(() => {});
+    return () => { vale = false; };
   }, [modo, form.data_inicio, form.data_final, form.tipo_dias]);
 
   async function buscarPastas(termo) {
@@ -796,9 +801,12 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
       while (contados < qtd) { data.setDate(data.getDate() + 1); const d = data.getDay(); if (d !== 0 && d !== 6) contados++; }
     }
     setForm(f => ({ ...f, data_final: dataParaIsoLocal(data) }));
+    // Resposta atrasada não pode sobrescrever o que a pessoa digitou depois: ao mudar qualquer campo, esta consulta deixa de valer.
+    let vale = true;
     prazosAPI.calcularDataFinal(form.data_inicio, form.quantidade, form.tipo_dias)
-      .then(r => { if (r.data.ok) setForm(f => ({ ...f, data_final: r.data.dados.data_final })); })
+      .then(r => { if (vale && r.data.ok) setForm(f => ({ ...f, data_final: r.data.dados.data_final })); })
       .catch(() => {});
+    return () => { vale = false; };
   }, [modo, form.data_inicio, form.quantidade, form.tipo_dias]);
 
   // CAMINHO DATA → DIAS (só quando o usuário mexeu na Data final; a data digitada é a que MANDA)
@@ -817,9 +825,11 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
       while (d <= fim) { const wd = d.getDay(); if (wd !== 0 && wd !== 6) qtd++; d.setDate(d.getDate() + 1); }
     }
     setForm(f => ({ ...f, quantidade: textoQuantidade(qtd) }));
+    let vale = true; // resposta atrasada não sobrescreve o que a pessoa digitou depois
     prazosAPI.calcularDias(form.data_inicio, form.data_final, form.tipo_dias)
-      .then(r => { if (r.data.ok && r.data.dados.quantidade != null) setForm(f => ({ ...f, quantidade: textoQuantidade(r.data.dados.quantidade) })); })
+      .then(r => { if (vale && r.data.ok && r.data.dados.quantidade != null) setForm(f => ({ ...f, quantidade: textoQuantidade(r.data.dados.quantidade) })); })
       .catch(() => {});
+    return () => { vale = false; };
   }, [modo, form.data_inicio, form.data_final, form.tipo_dias]);
 
   function set(k, v) { setForm(f => ({...f, [k]: v})); }

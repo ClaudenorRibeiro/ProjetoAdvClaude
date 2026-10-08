@@ -403,6 +403,22 @@ test('@critical Novo Prazo (pasta travada): processo e título já preenchidos, 
   expect(await noBanco('SELECT id FROM notificacoes WHERE prazo_id = ? AND usuario_id = 2', [p.id])).toHaveLength(1);        // o delegado foi avisado na hora
 });
 
+test('@critical Novo Prazo: resposta ATRASADA do servidor não sobrescreve o que a pessoa digitou depois (dias→data e data→dias)', async ({ page }) => {
+  // Segura de propósito a resposta do cálculo de data final por 1,5 s: antes da correção ela chegava depois e trocava a data digitada.
+  await page.route(/\/api\/prazos\/calcular\?/, async (rota) => { await new Promise(r => setTimeout(r, 1500)); await rota.continue(); });
+  await loginPelaTela(page);
+  await abrirNovoPrazo(page);
+  const jan = novoPrazo(page);
+  await jan.getByLabel('Data início', { exact: true }).fill('2026-03-02');
+  await jan.getByLabel('Tipo de dias', { exact: true }).selectOption('corridos');
+  await jan.getByLabel('Quantidade de dias', { exact: true }).fill('10');           // pede a data final ao servidor (resposta demora)
+  await expect(jan.getByLabel('Data final', { exact: true })).toHaveValue('2026-03-11');   // cálculo local imediato
+  await jan.getByLabel('Data final', { exact: true }).fill('2026-03-20');           // a pessoa digita a data antes da resposta chegar
+  await page.waitForTimeout(2500);                                                  // dá tempo da resposta atrasada chegar
+  await expect(jan.getByLabel('Data final', { exact: true })).toHaveValue('2026-03-20');
+  await expect(jan.getByLabel('Quantidade de dias', { exact: true })).toHaveValue('19');
+});
+
 test('@critical Novo Prazo: Cancelar, ✕ e ESC não gravam; subtipo depende do tipo; "Salvando..."', async ({ page }) => {
   await loginPelaTela(page);
   await abrirNovoPrazo(page);

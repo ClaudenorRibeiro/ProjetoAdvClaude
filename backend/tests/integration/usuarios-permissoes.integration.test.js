@@ -24,7 +24,7 @@ async function sql(q, params = []) {
 // Cria o usuário direto no banco, já com uma sessão ativa, e devolve o crachá (token) dele.
 async function novoUsuario({ nivel = 2, ativo = 1, prefixo = 'usr' } = {}) {
   SEQ += 1;
-  const login = `${prefixo}${String.fromCharCode(97 + (SEQ % 26))}${crypto.randomBytes(3).toString('hex').replace(/[0-9]/g, 'z')}`;
+  const login = `${prefixo}${String.fromCharCode(97 + (SEQ % 26))}${crypto.randomBytes(3).toString('hex').replace(/[0-9]/g, d => 'ghijklmnop'[d])}`;
   const sessao = crypto.randomBytes(16).toString('hex');
   const r = await sql(`INSERT INTO usuarios (nome, login, senha_hash, email, tipo, nivel, ativo, sessao_atual) VALUES (?, ?, ?, ?, 'advogado', ?, ?, ?)`,
     [`Pessoa ${login}`, login, bcrypt.hashSync(SENHA, 4), `${login}@example.invalid`, nivel, ativo, sessao]);
