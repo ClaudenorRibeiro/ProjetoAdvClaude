@@ -654,6 +654,51 @@ CREATE TABLE `auditoria_prazo` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `avisos_cliente`
+--
+
+DROP TABLE IF EXISTS `avisos_cliente`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `avisos_cliente` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `modulo` varchar(20) NOT NULL COMMENT 'pericia | audiencia | parabens',
+  `pericia_id` int DEFAULT NULL,
+  `audiencia_id` int DEFAULT NULL,
+  `pessoa_fisica_id` int DEFAULT NULL COMMENT 'so nos parabens: o aniversariante',
+  `referencia_id` int GENERATED ALWAYS AS (coalesce(`pericia_id`,`audiencia_id`,`pessoa_fisica_id`)) VIRTUAL,
+  `cliente_tipo` varchar(10) NOT NULL COMMENT 'fisica | juridica',
+  `cliente_id` int NOT NULL,
+  `processo_id` int DEFAULT NULL,
+  `data_evento` date NOT NULL COMMENT 'data da pericia/audiencia/aniversario',
+  `data_aviso` date NOT NULL COMMENT 'primeiro dia em que o aviso podia aparecer',
+  `assunto` varchar(200) NOT NULL,
+  `texto` text NOT NULL,
+  `texto_editado` tinyint(1) NOT NULL DEFAULT '0' COMMENT '1 = alguem editou o texto na tela (nao regenerar)',
+  `status` varchar(15) NOT NULL DEFAULT 'pendente' COMMENT 'pendente | enviado | descartado | expirado | cancelado',
+  `modo` varchar(10) DEFAULT NULL COMMENT 'tela | automatico (como foi decidido)',
+  `decidido_por` int DEFAULT NULL,
+  `decidido_em` datetime DEFAULT NULL,
+  `motivo_status` varchar(300) DEFAULT NULL,
+  `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_aviso_ocorrencia` (`modulo`,`referencia_id`,`data_evento`,`cliente_tipo`,`cliente_id`),
+  KEY `idx_aviso_status` (`status`,`modulo`),
+  KEY `idx_aviso_pericia` (`pericia_id`),
+  KEY `idx_aviso_audiencia` (`audiencia_id`),
+  KEY `idx_aviso_pessoa_fisica` (`pessoa_fisica_id`),
+  KEY `idx_aviso_processo` (`processo_id`),
+  KEY `idx_aviso_decidido_por` (`decidido_por`),
+  CONSTRAINT `fk_aviso_audiencia` FOREIGN KEY (`audiencia_id`) REFERENCES `audiencia` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_aviso_decidido_por` FOREIGN KEY (`decidido_por`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `fk_aviso_pericia` FOREIGN KEY (`pericia_id`) REFERENCES `pericia` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_aviso_pessoa_fisica` FOREIGN KEY (`pessoa_fisica_id`) REFERENCES `pessoas_fisicas` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_aviso_processo` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `chk_aviso_uma_referencia` CHECK (((((`pericia_id` is not null) + (`audiencia_id` is not null)) + (`pessoa_fisica_id` is not null)) = 1))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `calendario`
 --
 
@@ -709,6 +754,10 @@ CREATE TABLE `configuracoes_escritorio` (
   `oab_principal` varchar(30) DEFAULT NULL,
   `modelos_email_perito` json DEFAULT NULL COMMENT 'Modelos editáveis de e-mail enviados ao perito a partir da ata',
   `max_relatorios_por_usuario` int NOT NULL DEFAULT '10' COMMENT 'limite padrao de relatorios pessoais por usuario',
+  `avisos_pericia_mostrar` tinyint(1) NOT NULL DEFAULT '1' COMMENT '1 = avisos de pericia aos clientes passam pela tela de conferencia; 0 = saem sozinhos (e-mail e SMS)',
+  `avisos_audiencia_mostrar` tinyint(1) NOT NULL DEFAULT '1' COMMENT '1 = avisos de audiencia aos clientes passam pela tela de conferencia; 0 = saem sozinhos (e-mail e SMS)',
+  `avisos_parabens_mostrar` tinyint(1) NOT NULL DEFAULT '1' COMMENT '1 = parabens de aniversario passam pela tela de conferencia; 0 = saem sozinhos (e-mail e SMS)',
+  `dias_aviso_parabens` int NOT NULL DEFAULT '0' COMMENT 'dias ANTES do aniversario para aparecer o aviso de parabens (0 = no proprio dia)',
   PRIMARY KEY (`id`),
   KEY `fk_config_advogado_principal` (`advogado_principal_id`),
   CONSTRAINT `fk_config_advogado_principal` FOREIGN KEY (`advogado_principal_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
@@ -1068,9 +1117,12 @@ CREATE TABLE `log_comunicacoes` (
   `processo_id` int DEFAULT NULL,
   `usuario_id` int DEFAULT NULL,
   `enviado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  `aviso_id` int DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `processo_id` (`processo_id`),
   KEY `usuario_id` (`usuario_id`),
+  KEY `idx_logcom_aviso` (`aviso_id`),
+  CONSTRAINT `fk_logcom_aviso` FOREIGN KEY (`aviso_id`) REFERENCES `avisos_cliente` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_logcomun_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`),
   CONSTRAINT `log_comunicacoes_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -2423,7 +2475,13 @@ CREATE TABLE `telefones_pf` (
   `principal` tinyint(1) DEFAULT '0',
   `ativo` tinyint(1) DEFAULT '1',
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  `whatsapp` tinyint(1) NOT NULL DEFAULT '0' COMMENT '1 = este e o numero de WhatsApp da pessoa (no maximo um ativo)',
+  `sms` tinyint(1) NOT NULL DEFAULT '0' COMMENT '1 = este e o numero de SMS da pessoa (no maximo um ativo)',
+  `whatsapp_unico` int GENERATED ALWAYS AS (if(((`whatsapp` = 1) and (`ativo` = 1)),`pessoa_id`,NULL)) VIRTUAL,
+  `sms_unico` int GENERATED ALWAYS AS (if(((`sms` = 1) and (`ativo` = 1)),`pessoa_id`,NULL)) VIRTUAL,
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_tel_pf_whatsapp` (`whatsapp_unico`),
+  UNIQUE KEY `uq_tel_pf_sms` (`sms_unico`),
   KEY `pessoa_id` (`pessoa_id`),
   CONSTRAINT `telefones_pf_ibfk_1` FOREIGN KEY (`pessoa_id`) REFERENCES `pessoas_fisicas` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=22429 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -2444,7 +2502,13 @@ CREATE TABLE `telefones_pj` (
   `principal` tinyint(1) DEFAULT '0',
   `ativo` tinyint(1) DEFAULT '1',
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  `whatsapp` tinyint(1) NOT NULL DEFAULT '0' COMMENT '1 = este e o numero de WhatsApp da pessoa (no maximo um ativo)',
+  `sms` tinyint(1) NOT NULL DEFAULT '0' COMMENT '1 = este e o numero de SMS da pessoa (no maximo um ativo)',
+  `whatsapp_unico` int GENERATED ALWAYS AS (if(((`whatsapp` = 1) and (`ativo` = 1)),`pessoa_id`,NULL)) VIRTUAL,
+  `sms_unico` int GENERATED ALWAYS AS (if(((`sms` = 1) and (`ativo` = 1)),`pessoa_id`,NULL)) VIRTUAL,
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_tel_pj_whatsapp` (`whatsapp_unico`),
+  UNIQUE KEY `uq_tel_pj_sms` (`sms_unico`),
   KEY `pessoa_id` (`pessoa_id`),
   CONSTRAINT `telefones_pj_ibfk_1` FOREIGN KEY (`pessoa_id`) REFERENCES `pessoas_juridicas` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
