@@ -577,7 +577,7 @@ test('@critical Clicar na linha do prazo abre "Detalhes do Prazo" só para ver; 
   await expect(jan.getByLabel('Data final', { exact: true })).toHaveValue(dia(6));
   await expect(jan.getByLabel('Descrição', { exact: true })).toBeDisabled();
   await expect(jan.getByLabel('Data final', { exact: true })).toBeDisabled();
-  await expect(jan.getByLabel('Delegar para')).toBeDisabled();
+  await expect(jan.getByRole('combobox', { name: 'Delegar para' })).toBeDisabled();
   await expect(jan.getByRole('button', { name: 'Salvar Alterações' })).toHaveCount(0);
   await semViolacoes(page, 'janela Detalhes do Prazo');
   await jan.getByRole('button', { name: 'Editar', exact: true }).click();
