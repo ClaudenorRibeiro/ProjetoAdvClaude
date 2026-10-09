@@ -228,7 +228,7 @@ export default function Agenda() {
                             : (!c.dia_todo && c.hora_inicio) ? c.hora_inicio.slice(0, 5) : '23:59';
               return {
                 id: `compromisso-${c.id}`,
-                title: `📌 ${c.titulo}`,
+                title: c.titulo,
                 start: new Date(`${String(c.data).slice(0, 10)}T${horaIni}:00`),
                 end:   new Date(`${String(c.data).slice(0, 10)}T${horaFim}:00`),
                 allDay: !!c.dia_todo,
@@ -550,7 +550,7 @@ export default function Agenda() {
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 <button className="btn btn-primary"
                   onClick={() => { setModalCompromisso({ dataInicial: format(diaSelecionado, 'yyyy-MM-dd') }); setDiaSelecionado(null); }}>
-                  📌 Novo compromisso
+                  Novo compromisso
                 </button>
                 {/* Nova tarefa: abre o MESMO ModalTarefa da tela de Tarefas, aqui dentro da Agenda (não navega mais
                     para /tarefas — o usuário fica na tela que escolheu). Gated por 'tarefas.cadastrar', igual ao botão

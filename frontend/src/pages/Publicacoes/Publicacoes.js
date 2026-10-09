@@ -492,7 +492,7 @@ function BarraAcoesPublicacao({ pub, podeAgir, podeCriarPericia, podeAtribuir, o
     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
       {podeAgir && (
         <>
-          <button className="btn btn-outline" onClick={() => onCriar('prazo', pub)}>📌 Criar prazo</button>
+          <button className="btn btn-outline" onClick={() => onCriar('prazo', pub)}>Criar prazo</button>
           <button className="btn btn-outline" onClick={() => onCriar('tarefa', pub)}>✓ Criar tarefa</button>
           <button className="btn btn-outline" onClick={() => onCriar('compromisso', pub)}>📅 Criar compromisso</button>
           <button className="btn btn-outline" onClick={() => onEmail(pub)}>📧 Enviar por e-mail</button>
@@ -1433,7 +1433,7 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
                       <MenuAcoes itens={[
                         itemEtiquetasSubmenu({ definicoes: etqDefs, slotAtual: p.etiqueta_pessoal,
                           onMarcar: (slot) => marcarEtq(p.id, slot) }),
-                        { label: 'Criar prazo', icone: '📌',
+                        { label: 'Criar prazo',
                           oculto: !p.pode_agir,
                           onClick: () => setAcaoAberta({ tipo: 'prazo', pub: p }) },
                         { label: 'Criar tarefa', icone: '✓',
@@ -2151,7 +2151,7 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
                       <MenuAcoes itens={[
                         itemEtiquetasSubmenu({ definicoes: etqDefs, slotAtual: p.etiqueta_pessoal,
                           onMarcar: (slot) => marcarEtq(p.id, slot) }),
-                        { label: 'Criar prazo', icone: '📌',
+                        { label: 'Criar prazo',
                           oculto: !p.pode_agir,
                           onClick: () => setAcaoAberta({ tipo: 'prazo', pub: p }) },
                         { label: 'Criar tarefa', icone: '✓',
@@ -2548,7 +2548,7 @@ function ModalHistorico({ publicacao, onFechar }) {
                     {total === 0 ? 'nenhuma ainda.' : (
                       <ul style={{ margin: '6px 0 0', paddingLeft: '18px', lineHeight: '1.7' }}>
                         {prazos.map(a => (
-                          <li key={'p' + a.id}>📌 Prazo: {a.titulo || 'Prazo'} — vence {formatarData(a.data_vencimento)}
+                          <li key={'p' + a.id}>Prazo: {a.titulo || 'Prazo'} — vence {formatarData(a.data_vencimento)}
                             {a.processo_numero ? ` · proc. ${a.processo_numero}` : ''}
                             {a.status === 'cancelado' ? ' (cancelado)' : a.status === 'concluido' ? ' (concluído)' : ''}
                             <span style={{ color: '#1a56db' }}> · 👤 {a.direcionado_nome || 'Escritório'}</span></li>

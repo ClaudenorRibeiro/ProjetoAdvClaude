@@ -3115,12 +3115,12 @@ function CampoLocalVara({ varas, foruns, varaId, onChange, onRecarregarVaras, so
       {/* Endereço informativo abaixo */}
       {varaSelecionada && endereco && (
         <div style={{ marginTop: 6, padding: '7px 12px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, fontSize: 14, fontWeight: 600, color: '#1e40af' }}>
-          📍 {endereco}
+          {endereco}
         </div>
       )}
       {varaSelecionada && !endereco && (
         <div style={{ marginTop: 6, fontSize: 12, color: '#5b6472' }}>
-          📍 Endereço não cadastrado para este fórum
+          Endereço não cadastrado para este fórum
         </div>
       )}
 
