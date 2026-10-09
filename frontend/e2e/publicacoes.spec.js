@@ -401,3 +401,38 @@ test('@critical Permissões: quem só VISUALIZA não vê Importar, "Ver", seleç
   await page.keyboard.press('Escape');
   await semViolacoes(page, 'Publicações para quem só visualiza');
 });
+
+test('@critical Publicações: Criar tarefa de Rotina Interna mostra o processo da publicação e grava o número na frente do título; tarefa de Processo não muda', async ({ page }) => {
+  const x = await nova({ data: '2026-02-17', numero_processo: PROC, texto: 'Pub E2E T9 rotina com numero' });
+  await abrir(page);
+  await procurar(page, 'Pub E2E T9');
+  const abrirNova = async () => {
+    await abrirMenuAcoes(page, linha(page, 'T9 rotina'));
+    await item(page, 'Criar tarefa').click();
+    const j = janela(page, 'Nova Tarefa');
+    await expect(j).toBeVisible();
+    return j;
+  };
+  // Tipo Processo (padrão): não aparece a linha do número da rotina e o título não ganha prefixo.
+  let j = await abrirNova();
+  await expect(j.getByLabel('Processo da publicação')).toHaveCount(0);
+  await j.getByRole('button', { name: /Rotina Interna/ }).click();
+  const campo = j.getByLabel('Processo da publicação');
+  await expect(campo).toHaveValue(PROC);
+  await expect(campo).toHaveJSProperty('readOnly', true);
+  await semViolacoes(page, 'Nova Tarefa (Rotina Interna) vinda da publicação');
+  // Título grande demais com o número na frente: avisa e não grava.
+  await j.getByLabel('Título', { exact: true }).fill('a'.repeat(290));
+  await j.getByRole('button', { name: 'Salvar Tarefa' }).click();
+  await expect(page.getByText('Título muito longo')).toBeVisible();
+  await page.getByRole('button', { name: /OK|Entendi|Fechar/ }).last().click();
+  expect((await noBanco('SELECT COUNT(*) AS n FROM tarefas WHERE publicacao_id = ?', [x]))[0].n).toBe(0);
+  await j.getByLabel('Título', { exact: true }).fill('cadastrar processo');
+  await j.getByRole('button', { name: 'Salvar Tarefa' }).click();
+  await expect(j).toHaveCount(0);
+  const t = await noBanco('SELECT titulo, processo_id FROM tarefas WHERE publicacao_id = ?', [x]);
+  expect(t).toHaveLength(1);
+  expect(t[0].titulo.startsWith(`${PROC} - `)).toBe(true);
+  expect(t[0].titulo.toLowerCase()).toBe(`${PROC} - cadastrar processo`);
+  expect(t[0].processo_id).toBeNull();
+});

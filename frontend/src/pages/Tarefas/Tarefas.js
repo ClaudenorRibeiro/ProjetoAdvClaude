@@ -506,7 +506,7 @@ export function ModalHistoricoTarefa({ tarefa, onFechar }) {
 // preSelecao: { tipo, processo_id, processo_numero }
 //   usado quando aberto a partir do PastaDetalhe
 // ============================================================
-export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publicacaoId, bloquearProcesso = false, pastaInicial = '', onSalvarRascunho = null, tituloInicial = '' }) {
+export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publicacaoId, bloquearProcesso = false, pastaInicial = '', onSalvarRascunho = null, tituloInicial = '', numeroPublicacao = '' }) {
   // Deduz tipo inicial: tarefa existente → preSelecao → 'rotina'
   // Obs: tipo 'pasta' foi removido da UI — tarefas antigas com pasta_id continuam exibidas
   //      corretamente na listagem, mas não é mais possível criar/editar com esse vínculo
@@ -540,6 +540,10 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
   // sempre desmarcado (inclusive na edição), e cada salvamento decide se manda ou não.
   const [enviarEmailPara, setEnviarEmailPara] = useState(false);
   const { ehAdmin } = useAuth();
+  // Tarefa NOVA de "Rotina Interna" criada a partir de uma publicação: não liga ao processo, mas o
+  // número dele vai na frente do título ("NÚMERO - o que o usuário digitou"). Só quem passa
+  // `numeroPublicacao` (a tela de Publicações) ganha isso; os outros usos da janela não mudam.
+  const prefixoTitulo = (!tarefa?.id && tipo === 'rotina' && numeroPublicacao) ? `${numeroPublicacao} - ` : '';
 
   // Busca de processo (CNJ) — inicializa com pré-seleção se vier do PastaDetalhe
   const [buscaProc, setBuscaProc]             = useState(tarefa?.processo_numero || preSelecao?.processo_numero || '');
@@ -647,7 +651,7 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
     try {
       const payload = {
         ...form,
-        titulo:      form.titulo.trim(),
+        titulo:      prefixoTitulo + form.titulo.trim(),
         pasta_id:    null,                                            // pasta não é mais tipo suportado
         processo_id: tipo === 'processo' ? form.processo_id : null,
       };
@@ -704,6 +708,7 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
     // Validações obrigatórias: pequeno modal informativo (a pedido do usuário, só nesta tela)
     // Ao fechar o aviso, o foco vai para o campo que faltou (focar).
     if (!form.titulo?.trim())                     return setInfo({ titulo: 'Título obrigatório', mensagem: 'Informe o título da tarefa.', focar: () => tituloRef.current?.focus() });
+    if (prefixoTitulo && prefixoTitulo.length + form.titulo.trim().length > 300) return setInfo({ titulo: 'Título muito longo', mensagem: `O número do processo entra na frente do título. Encurte o título para no máximo ${300 - prefixoTitulo.length} letras.`, focar: () => tituloRef.current?.focus() });
     if (tipo === 'processo' && !form.processo_id) return setInfo({ titulo: 'Processo obrigatório', mensagem: 'Selecione o processo: pesquise pelo número e escolha a pasta na lista.', focar: () => buscaProcRef.current?.focus() });
     if (!form.data_vencimento)                    return setInfo({ titulo: 'Vencimento obrigatório', mensagem: 'Informe a data de vencimento da tarefa.', focar: () => dataVencRef.current?.focus() });
     // Vencimento anterior a hoje: usuário comum é bloqueado; admin confirma.
@@ -829,6 +834,18 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Rotina Interna vinda de publicação: mostra o processo (só leitura), igual ao da tarefa de processo. */}
+          {prefixoTitulo && (
+            <div className="form-group">
+              <label className="form-label">Processo</label>
+              <input className="form-control" aria-label="Processo da publicação" readOnly
+                value={numeroPublicacao} style={{ fontFamily: 'monospace', letterSpacing: '0.5px' }} />
+              <span style={{ fontSize: '12px', color: '#5b6472', marginTop: '4px', display: 'block' }}>
+                Este número será colocado na frente do título.
+              </span>
             </div>
           )}
 

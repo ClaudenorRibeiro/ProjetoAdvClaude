@@ -333,7 +333,7 @@ function ModalAcaoDaPublicacao({ acao, usuariosAgenda, usuarioLogadoId, ehAdmin,
     return <ModalTarefa
       preSelecao={numero ? { tipo: 'processo', processo_numero: numero } : undefined}
       tarefa={sugestao ? { titulo: sugestao.titulo, descricao: sugestao.descricao } : undefined}
-      publicacaoId={pub.id} onFechar={onFechar} />;
+      publicacaoId={pub.id} numeroPublicacao={numero || ''} onFechar={onFechar} />;
   }
   if (tipo === 'pericia') {
     if (!processoInicialPericia) {
