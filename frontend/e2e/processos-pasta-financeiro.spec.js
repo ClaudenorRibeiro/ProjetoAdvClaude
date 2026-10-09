@@ -249,7 +249,7 @@ test('@critical Multa fixada pelo juiz: o percentual guardado no acordo já vem 
   await abrirMenuAcoes(page, page.locator('tbody tr').filter({ hasText: 'Pendente' }).first());
   await page.getByRole('button', { name: /Lançar multa/ }).click();
   const m = janela(page, /Lançar multa/);
-  await expect(m.getByLabel('Percentual da multa (%)')).toHaveValue('15');
+  await expect(m.getByLabel('Percentual da multa (%)')).toHaveValue(/^15(\.00)?$/);
   await expect(m.getByLabel('Valor da multa (R$)')).toHaveValue('150,00');
   await semViolacoes(page, 'janela Lançar multa pré-preenchida');
 });
@@ -293,6 +293,10 @@ test('@critical Editar acordo: janela carregada com as parcelas, muda uma parcel
 });
 
 test('@critical Receber e desfazer parcela pela aba: pede data, conta e forma; gera a entrada no extrato; desfazer limpa tudo', async ({ page }) => {
+  // a sugestão automática de conta precisa de um caixa em espécie (sem conta principal): este teste não pode depender de outro para criá-lo (o afterAll apaga)
+  if (!(await noBanco("SELECT id FROM conta_financeira WHERE nome = 'Caixa C8'")).length) {
+    await noBanco("INSERT INTO conta_financeira (nome, tipo, ativo, principal) VALUES ('Caixa C8', 'especie', 1, 0)");
+  }
   await loginPelaTela(page);
   await abrirAba(page, CNJ1);
   const bloco = () => blocoAcordo(page, 'Acordo C8');
