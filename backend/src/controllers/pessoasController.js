@@ -11,7 +11,7 @@ const { enviarEmail } = require('../utils/email');
 const { registrarComunicacao } = require('../utils/logComunicacao');
 const smsService = require('../services/smsService');
 const { lerConfigComtele } = require('../utils/configComtele');
-const { lerConfigEscritorio, montarMensagemParabens } = require('../utils/mensagemParabens');
+const { lerConfigEscritorio, montarMensagemParabens, ASSUNTO_PARABENS } = require('../utils/mensagemParabens');
 const { consolidarMarcadoresTelefone } = require('../utils/marcadoresTelefone');
 const multer = require('multer');
 const { criarBancoNoCatalogo } = require('./instituicaoFinanceiraController');
@@ -2194,6 +2194,7 @@ async function buscarAniversariantes({ filtro = 'hoje', mes, pessoaId } = {}) {
     return {
       ...r,
       mensagem: montarMensagemParabens(cfg.template, r.nome, cfg.nome),
+      assunto_email: ASSUNTO_PARABENS,
       ja_parabenizado: jaEnviados.length > 0,
       parabens: jaEnviados,
     };
@@ -2255,7 +2256,7 @@ async function registrarParabens(req, res) {
       try {
         await enviarEmail({
           para: pessoa.email,
-          assunto: 'Feliz Aniversário! 🎂',
+          assunto: ASSUNTO_PARABENS,
           html: `<p>${texto.replace(/\n/g, '<br>')}</p>`,
         });
       } catch (e) {

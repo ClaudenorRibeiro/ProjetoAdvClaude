@@ -388,6 +388,7 @@ router.put('/pericias/:id/realizada',     autenticar, verificarPermissao('perici
 router.put('/pericias/:id/cancelar',      autenticar, verificarPermissao('pericias','alterar'),    periciasCtrl.cancelar);
 router.put('/pericias/:id/remarcar',      autenticar, verificarPermissao('pericias','alterar'),    periciasCtrl.remarcar);
 router.put('/pericias/:id/marcar-remarcada', autenticar, verificarPermissao('pericias','alterar'), periciasCtrl.marcarRemarcada);
+router.get('/pericias/:id/comunicado/previa', autenticar, verificarPermissao('pericias','alterar'), periciasCtrl.previaComunicado);
 router.post('/pericias/:id/comunicado',   autenticar, verificarPermissao('pericias','alterar'), periciasCtrl.enviarComunicado);
 router.delete('/pericias/:id',            autenticar, verificarPermissao('pericias','excluir'),     periciasCtrl.excluir);
 

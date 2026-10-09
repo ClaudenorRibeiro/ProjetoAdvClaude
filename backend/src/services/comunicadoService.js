@@ -118,11 +118,10 @@ function montarComunicadoPericia(tipoEvento, pe, nomeCliente, escritorio) {
   return { assunto, html };
 }
 
-// Envia o comunicado ao(s) cliente(s) do processo da perícia.
-// Best-effort: registra cada tentativa em log_comunicacoes; marca comunicado_enviado
-// se ao menos 1 e-mail saiu (exceto no cancelamento, que não muda esse flag).
-// Retorna { enviados, semCliente, semEmail, polo }
-async function enviarComunicadoPericia(periciaId, tipoEvento, usuarioId) {
+// Monta (SEM enviar) os e-mails do comunicado: um por cliente do processo que tem e-mail. É a MESMA montagem usada no envio,
+// por isso a janela de confirmação mostra exatamente o que sai.
+// Retorna { semCliente, polo, pe, mensagens: [{ cliente, assunto, html }], semEmailNomes: [nome] }
+async function montarComunicadosPericia(periciaId, tipoEvento) {
   // Dados da perícia + nomes legíveis (tipo, perito, número do processo)
   const [rows] = await pool.execute(`
     SELECT pe.*, tp.nome AS tipo_nome,
@@ -135,21 +134,36 @@ async function enviarComunicadoPericia(periciaId, tipoEvento, usuarioId) {
     LEFT JOIN pessoas_juridicas pj ON pe.perito_tipo='juridica' AND pe.perito_id=pj.id
     LEFT JOIN tblproc pr ON pe.processo_id = pr.id
     WHERE pe.id = ?`, [periciaId]);
-  if (!rows.length) return { enviados: 0, semCliente: true, semEmail: false, polo: null };
+  if (!rows.length) return { semCliente: true, polo: null, pe: null, mensagens: [], semEmailNomes: [] };
   const pe = rows[0];
 
   const [cfg] = await pool.execute('SELECT nome FROM configuracoes_escritorio LIMIT 1');
   const escritorio = cfg.length ? cfg[0].nome : 'Escritório de Advocacia';
 
   const { polo, clientes } = await buscarClientesDoProcesso(pe.processo_id);
-  if (!polo || clientes.length === 0) {
-    return { enviados: 0, semCliente: true, semEmail: false, polo };
-  }
+  if (!polo || clientes.length === 0) return { semCliente: true, polo, pe, mensagens: [], semEmailNomes: [] };
 
-  let enviados = 0, semEmailCount = 0;
+  const mensagens = [];
+  const semEmailNomes = [];
   for (const c of clientes) {
-    if (!c.email) { semEmailCount++; continue; }
+    if (!c.email) { semEmailNomes.push(c.nome || 'Cliente sem nome'); continue; }
     const { assunto, html } = montarComunicadoPericia(tipoEvento, pe, c.nome, escritorio);
+    mensagens.push({ cliente: c, assunto, html });
+  }
+  return { semCliente: false, polo, pe, mensagens, semEmailNomes };
+}
+
+// Envia o comunicado ao(s) cliente(s) do processo da perícia.
+// Best-effort: registra cada tentativa em log_comunicacoes; marca comunicado_enviado
+// se ao menos 1 e-mail saiu (exceto no cancelamento, que não muda esse flag).
+// Retorna { enviados, semCliente, semEmail, polo }
+async function enviarComunicadoPericia(periciaId, tipoEvento, usuarioId) {
+  const { semCliente, polo, pe, mensagens, semEmailNomes } = await montarComunicadosPericia(periciaId, tipoEvento);
+  if (semCliente) return { enviados: 0, semCliente: true, semEmail: false, polo };
+
+  let enviados = 0;
+  const semEmailCount = semEmailNomes.length;
+  for (const { cliente: c, assunto, html } of mensagens) {
     let ok = false, erroMsg = null;
     try {
       await enviarEmail({ para: c.email, assunto, html });
@@ -253,4 +267,4 @@ async function enviarEmailPeritoPericia(periciaId, modeloId, usuarioId) {
   return { enviado, semEmail: false, semModelo: false };
 }
 
-module.exports = { enviarComunicadoPericia, enviarEmailPeritoPericia, buscarClientesDoProcesso, montarComunicadoPericia };
+module.exports = { enviarComunicadoPericia, montarComunicadosPericia, enviarEmailPeritoPericia, buscarClientesDoProcesso, montarComunicadoPericia };

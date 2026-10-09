@@ -2,8 +2,8 @@
 // AÇÕES DE ANIVERSARIANTE (menu "⋮" compartilhado)
 // Usado no Relatório de Aniversariantes e no card do Dashboard — sem duplicar lógica.
 //   "Parabenizar Zap"   → abre o WhatsApp (wa.me) com a mensagem pronta e REGISTRA o envio.
-//   "Parabenizar E-mail" → envia o e-mail pelo servidor e REGISTRA o envio.
-// Se o cliente já foi parabenizado neste ano, pede confirmação (ModalConfirmar) antes de reenviar.
+//   "Parabenizar E-mail" → abre a janela de confirmação com Para, Assunto e Mensagem; só "Enviar" manda o e-mail pelo servidor e REGISTRA o envio.
+// Se o cliente já foi parabenizado neste ano, a janela do e-mail avisa (e o WhatsApp pede confirmação com ModalConfirmar) antes de reenviar.
 // Props: pessoa (registro do aniversariante) e onFeito() (recarrega a lista após registrar).
 //   Em vez de `pessoa`, pode vir buscarPessoa() (async): busca os dados só quando a pessoa clica numa ação
 //   (usado nos relatórios, cujas linhas só têm o identificador).
@@ -12,6 +12,7 @@
 import React, { useRef, useState } from 'react';
 import MenuAcoes from './MenuAcoes';
 import ModalConfirmar from './ui/ModalConfirmar';
+import ModalConfirmarEmail from './ui/ModalConfirmarEmail';
 import { pessoasAPI } from '../services/api';
 import { linkWhatsApp } from '../utils/whatsapp';
 import { toast } from 'react-toastify';
@@ -19,6 +20,7 @@ import { formatarDataHora } from '../utils/formatters';
 
 export default function AcoesAniversariante({ pessoa: pessoaInicial, buscarPessoa, onFeito }) {
   const [confirmar, setConfirmar] = useState(null);
+  const [janelaEmail, setJanelaEmail] = useState(null);   // { pessoa } — janela de confirmação do e-mail de parabéns
   const carregada = useRef(null);   // dados buscados no clique no "⋮" (antes da escolha), para o WhatsApp não ser barrado como pop-up
 
   function antecipar() {
@@ -28,32 +30,40 @@ export default function AcoesAniversariante({ pessoa: pessoaInicial, buscarPesso
     carregada.current = p;
   }
 
-  // Executa de fato o parabéns (WhatsApp abre o wa.me e registra; E-mail envia e registra).
-  async function executar(canal, pessoa) {
-    if (canal === 'whatsapp') {
-      if (!pessoa.telefone) return toast.error('Este cliente não tem telefone cadastrado');
-      const link = linkWhatsApp(pessoa.telefone, pessoa.mensagem);
-      if (!link) return toast.error('Telefone inválido para o WhatsApp');
-      window.open(link, '_blank', 'noopener');
-      try {
-        await pessoasAPI.parabenizar(pessoa.id, { canal: 'whatsapp' });
-        toast.success('Registrado! Confira o WhatsApp aberto e clique em enviar.');
-        onFeito && onFeito();
-      } catch (err) {
-        toast.error(err.response?.data?.mensagem || 'Erro ao registrar o parabéns');
-      }
-    } else {
-      try {
-        await pessoasAPI.parabenizar(pessoa.id, { canal: 'email' });
-        toast.success('Parabéns enviado por e-mail!');
-        onFeito && onFeito();
-      } catch (err) {
-        toast.error(err.response?.data?.mensagem || 'Erro ao enviar o e-mail');
-      }
+  // Executa de fato o parabéns por WhatsApp (abre o wa.me e registra). O e-mail passa pela janela de confirmação (enviarEmail).
+  async function executar(pessoa) {
+    if (!pessoa.telefone) return toast.error('Este cliente não tem telefone cadastrado');
+    const link = linkWhatsApp(pessoa.telefone, pessoa.mensagem);
+    if (!link) return toast.error('Telefone inválido para o WhatsApp');
+    window.open(link, '_blank', 'noopener');
+    try {
+      await pessoasAPI.parabenizar(pessoa.id, { canal: 'whatsapp' });
+      toast.success('Registrado! Confira o WhatsApp aberto e clique em enviar.');
+      onFeito && onFeito();
+    } catch (err) {
+      toast.error(err.response?.data?.mensagem || 'Erro ao registrar o parabéns');
     }
   }
 
-  // Se já foi parabenizado neste ano, abre o modal padrão de confirmação; senão, executa direto.
+  // Só chamado pelo botão "Enviar" da janela de confirmação do e-mail.
+  async function enviarEmail(pessoa) {
+    await pessoasAPI.parabenizar(pessoa.id, { canal: 'email' });
+    toast.success('Parabéns enviado por e-mail!');
+    onFeito && onFeito();
+  }
+
+  // Texto do aviso "já parabenizado neste ano" (usado na janela do e-mail e na confirmação do WhatsApp).
+  function textoJaParabenizado(pessoa) {
+    const primeiroNome = String(pessoa.nome || '').trim().split(/\s+/)[0] || pessoa.nome;
+    const ult = pessoa.parabens[pessoa.parabens.length - 1];
+    const canalTxt = ult.canal === 'whatsapp' ? 'WhatsApp' : 'e-mail';
+    let quando = formatarDataHora(ult.enviado_em).split(' ')[0];
+    if (quando === '—') quando = '';
+    return `${primeiroNome} já foi parabenizado(a) por ${canalTxt}${ult.usuario_nome ? ` (${ult.usuario_nome})` : ''}${quando ? ` em ${quando}` : ''}.`;
+  }
+
+  // E-mail: SEMPRE abre a janela de confirmação (Para, Assunto, Mensagem). WhatsApp: se já foi parabenizado neste ano, pede
+  // confirmação; senão abre o WhatsApp (o envio é feito pela própria pessoa lá).
   async function parabenizar(canal) {
     let pessoa = pessoaInicial;
     if (!pessoa && buscarPessoa) {
@@ -62,24 +72,19 @@ export default function AcoesAniversariante({ pessoa: pessoaInicial, buscarPesso
     }
     if (!pessoa) return undefined;
     carregada.current = null;   // depois de parabenizar, a próxima vez busca de novo (o "já parabenizado" muda)
-    const primeiroNome = String(pessoa.nome || '').trim().split(/\s+/)[0] || pessoa.nome;
-    if (pessoa.ja_parabenizado && pessoa.parabens?.length) {
-      const ult = pessoa.parabens[pessoa.parabens.length - 1];
-      const canalTxt = ult.canal === 'whatsapp' ? 'WhatsApp' : 'e-mail';
-      let quando = '';
-      quando = formatarDataHora(ult.enviado_em).split(' ')[0];
-      if (quando === '—') quando = '';
+    const jaParabenizado = !!(pessoa.ja_parabenizado && pessoa.parabens?.length);
+    if (canal === 'email') {
+      setJanelaEmail({ pessoa });
+    } else if (jaParabenizado) {
       setConfirmar({
         titulo: 'Já parabenizado',
-        mensagem: `${primeiroNome} já foi parabenizado(a) por ${canalTxt}` +
-          `${ult.usuario_nome ? ` (${ult.usuario_nome})` : ''}${quando ? ` em ${quando}` : ''}. ` +
-          `Deseja enviar novamente?`,
+        mensagem: `${textoJaParabenizado(pessoa)} Deseja enviar novamente?`,
         textoBotao: 'Enviar novamente',
         tipo: 'aviso',
-        acao: () => executar(canal, pessoa),
+        acao: () => executar(pessoa),
       });
     } else {
-      executar(canal, pessoa);
+      executar(pessoa);
     }
     return undefined;
   }
@@ -93,6 +98,17 @@ export default function AcoesAniversariante({ pessoa: pessoaInicial, buscarPesso
         ]} />
       </span>
       {confirmar && <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(null)} />}
+      {janelaEmail && (() => {
+        const { pessoa } = janelaEmail;
+        const avisos = [];
+        if (pessoa.ja_parabenizado && pessoa.parabens?.length) avisos.push(`${textoJaParabenizado(pessoa)} Confira antes de enviar novamente.`);
+        if (!pessoa.email) avisos.push('Este cliente não tem e-mail cadastrado. Cadastre um e-mail na ficha da pessoa para enviar o parabéns por e-mail.');
+        return (
+          <ModalConfirmarEmail titulo="Parabenizar por e-mail" textoBotao="Enviar parabéns" avisos={avisos}
+            emails={pessoa.email ? [{ nome: pessoa.nome, para: pessoa.email, assunto: pessoa.assunto_email, texto: pessoa.mensagem }] : []}
+            acao={() => enviarEmail(pessoa)} onCancelar={() => setJanelaEmail(null)} />
+        );
+      })()}
     </>
   );
 }

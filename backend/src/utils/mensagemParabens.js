@@ -15,6 +15,9 @@ async function lerConfigEscritorio(exec) {
 }
 
 // Monta a mensagem resolvendo {{nome}} (1º nome do cliente) e {{escritorio}}.
+// Assunto do e-mail de parabéns (uma cópia só: envio, aviso automático e janela de confirmação).
+const ASSUNTO_PARABENS = 'Feliz Aniversário! 🎂';
+
 function montarMensagemParabens(template, nomeCliente, nomeEscritorio) {
   const primeiroNome = String(nomeCliente || '').trim().split(/\s+/)[0] || String(nomeCliente || '');
   const padrao = 'Olá, {{nome}}! O escritório {{escritorio}} deseja a você um feliz aniversário! 🎂';
@@ -24,4 +27,4 @@ function montarMensagemParabens(template, nomeCliente, nomeEscritorio) {
     .replace(/\{\{\s*escritorio\s*\}\}/gi, nomeEscritorio || '');
 }
 
-module.exports = { lerConfigEscritorio, montarMensagemParabens };
+module.exports = { lerConfigEscritorio, montarMensagemParabens, ASSUNTO_PARABENS };

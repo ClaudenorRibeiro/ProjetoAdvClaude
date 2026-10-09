@@ -426,6 +426,58 @@ test('@critical Comunicar cliente: sem cliente/e-mail definidos o sistema explic
   await expect(page.getByText('Não foi possível carregar esta tela')).toHaveCount(0);
 });
 
+// CPF válido que não colide com os de outros testes (o banco de teste é compartilhado): 9 dígitos vindos do relógio + 2 dígitos verificadores.
+function cpfUnicoComunicado(deslocamento) {
+  const base = String((Date.now() + deslocamento) % 1000000000).padStart(9, '0').split('').map(Number);
+  const dv = (lista, peso) => { const r = (lista.reduce((t, x, i) => t + x * (peso - i), 0) * 10) % 11; return r === 10 ? 0 : r; };
+  const d1 = dv(base, 10); const d2 = dv([...base, d1], 11);
+  return [...base, d1, d2].join('');
+}
+
+test('@critical Comunicar cliente: o clique abre a janela com Para, Assunto e Mensagem; Cancelar não envia nada; só "Enviar comunicado" envia e registra', async ({ page }) => {
+  const EMAIL = 'cliente.comunicado.e2e@example.invalid';
+  const proc = (await noBanco('SELECT id FROM tblproc WHERE numProc = ?', [CNJ1]))[0].id;
+  await noBanco("UPDATE tblproc SET cliente_polo = 'autor' WHERE id = ?", [proc]);
+  await noBanco('DELETE FROM tbltituloprocautor WHERE proc_id = ?', [proc]);      // a pasta de teste já traz partes: só vale o cliente deste teste
+  const cliente = (await noBanco("INSERT INTO pessoas_fisicas (nome, cpf) VALUES ('Cliente Comunicado E2E', ?)", [cpfUnicoComunicado(7)])).insertId;
+  await noBanco('INSERT INTO emails_pf (pessoa_id, email, principal, ativo) VALUES (?, ?, 1, 1)', [cliente, EMAIL]);
+  await noBanco("INSERT INTO tbltituloprocautor (proc_id, tipo_pessoa, pessoa_id) VALUES (?, 'fisica', ?)", [proc, cliente]);
+  const enviados = async () => (await noBanco('SELECT COUNT(*) AS n FROM log_comunicacoes WHERE destinatario = ?', [EMAIL]))[0].n;
+  try {
+    await loginPelaTela(page);
+    await abrirAba(page, CNJ1);
+    const abrir = async () => {
+      await abrirMenuAcoes(page, linha(page, `${br(util(1))} 10:00`));
+      await page.getByRole('button', { name: /Comunicar cliente/ }).click();
+      const j = page.getByRole('dialog', { name: 'Comunicar cliente' });
+      await expect(j).toBeVisible();
+      return j;
+    };
+    let j = await abrir();
+    // mostra para quem vai, o assunto e a mensagem completa — e NADA foi enviado ainda
+    await expect(j.getByText(EMAIL)).toBeVisible();
+    await expect(j.getByText(/Comunicado de Perícia — Proc\. 9400001-00\.2026\.5\.15\.0001/)).toBeVisible();
+    const mensagem = page.frameLocator('iframe[title^="Mensagem do e-mail"]');
+    await expect(mensagem.getByText(/Prezado\(a\) Cliente Comunicado E2E/)).toBeVisible();
+    await expect(mensagem.getByText(/agendada uma perícia/)).toBeVisible();
+    expect(await enviados()).toBe(0);
+    await semViolacoes(page, 'janela Comunicar cliente');
+    // Cancelar não envia
+    await j.getByRole('button', { name: 'Cancelar' }).click();
+    await expect(j).toHaveCount(0);
+    expect(await enviados()).toBe(0);
+    // só "Enviar comunicado" envia e registra
+    j = await abrir();
+    await j.getByRole('button', { name: 'Enviar comunicado' }).click();
+    await aviso(page, /Comunicado enviado ao cliente/);
+    await expect(j).toHaveCount(0);
+    expect(await enviados()).toBe(1);
+  } finally {
+    await noBanco('DELETE FROM log_comunicacoes WHERE destinatario = ?', [EMAIL]);
+    await noBanco("DELETE FROM pessoas_fisicas WHERE nome = 'Cliente Comunicado E2E'");
+  }
+});
+
 test('@critical Permissões: só VISUALIZAR não recebe "+ Nova Perícia", Marcar realizada, Editar, Remarcar, Cancelar nem Excluir (só Histórico); sem "ver perícias" recebe aviso claro', async ({ page }) => {
   const so = await criarUsuarioComPermissoes('so_ve_pericias', [['processos', null, 'visualizar'], ['pericias', null, 'visualizar']]);
   await loginPelaTela(page, so);

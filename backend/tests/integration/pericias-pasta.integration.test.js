@@ -351,3 +351,54 @@ test('um só local: réu + endereço digitado, ou dois réus, é recusado (nada 
   t.checar(porId(idNome)?.local_endereco === 'Só o nome antigo', `só nome: ${porId(idNome)?.local_endereco}`);
   t.fim();
 });
+
+// ---- comunicado ao cliente: a PRÉVIA (janela de confirmação) mostra exatamente o e-mail que o envio usa, sem enviar nada ----
+test('comunicado: a prévia mostra para, assunto e corpo iguais aos do envio (sem enviar), avisa quem não tem e-mail, explica quando não há cliente e respeita a permissão', async () => {
+  const t = juntar();
+  const proc = (await sql("INSERT INTO tblproc (pasta_id, numProc, NomeTituloProc, tipo_id, status_id, ativo, criado_por, cliente_polo) VALUES ((SELECT id FROM tblpasta WHERE numPasta = 6301), '0000099-00.2026.5.15.0001', 'PROCESSO DO COMUNICADO', 1, 1, 1, 1, 'autor')")).insertId;
+  const id = await nova({ processo_id: proc });
+  const previa = (token = admin, i = id) => api(token).get(`/api/pericias/${i}/comunicado/previa`);
+
+  // sem nenhuma parte do cliente no processo: explica o motivo (mesma mensagem do envio)
+  const semCliente = await previa();
+  t.checar(semCliente.status === 400 && /Defina no cadastro do processo/.test(msg(semCliente)), `sem cliente: ${semCliente.status} ${msg(semCliente)}`);
+
+  // cliente SEM e-mail: explica
+  const semEmailId = (await sql("INSERT INTO pessoas_fisicas (nome, cpf) VALUES ('Sem Email Previa', '81234567890')")).insertId;
+  await sql("INSERT INTO tbltituloprocautor (proc_id, tipo_pessoa, pessoa_id) VALUES (?, 'fisica', ?)", [proc, semEmailId]);
+  const soSemEmail = await previa();
+  t.checar(soSemEmail.status === 400 && /não possui e-mail/.test(msg(soSemEmail)), `só sem e-mail: ${soSemEmail.status} ${msg(soSemEmail)}`);
+
+  // um cliente com e-mail e outro sem
+  const comEmailId = (await sql("INSERT INTO pessoas_fisicas (nome, cpf) VALUES ('Cliente Previa C7', '82345678901')")).insertId;
+  await sql("INSERT INTO emails_pf (pessoa_id, email, principal, ativo) VALUES (?, 'cliente.previa@example.invalid', 1, 1)", [comEmailId]);
+  await sql("INSERT INTO tbltituloprocautor (proc_id, tipo_pessoa, pessoa_id) VALUES (?, 'fisica', ?)", [proc, comEmailId]);
+  const antesLog = await total("SELECT COUNT(*) AS n FROM log_comunicacoes WHERE destinatario = 'cliente.previa@example.invalid'");
+  const ok = await previa();
+  t.checar(ok.status === 200, `prévia: ${ok.status} ${msg(ok)}`);
+  const m = ok.body.dados?.mensagens || [];
+  t.checar(m.length === 1 && m[0].para === 'cliente.previa@example.invalid' && m[0].nome === 'Cliente Previa C7', `mensagens: ${JSON.stringify(m.map(x => [x.nome, x.para]))}`);
+  t.checar(/^Comunicado de Perícia — Proc\. 0000099-00\.2026\.5\.15\.0001$/.test(m[0]?.assunto || ''), `assunto: ${m[0]?.assunto}`);
+  t.checar(/Prezado\(a\) <strong>Cliente Previa C7<\/strong>/.test(m[0]?.html || '') && /Médica C7/.test(m[0]?.html || ''), 'corpo traz o nome do cliente e os dados da perícia');
+  t.checar(JSON.stringify(ok.body.dados?.semEmail) === JSON.stringify(['Sem Email Previa']), `sem e-mail: ${JSON.stringify(ok.body.dados?.semEmail)}`);
+  // a prévia NÃO envia nem marca nada
+  t.checar(await total("SELECT COUNT(*) AS n FROM log_comunicacoes WHERE destinatario = 'cliente.previa@example.invalid'") === antesLog, 'a prévia não pode enviar nem registrar envio');
+  t.checar((await per(id)).comunicado_enviado === 0, 'a prévia não pode marcar o comunicado como enviado');
+
+  // o envio usa EXATAMENTE o que a prévia mostrou (mesma montagem)
+  const envio = await api().post(`/api/pericias/${id}/comunicado`).send({});
+  t.checar(envio.status === 200, `envio: ${envio.status} ${msg(envio)}`);
+  const log = await um("SELECT assunto, conteudo FROM log_comunicacoes WHERE destinatario = 'cliente.previa@example.invalid' ORDER BY id DESC LIMIT 1");
+  t.checar(log && log.assunto === m[0].assunto && log.conteudo === m[0].html, 'o e-mail enviado precisa ser idêntico ao da prévia (assunto e corpo)');
+
+  // o texto acompanha o status da perícia (cancelada)
+  await sql("UPDATE pericia SET status = 'cancelada' WHERE id = ?", [id]);
+  const cancelada = await previa();
+  t.checar(/^Perícia CANCELADA/.test(cancelada.body.dados?.mensagens?.[0]?.assunto || ''), `cancelada: ${cancelada.body.dados?.mensagens?.[0]?.assunto}`);
+
+  // perícia inexistente / id ruim = 404; sem permissão de alterar = 403
+  t.checar((await previa(admin, 999999)).status === 404 && (await previa(admin, 'abc')).status === 404, 'inexistente e "abc" = 404');
+  const ver = await criarUsuario('so ve previa', 2, [['pericias', null, 'visualizar']]);
+  t.checar((await previa(ver.token)).status === 403, 'sem alterar = 403');
+  t.fim();
+});

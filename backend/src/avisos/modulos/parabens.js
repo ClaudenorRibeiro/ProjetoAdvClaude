@@ -1,7 +1,7 @@
 // Avisos aos clientes — módulo Parabéns de aniversário (só clientes pessoa física ativos com data de nascimento).
 const { pool } = require('../../config/database');
 const { SUB_CLIENTES_PF, PROX_ANIV } = require('../../controllers/pessoasController');
-const { montarMensagemParabens } = require('../../utils/mensagemParabens');
+const { montarMensagemParabens, ASSUNTO_PARABENS } = require('../../utils/mensagemParabens');
 
 // Clientes que fazem aniversário de hoje até hoje + "dias" e ainda não foram parabenizados neste ano.
 async function aniversariantes(dias) {
@@ -17,7 +17,7 @@ async function aniversariantes(dias) {
 }
 
 function textoParabens(nome, cfg) {
-  return { assunto: 'Feliz Aniversário! 🎂', texto: montarMensagemParabens(cfg.mensagemAniversario, nome, cfg.escritorio) };
+  return { assunto: ASSUNTO_PARABENS, texto: montarMensagemParabens(cfg.mensagemAniversario, nome, cfg.escritorio) };
 }
 
 // Aviso pendente de quem foi parabenizado na mão (botão do aniversariante) ou deixou de ser cliente ativo: não vale mais.

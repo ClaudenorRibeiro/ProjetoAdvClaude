@@ -501,6 +501,7 @@ export const periciasAPI = {
   marcarRemarcada:   (id, motivo) => api.put(`/pericias/${id}/marcar-remarcada`, { motivo }),
   excluir:           (id) => api.delete(`/pericias/${id}`),
   historico:         (id) => api.get(`/pericias/${id}/historico`),
+  previaComunicado:  (id) => api.get(`/pericias/${id}/comunicado/previa`),   // e-mails como serão enviados (para confirmar antes)
   enviarComunicado:  (id) => api.post(`/pericias/${id}/comunicado`),
 };
 

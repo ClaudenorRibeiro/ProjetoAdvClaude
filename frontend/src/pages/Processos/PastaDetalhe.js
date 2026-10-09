@@ -24,6 +24,7 @@ import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
 import MenuAcoes from '../../components/MenuAcoes';
+import useComunicadoPericia from '../../components/ComunicadoPericia';
 
 const STATUS_COR_PRAZO = { agendado:'badge-azul', pendente:'badge-laranja', atrasado:'badge-vermelho', concluido:'badge-verde', cancelado:'badge-cinza' };
 
@@ -201,6 +202,8 @@ export default function PastaDetalhe() {
 
   // Modal de confirmação reutilizável (substitui window.confirm)
   const [confirmar, setConfirmar] = useState(null);
+  // Comunicar cliente / Reenviar comunicado da perícia: abre a janela com Para, Assunto e Mensagem; só "Enviar" dispara o e-mail
+  const { pedirComunicado, janelaComunicado } = useComunicadoPericia(() => carregarPericias());
   const [modalProcesso, setModalProcesso]         = useState(false);
   const [modalEditar, setModalEditar]             = useState(false);
   const [processoEditando, setProcessoEditando]   = useState(null);
@@ -614,15 +617,6 @@ export default function PastaDetalhe() {
         } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao excluir'); }
       },
     });
-  }
-
-  // Envia/reenvia o comunicado da perícia ao cliente por e-mail
-  async function comunicarPericia(id) {
-    try {
-      const { data } = await periciasAPI.enviarComunicado(id);
-      toast.success(data.mensagem || 'Comunicado enviado ao cliente');
-      carregarPericias();
-    } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao enviar comunicado'); }
   }
 
   // Financeiro é POR PROCESSO: precisa de um processo específico selecionado no filtro
@@ -1212,6 +1206,7 @@ export default function PastaDetalhe() {
             onFechar={(reload) => { setPrazoEditando(null); if (reload) carregarPrazos(); }} />
         )}
         {confirmar && <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(null)} />}
+        {janelaComunicado}
         {modalTarefa && (
           <ModalTarefa
             tarefa={tarefaEditando}
@@ -1585,7 +1580,7 @@ export default function PastaDetalhe() {
                               { label: 'Remarcar', icone: '🔁', oculto: !(agendada && temPermissao('pericias','alterar')), onClick: () => setPericiaRemarcando(p) },
                               { label: 'Marcar como remarcada', icone: '↪️', oculto: !(agendada && temPermissao('pericias','alterar')), onClick: () => setPericiaMarcandoRemarcada(p) },
                               { label: 'Cancelar', icone: '✖', oculto: !(agendada && temPermissao('pericias','alterar')), onClick: () => setPericiaCancelando(p) },
-                              { label: p.comunicado_enviado ? 'Reenviar comunicado' : 'Comunicar cliente', icone: '✉', oculto: !(agendada && temPermissao('pericias','alterar')), onClick: () => comunicarPericia(p.id) },
+                              { label: p.comunicado_enviado ? 'Reenviar comunicado' : 'Comunicar cliente', icone: '✉', oculto: !(agendada && temPermissao('pericias','alterar')), onClick: () => pedirComunicado(p.id, !!p.comunicado_enviado) },
                               { label: 'Histórico', icone: '📋', onClick: () => setPericiaHistorico(p) },
                               { label: 'Excluir', icone: '🗑️', perigo: true, oculto: !(!historico && temPermissao('pericias','excluir')), onClick: () => excluirPericia(p) },
                             ]} />

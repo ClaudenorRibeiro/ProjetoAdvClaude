@@ -8,7 +8,7 @@
 const { pool } = require('../config/database');
 const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
-const { enviarComunicadoPericia } = require('../services/comunicadoService');
+const { enviarComunicadoPericia, montarComunicadosPericia } = require('../services/comunicadoService');
 const avisos = require('../avisos');
 const agendaGoogle = require('../services/agendaGoogleService');
 const { paginacao, escaparLike } = require('../utils/helpers');
@@ -1488,6 +1488,33 @@ async function excluirTipo(req, res) {
 }
 
 // POST /api/pericias/:id/comunicado — Envia (ou reenvia) o comunicado ao cliente
+// O texto do comunicado reflete o status atual da perícia
+function tipoEventoDoComunicado(status) {
+  return status === 'cancelada' ? 'cancelada' : status === 'remarcada' ? 'remarcada' : 'agendada';
+}
+
+// GET /api/pericias/:id/comunicado/previa — mostra os e-mails do comunicado COMO SERÃO ENVIADOS (destinatário, assunto e corpo),
+// sem enviar nada. Usa a mesma montagem do envio (montarComunicadosPericia), então o que a janela de confirmação mostra é o que sai.
+async function previaComunicado(req, res) {
+  try {
+    const id = lerIdPericia(req.params.id);
+    if (!id) return naoEncontrado(res, 'Perícia não encontrada');
+    const [pe] = await pool.execute('SELECT status FROM pericia WHERE id = ?', [id]);
+    if (!pe.length) return naoEncontrado(res, 'Perícia não encontrada');
+    const tipoEvento = tipoEventoDoComunicado(pe[0].status);
+    const r = await montarComunicadosPericia(id, tipoEvento);
+    if (r.semCliente) return erro(res, 'Defina no cadastro do processo qual parte é o cliente (autor ou réu) para enviar o comunicado');
+    if (!r.mensagens.length) return erro(res, 'O cliente não possui e-mail cadastrado');
+    return sucesso(res, {
+      tipoEvento,
+      mensagens: r.mensagens.map(m => ({ nome: m.cliente.nome, para: m.cliente.email, assunto: m.assunto, html: m.html })),
+      semEmail: r.semEmailNomes,
+    });
+  } catch (e) {
+    return erroInterno(res, e);
+  }
+}
+
 async function enviarComunicado(req, res) {
   try {
     const id = lerIdPericia(req.params.id);
@@ -1495,10 +1522,7 @@ async function enviarComunicado(req, res) {
     const [pe] = await pool.execute('SELECT status FROM pericia WHERE id = ?', [id]);
     if (!pe.length) return naoEncontrado(res, 'Perícia não encontrada');
 
-    // O texto do comunicado reflete o status atual da perícia
-    const tipoEvento = pe[0].status === 'cancelada' ? 'cancelada'
-                     : pe[0].status === 'remarcada' ? 'remarcada'
-                     : 'agendada';
+    const tipoEvento = tipoEventoDoComunicado(pe[0].status);
 
     const r = await enviarComunicadoPericia(id, tipoEvento, req.usuario.id);
     if (r.enviados > 0) await avisos.marcarEnviadoManual({ modulo: 'pericia', tipo: tipoEvento, id });   // o aviso pendente equivalente não precisa mais sair
@@ -1522,5 +1546,5 @@ module.exports = {
   atualizarTipo: comIdNumerico(atualizarTipo, 'Tipo de perícia não encontrado'), excluirTipo: comIdNumerico(excluirTipo, 'Tipo de perícia não encontrado'),
   reusDoProcesso, peritosDoProcesso, buscarPeritosParaAta,
   enderecoDoPerito: comIdNumerico(enderecoDoPerito, 'Perito não encontrado'), relatorioPeritos, marcarRealizada, cancelar, remarcar, marcarRemarcada, excluir,
-  buscarHistorico, enviarComunicado,
+  buscarHistorico, enviarComunicado, previaComunicado,
 };

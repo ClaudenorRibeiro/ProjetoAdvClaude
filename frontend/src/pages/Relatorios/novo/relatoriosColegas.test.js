@@ -214,29 +214,57 @@ describe('Menu "Parabenizar" nas linhas do resultado', () => {
     expect(screen.queryByTitle('Mais ações')).toBeNull();
   });
 
-  it('busca os dados do cliente já no clique no ⋮ e envia o e-mail pelo mesmo caminho do Dashboard', async () => {
-    pessoas.dadosParabens.mockResolvedValue({ data: { dados: { id: 7, nome: 'Ana Souza', telefone: '11999990000', mensagem: 'Feliz!', ja_parabenizado: false, parabens: [] } } });
+  it('busca os dados do cliente já no clique no ⋮; o e-mail só sai depois da janela de confirmação (Para, Assunto, Mensagem)', async () => {
+    pessoas.dadosParabens.mockResolvedValue({ data: { dados: { id: 7, nome: 'Ana Souza', telefone: '11999990000', email: 'ana@example.invalid', assunto_email: 'Feliz Aniversário!', mensagem: 'Feliz!', ja_parabenizado: false, parabens: [] } } });
     pessoas.parabenizar.mockResolvedValue({ data: {} });
     const aoFazer = vi.fn();
     montar(['parabenizar'], aoFazer);
     await userEvent.click(screen.getByTitle('Mais ações'));
     expect(pessoas.dadosParabens).toHaveBeenCalledWith(7);                                      // antecipado: antes de escolher
     await userEvent.click(screen.getByText('Parabenizar E-mail'));
+    const janela = await screen.findByRole('dialog', { name: 'Parabenizar por e-mail' });       // abre a janela, NÃO envia na hora
+    expect(within(janela).getByText('ana@example.invalid')).toBeTruthy();
+    expect(within(janela).getByText('Feliz Aniversário!')).toBeTruthy();
+    expect(within(janela).getByText('Feliz!')).toBeTruthy();
+    expect(pessoas.parabenizar).not.toHaveBeenCalled();
+    await userEvent.click(within(janela).getByRole('button', { name: 'Enviar parabéns' }));
     await waitFor(() => expect(pessoas.parabenizar).toHaveBeenCalledWith(7, { canal: 'email' }));
     expect(pessoas.dadosParabens).toHaveBeenCalledTimes(1);                                     // não busca duas vezes
     await waitFor(() => expect(aoFazer).toHaveBeenCalled());                                    // a lista recarrega
   });
 
-  it('já parabenizado neste ano: pede confirmação antes de enviar de novo', async () => {
-    pessoas.dadosParabens.mockResolvedValue({ data: { dados: { id: 7, nome: 'Ana Souza', ja_parabenizado: true, parabens: [{ canal: 'email', usuario_nome: 'Maria', enviado_em: '2026-10-01 09:00:00' }] } } });
+  it('já parabenizado neste ano: a janela do e-mail avisa quando foi e só envia de novo no "Enviar parabéns"', async () => {
+    pessoas.dadosParabens.mockResolvedValue({ data: { dados: { id: 7, nome: 'Ana Souza', email: 'ana@example.invalid', assunto_email: 'Feliz!', mensagem: 'Oi', ja_parabenizado: true, parabens: [{ canal: 'email', usuario_nome: 'Maria', enviado_em: '2026-10-01 09:00:00' }] } } });
     pessoas.parabenizar.mockResolvedValue({ data: {} });
     montar();
     await userEvent.click(screen.getByTitle('Mais ações'));
     await userEvent.click(screen.getByText('Parabenizar E-mail'));
     expect(await screen.findByText(/já foi parabenizado\(a\) por e-mail \(Maria\)/)).toBeTruthy();
     expect(pessoas.parabenizar).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole('button', { name: 'Enviar novamente' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Enviar parabéns' }));
     await waitFor(() => expect(pessoas.parabenizar).toHaveBeenCalledWith(7, { canal: 'email' }));
+  });
+
+  it('Cancelar na janela do e-mail não envia nada; cliente sem e-mail: a janela explica e não oferece "Enviar"', async () => {
+    pessoas.dadosParabens.mockResolvedValue({ data: { dados: { id: 7, nome: 'Ana Souza', email: 'ana@example.invalid', assunto_email: 'Feliz!', mensagem: 'Oi', ja_parabenizado: false, parabens: [] } } });
+    pessoas.parabenizar.mockResolvedValue({ data: {} });
+    montar();
+    await userEvent.click(screen.getByTitle('Mais ações'));
+    await userEvent.click(screen.getByText('Parabenizar E-mail'));
+    await userEvent.click(within(await screen.findByRole('dialog', { name: 'Parabenizar por e-mail' })).getByRole('button', { name: 'Cancelar' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(pessoas.parabenizar).not.toHaveBeenCalled();
+  });
+
+  it('cliente sem e-mail cadastrado: a janela do e-mail avisa e não tem botão de enviar', async () => {
+    pessoas.dadosParabens.mockResolvedValue({ data: { dados: { id: 7, nome: 'Ana Souza', email: null, assunto_email: 'Feliz!', mensagem: 'Oi', ja_parabenizado: false, parabens: [] } } });
+    montar();
+    await userEvent.click(screen.getByTitle('Mais ações'));
+    await userEvent.click(screen.getByText('Parabenizar E-mail'));
+    const janela = await screen.findByRole('dialog', { name: 'Parabenizar por e-mail' });
+    expect(within(janela).getByText(/não tem e-mail cadastrado/)).toBeTruthy();
+    expect(within(janela).queryByRole('button', { name: 'Enviar parabéns' })).toBeNull();
+    expect(pessoas.parabenizar).not.toHaveBeenCalled();
   });
 
   it('cliente não encontrado (404): mostra o aviso do servidor e não registra nada', async () => {

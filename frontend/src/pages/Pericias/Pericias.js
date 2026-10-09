@@ -21,6 +21,7 @@ import useEscFechar from '../../hooks/useEscFechar';
 import SelectPesquisavel from '../../components/ui/SelectPesquisavel';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
 import CampoPesquisa from '../../components/ui/CampoPesquisa';
+import useComunicadoPericia from '../../components/ComunicadoPericia';
 
 // Cor/label do badge conforme o status
 function badgeStatus(status) {
@@ -114,6 +115,8 @@ export default function Pericias() {
   }
 
   useEffect(() => { carregar(); }, [carregar]);
+  // Comunicar cliente / Reenviar comunicado: abre a janela com Para, Assunto e Mensagem; só "Enviar" dispara o e-mail
+  const { pedirComunicado, janelaComunicado } = useComunicadoPericia(() => carregar());
   useEffect(() => {
     periciasAPI.tipos().then(r => { if (r.data.ok) setTipos(r.data.dados); });
   }, []);
@@ -126,14 +129,6 @@ export default function Pericias() {
       if (data.ok) { setEditando(data.dados); setModalAberto(true); }
       else toast.error('Erro ao carregar perícia');
     } catch { toast.error('Erro ao carregar perícia'); }
-  }
-
-  async function enviarComunicado(id) {
-    try {
-      const { data } = await periciasAPI.enviarComunicado(id);
-      toast.success(data.mensagem || 'Comunicado enviado ao cliente');
-      carregar();
-    } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao enviar comunicado'); }
   }
 
   // Marca como realizada (com confirmação)
@@ -291,7 +286,7 @@ export default function Pericias() {
                             { label: 'Remarcar', icone: '🔁', oculto: !agendada, onClick: () => setRemarcando(p) },
                             { label: 'Marcar como remarcada', icone: '↪️', oculto: !agendada, onClick: () => setMarcandoRemarcada(p) },
                             { label: 'Cancelar', icone: '✖', oculto: !agendada, onClick: () => setCancelando(p) },
-                            { label: p.comunicado_enviado ? 'Reenviar comunicado' : 'Comunicar cliente', icone: '✉', oculto: !agendada, onClick: () => enviarComunicado(p.id) },
+                            { label: p.comunicado_enviado ? 'Reenviar comunicado' : 'Comunicar cliente', icone: '✉', oculto: !agendada, onClick: () => pedirComunicado(p.id, !!p.comunicado_enviado) },
                             { label: 'Histórico', icone: '📋', onClick: () => setHistoricoDe(p) },
                             { label: 'Excluir', icone: '🗑️', perigo: true, oculto: !!historico, onClick: () => pedirExcluir(p) },
                           ]} />
@@ -339,6 +334,7 @@ export default function Pericias() {
       {confirmar && (
         <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(null)} />
       )}
+      {janelaComunicado}
       {loteAberto && (
         <ModalGerarLote ancoraTipo="pericia" ancoraIds={[...selecionados]}
           onFechar={() => setLoteAberto(false)} />
