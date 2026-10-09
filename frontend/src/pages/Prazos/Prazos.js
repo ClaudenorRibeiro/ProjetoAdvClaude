@@ -863,7 +863,7 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar, somenteLeitura = fals
           <h3>{leitura ? 'Detalhes do Prazo' : 'Editar Prazo'}</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
         </div>
-        <div className="modal-body">
+        <div className="modal-body" tabIndex={leitura ? 0 : undefined}>
           {aviso && (
             <div style={{ background:'#fff4e5', border:'1px solid #ffcf99', color:'#8a5300',
               padding:'8px 12px', borderRadius:'6px', fontSize:'13px', marginBottom:'12px' }}>

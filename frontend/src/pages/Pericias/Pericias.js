@@ -731,7 +731,7 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
           <h3>{leitura ? 'Detalhes da Perícia' : pericia ? 'Editar Perícia' : 'Nova Perícia'}</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
         </div>
-        <div className="modal-body">
+        <div className="modal-body" tabIndex={leitura ? 0 : undefined}>
           <fieldset disabled={leitura} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           {/* Número do Processo (CNJ) — mesmo padrão do Novo Prazo. Quando aberto pela aba da
               pasta (processoInicial), o processo é fixo e o campo fica somente leitura. */}

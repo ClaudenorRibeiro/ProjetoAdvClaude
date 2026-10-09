@@ -565,7 +565,7 @@ test('@critical Aba Prazos: mais de 50 (e de 100) prazos no mesmo processo apare
 test('@critical Clicar na linha do prazo abre "Detalhes do Prazo" só para ver; Editar libera; concluído/cancelado não tem Editar; o menu ⋮ não abre os Detalhes', async ({ page }) => {
   await cenario();
   await loginPelaTela(page);
-  await abrirAba(page, CNJ1);
+  await abrirAba(page);
   const dataFutura = dia(6).split('-').reverse().join('/');
   // o clique no ⋮ não abre os Detalhes
   await menu(page, dataFutura);
