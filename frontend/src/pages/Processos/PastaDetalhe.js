@@ -164,6 +164,7 @@ export default function PastaDetalhe() {
   // Modais — Prazos
   const [prazoCancelando, setPrazoCancelando] = useState(null);
   const [prazoEditando, setPrazoEditando]     = useState(null);
+  const [prazoEmLeitura, setPrazoEmLeitura]     = useState(false); // true = abrir "Detalhes do Prazo" (somente leitura)
   const [modalNovoPrazo, setModalNovoPrazo]   = useState(false);
   const [tiposPrazo, setTiposPrazo]           = useState({ tipos: [], subtipos: [] });
   // Filtros da aba Prazos (dentro da pasta) — espelham a tela de Prazos, MENOS "Número do Processo"
@@ -178,6 +179,7 @@ export default function PastaDetalhe() {
   const [modalTarefa, setModalTarefa]         = useState(false);
   const [tarefaHistorico, setTarefaHistorico] = useState(null);
   const [tarefaEditando, setTarefaEditando]   = useState(null);
+  const [tarefaEmLeitura, setTarefaEmLeitura]   = useState(false); // true = abrir "Detalhes da Tarefa" (somente leitura)
 
   // Modais — Audiências
   const [modalNovaAudiencia, setModalNovaAudiencia] = useState(false); // abrir modal de nova audiência
@@ -195,6 +197,7 @@ export default function PastaDetalhe() {
   const [tiposPericia, setTiposPericia]         = useState([]);   // tipos para o modal de nova/editar
   const [modalNovaPericia, setModalNovaPericia] = useState(false);// abrir modal de nova perícia
   const [periciaEditando, setPericiaEditando]   = useState(null); // perícia sendo editada
+  const [periciaEmLeitura, setPericiaEmLeitura] = useState(false); // true = abrir "Detalhes da Perícia" (somente leitura)
   const [periciaCancelando, setPericiaCancelando] = useState(null); // perícia sendo cancelada
   const [periciaRemarcando, setPericiaRemarcando] = useState(null); // perícia sendo remarcada
   const [periciaMarcandoRemarcada, setPericiaMarcandoRemarcada] = useState(null); // perícia só marcada como remarcada
@@ -577,10 +580,10 @@ export default function PastaDetalhe() {
 
   // Abre o modal de edição com a perícia COMPLETA (a linha da lista não traz
   // endereço estruturado nem o responsável; sem isso o salvar zeraria esses campos).
-  async function editarPericia(p) {
+  async function editarPericia(p, soVer = false) {
     try {
       const { data } = await periciasAPI.buscar(p.id);
-      if (data.ok) setPericiaEditando(data.dados);
+      if (data.ok) { setPericiaEmLeitura(soVer); setPericiaEditando(data.dados); }
       else toast.error('Erro ao carregar perícia');
     } catch { toast.error('Erro ao carregar perícia'); }
   }
@@ -1135,7 +1138,9 @@ export default function PastaDetalhe() {
                     const outroFazendo = p.fazendo_por && !euFazendo;
                     const ativo        = !['concluido','cancelado'].includes(p.status);
                     return (
-                      <tr key={p.id} className={ativo ? corPrazo(p.dias_restantes) : ''}>
+                      <tr key={p.id} className={ativo ? corPrazo(p.dias_restantes) : ''}
+                        style={{ cursor: 'pointer' }} title="Ver detalhes do prazo"
+                        onClick={() => { setPrazoEmLeitura(true); setPrazoEditando(p); }}>
                         <td>{p.subtipo_nome || p.descricao || '—'}</td>
                         <td>{formatarData(p.data_vencimento)}</td>
                         <td>
@@ -1162,7 +1167,7 @@ export default function PastaDetalhe() {
                           {!p.fazendo_por && '—'}
                         </td>
                         <td><span className={`badge ${STATUS_COR_PRAZO[p.status] || 'badge-cinza'}`}>{labelStatusPrazo(p.status)}</span></td>
-                        <td>
+                        <td onClick={e => e.stopPropagation()}>
                           {/* Todas as ações no menu "⋮" — mesmas regras de estado da tela de Prazos */}
                           <MenuAcoes itens={[
                             { label: 'Fazer', icone: '▶',
@@ -1182,7 +1187,7 @@ export default function PastaDetalhe() {
                               onClick: () => setPrazoCancelando(p) },
                             { label: 'Editar', icone: '✏️',
                               oculto: !(ativo && temPermissao('prazos','alterar') && (!outroFazendo || ehAdmin)),
-                              onClick: () => setPrazoEditando(p) },
+                              onClick: () => { setPrazoEmLeitura(false); setPrazoEditando(p); } },
                             { label: 'Excluir', icone: '🗑️', perigo: true,
                               oculto: !(ativo && temPermissao('prazos','excluir') && (!outroFazendo || ehAdmin)),
                               onClick: () => confirmarExcluirPrazo(p.id) },
@@ -1203,13 +1208,19 @@ export default function PastaDetalhe() {
         )}
         {prazoEditando && (
           <ModalEditarPrazo prazo={prazoEditando} tipos={tiposPrazo}
-            onFechar={(reload) => { setPrazoEditando(null); if (reload) carregarPrazos(); }} />
+            somenteLeitura={prazoEmLeitura}
+            podeEditar={prazoEditando.status !== 'concluido' && prazoEditando.status !== 'cancelado'
+              && temPermissao('prazos','alterar')
+              && !(prazoEditando.fazendo_por && prazoEditando.fazendo_por !== usuario?.id && !ehAdmin)}
+            onFechar={(reload) => { setPrazoEditando(null); setPrazoEmLeitura(false); if (reload) carregarPrazos(); }} />
         )}
         {confirmar && <ModalConfirmar {...confirmar} onCancelar={() => setConfirmar(null)} />}
         {janelaComunicado}
         {modalTarefa && (
           <ModalTarefa
             tarefa={tarefaEditando}
+            somenteLeitura={tarefaEmLeitura}
+            podeEditar={!!tarefaEditando && temPermissao('tarefas','alterar') && !tarefaEditando.concluida && souDonoTarefa(tarefaEditando)}
             preSelecao={!tarefaEditando ? (processoSelecionado ? {
               tipo:            'processo',
               processo_id:     processoSelecionado.id,
@@ -1219,7 +1230,7 @@ export default function PastaDetalhe() {
               pasta_id:    pasta.id,
               pasta_nome:  `${String(pasta.numPasta).padStart(4,'0')} — ${processoSelecionado?.NomeTituloProc || ''}`,
             }) : undefined}
-            onFechar={(reload) => { setModalTarefa(false); setTarefaEditando(null); if (reload) carregarTarefas(); }}
+            onFechar={(reload) => { setModalTarefa(false); setTarefaEditando(null); setTarefaEmLeitura(false); if (reload) carregarTarefas(); }}
           />
         )}
         {tarefaHistorico && (
@@ -1307,7 +1318,9 @@ export default function PastaDetalhe() {
             tipos={tiposPericia}
             onTiposChange={() => periciasAPI.tipos().then(r => { if (r.data.ok) setTiposPericia(r.data.dados); })}
             pericia={periciaEditando}
-            onFechar={(reload) => { setPericiaEditando(null); if (reload) carregarPericias(); }}
+            somenteLeitura={periciaEmLeitura}
+            podeEditar={(periciaEditando.status === 'agendada' || !periciaEditando.status || periciaEditando.status === 'aguardando_data') && temPermissao('pericias','alterar')}
+            onFechar={(reload) => { setPericiaEditando(null); setPericiaEmLeitura(false); if (reload) carregarPericias(); }}
           />
         )}
         {periciaCancelando && (
@@ -1412,7 +1425,8 @@ export default function PastaDetalhe() {
                   {tarefas.map(t => {
                     const PRIO_COR = { urgente: 'badge-vermelho', normal: 'badge-laranja', baixa: 'badge-verde' };
                     return (
-                      <tr key={t.id}>
+                      <tr key={t.id} style={{ cursor: 'pointer' }} title="Ver detalhes da tarefa"
+                        onClick={() => { setTarefaEmLeitura(true); setTarefaEditando(t); setModalTarefa(true); }}>
                         <td>
                           <strong style={t.concluida ? { textDecoration: 'line-through' } : {}}>
                             {t.titulo}
@@ -1440,13 +1454,13 @@ export default function PastaDetalhe() {
                             {t.concluida ? 'Concluída' : 'Pendente'}
                           </span>
                         </td>
-                        <td>
+                        <td onClick={e => e.stopPropagation()}>
                           <MenuAcoes itens={[
                             { label: t.concluida ? 'Reabrir' : 'Concluir', icone: t.concluida ? '↩️' : '✅',
                               onClick: () => toggleConcluirTarefa(t) },
                             { label: 'Editar', icone: '✏️',
                               oculto: !(temPermissao('tarefas','alterar') && !t.concluida && souDonoTarefa(t)),
-                              onClick: () => { setTarefaEditando(t); setModalTarefa(true); } },
+                              onClick: () => { setTarefaEmLeitura(false); setTarefaEditando(t); setModalTarefa(true); } },
                             { label: 'Histórico', icone: '📋',
                               oculto: !(temPermissao('tarefas','historico') && souDonoTarefa(t)),
                               onClick: () => setTarefaHistorico(t) },
@@ -1560,7 +1574,8 @@ export default function PastaDetalhe() {
                     const aguardandoData = p.status === 'aguardando_data';       // nasceu da ata sem data: só dá para informar a data
                     const historico = p.status === 'cancelada' || p.status === 'remarcada'; // não pode excluir
                     return (
-                      <tr key={p.id}>
+                      <tr key={p.id} style={{ cursor: 'pointer' }} title="Ver detalhes da perícia"
+                        onClick={() => editarPericia(p, true)}>
                         <td>{p.tipo_nome || '—'}</td>
                         <td>{p.data ? <>{formatarData(p.data)} {p.hora?.slice(0, 5)}</> : 'Aguardando data'}</td>
                         <td>{p.perito_nome || '—'}</td>
@@ -1571,7 +1586,7 @@ export default function PastaDetalhe() {
                             {STATUS_LABEL_PER[p.status] || 'Agendada'}
                           </span>
                         </td>
-                        <td style={{ whiteSpace: 'nowrap' }}>
+                        <td style={{ whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
                             {/* Realizada / Editar / Remarcar / Cancelar / Comunicar — só quando agendada */}
                             <MenuAcoes itens={[
                               { label: 'Marcar realizada', icone: '✅', oculto: !(agendada && temPermissao('pericias','alterar')), onClick: () => marcarPericiaRealizada(p) },

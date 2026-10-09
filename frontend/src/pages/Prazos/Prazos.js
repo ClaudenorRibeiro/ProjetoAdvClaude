@@ -752,7 +752,9 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
 // ============================================================
 // MODAL DE EDIÇÃO DE PRAZO
 // ============================================================
-export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
+export function ModalEditarPrazo({ prazo, tipos, onFechar, somenteLeitura = false, podeEditar = true }) {
+  // Abre só para ver (Detalhes); o botão Editar libera os campos.
+  const [leitura, setLeitura] = useState(somenteLeitura);
   const [form, setForm] = useState({
     subtipo_id:    String(prazo.subtipo_id   || ''),
     tipo_prazo_id: String(prazo.tipo_prazo_id || ''),
@@ -856,9 +858,9 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
   return (
     <>
     <div className="modal-overlay">
-      <div className="modal-box modal-grande">
+      <div className={`modal-box modal-grande ${leitura ? 'modal-leitura' : ''}`}>
         <div className="modal-header">
-          <h3>Editar Prazo</h3>
+          <h3>{leitura ? 'Detalhes do Prazo' : 'Editar Prazo'}</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
         </div>
         <div className="modal-body">
@@ -868,6 +870,7 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
               {aviso}
             </div>
           )}
+          <fieldset disabled={leitura} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Processo</label>
@@ -976,12 +979,22 @@ export function ModalEditarPrazo({ prazo, tipos, onFechar }) {
               {!form.delegado_para && <span style={{ fontSize: 12 }}>— disponível ao delegar para um usuário</span>}
             </label>
           </div>
+          </fieldset>
         </div>
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
-            {salvando ? 'Salvando...' : 'Salvar Alterações'}
-          </button>
+          {leitura ? (
+            <>
+              <button className="btn btn-secondary" onClick={() => onFechar(false)}>Fechar</button>
+              {podeEditar && <button className="btn btn-primary" onClick={() => setLeitura(false)}>Editar</button>}
+            </>
+          ) : (
+            <>
+              <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+                {salvando ? 'Salvando...' : 'Salvar Alterações'}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

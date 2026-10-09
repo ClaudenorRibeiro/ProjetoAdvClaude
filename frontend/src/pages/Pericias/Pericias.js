@@ -350,7 +350,9 @@ export default function Pericias() {
 // aberto já dentro de um processo (ex.: aba Perícias da pasta), pré-seleciona o processo e dispensa
 // a busca de pasta. Default undefined => comportamento idêntico ao da tela de Perícias.
 // dataInicial / horaInicial: pré-preenchimento vindo de uma SUGESTÃO da publicação.
-export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, horaInicial, onTiposChange, onFechar }) {
+export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, horaInicial, onTiposChange, onFechar, somenteLeitura = false, podeEditar = true }) {
+  // Abre só para ver (Detalhes); o botão Editar libera os campos.
+  const [leitura, setLeitura] = useState(somenteLeitura);
   const overlayRef = useEscFechar(() => onFechar(false)); // ESC fecha esta janela (só quando é a de cima)
   const { temPermissao } = useAuth();
   // Mostra o botão "..." de gerenciar tipos só para quem pode cadastrar/alterar tipos.
@@ -724,12 +726,13 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
 
   return (
     <div className="modal-overlay" ref={overlayRef}>
-      <div className="modal-box modal-grande">
+      <div className={`modal-box modal-grande ${leitura ? 'modal-leitura' : ''}`}>
         <div className="modal-header">
-          <h3>{pericia ? 'Editar Perícia' : 'Nova Perícia'}</h3>
+          <h3>{leitura ? 'Detalhes da Perícia' : pericia ? 'Editar Perícia' : 'Nova Perícia'}</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
         </div>
         <div className="modal-body">
+          <fieldset disabled={leitura} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           {/* Número do Processo (CNJ) — mesmo padrão do Novo Prazo. Quando aberto pela aba da
               pasta (processoInicial), o processo é fixo e o campo fica somente leitura. */}
           <div className="form-group">
@@ -1005,12 +1008,22 @@ export function ModalPericia({ tipos, pericia, processoInicial, dataInicial, hor
               </div>
             </div>
           </div>
+          </fieldset>
         </div>
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={() => salvar()} disabled={salvando}>
-            {salvando ? 'Salvando...' : 'Salvar'}
-          </button>
+          {leitura ? (
+            <>
+              <button className="btn btn-secondary" onClick={() => onFechar(false)}>Fechar</button>
+              {podeEditar && <button className="btn btn-primary" onClick={() => setLeitura(false)}>Editar</button>}
+            </>
+          ) : (
+            <>
+              <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={() => salvar()} disabled={salvando}>
+                {salvando ? 'Salvando...' : 'Salvar'}
+              </button>
+            </>
+          )}
         </div>
       </div>
 

@@ -596,3 +596,35 @@ test('@critical Nova perícia: local manual já preenchido não é sobrescrito p
   await expect(j2.getByLabel('Nome/Referência do local', { exact: true })).toHaveValue('Iml Central');   // (o sistema já arruma maiúsculas ao sair do campo)
   await expect(j2.getByRole('radio', { name: /Endereço do perito/ })).not.toBeChecked();
 });
+
+test('@critical Clicar na linha da perícia abre "Detalhes da Perícia" só para ver; Editar libera; cancelada não tem Editar; o menu ⋮ não abre os Detalhes', async ({ page }) => {
+  await loginPelaTela(page);
+  await abrirAba(page, CNJ1);
+  const l = () => linha(page, `${br(util(1))} 10:00`);
+  await abrirMenuAcoes(page, l());
+  await expect(janela(page, 'Detalhes da Perícia')).toHaveCount(0);
+  await page.mouse.click(700, 15);
+  await l().locator('td').first().click();
+  const j = janela(page, 'Detalhes da Perícia');
+  await expect(j).toBeVisible();
+  await expect(j.getByLabel('Data', { exact: true })).toHaveValue(util(1));
+  await expect(j.getByLabel('Data', { exact: true })).toBeDisabled();
+  await expect(j.getByLabel('Nome/Referência do local', { exact: true })).toBeDisabled();
+  await expect(j.getByRole('button', { name: 'Salvar', exact: true })).toHaveCount(0);
+  await semViolacoes(page, 'janela Detalhes da Perícia');
+  await j.getByRole('button', { name: 'Editar', exact: true }).click();
+  const e = janela(page, 'Editar Perícia');
+  await expect(e.getByLabel('Data', { exact: true })).toBeEnabled();
+  await expect(e.getByRole('button', { name: 'Salvar', exact: true })).toBeVisible();
+  await e.getByRole('button', { name: 'Cancelar' }).click();
+  expect((await noBancoPer(d.p1))[0].dia).toBe(util(1));
+  // cancelada: só para ver
+  await noBanco("UPDATE pericia SET status = 'cancelada', motivo_status = 'teste' WHERE id = ?", [d.p1]);
+  await abrirAba(page, CNJ1);
+  await l().locator('td').first().click();
+  const c = janela(page, 'Detalhes da Perícia');
+  await expect(c).toBeVisible();
+  await expect(c.getByRole('button', { name: 'Editar', exact: true })).toHaveCount(0);
+  await c.getByRole('button', { name: 'Fechar' }).click();
+  await expect(c).toHaveCount(0);
+});

@@ -334,3 +334,32 @@ test('@critical Mais de 100 tarefas no mesmo processo: a aba mostra todas (sem c
   await abrirAba(page, CNJ1);
   await expect(page.locator('tbody tr'), 'a lista mostrou menos tarefas do que existem (130 em massa + 2 do processo)').toHaveCount(132, { timeout: 20000 });
 });
+
+test('@critical Clicar na linha da tarefa abre "Detalhes da Tarefa" só para ver; Editar libera; concluída não tem Editar; o menu ⋮ não abre os Detalhes', async ({ page }) => {
+  await loginPelaTela(page);
+  await abrirAba(page);
+  await abrirMenuAcoes(page, linha(page, 'Preparar Contestação'));
+  await expect(janela(page, 'Detalhes da Tarefa')).toHaveCount(0);
+  await page.mouse.click(700, 15);
+  await linha(page, 'Preparar Contestação').locator('td').first().click();
+  const j = janela(page, 'Detalhes da Tarefa');
+  await expect(j).toBeVisible();
+  await expect(j.getByLabel('Título', { exact: true })).toHaveValue('Preparar Contestação');
+  await expect(j.getByLabel('Título', { exact: true })).toBeDisabled();
+  await expect(j.getByLabel('Prioridade', { exact: true })).toBeDisabled();
+  await expect(j.getByRole('button', { name: 'Salvar Tarefa' })).toHaveCount(0);
+  await semViolacoes(page, 'janela Detalhes da Tarefa');
+  await j.getByRole('button', { name: 'Editar', exact: true }).click();
+  const e = janela(page, 'Editar Tarefa');
+  await expect(e.getByLabel('Título', { exact: true })).toBeEnabled();
+  await expect(e.getByRole('button', { name: 'Salvar Tarefa' })).toBeVisible();
+  await e.getByRole('button', { name: 'Cancelar' }).click();
+  // concluída: só para ver
+  await mostrar(page).selectOption('1');
+  await linha(page, 'Revisar Laudo').locator('td').first().click();
+  const c = janela(page, 'Detalhes da Tarefa');
+  await expect(c).toBeVisible();
+  await expect(c.getByRole('button', { name: 'Editar', exact: true })).toHaveCount(0);
+  await c.getByRole('button', { name: 'Fechar' }).click();
+  await expect(c).toHaveCount(0);
+});

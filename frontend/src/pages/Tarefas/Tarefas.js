@@ -506,7 +506,9 @@ export function ModalHistoricoTarefa({ tarefa, onFechar }) {
 // preSelecao: { tipo, processo_id, processo_numero }
 //   usado quando aberto a partir do PastaDetalhe
 // ============================================================
-export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publicacaoId, bloquearProcesso = false, pastaInicial = '', onSalvarRascunho = null, tituloInicial = '', numeroPublicacao = '' }) {
+export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publicacaoId, bloquearProcesso = false, pastaInicial = '', onSalvarRascunho = null, tituloInicial = '', numeroPublicacao = '', somenteLeitura = false, podeEditar = true }) {
+  // Abre só para ver (Detalhes); o botão Editar libera os campos.
+  const [leitura, setLeitura] = useState(somenteLeitura);
   // Deduz tipo inicial: tarefa existente → preSelecao → 'rotina'
   // Obs: tipo 'pasta' foi removido da UI — tarefas antigas com pasta_id continuam exibidas
   //      corretamente na listagem, mas não é mais possível criar/editar com esse vínculo
@@ -728,9 +730,9 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
   return (
     <>
     <div className="modal-overlay" ref={overlayRef}>
-      <div className="modal-box modal-grande">
+      <div className={`modal-box modal-grande ${leitura ? 'modal-leitura' : ''}`}>
         <div className="modal-header">
-          <h3>{tarefa ? 'Editar Tarefa' : 'Nova Tarefa'}</h3>
+          <h3>{leitura ? 'Detalhes da Tarefa' : tarefa ? 'Editar Tarefa' : 'Nova Tarefa'}</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
         </div>
         <div className="modal-body">
@@ -741,6 +743,7 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
             </div>
           )}
 
+          <fieldset disabled={leitura} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           {/* ── Seleção de tipo ── */}
           {!bloquearProcesso && <div className="form-group">
             <label className="form-label">Tipo da tarefa *</label>
@@ -914,13 +917,23 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
               📧 Enviar e-mail{nomeAtribuido ? ` para ${nomeAtribuido}` : ''}
             </label>}
           </div>
+          </fieldset>
 
         </div>
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
-            {salvando ? 'Salvando...' : 'Salvar Tarefa'}
-          </button>
+          {leitura ? (
+            <>
+              <button className="btn btn-secondary" onClick={() => onFechar(false)}>Fechar</button>
+              {podeEditar && <button className="btn btn-primary" onClick={() => setLeitura(false)}>Editar</button>}
+            </>
+          ) : (
+            <>
+              <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+                {salvando ? 'Salvando...' : 'Salvar Tarefa'}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

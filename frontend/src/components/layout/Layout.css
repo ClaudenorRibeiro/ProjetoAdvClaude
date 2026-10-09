@@ -999,6 +999,28 @@ body {
   cursor: default;
 }
 
+/* Janelas "Detalhes" (só para ver) abertas ao clicar numa linha: campos travados, texto escuro e legível.
+   Listas de escolha pesquisáveis e seletores com botões não respondem ao mouse. */
+.modal-leitura input:disabled,
+.modal-leitura select:disabled,
+.modal-leitura textarea:disabled {
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+  font-weight: 600;
+  opacity: 1;
+  background: #f8fafc;
+  cursor: default;
+}
+.modal-leitura fieldset:disabled [class*="select-pesquisavel"],
+.modal-leitura fieldset:disabled select,
+.modal-leitura fieldset:disabled button {
+  pointer-events: none;
+}
+.modal-leitura fieldset:disabled [class*="select-pesquisavel-"][class*="-singleValue"] {
+  color: #111827;
+  font-weight: 600;
+}
+
 /* Calendário: dias de OUTRO mês (cinza claro da biblioteca) com contraste mínimo de 4,5:1 */
 .rbc-off-range,
 .rbc-off-range .rbc-button-link {

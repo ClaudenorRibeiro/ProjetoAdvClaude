@@ -560,3 +560,38 @@ test('@critical Aba Prazos: mais de 50 (e de 100) prazos no mesmo processo apare
   expect(venc[0]).toBe(dia(31).split('-').reverse().join('/'));
   expect(venc[129]).toBe(dia(160).split('-').reverse().join('/'));
 });
+
+// ------------------------------------------------------------------ Clicar na linha = Detalhes (somente leitura)
+test('@critical Clicar na linha do prazo abre "Detalhes do Prazo" só para ver; Editar libera; concluído/cancelado não tem Editar; o menu ⋮ não abre os Detalhes', async ({ page }) => {
+  await cenario();
+  await loginPelaTela(page);
+  await abrirAba(page, CNJ1);
+  const dataFutura = dia(6).split('-').reverse().join('/');
+  // o clique no ⋮ não abre os Detalhes
+  await menu(page, dataFutura);
+  await expect(janela(page, 'Detalhes do Prazo')).toHaveCount(0);
+  await page.mouse.click(700, 15);
+  await linha(page, dataFutura).locator('td').first().click();
+  const jan = janela(page, 'Detalhes do Prazo');
+  await expect(jan).toBeVisible();
+  await expect(jan.getByLabel('Data final', { exact: true })).toHaveValue(dia(6));
+  await expect(jan.getByLabel('Descrição', { exact: true })).toBeDisabled();
+  await expect(jan.getByLabel('Data final', { exact: true })).toBeDisabled();
+  await expect(jan.getByLabel('Delegar para')).toBeDisabled();
+  await expect(jan.getByRole('button', { name: 'Salvar Alterações' })).toHaveCount(0);
+  await semViolacoes(page, 'janela Detalhes do Prazo');
+  await jan.getByRole('button', { name: 'Editar', exact: true }).click();
+  const ed = janela(page, 'Editar Prazo');
+  await expect(ed.getByLabel('Descrição', { exact: true })).toBeEnabled();
+  await expect(ed.getByRole('button', { name: 'Salvar Alterações' })).toBeVisible();
+  await ed.getByRole('button', { name: 'Cancelar' }).click();
+  expect((await statusNoBanco(d.futuro)).descricao).toBe('Prazo Futuro');
+  // concluído: abre só para ver, sem Editar
+  await page.getByRole('checkbox', { name: 'Mostrar concluídos e cancelados' }).check();
+  await linha(page, dia(3).split('-').reverse().join('/')).locator('td').first().click();
+  const c = janela(page, 'Detalhes do Prazo');
+  await expect(c).toBeVisible();
+  await expect(c.getByRole('button', { name: 'Editar', exact: true })).toHaveCount(0);
+  await c.getByRole('button', { name: 'Fechar' }).click();
+  await expect(c).toHaveCount(0);
+});
