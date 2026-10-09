@@ -7,6 +7,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { audienciasAPI, processosAPI, pessoasAPI, authAPI, calendarioAPI, configuracaoAPI, periciasAPI } from '../../services/api';
 import { formatarData, formatarDataHora, hojeLocal, audienciaJaPassou, toTitleCase, validarCPF, mascaraCPF, formatarCPF } from '../../utils/formatters';
 import { limparLinkDigitado, completarLink } from '../../utils/linkWeb';
+import SelectPesquisavel from '../../components/ui/SelectPesquisavel';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
@@ -879,10 +880,9 @@ function ModalCadastroRapidoPessoa({ onFechar, onSalvo }) {
             </div>
             <div className="form-group">
               <label className="form-label">Profissão</label>
-              <select aria-label="Profissão" className="form-control" value={form.profissao_id || ''} onChange={e => set('profissao_id', e.target.value)}>
-                <option value="">— Selecione —</option>
-                {auxiliares.profissoes.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-              </select>
+              <SelectPesquisavel ariaLabel="Profissão" className="form-control" value={form.profissao_id || ''} isClearable
+                onChange={valor => set('profissao_id', valor)}
+                opcoes={auxiliares.profissoes.map(p => ({ value: p.id, label: p.nome }))} />
             </div>
           </div>
 
@@ -2181,10 +2181,9 @@ export function ModalNovoFreela({ onFechar, onSalvo, profissoes = [], exigirProf
           </div>
           <div className="form-group">
             <label className="form-label">Profissão{exigirProfissao ? ' *' : ''}</label>
-            <select aria-label="Profissão" className="form-control" value={form.profissao_id} onChange={e => set('profissao_id', e.target.value)}>
-              <option value="">— Não informada —</option>
-              {profissoes.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-            </select>
+            <SelectPesquisavel ariaLabel="Profissão" className="form-control" value={form.profissao_id} isClearable={!exigirProfissao}
+              placeholder="— Não informada —" onChange={valor => set('profissao_id', valor)}
+              opcoes={profissoes.map(p => ({ value: p.id, label: p.nome }))} />
           </div>
           <div className="grid-2">
             <div className="form-group">

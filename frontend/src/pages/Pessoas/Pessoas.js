@@ -1961,7 +1961,7 @@ export function ModalPessoa({ tipo, pessoa, onFechar, onAbrirEdicao, somenteLeit
                 />
                 <SelectComAdicao
                   label="Profissão" value={form.profissao_id||''} onChange={v=>set('profissao_id',v)}
-                  opcoes={auxiliares.profissoes} tipo="profissoes"
+                  opcoes={auxiliares.profissoes} tipo="profissoes" pesquisavel
                   onNovoItem={item => handleNovoAuxiliar('profissoes', item)}
                   somenteLeitura={leitura}
                 />

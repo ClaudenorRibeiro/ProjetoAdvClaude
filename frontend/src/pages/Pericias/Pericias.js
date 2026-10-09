@@ -1175,11 +1175,9 @@ function ModalCadastroPeritoRapido({ profissoes, onFechar, onSalvo }) {
             </div>
             <div className="form-group">
               <label className="form-label">Profissão *</label>
-              <select aria-label="Profissão" className="form-control" value={form.profissao_id}
-                onChange={e => set('profissao_id', e.target.value)}>
-                <option value="">— Selecione —</option>
-                {peritoProfissoes.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-              </select>
+              <SelectPesquisavel ariaLabel="Profissão" className="form-control" value={form.profissao_id}
+                onChange={valor => set('profissao_id', valor)}
+                opcoes={peritoProfissoes.map(p => ({ value: p.id, label: p.nome }))} />
               {peritoProfissoes.length === 0 && (
                 <small style={{color:'#b45309'}}>Nenhuma profissão iniciando com "Perícia" encontrada no cadastro.</small>
               )}

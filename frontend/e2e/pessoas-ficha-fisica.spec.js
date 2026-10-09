@@ -93,6 +93,15 @@ async function irParaPessoas(page) {
   await loginPelaTela(page);
   await page.goto('/pessoas'); await aguardarTelaPronta(page);
 }
+// Profissão é uma lista onde se DIGITA para filtrar (sem diferenciar acento/maiúscula, em qualquer parte do nome): digita um trecho e clica na opção.
+async function escolherProfissao(page, nome, digitado = nome) {
+  const campo = ficha(page).getByLabel('Profissão', { exact: true });
+  await campo.click();
+  await campo.fill(digitado);
+  await page.getByRole('option', { name: nome, exact: true }).click();
+}
+const profissaoEscolhida = (page, j) => j.locator('.form-group').filter({ has: page.getByLabel('Profissão', { exact: true }) }).locator('.select-pesquisavel__single-value');
+
 async function abrirNova(page) {
   await page.getByRole('button', { name: '+ Nova Pessoa Física' }).click();
   await expect(ficha(page).getByRole('heading', { name: 'Nova Pessoa Física' })).toBeVisible();
@@ -269,7 +278,7 @@ test('@critical Responsável legal: buscar (mínimo 2 letras), escolher, parente
   await ficha(page).getByText(`Responsável Ficha E2E — ${mascaraCpf(CPF.responsavel)}`).click();
   await ficha(page).getByTitle('Remover o responsável legal').click();
   await expect(ficha(page).getByText('CPF *')).toBeVisible(); await expect(ficha(page).getByLabel('Parentesco', { exact: true })).toBeDisabled();
-  await ficha(page).getByLabel('Profissão', { exact: true }).selectOption({ label: 'Perícia Médica Ficha E2E' });
+  await escolherProfissao(page, 'Perícia Médica Ficha E2E', 'pericia med');   // sem acento e só um pedaço do nome
   await expect(ficha(page).getByText('CPF (não obrigatório — profissional de perícia)')).toBeVisible();
   await ficha(page).getByRole('button', { name: 'Cancelar', exact: true }).click();
 });
@@ -348,6 +357,32 @@ test('@critical CTPS, telefones e e-mails: Digital esconde número e série e gr
   const tels = await noBanco('SELECT numero, tipo, principal FROM telefones_pf WHERE pessoa_id = ? ORDER BY id', [p.id]);
   expect(tels.map(t => [t.numero, t.tipo, Number(t.principal)])).toEqual([['(19) 98888-7777', 'celular da esposa', 1], ['(19) 3333-4444', 'celular', 0]]);   // a 2ª linha sem descrição vira o padrão "celular"
   expect((await noBanco('SELECT email FROM emails_pf WHERE pessoa_id = ?', [p.id])).map(e => e.email)).toEqual(['contato@ficha.invalid']);
+});
+
+test('@critical Profissão: digitar filtra a lista (sem acento, em qualquer parte do nome), escolher, limpar e "Nenhuma opção encontrada"; as outras listas continuam comuns', async ({ page }) => {
+  await irParaPessoas(page);
+  await abrirNova(page);
+  const j = ficha(page);
+  const campo = j.getByLabel('Profissão', { exact: true });
+  await campo.click();
+  await expect(page.getByRole('option', { name: 'Advogada Ficha E2E', exact: true })).toBeVisible();          // lista completa ao abrir
+  await expect(page.getByRole('option', { name: 'Perícia Médica Ficha E2E', exact: true })).toBeVisible();
+  await campo.fill('ADVOG');                                                                                // maiúscula não atrapalha
+  await expect(page.getByRole('option', { name: 'Advogada Ficha E2E', exact: true })).toBeVisible();
+  await expect(page.getByRole('option', { name: 'Perícia Médica Ficha E2E', exact: true })).toHaveCount(0);   // quem não casa some
+  await campo.fill('medica ficha');                                                                         // sem acento e no MEIO do nome
+  await expect(page.getByRole('option', { name: 'Perícia Médica Ficha E2E', exact: true })).toBeVisible();
+  await campo.fill('zzzzzz');
+  await expect(page.getByText('Nenhuma opção encontrada')).toBeVisible();
+  await campo.fill('advog');
+  await page.getByRole('option', { name: 'Advogada Ficha E2E', exact: true }).click();
+  await expect(profissaoEscolhida(page, j)).toHaveText('Advogada Ficha E2E');
+  await campo.press('Backspace');                                                                           // limpar: volta a "Selecione"
+  await expect(profissaoEscolhida(page, j)).toHaveCount(0);
+  await expect(j.locator('.form-group').filter({ has: page.getByLabel('Profissão', { exact: true }) }).locator('.select-pesquisavel__placeholder')).toHaveText('— Selecione —');
+  // as outras listas do formulário continuam como antes (lista comum)
+  for (const select of ['Gênero', 'Estado civil', 'Nacionalidade', 'Parentesco']) await expect(j.getByLabel(select, { exact: true }).evaluate(el => el.tagName)).resolves.toBe('SELECT');
+  await semViolacoes(page, 'ficha da pessoa com Profissão pesquisável');
 });
 
 test('@critical Listas com "…" (gênero, estado civil, profissão, nacionalidade, parentesco): cadastra na hora e já escolhe; vazio, repetido e nome grande demais dão aviso DENTRO do mini formulário', async ({ page }) => {
@@ -475,7 +510,7 @@ test('@critical Editar: abre com tudo preenchido do jeito que está no banco; SA
   await expect(j.getByLabel('RG', { exact: true })).toHaveValue('12.345.678-9'); await expect(j.getByLabel('Órgão Expedidor')).toHaveValue('SSP/SP');
   await expect(j.getByLabel('Data de nascimento')).toHaveValue('1990-05-17'); await expect(j.getByLabel('PIS', { exact: true })).toHaveValue('123.45678.90-1');
   await expect(j.getByLabel('Gênero', { exact: true }).locator('option:checked')).toHaveText('Feminino Ficha E2E');
-  await expect(j.getByLabel('Profissão', { exact: true }).locator('option:checked')).toHaveText('Advogada Ficha E2E');
+  await expect(profissaoEscolhida(page, j)).toHaveText('Advogada Ficha E2E');
   await expect(j.getByLabel('Número da CTPS')).toHaveValue('123456'); await expect(j.getByLabel('Série da CTPS')).toHaveValue('0001');
   await expect(j.getByLabel('Pai', { exact: true })).toHaveValue('Pai Da Ficha'); await expect(j.getByLabel('Mãe', { exact: true })).toHaveValue('Mãe Da Ficha');
   await expect(j.getByLabel('Logradouro', { exact: true })).toHaveValue('Rua Direita'); await expect(j.getByLabel('Estado', { exact: true })).toHaveValue('SP');

@@ -11,9 +11,11 @@
 // ============================================================
 import React, { useState } from 'react';
 import { pessoasAPI } from '../../services/api';
+import SelectPesquisavel from './SelectPesquisavel';
 import { toast } from 'react-toastify';
 
-export function SelectComAdicao({ label, value, onChange, opcoes = [], tipo, onNovoItem, somenteLeitura = false, placeholderNovo }) {
+// pesquisavel: troca a lista comum por uma lista onde se digita para filtrar (para listas longas, como Profissão). Só quem pede ganha isso.
+export function SelectComAdicao({ label, value, onChange, opcoes = [], tipo, onNovoItem, somenteLeitura = false, placeholderNovo, pesquisavel = false }) {
   const [miniFormAberto, setMiniFormAberto] = useState(false);
   const [novoNome, setNovoNome]             = useState('');
   const [salvando, setSalvando]             = useState(false);
@@ -48,17 +50,31 @@ export function SelectComAdicao({ label, value, onChange, opcoes = [], tipo, onN
     <div className="form-group">
       {label && <label className="form-label">{label}</label>}
       <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-        <select
-          aria-label={typeof label === 'string' ? label : undefined}
-          className="form-control"
-          value={value}
-          disabled={somenteLeitura}
-          onChange={e => onChange(e.target.value)}
-          style={{ flex: 1 }}
-        >
-          <option value="">— Selecione —</option>
-          {opcoes.map(o => <option key={o.id} value={o.id}>{o.nome}</option>)}
-        </select>
+        {pesquisavel ? (
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <SelectPesquisavel
+              ariaLabel={typeof label === 'string' ? label : undefined}
+              className="form-control"
+              value={value}
+              disabled={somenteLeitura}
+              isClearable
+              onChange={onChange}
+              opcoes={opcoes.map(o => ({ value: o.id, label: o.nome }))}
+            />
+          </div>
+        ) : (
+          <select
+            aria-label={typeof label === 'string' ? label : undefined}
+            className="form-control"
+            value={value}
+            disabled={somenteLeitura}
+            onChange={e => onChange(e.target.value)}
+            style={{ flex: 1 }}
+          >
+            <option value="">— Selecione —</option>
+            {opcoes.map(o => <option key={o.id} value={o.id}>{o.nome}</option>)}
+          </select>
+        )}
         {/* Botão "..." abre mini formulário para cadastrar novo item */}
         {!somenteLeitura && (
           <button
