@@ -13,6 +13,7 @@ import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import ModalInfo from '../../components/ui/ModalInfo';
 import MenuAcoes from '../../components/MenuAcoes';
 import { ModalGerar } from '../../components/GerarDocumento';
+import { clientesDoProcesso, clienteUnico, destinoClienteDaParcela, contaEscritorioPadrao, formaUnica, destinoSugerido } from './destinoPadrao';
 
 const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
 
@@ -557,14 +558,20 @@ function ModalRepasse({ linha, onCancelar, onConfirmar }) {
   const [contasEscritorio, setContasEscritorio] = useState([]);
   const [contaEscritorioId, setContaEscritorioId] = useState('');
   const p = linha.parcela;
-  const inicialTipo = linha.tipo === 'parceiro' ? p.parceria_pessoa_tipo : p.repasse_cliente_tipo;
-  const inicialPessoa = linha.tipo === 'parceiro' ? p.parceria_pessoa_id : p.repasse_cliente_pessoa_id;
+  // Cliente: o que a parcela já tem; sem isso, o padrão do acordo (pessoa e conta juntas). Parceiro: o da parceria.
+  const padraoCliente = linha.tipo === 'cliente' ? destinoClienteDaParcela(p) : null;
+  const inicialTipo = linha.tipo === 'parceiro' ? p.parceria_pessoa_tipo : padraoCliente?.tipo;
+  const inicialPessoa = linha.tipo === 'parceiro' ? p.parceria_pessoa_id : padraoCliente?.pessoaId;
   const [beneficiarios, setBeneficiarios] = useState([]);
   const [destinoTipo, setDestinoTipo] = useState(inicialTipo || '');
   const [destinoPessoa, setDestinoPessoa] = useState(inicialPessoa || '');
   const [contasDestino, setContasDestino] = useState([]);
-  const [contaDestinoId, setContaDestinoId] = useState(linha.tipo === 'cliente' ? (p.repasse_cliente_conta_id || '') : '');
+  const [contaDestinoId, setContaDestinoId] = useState(linha.tipo === 'cliente' ? (padraoCliente?.contaId || '') : '');
   const [tipoDestino, setTipoDestino] = useState('bancaria');
+  const [emMaosPorFaltaDeConta, setEmMaosPorFaltaDeConta] = useState(false); // "em mãos" foi sugerido porque a pessoa não tem conta
+  // A sugestão automática (conta principal ou "em mãos") só vale enquanto a pessoa NÃO mexeu no destino/conta: se a lista de
+  // contas chegar atrasada (máquina ou rede lenta), ela nunca desfaz uma escolha já feita.
+  const destinoManualRef = useRef(false);
   const [observacao, setObservacao] = useState('');
   const [modalNovaConta, setModalNovaConta] = useState(false);
   const [info, setInfo] = useState(null);
@@ -590,23 +597,42 @@ function ModalRepasse({ linha, onCancelar, onConfirmar }) {
     financeiroAPI.contasEscritorio().then(({ data }) => {
       if (data.ok) {
         setContasEscritorio(data.dados);
-        // Pré-seleciona a conta principal do escritório (mesmo padrão já usado abaixo p/
-        // "Conta do beneficiário") — evita o usuário esquecer de escolher a cada repasse.
-        setContaEscritorioId(atual => atual || (data.dados.find(c => c.principal)?.id || ''));
+        // Sugere a conta principal do escritório; sem principal, o caixa em espécie (se houver um só) — dinheiro em mãos.
+        setContaEscritorioId(atual => atual || contaEscritorioPadrao(data.dados));
       }
     }).catch(() => toast.error('Erro ao carregar contas do escritório'));
-    if (linha.tipo === 'cliente' && !inicialPessoa) {
-      financeiroAPI.beneficiariosProcesso(p.processo_id).then(({ data }) => { if (data.ok) setBeneficiarios(data.dados); })
-        .catch(() => toast.error('Erro ao carregar beneficiários do processo'));
+    if (linha.tipo === 'cliente') {
+      // A lista traz quem é do lado do cliente; com um cliente só (e nenhum escolhido ainda), ele já vem escolhido.
+      financeiroAPI.beneficiariosProcesso(p.processo_id).then(({ data }) => {
+        if (!data.ok) return;
+        setBeneficiarios(data.dados);
+        if (!inicialPessoa) {
+          const unico = clienteUnico(clientesDoProcesso(data.dados));
+          if (unico) { setDestinoTipo(unico.tipo); setDestinoPessoa(String(unico.id)); }
+        }
+      }).catch(() => toast.error('Erro ao carregar beneficiários do processo'));
     }
   }, []);
+  // Forma de pagamento: com uma só compatível, ela já vem escolhida (a pessoa ainda pode trocar).
+  useEffect(() => {
+    if (!formaId) { const unica = formaUnica(formasCompativeis); if (unica) setFormaId(String(unica)); }
+  }, [formas, tipoDestino, formaId]);
   useEffect(() => {
     const minhaSeq = ++contasDestinoSeqRef.current;
     if (!destinoTipo || !destinoPessoa) { setContasDestino([]); return; }
     financeiroAPI.contasBeneficiario(destinoTipo, destinoPessoa)
       .then(({ data }) => {
         if (minhaSeq !== contasDestinoSeqRef.current) return; // já trocou de beneficiário depois desta busca
-        if (data.ok) { setContasDestino(data.dados); if (!contaDestinoId) setContaDestinoId(data.dados.find(c => c.principal)?.id || ''); }
+        if (data.ok) {
+          setContasDestino(data.dados);
+          if (destinoManualRef.current) return;
+          // Conta já definida (se ainda existir) > conta principal > Dinheiro em espécie — em mãos.
+          const sugerido = destinoSugerido(data.dados, contaDestinoId);
+          setContaDestinoId(sugerido.contaId ? String(sugerido.contaId) : '');
+          setTipoDestino(sugerido.tipo);
+          setFormaId('');   // a forma depende do tipo de destino; a única compatível volta sozinha
+          setEmMaosPorFaltaDeConta(sugerido.porFaltaDeConta);
+        }
       })
       .catch(() => toast.error('Erro ao carregar contas do beneficiário'));
   }, [destinoTipo, destinoPessoa]);
@@ -659,21 +685,24 @@ function ModalRepasse({ linha, onCancelar, onConfirmar }) {
               {contasEscritorio.map(c => <option key={c.id} value={c.id}>{c.instituicao_nome ? `${c.instituicao_nome} — ${c.nome}` : c.nome}</option>)}
             </select>
           </div>
-          {linha.tipo === 'cliente' && !inicialPessoa && (
+          {linha.tipo === 'cliente' && (
             <div className="form-group"><label className="form-label">Beneficiário *</label>
-              <select aria-label="Beneficiário" ref={beneficiarioRef} className="form-control" value={destinoPessoa ? `${destinoTipo}:${destinoPessoa}` : ''} onChange={e => { const [t, id] = e.target.value.split(':'); setDestinoTipo(t || ''); setDestinoPessoa(id || ''); setContaDestinoId(''); }}>
-                <option value="">Selecione...</option>{beneficiarios.map(b => <option key={`${b.tipo}:${b.id}`} value={`${b.tipo}:${b.id}`}>{b.nome}</option>)}
+              <select aria-label="Beneficiário" ref={beneficiarioRef} className="form-control" value={destinoPessoa ? `${destinoTipo}:${destinoPessoa}` : ''} onChange={e => { const [t, id] = e.target.value.split(':'); destinoManualRef.current = false; setDestinoTipo(t || ''); setDestinoPessoa(id || ''); setContaDestinoId(''); }}>
+                <option value="">Selecione...</option>{clientesDoProcesso(beneficiarios, destinoPessoa ? { tipo: destinoTipo, id: destinoPessoa } : null).map(b => <option key={`${b.tipo}:${b.id}`} value={`${b.tipo}:${b.id}`}>{b.nome}</option>)}
               </select></div>
           )}
           <div className="form-group"><label className="form-label">Destino do repasse *</label>
-            <select aria-label="Destino do repasse" className="form-control" value={tipoDestino} onChange={e => { setTipoDestino(e.target.value); setFormaId(''); }}>
+            <select aria-label="Destino do repasse" className="form-control" value={tipoDestino} onChange={e => { destinoManualRef.current = true; setTipoDestino(e.target.value); setFormaId(''); setEmMaosPorFaltaDeConta(false); }}>
               <option value="bancaria">Conta bancária</option>
               <option value="em_maos">Dinheiro em espécie — em mãos</option>
             </select>
+            {emMaosPorFaltaDeConta && tipoDestino === 'em_maos' && (
+              <small style={{ color: '#5b6472' }}>Este beneficiário não tem conta principal cadastrada: sugerido “Dinheiro em espécie — em mãos”. Você pode trocar.</small>
+            )}
           </div>
           {tipoDestino === 'bancaria' ? (
             <div className="form-group"><label className="form-label">Conta do beneficiário *</label>
-              <select aria-label="Conta do beneficiário" ref={contaDestinoRef} className="form-control" value={contaDestinoId} onChange={e => setContaDestinoId(e.target.value)}>
+              <select aria-label="Conta do beneficiário" ref={contaDestinoRef} className="form-control" value={contaDestinoId} onChange={e => { destinoManualRef.current = true; setContaDestinoId(e.target.value); }}>
                 <option value="">Selecione...</option>{contasDestino.map(c => <option key={c.id} value={c.id}>{c.instituicao_nome} — {c.agencia ? `Ag. ${c.agencia} · ` : ''}{c.numero || c.chave_pix || c.titular}</option>)}
               </select>
               {podeCadastrarConta && destinoTipo && destinoPessoa && (
@@ -1091,7 +1120,9 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
       key: `${tipo}-${p.id}`, origem: 'parcela', tipo,
       beneficiario: tipo === 'cliente' ? 'Cliente' : (p.parceria_nome || 'Parceiro'),
       valor: tipo === 'cliente' ? p.valor_liquido : p.parceria_valor,
-      parcela: { ...p, processo_id: acordo.processo_id },
+      // O cliente padrão do acordo vai junto: parcela sem cliente próprio (ex.: já recebida antes de o cliente ser definido) usa o do acordo.
+      parcela: { ...p, processo_id: acordo.processo_id, acordo_cliente_tipo: acordo.beneficiario_cliente_tipo,
+        acordo_cliente_id: acordo.beneficiario_cliente_id, acordo_cliente_conta_id: acordo.beneficiario_cliente_conta_id },
     });
   }
   async function confirmarRepasseDaParcela(dados) {
@@ -1546,9 +1577,15 @@ function ModalReceberParcela({ parcela, onCancelar, onConfirmar, titulo, valorEx
       .catch(() => toast.error('Erro ao carregar formas de pagamento'));
   }, []);
   useEffect(() => {
-    financeiroAPI.contasEscritorio().then(({ data }) => { if (data.ok) setContasEscritorio(data.dados); })
-      .catch(() => toast.error('Erro ao carregar contas do escritório'));
+    // Sugere a conta principal do escritório; sem principal, o caixa em espécie (se houver um só) — dinheiro em mãos.
+    financeiroAPI.contasEscritorio().then(({ data }) => {
+      if (data.ok) { setContasEscritorio(data.dados); setContaEscritorioId(atual => atual || contaEscritorioPadrao(data.dados)); }
+    }).catch(() => toast.error('Erro ao carregar contas do escritório'));
   }, []);
+  // Forma de recebimento: com uma só compatível com a conta escolhida, ela já vem escolhida.
+  useEffect(() => {
+    if (contaRecebimento && !formaId) { const unica = formaUnica(formasCompativeis); if (unica) setFormaId(String(unica)); }
+  }, [formas, contaEscritorioId, formaId]);
 
   async function confirmar() {
     if (!data) return toast.error('Informe a data do recebimento');
@@ -1814,11 +1851,20 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
   // rápido não pode deixar a conta bancária de outra pessoa selecionada (auditoria 23/09).
   const contasBeneficiarioSeqRef = useRef(0);
 
+  const beneficiarioIdRef = useRef('');
+  beneficiarioIdRef.current = beneficiarioId;   // lido quando a lista de clientes chega: nunca troca quem a pessoa já escolheu
   const beneficiarioSelecionado = beneficiarios.find(b => b.tipo === beneficiarioTipo && String(b.id) === String(beneficiarioId));
 
   useEffect(() => {
-    financeiroAPI.beneficiariosProcesso(processoId).then(({ data }) => { if (data.ok) setBeneficiarios(data.dados); })
-      .catch(() => toast.error('Erro ao carregar pessoas vinculadas ao processo'));
+    // Acordo NOVO com um cliente só no processo: ele já vem como cliente padrão (com dois ou mais, quem escolhe é o usuário).
+    financeiroAPI.beneficiariosProcesso(processoId).then(({ data }) => {
+      if (!data.ok) return;
+      setBeneficiarios(data.dados);
+      if (!acordoId && !beneficiarioIdRef.current) {
+        const unico = clienteUnico(clientesDoProcesso(data.dados));
+        if (unico) { setBeneficiarioTipo(unico.tipo); setBeneficiarioId(String(unico.id)); }
+      }
+    }).catch(() => toast.error('Erro ao carregar pessoas vinculadas ao processo'));
   }, [processoId]);
   useEffect(() => {
     const minhaSeq = ++contasBeneficiarioSeqRef.current;
@@ -1920,9 +1966,10 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
   }
 
   // Parceria do ACORDO INTEIRO: aplica (ou limpa) a mesma parceria em todas as parcelas
+  // Parcela já recebida NÃO muda (a divisão do dinheiro que já entrou fica como está): vale só para as demais.
   function aplicarParceriaAcordo(dados) {
     setParceriaAcordo(dados.parceria_pessoa_id ? dados : null);
-    setParcelas(arr => arr.map(p => ({ ...p, ...dados })));
+    setParcelas(arr => arr.map(p => (p.status === 'pago' ? p : { ...p, ...dados })));
     setModalParcAcordo(false);
   }
 
@@ -2024,12 +2071,12 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
               <select aria-label="Beneficiário padrão das parcelas" className="form-control" value={beneficiarioId ? `${beneficiarioTipo}:${beneficiarioId}` : ''}
                 onChange={e => { const [t, id] = e.target.value.split(':'); setBeneficiarioTipo(t || ''); setBeneficiarioId(id || ''); setContaBeneficiarioId(''); }}>
                 <option value="">Definir depois, no repasse</option>
-                {beneficiarios.map(b => <option key={`${b.tipo}:${b.id}`} value={`${b.tipo}:${b.id}`}>{b.nome}</option>)}
+                {clientesDoProcesso(beneficiarios, beneficiarioId ? { tipo: beneficiarioTipo, id: beneficiarioId } : null).map(b => <option key={`${b.tipo}:${b.id}`} value={`${b.tipo}:${b.id}`}>{b.nome}</option>)}
               </select></div>
             <div className="form-group"><label className="form-label">Conta padrão do beneficiário</label>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <select aria-label="Conta padrão do beneficiário" className="form-control" value={contaBeneficiarioId} disabled={!beneficiarioId} onChange={e => setContaBeneficiarioId(e.target.value)}>
-                  <option value="">Selecione...</option>
+                  <option value="">Dinheiro em espécie — em mãos (ou a conta principal, se houver)</option>
                   {contasBeneficiario.map(c => <option key={c.id} value={c.id}>{c.instituicao_nome} — {c.numero || c.chave_pix || c.titular}</option>)}
                 </select>
                 {podeCadastrarContaBeneficiario && <button type="button" className="btn btn-outline" title={beneficiarioId ? 'Cadastrar conta do beneficiário' : 'Selecione primeiro o beneficiário'}
@@ -2042,8 +2089,8 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
           </button>
           {/* Parceria de TODO o acordo — aplica a mesma parceria em todas as parcelas */}
           <button type="button" className="btn btn-outline" style={{ marginBottom: '12px', marginLeft: '8px' }}
-            onClick={() => setModalParcAcordo(true)} disabled={temParcelasRecebidas}
-            title={temParcelasRecebidas ? 'Não é possível alterar todas as parcelas após um recebimento.' : ''}>
+            onClick={() => setModalParcAcordo(true)}
+            title={temParcelasRecebidas ? 'Vale só para as parcelas ainda não recebidas. As já recebidas não mudam.' : ''}>
             {parceriaAcordo?.parceria_pessoa_id ? `👥 Parceria do acordo: ${parceriaAcordo.parceria_nome}` : '+ Parceria do acordo (todas as parcelas)'}
           </button>
           {parcelas.length > 0 && (
@@ -2140,7 +2187,7 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
           onAplicar={(dados) => aplicarParceria(parceriaRow, dados)} />
       )}
       {modalParcAcordo && (
-        <ModalParceriaParcela parcela={parceriaAcordo || {}} titulo="Parceria do acordo (todas as parcelas)"
+        <ModalParceriaParcela parcela={parceriaAcordo || {}} titulo={temParcelasRecebidas ? 'Parceria do acordo (parcelas ainda não recebidas)' : 'Parceria do acordo (todas as parcelas)'}
           onCancelar={() => setModalParcAcordo(false)}
           onAplicar={aplicarParceriaAcordo} />
       )}

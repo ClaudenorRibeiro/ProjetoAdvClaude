@@ -122,6 +122,30 @@ async function resolverContaPessoa(conn, tipo, pessoaId, contaId) {
   return rows[0];
 }
 
+// Cliente PADRÃO do acordo/alvará: a pessoa é obrigatória quando há qualquer dado de cliente, mas a CONTA é
+// opcional — quem não tem conta recebe "Dinheiro em espécie — em mãos" (ou a conta principal) na hora do repasse.
+// Devolve null (nada informado) ou { tipo, pessoaId, contaId } com números já conferidos; contaId pode ser null.
+async function resolverClientePadrao(conn, tipo, pessoaId, contaId) {
+  const temConta = contaId !== undefined && contaId !== null && contaId !== '';
+  if (!tipo && !pessoaId && !temConta) return null;
+  if (!tiposPessoa.has(tipo) || !inteiroPositivo(pessoaId)) {
+    throw erroValidacaoFinanceiro('Informe o cliente padrão do acordo (a conta é opcional).');
+  }
+  if (!(await resolverNomePessoa(conn, tipo, pessoaId))) {
+    throw erroValidacaoFinanceiro('O cliente escolhido não foi encontrado.');
+  }
+  if (!temConta) return { tipo, pessoaId: Number(pessoaId), contaId: null };
+  await resolverContaPessoa(conn, tipo, pessoaId, contaId);
+  return { tipo, pessoaId: Number(pessoaId), contaId: Number(contaId) };
+}
+
+// Destino do repasse ao cliente de UMA parcela: o padrão do acordo (quando existe) vale como um bloco só
+// (pessoa + conta), para nunca misturar a pessoa nova com a conta de outra; sem padrão, vale o que a parcela já tinha.
+function destinoClienteDaParcela(p, destinoCliente) {
+  if (destinoCliente) return { tipo: destinoCliente.tipo, pessoaId: destinoCliente.pessoaId, contaId: destinoCliente.contaId };
+  return { tipo: p.repasse_cliente_tipo || null, pessoaId: p.repasse_cliente_pessoa_id || null, contaId: p.repasse_cliente_conta_id || null };
+}
+
 async function resolverContaEscritorio(conn, contaId) {
   const id = inteiroPositivo(contaId);
   if (!id) throw erroValidacaoFinanceiro('Informe a conta ou o caixa em espécie do escritório.');
@@ -236,17 +260,32 @@ async function listarBeneficiariosProcesso(req, res) {
   const processoId = inteiroPositivo(req.params.processoId);
   if (!processoId) return erro(res, 'Processo inválido');
   try {
+    // Pessoas dos dois lados do processo. `cliente` diz se a pessoa é do lado do cliente do escritório
+    // (campo "cliente_polo" do processo): true/false; null quando o processo não informa o lado do cliente
+    // (a tela então mostra todo mundo, como sempre fez).
     const [rows] = await pool.execute(
-      `SELECT DISTINCT 'fisica' AS tipo, pf.id, pf.nome AS nome FROM pessoas_fisicas pf
-         JOIN (SELECT pessoa_id FROM tbltituloprocautor WHERE proc_id=? AND tipo_pessoa='fisica'
-               UNION SELECT pessoa_id FROM tbltituloprocreu WHERE proc_id=? AND tipo_pessoa='fisica') x ON x.pessoa_id=pf.id
-       UNION
-       SELECT DISTINCT 'juridica' AS tipo, pj.id, pj.razao_social AS nome FROM pessoas_juridicas pj
-         JOIN (SELECT pessoa_id FROM tbltituloprocautor WHERE proc_id=? AND tipo_pessoa='juridica'
-               UNION SELECT pessoa_id FROM tbltituloprocreu WHERE proc_id=? AND tipo_pessoa='juridica') x ON x.pessoa_id=pj.id
-       ORDER BY nome`, [processoId, processoId, processoId, processoId]
+      `SELECT 'fisica' AS tipo, pf.id, pf.nome AS nome, x.lado FROM pessoas_fisicas pf
+         JOIN (SELECT pessoa_id, 'autor' AS lado FROM tbltituloprocautor WHERE proc_id=? AND tipo_pessoa='fisica'
+               UNION ALL SELECT pessoa_id, 'reu' AS lado FROM tbltituloprocreu WHERE proc_id=? AND tipo_pessoa='fisica') x ON x.pessoa_id=pf.id
+       UNION ALL
+       SELECT 'juridica' AS tipo, pj.id, pj.razao_social AS nome, x.lado FROM pessoas_juridicas pj
+         JOIN (SELECT pessoa_id, 'autor' AS lado FROM tbltituloprocautor WHERE proc_id=? AND tipo_pessoa='juridica'
+               UNION ALL SELECT pessoa_id, 'reu' AS lado FROM tbltituloprocreu WHERE proc_id=? AND tipo_pessoa='juridica') x ON x.pessoa_id=pj.id`,
+      [processoId, processoId, processoId, processoId]
     );
-    return sucesso(res, rows);
+    const [[proc]] = await pool.execute('SELECT cliente_polo FROM tblproc WHERE id = ?', [processoId]);
+    const polo = proc && (proc.cliente_polo === 'autor' || proc.cliente_polo === 'reu') ? proc.cliente_polo : null;
+    const porPessoa = new Map();
+    for (const r of rows) {
+      const chave = `${r.tipo}:${r.id}`;
+      const atual = porPessoa.get(chave) || { tipo: r.tipo, id: r.id, nome: r.nome, lados: new Set() };
+      atual.lados.add(r.lado);
+      porPessoa.set(chave, atual);
+    }
+    const lista = [...porPessoa.values()]
+      .map(({ tipo, id, nome, lados }) => ({ tipo, id, nome, cliente: polo ? lados.has(polo) : null }))
+      .sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
+    return sucesso(res, lista);
   } catch (err) { return erroInterno(res, err); }
 }
 
@@ -660,22 +699,17 @@ async function criarAcordo(req, res) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    let destinoCliente = null;
-    if (beneficiario_cliente_tipo || beneficiario_cliente_id || beneficiario_cliente_conta_id) {
-      destinoCliente = await resolverContaPessoa(conn, beneficiario_cliente_tipo, beneficiario_cliente_id, beneficiario_cliente_conta_id);
-    }
+    const destinoCliente = await resolverClientePadrao(conn, beneficiario_cliente_tipo, beneficiario_cliente_id, beneficiario_cliente_conta_id);
     const [a] = await conn.execute(
       `INSERT INTO acordo (processo_id, tipo, descricao, valor_total, qtd_parcelas, data_primeira, criado_por,
         beneficiario_cliente_tipo, beneficiario_cliente_id, beneficiario_cliente_conta_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [processoId, tipoAcordo, descricao || null, round2(valor_total), parseInt(qtd_parcelas, 10) || parcelas.length,
        data_primeira || parcelas[0].vencimento, req.usuario.id,
-       destinoCliente ? beneficiario_cliente_tipo : null, destinoCliente ? beneficiario_cliente_id : null, destinoCliente ? beneficiario_cliente_conta_id : null]
+       destinoCliente ? destinoCliente.tipo : null, destinoCliente ? destinoCliente.pessoaId : null, destinoCliente ? destinoCliente.contaId : null]
     );
     const acordoId = a.insertId;
-    await inserirParcelas(conn, acordoId, parcelas, req.usuario.id, valor_total, destinoCliente ? {
-      tipo: beneficiario_cliente_tipo, pessoaId: beneficiario_cliente_id, contaId: beneficiario_cliente_conta_id,
-    } : null);
+    await inserirParcelas(conn, acordoId, parcelas, req.usuario.id, valor_total, destinoCliente);
     await auditoria.registrar(req.usuario.id, 'acordo', 'criar', acordoId, null, null, conn);
     await conn.commit();
     return sucesso(res, { id: acordoId }, 'Acordo criado com sucesso', 201);
@@ -770,7 +804,8 @@ async function inserirParcelas(conn, acordoId, parcelas, usuarioId, valorTotal, 
     // O servidor recalcula tudo, mas este campo vinha direto do corpo da requisição sem
     // conferir contra a lista de tipos válidos (auditoria 24/09, item 9 — S7 corrigiu dado
     // antigo gravado antes desta trava existir).
-    const repasseClienteTipo = p.repasse_cliente_tipo || destinoCliente?.tipo || null;
+    const destinoParcela = destinoClienteDaParcela(p, destinoCliente);
+    const repasseClienteTipo = destinoParcela.tipo;
     if (repasseClienteTipo && !tiposPessoa.has(repasseClienteTipo)) {
       throw erroValidacaoFinanceiro(`Tipo de beneficiário do repasse inválido na parcela ${p.numero || (i + 1)}.`);
     }
@@ -784,9 +819,7 @@ async function inserirParcelas(conn, acordoId, parcelas, usuarioId, valorTotal, 
       [acordoId, p.numero || (i + 1), p.vencimento,
        v.valor_bruto, v.honor_tipo, v.honor_percentual, v.honor_valor, v.valor_liquido, v.observacao,
        v.parceria_pessoa_tipo, v.parceria_pessoa_id, v.parceria_tipo, v.parceria_percentual, v.parceria_valor, multaPct,
-       repasseClienteTipo,
-       p.repasse_cliente_pessoa_id || destinoCliente?.pessoaId || null,
-       p.repasse_cliente_conta_id || destinoCliente?.contaId || null]
+       repasseClienteTipo, destinoParcela.pessoaId, destinoParcela.contaId]
     );
     await logParcela(conn, r.insertId, usuarioId, 'criada', null, null, `Parcela ${p.numero || (i + 1)} criada`);
   }
@@ -864,20 +897,9 @@ async function atualizarAcordo(req, res) {
       return erro(res, 'Acordo cancelado é registro permanente e não pode ser editado.');
     }
 
-    let destinoCliente = null;
-    if (beneficiario_cliente_tipo || beneficiario_cliente_id || beneficiario_cliente_conta_id) {
-      // resolverContaPessoa só CONFIRMA que a conta existe/está ativa — o retorno dela traz
-      // o tipo da CONTA (corrente/poupança), não o tipo da PESSOA. Por isso o objeto usado
-      // daqui pra baixo (e passado às parcelas) é reconstruído com os dados do próprio
-      // formulário, exatamente como já era feito em criarAcordo (auditoria 23/09: aqui
-      // faltava essa reconstrução — uma parcela nova sem repasse_cliente_tipo/pessoa_id
-      // próprios acabava herdando o tipo de conta em vez do tipo de pessoa, e a pessoa
-      // ficava null porque resolverContaPessoa nem devolve esse campo).
-      await resolverContaPessoa(conn, beneficiario_cliente_tipo, beneficiario_cliente_id, beneficiario_cliente_conta_id);
-      destinoCliente = {
-        tipo: beneficiario_cliente_tipo, pessoaId: beneficiario_cliente_id, contaId: beneficiario_cliente_conta_id,
-      };
-    }
+    // Cliente padrão: pessoa obrigatória, conta opcional (sem conta = principal ou "em mãos" na hora do repasse).
+    // O objeto é reconstruído com os dados do formulário (resolverClientePadrao devolve tipo da PESSOA, nunca o da conta).
+    const destinoCliente = await resolverClientePadrao(conn, beneficiario_cliente_tipo, beneficiario_cliente_id, beneficiario_cliente_conta_id);
 
     // Recalcula e valida TODAS as parcelas antes de gravar qualquer coisa — inclusive que a
     // soma dos valores brutos bate EXATAMENTE com o valor total informado para o acordo.
@@ -894,8 +916,8 @@ async function atualizarAcordo(req, res) {
               alterado_por = ?, alterado_em = NOW() WHERE id = ?`,
       [descricao || null, round2(valor_total), parseInt(qtd_parcelas, 10) || parcelas.length,
        data_primeira || parcelas[0].vencimento,
-       destinoCliente ? beneficiario_cliente_tipo : null, destinoCliente ? beneficiario_cliente_id : null,
-       destinoCliente ? beneficiario_cliente_conta_id : null, req.usuario.id, id]
+       destinoCliente ? destinoCliente.tipo : null, destinoCliente ? destinoCliente.pessoaId : null,
+       destinoCliente ? destinoCliente.contaId : null, req.usuario.id, id]
     );
 
     // Diff das parcelas — MANTÉM os IDs p/ preservar o histórico de cada parcela.
@@ -943,7 +965,8 @@ async function atualizarAcordo(req, res) {
           await logParcela(conn, ex.id, req.usuario.id, 'editada', 'Parceiro', antesNome || '—', novoNome || '—');
         }
         const multaPct = p.multa_percentual != null && p.multa_percentual !== '' ? Number(p.multa_percentual) : null;
-        const repasseClienteTipoEdit = p.repasse_cliente_tipo || destinoCliente?.tipo || null;
+        const destinoEdit = destinoClienteDaParcela(p, destinoCliente);
+        const repasseClienteTipoEdit = destinoEdit.tipo;
         if (repasseClienteTipoEdit && !tiposPessoa.has(repasseClienteTipoEdit)) {
           throw erroValidacaoFinanceiro(`Tipo de beneficiário do repasse inválido na parcela ${numero}.`);
         }
@@ -955,12 +978,12 @@ async function atualizarAcordo(req, res) {
           [numero, p.vencimento, v.valor_bruto, v.honor_tipo, v.honor_percentual, v.honor_valor, v.valor_liquido,
            v.observacao, v.parceria_pessoa_tipo, v.parceria_pessoa_id, v.parceria_tipo, v.parceria_percentual,
            v.parceria_valor, multaPct, repasseClienteTipoEdit,
-           p.repasse_cliente_pessoa_id || destinoCliente?.pessoaId || null,
-           p.repasse_cliente_conta_id || destinoCliente?.contaId || null, ex.id]
+           destinoEdit.pessoaId, destinoEdit.contaId, ex.id]
         );
       } else {
         const multaPct = p.multa_percentual != null && p.multa_percentual !== '' ? Number(p.multa_percentual) : null;
-        const repasseClienteTipoNovo = p.repasse_cliente_tipo || destinoCliente?.tipo || null;
+        const destinoNovo = destinoClienteDaParcela(p, destinoCliente);
+        const repasseClienteTipoNovo = destinoNovo.tipo;
         if (repasseClienteTipoNovo && !tiposPessoa.has(repasseClienteTipoNovo)) {
           throw erroValidacaoFinanceiro(`Tipo de beneficiário do repasse inválido na parcela ${numero}.`);
         }
@@ -972,8 +995,7 @@ async function atualizarAcordo(req, res) {
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendente')`,
           [id, numero, p.vencimento, v.valor_bruto, v.honor_tipo, v.honor_percentual, v.honor_valor, v.valor_liquido,
            v.observacao, v.parceria_pessoa_tipo, v.parceria_pessoa_id, v.parceria_tipo, v.parceria_percentual, v.parceria_valor, multaPct,
-           repasseClienteTipoNovo, p.repasse_cliente_pessoa_id || destinoCliente?.pessoaId || null,
-           p.repasse_cliente_conta_id || destinoCliente?.contaId || null]
+           repasseClienteTipoNovo, destinoNovo.pessoaId, destinoNovo.contaId]
         );
         await logParcela(conn, r.insertId, req.usuario.id, 'criada', null, null, `Parcela ${numero} criada`);
       }
@@ -1772,6 +1794,8 @@ async function listarRepassesPendentes(req, res) {
                 ELSE NULL
               END AS parceria_nome,
               a.processo_id, a.tipo AS acordo_tipo,
+              a.beneficiario_cliente_tipo AS acordo_cliente_tipo, a.beneficiario_cliente_id AS acordo_cliente_id,
+              a.beneficiario_cliente_conta_id AS acordo_cliente_conta_id,
               (SELECT COUNT(*) FROM acordo_parcela ap2 WHERE ap2.acordo_id = ap.acordo_id) AS total_parcelas,
               (SELECT COUNT(*) FROM acordo a2 WHERE a2.processo_id = a.processo_id AND a2.tipo = a.tipo AND a2.id <= a.id) AS numero_acordo,
               p.numProc, p.NomeTituloProc, pa.numPasta
@@ -1798,6 +1822,8 @@ async function listarRepassesPendentes(req, res) {
                 ELSE NULL
               END AS parceria_nome,
               a.processo_id, a.tipo AS acordo_tipo,
+              a.beneficiario_cliente_tipo AS acordo_cliente_tipo, a.beneficiario_cliente_id AS acordo_cliente_id,
+              a.beneficiario_cliente_conta_id AS acordo_cliente_conta_id,
               (SELECT COUNT(*) FROM acordo_parcela ap2 WHERE ap2.acordo_id = ap.acordo_id) AS total_parcelas,
               (SELECT COUNT(*) FROM acordo a2 WHERE a2.processo_id = a.processo_id AND a2.tipo = a.tipo AND a2.id <= a.id) AS numero_acordo,
               p.numProc, p.NomeTituloProc, pa.numPasta

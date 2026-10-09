@@ -273,6 +273,8 @@ test('@critical Receber e desfazer parcela pela aba: pede data, conta e forma; g
   await page.getByRole('button', { name: /Receber/ }).click();
   const j = janela(page, 'Receber parcela 1');
   await j.getByLabel('Data do recebimento', { exact: true }).fill('2099-03-15');
+  await expect(j.getByLabel('Conta ou caixa de recebimento', { exact: true })).not.toHaveValue('');   // sugestão automática: conta principal (ou o único caixa em espécie)
+  await j.getByLabel('Conta ou caixa de recebimento', { exact: true }).selectOption('');              // a pessoa pode limpar: a conta continua obrigatória
   await j.getByRole('button', { name: 'Confirmar recebimento' }).click();
   await aviso(page, 'Informe a conta ou caixa de recebimento');
   await j.getByLabel('Conta ou caixa de recebimento', { exact: true }).selectOption({ label: 'Banco C8 — Conta C8' });
@@ -521,4 +523,117 @@ test('@critical Repassar pelo menu da parcela: quem só VISUALIZA o financeiro n
   await expect(page.getByRole('button', { name: /Histórico/ }).last()).toBeVisible();
   await expect(page.getByRole('button', { name: /Repassar/ })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Desfazer recebimento/ })).toHaveCount(0);
+});
+
+// ---- cliente e destino padrão (pedido de 09/10/2026): o cliente já vem escolhido; sem conta principal vem "Dinheiro em espécie — em mãos" ----
+async function ligarPartes(proc, { clientes = [], contrarios = [], polo = 'autor' }) {
+  await noBanco('UPDATE tblproc SET cliente_polo = ? WHERE id = ?', [polo, proc]);
+  await noBanco('DELETE FROM tbltituloprocautor WHERE proc_id = ?', [proc]);      // a pasta de teste já traz partes: só valem as deste teste (recriadas a cada teste)
+  await noBanco('DELETE FROM tbltituloprocreu WHERE proc_id = ?', [proc]);
+  for (const id of clientes) await noBanco("INSERT INTO tbltituloprocautor (proc_id, tipo_pessoa, pessoa_id) VALUES (?, 'fisica', ?)", [proc, id]);
+  for (const id of contrarios) await noBanco("INSERT INTO tbltituloprocreu (proc_id, tipo_pessoa, pessoa_id) VALUES (?, 'fisica', ?)", [proc, id]);
+}
+async function abrirRepasseCliente(page) {
+  await abrirParcelas(page);
+  await abrirMenuAcoes(page, parcelaRecebida(page));
+  await page.getByRole('button', { name: /^\S*\s*Repassar ao cliente$/ }).click();
+  const j = janela(page, 'Repassar ao cliente');
+  await expect(j).toBeVisible();
+  return j;
+}
+
+test('@critical Repassar ao cliente (caso do João): o único cliente do processo já vem escolhido, a parte contrária não aparece e, sem conta principal, vem "Dinheiro em espécie — em mãos"', async ({ page }) => {
+  const x = await prepararRepasse();
+  await noBanco('UPDATE acordo_parcela SET repasse_cliente_tipo = NULL, repasse_cliente_pessoa_id = NULL WHERE id = ?', [d.pa1]);   // acordo sem cliente definido
+  await ligarPartes(d.proc1, { clientes: [x.cliente], contrarios: [x.parceiro] });
+  await loginPelaTela(page);
+  await abrirAba(page, CNJ1);
+  const j = await abrirRepasseCliente(page);
+  const benef = j.getByLabel('Beneficiário', { exact: true });
+  await expect(benef).toHaveValue(`fisica:${x.cliente}`);                                       // já vem escolhido
+  await expect(benef.locator('option')).toHaveText(['Selecione...', 'Cliente Repasse C8']);    // a parte contrária não é oferecida
+  await expect(j.getByLabel('Destino do repasse', { exact: true })).toHaveValue('em_maos');    // cliente sem conta: dinheiro em mãos
+  await expect(j.getByText(/não tem conta principal cadastrada/)).toBeVisible();
+  await semViolacoes(page, 'janela Repassar com cliente e destino já escolhidos');
+  await j.getByLabel('Conta ou caixa de saída', { exact: true }).selectOption({ label: 'Caixa C8' });
+  await j.getByLabel('Forma do repasse', { exact: true }).selectOption({ label: 'Dinheiro C8' });
+  await j.getByRole('button', { name: 'Confirmar repasse' }).click();
+  await aviso(page, 'Repasse registrado');
+  const par = (await noBanco('SELECT repasse_cliente_destino_tipo AS dest, repasse_cliente_destino_snapshot AS snap FROM acordo_parcela WHERE id = ?', [d.pa1]))[0];
+  expect(par.dest).toBe('em_maos');
+  expect(JSON.parse(par.snap).pessoa_id).toBe(x.cliente);                                       // o repasse foi para o cliente certo
+});
+
+test('@critical Repassar ao cliente: com mais de um cliente no processo mostra a lista só dos clientes, sem escolher ninguém, e pede a escolha', async ({ page }) => {
+  const x = await prepararRepasse();
+  await noBanco('UPDATE acordo_parcela SET repasse_cliente_tipo = NULL, repasse_cliente_pessoa_id = NULL WHERE id = ?', [d.pa1]);
+  const contrario = (await noBanco("INSERT INTO pessoas_fisicas (nome, cpf) VALUES ('Contrario Repasse C8', ?)", [cpfUnico(3)])).insertId;
+  try {
+    await ligarPartes(d.proc1, { clientes: [x.cliente, x.parceiro], contrarios: [contrario] });
+    await loginPelaTela(page);
+    await abrirAba(page, CNJ1);
+    const j = await abrirRepasseCliente(page);
+    const benef = j.getByLabel('Beneficiário', { exact: true });
+    await expect(benef).toHaveValue('');                                                          // dois clientes: quem decide é o usuário
+    await expect(benef.locator('option')).toHaveText(['Selecione...', 'Cliente Repasse C8', 'Parceiro Repasse C8']);
+    await j.getByRole('button', { name: 'Confirmar repasse' }).click();
+    await expect(page.getByText('Beneficiário obrigatório')).toBeVisible();
+  } finally { await noBanco("DELETE FROM pessoas_fisicas WHERE nome = 'Contrario Repasse C8'"); }
+});
+
+test('@critical Repassar ao cliente: parcela sem cliente próprio usa o cliente padrão do acordo (e a conta dele, se houver)', async ({ page }) => {
+  const x = await prepararRepasse();
+  await noBanco('UPDATE acordo_parcela SET repasse_cliente_tipo = NULL, repasse_cliente_pessoa_id = NULL WHERE id = ?', [d.pa1]);
+  await noBanco("UPDATE acordo SET beneficiario_cliente_tipo = 'fisica', beneficiario_cliente_id = ?, beneficiario_cliente_conta_id = NULL WHERE id = ?", [x.cliente, d.ac]);
+  await ligarPartes(d.proc1, { clientes: [x.cliente, x.parceiro], polo: 'autor' });          // dois clientes: sem o padrão do acordo a lista ficaria em branco
+  await loginPelaTela(page);
+  await abrirAba(page, CNJ1);
+  const j = await abrirRepasseCliente(page);
+  await expect(j.getByLabel('Beneficiário', { exact: true })).toHaveValue(`fisica:${x.cliente}`);
+  await expect(j.getByLabel('Destino do repasse', { exact: true })).toHaveValue('em_maos');
+});
+
+test('@critical Novo acordo: o único cliente do processo já vem como cliente padrão e a conta é opcional (sem conta = "Dinheiro em espécie — em mãos")', async ({ page }) => {
+  const x = await prepararRepasse();
+  await ligarPartes(d.proc1, { clientes: [x.cliente], contrarios: [x.parceiro] });
+  await loginPelaTela(page);
+  await abrirAba(page, CNJ1);
+  await page.getByRole('button', { name: '+ Novo Acordo' }).click();
+  const j = janela(page, 'Novo Acordo');
+  const benef = j.getByLabel('Beneficiário padrão das parcelas', { exact: true });
+  await expect(benef).toHaveValue(`fisica:${x.cliente}`);
+  await expect(benef.locator('option')).toHaveText(['Definir depois, no repasse', 'Cliente Repasse C8']);   // sem a parte contrária
+  await expect(j.getByLabel('Conta padrão do beneficiário', { exact: true }).locator('option').first()).toHaveText(/Dinheiro em espécie — em mãos/);
+  await semViolacoes(page, 'janela Novo Acordo com cliente padrão');
+  await j.getByLabel('Valor total (R$)', { exact: true }).fill('100000');
+  await j.getByLabel('Nº de parcelas', { exact: true }).fill('1');
+  await j.getByLabel('1ª parcela', { exact: true }).fill(DIA);
+  await j.getByLabel('Descrição (opcional)', { exact: true }).fill('Acordo cliente sem conta');
+  await j.getByRole('button', { name: 'Gerar parcelas' }).click();
+  await j.getByRole('button', { name: 'Salvar acordo' }).click();
+  await aviso(page, 'Acordo criado!');
+  const a = (await noBanco("SELECT id, beneficiario_cliente_id AS pessoa, beneficiario_cliente_conta_id AS conta FROM acordo WHERE descricao = 'Acordo cliente sem conta'"))[0];
+  expect({ pessoa: a.pessoa, conta: a.conta }).toEqual({ pessoa: x.cliente, conta: null });
+  const p = (await noBanco('SELECT repasse_cliente_pessoa_id AS pessoa, repasse_cliente_conta_id AS conta FROM acordo_parcela WHERE acordo_id = ?', [a.id]))[0];
+  expect({ pessoa: p.pessoa, conta: p.conta }).toEqual({ pessoa: x.cliente, conta: null });
+});
+
+test('@critical Editar acordo com parcela já recebida: a parceria do acordo vale só para as parcelas ainda não recebidas', async ({ page }) => {
+  const x = await prepararRepasse();
+  await loginPelaTela(page);
+  await abrirAba(page, CNJ1);
+  await blocoAcordo(page, 'Acordo C8').getByRole('button', { name: 'Editar', exact: true }).click();
+  const j = janela(page, 'Editar Acordo');
+  const botao = j.getByRole('button', { name: /Parceria do acordo/ });
+  await expect(botao).toBeEnabled();                                                          // antes ficava desligado por causa da parcela recebida
+  await botao.click();
+  const pm = janela(page, 'Parceria do acordo (parcelas ainda não recebidas)');
+  await expect(pm).toBeVisible();
+  await pm.getByLabel('Buscar parceiro', { exact: true }).fill('Parceiro Repasse');
+  await pm.getByText('Parceiro Repasse C8', { exact: true }).click();
+  await pm.getByRole('button', { name: 'Aplicar' }).click();
+  await j.getByRole('button', { name: 'Salvar alterações' }).click();
+  await aviso(page, 'Acordo atualizado!');
+  const ps = await noBanco('SELECT id, parceria_pessoa_id AS parceiro FROM acordo_parcela WHERE acordo_id = ? ORDER BY numero', [d.ac]);
+  expect(ps.map(p => p.parceiro)).toEqual([null, x.parceiro]);                                // a recebida não mudou; a pendente ganhou o parceiro
 });

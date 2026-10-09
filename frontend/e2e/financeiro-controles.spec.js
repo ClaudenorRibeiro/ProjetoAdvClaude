@@ -119,6 +119,8 @@ test('@critical Financeiro: abas, janelas, validações, recebimento, multa, rep
   await page.getByRole('button', { name: /Receber/ }).click();
   const rec = modal(page);
   await expect(rec.getByRole('heading', { name: 'Receber parcela 1' })).toBeVisible();
+  await expect(rec.getByLabel('Conta ou caixa de recebimento')).not.toHaveValue('');       // sugestão automática: conta principal (ou o único caixa em espécie)
+  await rec.getByLabel('Conta ou caixa de recebimento').selectOption('');                  // a pessoa pode limpar: a conta continua obrigatória
   await expect(rec.getByLabel('Forma de recebimento').locator('option')).toHaveCount(4);   // sem conta escolhida: "Selecione" + todas as 3 formas
   await semViolacoes(page, 'janela Receber parcela');
   await rec.getByRole('button', { name: 'Confirmar recebimento' }).click();
@@ -278,6 +280,10 @@ test('@critical Financeiro: abas, janelas, validações, recebimento, multa, rep
   await abrirMenuAcoes(page, pend('parceiro', 'parc 2/2'));
   await page.getByRole('button', { name: /Repassar/ }).click();
   rep2 = modal(page);
+  // o parceiro tem uma conta, mas nenhuma marcada como principal: a janela já sugere "Dinheiro em espécie — em mãos" (e avisa); a pessoa pode trocar
+  await expect(rep2.getByLabel('Destino do repasse')).toHaveValue('em_maos');
+  await expect(rep2.getByText(/não tem conta principal cadastrada/)).toBeVisible();
+  await rep2.getByLabel('Destino do repasse').selectOption({ label: 'Conta bancária' });
   await expect(rep2.getByLabel('Conta do beneficiário').locator('option')).toHaveCount(2);      // "Selecione" + a conta Pix do parceiro
   await rep2.getByRole('button', { name: '+ Cadastrar conta do beneficiário' }).click();
   const nova = modal(page);

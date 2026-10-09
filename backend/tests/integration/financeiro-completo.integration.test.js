@@ -574,3 +574,80 @@ test('permissões: sem login 401; sem permissão de Financeiro 403 em TODAS as r
   ];
   for (const [metodo, rota] of soAdmin) assert.equal((await api(usuario)[metodo](rota).send({ nome: 'x' })).status, 403, `usuário comum ${metodo.toUpperCase()} ${rota}`);
 });
+
+// ------------------------------------------------------------------ cliente padrão sem conta e "em mãos" (pedido de 09/10/2026)
+test('beneficiários do processo: diz quem é do lado do cliente (cliente_polo) e, sem o lado informado, deixa a decisão para a tela', async () => {
+  const lista = async () => (await api().get('/api/financeiro/processo/1/beneficiarios')).body.dados;
+  const achar = (l, id) => l.find(b => b.id === id);
+  let l = await lista();
+  assert.equal(achar(l, F.clienteId).cliente, true);        // autor, e o cliente do processo é o autor
+  assert.equal(achar(l, F.semCpfId).cliente, false);        // réu = parte contrária
+  try {
+    await sql("UPDATE tblproc SET cliente_polo = 'reu' WHERE id = 1");
+    l = await lista();
+    assert.equal(achar(l, F.clienteId).cliente, false);
+    assert.equal(achar(l, F.semCpfId).cliente, true);
+    await sql('UPDATE tblproc SET cliente_polo = NULL WHERE id = 1');
+    l = await lista();
+    assert.equal(achar(l, F.clienteId).cliente, null);      // lado não informado: ninguém é marcado
+    assert.equal(achar(l, F.semCpfId).cliente, null);
+  } finally { await sql("UPDATE tblproc SET cliente_polo = 'autor' WHERE id = 1"); }
+});
+
+test('acordo: cliente padrão SEM conta é aceito (vira "principal ou em mãos" no repasse), conta sem cliente ou cliente inexistente são recusados', async () => {
+  const corpo = (extra) => ({ descricao: 'Sem conta', valor_total: 100, qtd_parcelas: 1, data_primeira: '2026-01-05',
+    parcelas: [{ numero: 1, vencimento: '2026-01-05', valor_bruto: 100, honor_tipo: 'percent', honor_percentual: 30 }], ...extra });
+  const semConta = await api().post('/api/financeiro/processo/1/acordo').send(corpo({ beneficiario_cliente_tipo: 'fisica', beneficiario_cliente_id: F.clienteId }));
+  assert.equal(semConta.status, 201, JSON.stringify(semConta.body));
+  const id = semConta.body.dados.id;
+  const ac = await um('SELECT beneficiario_cliente_tipo t, beneficiario_cliente_id p, beneficiario_cliente_conta_id c FROM acordo WHERE id = ?', [id]);
+  assert.deepEqual({ t: ac.t, p: ac.p, c: ac.c }, { t: 'fisica', p: F.clienteId, c: null });
+  const pa = await um('SELECT repasse_cliente_tipo t, repasse_cliente_pessoa_id p, repasse_cliente_conta_id c FROM acordo_parcela WHERE acordo_id = ?', [id]);
+  assert.deepEqual({ t: pa.t, p: pa.p, c: pa.c }, { t: 'fisica', p: F.clienteId, c: null });
+
+  for (const [rotulo, extra] of [
+    ['conta sem cliente', { beneficiario_cliente_conta_id: F.contaClienteId }],
+    ['cliente inexistente', { beneficiario_cliente_tipo: 'fisica', beneficiario_cliente_id: 999999 }],
+    ['tipo de pessoa inválido', { beneficiario_cliente_tipo: 'robo', beneficiario_cliente_id: F.clienteId }],
+    ['conta de outra pessoa', { beneficiario_cliente_tipo: 'fisica', beneficiario_cliente_id: F.parceiroId, beneficiario_cliente_conta_id: F.contaClienteId }],
+  ]) {
+    const antes = (await um('SELECT COUNT(*) n FROM acordo')).n;
+    assert.equal((await api().post('/api/financeiro/processo/1/acordo').send(corpo(extra))).status, 422, rotulo);
+    assert.equal((await um('SELECT COUNT(*) n FROM acordo')).n, antes, `${rotulo}: nada foi gravado`);
+  }
+
+  // o repasse "em mãos" funciona para esse cliente, que não tem conta definida no acordo
+  const parcelaId = (await um('SELECT id FROM acordo_parcela WHERE acordo_id = ?', [id])).id;
+  assert.equal((await receber(parcelaId)).status, 200);
+  const rep = await repasseCliente(parcelaId, { destino_tipo: 'em_maos', forma_id: F.formaEspecie, conta_financeira_id: F.caixa });
+  assert.equal(rep.status, 200, JSON.stringify(rep.body));
+  const feito = await um('SELECT repasse_cliente_destino_tipo d, repasse_cliente_conta_id c, repasse_cliente_em em FROM acordo_parcela WHERE id = ?', [parcelaId]);
+  assert.equal(feito.d, 'em_maos'); assert.equal(feito.c, null); assert.ok(feito.em);
+});
+
+test('acordo: ao editar, o cliente padrão novo vale para as parcelas pendentes (pessoa e conta juntas); a parcela já recebida não muda', async () => {
+  const { acordoId, parcelas: [p1, p2] } = await novoAcordo({ parcelas: 2 });                // cliente + conta do cliente
+  assert.equal((await receber(p1)).status, 200);
+  const atual = (await api().get(`/api/financeiro/acordo/${acordoId}`)).body.dados;
+  // a tela devolve cada parcela como veio do servidor (inclusive o cliente antigo gravado nela)
+  const parcelas = atual.parcelas.map(p => ({ ...p, vencimento: String(p.vencimento).slice(0, 10), valor_bruto: Number(p.valor_bruto),
+    honor_percentual: Number(p.honor_percentual), honor_valor: 0 }));
+  const edit = await api().put(`/api/financeiro/acordo/${acordoId}`).send({ descricao: 'Editado', valor_total: 1000, qtd_parcelas: 2, data_primeira: '2026-01-05', parcelas,
+    beneficiario_cliente_tipo: 'fisica', beneficiario_cliente_id: F.parceiroId });            // outro cliente, SEM conta
+  assert.equal(edit.status, 200, JSON.stringify(edit.body));
+  const linha = (id) => um('SELECT repasse_cliente_pessoa_id p, repasse_cliente_conta_id c FROM acordo_parcela WHERE id = ?', [id]);
+  assert.deepEqual(await linha(p2), { p: F.parceiroId, c: null });                           // pendente: pessoa nova, e a conta antiga NÃO sobra
+  assert.deepEqual(await linha(p1), { p: F.clienteId, c: F.contaClienteId });                // recebida: intacta
+  const ac = await um('SELECT beneficiario_cliente_id p, beneficiario_cliente_conta_id c FROM acordo WHERE id = ?', [acordoId]);
+  assert.deepEqual({ p: ac.p, c: ac.c }, { p: F.parceiroId, c: null });
+});
+
+test('repasses pendentes trazem o cliente padrão do acordo (para a janela de repasse sugerir o destino certo)', async () => {
+  const { acordoId, parcelaId } = await novoAcordo();
+  assert.equal((await receber(parcelaId)).status, 200);
+  const pend = (await api().get('/api/financeiro/repasses-pendentes')).body.dados.find(r => r.id === parcelaId && r.origem === 'parcela');
+  assert.ok(pend, 'a parcela recebida aparece nos pendentes');
+  assert.deepEqual({ t: pend.acordo_cliente_tipo, p: pend.acordo_cliente_id, c: pend.acordo_cliente_conta_id },
+    { t: 'fisica', p: F.clienteId, c: F.contaClienteId });
+  assert.ok(acordoId);
+});
