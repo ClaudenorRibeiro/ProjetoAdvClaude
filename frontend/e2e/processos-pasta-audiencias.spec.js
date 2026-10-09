@@ -256,6 +256,36 @@ test('@critical Modalidade na janela Nova Audiência: virtual mostra Plataforma 
   expect({ mod: a.modalidade, plat: a.plataforma_virtual, link: a.link_virtual, vara: a.vara_id }).toEqual({ mod: 'sem_comparecimento', plat: null, link: null, vara: null });
 });
 
+test('@critical Link da audiência virtual: o espaço some ao colar, https:// entra ao sair do campo, endereço inválido é recusado e o link aparece maior na lista', async ({ page }) => {
+  await loginPelaTela(page);
+  const preencher = async (j, hora, link) => {
+    await j.getByLabel('Modalidade', { exact: true }).selectOption('virtual');
+    await j.getByLabel('Plataforma', { exact: true }).fill('Zoom');
+    await j.getByLabel('Link', { exact: true }).fill(link);
+    await j.getByLabel('Tipo de audiência', { exact: true }).selectOption({ label: 'Julgamento' });
+    await dataDe(j).fill(br(util(8))); await dataDe(j).blur();
+    await j.getByLabel('Hora', { exact: true }).fill(hora);
+  };
+  // 1) colar um link com espaço no meio (como vem do convite): o espaço nem entra; ao sair do campo entra o https://
+  let j = await abrirNova(page);
+  await preencher(j, '16:10', 'zoom.us/j /856 01023093?pwd=dytLODJ6 ckdYam');
+  await expect(j.getByLabel('Link', { exact: true })).toHaveValue('https://zoom.us/j/85601023093?pwd=dytLODJ6ckdYam');
+  await j.getByRole('button', { name: 'Criar Audiência' }).click();
+  await aviso(page, 'Audiência criada com sucesso!');
+  expect((await noBanco("SELECT link_virtual FROM audiencia WHERE processo_id = ? AND hora = '16:10:00'", [d.proc1]))[0].link_virtual).toBe('https://zoom.us/j/85601023093?pwd=dytLODJ6ckdYam');
+  // 2) o link na lista da pasta aparece maior e legível (era 11 px e cinza claro)
+  const linkNaLista = page.getByRole('link', { name: /Link/ }).first();
+  await expect(linkNaLista).toBeVisible();
+  const tamanho = await linkNaLista.evaluate(el => parseFloat(getComputedStyle(el).fontSize));
+  expect(tamanho).toBeGreaterThanOrEqual(13);
+  // 3) texto que não é endereço: o servidor recusa com aviso claro e nada é gravado
+  j = await abrirNova(page);
+  await preencher(j, '16:11', 'sala do zoom');
+  await j.getByRole('button', { name: 'Criar Audiência' }).click();
+  await expect(page.getByText(/não é um endereço válido/).first()).toBeVisible();
+  expect((await noBanco("SELECT COUNT(*) AS n FROM audiencia WHERE processo_id = ? AND hora = '16:11:00'", [d.proc1]))[0].n).toBe(0);
+});
+
 test('@critical Detalhes (somente leitura) e Editar: clicar na linha abre travado; "Editar" destrava; salvar grava e o histórico registra; Esc fecha', async ({ page }) => {
   await loginPelaTela(page);
   await abrirAba(page);

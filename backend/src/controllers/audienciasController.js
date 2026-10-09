@@ -11,6 +11,7 @@ const { enviarEmailPeritoPericia } = require('../services/comunicadoService');
 const avisos = require('../avisos');
 const { pastaFormatadaSql, paginacao, escaparLike } = require('../utils/helpers');
 const { texto, lerTextos, dataIso, inteiroPositivo } = require('../utils/camposTexto');
+const { lerLink } = require('../utils/linkWeb');
 const { comIdNumerico } = require('../utils/rotasSeguras');
 const { lerBuscaFrase, condBuscaFrase } = require('../utils/buscaFrase');
 
@@ -61,12 +62,16 @@ async function lerCamposAudiencia(c, { exigeProcesso = false } = {}) {
   for (const [chave, opcoes] of [
     ['observacoes', { rotulo: 'As observações', max: LIMITE_OBS_AUDIENCIA }],
     ['plataforma_virtual', { rotulo: 'A plataforma', max: LIMITE_PLATAFORMA_AUDIENCIA }],
-    ['link_virtual', { rotulo: 'O link', max: LIMITE_LINK_AUDIENCIA }],
   ]) {
     const r = texto(corpo[chave], opcoes);
     if (r.erro) return { erro: r.erro, status: 400 };
     dados[chave] = r.valor;
   }
+  // Link: sem espaços, com https:// e só endereço de verdade. Só vale (e só é conferido) na audiência virtual: um link velho esquecido
+  // numa audiência de outra modalidade não impede de salvar (ele nem é gravado).
+  const link = corpo.modalidade === 'virtual' ? lerLink(corpo.link_virtual, { rotulo: 'O link', max: LIMITE_LINK_AUDIENCIA }) : { valor: null };
+  if (link.erro) return { erro: link.erro, status: 400 };
+  dados.link_virtual = link.valor;
   const vara = inteiroPositivo(corpo.vara_id, { rotulo: 'Vara' });
   if (vara.erro) return { erro: vara.erro, status: 400 };
   // Sem comparecimento não tem local: a vara enviada é ignorada (e descartada na gravação), então nem é conferida.
@@ -1106,6 +1111,8 @@ async function criarAudienciaDaAta(conn, dados, processoId, usuarioId) {
   }
   const duplicada = await localizarAudienciaAtivaNoHorario(conn, processoId, data, hora);
   if (duplicada) throw erroDaAta(mensagemHorarioOcupado(duplicada, data, hora), 409);
+  const linkLido = modalidadeNormalizada === 'virtual' ? lerLink(link_virtual, { rotulo: 'O link da nova audiência', max: LIMITE_LINK_AUDIENCIA }) : { valor: null };
+  if (linkLido.erro) throw erroDaAta(linkLido.erro);
 
   const responsaveisNormalizados = normalizarResponsaveis(responsaveis, responsavelRaw);
   if (!(await validarResponsaveis(conn, responsaveisNormalizados))) {
@@ -1123,7 +1130,7 @@ async function criarAudienciaDaAta(conn, dados, processoId, usuarioId) {
         responsavel_freela_id, criado_por, publicacao_id)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, null)`,
     [processoId, tipo_audiencia_id, data, hora, modalidadeNormalizada, semComparecimento(modalidadeNormalizada) ? null : vara_id || null,
-      modalidadeNormalizada === 'virtual' ? plataforma_virtual || null : null, modalidadeNormalizada === 'virtual' ? link_virtual || null : null,
+      modalidadeNormalizada === 'virtual' ? plataforma_virtual || null : null, linkLido.valor,
       (observacoes && observacoes.trim()) ? observacoes.trim() : null,
       responsavel_id, responsavel_freela_id, usuarioId]
   );

@@ -6,6 +6,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { audienciasAPI, processosAPI, pessoasAPI, authAPI, calendarioAPI, configuracaoAPI, periciasAPI } from '../../services/api';
 import { formatarData, formatarDataHora, hojeLocal, audienciaJaPassou, toTitleCase, validarCPF, mascaraCPF, formatarCPF } from '../../utils/formatters';
+import { limparLinkDigitado, completarLink } from '../../utils/linkWeb';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
@@ -1595,7 +1596,8 @@ export function ModalNovaAudiencia({ tipos, onTiposChange, onFechar, processoIni
               <div className="form-group">
                 <label className="form-label">Link</label>
                 <input aria-label="Link" className="form-control" value={form.link_virtual || ''}
-                  onChange={e => set('link_virtual', e.target.value)}
+                  onChange={e => set('link_virtual', limparLinkDigitado(e.target.value))}
+                  onBlur={() => set('link_virtual', completarLink(form.link_virtual))}
                   placeholder="https://..." />
               </div>
             </div>
@@ -2004,7 +2006,8 @@ export function ModalEditarAudiencia({ audiencia, tipos, onTiposChange, onFechar
               <div className="form-group">
                 <label className="form-label">Link</label>
                 <input aria-label="Link" className="form-control" value={form.link_virtual || ''} disabled={leitura}
-                  onChange={e => set('link_virtual', e.target.value)}
+                  onChange={e => set('link_virtual', limparLinkDigitado(e.target.value))}
+                  onBlur={() => set('link_virtual', completarLink(form.link_virtual))}
                   placeholder="https://..." />
               </div>
             </div>

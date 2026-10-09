@@ -190,3 +190,69 @@ test('usuário autenticado sem nível administrativo recebe 403 em área adminis
   assert.equal(resposta.status, 403);
   assert.doesNotMatch(resposta.body.mensagem, /token|sessão expirada/i);
 });
+
+// ---- link da audiência virtual: sem espaços, com https:// e só endereço de verdade ----
+test('link da audiência: espaço no meio sai, https:// é completado, endereço inválido é recusado (criar e editar); fora do virtual o link é ignorado', async () => {
+  const virtual = (hora, link, extra = {}) => criar(audiencia({ modalidade: 'virtual', data: '2031-02-03', hora, plataforma_virtual: 'zoom', link_virtual: link, ...extra }));
+  const linkNoBanco = async (id) => {
+    const conn = await conectarBancoTeste();
+    try { return (await conn.execute('SELECT link_virtual FROM audiencia WHERE id = ?', [id]))[0][0].link_virtual; } finally { await conn.end(); }
+  };
+  const comEspaco = await virtual('11:01', ' https://us02web.zoom.us/j /85601023093?pwd=dytLODJ6\nckdYamZOUjF2YW ');
+  assert.equal(comEspaco.status, 201, JSON.stringify(comEspaco.body));
+  assert.equal(await linkNoBanco(comEspaco.body.dados.id), 'https://us02web.zoom.us/j/85601023093?pwd=dytLODJ6ckdYamZOUjF2YW');
+  const semHttps = await virtual('11:02', 'meet.google.com/abc-defg-hij');
+  assert.equal(semHttps.status, 201, JSON.stringify(semHttps.body));
+  assert.equal(await linkNoBanco(semHttps.body.dados.id), 'https://meet.google.com/abc-defg-hij');
+  const vazio = await virtual('11:03', '   ');
+  assert.equal(vazio.status, 201);
+  assert.equal(await linkNoBanco(vazio.body.dados.id), null);
+
+  for (const [hora, ruim] of [['11:04', 'link da sala'], ['11:05', 'javascript:alert(1)'], ['11:06', 'Link: https://zoom.us/j/1'], ['11:07', 'https://semponto']]) {
+    const r = await virtual(hora, ruim);
+    assert.equal(r.status, 400, `${ruim}: ${JSON.stringify(r.body)}`);
+    assert.match(r.body.mensagem, /não é um endereço válido/);
+  }
+  const naoTexto = await virtual('11:08', ['https://zoom.us/j/1']);
+  assert.equal(naoTexto.status, 400);
+
+  // editar: link com espaço é limpo; link inválido é recusado e nada muda
+  const id = comEspaco.body.dados.id;
+  const editar = (link) => request(app).put(`/api/audiencias/${id}`).set('Authorization', `Bearer ${tokenAdmin}`)
+    .send({ tipo_audiencia_id: 1, data: '2031-02-03', hora: '11:01', modalidade: 'virtual', plataforma_virtual: 'zoom', link_virtual: link, responsaveis: [], testemunhas: [] });
+  const ok = await editar('https://zoom.us/j/ 999');
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.equal(await linkNoBanco(id), 'https://zoom.us/j/999');
+  const ruim = await editar('qualquer coisa');
+  assert.equal(ruim.status, 400);
+  assert.equal(await linkNoBanco(id), 'https://zoom.us/j/999');
+
+  // fora do virtual o link nem é conferido (link velho esquecido não impede de salvar) e não é gravado
+  const presencial = await criar(audiencia({ modalidade: 'presencial', data: '2031-02-03', hora: '11:09', link_virtual: 'lixo antigo' }));
+  assert.equal(presencial.status, 201, JSON.stringify(presencial.body));
+  assert.equal(await linkNoBanco(presencial.body.dados.id), null);
+});
+
+test('link da audiência: a nova audiência criada pela ata também limpa o link e recusa endereço inválido', async () => {
+  const ata = async (hora, link, horaNova = '09:30') => {
+    const criada = await criar(audiencia({ modalidade: 'presencial', data: '2001-03-05', hora, tipo_audiencia_id: 4 }));
+    assert.equal(criada.status, 201, JSON.stringify(criada.body));
+    return request(app).post(`/api/audiencias/${criada.body.dados.id}/ata`).set('Authorization', `Bearer ${tokenAdmin}`).send({
+      advogado_acompanhante: 'ninguem', nova_audiencia: true,
+      nova_audiencia_dados: { tipo_audiencia_id: 1, data: '2031-03-04', hora: horaNova, modalidade: 'virtual', plataforma_virtual: 'zoom', link_virtual: link },
+    });
+  };
+  const boa = await ata('12:01', 'zoom.us/j /123 456');
+  assert.equal(boa.status, 201, JSON.stringify(boa.body));
+  const conn = await conectarBancoTeste();
+  try {
+    const [r] = await conn.execute("SELECT link_virtual FROM audiencia WHERE data = '2031-03-04' AND hora = '09:30:00'");
+    assert.equal(r.length, 1);
+    assert.equal(r[0].link_virtual, 'https://zoom.us/j/123456');
+  } finally { await conn.end(); }
+  const ruim = await ata('12:02', 'sem endereço', '09:45');
+  assert.equal(ruim.status, 400, JSON.stringify(ruim.body));
+  assert.match(ruim.body.mensagem, /não é um endereço válido/);
+  const c2 = await conectarBancoTeste();
+  try { assert.equal((await c2.execute("SELECT COUNT(*) n FROM audiencia WHERE data = '2031-03-04' AND hora = '09:30:00'"))[0][0].n, 1); } finally { await c2.end(); }   // a recusada não criou nada
+});

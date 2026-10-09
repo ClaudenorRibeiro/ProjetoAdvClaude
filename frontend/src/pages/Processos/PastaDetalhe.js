@@ -1503,12 +1503,12 @@ export default function PastaDetalhe() {
                         <td>
                           {varaTexto || a.local || '—'}
                           {a.modalidade === 'virtual' && (a.plataforma_virtual || a.link_virtual) && (
-                            <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
+                            <div style={{ fontSize: 13, color: '#5b6472', marginTop: 3 }}>
                               {a.plataforma_virtual && <span>{a.plataforma_virtual}</span>}
                               {a.link_virtual && (
                                 <a href={a.link_virtual} target="_blank" rel="noreferrer"
                                   onClick={e => e.stopPropagation()}
-                                  style={{ marginLeft: a.plataforma_virtual ? 6 : 0, color: '#2563eb' }}>
+                                  style={{ marginLeft: a.plataforma_virtual ? 8 : 0, color: '#1d4ed8', fontWeight: 600 }}>
                                   🔗 Link
                                 </a>
                               )}
