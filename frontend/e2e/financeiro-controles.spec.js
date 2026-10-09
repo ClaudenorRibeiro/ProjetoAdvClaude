@@ -159,10 +159,12 @@ test('@critical Financeiro: abas, janelas, validações, recebimento, multa, rep
 
   await acordo1.getByRole('button', { name: /Parcelas/ }).click();
   await expect(page.getByText('Multa ·')).toBeVisible();
-  // com multa pendente, receber a parcela é bloqueado com explicação
+  // parcela e multa são independentes: com multa pendente, "Receber" da parcela abre a janela normalmente
   await abrirMenuAcoes(page, parcelaPendente(page).first());
   await page.getByRole('button', { name: /Receber/ }).click();
-  await aviso(page, 'Existe uma multa lançada nesta parcela');
+  await expect(modal(page).getByRole('heading', { name: 'Receber parcela 2' })).toBeVisible();
+  await expect(page.getByText('Existe uma multa lançada nesta parcela')).toHaveCount(0);
+  await modal(page).getByRole('button', { name: 'Cancelar' }).click();
   await expect(page.locator('.modal-box')).toHaveCount(0);
   // editar multa
   await abrirMenuAcoes(page, parcelaPendente(page).first());

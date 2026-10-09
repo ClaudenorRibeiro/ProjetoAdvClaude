@@ -339,6 +339,53 @@ test('@critical Receber e desfazer parcela pela aba: pede data, conta e forma; g
   for (const evento of ['Recebida', 'Recebimento desfeito']) await expect(h.getByRole('cell', { name: evento, exact: true }).first()).toBeVisible();
 });
 
+test('@critical Parcela e multa são independentes: recebe a parcela com a multa pendente, recebe a multa depois e desfaz só a parcela sem perder o recebimento da multa', async ({ page }) => {
+  await loginPelaTela(page);
+  await abrirAba(page, CNJ1);
+  const bloco = () => blocoAcordo(page, 'Acordo C8');
+  await bloco().getByRole('button', { name: /Parcelas/ }).click();
+  // lança a multa na parcela 1 (pendente)
+  await abrirMenuAcoes(page, linha(page, 'Pendente').first());
+  await itemMenu(page, 'Lançar multa').click();
+  const m = janela(page, /Lançar multa/);
+  await m.getByLabel('Valor da multa (R$)').fill('100,00');
+  await m.getByRole('button', { name: 'Salvar multa' }).click();
+  await aviso(page, 'Multa lançada');
+  await bloco().getByRole('button', { name: /Parcelas/ }).click();
+  await expect(page.getByText('Multa pendente')).toBeVisible();
+  // recebe a PARCELA com a multa ainda pendente (antes bloqueava)
+  await abrirMenuAcoes(page, linha(page, 'Pendente').first());
+  await itemMenu(page, 'Receber').click();
+  const r = janela(page, 'Receber parcela 1');
+  await r.getByLabel('Data do recebimento', { exact: true }).fill('2099-03-15');
+  await r.getByLabel('Conta ou caixa de recebimento', { exact: true }).selectOption({ label: 'Banco C8 — Conta C8' });
+  await r.getByLabel('Forma de recebimento', { exact: true }).selectOption({ label: 'Pix C8' });
+  await r.getByRole('button', { name: 'Confirmar recebimento' }).click();
+  await aviso(page, 'Recebimento registrado');
+  expect((await noBanco('SELECT status FROM acordo_parcela WHERE id = ?', [d.pa1]))[0].status).toBe('pago');
+  expect((await noBanco('SELECT status FROM acordo_parcela_multa WHERE parcela_id = ?', [d.pa1]))[0].status).toBe('pendente');
+  // recebe a MULTA depois
+  await bloco().getByRole('button', { name: /Parcelas/ }).click();
+  await abrirMenuAcoes(page, linha(page, 'Recebida'));
+  await itemMenu(page, 'Multa').hover();
+  await itemMenu(page, 'Receber multa').click();
+  const rm = janela(page, 'Receber multa da parcela 1');
+  await rm.getByLabel('Data do recebimento', { exact: true }).fill('2099-03-20');
+  await rm.getByLabel('Conta ou caixa de recebimento', { exact: true }).selectOption({ label: 'Banco C8 — Conta C8' });
+  await rm.getByLabel('Forma de recebimento', { exact: true }).selectOption({ label: 'Pix C8' });
+  await rm.getByRole('button', { name: 'Confirmar recebimento' }).click();
+  await aviso(page, 'Multa recebida');
+  // desfaz SÓ a parcela: a multa continua recebida e no extrato
+  await bloco().getByRole('button', { name: /Parcelas/ }).click();
+  await abrirMenuAcoes(page, linha(page, 'Recebida').first());
+  await page.getByRole('button', { name: 'Desfazer recebimento', exact: true }).click();
+  await aviso(page, 'Recebimento desfeito');
+  expect((await noBanco('SELECT status FROM acordo_parcela WHERE id = ?', [d.pa1]))[0].status).toBe('pendente');
+  expect((await noBanco('SELECT status FROM acordo_parcela_multa WHERE parcela_id = ?', [d.pa1]))[0].status).toBe('pago');
+  expect((await noBanco("SELECT COUNT(*) AS n FROM conta_corrente WHERE parcela_id = ? AND origem = 'multa'", [d.pa1]))[0].n).toBe(1);
+  expect((await noBanco("SELECT COUNT(*) AS n FROM conta_corrente WHERE parcela_id = ? AND origem = 'recebimento'", [d.pa1]))[0].n).toBe(0);
+});
+
 test('@critical Cancelar acordo: pede o motivo, cancela as parcelas pendentes, vira registro permanente (sem Editar, Cancelar nem Excluir)', async ({ page }) => {
   await loginPelaTela(page);
   await abrirAba(page, CNJ1);

@@ -374,7 +374,7 @@ test('desfazer recebimento da parcela é bloqueado enquanto houver repasse feito
 });
 
 // ------------------------------------------------------------------ multa por atraso
-test('multa: lançar, editar, bloqueio do recebimento da parcela, receber, repassar, desfazer e remover — ciclo completo', async () => {
+test('multa: lançar, editar, receber, repassar, desfazer e remover — ciclo completo', async () => {
   const { acordoId, parcelaId } = await novoAcordo({ parceria: true });
   const base = { percentual_juiz: 10, valor_bruto: 100, vencimento: '2026-02-05', repasse_cliente_habilitado: true, repasse_parceiro_habilitado: true };
   const multa = (corpo, metodo = 'post') => api()[metodo](`/api/financeiro/parcela/${parcelaId}/multa`).send(corpo);
@@ -394,10 +394,6 @@ test('multa: lançar, editar, bloqueio do recebimento da parcela, receber, repas
     { bruto: 100, honor: 30, liq: 70, parceria: 15, status: 'pendente' });
   assert.equal((await um("SELECT COUNT(*) AS n FROM conta_corrente WHERE parcela_id = ? AND origem = 'multa'", [parcelaId])).n, 0);
   assert.match(msg(await multa(base)), /Já existe uma multa lançada/);
-
-  // com multa lançada e não recebida, a parcela não pode ser recebida
-  const bloqueada = await receber(parcelaId);
-  assert.equal(bloqueada.status, 400); assert.match(msg(bloqueada), /multa lançada nesta parcela e ainda não recebida/);
 
   // editar recalcula
   assert.equal((await multa({ ...base, valor_bruto: 200 }, 'put')).status, 200);
@@ -434,12 +430,18 @@ test('multa: lançar, editar, bloqueio do recebimento da parcela, receber, repas
   assert.match(msg(await api().put(`/api/financeiro/parcela/${parcelaId}/multa/repasse/desfazer`).send({ tipo: 'cliente' })), /Não há repasse da multa ao cliente para desfazer/);
   assert.equal((await um("SELECT COUNT(*) AS n FROM conta_corrente WHERE parcela_id = ? AND origem IN ('multa_rep_cli','multa_rep_par')", [parcelaId])).n, 0);
 
-  // com a multa recebida, a parcela pode ser recebida, mas o recebimento dela não pode ser desfeito antes do da multa
+  // parcela e multa são independentes: com a multa recebida, a parcela é recebida e o recebimento dela pode ser
+  // desfeito SEM tocar no lançamento da multa (que continua no extrato e "recebida")
   assert.equal((await receber(parcelaId)).status, 200);
-  assert.match(msg(await api().put(`/api/financeiro/parcela/${parcelaId}/desfazer`).send({})), /Desfaça o recebimento da multa antes de desfazer o recebimento da parcela/);
-  assert.equal((await api().put(`/api/financeiro/parcela/${parcelaId}/desfazer`).send({})).status, 400);
+  assert.equal((await api().put(`/api/financeiro/parcela/${parcelaId}/desfazer`).send({})).status, 200);
+  assert.equal((await um('SELECT status FROM acordo_parcela WHERE id = ?', [parcelaId])).status, 'pendente');
+  assert.equal((await um('SELECT status FROM acordo_parcela_multa WHERE parcela_id = ?', [parcelaId])).status, 'pago');
+  assert.equal((await um("SELECT COUNT(*) AS n FROM conta_corrente WHERE parcela_id = ? AND origem = 'multa'", [parcelaId])).n, 1);
+  assert.equal((await um("SELECT COUNT(*) AS n FROM conta_corrente WHERE parcela_id = ? AND origem = 'recebimento'", [parcelaId])).n, 0);
+  assert.equal((await receber(parcelaId)).status, 200);
   assert.equal((await api().put(`/api/financeiro/parcela/${parcelaId}/multa/desfazer`).send({})).status, 200);
   assert.equal((await um("SELECT COUNT(*) AS n FROM conta_corrente WHERE parcela_id = ? AND origem = 'multa'", [parcelaId])).n, 0);
+  assert.equal((await um('SELECT status FROM acordo_parcela WHERE id = ?', [parcelaId])).status, 'pago');          // desfazer a multa não mexe na parcela
   assert.match(msg(await api().put(`/api/financeiro/parcela/${parcelaId}/multa/desfazer`).send({})), /A multa não está recebida/);
   assert.equal((await api().put(`/api/financeiro/parcela/${parcelaId}/desfazer`).send({})).status, 200);
 
@@ -454,6 +456,44 @@ test('multa: lançar, editar, bloqueio do recebimento da parcela, receber, repas
   assert.match(msg(await multa(base)), /Só é possível lançar multa em uma parcela ainda não recebida/);
   const hist = JSON.stringify((await api().get(`/api/financeiro/parcela/${parcelaId}/historico`)).body.dados);
   assert.match(hist, /multa-lancada/); assert.match(hist, /multa-recebida|multa/);
+});
+
+test('parcela e multa são independentes: a parcela é recebida com a multa pendente, a multa é recebida depois (e o contrário), cada uma dá baixa sozinha', async () => {
+  const dados = { percentual_juiz: 10, valor_bruto: 100, vencimento: '2026-02-05', repasse_cliente_habilitado: true };
+  const receberMulta = (id) => api().put(`/api/financeiro/parcela/${id}/multa/receber`).send({ recebido_em: '2026-02-06', recebimento_forma_id: F.formaAmbos, recebimento_conta_financeira_id: F.contaBanco });
+  const contar = async (id, origem) => (await um('SELECT COUNT(*) AS n FROM conta_corrente WHERE parcela_id = ? AND origem = ?', [id, origem])).n;
+
+  // 1) multa lançada e pendente; a parcela é recebida normalmente; a multa continua pendente e é recebida depois
+  const a = (await novoAcordo()).parcelaId;
+  assert.equal((await api().post(`/api/financeiro/parcela/${a}/multa`).send(dados)).status, 201);
+  assert.equal((await receber(a)).status, 200);
+  assert.equal((await um('SELECT status FROM acordo_parcela WHERE id = ?', [a])).status, 'pago');
+  assert.equal((await um('SELECT status FROM acordo_parcela_multa WHERE parcela_id = ?', [a])).status, 'pendente');
+  assert.equal(await contar(a, 'multa'), 0);
+  assert.equal((await receberMulta(a)).status, 200);
+  assert.equal(await contar(a, 'multa'), 1);
+  assert.equal(await contar(a, 'recebimento'), 1);
+
+  // 2) com as duas recebidas, desfazer só a parcela mantém a multa; depois desfazer a multa mantém a parcela
+  assert.equal((await api().put(`/api/financeiro/parcela/${a}/desfazer`).send({})).status, 200);
+  assert.equal(await contar(a, 'multa'), 1);
+  assert.equal(await contar(a, 'recebimento'), 0);
+  assert.equal((await um('SELECT status FROM acordo_parcela_multa WHERE parcela_id = ?', [a])).status, 'pago');
+
+  // 3) o contrário: a multa é recebida primeiro e a parcela depois
+  const b = (await novoAcordo()).parcelaId;
+  assert.equal((await api().post(`/api/financeiro/parcela/${b}/multa`).send(dados)).status, 201);
+  assert.equal((await receberMulta(b)).status, 200);
+  assert.equal((await um('SELECT status FROM acordo_parcela WHERE id = ?', [b])).status, 'pendente');
+  assert.equal((await receber(b)).status, 200);
+  assert.equal(await contar(b, 'multa'), 1);
+  assert.equal(await contar(b, 'recebimento'), 1);
+
+  // 4) multa recebida com repasse feito também não impede desfazer a parcela, e o repasse da multa permanece
+  assert.equal((await api().put(`/api/financeiro/parcela/${b}/multa/repasse`).send({ tipo: 'cliente', data: '2026-02-07', forma_id: F.formaAmbos, conta_financeira_id: F.contaBanco })).status, 200);
+  assert.equal((await api().put(`/api/financeiro/parcela/${b}/desfazer`).send({})).status, 200);
+  assert.equal(await contar(b, 'multa_rep_cli'), 1);
+  assert.equal(await contar(b, 'multa'), 1);
 });
 
 // ------------------------------------------------------------------ consulta e exportação

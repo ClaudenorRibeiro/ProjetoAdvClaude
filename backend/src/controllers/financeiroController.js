@@ -1147,13 +1147,8 @@ async function pagarParcela(req, res) {
     if (parc.status === 'pago')      { await conn.rollback(); return erro(res, 'Parcela já está recebida'); }
     if (parc.status === 'cancelada') { await conn.rollback(); return erro(res, 'Esta parcela está cancelada e não pode ser recebida.'); }
 
-    // Multa lançada e ainda não recebida trava o recebimento da parcela — evita que o
-    // recebimento da parcela "esconda" uma multa em aberto (auditoria 23/09).
-    const [multaPend] = await conn.execute(`SELECT status FROM acordo_parcela_multa WHERE parcela_id = ?`, [id]);
-    if (multaPend.length && multaPend[0].status === 'pendente') {
-      await conn.rollback();
-      return erro(res, 'Existe uma multa lançada nesta parcela e ainda não recebida. Receba (ou remova) a multa antes de receber a parcela.');
-    }
+    // Parcela e multa são independentes (regra do usuário, 09/10/2026): a empresa pode pagar a
+    // parcela antes da multa (ou o contrário), então uma multa pendente NÃO trava o recebimento.
 
     const dataPg = recebido_em || hojeBrasilia();
     const contaEscritorio = await resolverContaEscritorio(conn, recebimento_conta_financeira_id);
@@ -1218,19 +1213,13 @@ async function desfazerPagamento(req, res) {
       await conn.rollback();
       return erro(res, 'Desfaça os repasses (cliente/parceiro) antes de desfazer o recebimento');
     }
-    // Multa já recebida trava o desfazer do recebimento da parcela: sem essa trava, o
-    // DELETE FROM conta_corrente abaixo (que filtra só por parcela_id) apagaria também o
-    // lançamento da multa sem resetar o status dela, deixando-a "recebida" sem lançamento
-    // nenhum no extrato (auditoria 23/09).
-    const [multaAtiva] = await conn.execute(`SELECT status FROM acordo_parcela_multa WHERE parcela_id = ?`, [id]);
-    if (multaAtiva.length && multaAtiva[0].status === 'pago') {
-      await conn.rollback();
-      return erro(res, 'Desfaça o recebimento da multa antes de desfazer o recebimento da parcela.');
-    }
-
-    // Sem repasses ativos, todos os lançamentos vinculados à parcela pertencem ao recebimento
-    // (inclusive lançamentos do modelo antigo, caso esta parcela seja desfeita manualmente).
-    await conn.execute('DELETE FROM conta_corrente WHERE parcela_id = ?', [id]);
+    // Parcela e multa são independentes: desfazer a parcela NUNCA mexe nos lançamentos da multa
+    // (recebimento e repasses dela), que têm origem própria. Sem repasses ativos, todo o resto
+    // vinculado à parcela pertence ao recebimento (inclusive lançamentos do modelo antigo, sem origem).
+    await conn.execute(
+      'DELETE FROM conta_corrente WHERE parcela_id = ? AND (origem IS NULL OR origem NOT IN (?, ?, ?))',
+      [id, ORIGEM_MULTA, ORIGEM_MULTA_REP_CLIENTE, ORIGEM_MULTA_REP_PARCEIRO]
+    );
     await conn.execute(
       `UPDATE acordo_parcela
          SET status = 'pendente', recebido_em = NULL, recebimento_forma_id = NULL,
@@ -1416,9 +1405,8 @@ async function desfazerRepasse(req, res) {
 // (opcional, exatamente como o repasse de uma parcela normal). Honorário e
 // parceria usam o MESMO honor_tipo/percentual e parceria_tipo/percentual já
 // configurados na parcela — não se pede de novo (auditoria 23/09).
-// Enquanto a multa está lançada e não recebida, o "Receber" da PARCELA fica
-// bloqueado (ver pagarParcela); enquanto a multa está recebida, o "Desfazer
-// recebimento" da PARCELA também fica bloqueado (ver desfazerPagamento).
+// Parcela e multa são independentes (09/10/2026): receber/desfazer uma não depende da outra
+// (ver pagarParcela e desfazerPagamento, que não mexem nos lançamentos da multa).
 // ============================================================
 
 async function buscarMultaDaParcela(conn, parcelaId, forUpdate = false) {

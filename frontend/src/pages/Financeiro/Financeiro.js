@@ -1239,21 +1239,12 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
                       // Pendente recebe; recebida desfaz (bloqueado se houver repasse); cancelada não tem ação
                       { label: 'Receber', icone: '💰',
                         oculto: !(podeAlterar && p.status === 'pendente'),
-                        onClick: () => {
-                          if (p.multa && p.multa.status === 'pendente') {
-                            toast.info('Existe uma multa lançada nesta parcela. Receba (ou remova) a multa antes de receber a parcela.');
-                            return;
-                          }
-                          setRecebendo(p);
-                        } },
+                        onClick: () => setRecebendo(p) },
                       { label: 'Desfazer recebimento', icone: '↩️',
                         oculto: !(podeAlterar && p.status === 'pago'),
-                        // Continua visível com repasse/multa pendente para poder explicar o porquê do bloqueio
+                        // Continua visível com repasse pendente para poder explicar o porquê do bloqueio.
+                        // A multa é independente da parcela: não trava o desfazer.
                         onClick: () => {
-                          if (p.multa && p.multa.status === 'pago') {
-                            toast.info('Desfaça o recebimento da multa antes de desfazer o recebimento da parcela.');
-                            return;
-                          }
                           if (p.repasse_cliente_em || p.repasse_parceiro_em) {
                             toast.info("Desfaça os repasses na aba 'Repasses' antes de desfazer o recebimento.");
                             return;
@@ -1261,9 +1252,8 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
                           desfazer(p);
                         } },
                       // Multa por atraso: só pode ser LANÇADA enquanto a parcela ainda não foi recebida.
-                      // Uma vez lançada, o restante do ciclo (editar/receber/remover/desfazer) não
-                      // depende mais do status da parcela em si — a parcela pode até já ter sido
-                      // recebida depois (ela só destrava quando a multa é recebida).
+                      // Uma vez lançada, parcela e multa são INDEPENDENTES: cada uma é recebida e desfeita
+                      // sozinha, em qualquer ordem (a empresa pode pagar uma antes da outra).
                       // Repasse desta parcela: só recebida e com repasse pendente. Um só pendente → abre direto; cliente E parceiro → submenu.
                       { label: `Repassar ao ${cicloDaParcela(p)?.[0] || 'cliente'}`, icone: '💸',
                         oculto: !(podeAlterar && cicloDaParcela(p)?.length === 1),
