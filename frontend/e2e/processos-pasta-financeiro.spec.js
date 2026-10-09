@@ -224,6 +224,36 @@ test('@critical Novo acordo: janela, obrigatórios, data retroativa pede confirm
   await expect(page.getByText('0/3 parcelas pagas')).toBeVisible();
 });
 
+test('@critical Multa fixada pelo juiz: o percentual guardado no acordo já vem preenchido (com o valor calculado) ao lançar a multa de uma parcela, e não lança multa nenhuma ao salvar o acordo', async ({ page }) => {
+  await loginPelaTela(page);
+  await abrirAba(page, CNJ1);
+  await page.getByRole('button', { name: '+ Novo Acordo' }).click();
+  const j = janela(page, 'Novo Acordo');
+  await expect(j.getByText('Multa fixada pelo juiz (%)')).toBeVisible();
+  await expect(j.getByText('Multa por atraso (%)')).toHaveCount(0);
+  await j.getByLabel('Valor total (R$)', { exact: true }).fill('200000');
+  await j.getByLabel('Nº de parcelas', { exact: true }).fill('2');
+  await j.getByLabel('1ª parcela', { exact: true }).fill(DIA);
+  await j.getByLabel('Multa fixada pelo juiz (%)', { exact: true }).fill('15');
+  await j.getByLabel('Descrição (opcional)', { exact: true }).fill('Acordo com multa do juiz');
+  await j.getByRole('button', { name: 'Gerar parcelas' }).click();
+  await j.getByRole('button', { name: 'Salvar acordo' }).click();
+  await aviso(page, 'Acordo criado!');
+  const novo = (await noBanco("SELECT id FROM acordo WHERE descricao = 'Acordo com multa do juiz'"))[0];
+  const ps = await noBanco('SELECT numero, multa_percentual FROM acordo_parcela WHERE acordo_id = ? ORDER BY numero', [novo.id]);
+  expect(ps.map(p => Number(p.multa_percentual))).toEqual([15, 15]);
+  expect((await noBanco('SELECT COUNT(*) AS n FROM acordo_parcela_multa WHERE parcela_id IN (SELECT id FROM acordo_parcela WHERE acordo_id = ?)', [novo.id]))[0].n).toBe(0);   // só guardou a informação
+  const bloco = page.locator('div').filter({ hasText: 'Acordo com multa do juiz' }).filter({ has: page.getByRole('button', { name: /Parcelas/ }) }).last();
+  const abrir = bloco.getByRole('button', { name: /▶ Parcelas/ });
+  if (await abrir.count()) await abrir.click();
+  await abrirMenuAcoes(page, page.locator('tbody tr').filter({ hasText: 'Pendente' }).first());
+  await page.getByRole('button', { name: /Lançar multa/ }).click();
+  const m = janela(page, /Lançar multa/);
+  await expect(m.getByLabel('Percentual da multa (%)')).toHaveValue('15');
+  await expect(m.getByLabel('Valor da multa (R$)')).toHaveValue('150,00');
+  await semViolacoes(page, 'janela Lançar multa pré-preenchida');
+});
+
 test('@critical Novo alvará: mesma janela com o nome "Alvará", valor com centavos, bloco "Alvará 1"', async ({ page }) => {
   await loginPelaTela(page);
   await abrirAba(page, CNJ1);

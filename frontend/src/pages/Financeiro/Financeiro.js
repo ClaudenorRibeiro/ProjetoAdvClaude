@@ -2056,9 +2056,10 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
                 onChange={e => setC('honor_percentual', e.target.value)} />
             </div>
             <div className="form-group">
-              <label className="form-label">Multa por atraso (%)</label>
-              <input aria-label="Multa por atraso (%)" type="number" step="0.01" min="0" className="form-control" value={cab.multa_percentual}
+              <label className="form-label">Multa fixada pelo juiz (%)</label>
+              <input aria-label="Multa fixada pelo juiz (%)" type="number" step="0.01" min="0" className="form-control" value={cab.multa_percentual}
                 onChange={e => setC('multa_percentual', e.target.value)} placeholder="Ex: 10 (opcional)" />
+              <small style={{ color: '#5b6472', fontSize: 12 }}>Só fica guardada: não lança multa nenhuma. Preenche a janela "Lançar multa" das parcelas.</small>
             </div>
           </div>
           <div className="form-group">

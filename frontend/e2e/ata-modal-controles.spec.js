@@ -5,7 +5,7 @@ import { abrirMenuAcoes, adicionarAutorAoProcesso, aguardarTelaPronta, bloquearR
 // campos, as 8 caixas "O que teve nessa audiência?", o que cada uma revela, as janelas filhas,
 // as mensagens de validação, cadastro/remoção dos rascunhos e o registro final da ata.
 const API = 'http://127.0.0.1:3001/api';
-const ITENS = ['Prazo', 'Perícia', 'Acordo', 'Nova audiência', 'Alvará', 'Testemunha(s)', 'Desistência da Ação', 'Retornem aos autos'];
+const ITENS = ['Prazo', 'Perícia', 'Acordo', 'Nova audiência', 'Alvará', 'Testemunha(s)', 'Desistência da Ação', 'Retornem aos autos', 'Tarefa'];
 // Cada teste usa a sua audiência (horário próprio), pois o banco de teste é compartilhado.
 
 async function token(request) {
@@ -80,6 +80,7 @@ test('@critical Ata: cada caixa revela os seus controles e, ao desmarcar, eles s
     'Perícia': ['+ Cadastrar perícia'],
     'Alvará': ['+ Cadastrar tarefa do alvará'],
     'Desistência da Ação': ['+ Cadastrar tarefa'],
+    'Tarefa': ['+ Cadastrar tarefa'],
   };
   for (const [item, botoes] of Object.entries(revela)) {
     await marcar(ata, item).check();
@@ -140,6 +141,7 @@ test('@critical Ata: mensagens de validação de cada controle ao tentar registr
     ['Prazo', 'Cadastre ao menos um prazo ou desmarque essa opção antes de registrar a ata.'],
     ['Perícia', 'Cadastre ao menos uma perícia ou desmarque essa opção antes de registrar a ata.'],
     ['Alvará', 'Cadastre ao menos uma tarefa do alvará ou desmarque essa opção antes de registrar a ata.'],
+    ['Tarefa', 'Cadastre ao menos uma tarefa ou desmarque essa opção antes de registrar a ata.'],
     ['Desistência da Ação', 'Informe o motivo da desistência da ação antes de registrar a ata.'],
   ];
   for (const [item, mensagem] of casos) {
@@ -281,6 +283,13 @@ test('@critical Ata: preencher TODOS os controles com dados (cadastrar, remover,
   await janela(page, 'Nova Tarefa').getByRole('button', { name: 'Salvar Tarefa' }).click();
   await expect(ata.getByText(/ATA com Desistência da Ação, tomar providências — vencimento/)).toBeVisible();
 
+  // --- Tarefa avulsa (mesma janela "Nova Tarefa" de Publicações, processo travado; só grava ao registrar a ata)
+  await marcar(ata, 'Tarefa').check();
+  await ata.getByRole('button', { name: '+ Cadastrar tarefa', exact: true }).first().click();
+  await janela(page, 'Nova Tarefa').getByLabel('Título', { exact: true }).fill('Conferir cumprimento da ata');
+  await janela(page, 'Nova Tarefa').getByRole('button', { name: 'Salvar Tarefa' }).click();
+  await expect(ata.getByText(/Conferir Cumprimento Da Ata — vencimento/i)).toBeVisible();
+
   // --- Retornem aos autos (Sim + comentário)
   await marcar(ata, 'Retornem aos autos').check();
   await ata.getByRole('radio').first().check();
@@ -370,7 +379,7 @@ test('@critical Ata: preencher TODOS os controles com dados (cadastrar, remover,
     expect(ata2[marca], `marca ${marca} da ata`).toBe(1);
   }
   const tipos = detalhes.itens.map(i => i.tipo);
-  expect([...tipos].sort()).toEqual(['acordo', 'desistencia', 'nova_audiencia', 'pericia', 'prazo', 'retorno_autos', 'tarefa_alvara', 'tarefa_desistencia', 'testemunha']);
+  expect([...tipos].sort()).toEqual(['acordo', 'desistencia', 'nova_audiencia', 'pericia', 'prazo', 'retorno_autos', 'tarefa', 'tarefa_alvara', 'tarefa_desistencia', 'testemunha']);
   const nova = todas.find(a => String(a.hora).startsWith('14:30'));
   expect(nova, 'a nova audiência designada na ata precisa ter sido criada').toBeTruthy();
 });

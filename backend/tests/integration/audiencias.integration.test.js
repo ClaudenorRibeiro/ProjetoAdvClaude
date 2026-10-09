@@ -145,6 +145,31 @@ test('audiência presencial mantém a exigência de ao menos um acontecimento', 
   assert.match(resposta.body.mensagem, /selecione ao menos um item/i);
 });
 
+test('ata: o item "Tarefa" sozinho basta para registrar, grava a tarefa e o item da ata; excluir a tarefa só solta o vínculo', async () => {
+  const criada = await criar(audiencia({ modalidade: 'presencial', tipo_audiencia_id: 4, hora: '10:31' }));
+  assert.equal(criada.status, 201, JSON.stringify(criada.body));
+  const id = criada.body.dados.id;
+  const r = await request(app).post(`/api/audiencias/${id}/ata`).set('Authorization', `Bearer ${tokenAdmin}`)
+    .send({ advogado_acompanhante: 'ninguem', tarefas: [{ origem_ata: 'tarefa', titulo: 'Tarefa avulsa da ata', data_vencimento: '2030-06-10', prioridade: 'normal' }] });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  const detalhes = await request(app).get(`/api/audiencias/${id}/detalhes-ata`).set('Authorization', `Bearer ${tokenAdmin}`);
+  assert.deepEqual(detalhes.body.dados.itens.map(i => i.tipo), ['tarefa']);
+  const item = detalhes.body.dados.itens[0];
+  assert.equal(item.titulo, 'Tarefa avulsa da ata');
+  assert.ok(item.registro_id, 'o item da ata precisa apontar para a tarefa criada');
+  const conn = await conectarBancoTeste();
+  try {
+    const [t] = await conn.execute('SELECT titulo, processo_id FROM tarefas WHERE id = ?', [item.registro_id]);
+    assert.equal(t[0].titulo, 'Tarefa avulsa da ata');
+    assert.ok(t[0].processo_id, 'a tarefa nasce ligada ao processo da audiência');
+    const del = await request(app).delete(`/api/tarefas/${item.registro_id}`).set('Authorization', `Bearer ${tokenAdmin}`);
+    assert.equal(del.status, 200, JSON.stringify(del.body));
+    const [it] = await conn.execute("SELECT registro_id FROM ata_audiencia_itens WHERE tipo = 'tarefa' AND titulo = 'Tarefa avulsa da ata'");
+    assert.equal(it.length, 1, 'o histórico da ata continua');
+    assert.equal(it[0].registro_id, null);
+  } finally { await conn.end(); }
+});
+
 test('sem comparecimento recusa testemunhas e desfaz a audiência inteira', async () => {
   const resposta = await criar(audiencia({
     hora: '10:06',

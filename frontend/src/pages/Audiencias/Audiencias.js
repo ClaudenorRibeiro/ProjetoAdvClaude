@@ -600,7 +600,7 @@ function ModalDetalhesAta({ audiencia, onFechar }) {
 
   const ROTULO = {
     prazo: 'Prazo', pericia: 'Perícia', nova_audiencia: 'Nova audiência', acordo: 'Acordo',
-    tarefa_alvara: 'Tarefa de alvará', tarefa_desistencia: 'Tarefa de desistência',
+    tarefa_alvara: 'Tarefa de alvará', tarefa_desistencia: 'Tarefa de desistência', tarefa: 'Tarefa',
     desistencia: 'Desistência da ação', retorno_autos: 'Retorno aos autos', testemunha: 'Testemunha',
   };
 
@@ -2389,6 +2389,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
   const [periciasAta, setPericiasAta] = useState([]);
   const [modalTarefaAta, setModalTarefaAta] = useState(null);
   const [tarefasAlvara, setTarefasAlvara] = useState([]);
+  const [tarefasAta, setTarefasAta] = useState([]); // tarefas avulsas do item "Tarefa" (rascunho até registrar a ata)
   const [testemunhasAta, setTestemunhasAta] = useState([]);
   const [processoTestemunhasAta, setProcessoTestemunhasAta] = useState(null);
   const [cadastroTestemunhasAberto, setCadastroTestemunhasAberto] = useState(false);
@@ -2407,7 +2408,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
   // "O que teve nessa audiência?" — cada checkbox revela um recurso (antes oculto) e é gravado na ata.
   const [itens, setItens] = useState({
     prazo: false, pericia: false, acordo: false, nova_audiencia: false,
-    alvara: false, desistencia: false, retorno_autos: false, testemunha: false,
+    alvara: false, desistencia: false, retorno_autos: false, testemunha: false, tarefa: false,
   });
   // Ao desmarcar um item, apaga o rascunho correspondente — ele só existe em memória
   // até a ata ser registrada, então desmarcar precisa desfazer o que foi preenchido.
@@ -2417,6 +2418,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
     if (chave === 'prazo') setPrazosAta([]);
     else if (chave === 'pericia') setPericiasAta([]);
     else if (chave === 'alvara') setTarefasAlvara([]);
+    else if (chave === 'tarefa') setTarefasAta([]);
     else if (chave === 'desistencia') { setTarefasDesistencia([]); setMotivoDesistencia(''); }
     else if (chave === 'retorno_autos') { setRegistrarComentarioRetorno(false); setComentarioRetorno(''); }
     else if (chave === 'nova_audiencia') setNovaAudienciaRascunho(null);
@@ -2568,7 +2570,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
         pasta: d.pasta_numero != null && d.pasta_numero !== ''
           ? `Pasta: ${String(d.pasta_numero).padStart(4, '0')}` : '',
         origem,
-        titulo: origem === 'desistencia' ? 'ATA com Desistência da Ação, tomar providências' : 'ATA com Alvará, tomar providências',
+        titulo: origem === 'desistencia' ? 'ATA com Desistência da Ação, tomar providências' : origem === 'tarefa' ? '' : 'ATA com Alvará, tomar providências',
       });
     } catch {
       toast.error('Não foi possível carregar os dados do processo para a tarefa da ATA.');
@@ -2582,7 +2584,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
       return;
     }
     // Testemunha(s) é complementar: não basta sozinha para concluir a ATA.
-    if (!ehSemComparecimento && !['prazo', 'pericia', 'acordo', 'nova_audiencia', 'alvara', 'desistencia', 'retorno_autos'].some(k => itens[k])) {
+    if (!ehSemComparecimento && !['prazo', 'pericia', 'acordo', 'nova_audiencia', 'alvara', 'desistencia', 'retorno_autos', 'tarefa'].some(k => itens[k])) {
       setAviso('Selecione ao menos um item da audiência além de testemunha(s) antes de registrar a ata.');
       return;
     }
@@ -2617,6 +2619,10 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
       setAviso('Cadastre ao menos uma tarefa do alvará ou desmarque essa opção antes de registrar a ata.');
       return;
     }
+    if (itens.tarefa && tarefasAta.length === 0) {
+      setAviso('Cadastre ao menos uma tarefa ou desmarque essa opção antes de registrar a ata.');
+      return;
+    }
     if (itens.desistencia && !motivoDesistencia.trim()) {
       setAviso('Informe o motivo da desistência da ação antes de registrar a ata.');
       return;
@@ -2645,6 +2651,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
       tarefas: [
         ...(itens.alvara ? tarefasAlvara.map(t => ({ ...t, origem_ata: 'alvara' })) : []),
         ...(itens.desistencia ? tarefasDesistencia.map(t => ({ ...t, origem_ata: 'desistencia' })) : []),
+        ...(itens.tarefa ? tarefasAta.map(t => ({ ...t, origem_ata: 'tarefa' })) : []),
       ],
       nova_audiencia_dados: itens.nova_audiencia ? novaAudienciaRascunho : null,
       motivo_desistencia: itens.desistencia ? motivoDesistencia.trim() : null,
@@ -2718,6 +2725,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
                 ['prazo', 'Prazo'], ['pericia', 'Perícia'], ['acordo', 'Acordo'],
                 ['nova_audiencia', 'Nova audiência'], ['alvara', 'Alvará'],
                 ['testemunha', 'Testemunha(s)'], ['desistencia', 'Desistência da Ação'], ['retorno_autos', 'Retornem aos autos'],
+                ['tarefa', 'Tarefa'],
               ].filter(([k]) => !ehSemComparecimento || k !== 'testemunha').map(([k, rotulo]) => (
                 <label key={k} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', cursor: 'pointer' }}>
                   <input type="checkbox" checked={itens[k]} onChange={() => toggleItem(k)} />
@@ -2768,7 +2776,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
           )}
 
           {/* Recursos ainda em implementação — revelados pelo checkbox, codados um a um */}
-          {(itens.prazo || itens.pericia || itens.alvara || itens.desistencia || itens.retorno_autos) && (
+          {(itens.prazo || itens.pericia || itens.alvara || itens.desistencia || itens.retorno_autos || itens.tarefa) && (
             <div className="form-group" style={{ marginTop: '8px' }}>
               {itens.prazo && (
                 <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, padding: '8px 12px', fontSize: '13px', color: '#1e40af', marginBottom: '6px' }}>
@@ -2815,6 +2823,20 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
                     {tarefasAlvara.map((tarefa, indice) => <div key={indice} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: '#fff', borderRadius: 4, padding: '6px 8px' }}>
                       <span>{tarefa.titulo} — vencimento {formatarData(tarefa.data_vencimento)}</span>
                       <button type="button" className="btn btn-secondary" style={{ padding: '3px 7px', fontSize: 11 }} onClick={() => setTarefasAlvara(lista => lista.filter((_, i) => i !== indice))}>Remover</button>
+                    </div>)}
+                  </div>}
+                </div>
+              )}
+              {itens.tarefa && (
+                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, padding: '8px 12px', fontSize: '13px', color: '#1e40af', marginBottom: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <strong>Tarefa</strong>
+                    <button type="button" className="btn btn-outline" style={{ padding: '4px 8px', fontSize: 12 }} onClick={() => abrirTarefaAta('tarefa')}>+ Cadastrar tarefa</button>
+                  </div>
+                  {tarefasAta.length > 0 && <div style={{ marginTop: 8, display: 'grid', gap: 5 }}>
+                    {tarefasAta.map((tarefa, indice) => <div key={indice} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: '#fff', borderRadius: 4, padding: '6px 8px' }}>
+                      <span>{tarefa.titulo} — vencimento {formatarData(tarefa.data_vencimento)}</span>
+                      <button type="button" className="btn btn-secondary" style={{ padding: '3px 7px', fontSize: 11 }} onClick={() => setTarefasAta(lista => lista.filter((_, i) => i !== indice))}>Remover</button>
                     </div>)}
                   </div>}
                 </div>
@@ -2905,6 +2927,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
           tituloInicial={modalTarefaAta.titulo}
           onSalvarRascunho={tarefa => {
             if (modalTarefaAta.origem === 'desistencia') setTarefasDesistencia(lista => [...lista, tarefa]);
+            else if (modalTarefaAta.origem === 'tarefa') setTarefasAta(lista => [...lista, tarefa]);
             else setTarefasAlvara(lista => [...lista, tarefa]);
           }}
           onFechar={() => setModalTarefaAta(null)}

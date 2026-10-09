@@ -1233,7 +1233,9 @@ async function registrarAta(req, res) {
   const resultadoTexto = String(resultado_texto || '').trim();
   const temItemSelecionado = [teve_prazo, teve_pericia, houve_acordo, nova_audiencia,
     teve_alvara, teve_desistencia, teve_retorno_autos]
-    .some(valor => valor === true || Number(valor) === 1);
+    .some(valor => valor === true || Number(valor) === 1)
+    // Tarefa avulsa (item "Tarefa" da ata) não tem coluna própria: vale pela presença das tarefas enviadas.
+    || (Array.isArray(tarefas) && tarefas.some(t => t?.origem_ata === 'tarefa'));
   if (ehSemComparecimento && !resultadoTexto) {
     return erro(res, 'Descreva o que aconteceu no ato processual antes de registrar o resultado.');
   }
@@ -1397,7 +1399,7 @@ async function registrarAta(req, res) {
           t.notificar_conclusao && t.atribuida_para ? 1 : 0]
       );
       await auditoria.registrar(req.usuario.id, 'tarefas', 'criar', tarefaResult.insertId, null, null, conn);
-      await registrarItemAta(t.origem_ata === 'desistencia' ? 'tarefa_desistencia' : 'tarefa_alvara',
+      await registrarItemAta(t.origem_ata === 'desistencia' ? 'tarefa_desistencia' : t.origem_ata === 'tarefa' ? 'tarefa' : 'tarefa_alvara',
         tarefaResult.insertId, t.titulo.trim(), t.descricao || null, t.data_vencimento);
     }
 
