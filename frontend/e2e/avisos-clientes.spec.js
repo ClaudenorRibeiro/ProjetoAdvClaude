@@ -123,8 +123,10 @@ test('@critical Avisos: Configurações — "mostrar antes de enviar" por módul
     await cx.setChecked(false);
     await page.getByLabel(/Lembrete de perícia/).fill('0');
     await page.getByLabel(/Lembrete de parabéns de aniversário/).fill('1');
+    // espera a gravação de verdade (o botão "Salvar Configurações" também combina com /salv/, então um texto não serve de prova)
+    const gravou = page.waitForResponse(r => r.url().includes('/api/configuracoes/escritorio') && r.request().method() === 'PUT');
     await page.getByRole('button', { name: 'Salvar Configurações' }).click();
-    await expect(page.getByText(/salv|atualiz/i).first()).toBeVisible();
+    expect((await gravou).ok()).toBe(true);
     expect((await noBanco('SELECT avisos_pericia_mostrar, avisos_audiencia_mostrar, dias_alerta_pericia, dias_aviso_parabens FROM configuracoes_escritorio LIMIT 1'))[0])
       .toMatchObject({ avisos_pericia_mostrar: 0, avisos_audiencia_mostrar: 1, dias_alerta_pericia: 0, dias_aviso_parabens: 1 });
   } finally {

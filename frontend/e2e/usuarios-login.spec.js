@@ -106,7 +106,7 @@ test('@critical Login: entrar certo leva ao Dashboard e grava a sessão; usuári
   // Ao apagar a sessão, o próprio sistema já pode mandar a tela para /login no mesmo instante em que pedimos /pessoas
   // (a abertura é interrompida pelo redirecionamento): o que importa é terminar no login.
   await page.evaluate(() => sessionStorage.clear());
-  await page.goto('/pessoas').catch(erro => { if (!/interrupted by another navigation/i.test(String(erro))) throw erro; });
+  await page.goto('/pessoas').catch(erro => { if (!/interrupted by another navigation|net::ERR_ABORTED/i.test(String(erro))) throw erro; });
   await expect(page).toHaveURL(/\/login$/);
 });
 
