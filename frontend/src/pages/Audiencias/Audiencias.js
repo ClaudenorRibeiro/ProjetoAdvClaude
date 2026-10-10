@@ -108,6 +108,7 @@ export default function Audiencias() {
   const [confirmarExcluir, setConfirmarExcluir] = useState(null); // audiência selecionada para excluir
   const [modalHistorico, setModalHistorico] = useState(null); // audiência selecionada para ver histórico
   const [modalDetalhesAta, setModalDetalhesAta] = useState(null); // consulta operacional da ATA
+  const [modalEditarAta, setModalEditarAta] = useState(null);     // ata sendo EDITADA (advogado, resumo, observações, itens acrescentados)
   const [modalCancelar, setModalCancelar] = useState(null); // audiência selecionada para cancelar
   const [modalRemarcar, setModalRemarcar] = useState(null); // audiência selecionada para remarcar
   const [remarcacaoEmCadastro, setRemarcacaoEmCadastro] = useState(null);
@@ -423,6 +424,14 @@ export default function Audiencias() {
           onFechar={(reload) => { setModalAta(null); if (reload) carregar(); }} />
       )}
 
+      {/* Modal editar ata (advogado, resumo, observações e itens acrescentados) */}
+      {modalEditarAta && (
+        <ModalRegistrarAta audiencia={modalEditarAta} modoEdicao
+          tipos={tipos}
+          onTiposChange={() => audienciasAPI.tipos().then(r => { if (r.data.ok) setTipos(r.data.dados); })}
+          onFechar={(reload) => { setModalEditarAta(null); if (reload) carregar(); }} />
+      )}
+
       {/* Modal reverter status (só admin) */}
       {modalReverter && (
         <ModalReverterStatus audiencia={modalReverter}
@@ -455,7 +464,8 @@ export default function Audiencias() {
       )}
 
       {modalDetalhesAta && (
-        <ModalDetalhesAta audiencia={modalDetalhesAta} onFechar={() => setModalDetalhesAta(null)} />
+        <ModalDetalhesAta audiencia={modalDetalhesAta} onFechar={() => setModalDetalhesAta(null)}
+          onEditar={temPermissao('audiencias.ata', 'visualizar') ? () => { setModalEditarAta(modalDetalhesAta); setModalDetalhesAta(null); } : undefined} />
       )}
 
       {/* Confirmação de exclusão */}
@@ -586,7 +596,15 @@ export function ModalRemarcarAudiencia({ audiencia, onFechar, onContinuar }) {
 // Modal de histórico de alterações de uma audiência
 // Exibe todos os registros da tabela auditoria_audiencia
 // ============================================================
-function ModalDetalhesAta({ audiencia, onFechar }) {
+// Nome de cada tipo de item gravado na ata (Detalhes e Editar ata mostram os mesmos).
+const ROTULO_ITEM_ATA = {
+  prazo: 'Prazo', pericia: 'Perícia', nova_audiencia: 'Nova audiência', acordo: 'Acordo',
+  tarefa_alvara: 'Tarefa de alvará', tarefa_desistencia: 'Tarefa de desistência', tarefa: 'Tarefa',
+  desistencia: 'Desistência da ação', retorno_autos: 'Retorno aos autos', testemunha: 'Testemunha',
+};
+
+// Detalhes da ATA (somente leitura). `onEditar`, quando informado, mostra o botão "Editar ata" (a quem pode alterar a ata).
+export function ModalDetalhesAta({ audiencia, onFechar, onEditar }) {
   const [dados, setDados] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const ehSemComparecimento = audiencia.modalidade === 'sem_comparecimento';
@@ -598,11 +616,7 @@ function ModalDetalhesAta({ audiencia, onFechar }) {
       .finally(() => setCarregando(false));
   }, [audiencia.id]);
 
-  const ROTULO = {
-    prazo: 'Prazo', pericia: 'Perícia', nova_audiencia: 'Nova audiência', acordo: 'Acordo',
-    tarefa_alvara: 'Tarefa de alvará', tarefa_desistencia: 'Tarefa de desistência', tarefa: 'Tarefa',
-    desistencia: 'Desistência da ação', retorno_autos: 'Retorno aos autos', testemunha: 'Testemunha',
-  };
+  const ROTULO = ROTULO_ITEM_ATA;
 
   return (
     <div className="modal-overlay">
@@ -635,7 +649,12 @@ function ModalDetalhesAta({ audiencia, onFechar }) {
             )}
           </>}
         </div>
-        <div className="modal-footer"><button className="btn btn-secondary" onClick={onFechar}>Fechar</button></div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onFechar}>Fechar</button>
+          {onEditar && dados && dados.ata.audiencia_status === 'realizada' && (
+            <button className="btn btn-primary" onClick={onEditar}>{ehSemComparecimento ? 'Editar resultado' : 'Editar ata'}</button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -670,6 +689,10 @@ export function ModalHistoricoAudiencia({ audiencia, onFechar }) {
     responsavel_id: 'Responsável',
     motivo_status: 'Motivo da remarcação',
     cancelada: 'Cancelamento',
+    ata_advogado: 'Ata — advogado acompanhante',
+    ata_resumo: 'Ata — resumo',
+    ata_observacoes: 'Ata — observações',
+    ata_item: 'Ata — item acrescentado',
   };
 
   return (
@@ -2376,7 +2399,9 @@ function FaixaEmBreve({ rotulo }) {
 }
 
 // Modal para registrar ata da audiência
-export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChange }) {
+// `modoEdicao`: EDITA a ata já registrada — corrige o advogado, o resumo e as observações e ACRESCENTA itens esquecidos
+// (o que a ata já tem não é refeito aqui). Sem ele, é o registro da ata de sempre.
+export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChange, modoEdicao = false }) {
   // "Registrar Ata" pressupõe que a audiência ACONTECEU → status Realizada. Cancelar/Remarcar são
   // ações à parte; o acordo é registrado pelo modal completo do Financeiro (botão abaixo).
   const [form, setForm] = useState({});
@@ -2437,6 +2462,28 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
   const [advogadoSel, setAdvogadoSel] = useState(''); // '' | 'ninguem' | 'usuario:X' | 'freela:X'
   const [modalNovoFreela, setModalNovoFreela] = useState(false);
   const [aviso, setAviso] = useState(''); // faixa interna de validação
+  const [ataAtual, setAtaAtual] = useState(null);       // modo edição: { ata, itens } como estão registrados
+  const textosOriginais = useRef({ resultado: '', observacoes: '' });   // modo edição: só envia o que a pessoa mudou
+  const jaTem = ataAtual ? { acordo: !!ataAtual.ata.houve_acordo, nova_audiencia: !!ataAtual.ata.nova_audiencia,
+    desistencia: !!ataAtual.ata.teve_desistencia, retorno_autos: !!ataAtual.ata.teve_retorno_autos } : {};
+
+  // Modo edição: traz a ata como está (advogado, resumo, observações e itens já registrados).
+  useEffect(() => {
+    if (!modoEdicao) return undefined;
+    let vivo = true;
+    audienciasAPI.detalhesAta(audiencia.id)
+      .then(({ data }) => {
+        if (!vivo || !data.ok) return;
+        const { ata } = data.dados;
+        setAtaAtual(data.dados);
+        const resultado = ata.resultado && ata.resultado !== 'realizada' ? ata.resultado : '';
+        textosOriginais.current = { resultado, observacoes: ata.observacoes || '' };
+        setForm({ resultado_texto: resultado, observacoes: ata.observacoes || '' });
+        setAdvogadoSel(ata.sem_advogado ? 'ninguem' : ata.advogado_id ? `usuario:${ata.advogado_id}` : ata.advogado_freela_id ? `freela:${ata.advogado_freela_id}` : '');
+      })
+      .catch(() => { if (vivo) setAviso('Não foi possível carregar a ata para edição.'); });
+    return () => { vivo = false; };
+  }, [audiencia.id, modoEdicao]);
 
   // Carrega advogados + dados da audiência (pré-preenche com o Responsável pela condução).
   useEffect(() => {
@@ -2452,13 +2499,14 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
         if (aud.data.ok) {
           const d = aud.data.dados;
           setProcessoTestemunhasAta(d.processo_id || null);
-          if (d.responsavel_id) setAdvogadoSel(`usuario:${d.responsavel_id}`);
+          if (modoEdicao) { /* na edição vale o advogado da ata, não o responsável pela condução */ }
+          else if (d.responsavel_id) setAdvogadoSel(`usuario:${d.responsavel_id}`);
           else if (d.responsavel_freela_id) setAdvogadoSel(`freela:${d.responsavel_freela_id}`);
         }
       } catch { /* silencioso: se falhar, o campo apenas começa vazio */ }
     })();
     return () => { vivo = false; };
-  }, [audiencia.id]);
+  }, [audiencia.id, modoEdicao]);
 
   useEffect(() => {
     let vivo = true;
@@ -2584,7 +2632,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
       return;
     }
     // Testemunha(s) é complementar: não basta sozinha para concluir a ATA.
-    if (!ehSemComparecimento && !['prazo', 'pericia', 'acordo', 'nova_audiencia', 'alvara', 'desistencia', 'retorno_autos', 'tarefa'].some(k => itens[k])) {
+    if (!modoEdicao && !ehSemComparecimento && !['prazo', 'pericia', 'acordo', 'nova_audiencia', 'alvara', 'desistencia', 'retorno_autos', 'tarefa'].some(k => itens[k])) {
       setAviso('Selecione ao menos um item da audiência além de testemunha(s) antes de registrar a ata.');
       return;
     }
@@ -2634,8 +2682,12 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
     setSalvando(true);
     // O acordo (se houve) já foi criado no Financeiro pelo modal próprio; aqui só marcamos na ata
     // que esta audiência teve acordo. O status da audiência é sempre "Realizada".
+    const { resultado_texto: resumoDigitado, observacoes: obsDigitada, ...restoDoForm } = form;
     const payload = {
-      ...form,
+      ...restoDoForm,
+      // registro: tudo como foi digitado; edição: só o que a pessoa mudou (o resto fica como está na ata)
+      ...(!modoEdicao || (resumoDigitado || '') !== textosOriginais.current.resultado ? { resultado_texto: resumoDigitado } : {}),
+      ...(!modoEdicao || (obsDigitada || '') !== textosOriginais.current.observacoes ? { observacoes: obsDigitada } : {}),
       advogado_acompanhante: advogadoSel || '',
       houve_acordo: itens.acordo ? 1 : 0,
       nova_audiencia: itens.nova_audiencia ? 1 : 0,
@@ -2658,10 +2710,15 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
       comentario_retorno_autos: itens.retorno_autos && registrarComentarioRetorno ? comentarioRetorno.trim() : null,
     };
     try {
-      await audienciasAPI.registrarAta(audiencia.id, payload);
-      toast.success(ehSemComparecimento ? 'Resultado registrado com sucesso!' : 'Ata registrada com sucesso!');
+      if (modoEdicao) {
+        await audienciasAPI.editarAta(audiencia.id, payload);
+        toast.success(ehSemComparecimento ? 'Resultado atualizado com sucesso!' : 'Ata atualizada com sucesso!');
+      } else {
+        await audienciasAPI.registrarAta(audiencia.id, payload);
+        toast.success(ehSemComparecimento ? 'Resultado registrado com sucesso!' : 'Ata registrada com sucesso!');
+      }
       onFechar(true);
-    } catch (err) { setAviso(err.response?.data?.mensagem || 'Não foi possível registrar o resultado. Tente novamente.'); }
+    } catch (err) { setAviso(err.response?.data?.mensagem || (modoEdicao ? 'Não foi possível salvar a ata. Tente novamente.' : 'Não foi possível registrar o resultado. Tente novamente.')); }
     finally { setSalvando(false); }
   }
 
@@ -2669,13 +2726,23 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
     <div className="modal-overlay">
       <div className="modal-box modal-grande">
         <div className="modal-header">
-          <h3>{ehSemComparecimento ? 'Registrar resultado' : 'Registrar Ata'} — {formatarData(audiencia.data)} {audiencia.hora?.slice(0, 5)}</h3>
+          <h3>{modoEdicao ? (ehSemComparecimento ? 'Editar resultado' : 'Editar Ata') : (ehSemComparecimento ? 'Registrar resultado' : 'Registrar Ata')} — {formatarData(audiencia.data)} {audiencia.hora?.slice(0, 5)}</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
         </div>
         <div className="modal-body">
           {aviso && (
             <div style={{ background: '#fff4e5', border: '1px solid #ffcf99', color: '#8a5300', padding: '8px 12px', borderRadius: 6, fontSize: 13, marginBottom: 12 }}>
               {aviso}
+            </div>
+          )}
+
+          {/* Modo edição: o que a ata já tem (só leitura). Para acrescentar, marque abaixo. */}
+          {modoEdicao && ataAtual && ataAtual.itens.length > 0 && (
+            <div data-testid="itens-ja-registrados" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '8px 12px', marginBottom: 12 }}>
+              <strong style={{ fontSize: 13 }}>Já registrado nesta ata</strong>
+              <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 13, color: '#334155' }}>
+                {ataAtual.itens.map(item => <li key={item.id}>{ROTULO_ITEM_ATA[item.tipo] || item.tipo}: {item.titulo}</li>)}
+              </ul>
             </div>
           )}
 
@@ -2719,7 +2786,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
 
           {/* "O que teve nessa audiência?" — cada checkbox revela um recurso antes oculto e é gravado na ata */}
           <div className="form-group" style={{ marginTop: '12px' }}>
-            <label className="form-label">{ehSemComparecimento ? 'Providências geradas por este ato' : 'O que teve nessa audiência?'}</label>
+            <label className="form-label">{modoEdicao ? 'Acrescentar à ata (marque o que faltou registrar)' : ehSemComparecimento ? 'Providências geradas por este ato' : 'O que teve nessa audiência?'}</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 18px', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#f8fafc' }}>
               {[
                 ['prazo', 'Prazo'], ['pericia', 'Perícia'], ['acordo', 'Acordo'],
@@ -2728,8 +2795,8 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
                 ['tarefa', 'Tarefa'],
               ].filter(([k]) => !ehSemComparecimento || k !== 'testemunha').map(([k, rotulo]) => (
                 <label key={k} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={itens[k]} onChange={() => toggleItem(k)} />
-                  {rotulo}
+                  <input type="checkbox" checked={itens[k]} disabled={modoEdicao && !!jaTem[k]} onChange={() => toggleItem(k)} />
+                  {rotulo}{modoEdicao && jaTem[k] ? ' (já registrado)' : ''}
                 </label>
               ))}
             </div>
@@ -2887,7 +2954,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
           <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
-            {salvando ? 'Salvando...' : ehSemComparecimento ? 'Registrar resultado' : 'Registrar Ata'}
+            {salvando ? 'Salvando...' : modoEdicao ? 'Salvar alterações' : ehSemComparecimento ? 'Registrar resultado' : 'Registrar Ata'}
           </button>
         </div>
       </div>

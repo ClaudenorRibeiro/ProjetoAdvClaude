@@ -294,6 +294,7 @@ export const audienciasAPI = {
   cancelar:          (id, dados) => api.put(`/audiencias/${id}/cancelar`, dados),
   remarcar:          (id, dados) => api.put(`/audiencias/${id}/remarcar`, dados),
   registrarAta:      (id, dados) => api.post(`/audiencias/${id}/ata`, dados),
+  editarAta:         (id, dados) => api.put(`/audiencias/${id}/ata`, dados),   // corrige advogado/resumo/observações e acrescenta itens
   marcarAtaImpressa: (id) => api.put(`/audiencias/${id}/ata-impressa`),
   reverterStatus:    (id, dados) => api.put(`/audiencias/${id}/reverter`, dados),
   historico:         (id) => api.get(`/audiencias/${id}/historico`),

@@ -170,6 +170,82 @@ test('ata: o item "Tarefa" sozinho basta para registrar, grava a tarefa e o item
   } finally { await conn.end(); }
 });
 
+test('editar ata: corrige o advogado, o resumo e as observações e ACRESCENTA itens; o que já existe não muda; tudo no Histórico', async () => {
+  const criada = await criar(audiencia({ modalidade: 'presencial', tipo_audiencia_id: 4, hora: '10:41' }));
+  assert.equal(criada.status, 201, JSON.stringify(criada.body));
+  const id = criada.body.dados.id;
+  const adm = (r) => r.set('Authorization', `Bearer ${tokenAdmin}`);
+  const registrar = await adm(request(app).post(`/api/audiencias/${id}/ata`))
+    .send({ advogado_acompanhante: 'ninguem', observacoes: 'Obs original', tarefas: [{ origem_ata: 'tarefa', titulo: 'Tarefa original da ata', data_vencimento: '2030-06-10' }] });
+  assert.equal(registrar.status, 201, JSON.stringify(registrar.body));
+  const editar = (corpo, tk = tokenAdmin) => request(app).put(`/api/audiencias/${id}/ata`).set('Authorization', `Bearer ${tk}`).send(corpo);
+  const detalhes = async () => (await adm(request(app).get(`/api/audiencias/${id}/detalhes-ata`))).body.dados;
+  const historico = async () => (await adm(request(app).get(`/api/audiencias/${id}/historico`))).body.dados;
+
+  // nada para salvar, entradas ruins e permissão
+  const nada = await editar({});
+  assert.equal(nada.status, 400); assert.match(nada.body.mensagem, /nenhuma alteração/i);
+  assert.match((await editar({ advogado_acompanhante: '' })).body.mensagem, /advogado/i);
+  assert.match((await editar({ advogado_acompanhante: 'abc' })).body.mensagem, /advogado inválido/i);
+  assert.equal((await editar({ observacoes: { x: 1 } })).status, 400);
+  assert.equal((await editar({ observacoes: 'x'.repeat(5001) })).status, 400);
+  assert.equal((await editar({ tarefas: 'não é lista' })).status, 400);
+  assert.equal((await editar({ tarefas: [{ origem_ata: 'qualquer', titulo: 'x', data_vencimento: '2030-06-10' }] })).status, 400);
+  assert.equal((await editar({ teve_desistencia: 1 })).status, 400);                          // desistência exige o motivo
+  assert.equal((await editar({ tarefas: [{ origem_ata: 'desistencia', titulo: 'x', data_vencimento: '2030-06-10' }] })).status, 400);   // tarefa de desistência sem desistência
+  // sem a permissão de ata (pode ver audiências, mas não a ata): 403
+  const semAta = await (async () => {
+    const c = await conectarBancoTeste();
+    try {
+      const [u] = await c.execute(`INSERT INTO usuarios (nome, login, senha_hash, email, tipo, nivel, ativo, ver_todos_processos, sessao_atual, notif_email, google_agenda_ativo)
+        VALUES ('Sem Ata', 'sem_ata_edit', 'x', 'sem_ata_edit@example.invalid', 'advogado', 2, 1, 0, 'sessao-sem-ata', 0, 0)`);
+      await c.execute("INSERT INTO permissoes (usuario_id, modulo, submodulo, acao, permitido) VALUES (?, 'audiencias', NULL, 'visualizar', 1)", [u.insertId]);
+      return token(u.insertId, 2, 'sessao-sem-ata');
+    } finally { await c.end(); }
+  })();
+  assert.equal((await editar({ observacoes: 'Nova' }, semAta)).status, 403);
+  const inexistente = await request(app).put('/api/audiencias/999999/ata').set('Authorization', `Bearer ${tokenAdmin}`).send({ observacoes: 'x' });
+  assert.equal(inexistente.status, 404);
+  assert.equal((await detalhes()).itens.length, 1, 'as tentativas recusadas não gravaram nada');
+
+  // corrige advogado, resumo e observações
+  const corrigido = await editar({ advogado_acompanhante: 'usuario:1', resultado_texto: 'Resumo corrigido', observacoes: 'Obs corrigida' });
+  assert.equal(corrigido.status, 200, JSON.stringify(corrigido.body));
+  let d = await detalhes();
+  assert.equal(d.ata.advogado_id, 1); assert.equal(d.ata.sem_advogado, 0);
+  assert.equal(d.ata.resultado, 'Resumo corrigido'); assert.equal(d.ata.observacoes, 'Obs corrigida');
+  assert.equal(d.itens.length, 1, 'o item que já existia continua só um');
+  const campos = (await historico()).map(h => h.campo_alterado);
+  for (const c of ['ata_advogado', 'ata_resumo', 'ata_observacoes']) assert.ok(campos.includes(c), `Histórico sem ${c}`);
+  const trocaAdv = (await historico()).find(h => h.campo_alterado === 'ata_advogado');
+  assert.match(trocaAdv.valor_anterior, /Ninguém/); assert.ok(trocaAdv.valor_novo);
+  assert.equal((await editar({ advogado_acompanhante: 'usuario:1' })).status, 400, 'mesmo advogado e nada mais = nenhuma alteração');
+
+  // acrescenta itens esquecidos: outra tarefa, desistência (com tarefa) e retorno aos autos
+  const mais = await editar({
+    tarefas: [{ origem_ata: 'tarefa', titulo: 'Tarefa esquecida', data_vencimento: '2030-07-01' },
+              { origem_ata: 'desistencia', titulo: 'Providências da desistência', data_vencimento: '2030-07-02' }],
+    teve_desistencia: 1, motivo_desistencia: 'Cliente desistiu', teve_retorno_autos: 1, comentario_retorno_autos: 'Voltar aos autos',
+  });
+  assert.equal(mais.status, 200, JSON.stringify(mais.body)); assert.equal(mais.body.dados.itens_acrescentados, 4);
+  d = await detalhes();
+  assert.deepEqual(d.itens.map(i => i.tipo), ['tarefa', 'tarefa', 'tarefa_desistencia', 'desistencia', 'retorno_autos']);
+  assert.equal(d.ata.teve_desistencia, 1); assert.equal(d.ata.teve_retorno_autos, 1);
+  const conn = await conectarBancoTeste();
+  try {
+    const [t] = await conn.execute("SELECT COUNT(*) AS n FROM tarefas WHERE titulo IN ('Tarefa esquecida', 'Providências da desistência')");
+    assert.equal(Number(t[0].n), 2, 'as tarefas acrescentadas existem de verdade');
+  } finally { await conn.end(); }
+  assert.equal((await historico()).filter(h => h.campo_alterado === 'ata_item').length, 4);
+
+  // repetir a desistência não duplica o item (a ata já tem)
+  const repetida = await editar({ teve_desistencia: 1, motivo_desistencia: 'Outro motivo', observacoes: 'Obs final' });
+  assert.equal(repetida.status, 200, JSON.stringify(repetida.body));
+  d = await detalhes();
+  assert.equal(d.itens.filter(i => i.tipo === 'desistencia').length, 1);
+  assert.equal(d.ata.observacoes, 'Obs final');
+});
+
 test('sem comparecimento recusa testemunhas e desfaz a audiência inteira', async () => {
   const resposta = await criar(audiencia({
     hora: '10:06',

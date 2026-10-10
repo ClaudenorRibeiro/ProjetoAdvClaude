@@ -266,6 +266,7 @@ router.delete('/audiencias/:id',             autenticar, verificarPermissao('aud
 router.put('/audiencias/:id/cancelar',       autenticar, verificarPermissao('audiencias','alterar'),    audienciasCtrl.cancelar);
 router.put('/audiencias/:id/remarcar',       autenticar, verificarPermissao('audiencias','alterar'),    audienciasCtrl.remarcar);
 router.post('/audiencias/:id/ata',              autenticar, verificarPermissao('audiencias','ata','visualizar'), audienciasCtrl.registrarAta);
+router.put('/audiencias/:id/ata',               autenticar, verificarPermissao('audiencias','ata','visualizar'), audienciasCtrl.editarAta);
 router.put('/audiencias/:id/ata-impressa',      autenticar, verificarPermissao('audiencias','ata','visualizar'), audienciasCtrl.marcarAtaImpressa);
 // Reverter status (Realizada -> Agendada): SOMENTE admin. Apaga a ata; exige motivo.
 router.put('/audiencias/:id/reverter',          autenticar, apenasAdmin, audienciasCtrl.reverterStatus);

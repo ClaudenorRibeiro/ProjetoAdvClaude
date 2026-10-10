@@ -57,8 +57,11 @@ async function limpar() {
   await noBanco(`DELETE FROM auditoria_audiencia WHERE audiencia_id IN (SELECT id FROM audiencia WHERE processo_id IN ${ids})`);
   await noBanco(`DELETE FROM audiencia_testemunhas WHERE audiencia_id IN (SELECT id FROM audiencia WHERE processo_id IN ${ids})`);
   await noBanco(`DELETE FROM audiencia_responsaveis WHERE audiencia_id IN (SELECT id FROM audiencia WHERE processo_id IN ${ids})`);
+  await noBanco(`DELETE FROM ata_audiencia WHERE audiencia_id IN (SELECT id FROM audiencia WHERE processo_id IN ${ids})`);   // os itens da ata saem junto (cascata)
   await noBanco(`DELETE FROM audiencia WHERE processo_id IN ${ids}`);
-  await noBanco("DELETE FROM logs_auditoria WHERE tabela = 'audiencia'");
+  await noBanco("DELETE FROM tarefas WHERE titulo IN ('Tarefa esquecida da ata E2E')");
+  await noBanco("DELETE FROM advogados_freela WHERE nome = 'Freela E2E da ata'");
+  await noBanco("DELETE FROM logs_auditoria WHERE tabela IN ('audiencia', 'ata_audiencia', 'tarefas')");
 }
 test.beforeEach(async ({ page }) => {
   await limpar();
@@ -482,4 +485,83 @@ test('@critical Mais de 50 audiências no mesmo processo: a aba mostra todas (se
   await loginPelaTela(page);
   await abrirAba(page, CNJ1);
   await expect(page.locator('tbody tr'), 'a lista mostrou menos audiências do que existem (70 em massa + 3 do processo)').toHaveCount(73, { timeout: 20000 });
+});
+
+// ---- Detalhes da ATA e EDITAR ATA pela aba Audiências da pasta (10/10/2026) ----
+// a4 = audiência realizada (proc2): ganha uma ata com "Ninguém" como acompanhante e uma tarefa registrada.
+async function criarAtaDaA4() {
+  const ata = (await noBanco("INSERT INTO ata_audiencia (audiencia_id, resultado, observacoes, sem_advogado, criado_por) VALUES (?, NULL, 'Observação original', 1, 1)", [d.a4])).insertId;
+  await noBanco("INSERT INTO ata_audiencia_itens (ata_audiencia_id, tipo, registro_id, titulo, data_referencia) VALUES (?, 'tarefa', NULL, 'Tarefa original da ata', '2030-06-10')", [ata]);
+  return ata;
+}
+const linhaA4 = (page) => page.locator('tbody tr').filter({ hasText: '10/01/2001' });
+const caixa = (j, nome) => j.getByRole('checkbox', { name: nome });
+
+test('@critical Aba Audiências da pasta: "Detalhes da ATA" só aparece na audiência com ata; "Editar ata" corrige o advogado e as observações e acrescenta uma tarefa esquecida', async ({ page }) => {
+  const ataId = await criarAtaDaA4();
+  const freela = (await noBanco("INSERT INTO advogados_freela (nome, oab) VALUES ('Freela E2E da ata', 'OAB 123')")).insertId;
+  await loginPelaTela(page);
+  await abrirAba(page, CNJ2);
+  // só a audiência com ata oferece o item
+  await abrirMenuAcoes(page, linha(page, 'Sem comparecimento'));
+  await expect(page.getByRole('button', { name: /Detalhes d/ })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await abrirMenuAcoes(page, linhaA4(page));
+  await page.getByRole('button', { name: 'Detalhes da ATA' }).click();
+  const det = janela(page, 'Detalhes da ATA — 10/01/2001 11:00');
+  await expect(det).toBeVisible();
+  await expect(det.getByText('Ninguém (a parte compareceu sozinha)')).toBeVisible();
+  await expect(det.getByText('Tarefa original da ata')).toBeVisible();
+  await semViolacoes(page, 'Detalhes da ATA na pasta');
+  // editar
+  await det.getByRole('button', { name: 'Editar ata' }).click();
+  const ed = janela(page, 'Editar Ata — 10/01/2001 11:00');
+  await expect(ed).toBeVisible();
+  await expect(ed.getByTestId('itens-ja-registrados')).toContainText('Tarefa: Tarefa original da ata');
+  await expect(ed.getByLabel('Advogado(a) que acompanhou a audiência', { exact: true })).toHaveValue('ninguem');
+  await expect(ed.getByLabel('Observações', { exact: true })).toHaveValue('Observação original');
+  await expect(ed.getByRole('button', { name: 'Salvar alterações' })).toBeVisible();
+  await expect(caixa(ed, 'Tarefa')).toBeEnabled();                                            // dá para acrescentar outra tarefa
+  await semViolacoes(page, 'janela Editar Ata');
+  // sem mexer em nada: o servidor recusa e a janela continua
+  await ed.getByRole('button', { name: 'Salvar alterações' }).click();
+  await expect(ed.getByText('Nenhuma alteração para salvar.')).toBeVisible();
+  // corrige o advogado e as observações, acrescenta uma tarefa
+  await ed.getByLabel('Advogado(a) que acompanhou a audiência', { exact: true }).selectOption(`freela:${freela}`);
+  await ed.getByLabel('Observações', { exact: true }).fill('Observação corrigida');
+  await caixa(ed, 'Tarefa').check();
+  await ed.getByRole('button', { name: '+ Cadastrar tarefa', exact: true }).click();
+  await janela(page, 'Nova Tarefa').getByLabel('Título', { exact: true }).fill('Tarefa esquecida da ata E2E');
+  await janela(page, 'Nova Tarefa').getByRole('button', { name: 'Salvar Tarefa' }).click();
+  await ed.getByRole('button', { name: 'Salvar alterações' }).click();
+  await aviso(page, 'Ata atualizada com sucesso!');
+  await expect(ed).toHaveCount(0);
+  const ata = (await noBanco('SELECT advogado_freela_id, sem_advogado, observacoes FROM ata_audiencia WHERE id = ?', [ataId]))[0];
+  expect(ata).toEqual({ advogado_freela_id: freela, sem_advogado: 0, observacoes: 'Observação Corrigida' });   // o campo põe as iniciais em maiúscula ao sair, como na ata nova
+  const itens = await noBanco("SELECT tipo, titulo FROM ata_audiencia_itens WHERE ata_audiencia_id = ? ORDER BY id", [ataId]);
+  expect(itens.map(i => i.tipo)).toEqual(['tarefa', 'tarefa']);
+  expect(itens[1].titulo).toMatch(/tarefa esquecida da ata e2e/i);
+  expect((await noBanco("SELECT COUNT(*) AS n FROM tarefas WHERE titulo LIKE 'Tarefa esquecida da ata E2E'"))[0].n).toBe(1);
+  const hist = (await noBanco("SELECT campo_alterado FROM auditoria_audiencia WHERE audiencia_id = ? AND campo_alterado LIKE 'ata_%'", [d.a4])).map(h => h.campo_alterado);
+  expect(hist.sort()).toEqual(['ata_advogado', 'ata_item', 'ata_observacoes']);
+  // reabrindo os Detalhes: mostram o advogado novo e as duas tarefas
+  await abrirMenuAcoes(page, linhaA4(page));
+  await page.getByRole('button', { name: 'Detalhes da ATA' }).click();
+  const det2 = janela(page, 'Detalhes da ATA — 10/01/2001 11:00');
+  await expect(det2.getByText('Freela E2E da ata')).toBeVisible();
+  await expect(det2.getByText('Observação Corrigida')).toBeVisible();
+  await expect(det2.getByText('Tarefa original da ata')).toBeVisible();
+});
+
+test('@critical Aba Audiências da pasta: quem vê audiências mas NÃO tem a permissão de ata consulta os Detalhes da ATA, sem o botão "Editar ata"', async ({ page }) => {
+  await criarAtaDaA4();
+  const so = await criarUsuarioComPermissoes('so_ve_ata_c6', [['processos', null, 'visualizar'], ['audiencias', null, 'visualizar']]);
+  await loginPelaTela(page, so);
+  await abrirAba(page, CNJ2);
+  await abrirMenuAcoes(page, linhaA4(page));
+  await page.getByRole('button', { name: 'Detalhes da ATA' }).click();
+  const det = janela(page, 'Detalhes da ATA — 10/01/2001 11:00');
+  await expect(det.getByText('Tarefa original da ata')).toBeVisible();
+  await expect(det.getByRole('button', { name: 'Editar ata' })).toHaveCount(0);
+  await expect(det.getByRole('button', { name: 'Fechar', exact: true })).toBeVisible();
 });

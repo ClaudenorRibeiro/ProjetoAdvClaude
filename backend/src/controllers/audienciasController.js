@@ -1201,6 +1201,137 @@ async function criarPericiaDaAta(conn, dados, processoId, usuarioId) {
   return { id: result.insertId, agendada: !aguardandoData, enviarEmailPerito: !!dados.enviar_email_perito, modeloEmailPeritoId: dados.modelo_email_perito_id || null };
 }
 
+// Advogado acompanhante da ata: "usuario:X" | "freela:X" | "ninguem" | vazio (não informado).
+function lerAdvogadoDaAta(valor) {
+  if (valor === 'ninguem') return { advogado_id: null, advogado_freela_id: null, sem_advogado: 1 };
+  const r = parsarResponsavel(valor);
+  return { advogado_id: r.responsavel_id, advogado_freela_id: r.responsavel_freela_id, sem_advogado: 0 };
+}
+
+// Grava os EFEITOS de uma ata (testemunhas, prazos, nova audiência, perícias, tarefas e os itens "só de registro": acordo,
+// desistência, retorno aos autos), dentro da transação de quem chama. Usada ao REGISTRAR a ata e ao ACRESCENTAR itens a uma ata
+// já registrada (editarAta): nos dois casos cada efeito cria o registro de verdade e o item correspondente em "Detalhes da ATA".
+async function gravarEfeitosDaAta(conn, { ataId, audienciaId, processoId, pastaId, usuario }, corpo) {
+  const { testemunhas = [], prazos = [], pericias = [], tarefas = [], nova_audiencia, nova_audiencia_dados, houve_acordo,
+    teve_desistencia, motivo_desistencia, teve_retorno_autos, comentario_retorno_autos } = corpo;
+  // Registro próprio dos efeitos desta ATA. Ele guarda o vínculo e uma descrição
+  // legível sem alterar as rotinas compartilhadas de prazo, perícia ou tarefa.
+  const registrarItemAta = async (tipo, registroId, titulo, descricao = null, dataReferencia = null) => {
+    await conn.execute(
+      `INSERT INTO ata_audiencia_itens
+         (ata_audiencia_id, tipo, registro_id, titulo, descricao, data_referencia)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [ataId, tipo, registroId || null, titulo, descricao || null, dataReferencia || null]
+    );
+  };
+
+  for (const testemunha of testemunhas) {
+    try {
+      await inserirTestemunha(conn, audienciaId, processoId, testemunha, usuario.id, audienciaId);
+      const [pessoas] = await conn.execute('SELECT nome FROM pessoas_fisicas WHERE id IN (?, ?)', [testemunha.pessoa_id, testemunha.parte_pessoa_id]);
+      const nomeTestemunha = pessoas.find(p => Number(p.id) === Number(testemunha.pessoa_id))?.nome || 'Testemunha';
+      const nomeParte = pessoas.find(p => Number(p.id) === Number(testemunha.parte_pessoa_id))?.nome || 'Parte';
+      await registrarItemAta('testemunha', null, `${nomeTestemunha} — testemunha de ${nomeParte}`);
+    } catch (err) { throw erroDaAta(err.message); }
+  }
+
+  // (O acordo, quando há, é criado pelo modal completo do Financeiro — parcelas/honorário/parceria.
+  //  Por isso NÃO lançamos mais nada na conta corrente aqui, para não duplicar o Financeiro.)
+
+  for (const p of prazos) {
+    const dataFinalInformada = p.data_final || p.data_vencimento;
+    // Mesma regra do módulo Prazos: a data final digitada MANDA; a quantidade é só referência e "0"
+    // (zero dias úteis entre início e final) vale como "sem quantidade".
+    const qtdInformada = /^0+$/.test(String(p.quantidade ?? '').trim()) ? null : p.quantidade;
+    if (!p.data_inicio || !p.subtipo_id || (!qtdInformada && !dataFinalInformada)) {
+      throw erroDaAta('Cada prazo da ata precisa de data inicial, tipo, subtipo e data final ou quantidade de dias.');
+    }
+    const { calcularVencimento } = require('../services/calendarioService');
+    const vencimento = dataFinalInformada
+      ? dataFinalInformada
+      : await calcularVencimento(p.data_inicio, qtdInformada, p.tipo_dias || 'uteis');
+    const [prazoResult] = await conn.execute(
+      `INSERT INTO prazos_processo (processo_id, subtipo_id, descricao, data_inicio,
+        quantidade, tipo_dias, data_vencimento, delegado_para, criado_por)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [processoId, p.subtipo_id, p.descricao || null, p.data_inicio,
+       qtdInformada || null, p.tipo_dias || 'uteis', vencimento,
+       p.delegado_para || null, usuario.id]
+    );
+    await auditoria.registrar(usuario.id, 'prazos_processo', 'criar', prazoResult.insertId, null, null, conn);
+    await registrarItemAta('prazo', prazoResult.insertId, p.descricao || 'Prazo', null, vencimento);
+  }
+
+  // A nova audiência é só um rascunho no navegador até este momento. Ao salvar a ata,
+  // ela nasce no mesmo commit e sempre fica vinculada ao processo da audiência original.
+  let novaAudienciaId = null;
+  if (nova_audiencia && !nova_audiencia_dados) {
+    throw erroDaAta('Cadastre os dados da nova audiência antes de registrar a ata.');
+  }
+  if (nova_audiencia_dados) {
+    novaAudienciaId = await criarAudienciaDaAta(conn, nova_audiencia_dados, processoId, usuario.id);
+    await registrarItemAta('nova_audiencia', novaAudienciaId, 'Nova audiência', null, nova_audiencia_dados.data || null);
+  }
+
+  const periciasCriadas = [];
+  for (const pericia of pericias) {
+    const periciaCriada = await criarPericiaDaAta(conn, pericia, processoId, usuario.id);
+    periciasCriadas.push(periciaCriada);
+    await registrarItemAta('pericia', periciaCriada.id, pericia.tipo_pericia_nome || 'Perícia', pericia.perito_nome || null, pericia.data || null);
+  }
+
+  if (tarefas.length && !(await temPermissaoBackend(usuario.id, usuario.nivel, 'tarefas', 'cadastrar'))) {
+    throw erroDaAta('Você não possui permissão para cadastrar tarefas. Remova a tarefa da ata ou solicite essa permissão.');
+  }
+  for (const t of tarefas) {
+    if (!t?.titulo?.trim()) throw erroDaAta('Informe o título de cada tarefa da ata.');
+    if (!t.data_vencimento) throw erroDaAta('Informe o vencimento de cada tarefa da ata.');
+    const [tarefaResult] = await conn.execute(
+      `INSERT INTO tarefas
+         (titulo, descricao, prioridade, processo_id, pasta_id, prazo_id,
+          atribuida_para, data_vencimento, criado_por, publicacao_id, notificar_conclusao)
+       VALUES (?, ?, ?, ?, ?, null, ?, ?, ?, null, ?)`,
+      [t.titulo.trim(), t.descricao || null, t.prioridade || 'normal', processoId, pastaId,
+        t.atribuida_para || null, t.data_vencimento, usuario.id,
+        t.notificar_conclusao && t.atribuida_para ? 1 : 0]
+    );
+    await auditoria.registrar(usuario.id, 'tarefas', 'criar', tarefaResult.insertId, null, null, conn);
+    await registrarItemAta(t.origem_ata === 'desistencia' ? 'tarefa_desistencia' : t.origem_ata === 'tarefa' ? 'tarefa' : 'tarefa_alvara',
+      tarefaResult.insertId, t.titulo.trim(), t.descricao || null, t.data_vencimento);
+  }
+
+  if (houve_acordo) {
+    await registrarItemAta('acordo', null, 'Acordo registrado no Financeiro');
+  }
+  if (teve_desistencia) {
+    await registrarItemAta('desistencia', null, 'Desistência da ação', String(motivo_desistencia).trim());
+  }
+  if (teve_retorno_autos) {
+    await registrarItemAta('retorno_autos', null, 'Retorno aos autos',
+      comentario_retorno_autos != null ? String(comentario_retorno_autos).trim() : null);
+  }
+
+  return { novaAudienciaId, periciasCriadas };
+}
+
+// Comunicação externa (Google, e-mail ao perito, avisos) SÓ depois do commit: nenhuma falha de SMTP deixa a ata parcialmente salva.
+async function efeitosExternosDaAta({ novaAudienciaId, periciasCriadas, usuario }) {
+  if (novaAudienciaId) {
+    sincronizarAudienciaGoogle(novaAudienciaId, {});
+    await avisos.registrarEvento({ modulo: 'audiencia', tipo: 'agendada', id: novaAudienciaId });
+  }
+  for (const pericia of periciasCriadas) {
+    if (pericia.enviarEmailPerito && pericia.modeloEmailPeritoId) {
+      enviarEmailPeritoPericia(pericia.id, pericia.modeloEmailPeritoId, usuario.id)
+        .catch(err => console.error('Falha ao enviar e-mail ao perito da ATA:', err.message));
+    }
+    if (pericia.agendada) {
+      sincronizarPericiaDaAtaGoogle(pericia.id);
+      await avisos.registrarEvento({ modulo: 'pericia', tipo: 'agendada', id: pericia.id });
+    }
+  }
+}
+
 // POST /api/audiencias/:id/ata — Registra a ata de uma audiência
 async function registrarAta(req, res) {
   const { id } = req.params;
@@ -1269,15 +1400,7 @@ async function registrarAta(req, res) {
       : 'Informe o advogado que acompanhou a audiência (ou selecione "Ninguém").');
   }
 
-  // Advogado acompanhante: "usuario:X" | "freela:X" | "ninguem" | vazio (não informado).
-  let advogado_id = null, advogado_freela_id = null, sem_advogado = 0;
-  if (advogado_acompanhante === 'ninguem') {
-    sem_advogado = 1;
-  } else if (advogado_acompanhante) {
-    const r = parsarResponsavel(advogado_acompanhante);
-    advogado_id = r.responsavel_id;
-    advogado_freela_id = r.responsavel_freela_id;
-  }
+  const { advogado_id, advogado_freela_id, sem_advogado } = lerAdvogadoDaAta(advogado_acompanhante);
 
   const conn = await pool.getConnection();
   try {
@@ -1309,17 +1432,6 @@ async function registrarAta(req, res) {
       ]
     );
 
-    // Registro próprio dos efeitos desta ATA. Ele guarda o vínculo e uma descrição
-    // legível sem alterar as rotinas compartilhadas de prazo, perícia ou tarefa.
-    const registrarItemAta = async (tipo, registroId, titulo, descricao = null, dataReferencia = null) => {
-      await conn.execute(
-        `INSERT INTO ata_audiencia_itens
-           (ata_audiencia_id, tipo, registro_id, titulo, descricao, data_referencia)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [result.insertId, tipo, registroId || null, titulo, descricao || null, dataReferencia || null]
-      );
-    };
-
     const [aud] = await conn.execute('SELECT * FROM audiencia WHERE id = ?', [id]);
     if (!aud.length) throw erroDaAta('Audiência não encontrada.', 404);
     const orig = aud[0] || {};
@@ -1328,91 +1440,10 @@ async function registrarAta(req, res) {
     if (!processo.length) throw erroDaAta('Processo da audiência não encontrado.', 404);
     const pastaId = processo[0].pasta_id || null;
 
-    for (const testemunha of testemunhas) {
-      try {
-        await inserirTestemunha(conn, id, processoId, testemunha, req.usuario.id, id);
-        const [pessoas] = await conn.execute('SELECT nome FROM pessoas_fisicas WHERE id IN (?, ?)', [testemunha.pessoa_id, testemunha.parte_pessoa_id]);
-        const nomeTestemunha = pessoas.find(p => Number(p.id) === Number(testemunha.pessoa_id))?.nome || 'Testemunha';
-        const nomeParte = pessoas.find(p => Number(p.id) === Number(testemunha.parte_pessoa_id))?.nome || 'Parte';
-        await registrarItemAta('testemunha', null, `${nomeTestemunha} — testemunha de ${nomeParte}`);
-      } catch (err) { throw erroDaAta(err.message); }
-    }
-
-    // (O acordo, quando há, é criado pelo modal completo do Financeiro — parcelas/honorário/parceria.
-    //  Por isso NÃO lançamos mais nada na conta corrente aqui, para não duplicar o Financeiro.)
-
-    for (const p of prazos) {
-      const dataFinalInformada = p.data_final || p.data_vencimento;
-      // Mesma regra do módulo Prazos: a data final digitada MANDA; a quantidade é só referência e "0"
-      // (zero dias úteis entre início e final) vale como "sem quantidade".
-      const qtdInformada = /^0+$/.test(String(p.quantidade ?? '').trim()) ? null : p.quantidade;
-      if (!p.data_inicio || !p.subtipo_id || (!qtdInformada && !dataFinalInformada)) {
-        throw erroDaAta('Cada prazo da ata precisa de data inicial, tipo, subtipo e data final ou quantidade de dias.');
-      }
-      const { calcularVencimento } = require('../services/calendarioService');
-      const vencimento = dataFinalInformada
-        ? dataFinalInformada
-        : await calcularVencimento(p.data_inicio, qtdInformada, p.tipo_dias || 'uteis');
-      const [prazoResult] = await conn.execute(
-        `INSERT INTO prazos_processo (processo_id, subtipo_id, descricao, data_inicio,
-          quantidade, tipo_dias, data_vencimento, delegado_para, criado_por)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [processoId, p.subtipo_id, p.descricao || null, p.data_inicio,
-         qtdInformada || null, p.tipo_dias || 'uteis', vencimento,
-         p.delegado_para || null, req.usuario.id]
-      );
-      await auditoria.registrar(req.usuario.id, 'prazos_processo', 'criar', prazoResult.insertId, null, null, conn);
-      await registrarItemAta('prazo', prazoResult.insertId, p.descricao || 'Prazo', null, vencimento);
-    }
-
-    // A nova audiência é só um rascunho no navegador até este momento. Ao salvar a ata,
-    // ela nasce no mesmo commit e sempre fica vinculada ao processo da audiência original.
-    let novaAudienciaId = null;
-    if (nova_audiencia && !nova_audiencia_dados) {
-      throw erroDaAta('Cadastre os dados da nova audiência antes de registrar a ata.');
-    }
-    if (nova_audiencia_dados) {
-      novaAudienciaId = await criarAudienciaDaAta(conn, nova_audiencia_dados, processoId, req.usuario.id);
-      await registrarItemAta('nova_audiencia', novaAudienciaId, 'Nova audiência', null, nova_audiencia_dados.data || null);
-    }
-
-    const periciasCriadas = [];
-    for (const pericia of pericias) {
-      const periciaCriada = await criarPericiaDaAta(conn, pericia, processoId, req.usuario.id);
-      periciasCriadas.push(periciaCriada);
-      await registrarItemAta('pericia', periciaCriada.id, pericia.tipo_pericia_nome || 'Perícia', pericia.perito_nome || null, pericia.data || null);
-    }
-
-    if (tarefas.length && !(await temPermissaoBackend(req.usuario.id, req.usuario.nivel, 'tarefas', 'cadastrar'))) {
-      throw erroDaAta('Você não possui permissão para cadastrar tarefas. Remova a tarefa da ata ou solicite essa permissão.');
-    }
-    for (const t of tarefas) {
-      if (!t?.titulo?.trim()) throw erroDaAta('Informe o título de cada tarefa da ata.');
-      if (!t.data_vencimento) throw erroDaAta('Informe o vencimento de cada tarefa da ata.');
-      const [tarefaResult] = await conn.execute(
-        `INSERT INTO tarefas
-           (titulo, descricao, prioridade, processo_id, pasta_id, prazo_id,
-            atribuida_para, data_vencimento, criado_por, publicacao_id, notificar_conclusao)
-         VALUES (?, ?, ?, ?, ?, null, ?, ?, ?, null, ?)`,
-        [t.titulo.trim(), t.descricao || null, t.prioridade || 'normal', processoId, pastaId,
-          t.atribuida_para || null, t.data_vencimento, req.usuario.id,
-          t.notificar_conclusao && t.atribuida_para ? 1 : 0]
-      );
-      await auditoria.registrar(req.usuario.id, 'tarefas', 'criar', tarefaResult.insertId, null, null, conn);
-      await registrarItemAta(t.origem_ata === 'desistencia' ? 'tarefa_desistencia' : t.origem_ata === 'tarefa' ? 'tarefa' : 'tarefa_alvara',
-        tarefaResult.insertId, t.titulo.trim(), t.descricao || null, t.data_vencimento);
-    }
-
-    if (houve_acordo) {
-      await registrarItemAta('acordo', null, 'Acordo registrado no Financeiro');
-    }
-    if (teve_desistencia) {
-      await registrarItemAta('desistencia', null, 'Desistência da ação', String(motivo_desistencia).trim());
-    }
-    if (teve_retorno_autos) {
-      await registrarItemAta('retorno_autos', null, 'Retorno aos autos',
-        comentario_retorno_autos != null ? String(comentario_retorno_autos).trim() : null);
-    }
+    const { novaAudienciaId, periciasCriadas } = await gravarEfeitosDaAta(conn, {
+      ataId: result.insertId, audienciaId: id, processoId, pastaId, usuario: req.usuario,
+    }, { testemunhas, prazos, pericias, tarefas, nova_audiencia, nova_audiencia_dados, houve_acordo,
+         teve_desistencia, motivo_desistencia, teve_retorno_autos, comentario_retorno_autos });
 
     // Atualiza o status da audiência (a ata sempre conclui a audiência: Realizada ou Acordo).
     await conn.execute(
@@ -1428,21 +1459,7 @@ async function registrarAta(req, res) {
     // Auditoria na MESMA transação (tudo ou nada): antes do commit, com conn
     await auditoria.registrar(req.usuario.id, 'ata_audiencia', 'criar', result.insertId, null, null, conn);
     await conn.commit();
-    if (novaAudienciaId) {
-      sincronizarAudienciaGoogle(novaAudienciaId, {});
-      await avisos.registrarEvento({ modulo: 'audiencia', tipo: 'agendada', id: novaAudienciaId });
-    }
-    // Comunicação externa é feita somente após o commit: nenhuma falha de SMTP pode deixar a ATA parcialmente salva.
-    for (const pericia of periciasCriadas) {
-      if (pericia.enviarEmailPerito && pericia.modeloEmailPeritoId) {
-        enviarEmailPeritoPericia(pericia.id, pericia.modeloEmailPeritoId, req.usuario.id)
-          .catch(err => console.error('Falha ao enviar e-mail ao perito da ATA:', err.message));
-      }
-      if (pericia.agendada) {
-        sincronizarPericiaDaAtaGoogle(pericia.id);
-        await avisos.registrarEvento({ modulo: 'pericia', tipo: 'agendada', id: pericia.id });
-      }
-    }
+    await efeitosExternosDaAta({ novaAudienciaId, periciasCriadas, usuario: req.usuario });
     return sucesso(res, { id: result.insertId }, 'Ata registrada com sucesso', 201);
   } catch (err) {
     await conn.rollback();
@@ -1453,6 +1470,138 @@ async function registrarAta(req, res) {
     if (err.code === 'CALENDARIO_INSUFICIENTE' || err.code === 'CALENDARIO_QUANTIDADE_INVALIDA') {
       return erro(res, err.message, 422);
     }
+    if (erroDeHorarioDuplicado(err)) return erro(res, 'Já existe uma audiência ativa neste processo, na mesma data e horário.', 409);
+    return erroInterno(res, err);
+  } finally {
+    conn.release();
+  }
+}
+
+// Nome legível de quem acompanhou a ata (para o Histórico da audiência).
+async function nomeAdvogadoDaAta(conn, { advogado_id, advogado_freela_id, sem_advogado }, ehSemComparecimento) {
+  if (advogado_id) return (await conn.execute('SELECT nome FROM usuarios WHERE id = ?', [advogado_id]))[0][0]?.nome || `Usuário ${advogado_id}`;
+  if (advogado_freela_id) return (await conn.execute('SELECT nome FROM advogados_freela WHERE id = ?', [advogado_freela_id]))[0][0]?.nome || `Freelancer ${advogado_freela_id}`;
+  if (sem_advogado) return ehSemComparecimento ? 'Não informado' : 'Ninguém (a parte compareceu sozinha)';
+  return 'Não informado';
+}
+
+// Texto livre da ata na edição: ausente = não muda; texto = novo valor (vazio apaga); outro tipo ou acima de 5.000 letras = aviso.
+function lerTextoDaAta(bruto, rotulo) {
+  if (bruto === undefined) return { mudou: false };
+  if (bruto !== null && typeof bruto !== 'string') return { erro: `${rotulo}: informe um texto.` };
+  const valor = String(bruto || '').trim();
+  if (valor.length > 5000) return { erro: `${rotulo} é longo demais (máximo 5.000 caracteres).` };
+  return { mudou: true, valor: valor || null };
+}
+
+// PUT /api/audiencias/:id/ata — EDITA uma ata já registrada: corrige o advogado acompanhante, o resumo e as observações e
+// ACRESCENTA itens esquecidos (prazos, perícias, tarefas, testemunhas, nova audiência, acordo, desistência, retorno aos autos).
+// Itens que já existem NÃO são alterados nem apagados aqui. Tudo na mesma transação, com o Histórico da audiência.
+async function editarAta(req, res) {
+  const id = lerIdAudiencia(req.params.id);
+  if (!id) return naoEncontrado(res, 'Audiência não encontrada');
+  const corpo = req.body || {};
+  const resumo = lerTextoDaAta(corpo.resultado_texto, 'O resumo da ata');
+  if (resumo.erro) return erro(res, resumo.erro);
+  const obs = lerTextoDaAta(corpo.observacoes, 'As observações');
+  if (obs.erro) return erro(res, obs.erro);
+  const listas = ['testemunhas', 'prazos', 'pericias', 'tarefas'];
+  for (const nome of listas) {
+    if (corpo[nome] !== undefined && !Array.isArray(corpo[nome])) return erro(res, `Informe corretamente a lista de ${nome} da ata.`);
+  }
+  const { testemunhas = [], prazos = [], pericias = [], tarefas = [], nova_audiencia_dados = null } = corpo;
+  if (corpo.advogado_acompanhante !== undefined && (typeof corpo.advogado_acompanhante !== 'string' || !corpo.advogado_acompanhante.trim())) {
+    return erro(res, 'Informe o advogado que acompanhou a audiência (ou selecione "Ninguém").');
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [atas] = await conn.execute(
+      `SELECT aa.*, a.status AS audiencia_status, a.modalidade, a.processo_id
+         FROM ata_audiencia aa JOIN audiencia a ON a.id = aa.audiencia_id
+        WHERE aa.audiencia_id = ? FOR UPDATE`, [id]);
+    if (!atas.length) { await conn.rollback(); return naoEncontrado(res, 'Esta audiência ainda não possui ata registrada.'); }
+    const ata = atas[0];
+    if (ata.audiencia_status !== 'realizada') { await conn.rollback(); return erro(res, 'Só é possível editar a ata de uma audiência realizada.'); }
+    const ehSemComparecimento = semComparecimento(ata.modalidade);
+
+    // O que é NOVO nesta edição (o que a ata já tem não é refeito).
+    const querAcordo = corpo.houve_acordo === true || Number(corpo.houve_acordo) === 1;
+    const querDesistencia = corpo.teve_desistencia === true || Number(corpo.teve_desistencia) === 1;
+    const querRetorno = corpo.teve_retorno_autos === true || Number(corpo.teve_retorno_autos) === 1;
+    const acordoNovo = querAcordo && !ata.houve_acordo;
+    const desistenciaNova = querDesistencia && !ata.teve_desistencia;
+    const retornoNovo = querRetorno && !ata.teve_retorno_autos;
+    if (nova_audiencia_dados && ata.nova_audiencia) throw erroDaAta('Esta ata já tem nova audiência. Cadastre outra pela tela de Audiências.');
+    if (desistenciaNova && !String(corpo.motivo_desistencia || '').trim()) throw erroDaAta('Informe o motivo da desistência da ação.');
+    if (corpo.comentario_retorno_autos != null && !String(corpo.comentario_retorno_autos).trim()) {
+      throw erroDaAta('Informe o comentário sobre o retorno aos autos ou escolha não registrá-lo.');
+    }
+    if (tarefas.some(t => t?.origem_ata === 'desistencia') && !(ata.teve_desistencia || desistenciaNova)) {
+      throw erroDaAta('A tarefa de desistência só existe numa ata com Desistência da Ação.');
+    }
+    if (tarefas.some(t => !['alvara', 'desistencia', 'tarefa'].includes(t?.origem_ata))) throw erroDaAta('Tarefa da ata inválida.');
+
+    // Advogado acompanhante: só muda se veio e é diferente do atual.
+    let atual = { advogado_id: ata.advogado_id, advogado_freela_id: ata.advogado_freela_id, sem_advogado: ata.sem_advogado };
+    let novo = atual;
+    if (corpo.advogado_acompanhante !== undefined) {
+      novo = lerAdvogadoDaAta(corpo.advogado_acompanhante.trim());
+      const valido = novo.sem_advogado || novo.advogado_id || novo.advogado_freela_id;
+      if (!valido) throw erroDaAta('Advogado inválido.');
+    }
+    const advogadoMudou = Number(novo.advogado_id || 0) !== Number(atual.advogado_id || 0)
+      || Number(novo.advogado_freela_id || 0) !== Number(atual.advogado_freela_id || 0)
+      || Number(novo.sem_advogado || 0) !== Number(atual.sem_advogado || 0);
+    const resumoMudou = resumo.mudou && (resumo.valor || null) !== (ata.resultado || null);
+    const obsMudou = obs.mudou && (obs.valor || null) !== (ata.observacoes || null);
+    if (ehSemComparecimento && resumo.mudou && !resumo.valor) throw erroDaAta('Descreva o que aconteceu no ato processual antes de salvar.');
+    const temItemNovo = testemunhas.length || prazos.length || pericias.length || tarefas.length || nova_audiencia_dados
+      || acordoNovo || desistenciaNova || retornoNovo;
+    if (!advogadoMudou && !resumoMudou && !obsMudou && !temItemNovo) throw erroDaAta('Nenhuma alteração para salvar.');
+
+    const [proc] = await conn.execute('SELECT pasta_id FROM tblproc WHERE id = ?', [ata.processo_id]);
+    if (!proc.length) throw erroDaAta('Processo da audiência não encontrado.', 404);
+    const [[ultimo]] = await conn.execute('SELECT COALESCE(MAX(id), 0) AS n FROM ata_audiencia_itens WHERE ata_audiencia_id = ?', [ata.id]);
+
+    const { novaAudienciaId, periciasCriadas } = await gravarEfeitosDaAta(conn, {
+      ataId: ata.id, audienciaId: id, processoId: ata.processo_id, pastaId: proc[0].pasta_id || null, usuario: req.usuario,
+    }, { testemunhas, prazos, pericias, tarefas, nova_audiencia: !!nova_audiencia_dados, nova_audiencia_dados, houve_acordo: acordoNovo,
+         teve_desistencia: desistenciaNova, motivo_desistencia: corpo.motivo_desistencia, teve_retorno_autos: retornoNovo,
+         comentario_retorno_autos: corpo.comentario_retorno_autos });
+
+    await conn.execute(
+      `UPDATE ata_audiencia SET resultado = ?, observacoes = ?, advogado_id = ?, advogado_freela_id = ?, sem_advogado = ?,
+              houve_acordo = ?, nova_audiencia = ?, teve_prazo = ?, teve_pericia = ?, teve_alvara = ?, teve_desistencia = ?, teve_retorno_autos = ?
+        WHERE id = ?`,
+      [resumo.mudou ? resumo.valor : ata.resultado, obs.mudou ? obs.valor : ata.observacoes,
+       novo.advogado_id, novo.advogado_freela_id, novo.sem_advogado,
+       ata.houve_acordo || acordoNovo ? 1 : 0, ata.nova_audiencia || nova_audiencia_dados ? 1 : 0,
+       ata.teve_prazo || prazos.length ? 1 : 0, ata.teve_pericia || pericias.length ? 1 : 0,
+       ata.teve_alvara || tarefas.some(t => t.origem_ata === 'alvara') ? 1 : 0,
+       ata.teve_desistencia || desistenciaNova ? 1 : 0, ata.teve_retorno_autos || retornoNovo ? 1 : 0,
+       ata.id]
+    );
+
+    // Histórico da audiência: o que mudou e quem mudou (cada item acrescentado vira uma linha).
+    const historico = async (campo, anterior, valorNovo) => conn.execute(
+      'INSERT INTO auditoria_audiencia (audiencia_id, campo_alterado, valor_anterior, valor_novo, usuario_id) VALUES (?, ?, ?, ?, ?)',
+      [id, campo, anterior, valorNovo, req.usuario.id]);
+    if (advogadoMudou) await historico('ata_advogado', await nomeAdvogadoDaAta(conn, atual, ehSemComparecimento), await nomeAdvogadoDaAta(conn, novo, ehSemComparecimento));
+    if (resumoMudou) await historico('ata_resumo', ata.resultado || null, resumo.valor);
+    if (obsMudou) await historico('ata_observacoes', ata.observacoes || null, obs.valor);
+    const [acrescentados] = await conn.execute('SELECT tipo, titulo FROM ata_audiencia_itens WHERE ata_audiencia_id = ? AND id > ? ORDER BY id', [ata.id, ultimo.n]);
+    for (const item of acrescentados) await historico('ata_item', null, `${item.tipo}: ${item.titulo}`);
+
+    await auditoria.registrar(req.usuario.id, 'ata_audiencia', 'editar', ata.id, null, null, conn);
+    await conn.commit();
+    await efeitosExternosDaAta({ novaAudienciaId, periciasCriadas, usuario: req.usuario });
+    return sucesso(res, { id: ata.id, itens_acrescentados: acrescentados.length }, 'Ata atualizada com sucesso');
+  } catch (err) {
+    await conn.rollback();
+    if (err.erroDaAta) return erro(res, err.message, err.status || 400);
+    if (err.code === 'CALENDARIO_INSUFICIENTE' || err.code === 'CALENDARIO_QUANTIDADE_INVALIDA') return erro(res, err.message, 422);
     if (erroDeHorarioDuplicado(err)) return erro(res, 'Já existe uma audiência ativa neste processo, na mesma data e horário.', 409);
     return erroInterno(res, err);
   } finally {
@@ -1786,9 +1935,10 @@ async function buscarDetalhesAta(req, res) {
       `SELECT aa.id, aa.resultado, aa.observacoes, aa.criado_em,
               aa.houve_acordo, aa.nova_audiencia, aa.teve_prazo, aa.teve_pericia,
               aa.teve_alvara, aa.teve_desistencia, aa.teve_retorno_autos,
+              aa.advogado_id, aa.advogado_freela_id, aa.sem_advogado,
               u.nome AS criado_por_nome,
               COALESCE(ua.nome, af.nome, CASE WHEN aa.sem_advogado = 1 THEN 'Ninguém (a parte compareceu sozinha)' END) AS advogado_nome,
-              a.data AS audiencia_data, a.hora AS audiencia_hora,
+              a.data AS audiencia_data, a.hora AS audiencia_hora, a.modalidade AS audiencia_modalidade, a.status AS audiencia_status,
               pr.numProc AS processo_numero, pa.numPasta AS pasta_numero
          FROM ata_audiencia aa
          JOIN audiencia a ON a.id = aa.audiencia_id
@@ -2022,7 +2172,7 @@ async function reverterStatus(req, res) {
 module.exports = {
   listarAdvogados,
   listar, buscar, criar, atualizar, excluir, cancelar, remarcar,
-  registrarAta,
+  registrarAta, editarAta,
   marcarAtaImpressa: comIdNumerico(marcarAtaImpressa, 'Audiência não encontrada'),
   reverterStatus: comIdNumerico(reverterStatus, 'Audiência não encontrada'),
   buscarHistorico, buscarDetalhesAta,

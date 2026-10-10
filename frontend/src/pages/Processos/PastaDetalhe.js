@@ -16,7 +16,7 @@ import { linkWhatsApp } from '../../utils/whatsapp';
 import { ModalNovoProcesso, ModalEditarProcesso, ModalMotivoStatus, ModalHistoricoProcesso } from './Processos';
 import { ModalNovoPrazo, ModalCancelarPrazo, ModalEditarPrazo } from '../Prazos/Prazos';
 import { ModalTarefa, ModalHistoricoTarefa } from '../Tarefas/Tarefas';
-import { ModalNovaAudiencia, ModalEditarAudiencia, ModalCancelarAudiencia, ModalRemarcarAudiencia, ModalHistoricoAudiencia, ModalRegistrarAta } from '../Audiencias/Audiencias';
+import { ModalNovaAudiencia, ModalEditarAudiencia, ModalCancelarAudiencia, ModalRemarcarAudiencia, ModalHistoricoAudiencia, ModalRegistrarAta, ModalDetalhesAta } from '../Audiencias/Audiencias';
 // Modais de perícia reutilizados da tela de Perícias (aba Perícias da pasta)
 import { ModalPericia, ModalCancelar as ModalCancelarPericia, ModalRemarcar as ModalRemarcarPericia, ModalMarcarRemarcada as ModalMarcarRemarcadaPericia, ModalHistorico as ModalHistoricoPericia } from '../Pericias/Pericias';
 // Componentes financeiros reutilizados da tela Financeiro (aba Financeiro da pasta — por processo)
@@ -198,6 +198,8 @@ export default function PastaDetalhe() {
   const [remarcacaoEmCadastro, setRemarcacaoEmCadastro] = useState(null);
   const [audienciaHistorico, setAudienciaHistorico]   = useState(null); // audiência com histórico aberto
   const [audienciaAta, setAudienciaAta]               = useState(null); // audiência para registrar ata
+  const [audienciaDetalhesAta, setAudienciaDetalhesAta] = useState(null); // audiência cuja ata está sendo consultada
+  const [audienciaEditandoAta, setAudienciaEditandoAta] = useState(null); // audiência cuja ata está sendo EDITADA
   const [tiposAudiencia, setTiposAudiencia]           = useState([]);   // lista de tipos para o modal de edição
 
   // Modais — Perícias (mesmo fluxo da aba Audiências)
@@ -1323,6 +1325,16 @@ export default function PastaDetalhe() {
             onFechar={(reload) => { setAudienciaAta(null); if (reload) carregarAudiencias(); }}
           />
         )}
+        {audienciaDetalhesAta && (
+          <ModalDetalhesAta audiencia={audienciaDetalhesAta} onFechar={() => setAudienciaDetalhesAta(null)}
+            onEditar={temPermissao('audiencias.ata', 'visualizar') ? () => { setAudienciaEditandoAta(audienciaDetalhesAta); setAudienciaDetalhesAta(null); } : undefined} />
+        )}
+        {audienciaEditandoAta && (
+          <ModalRegistrarAta audiencia={audienciaEditandoAta} modoEdicao
+            tipos={tiposAudiencia || []}
+            onTiposChange={recarregarTiposAudiencia}
+            onFechar={(reload) => { setAudienciaEditandoAta(null); if (reload) carregarAudiencias(); }} />
+        )}
         {audienciaCancelando && (
           <ModalCancelarAudiencia
             audiencia={audienciaCancelando}
@@ -1581,6 +1593,7 @@ export default function PastaDetalhe() {
                               { label: 'Remarcar', icone: '🔁', oculto: !(['agendada','adiada'].includes(a.status) && temPermissao('audiencias','alterar')), onClick: () => setAudienciaRemarcando(a) },
                               { label: 'Editar', icone: '✏️', oculto: !podeEditarAud(a), onClick: () => { setAudienciaEditando(a); setAudienciaEmLeitura(false); } },
                               { label: 'Histórico', icone: '📋', onClick: () => setAudienciaHistorico(a) },
+                              { label: a.modalidade === 'sem_comparecimento' ? 'Detalhes do resultado' : 'Detalhes da ATA', icone: '📝', oculto: !a.tem_ata, onClick: () => setAudienciaDetalhesAta(a) },
                               { label: 'Excluir', icone: '🗑️', perigo: true, oculto: !podeExcluirAud(a), onClick: () => excluirAudiencia(a) },
                             ]} />
                         </td>
