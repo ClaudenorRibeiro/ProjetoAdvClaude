@@ -51,7 +51,9 @@ const MODULOS_PERM = [
   { chave: 'pericias', label: 'Perícias (menu)', submodulos: [
     { chave: 'pericias.tipos', label: 'Tipos de perícia' },
   ]},
-  { chave: 'financeiro',   label: 'Financeiro' },
+  { chave: 'financeiro',   label: 'Financeiro (Histórico = ver a aba Atividade e o histórico do acordo)', submodulos: [
+    { chave: 'financeiro.repasses', label: 'Repasses (registrar e desfazer) — marque Alterar' },
+  ]},
   { chave: 'documentos',   label: 'Documentos (menu)', submodulos: [
     { chave: 'documentos.modelos', label: 'Modelos de documento' },
   ]},

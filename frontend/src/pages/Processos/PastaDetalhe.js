@@ -1713,7 +1713,7 @@ export default function PastaDetalhe() {
 
                 {repassesAberto && (
                   <RepassesView key={`${processoSelecionado.id}-${repassesChave}`} processoId={Number(processoSelecionado.id)} subInicial={repassesSub}
-                    versao={repassesVersao} podeAlterar={temPermissao('financeiro', 'alterar')} onMudou={carregarFinanceiro} />
+                    versao={repassesVersao} podeAlterar={temPermissao('financeiro.repasses', 'alterar')} onMudou={carregarFinanceiro} />
                 )}
 
                 <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>

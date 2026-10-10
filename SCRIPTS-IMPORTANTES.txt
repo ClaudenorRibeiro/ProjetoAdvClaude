@@ -25,6 +25,10 @@ PARA RODAR NO HEIDISQL (banco)
   sql_cor_etiqueta_acordo_para_heidi.sql        IMPORTANTE  ETIQUETA "ACORDO" (processo com acordo ganha etiqueta e fundo colorido): acrescenta a coluna da cor em
                                                             configuracoes_escritorio e registra a versão 3. Rodar DEPOIS do sql_avisos_clientes_para_heidi.sql, com o banco do
                                                             sistema selecionado; pode rodar várias vezes; só acrescenta. Sem ele o sistema funciona, mas sem escolher a cor. Backup antes.
+  sql_permissao_repasses_financeiro_para_heidi.sql IMPORTANTE  PERMISSÃO PRÓPRIA DE "REPASSES" NO FINANCEIRO (Configurações > Permissões > Financeiro > Repasses): dá o novo
+                                                            sub-item a todo usuário que JÁ tem "Alterar" no Financeiro, para ninguém perder o repasse; registra a versão 4. Só acrescenta
+                                                            linhas em permissoes (não muda a estrutura). Rodar DEPOIS do sql_cor_etiqueta_acordo_para_heidi.sql, com o banco do sistema
+                                                            selecionado; pode rodar várias vezes. Sem ele, só o administrador repassa até marcar o sub-item. Backup antes.
   SUBSTITUÍDOS pelo script único (só histórico, NÃO rodar): sql_relatorios_fase1/fase6/fase7, sql_atualizar_financeiro,
                                                             sql_contas_bancarias_pessoas, sql_remover_area_direito_da_pasta (_para_heidi.sql).
   sql_limpar_pastas_vazias_para_heidi.sql       IMPORTANTE  Apaga SÓ as pastas 9999 e 928804 (fixos: 9999 e 928804 — rodar SÓ no Antônio). Nunca em lote.

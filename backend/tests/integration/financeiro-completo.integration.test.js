@@ -621,7 +621,7 @@ test('permissões: sem login 401; sem permissão de Financeiro 403 em TODAS as r
     ['put', '/api/financeiro/parcela/1/multa/repasse'], ['put', '/api/financeiro/parcela/1/multa/repasse/desfazer'],
     ['get', '/api/financeiro/repasses-pendentes'], ['get', '/api/financeiro/repasses-concluidos'], ['get', '/api/financeiro/consulta'],
     ['get', '/api/financeiro/consulta/exportar'], ['put', '/api/financeiro/parcela/1/repasse'], ['put', '/api/financeiro/parcela/1/repasse/desfazer'],
-    ['get', '/api/financeiro/parcela/1/historico'],
+    ['get', '/api/financeiro/parcela/1/historico'], ['get', '/api/financeiro/atividade'], ['get', '/api/financeiro/acordo/1/historico'],
   ];
   for (const [metodo, rota] of rotas) {
     assert.equal((await request(app)[metodo](rota)).status, 401, `sem login ${metodo.toUpperCase()} ${rota}`);
@@ -633,6 +633,109 @@ test('permissões: sem login 401; sem permissão de Financeiro 403 em TODAS as r
     ['post', '/api/financeiro/instituicoes-financeiras'], ['put', '/api/financeiro/instituicoes-financeiras/1'], ['delete', '/api/financeiro/instituicoes-financeiras/1'],
   ];
   for (const [metodo, rota] of soAdmin) assert.equal((await api(usuario)[metodo](rota).send({ nome: 'x' })).status, 403, `usuário comum ${metodo.toUpperCase()} ${rota}`);
+});
+
+// ------------------------------------------------------------------ perfis (pedido de 10/10/2026): cadastro, só repasses, tudo; e a consulta "quem fez e quando"
+let seqPerfil = 500;
+async function usuarioFin(rotulo, permissoes) {
+  seqPerfil += 1;
+  const id = (await sql(
+    `INSERT INTO usuarios (nome, login, senha_hash, email, tipo, nivel, ativo, ver_todos_processos, sessao_atual, notif_email, google_agenda_ativo)
+     VALUES (?, ?, 'x', ?, 'advogado', 2, 1, 0, ?, 0, 0)`, [`Usuário ${rotulo}`, `perfil${seqPerfil}`, `perfil${seqPerfil}@example.invalid`, `sessao-perfil-${seqPerfil}`])).insertId;
+  for (const [sub, acao] of permissoes) await sql('INSERT INTO permissoes (usuario_id, modulo, submodulo, acao, permitido) VALUES (?, ?, ?, ?, 1)', [id, 'financeiro', sub, acao]);
+  return { id, nome: `Usuário ${rotulo}`, token: token(id, 2, `sessao-perfil-${seqPerfil}`) };
+}
+
+test('perfis do Financeiro: quem só cadastra não repassa; quem só repassa não cadastra, não recebe e não edita; "Alterar" sozinho já não repassa; tudo continua com tudo', async () => {
+  const cadastro = await usuarioFin('cadastra', [[null, 'visualizar'], [null, 'cadastrar']]);
+  const repassa = await usuarioFin('repassa', [[null, 'visualizar'], ['repasses', 'alterar']]);
+  const soAlterar = await usuarioFin('altera', [[null, 'visualizar'], [null, 'alterar']]);
+  const tudo = await usuarioFin('tudo', [[null, 'visualizar'], [null, 'cadastrar'], [null, 'alterar'], [null, 'excluir'], ['repasses', 'alterar']]);
+  const dados = { forma_id: F.formaAmbos, conta_financeira_id: F.contaBanco, data: '2026-01-07' };
+  const repassar = (u, parcela, tipo = 'cliente') => api(u.token).put(`/api/financeiro/parcela/${parcela}/repasse`).send({ tipo, ...dados });
+  const desfazerRepasse = (u, parcela, tipo = 'cliente') => api(u.token).put(`/api/financeiro/parcela/${parcela}/repasse/desfazer`).send({ tipo });
+
+  const { parcelaId, parcelas } = await novoAcordo({ parcelas: 3 });
+  assert.equal((await receber(parcelas[0])).status, 200); assert.equal((await receber(parcelas[1])).status, 200); assert.equal((await receber(parcelas[2])).status, 200);
+
+  // Cadastro: cria acordo e lançamento, mas não repassa nem recebe
+  const lanc = await api(cadastro.token).post('/api/financeiro/processo/1/lancamento').send({ tipo: 'entrada', data: '2026-01-10', descricao: 'Lançamento do perfil cadastro', valor: 10 });
+  assert.equal(lanc.status, 201, JSON.stringify(lanc.body));
+  assert.equal((await api(cadastro.token).post('/api/financeiro/acordo/previa').send({ valor_total: 100, qtd_parcelas: 2, data_primeira: '2026-02-05' })).status, 200);
+  assert.equal((await repassar(cadastro, parcelaId)).status, 403);
+  assert.equal((await desfazerRepasse(cadastro, parcelaId)).status, 403);
+  assert.equal((await api(cadastro.token).put(`/api/financeiro/parcela/${parcelas[0]}/multa/repasse`).send({ tipo: 'cliente' })).status, 403);
+  assert.equal((await api(cadastro.token).put(`/api/financeiro/parcela/${parcelas[0]}/desfazer`).send({})).status, 403);   // receber/desfazer recebimento é "Alterar"
+
+  // Só repasses: repassa e desfaz, mas não cadastra, não recebe, não edita nem exclui
+  assert.equal((await api(repassa.token).post('/api/financeiro/processo/1/lancamento').send({ tipo: 'entrada', data: '2026-01-10', descricao: 'x', valor: 1 })).status, 403);
+  assert.equal((await api(repassa.token).post('/api/financeiro/acordo/previa').send({})).status, 403);
+  assert.equal((await api(repassa.token).put(`/api/financeiro/parcela/${parcelas[1]}/desfazer`).send({})).status, 403);
+  assert.equal((await api(repassa.token).put(`/api/financeiro/lancamento/${lanc.body.dados.id}`).send({ descricao: 'y' })).status, 403);
+  assert.equal((await api(repassa.token).delete(`/api/financeiro/lancamento/${lanc.body.dados.id}`)).status, 403);
+  const feito = await repassar(repassa, parcelaId);
+  assert.equal(feito.status, 200, JSON.stringify(feito.body));
+  assert.equal((await api(repassa.token).get('/api/financeiro/repasses-concluidos')).status, 200);       // vê as listas (tem Visualizar)
+  assert.equal((await desfazerRepasse(repassa, parcelaId)).status, 200);
+
+  // "Alterar" sozinho (sem o sub-item de repasses) NÃO repassa mais; continua recebendo e editando
+  assert.equal((await repassar(soAlterar, parcelaId)).status, 403);
+  assert.equal((await api(soAlterar.token).put(`/api/financeiro/parcela/${parcelas[2]}/desfazer`).send({})).status, 200);
+
+  // Tudo: cadastra, recebe, repassa e exclui
+  // (o desfazer limpou o destino da parcela: o novo repasse vai "em mãos", pelo caixa em espécie)
+  const rt = await api(tudo.token).put(`/api/financeiro/parcela/${parcelaId}/repasse`).send({ tipo: 'cliente', data: '2026-01-08', destino_tipo: 'em_maos', forma_id: F.formaEspecie, conta_financeira_id: F.caixa });
+  assert.equal(rt.status, 200, JSON.stringify(rt.body));
+  assert.equal((await api(tudo.token).delete(`/api/financeiro/lancamento/${lanc.body.dados.id}`)).status, 200);
+});
+
+test('atividade do Financeiro: só com a permissão Histórico; mostra quem fez, quando e o quê, com filtros por usuário, período, tipo e acordo; entradas ruins dão aviso', async () => {
+  const quemRepassa = await usuarioFin('repassa2', [[null, 'visualizar'], ['repasses', 'alterar']]);
+  const quemVe = await usuarioFin('historico', [[null, 'visualizar'], [null, 'historico']]);
+  const semHistorico = await usuarioFin('sem-historico', [[null, 'visualizar'], [null, 'cadastrar'], [null, 'alterar']]);
+  const { acordoId, parcelaId } = await novoAcordo();
+  assert.equal((await receber(parcelaId)).status, 200);
+  const rep = await api(quemRepassa.token).put(`/api/financeiro/parcela/${parcelaId}/repasse`).send({ tipo: 'cliente', forma_id: F.formaAmbos, conta_financeira_id: F.contaBanco, data: '2026-01-07' });
+  assert.equal(rep.status, 200, JSON.stringify(rep.body));
+
+  assert.equal((await api(semHistorico.token).get('/api/financeiro/atividade')).status, 403);
+  assert.equal((await api(semHistorico.token).get(`/api/financeiro/acordo/${acordoId}/historico`)).status, 403);
+  const todos = await api(quemVe.token).get('/api/financeiro/atividade');
+  assert.equal(todos.status, 200, JSON.stringify(todos.body));
+  const dados = todos.body.dados;
+  const repasse = dados.registros.find(r => r.acao === 'repasse-cliente' && r.registro_id === parcelaId);
+  assert.ok(repasse, 'o repasse aparece na atividade');
+  assert.equal(repasse.usuario_nome, quemRepassa.nome); assert.equal(repasse.usuario_id, quemRepassa.id);
+  assert.equal(repasse.acao_rotulo, 'Repasse ao cliente'); assert.equal(repasse.processo_id, 1); assert.ok(repasse.criado_em, 'tem data e hora');
+  assert.ok(dados.registros.some(r => r.acao === 'criar' && r.tabela === 'acordo' && r.registro_id === acordoId && r.acao_rotulo === 'Acordo/alvará criado'), 'a criação do acordo aparece');
+  assert.ok(dados.usuarios.some(u => u.id === quemRepassa.id), 'a lista de usuários traz quem já agiu');
+  // ordem: do mais novo para o mais antigo
+  const datas = dados.registros.map(r => String(r.criado_em)); assert.deepEqual([...datas].sort().reverse(), datas);
+
+  // filtros
+  const por = async (q) => (await api(quemVe.token).get(`/api/financeiro/atividade?${q}`)).body.dados;
+  const doUsuario = await por(`usuario_id=${quemRepassa.id}`);
+  assert.ok(doUsuario.registros.length >= 1 && doUsuario.registros.every(r => r.usuario_id === quemRepassa.id));
+  const soRepasses = await por('grupo=repasses');
+  assert.ok(soRepasses.registros.length >= 1 && soRepasses.registros.every(r => /^(repasse-|desfazer-repasse|multa-rep-)/.test(r.acao)));
+  const soLancamentos = await por('grupo=lancamentos');
+  assert.ok(soLancamentos.registros.every(r => r.tabela === 'conta_corrente'));
+  assert.equal((await por('data_de=2999-01-01')).total, 0);
+  assert.ok((await por('data_ate=2999-01-01')).total >= 1);
+  assert.equal((await por('limite=1')).registros.length, 1);
+  const doAcordo = (await api(quemVe.token).get(`/api/financeiro/acordo/${acordoId}/historico`)).body.dados;
+  assert.ok(doAcordo.registros.length >= 3 && doAcordo.registros.every(r => ['acordo', 'acordo_parcela'].includes(r.tabela)), 'só o acordo e as parcelas dele');
+  assert.ok(doAcordo.registros.some(r => r.acao === 'repasse-cliente') && doAcordo.registros.some(r => r.acao === 'criar'));
+  const outro = await novoAcordo();
+  const doOutro = (await api(quemVe.token).get(`/api/financeiro/acordo/${outro.acordoId}/historico`)).body.dados;
+  assert.ok(!doOutro.registros.some(r => r.acao === 'repasse-cliente'), 'o histórico de um acordo não mistura o de outro');
+
+  // entradas ruins: aviso claro, nunca erro interno
+  for (const q of ['grupo=xyz', 'usuario_id=abc', 'data_de=2026-13-01', 'data_ate=ontem', 'processo_id=-1', 'grupo[]=a']) {
+    assert.equal((await api(quemVe.token).get(`/api/financeiro/atividade?${q}`)).status, 400, q);
+  }
+  assert.equal((await api(quemVe.token).get('/api/financeiro/acordo/abc/historico')).status, 404);
+  assert.equal((await api(quemVe.token).get('/api/financeiro/atividade?pagina=-3&limite=zero')).status, 200);
 });
 
 // ------------------------------------------------------------------ cliente padrão sem conta e "em mãos" (pedido de 09/10/2026)

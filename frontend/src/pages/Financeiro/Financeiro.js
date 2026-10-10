@@ -14,6 +14,7 @@ import ModalInfo from '../../components/ui/ModalInfo';
 import MenuAcoes from '../../components/MenuAcoes';
 import { ModalGerar } from '../../components/GerarDocumento';
 import { clientesDoProcesso, clienteUnico, destinoClienteDaParcela, contaEscritorioPadrao, formaUnica, destinoSugerido } from './destinoPadrao';
+import AtividadeFinanceiro, { ModalHistoricoAcordo } from './AtividadeFinanceiro';
 
 const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
 
@@ -64,6 +65,8 @@ export default function Financeiro() {
   const podeCadastrar = temPermissao('financeiro', 'cadastrar');
   const podeAlterar   = temPermissao('financeiro', 'alterar');
   const podeExcluir   = temPermissao('financeiro', 'excluir');
+  const podeRepassar  = temPermissao('financeiro.repasses', 'alterar');   // fazer e desfazer repasses (permissão própria)
+  const podeVerAtividade = temPermissao('financeiro', 'historico');       // aba Atividade: quem fez o quê e quando
 
   const [pastas, setPastas]         = useState([]);
   const [buscaPasta, setBuscaPasta] = useState('');
@@ -168,10 +171,16 @@ export default function Financeiro() {
         <button className={`btn ${aba === 'consulta' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setAba('consulta')}>
           Consulta
         </button>
+        {podeVerAtividade && (
+          <button className={`btn ${aba === 'atividade' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setAba('atividade')}>
+            Atividade
+          </button>
+        )}
       </div>
 
-      {aba === 'repasses' && <RepassesView podeAlterar={podeAlterar} onMudou={carregar} />}
+      {aba === 'repasses' && <RepassesView podeAlterar={podeRepassar} onMudou={carregar} />}
       {aba === 'consulta' && <ConsultaFinanceiro />}
+      {aba === 'atividade' && podeVerAtividade && <AtividadeFinanceiro />}
 
       {aba === 'processo' && (<>
       {/* Seleção pasta -> processo */}
@@ -1081,6 +1090,8 @@ export function ModalHistoricoLancamento({ lancamento, onFechar }) {
 // ============================================================
 export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcluir, onMudou, onAbrirRepasses }) {
   const { temPermissao } = useAuth();
+  const podeRepassar = temPermissao('financeiro.repasses', 'alterar');   // repasse tem permissão própria (não depende de Alterar)
+  const [historicoAcordo, setHistoricoAcordo] = useState(false);
   const [aberto, setAberto] = useState(false);
   const [parcelas, setParcelas] = useState(null);
   const [recebendo, setRecebendo] = useState(null); // parcela aguardando a data do recebimento
@@ -1233,6 +1244,7 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
               onClick={() => setCancelando(true)}>Cancelar</button>
           )}
           {!cancelado && podeExcluir && <button className="btn btn-danger" style={{ fontSize: '11px', padding: '3px 8px' }} onClick={onExcluir}>Excluir</button>}
+          {temPermissao('financeiro', 'historico') && <button className="btn btn-outline" style={{ fontSize: '11px', padding: '3px 8px' }} onClick={() => setHistoricoAcordo(true)}>Histórico</button>}
           {temPermissao('documentos', 'cadastrar') && <button className="btn btn-outline" style={{ fontSize: '11px', padding: '3px 8px' }} onClick={() => setRecibosAcordo(true)}>Recibos</button>}
         </div>
       </div>
@@ -1305,10 +1317,10 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
                       // sozinha, em qualquer ordem (a empresa pode pagar uma antes da outra).
                       // Repasse desta parcela: só recebida e com repasse pendente. Um só pendente → abre direto; cliente E parceiro → submenu.
                       { label: `Repassar ao ${cicloDaParcela(p)?.[0] || 'cliente'}`, icone: '💸',
-                        oculto: !(podeAlterar && cicloDaParcela(p)?.length === 1),
+                        oculto: !(podeRepassar && cicloDaParcela(p)?.length === 1),
                         onClick: () => pedirRepasse(p, cicloDaParcela(p)[0]) },
                       { label: 'Repassar', icone: '💸',
-                        oculto: !(podeAlterar && cicloDaParcela(p)?.length === 2),
+                        oculto: !(podeRepassar && cicloDaParcela(p)?.length === 2),
                         submenu: [
                           { label: 'Repassar ao cliente', icone: '💸', onClick: () => pedirRepasse(p, 'cliente') },
                           { label: 'Repassar ao parceiro', icone: '💸', onClick: () => pedirRepasse(p, 'parceiro') },
@@ -1382,10 +1394,10 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
                           oculto: !(podeAlterar && p.multa.status === 'pendente'),
                           onClick: () => setRecebendoMulta(p) },
                         { label: `Repassar ao ${cicloDaMulta(p.multa)?.[0] || 'cliente'}`, icone: '💸',
-                          oculto: !(podeAlterar && cicloDaMulta(p.multa)?.length === 1),
+                          oculto: !(podeRepassar && cicloDaMulta(p.multa)?.length === 1),
                           onClick: () => pedirRepasseMulta(p, cicloDaMulta(p.multa)[0]) },
                         { label: 'Repassar', icone: '💸',
-                          oculto: !(podeAlterar && cicloDaMulta(p.multa)?.length === 2),
+                          oculto: !(podeRepassar && cicloDaMulta(p.multa)?.length === 2),
                           submenu: [
                             { label: 'Repassar ao cliente', icone: '💸', onClick: () => pedirRepasseMulta(p, 'cliente') },
                             { label: 'Repassar ao parceiro', icone: '💸', onClick: () => pedirRepasseMulta(p, 'parceiro') },
@@ -1430,6 +1442,7 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
         <ModalCancelarAcordo onCancelar={() => setCancelando(false)} onConfirmar={cancelar} />
       )}
       {recibosAcordo && <ModalRecibosAcordo acordoId={acordo.id} onFechar={() => setRecibosAcordo(false)} />}
+      {historicoAcordo && <ModalHistoricoAcordo acordo={acordo} onFechar={() => setHistoricoAcordo(false)} />}
       {multaEditando && (
         <ModalMulta parcela={multaEditando}
           onCancelar={() => setMultaEditando(null)}

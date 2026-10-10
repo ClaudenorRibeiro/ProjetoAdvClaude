@@ -193,7 +193,7 @@ test('@critical Financeiro: abas, janelas, validações, recebimento, multa, rep
   // histórico da parcela
   await acordo1.getByRole('button', { name: /Parcelas/ }).click();
   await abrirMenuAcoes(page, parcelaPendente(page).first());
-  await page.getByRole('button', { name: /Histórico/ }).click();
+  await page.getByRole('button', { name: /Histórico/ }).last().click();
   await expect(modal(page).getByRole('heading', { name: 'Histórico da parcela 2' })).toBeVisible();
   await expect(modal(page).getByText('Carregando...')).toHaveCount(0);
   await expect(modal(page).getByText('Multa recebida').first()).toBeVisible();

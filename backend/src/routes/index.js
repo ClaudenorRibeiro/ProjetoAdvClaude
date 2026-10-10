@@ -61,6 +61,7 @@ const prazosCtrl        = require('../controllers/prazosController');
 const tarefasCtrl       = require('../controllers/tarefasController');
 const audienciasCtrl    = require('../controllers/audienciasController');
 const financeiroCtrl    = require('../controllers/financeiroController');
+const financeiroAtividadeCtrl = require('../controllers/financeiroAtividadeController');
 const formaPagamentoCtrl = require('../controllers/formaPagamentoController');
 const instituicaoFinanceiraCtrl = require('../controllers/instituicaoFinanceiraController');
 const andamentoCtrl     = require('../controllers/andamentoController');
@@ -306,16 +307,20 @@ router.put('/financeiro/parcela/:id/multa',                autenticar, verificar
 router.delete('/financeiro/parcela/:id/multa',             autenticar, verificarPermissao('financeiro','excluir'),    financeiroCtrl.removerMulta);
 router.put('/financeiro/parcela/:id/multa/receber',        autenticar, verificarPermissao('financeiro','alterar'),    financeiroCtrl.receberMulta);
 router.put('/financeiro/parcela/:id/multa/desfazer',       autenticar, verificarPermissao('financeiro','alterar'),    financeiroCtrl.desfazerMulta);
-router.put('/financeiro/parcela/:id/multa/repasse',            autenticar, verificarPermissao('financeiro','alterar'), financeiroCtrl.registrarRepasseMulta);
-router.put('/financeiro/parcela/:id/multa/repasse/desfazer',   autenticar, verificarPermissao('financeiro','alterar'), financeiroCtrl.desfazerRepasseMulta);
+// REPASSES têm permissão própria (financeiro > sub-item "repasses", ação alterar): quem só repassa não precisa editar nem cadastrar.
+router.put('/financeiro/parcela/:id/multa/repasse',            autenticar, verificarPermissao('financeiro','repasses','alterar'), financeiroCtrl.registrarRepasseMulta);
+router.put('/financeiro/parcela/:id/multa/repasse/desfazer',   autenticar, verificarPermissao('financeiro','repasses','alterar'), financeiroCtrl.desfazerRepasseMulta);
 // Repasses ao cliente/parceiro (2º tempo) + worklist global de repasses pendentes
 router.get('/financeiro/repasses-pendentes',               autenticar, verificarPermissao('financeiro','visualizar'), financeiroCtrl.listarRepassesPendentes);
 router.get('/financeiro/repasses-concluidos',              autenticar, verificarPermissao('financeiro','visualizar'), financeiroCtrl.listarRepassesConcluidos);
 // Consulta / relatório do financeiro (busca por múltiplos filtros + exportação Excel)
 router.get('/financeiro/consulta',                         autenticar, verificarPermissao('financeiro','visualizar'), financeiroCtrl.consultarFinanceiro);
 router.get('/financeiro/consulta/exportar',                autenticar, verificarPermissao('financeiro','visualizar'), financeiroCtrl.exportarConsultaFinanceiro);
-router.put('/financeiro/parcela/:id/repasse',              autenticar, verificarPermissao('financeiro','alterar'),    financeiroCtrl.registrarRepasse);
-router.put('/financeiro/parcela/:id/repasse/desfazer',     autenticar, verificarPermissao('financeiro','alterar'),    financeiroCtrl.desfazerRepasse);
+router.put('/financeiro/parcela/:id/repasse',              autenticar, verificarPermissao('financeiro','repasses','alterar'), financeiroCtrl.registrarRepasse);
+router.put('/financeiro/parcela/:id/repasse/desfazer',     autenticar, verificarPermissao('financeiro','repasses','alterar'), financeiroCtrl.desfazerRepasse);
+// Atividade (quem fez o quê e quando): consulta única do Financeiro e histórico de um acordo — permissão financeiro/historico
+router.get('/financeiro/atividade',                        autenticar, verificarPermissao('financeiro','historico'),  financeiroAtividadeCtrl.atividade);
+router.get('/financeiro/acordo/:id/historico',             autenticar, verificarPermissao('financeiro','historico'),  financeiroAtividadeCtrl.atividadeDoAcordo);
 router.get('/financeiro/parcela/:id/historico',            autenticar, verificarPermissao('financeiro','visualizar'), financeiroCtrl.buscarHistoricoParcela);
 
 // Formas de pagamento — cadastro no menu Controle (admin); a lista também alimenta o select do recebimento.

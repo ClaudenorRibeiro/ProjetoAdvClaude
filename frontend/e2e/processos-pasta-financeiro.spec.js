@@ -864,3 +864,129 @@ test('@critical Linha da multa: quem só VISUALIZA o financeiro não vê menu na
   await expect(linhaMulta(page)).toBeVisible();
   await expect(linhaMulta(page).getByTitle('Mais ações')).toHaveCount(0);
 });
+
+// ---- Perfis do Financeiro (10/10/2026): cadastro, só repasses, tudo — e a aba "Atividade" (quem fez o quê e quando) ----
+const botoesDeCadastro = (page) => page.getByRole('button', { name: /^\+ (Lançamento|Novo Acordo|Novo Alvará)$/ });
+
+test('@critical Perfil "só repasses": vê tudo, repassa, mas não cadastra, não recebe, não edita nem exclui', async ({ page }) => {
+  await prepararRepasse();
+  const login = await criarUsuarioComPermissoes('perfil_so_repasses_c8', [['processos', null, 'visualizar'], ['financeiro', null, 'visualizar'], ['financeiro', 'repasses', 'alterar']]);
+  await loginPelaTela(page, login);
+  await abrirAba(page, CNJ1);
+  await expect(botoesDeCadastro(page)).toHaveCount(0);                                         // nada de + Lançamento / + Novo Acordo / + Novo Alvará
+  const bloco = blocoAcordo(page, 'Acordo C8');
+  for (const nome of ['Editar', 'Cancelar', 'Excluir']) await expect(bloco.getByRole('button', { name: nome, exact: true })).toHaveCount(0);
+  await abrirParcelas(page);
+  await abrirMenuAcoes(page, parcelaRecebida(page));
+  await expect(page.getByRole('button', { name: /^\S*\s*Repassar ao cliente$/ })).toBeVisible();   // repassa
+  await expect(page.getByRole('button', { name: /Desfazer recebimento/ })).toHaveCount(0);          // não mexe no recebimento
+  await expect(page.getByRole('button', { name: /^\S*\s*Receber$/ })).toHaveCount(0);
+  await page.getByRole('button', { name: /^\S*\s*Repassar ao cliente$/ }).click();
+  await expect(janela(page, 'Repassar ao cliente')).toBeVisible();
+  await janela(page, 'Repassar ao cliente').getByRole('button', { name: 'Cancelar', exact: true }).click();
+  // a lista de Repasses do processo também oferece "Repassar"
+  await page.getByRole('button', { name: /Repasses/ }).first().click();
+  await abrirMenuAcoes(page, quadroRepasses(page).locator('tbody tr').first());
+  await expect(page.getByRole('button', { name: /^\S*\s*Repassar$/ }).last()).toBeVisible();
+});
+
+test('@critical Perfil "só cadastro": cadastra acordo, alvará e lançamento, mas não vê "Repassar" em lugar nenhum', async ({ page }) => {
+  await prepararRepasse();
+  const login = await criarUsuarioComPermissoes('perfil_so_cadastro_c8', [['processos', null, 'visualizar'], ['financeiro', null, 'visualizar'], ['financeiro', null, 'cadastrar']]);
+  await loginPelaTela(page, login);
+  await abrirAba(page, CNJ1);
+  await expect(botoesDeCadastro(page)).toHaveCount(3);
+  await abrirParcelas(page);
+  await abrirMenuAcoes(page, parcelaRecebida(page));
+  await expect(page.getByRole('button', { name: /Histórico/ }).last()).toBeVisible();          // o menu existe...
+  await expect(page.getByRole('button', { name: /Repassar/ })).toHaveCount(0);                   // ...mas sem repasse
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: /Repasses/ }).first().click();
+  await expect(quadroRepasses(page).locator('tbody tr').first()).toBeVisible();
+  await expect(quadroRepasses(page).getByTitle('Mais ações')).toHaveCount(0);                    // a lista não tem ações
+});
+
+test('@critical Quem tem "Alterar" mas não o sub-item Repasses recebe e edita, e NÃO repassa; quem tem tudo vê "Repassar" e "Desfazer recebimento"', async ({ page }) => {
+  await prepararRepasse();
+  const soAlterar = await criarUsuarioComPermissoes('perfil_alterar_sem_repasse_c8', [['processos', null, 'visualizar'], ['financeiro', null, 'visualizar'], ['financeiro', null, 'alterar']]);
+  await loginPelaTela(page, soAlterar);
+  await abrirAba(page, CNJ1);
+  await abrirParcelas(page);
+  await abrirMenuAcoes(page, parcelaRecebida(page));
+  await expect(page.getByRole('button', { name: /Desfazer recebimento/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Repassar/ })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
+  const tudo = await criarUsuarioComPermissoes('perfil_tudo_c8', [['processos', null, 'visualizar'], ['financeiro', null, 'visualizar'], ['financeiro', null, 'cadastrar'],
+    ['financeiro', null, 'alterar'], ['financeiro', null, 'excluir'], ['financeiro', 'repasses', 'alterar']]);
+  await loginPelaTela(page, tudo);
+  await abrirAba(page, CNJ1);
+  await abrirParcelas(page);
+  await abrirMenuAcoes(page, parcelaRecebida(page));
+  await expect(page.getByRole('button', { name: /Desfazer recebimento/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^\S*\s*Repassar ao cliente$/ })).toBeVisible();
+  await expect(botoesDeCadastro(page)).toHaveCount(3);
+});
+
+test('@critical Configurações > Permissões > Financeiro: o administrador vê o sub-item "Repasses", marca para um usuário, salva, e a linha certa vai para o banco', async ({ page }) => {
+  const login = await criarUsuarioComPermissoes('libera_repasses_c8', [['financeiro', null, 'visualizar']]);
+  await loginPelaTela(page, 'admteste');
+  await page.goto('/configuracoes'); await aguardarTelaPronta(page);
+  await page.getByRole('button', { name: 'Permissões', exact: true }).click();
+  await page.getByLabel('Selecionar usuário', { exact: true }).selectOption({ label: `Usuário ${login} (${login})` });
+  await page.locator('td', { hasText: /^▶\s*Financeiro/ }).click();
+  const caixa = page.getByLabel('Repasses (registrar e desfazer) — marque Alterar: alterar', { exact: true });
+  await expect(caixa).toBeVisible();
+  await expect(caixa).not.toBeChecked();
+  await caixa.check();
+  await page.getByRole('button', { name: 'Salvar Permissões' }).click();
+  await aviso(page, 'Permissões salvas!');
+  const linhas = await noBanco("SELECT p.permitido FROM permissoes p JOIN usuarios u ON u.id = p.usuario_id WHERE u.login = ? AND p.modulo = 'financeiro' AND p.submodulo = 'repasses' AND p.acao = 'alterar'", [login]);
+  expect(linhas.map(l => Number(l.permitido))).toEqual([1]);
+});
+
+test('@critical Atividade do Financeiro: quem tem Histórico vê a aba, quem fez o quê e quando, filtra por tipo e vê o Histórico do acordo; quem não tem não vê nada disso', async ({ page }) => {
+  await prepararRepasse();
+  await noBanco("DELETE FROM logs_auditoria WHERE tabela IN ('conta_corrente', 'acordo', 'acordo_parcela', 'conta_bancaria')");   // só valem os registros deste teste (os outros testes também deixam rastro)
+  await noBanco(`INSERT INTO logs_auditoria (usuario_id, tabela, acao, registro_id, descricao, criado_em) VALUES
+    (1, 'acordo', 'criar', ?, 'Acordo: Acordo C8', '2099-03-10 09:15:00'),
+    (1, 'acordo_parcela', 'pagar', ?, 'Parcela nº 1', '2099-03-15 10:30:00'),
+    (1, 'acordo_parcela', 'repasse-cliente', ?, 'Parcela nº 1', '2099-03-16 11:45:00')`, [d.ac, d.pa1, d.pa1]);
+  const comHistorico = await criarUsuarioComPermissoes('perfil_historico_c8', [['processos', null, 'visualizar'], ['financeiro', null, 'visualizar'], ['financeiro', null, 'historico']]);
+  await loginPelaTela(page, comHistorico);
+  await page.goto('/financeiro'); await aguardarTelaPronta(page);
+  await page.getByRole('button', { name: 'Atividade', exact: true }).click();
+  const quando = (iso) => iso.split('-').reverse().join('/');
+  const repasse = linha(page, 'Repasse ao cliente');
+  await expect(repasse).toBeVisible();
+  await expect(repasse).toContainText('Administrador de Testes');                                 // quem
+  await expect(repasse).toContainText('16/03/2099');                                               // quando
+  await expect(repasse).toContainText('(parcela 1)');
+  await expect(repasse).toContainText(CNJ1);                                                       // em que processo
+  await expect(linha(page, 'Acordo/alvará criado')).toBeVisible();
+  await semViolacoes(page, 'aba Atividade do Financeiro');
+  await page.getByLabel('Tipo de ação', { exact: true }).selectOption({ label: 'Repasses' });
+  await expect(linha(page, 'Acordo/alvará criado')).toHaveCount(0);
+  await expect(repasse).toBeVisible();
+  await page.getByLabel('Usuário', { exact: true }).selectOption({ label: 'Administrador de Testes' });
+  await expect(repasse).toBeVisible();
+  await page.getByLabel('De', { exact: true }).fill('2099-12-01');
+  await expect(page.getByText('Nenhuma atividade encontrada')).toBeVisible();
+  // Histórico do acordo (na pasta)
+  await abrirAba(page, CNJ1);
+  await blocoAcordo(page, 'Acordo C8').getByRole('button', { name: 'Histórico', exact: true }).click();
+  const h = janela(page, /Histórico — Acordo/);
+  await expect(h.getByText('Acordo/alvará criado')).toBeVisible();
+  await expect(h.getByText('Repasse ao cliente (parcela 1)')).toBeVisible();
+  await expect(h.getByText('Parcela recebida (parcela 1)')).toBeVisible();
+  await expect(h.getByText('Administrador de Testes').first()).toBeVisible();
+  await h.getByRole('button', { name: 'Fechar', exact: true }).click();
+  // sem Histórico: nem a aba nem o botão
+  await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
+  const semHistorico = await criarUsuarioComPermissoes('perfil_sem_historico_c8', [['processos', null, 'visualizar'], ['financeiro', null, 'visualizar'], ['financeiro', null, 'cadastrar']]);
+  await loginPelaTela(page, semHistorico);
+  await page.goto('/financeiro'); await aguardarTelaPronta(page);
+  await expect(page.getByRole('button', { name: 'Atividade', exact: true })).toHaveCount(0);
+  await abrirAba(page, CNJ1);
+  await expect(blocoAcordo(page, 'Acordo C8').getByRole('button', { name: 'Histórico', exact: true })).toHaveCount(0);
+});
