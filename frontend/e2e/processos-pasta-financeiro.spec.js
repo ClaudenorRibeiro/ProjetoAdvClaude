@@ -719,3 +719,74 @@ test('@critical Editar acordo com parcela já recebida: a parceria do acordo val
   const ps = await noBanco('SELECT id, parceria_pessoa_id AS parceiro FROM acordo_parcela WHERE acordo_id = ? ORDER BY numero', [d.ac]);
   expect(ps.map(p => p.parceiro)).toEqual([null, x.parceiro]);                                // a recebida não mudou; a pendente ganhou o parceiro
 });
+
+// ---- Botão "Repasses" da aba Financeiro da pasta (10/10/2026): lista os repasses SÓ do processo escolhido, fechada por padrão ----
+const botaoRepasses = (page) => page.getByRole('button', { name: /Repasses/ }).first();
+const quadroRepasses = (page) => page.getByTestId('repasses-do-processo');
+async function repassarEmMaos(page) {
+  await abrirMenuAcoes(page, quadroRepasses(page).locator('tbody tr').first());
+  await page.getByRole('button', { name: /^\S*\s*Repassar$/ }).last().click();
+  const j = janela(page, 'Repassar ao cliente');
+  await j.getByLabel('Conta ou caixa de saída', { exact: true }).selectOption({ label: 'Caixa C8' });
+  await j.getByLabel('Destino do repasse', { exact: true }).selectOption({ label: 'Dinheiro em espécie — em mãos' });
+  await j.getByLabel('Forma do repasse', { exact: true }).selectOption({ label: 'Dinheiro C8' });
+  await j.getByRole('button', { name: 'Confirmar repasse' }).click();
+  await aviso(page, 'Repasse registrado');
+}
+
+test('@critical Botão Repasses: vem fechado com o número do que falta; abre a lista só deste processo (sem outro processo), repassa e desfaz por ela', async ({ page }) => {
+  await prepararRepasse();
+  // um repasse pendente de OUTRO processo da pasta: não pode aparecer nem contar
+  const ac2 = (await noBanco("INSERT INTO acordo (processo_id, tipo, descricao, valor_total, qtd_parcelas, data_primeira, criado_por) VALUES (?, 'acordo', 'Acordo outro C8', 500, 1, ?, 1)", [d.proc2, DIA])).insertId;
+  await noBanco(`INSERT INTO acordo_parcela (acordo_id, numero, vencimento, valor_bruto, honor_tipo, honor_percentual, honor_valor, valor_liquido, status, recebido_em)
+                 VALUES (?, 1, ?, 500, 'percent', 30, 150, 350, 'pago', '2099-03-15')`, [ac2, DIA]);
+  await loginPelaTela(page);
+  await abrirAba(page, CNJ1);
+  await expect(botaoRepasses(page)).toHaveText(/Repasses \(1\)/);
+  await expect(quadroRepasses(page)).toHaveCount(0);                                         // fechado: tela limpa
+  await botaoRepasses(page).click();
+  await expect(quadroRepasses(page)).toBeVisible();
+  await expect(quadroRepasses(page).getByRole('columnheader', { name: 'Processo' })).toHaveCount(0);
+  await expect(quadroRepasses(page).locator('tbody tr')).toHaveCount(1);
+  await expect(quadroRepasses(page).locator('tbody tr').first()).toContainText('parc 1/2');
+  await semViolacoes(page, 'lista de repasses dentro da pasta');
+  await repassarEmMaos(page);
+  await expect(botaoRepasses(page)).toHaveText(/^\S*\s*Repasses$/);                          // não falta mais nada: sem número
+  await expect(quadroRepasses(page).getByText('Nenhum repasse pendente')).toBeVisible();
+  await quadroRepasses(page).getByRole('button', { name: /Concluídos \(1\)/ }).click();
+  await expect(quadroRepasses(page).locator('tbody tr')).toHaveCount(1);
+  expect((await noBanco('SELECT repasse_cliente_em FROM acordo_parcela WHERE id = ?', [d.pa1]))[0].repasse_cliente_em).not.toBeNull();
+  // desfazer pela lista
+  await abrirMenuAcoes(page, quadroRepasses(page).locator('tbody tr').first());
+  await page.getByRole('button', { name: /^\S*\s*Desfazer$/ }).last().click();
+  await aviso(page, 'Repasse desfeito');
+  await expect(botaoRepasses(page)).toHaveText(/Repasses \(1\)/);
+  expect((await noBanco('SELECT repasse_cliente_em FROM acordo_parcela WHERE id = ?', [d.pa1]))[0].repasse_cliente_em).toBeNull();
+  expect((await noBanco('SELECT repasse_cliente_em FROM acordo_parcela WHERE acordo_id = ?', [ac2]))[0].repasse_cliente_em).toBeNull();   // o do outro processo nem foi tocado
+  await botaoRepasses(page).click();                                                         // fecha de novo
+  await expect(quadroRepasses(page)).toHaveCount(0);
+});
+
+test('@critical Botão Repasses: "Desfazer recebimento" de parcela com repasse feito abre a lista de concluídos sozinha', async ({ page }) => {
+  await prepararRepasse();
+  await noBanco("UPDATE acordo_parcela SET repasse_cliente_em = '2099-03-16', repasse_cliente_destino_tipo = 'em_maos' WHERE id = ?", [d.pa1]);
+  await loginPelaTela(page);
+  await abrirAba(page, CNJ1);
+  await expect(quadroRepasses(page)).toHaveCount(0);
+  await abrirParcelas(page);
+  await abrirMenuAcoes(page, parcelaRecebida(page));
+  await page.getByRole('button', { name: /Desfazer recebimento/ }).click();
+  await expect(quadroRepasses(page)).toBeVisible();
+  await expect(quadroRepasses(page).getByRole('button', { name: /Concluídos \(1\)/ })).toHaveClass(/btn-primary/);
+  await expect(quadroRepasses(page).locator('tbody tr')).toHaveCount(1);
+});
+
+test('@critical Botão Repasses: quem só VISUALIZA vê a lista mas sem Repassar nem Desfazer', async ({ page }) => {
+  await prepararRepasse();
+  const so = await criarUsuarioComPermissoes('so_ve_repasses_c8', [['processos', null, 'visualizar'], ['financeiro', null, 'visualizar']]);
+  await loginPelaTela(page, so);
+  await abrirAba(page, CNJ1);
+  await botaoRepasses(page).click();
+  await expect(quadroRepasses(page).locator('tbody tr')).toHaveCount(1);
+  await expect(quadroRepasses(page).getByTitle('Mais ações')).toHaveCount(0);
+});

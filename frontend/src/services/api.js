@@ -358,8 +358,8 @@ export const financeiroAPI = {
   // Histórico do lançamento da conta corrente
   historicoLancamento: (id) => api.get(`/financeiro/lancamento/${id}/historico`),
   // Repasses ao cliente/parceiro (2º tempo) + worklist global
-  repassesPendentes:  () => api.get('/financeiro/repasses-pendentes'),
-  repassesConcluidos: () => api.get('/financeiro/repasses-concluidos'),
+  repassesPendentes:  (processoId) => api.get('/financeiro/repasses-pendentes', { params: processoId ? { processo_id: processoId } : {} }),
+  repassesConcluidos: (processoId) => api.get('/financeiro/repasses-concluidos', { params: processoId ? { processo_id: processoId } : {} }),
   // Consulta / relatório
   consultaFinanceiro: (params) => api.get('/financeiro/consulta', { params }),
   exportarConsulta:   (params) => api.get('/financeiro/consulta/exportar', { params, responseType: 'blob', timeout: 120000 }),

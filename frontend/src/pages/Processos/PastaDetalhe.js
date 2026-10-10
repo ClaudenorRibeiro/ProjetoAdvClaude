@@ -20,7 +20,7 @@ import { ModalNovaAudiencia, ModalEditarAudiencia, ModalCancelarAudiencia, Modal
 // Modais de perícia reutilizados da tela de Perícias (aba Perícias da pasta)
 import { ModalPericia, ModalCancelar as ModalCancelarPericia, ModalRemarcar as ModalRemarcarPericia, ModalMarcarRemarcada as ModalMarcarRemarcadaPericia, ModalHistorico as ModalHistoricoPericia } from '../Pericias/Pericias';
 // Componentes financeiros reutilizados da tela Financeiro (aba Financeiro da pasta — por processo)
-import { ModalLancamento as ModalLancamentoFin, ModalAcordo as ModalAcordoFin, AcordoBloco, ModalHistoricoLancamento } from '../Financeiro/Financeiro';
+import { ModalLancamento as ModalLancamentoFin, ModalAcordo as ModalAcordoFin, AcordoBloco, ModalHistoricoLancamento, RepassesView, montarPendentes } from '../Financeiro/Financeiro';
 import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
@@ -157,6 +157,12 @@ export default function PastaDetalhe() {
   const [audiencias, setAudiencias]       = useState([]);
   const [contaCorrente, setContaCorrente] = useState(null);   // { lancamentos, saldo_total } do processo
   const [acordosFin, setAcordosFin]       = useState([]);     // acordos do processo
+  // Repasses do processo: botão "Repasses (N)" abre/fecha a lista; N = quantos repasses ainda faltam (cliente e parceiro contam separado)
+  const [repassesAberto, setRepassesAberto]       = useState(false);
+  const [repassesSub, setRepassesSub]             = useState('pendentes');
+  const [repassesChave, setRepassesChave]         = useState(0);   // muda quando o aviso do "Desfazer recebimento" pede a lista de concluídos
+  const [repassesVersao, setRepassesVersao]       = useState(0);   // sobe a cada recarga do financeiro, para a lista acompanhar
+  const [repassesFaltam, setRepassesFaltam]       = useState(0);
   const [lancEditandoFin, setLancEditandoFin]   = useState(null);
   const [modalAcordoFin, setModalAcordoFin]     = useState(false);
   const [acordoEditandoFin, setAcordoEditandoFin] = useState(null);
@@ -628,13 +634,16 @@ export default function PastaDetalhe() {
   async function carregarFinanceiro() {
     const minhaSeq = ++financeiroSeqRef.current;
     const procId = processoFiltro !== 'todos' ? parseInt(processoFiltro) : null;
-    if (!procId || !podeVerFinanceiro) { setContaCorrente(null); setAcordosFin([]); return; }   // sem permissão: nem pergunta ao servidor (a tela mostra o aviso)
+    if (!procId || !podeVerFinanceiro) { setContaCorrente(null); setAcordosFin([]); setRepassesFaltam(0); setRepassesAberto(false); return; }   // sem permissão: nem pergunta ao servidor (a tela mostra o aviso)
     try {
-      const [c, a] = await Promise.all([
+      const [c, a, rp] = await Promise.all([
         financeiroAPI.buscarConta(procId, {}),
         financeiroAPI.listarAcordos(procId),
+        financeiroAPI.repassesPendentes(procId),
       ]);
       if (minhaSeq !== financeiroSeqRef.current) return; // já saiu outra busca financeira depois desta
+      if (rp.data.ok) setRepassesFaltam(montarPendentes(rp.data.dados).length);
+      setRepassesVersao(v => v + 1);
       if (c.data.ok) setContaCorrente(c.data.dados);
       if (a.data.ok) {
         setAcordosFin(a.data.dados);
@@ -1641,6 +1650,11 @@ export default function PastaDetalhe() {
                   </button>
                 </>
               )}
+              {podeVerFinanceiro && processoSelecionado && (
+                <button className="btn btn-outline" aria-expanded={repassesAberto} onClick={() => setRepassesAberto(a => !a)}>
+                  {repassesAberto ? '▼' : '▶'} Repasses{repassesFaltam > 0 ? ` (${repassesFaltam})` : ''}
+                </button>
+              )}
             </div>
 
             {!podeVerFinanceiro && <p className="lista-vazia">Você não tem permissão para ver o financeiro deste processo.</p>}
@@ -1651,14 +1665,20 @@ export default function PastaDetalhe() {
                 {acordosFin.length > 0 && (
                   <div style={{ marginBottom: '16px' }}>
                     {acordosFin.map(a => (
-                      <AcordoBloco key={a.id} acordo={a}
+                      <AcordoBloco key={`${a.id}-${repassesVersao}`} acordo={a}
                         podeAlterar={temPermissao('financeiro', 'alterar')}
                         podeExcluir={temPermissao('financeiro', 'excluir')}
                         onEditar={() => { setAcordoEditandoFin(a.id); setModalAcordoFin(true); }}
                         onExcluir={() => excluirAcordoFin(a)}
-                        onMudou={carregarFinanceiro} />
+                        onMudou={carregarFinanceiro}
+                        onAbrirRepasses={() => { setRepassesSub('concluidos'); setRepassesChave(k => k + 1); setRepassesAberto(true); }} />
                     ))}
                   </div>
+                )}
+
+                {repassesAberto && (
+                  <RepassesView key={`${processoSelecionado.id}-${repassesChave}`} processoId={Number(processoSelecionado.id)} subInicial={repassesSub}
+                    versao={repassesVersao} podeAlterar={temPermissao('financeiro', 'alterar')} onMudou={carregarFinanceiro} />
                 )}
 
                 <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>

@@ -331,6 +331,26 @@ test('repasse ao cliente: só depois de receber, destino e forma obrigatórios, 
   assert.match(msg(await api().put(`/api/financeiro/parcela/${parcelaId}/repasse/desfazer`).send({ tipo: 'x' })), /Tipo de repasse inválido/);
 });
 
+test('listas de repasses aceitam ?processo_id= (só aquele processo); sem o filtro continuam globais; filtro inválido = 400', async () => {
+  const { parcelaId } = await novoAcordo();
+  assert.equal((await receber(parcelaId)).status, 200);
+  const noProcesso = async (rota, id) => (await api().get(`/api/financeiro/${rota}?processo_id=${id}`)).body.dados;
+  assert.ok((await noProcesso('repasses-pendentes', 1)).some(x => Number(x.id) === parcelaId), 'do processo 1 aparece');
+  assert.deepEqual(await noProcesso('repasses-pendentes', 999999), [], 'de outro processo não aparece');
+  assert.ok((await api().get('/api/financeiro/repasses-pendentes')).body.dados.some(x => Number(x.id) === parcelaId), 'sem filtro continua global');
+  assert.equal((await repasseCliente(parcelaId)).status, 200);
+  assert.ok((await noProcesso('repasses-concluidos', 1)).some(x => Number(x.id) === parcelaId), 'concluído do processo 1 aparece');
+  assert.deepEqual(await noProcesso('repasses-concluidos', 999999), [], 'concluído de outro processo não aparece');
+  for (const rota of ['repasses-pendentes', 'repasses-concluidos']) {
+    for (const ruim of ['abc', '-1', '1%20OR%201=1', '1.5']) {
+      const r = await api().get(`/api/financeiro/${rota}?processo_id=${ruim}`);
+      assert.equal(r.status, 400, `${rota} ${ruim}`);
+      assert.match(msg(r), /Processo inválido/);
+    }
+    assert.equal((await api().get(`/api/financeiro/${rota}?processo_id[]=1`)).status, 400);   // lista não vira "sem filtro"
+  }
+});
+
 test('repasse em mãos (caixa + dinheiro) e ao parceiro; listas de repasses pendentes e concluídos acompanham', async () => {
   const { parcelaId } = await novoAcordo({ parceria: true });
   assert.equal((await receber(parcelaId)).status, 200);

@@ -360,61 +360,66 @@ export default function Financeiro() {
 // ainda falta repassar ao cliente e/ou ao parceiro). Cada pendência vira
 // uma linha (uma parcela com cliente E parceiro pendentes gera 2 linhas).
 // ============================================================
-function RepassesView({ podeAlterar, onMudou }) {
+// Pendentes: uma linha por repasse que ainda FALTA (cliente e/ou parceiro), da parcela OU da
+// multa dela. Prefixa a key com a origem: parcela e multa podem ter o MESMO id (id da multa
+// devolvido pelo backend é o id da própria parcela — é 1 multa por parcela).
+export function montarPendentes(parcelas) {
+  const out = [];
+  for (const p of parcelas) {
+    const origem = p.origem || 'parcela';
+    if (Number(p.valor_liquido) > 0 && !p.repasse_cliente_em)
+      out.push({ key: `c${origem}${p.id}`, parcela: p, tipo: 'cliente', beneficiario: 'Cliente', valor: p.valor_liquido, origem });
+    if (p.parceria_pessoa_id && Number(p.parceria_valor) > 0 && !p.repasse_parceiro_em)
+      out.push({ key: `p${origem}${p.id}`, parcela: p, tipo: 'parceiro', beneficiario: p.parceria_nome || 'Parceiro', valor: p.parceria_valor, origem });
+  }
+  return out;
+}
+
+// Concluídos: uma linha por repasse JÁ FEITO (com data, forma e quem fez), da parcela OU da multa.
+export function montarConcluidos(parcelas) {
+  const out = [];
+  for (const p of parcelas) {
+    const origem = p.origem || 'parcela';
+    if (p.repasse_cliente_em)
+      out.push({ key: `c${origem}${p.id}`, parcela: p, tipo: 'cliente', beneficiario: 'Cliente', valor: p.valor_liquido,
+                 data: p.repasse_cliente_em, forma: p.repasse_cliente_forma_nome, quem: p.repasse_cliente_por_nome,
+                 observacao: p.repasse_cliente_observacao, origem });
+    if (p.repasse_parceiro_em)
+      out.push({ key: `p${origem}${p.id}`, parcela: p, tipo: 'parceiro', beneficiario: p.parceria_nome || 'Parceiro', valor: p.parceria_valor,
+                 data: p.repasse_parceiro_em, forma: p.repasse_parceiro_forma_nome, quem: p.repasse_parceiro_por_nome,
+                 observacao: p.repasse_parceiro_observacao, origem });
+  }
+  return out;
+}
+
+// `processoId`: na aba Financeiro da pasta a lista mostra SÓ os repasses desse processo (sem as colunas Processo/Pasta e sem moldura própria);
+// sem ele é a tela geral. `subInicial` = 'pendentes' | 'concluidos'. `versao`: quando quem usa a lista muda (ex.: repasse feito pelo menu da parcela), sobe o número e a lista recarrega.
+export function RepassesView({ podeAlterar, onMudou, processoId, subInicial = 'pendentes', versao = 0 }) {
+  const embutido = !!processoId;
   const { temPermissao } = useAuth();
-  const [sub, setSub] = useState('pendentes');         // 'pendentes' | 'concluidos'
+  const [sub, setSub] = useState(subInicial);         // 'pendentes' | 'concluidos'
   const [pendentes, setPendentes] = useState(null);
   const [concluidos, setConcluidos] = useState(null);
   const [repassando, setRepassando] = useState(null);   // linha aguardando o modal de repasse
   const [historicoDe, setHistoricoDe] = useState(null); // parcela com histórico aberto
 
-  // Pendentes: uma linha por repasse que ainda FALTA (cliente e/ou parceiro), da parcela OU da
-  // multa dela. Prefixa a key com a origem: parcela e multa podem ter o MESMO id (id da multa
-  // devolvido pelo backend é o id da própria parcela — é 1 multa por parcela).
-  function montarPendentes(parcelas) {
-    const out = [];
-    for (const p of parcelas) {
-      const origem = p.origem || 'parcela';
-      if (Number(p.valor_liquido) > 0 && !p.repasse_cliente_em)
-        out.push({ key: `c${origem}${p.id}`, parcela: p, tipo: 'cliente', beneficiario: 'Cliente', valor: p.valor_liquido, origem });
-      if (p.parceria_pessoa_id && Number(p.parceria_valor) > 0 && !p.repasse_parceiro_em)
-        out.push({ key: `p${origem}${p.id}`, parcela: p, tipo: 'parceiro', beneficiario: p.parceria_nome || 'Parceiro', valor: p.parceria_valor, origem });
-    }
-    return out;
-  }
-
-  // Concluídos: uma linha por repasse JÁ FEITO (com data, forma e quem fez), da parcela OU da multa.
-  function montarConcluidos(parcelas) {
-    const out = [];
-    for (const p of parcelas) {
-      const origem = p.origem || 'parcela';
-      if (p.repasse_cliente_em)
-        out.push({ key: `c${origem}${p.id}`, parcela: p, tipo: 'cliente', beneficiario: 'Cliente', valor: p.valor_liquido,
-                   data: p.repasse_cliente_em, forma: p.repasse_cliente_forma_nome, quem: p.repasse_cliente_por_nome,
-                   observacao: p.repasse_cliente_observacao, origem });
-      if (p.repasse_parceiro_em)
-        out.push({ key: `p${origem}${p.id}`, parcela: p, tipo: 'parceiro', beneficiario: p.parceria_nome || 'Parceiro', valor: p.parceria_valor,
-                   data: p.repasse_parceiro_em, forma: p.repasse_parceiro_forma_nome, quem: p.repasse_parceiro_por_nome,
-                   observacao: p.repasse_parceiro_observacao, origem });
-    }
-    return out;
-  }
-
   const carregar = useCallback(async () => {
     try {
-      const [pend, conc] = await Promise.all([financeiroAPI.repassesPendentes(), financeiroAPI.repassesConcluidos()]);
+      const [pend, conc] = await Promise.all([financeiroAPI.repassesPendentes(processoId), financeiroAPI.repassesConcluidos(processoId)]);
       if (pend.data.ok) setPendentes(montarPendentes(pend.data.dados));
       if (conc.data.ok) setConcluidos(montarConcluidos(conc.data.dados));
     } catch { toast.error('Erro ao carregar repasses'); setPendentes([]); setConcluidos([]); }
-  }, []);
-  useEffect(() => { carregar(); }, [carregar]);
+  }, [processoId]);
+  useEffect(() => { carregar(); }, [carregar, versao]);
+  // Dentro da pasta, quem usa a lista recarrega tudo (inclusive esta lista, pela `versao`); na tela geral a lista recarrega a si mesma.
+  const aposMudar = async () => { if (embutido) await onMudou?.(); else await Promise.all([carregar(), onMudou?.()]); };
 
   async function confirmarRepasse(dados) {
     try {
       if (repassando.origem === 'multa') await financeiroAPI.registrarRepasseMulta(repassando.parcela.id, { tipo: repassando.tipo, ...dados });
       else await financeiroAPI.registrarRepasse(repassando.parcela.id, { tipo: repassando.tipo, ...dados });
       toast.success('Repasse registrado'); setRepassando(null);
-      await Promise.all([carregar(), onMudou?.()]);
+      await aposMudar();
     } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao repassar'); }
   }
   async function desfazerRepasse(l) {
@@ -422,7 +427,7 @@ function RepassesView({ podeAlterar, onMudou }) {
       if (l.origem === 'multa') await financeiroAPI.desfazerRepasseMulta(l.parcela.id, l.tipo);
       else await financeiroAPI.desfazerRepasse(l.parcela.id, l.tipo);
       toast.success('Repasse desfeito');
-      await Promise.all([carregar(), onMudou?.()]);
+      await aposMudar();
     }
     catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao desfazer repasse'); }
   }
@@ -430,20 +435,23 @@ function RepassesView({ podeAlterar, onMudou }) {
   // Células comuns de identificação do processo/pasta/parcela
   const colProc = (p) => (
     <>
-      <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{p.numProc || '—'}</td>
-      <td style={{ fontSize: 12, color: '#555', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.NomeTituloProc || ''}>
-        {formatarNumeroPasta(p.numPasta)} — {p.NomeTituloProc || '—'}
-      </td>
+      {!embutido && <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{p.numProc || '—'}</td>}
+      {!embutido && (
+        <td style={{ fontSize: 12, color: '#555', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.NomeTituloProc || ''}>
+          {formatarNumeroPasta(p.numPasta)} — {p.NomeTituloProc || '—'}
+        </td>
+      )}
       <td style={{ whiteSpace: 'nowrap' }}>{p.acordo_tipo === 'alvara' ? 'Alvará' : 'Acordo'} {p.numero_acordo} · parc {p.numero}/{p.total_parcelas}</td>
     </>
   );
 
   if (pendentes === null || concluidos === null)
-    return <div className="card"><div className="loading">Carregando...</div></div>;
+    return <div className={embutido ? undefined : 'card'}><div className="loading">Carregando...</div></div>;
 
   return (
-    <div className="card">
-      <h3 style={{ marginTop: 0 }}>Repasses</h3>
+    <div className={embutido ? undefined : 'card'} data-testid={embutido ? 'repasses-do-processo' : undefined}
+      style={embutido ? { marginBottom: '16px' } : undefined}>
+      {embutido ? <strong style={{ display: 'block', marginBottom: '8px' }}>Repasses deste processo</strong> : <h3 style={{ marginTop: 0 }}>Repasses</h3>}
       {/* Sub-abas: pendentes (falta repassar) | concluídos (já repassados) */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
         <button className={`btn ${sub === 'pendentes' ? 'btn-primary' : 'btn-outline'}`} style={{ fontSize: 12, padding: '4px 10px' }}
@@ -459,7 +467,7 @@ function RepassesView({ podeAlterar, onMudou }) {
             <table className="tabela">
               <thead>
                 <tr>
-                  <th>Recebido em</th><th>Processo</th><th>Pasta</th><th>Parcela</th>
+                  <th>Recebido em</th>{!embutido && <th>Processo</th>}{!embutido && <th>Pasta</th>}<th>Parcela</th>
                   <th>Repassar para</th><th style={{ textAlign: 'right' }}>Valor</th><th>Ações</th>
                 </tr>
               </thead>
@@ -496,7 +504,7 @@ function RepassesView({ podeAlterar, onMudou }) {
             <table className="tabela">
               <thead>
                 <tr>
-                  <th>Repassado em</th><th>Processo</th><th>Pasta</th><th>Parcela</th>
+                  <th>Repassado em</th>{!embutido && <th>Processo</th>}{!embutido && <th>Pasta</th>}<th>Parcela</th>
                   <th>Beneficiário</th><th style={{ textAlign: 'right' }}>Valor</th>
                   <th>Forma</th><th>Observação</th><th>Quem fez</th><th>Ações</th>
                 </tr>
@@ -1068,7 +1076,7 @@ export function ModalHistoricoLancamento({ lancamento, onFechar }) {
 // ============================================================
 // BLOCO DE UM ACORDO (resumo + parcelas, com baixa)
 // ============================================================
-export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcluir, onMudou }) {
+export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcluir, onMudou, onAbrirRepasses }) {
   const { temPermissao } = useAuth();
   const [aberto, setAberto] = useState(false);
   const [parcelas, setParcelas] = useState(null);
@@ -1246,6 +1254,7 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
                         // A multa é independente da parcela: não trava o desfazer.
                         onClick: () => {
                           if (p.repasse_cliente_em || p.repasse_parceiro_em) {
+                            if (onAbrirRepasses) { toast.info("Desfaça os repasses em 'Repasses' (aberto abaixo) antes de desfazer o recebimento."); onAbrirRepasses(); return; }
                             toast.info("Desfaça os repasses na aba 'Repasses' antes de desfazer o recebimento.");
                             return;
                           }
@@ -1282,6 +1291,7 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
                         oculto: !(podeAlterar && p.multa && p.multa.status === 'pago'),
                         onClick: () => {
                           if (p.multa.repasse_cliente_em || p.multa.repasse_parceiro_em) {
+                            if (onAbrirRepasses) { toast.info("Desfaça os repasses da multa em 'Repasses' (aberto abaixo) antes de desfazer o recebimento dela."); onAbrirRepasses(); return; }
                             toast.info("Desfaça os repasses da multa na aba 'Repasses' antes de desfazer o recebimento dela.");
                             return;
                           }

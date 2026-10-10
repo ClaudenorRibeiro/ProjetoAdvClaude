@@ -1766,10 +1766,21 @@ async function desfazerRepasseMulta(req, res) {
   }
 }
 
+// Filtro opcional ?processo_id= das duas listas de repasses (a aba Financeiro da pasta mostra só o processo aberto).
+// Sem o parâmetro, a lista continua global. Valor que não é número inteiro = 400 (nunca vira "sem filtro").
+function filtroProcessoRepasses(req) {
+  const bruto = req.query.processo_id;
+  if (bruto === undefined || bruto === '') return { sql: '', params: [] };
+  if (typeof bruto !== 'string' || !/^\d{1,15}$/.test(bruto)) return { erro: 'Processo inválido' };
+  return { sql: ' AND a.processo_id = ?', params: [Number(bruto)] };
+}
+
 // GET /api/financeiro/repasses-pendentes — worklist GLOBAL: parcelas já recebidas do réu
 // que ainda têm repasse pendente (ao cliente e/ou ao parceiro), + multas recebidas na mesma situação.
 async function listarRepassesPendentes(req, res) {
   try {
+    const fp = filtroProcessoRepasses(req);
+    if (fp.erro) return erro(res, fp.erro, 400);
     const [rows] = await pool.execute(
       `SELECT ap.id, ap.numero, ap.recebido_em, ap.valor_liquido,
               ap.parceria_pessoa_tipo, ap.parceria_pessoa_id, ap.parceria_valor,
@@ -1795,8 +1806,8 @@ async function listarRepassesPendentes(req, res) {
          AND (
            (ap.valor_liquido > 0 AND ap.repasse_cliente_em IS NULL)
            OR (ap.parceria_pessoa_id IS NOT NULL AND ap.repasse_parceiro_em IS NULL)
-         )
-       ORDER BY ap.recebido_em ASC, p.numProc ASC, ap.numero ASC`
+         )${fp.sql}
+       ORDER BY ap.recebido_em ASC, p.numProc ASC, ap.numero ASC`, fp.params
     );
     const [multaRows] = await pool.execute(
       `SELECT m.parcela_id AS id, ap.numero, m.recebido_em, m.valor_liquido,
@@ -1824,8 +1835,8 @@ async function listarRepassesPendentes(req, res) {
          AND (
            (m.repasse_cliente_habilitado = 1 AND m.valor_liquido > 0 AND m.repasse_cliente_em IS NULL)
            OR (m.repasse_parceiro_habilitado = 1 AND m.parceria_pessoa_id IS NOT NULL AND m.repasse_parceiro_em IS NULL)
-         )
-       ORDER BY m.recebido_em ASC, p.numProc ASC, ap.numero ASC`
+         )${fp.sql}
+       ORDER BY m.recebido_em ASC, p.numProc ASC, ap.numero ASC`, fp.params
     );
     return sucesso(res, [...rows.map(r => ({ ...r, origem: 'parcela' })), ...multaRows.map(r => ({ ...r, origem: 'multa' }))]);
   } catch (err) {
@@ -1837,6 +1848,8 @@ async function listarRepassesPendentes(req, res) {
 // da parcela e da multa. Traz a data, a forma de pagamento e quem fez cada repasse. LIMIT defensivo.
 async function listarRepassesConcluidos(req, res) {
   try {
+    const fp = filtroProcessoRepasses(req);
+    if (fp.erro) return erro(res, fp.erro, 400);
     const [rows] = await pool.execute(
       `SELECT ap.id, ap.numero, ap.valor_liquido, ap.parceria_pessoa_id, ap.parceria_valor,
               ap.repasse_cliente_em, ap.repasse_parceiro_em,
@@ -1860,10 +1873,10 @@ async function listarRepassesConcluidos(req, res) {
        JOIN tblpasta pa ON p.pasta_id = pa.id
        LEFT JOIN usuarios uc ON ap.repasse_cliente_por  = uc.id
        LEFT JOIN usuarios up ON ap.repasse_parceiro_por = up.id
-       WHERE ap.repasse_cliente_em IS NOT NULL OR ap.repasse_parceiro_em IS NOT NULL
+       WHERE (ap.repasse_cliente_em IS NOT NULL OR ap.repasse_parceiro_em IS NOT NULL)${fp.sql}
        ORDER BY GREATEST(COALESCE(ap.repasse_cliente_em,'1900-01-01'), COALESCE(ap.repasse_parceiro_em,'1900-01-01')) DESC,
                 p.numProc ASC, ap.numero ASC
-       LIMIT 300`
+       LIMIT 300`, fp.params
     );
     const [multaRows] = await pool.execute(
       `SELECT m.parcela_id AS id, ap.numero, m.valor_liquido, m.parceria_pessoa_id, m.parceria_valor,
@@ -1889,10 +1902,10 @@ async function listarRepassesConcluidos(req, res) {
        JOIN tblpasta pa ON p.pasta_id = pa.id
        LEFT JOIN usuarios uc ON m.repasse_cliente_por  = uc.id
        LEFT JOIN usuarios up ON m.repasse_parceiro_por = up.id
-       WHERE m.repasse_cliente_em IS NOT NULL OR m.repasse_parceiro_em IS NOT NULL
+       WHERE (m.repasse_cliente_em IS NOT NULL OR m.repasse_parceiro_em IS NOT NULL)${fp.sql}
        ORDER BY GREATEST(COALESCE(m.repasse_cliente_em,'1900-01-01'), COALESCE(m.repasse_parceiro_em,'1900-01-01')) DESC,
                 p.numProc ASC, ap.numero ASC
-       LIMIT 300`
+       LIMIT 300`, fp.params
     );
     return sucesso(res, [...rows.map(r => ({ ...r, origem: 'parcela' })), ...multaRows.map(r => ({ ...r, origem: 'multa' }))]);
   } catch (err) {
