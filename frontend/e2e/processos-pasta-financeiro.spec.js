@@ -801,3 +801,66 @@ test('@critical Botão Repasses: quem só VISUALIZA vê a lista mas sem Repassar
   await expect(quadroRepasses(page).locator('tbody tr')).toHaveCount(1);
   await expect(quadroRepasses(page).getByTitle('Mais ações')).toHaveCount(0);
 });
+
+// ---- Menu ⋮ na própria linha da MULTA (10/10/2026): receber, repassar e desfazer o recebimento da multa ----
+async function lancarMultaNoBanco(parcelaId) {
+  await noBanco(`INSERT INTO acordo_parcela_multa (parcela_id, vencimento, valor_bruto, honor_tipo, honor_percentual, honor_valor, valor_liquido, repasse_cliente_habilitado, status, criado_por)
+                 VALUES (?, '2099-03-20', 100, 'percent', 30, 30, 70, 1, 'pendente', 1)`, [parcelaId]);
+}
+const linhaMulta = (page) => page.locator('tbody tr').filter({ hasText: 'Multa ·' });
+
+test('@critical Linha da multa tem menu: Receber multa, Repassar ao cliente (só a multa) e Desfazer recebimento (com repasse feito, abre os Repasses)', async ({ page }) => {
+  await prepararRepasse();
+  await lancarMultaNoBanco(d.pa1);
+  await loginPelaTela(page);
+  await abrirAba(page, CNJ1);
+  await abrirParcelas(page);
+  // multa pendente: o menu da própria linha oferece só "Receber multa" (ainda não há o que repassar ou desfazer)
+  await abrirMenuAcoes(page, linhaMulta(page));
+  await expect(page.getByRole('button', { name: /Repassar/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Desfazer recebimento da multa/ })).toHaveCount(0);
+  await page.getByRole('button', { name: /^\S*\s*Receber multa$/ }).last().click();
+  const rm = janela(page, 'Receber multa da parcela 1');
+  await rm.getByLabel('Data do recebimento', { exact: true }).fill('2099-03-20');
+  await rm.getByLabel('Conta ou caixa de recebimento', { exact: true }).selectOption({ label: 'Banco C8 — Conta C8' });
+  await rm.getByLabel('Forma de recebimento', { exact: true }).selectOption({ label: 'Pix C8' });
+  await rm.getByRole('button', { name: 'Confirmar recebimento' }).click();
+  await aviso(page, 'Multa recebida');
+  expect((await noBanco('SELECT status FROM acordo_parcela_multa WHERE parcela_id = ?', [d.pa1]))[0].status).toBe('pago');
+  // multa recebida com repasse pendente: oferece "Repassar ao cliente" (abre a janela da multa)
+  await abrirParcelas(page);
+  await expect(linhaMulta(page).getByText('Falta repassar ao cliente')).toBeVisible();
+  await abrirMenuAcoes(page, linhaMulta(page));
+  await expect(page.getByRole('button', { name: /^\S*\s*Receber multa$/ })).toHaveCount(0);
+  await page.getByRole('button', { name: /^\S*\s*Repassar ao cliente$/ }).last().click();
+  const j = janela(page, 'Repassar ao cliente');
+  await expect(j).toBeVisible();
+  await j.getByLabel('Conta ou caixa de saída', { exact: true }).selectOption({ label: 'Caixa C8' });
+  await j.getByLabel('Destino do repasse', { exact: true }).selectOption({ label: 'Dinheiro em espécie — em mãos' });
+  await j.getByLabel('Forma do repasse', { exact: true }).selectOption({ label: 'Dinheiro C8' });
+  await j.getByRole('button', { name: 'Confirmar repasse' }).click();
+  await aviso(page, 'Repasse registrado');
+  const multa = (await noBanco('SELECT repasse_cliente_em, repasse_cliente_destino_tipo FROM acordo_parcela_multa WHERE parcela_id = ?', [d.pa1]))[0];
+  expect(multa.repasse_cliente_em).not.toBeNull();
+  expect(multa.repasse_cliente_destino_tipo).toBe('em_maos');
+  expect((await noBanco('SELECT repasse_cliente_em FROM acordo_parcela WHERE id = ?', [d.pa1]))[0].repasse_cliente_em).toBeNull();   // a PARCELA continua sem repasse: só a multa foi repassada
+  // desfazer o recebimento da multa com repasse feito: só explica e abre a lista de Repasses concluídos
+  await abrirParcelas(page);
+  await abrirMenuAcoes(page, linhaMulta(page));
+  await page.getByRole('button', { name: /Desfazer recebimento da multa/ }).last().click();
+  await expect(quadroRepasses(page)).toBeVisible();
+  await expect(quadroRepasses(page).getByRole('button', { name: /Concluídos \(1\)/ })).toHaveClass(/btn-primary/);
+  expect((await noBanco('SELECT status FROM acordo_parcela_multa WHERE parcela_id = ?', [d.pa1]))[0].status).toBe('pago');
+});
+
+test('@critical Linha da multa: quem só VISUALIZA o financeiro não vê menu na linha da multa', async ({ page }) => {
+  await prepararRepasse();
+  await lancarMultaNoBanco(d.pa1);
+
+  const so = await criarUsuarioComPermissoes('so_ve_multa_c8', [['processos', null, 'visualizar'], ['financeiro', null, 'visualizar']]);
+  await loginPelaTela(page, so);
+  await abrirAba(page, CNJ1);
+  await abrirParcelas(page);
+  await expect(linhaMulta(page)).toBeVisible();
+  await expect(linhaMulta(page).getByTitle('Mais ações')).toHaveCount(0);
+});

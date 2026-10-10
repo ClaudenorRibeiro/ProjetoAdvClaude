@@ -1102,6 +1102,15 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
     return pendencias;
   }
 
+  // Repasses que ainda faltam da MULTA recebida desta parcela (só os que a multa habilitou).
+  function cicloDaMulta(m) {
+    if (!m || m.status !== 'pago') return null;
+    const pendencias = [];
+    if (m.repasse_cliente_habilitado && Number(m.valor_liquido) > 0 && !m.repasse_cliente_em) pendencias.push('cliente');
+    if (m.repasse_parceiro_habilitado && m.parceria_pessoa_id && Number(m.parceria_valor) > 0 && !m.repasse_parceiro_em) pendencias.push('parceiro');
+    return pendencias;
+  }
+
   async function abrir() {
     if (!aberto && !parcelas) {
       try { const { data } = await financeiroAPI.buscarAcordo(acordo.id); if (data.ok) setParcelas(data.dados.parcelas); }
@@ -1136,9 +1145,28 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
         acordo_cliente_id: acordo.beneficiario_cliente_id, acordo_cliente_conta_id: acordo.beneficiario_cliente_conta_id },
     });
   }
+  // Repasse da MULTA desta parcela (mesma janela; os valores, a parceria e os repasses já feitos são os da multa, como na lista de Repasses).
+  function pedirRepasseMulta(p, tipo) {
+    const m = p.multa;
+    setRepassandoParcela({
+      key: `multa-${tipo}-${p.id}`, origem: 'multa', tipo,
+      beneficiario: tipo === 'cliente' ? 'Cliente' : (m.parceria_nome || 'Parceiro'),
+      valor: tipo === 'cliente' ? m.valor_liquido : m.parceria_valor,
+      parcela: { ...p, valor_liquido: m.valor_liquido, recebido_em: m.recebido_em,
+        parceria_pessoa_tipo: m.parceria_pessoa_tipo, parceria_pessoa_id: m.parceria_pessoa_id, parceria_valor: m.parceria_valor, parceria_nome: m.parceria_nome,
+        // cliente da multa: o que ela já tem; sem isso, o da própria parcela (pessoa e conta andam juntas), depois o padrão do acordo
+        ...(m.repasse_cliente_pessoa_id
+          ? { repasse_cliente_tipo: m.repasse_cliente_tipo, repasse_cliente_pessoa_id: m.repasse_cliente_pessoa_id, repasse_cliente_conta_id: m.repasse_cliente_conta_id }
+          : { repasse_cliente_tipo: p.repasse_cliente_tipo, repasse_cliente_pessoa_id: p.repasse_cliente_pessoa_id, repasse_cliente_conta_id: p.repasse_cliente_conta_id }),
+        repasse_cliente_em: m.repasse_cliente_em, repasse_parceiro_em: m.repasse_parceiro_em,
+        processo_id: acordo.processo_id, acordo_cliente_tipo: acordo.beneficiario_cliente_tipo,
+        acordo_cliente_id: acordo.beneficiario_cliente_id, acordo_cliente_conta_id: acordo.beneficiario_cliente_conta_id },
+    });
+  }
   async function confirmarRepasseDaParcela(dados) {
     try {
-      await financeiroAPI.registrarRepasse(repassandoParcela.parcela.id, { tipo: repassandoParcela.tipo, ...dados });
+      if (repassandoParcela.origem === 'multa') await financeiroAPI.registrarRepasseMulta(repassandoParcela.parcela.id, { tipo: repassandoParcela.tipo, ...dados });
+      else await financeiroAPI.registrarRepasse(repassandoParcela.parcela.id, { tipo: repassandoParcela.tipo, ...dados });
       toast.success('Repasse registrado'); setRepassandoParcela(null); setParcelas(null); setAberto(false); onMudou();
     } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao repassar'); }
   }
@@ -1162,6 +1190,15 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
       await financeiroAPI.receberMulta(p.id, dados);
       toast.success('Multa recebida'); setRecebendoMulta(null); setParcelas(null); setAberto(false); onMudou();
     } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao receber a multa'); }
+  }
+  // "Desfazer recebimento da multa": com repasse da multa já feito, só explica (e abre a lista de Repasses da pasta, se houver).
+  function pedirDesfazerMulta(p) {
+    if (p.multa.repasse_cliente_em || p.multa.repasse_parceiro_em) {
+      if (onAbrirRepasses) { toast.info("Desfaça os repasses da multa em 'Repasses' (aberto abaixo) antes de desfazer o recebimento dela."); onAbrirRepasses(); return; }
+      toast.info("Desfaça os repasses da multa na aba 'Repasses' antes de desfazer o recebimento dela.");
+      return;
+    }
+    desfazerMulta(p);
   }
   async function desfazerMulta(p) {
     try { await financeiroAPI.desfazerMulta(p.id); toast.success('Recebimento da multa desfeito'); setParcelas(null); setAberto(false); onMudou(); }
@@ -1292,14 +1329,7 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
                         ] },
                       { label: 'Desfazer recebimento da multa', icone: '↩️',
                         oculto: !(podeAlterar && p.multa && p.multa.status === 'pago'),
-                        onClick: () => {
-                          if (p.multa.repasse_cliente_em || p.multa.repasse_parceiro_em) {
-                            if (onAbrirRepasses) { toast.info("Desfaça os repasses da multa em 'Repasses' (aberto abaixo) antes de desfazer o recebimento dela."); onAbrirRepasses(); return; }
-                            toast.info("Desfaça os repasses da multa na aba 'Repasses' antes de desfazer o recebimento dela.");
-                            return;
-                          }
-                          desfazerMulta(p);
-                        } },
+                        onClick: () => pedirDesfazerMulta(p) },
                       { label: 'Histórico', icone: '📋', onClick: () => setHistoricoDe(p) },
                       { label: 'Recibo', icone: '📄',
                         submenu: [
@@ -1346,7 +1376,25 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
                         </div>
                       )}
                     </td>
-                    <td></td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <MenuAcoes itens={[
+                        { label: 'Receber multa', icone: '💰',
+                          oculto: !(podeAlterar && p.multa.status === 'pendente'),
+                          onClick: () => setRecebendoMulta(p) },
+                        { label: `Repassar ao ${cicloDaMulta(p.multa)?.[0] || 'cliente'}`, icone: '💸',
+                          oculto: !(podeAlterar && cicloDaMulta(p.multa)?.length === 1),
+                          onClick: () => pedirRepasseMulta(p, cicloDaMulta(p.multa)[0]) },
+                        { label: 'Repassar', icone: '💸',
+                          oculto: !(podeAlterar && cicloDaMulta(p.multa)?.length === 2),
+                          submenu: [
+                            { label: 'Repassar ao cliente', icone: '💸', onClick: () => pedirRepasseMulta(p, 'cliente') },
+                            { label: 'Repassar ao parceiro', icone: '💸', onClick: () => pedirRepasseMulta(p, 'parceiro') },
+                          ] },
+                        { label: 'Desfazer recebimento da multa', icone: '↩️',
+                          oculto: !(podeAlterar && p.multa.status === 'pago'),
+                          onClick: () => pedirDesfazerMulta(p) },
+                      ]} />
+                    </td>
                   </tr>
                 )}
                 </React.Fragment>
