@@ -13,7 +13,7 @@ async function noBanco(sql, params = []) {
 async function semViolacoes(page, rotulo) {
   await page.mouse.move(0, 0);
   await expect(page.locator('.Toastify__toast')).toHaveCount(0, { timeout: 10000 });
-  const v = await violacoesGraves(page);
+  const v = await violacoesGraves(page, { excluir: ['iframe[title^="Mensagem do e-mail"]'] });   // o quadro do e-mail é isolado (sandbox): o verificador não entra nele
   expect.soft(v, `acessibilidade — ${rotulo}: ${JSON.stringify(v, null, 1)}`).toEqual([]);   // soft: mostra TODOS os problemas
 }
 const aviso = (page, texto) => expect(page.getByText(texto).first()).toBeVisible();

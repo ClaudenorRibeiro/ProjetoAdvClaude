@@ -113,21 +113,25 @@ export async function adicionarAutorAoProcesso(nome = 'Autor Do Processo') {
 
 // Violações SÉRIAS ou CRÍTICAS de acessibilidade da tela (ou janela) aberta agora; [] = tudo certo.
 // Se a página recarregar no meio da verificação (acontece em máquina lenta), espera carregar e repete — igual à espera "tela pronta".
-export async function violacoesGraves(page) {
+// `excluir`: seletores que o verificador não lê (ex.: o quadro isolado `<iframe sandbox="">` que mostra o e-mail, onde ele não consegue entrar).
+export async function violacoesGraves(page, { excluir = [] } = {}) {
   for (let tentativa = 0; ; tentativa += 1) {
-    try { return await lerViolacoesGraves(page); } catch (e) {
+    try { return await lerViolacoesGraves(page, excluir); } catch (e) {
       if (!/Execution context was destroyed|navigat|Target page, context or browser has been closed/i.test(String(e.message)) || tentativa === 3) throw e;
-      await page.waitForLoadState('load');
+      // limite próprio: se a página não terminar de carregar, o erro diz o que o verificador reclamou (antes esperava o teste inteiro, sem dizer nada)
+      await page.waitForLoadState('load', { timeout: 30_000 }).catch(() => { throw new Error(`A página não terminou de carregar em 30 s depois de o verificador de acessibilidade falhar com: ${String(e.message).split('\n')[0]}`); });
     }
   }
 }
-async function lerViolacoesGraves(page) {
+async function lerViolacoesGraves(page, excluir = []) {
   // Espera as animações que têm fim (ex.: aviso "toast" entrando, com texto ainda meio transparente), senão o
   // verificador de contraste lê uma cor que existe só por uma fração de segundo.
   await page.evaluate(() => Promise.all(document.getAnimations()
     .filter(a => a.effect?.getTiming().iterations !== Infinity)
     .map(a => a.finished.catch(() => {}))));
-  const resultado = await new AxeBuilder({ page }).analyze();
+  const construtor = new AxeBuilder({ page });
+  excluir.forEach(seletor => construtor.exclude(seletor));
+  const resultado = await construtor.analyze();
   return resultado.violations.filter(v => ['serious', 'critical'].includes(v.impact))
     .map(v => ({ regra: v.id, itens: v.nodes.map(n => {
       const d = n.any[0]?.data;   // no contraste: cor do texto / cor do fundo / razão encontrada

@@ -244,8 +244,9 @@ test('@critical Multa fixada pelo juiz: o percentual guardado no acordo já vem 
   expect(ps.map(p => Number(p.multa_percentual))).toEqual([15, 15]);
   expect((await noBanco('SELECT COUNT(*) AS n FROM acordo_parcela_multa WHERE parcela_id IN (SELECT id FROM acordo_parcela WHERE acordo_id = ?)', [novo.id]))[0].n).toBe(0);   // só guardou a informação
   const bloco = page.locator('div').filter({ hasText: 'Acordo com multa do juiz' }).filter({ has: page.getByRole('button', { name: /Parcelas/ }) }).last();
-  const abrir = bloco.getByRole('button', { name: /▶ Parcelas/ });
-  if (await abrir.count()) await abrir.click();
+  const botaoParcelas = bloco.getByRole('button', { name: /Parcelas/ });
+  await expect(botaoParcelas).toBeVisible();                       // espera a lista recarregar (em máquina lenta o botão chega depois)
+  if ((await botaoParcelas.textContent()).includes('▶')) await botaoParcelas.click();
   await abrirMenuAcoes(page, page.locator('tbody tr').filter({ hasText: 'Pendente' }).first());
   await page.getByRole('button', { name: /Lançar multa/ }).click();
   const m = janela(page, /Lançar multa/);
