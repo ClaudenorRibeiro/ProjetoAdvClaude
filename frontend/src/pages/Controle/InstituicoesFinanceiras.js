@@ -11,6 +11,7 @@ import { financeiroAPI } from '../../services/api';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import MenuAcoes from '../../components/MenuAcoes';
+import { formatarContaBancaria } from '../../utils/formatters';
 
 export default function InstituicoesFinanceiras() {
   const [bancos,     setBancos]     = useState([]);
@@ -175,7 +176,7 @@ export default function InstituicoesFinanceiras() {
           <button className="btn btn-primary" onClick={() => abrirConta()}>+ Nova conta</button>
         </div>
         <div className="tabela-wrapper"><table className="tabela"><thead><tr><th>Banco / caixa</th><th>Identificação</th><th>Conta</th><th>Principal</th><th>Ações</th></tr></thead>
-          <tbody>{contas.length === 0 ? <tr><td colSpan="5" className="lista-vazia">Nenhuma conta do escritório cadastrada.</td></tr> : contas.map(c => <tr key={c.id}><td>{c.instituicao_nome || 'Dinheiro em espécie'}</td><td>{c.nome}</td><td>{c.agencia ? `Ag. ${c.agencia} · ` : ''}{c.numero || c.chave_pix || '—'}</td><td>{c.principal ? 'Sim' : '—'}</td><td><MenuAcoes itens={[{ label:'Editar', icone:'✏️', onClick:()=>abrirConta(c) },...(c.tipo === 'especie' ? [] : [{ label:'Desativar', icone:'🗑️', perigo:true, onClick:()=>desativarConta(c) }])]} /></td></tr>)}</tbody>
+          <tbody>{contas.length === 0 ? <tr><td colSpan="5" className="lista-vazia">Nenhuma conta do escritório cadastrada.</td></tr> : contas.map(c => <tr key={c.id}><td>{c.instituicao_nome || 'Dinheiro em espécie'}</td><td>{c.nome}</td><td>{formatarContaBancaria(c, { vazio: '—' })}</td><td>{c.principal ? 'Sim' : '—'}</td><td><MenuAcoes itens={[{ label:'Editar', icone:'✏️', onClick:()=>abrirConta(c) },...(c.tipo === 'especie' ? [] : [{ label:'Desativar', icone:'🗑️', perigo:true, onClick:()=>desativarConta(c) }])]} /></td></tr>)}</tbody>
         </table></div>
       </div>
 

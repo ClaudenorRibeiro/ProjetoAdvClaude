@@ -80,6 +80,8 @@ test('@critical Financeiro: abas, janelas, validações, recebimento, multa, rep
   await page.getByRole('button', { name: '+ Novo Acordo' }).click();
   await expect(modal(page).getByRole('heading', { name: 'Novo Acordo' })).toBeVisible();
   await semViolacoes(page, 'janela Novo Acordo');
+  // a conta do beneficiário é escrita com agência, número e DÍGITO separado por hífen (mesmo texto nas 3 telas que listam contas)
+  await expect(modal(page).getByLabel('Conta padrão do beneficiário').locator('option', { hasText: 'Ag. 0001' })).toHaveText('Banco E2E — Ag. 0001 · 12345-6');
   await modal(page).getByRole('button', { name: /\+ Parceria do acordo/ }).click();
   await expect(page.getByRole('heading', { name: 'Parceria do acordo (todas as parcelas)' })).toBeVisible();
   await semViolacoes(page, 'janela Parceria do acordo');
@@ -208,6 +210,7 @@ test('@critical Financeiro: abas, janelas, validações, recebimento, multa, rep
   const rep = modal(page);
   await expect(rep.getByRole('heading', { name: /Repassar ao cliente/ })).toBeVisible();
   await semViolacoes(page, 'janela Repassar');
+  await expect(rep.getByLabel('Conta do beneficiário').locator('option', { hasText: 'Ag. 0001' })).toHaveText('Banco E2E — Ag. 0001 · 12345-6');
   await rep.getByRole('button', { name: 'Confirmar repasse' }).click();
   await expect(page.getByText(/obrigatória|obrigatório/).first()).toBeVisible();     // validação (janela de aviso)
   await semViolacoes(page, 'aviso de validação do repasse');
@@ -369,4 +372,7 @@ test('@critical Financeiro: abas, janelas, validações, recebimento, multa, rep
   await expect(page.getByText('Multa ·')).toHaveCount(1);                                         // só a multa recebida da parcela 2 ficou
   await semViolacoes(page, 'processo no fim do fluxo');
   await erroDeTela(page);
+  // Controle > Instituições financeiras: a conta do escritório também é escrita com o dígito separado por hífen
+  await page.goto('/controle/instituicoes-financeiras'); await aguardarTelaPronta(page);
+  await expect(page.locator('tbody tr').filter({ hasText: 'Conta E2E' })).toContainText('Ag. 1 · 2-3');
 });

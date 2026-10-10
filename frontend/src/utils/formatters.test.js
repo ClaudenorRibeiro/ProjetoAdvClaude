@@ -119,4 +119,16 @@ describe('formatadores e validadores compartilhados', () => {
     expect(f.numeroParaMascaraMoeda(null)).toBe('');
     expect(f.mascaraMoeda('')).toBe('');
   });
+  it('conta bancária escrita com agência, número e DÍGITO separado por hífen', () => {
+    expect(f.formatarContaBancaria({ agencia: '1234', numero: '56789', digito: '0' })).toBe('Ag. 1234 · 56789-0');
+    expect(f.formatarContaBancaria({ agencia: ' 1234 ', numero: ' 56789 ', digito: ' X ' })).toBe('Ag. 1234 · 56789-X');
+    expect(f.formatarContaBancaria({ agencia: '1234', numero: '56789', digito: null })).toBe('Ag. 1234 · 56789');   // sem dígito, sem hífen sobrando
+    expect(f.formatarContaBancaria({ numero: '56789', digito: '0' })).toBe('56789-0');                              // sem agência
+    expect(f.formatarContaBancaria({ digito: '0', chave_pix: 'a@b.com' })).toBe('a@b.com');                         // dígito sem número não aparece
+    expect(f.formatarContaBancaria({ chave_pix: 'a@b.com' })).toBe('a@b.com');
+    expect(f.formatarContaBancaria({ titular: 'Maria' })).toBe('');
+    expect(f.formatarContaBancaria({ titular: 'Maria' }, { titular: true })).toBe('Maria');
+    expect(f.formatarContaBancaria({}, { vazio: '—' })).toBe('—');
+    expect(f.formatarContaBancaria(null)).toBe('');
+  });
 });

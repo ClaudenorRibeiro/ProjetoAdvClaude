@@ -314,3 +314,14 @@ export function toTitleCase(str) {
     })
     .join(' ');
 }
+
+// Como o sistema ESCREVE uma conta bancária: "Ag. 1234 · 56789-0" (o dígito vem depois do número, separado por hífen).
+// Sem número, cai na chave PIX (e, com `titular: true`, no nome do titular); `vazio` é o texto quando não há nada.
+// Os campos de cadastro continuam com o Dígito em caixinha própria: aqui é só o texto de listas e tabelas.
+export function formatarContaBancaria(conta, { titular = false, vazio = '' } = {}) {
+  const agencia = String(conta?.agencia ?? '').trim();
+  const numero = String(conta?.numero ?? '').trim();
+  const digito = String(conta?.digito ?? '').trim();
+  const principal = numero ? `${numero}${digito ? `-${digito}` : ''}` : (String(conta?.chave_pix ?? '').trim() || (titular ? String(conta?.titular ?? '').trim() : ''));
+  return `${agencia ? `Ag. ${agencia} · ` : ''}${principal || vazio}`;
+}

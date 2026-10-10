@@ -6,7 +6,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { financeiroAPI, processosAPI, pessoasAPI } from '../../services/api';
-import { formatarData, formatarDataHora, formatarMoeda, formatarNumeroPasta, toTitleCase, mascaraMoeda, numeroParaMascaraMoeda, parseMoeda, hojeLocal, mascaraDocumento } from '../../utils/formatters';
+import { formatarData, formatarDataHora, formatarMoeda, formatarNumeroPasta, toTitleCase, mascaraMoeda, numeroParaMascaraMoeda, parseMoeda, hojeLocal, mascaraDocumento, formatarContaBancaria } from '../../utils/formatters';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
@@ -703,7 +703,7 @@ function ModalRepasse({ linha, onCancelar, onConfirmar }) {
           {tipoDestino === 'bancaria' ? (
             <div className="form-group"><label className="form-label">Conta do beneficiário *</label>
               <select aria-label="Conta do beneficiário" ref={contaDestinoRef} className="form-control" value={contaDestinoId} onChange={e => { destinoManualRef.current = true; setContaDestinoId(e.target.value); }}>
-                <option value="">Selecione...</option>{contasDestino.map(c => <option key={c.id} value={c.id}>{c.instituicao_nome} — {c.agencia ? `Ag. ${c.agencia} · ` : ''}{c.numero || c.chave_pix || c.titular}</option>)}
+                <option value="">Selecione...</option>{contasDestino.map(c => <option key={c.id} value={c.id}>{c.instituicao_nome} — {formatarContaBancaria(c, { titular: true })}</option>)}
               </select>
               {podeCadastrarConta && destinoTipo && destinoPessoa && (
                 <button type="button" className="btn btn-outline" style={{ marginTop: 8, fontSize: 12, padding: '4px 8px' }} onClick={() => setModalNovaConta(true)}>
@@ -2068,7 +2068,7 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
               <div style={{ display: 'flex', gap: '8px' }}>
                 <select aria-label="Conta padrão do beneficiário" className="form-control" value={contaBeneficiarioId} disabled={!beneficiarioId} onChange={e => setContaBeneficiarioId(e.target.value)}>
                   <option value="">Dinheiro em espécie — em mãos (ou a conta principal, se houver)</option>
-                  {contasBeneficiario.map(c => <option key={c.id} value={c.id}>{c.instituicao_nome} — {c.numero || c.chave_pix || c.titular}</option>)}
+                  {contasBeneficiario.map(c => <option key={c.id} value={c.id}>{c.instituicao_nome} — {formatarContaBancaria(c, { titular: true })}</option>)}
                 </select>
                 {podeCadastrarContaBeneficiario && <button type="button" className="btn btn-outline" title={beneficiarioId ? 'Cadastrar conta do beneficiário' : 'Selecione primeiro o beneficiário'}
                   disabled={!beneficiarioId} onClick={() => setModalNovaContaBeneficiario(true)} style={{ minWidth: '42px', padding: '0 10px' }}>...</button>}
