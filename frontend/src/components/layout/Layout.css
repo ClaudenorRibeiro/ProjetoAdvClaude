@@ -964,6 +964,12 @@ body {
    ao clicar em "+N mais" abrimos uma janela central própria (ver Agenda.js). Por isso
    o CSS específico daquele popup (.rbc-overlay) foi removido. */
 
+/* Processo com acordo (etiqueta automática "Acordo"): fundo na cor escolhida em Configurações > Etiquetas do escritório.
+   As cores chegam por variáveis de CSS (estiloFundoAcordo em components/EtiquetaAcordo.js). */
+.tabela tr.linha-acordo td { background: var(--acordo-fundo); }
+.tabela tr.linha-acordo:hover td { background: var(--acordo-fundo-hover); }
+.card.card-acordo { background: var(--acordo-fundo); }
+
 /* Link "+N mais" dentro das células da Agenda: o padrão da lib é 85% (pequeno);
    subimos para 120%. !important para vencer o CSS padrão da biblioteca. */
 .rbc-row-segment .rbc-show-more {

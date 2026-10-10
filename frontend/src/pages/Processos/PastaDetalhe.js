@@ -7,6 +7,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { processosAPI, andamentoAPI, prazosAPI, tarefasAPI, audienciasAPI, periciasAPI, financeiroAPI, pessoasAPI, etiquetasAPI } from '../../services/api';
+import EtiquetaAcordo, { estiloFundoAcordo, useCorAcordo } from '../../components/EtiquetaAcordo';
 import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetaEscritorioSubmenu, ModalHistoricoEtiquetaEscritorio } from '../../components/Etiquetas';
 import { formatarData, formatarNumeroPasta, formatarMoeda, labelStatusPrazo, corPrazo, toTitleCase, hojeLocal, audienciaJaPassou } from '../../utils/formatters';
 // Janelas de contato/ficha reutilizadas da tela de Pessoas (painel "Partes do processo")
@@ -58,6 +59,7 @@ export default function PastaDetalhe() {
 
   // Etiqueta DO ESCRITÓRIO nos processos (catálogo compartilhado + quem pode aplicar)
   const [catEscritorio, setCatEscritorio] = useState([]);
+  const corAcordo = useCorAcordo();
   const podeEtiquetarEscritorio = temPermissao('processos.etiqueta_escritorio', 'alterar');
   // Andamentos têm permissões próprias (submódulo): só mostra o botão de quem pode usá-lo
   const podeVerAndamentos      = temPermissao('processos.andamentos', 'visualizar');
@@ -634,7 +636,13 @@ export default function PastaDetalhe() {
       ]);
       if (minhaSeq !== financeiroSeqRef.current) return; // já saiu outra busca financeira depois desta
       if (c.data.ok) setContaCorrente(c.data.dados);
-      if (a.data.ok) setAcordosFin(a.data.dados);
+      if (a.data.ok) {
+        setAcordosFin(a.data.dados);
+        // a marca "Acordo" do alto da pasta acompanha o que acabou de mudar aqui (criar, cancelar ou excluir acordo)
+        const tem = a.data.dados.some(x => x.tipo === 'acordo' && x.status !== 'cancelado');
+        setPasta(p => (p?.processos?.some(pr => pr.id === procId && !!Number(pr.tem_acordo) !== tem)
+          ? { ...p, processos: p.processos.map(pr => (pr.id === procId ? { ...pr, tem_acordo: tem ? 1 : 0 } : pr)) } : p));
+      }
     } catch {}
   }
 
@@ -719,6 +727,8 @@ export default function PastaDetalhe() {
 
   const processos        = pasta.processos || [];
   const processoSelecionado = getProcessoSelecionado(processos);
+  // Etiqueta automática "Acordo": algum processo da pasta tem acordo (não alvará) que não foi cancelado
+  const temAcordoNaPasta = processos.some(pr => Number(pr.tem_acordo));
 
   // Empresas EM RECUPERAÇÃO JUDICIAL entre as partes desta pasta (autor ou réu, de
   // qualquer processo dela). A marca é do cadastro da empresa (Pessoas → Jurídica),
@@ -756,8 +766,8 @@ export default function PastaDetalhe() {
 
   return (
     <div>
-      {/* Cabeçalho */}
-      <div className="card" style={{ marginBottom: '16px' }}>
+      {/* Cabeçalho (com fundo na cor do "Acordo" quando algum processo da pasta tem acordo) */}
+      <div className={`card${temAcordoNaPasta ? ' card-acordo' : ''}`} style={{ marginBottom: '16px', ...(temAcordoNaPasta ? estiloFundoAcordo(corAcordo) : {}) }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <button className="btn btn-outline" style={{ fontSize: '12px' }} onClick={() => navigate('/processos')}>
             ← Voltar
@@ -824,6 +834,7 @@ export default function PastaDetalhe() {
             {processos[0]?.status_nome && (
               <span className="badge badge-cinza">{processos[0].status_nome}</span>
             )}
+            {temAcordoNaPasta && <EtiquetaAcordo cor={corAcordo} />}
           </div>
         </div>
       </div>
@@ -879,7 +890,7 @@ export default function PastaDetalhe() {
                 </thead>
                 <tbody>
                   {processos.map(pr => (
-                    <tr key={pr.id}>
+                    <tr key={pr.id} className={Number(pr.tem_acordo) ? 'linha-acordo' : undefined} style={Number(pr.tem_acordo) ? estiloFundoAcordo(corAcordo) : undefined}>
                       <td>
                         <button
                           type="button"
@@ -902,6 +913,7 @@ export default function PastaDetalhe() {
                         >
                           {pr.NomeTituloProc || '—'}
                         </button>
+                        {!!Number(pr.tem_acordo) && <EtiquetaAcordo cor={corAcordo} style={{ marginLeft: '8px' }} />}
                       </td>
                       <td>
                         {pr.numProc

@@ -760,6 +760,7 @@ CREATE TABLE `configuracoes_escritorio` (
   `avisos_audiencia_mostrar` tinyint(1) NOT NULL DEFAULT '1' COMMENT '1 = avisos de audiencia aos clientes passam pela tela de conferencia; 0 = saem sozinhos (e-mail e SMS)',
   `avisos_parabens_mostrar` tinyint(1) NOT NULL DEFAULT '1' COMMENT '1 = parabens de aniversario passam pela tela de conferencia; 0 = saem sozinhos (e-mail e SMS)',
   `dias_aviso_parabens` int NOT NULL DEFAULT '0' COMMENT 'dias ANTES do aniversario para aparecer o aviso de parabens (0 = no proprio dia)',
+  `cor_etiqueta_acordo` varchar(7) DEFAULT NULL COMMENT 'cor (#rrggbb) da etiqueta e do fundo automaticos de processo com acordo; vazio = cor padrao do sistema',
   PRIMARY KEY (`id`),
   KEY `fk_config_advogado_principal` (`advogado_principal_id`),
   CONSTRAINT `fk_config_advogado_principal` FOREIGN KEY (`advogado_principal_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL

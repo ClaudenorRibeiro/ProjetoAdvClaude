@@ -1364,6 +1364,8 @@ SELECT esperado.tabela AS tabela, esperado.coluna AS coluna_que_falta
     UNION ALL
     SELECT 'configuracoes_escritorio' AS tabela, 'dias_aviso_parabens' AS coluna
     UNION ALL
+    SELECT 'configuracoes_escritorio' AS tabela, 'cor_etiqueta_acordo' AS coluna
+    UNION ALL
     SELECT 'log_comunicacoes' AS tabela, 'aviso_id' AS coluna
     UNION ALL
     SELECT 'pessoas_avisos_idade' AS tabela, 'id' AS coluna

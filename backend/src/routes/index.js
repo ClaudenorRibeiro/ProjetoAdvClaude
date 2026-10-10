@@ -471,6 +471,8 @@ router.get('/etiquetas/escritorio/catalogo/:modulo', autenticar, etiquetasCtrl.l
 router.get('/etiquetas/escritorio/uso/:modulo',       autenticar, etiquetasCtrl.listarSlotsEmUsoEscritorio);
 router.put('/etiquetas/escritorio/catalogo/:modulo', autenticar, apenasAdmin, etiquetasCtrl.salvarCatalogo);
 router.put('/etiquetas/escritorio/marcar',           autenticar, etiquetasCtrl.marcarEscritorio);
+router.get('/etiquetas/escritorio/acordo',          autenticar, etiquetasCtrl.buscarCorAcordo);                 // cor da etiqueta automática "Acordo"
+router.put('/etiquetas/escritorio/acordo',          autenticar, apenasAdmin, etiquetasCtrl.salvarCorAcordo);
 router.get('/etiquetas/escritorio/historico/:modulo/:registro_id', autenticar, etiquetasCtrl.historicoEscritorio);
 
 // ---- RELATÓRIOS (rotas no arquivo próprio, para o index.js não crescer) ----

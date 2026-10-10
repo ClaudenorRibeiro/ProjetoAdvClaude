@@ -6,6 +6,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { configuracaoAPI, manutencaoAPI, etiquetasAPI, processosAPI } from '../../services/api';
+import EtiquetaAcordoConfig from './EtiquetaAcordoConfig';
 import { EditorEtiquetasCinco, cincoLinhasEtiqueta, MODULOS_ETIQUETA_ESCRITORIO } from '../../components/Etiquetas';
 import { formatarData, formatarDataHora, hojeLocal, toTitleCase, mascaraTelefone } from '../../utils/formatters';
 import { UFS } from '../../utils/ufs';
@@ -1430,6 +1431,7 @@ function TabEtiquetasEscritorio() {
   }
 
   return (
+    <>
     <div className="card">
       <h3 style={{ margin: '0 0 6px' }}>Etiquetas do escritório</h3>
       <p style={{ color: '#6b7280', fontSize: 13, margin: '0 0 14px' }}>
@@ -1463,6 +1465,8 @@ function TabEtiquetasEscritorio() {
         </button>
       </div>
     </div>
+    {modulo === 'processos' && <EtiquetaAcordoConfig />}
+    </>
   );
 }
 

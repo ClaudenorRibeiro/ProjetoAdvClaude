@@ -104,6 +104,8 @@ export const etiquetasAPI = {
   salvarCatalogo:   (modulo, definicoes) => api.put(`/etiquetas/escritorio/catalogo/${modulo}`, { definicoes }),
   marcarEscritorio: (dados) => api.put('/etiquetas/escritorio/marcar', dados), // { modulo, registro_id, slot }
   historicoEscritorio: (modulo, registroId) => api.get(`/etiquetas/escritorio/historico/${modulo}/${registroId}`),
+  corAcordo:        () => api.get('/etiquetas/escritorio/acordo'),                    // cor da etiqueta automática "Acordo"
+  salvarCorAcordo:  (cor) => api.put('/etiquetas/escritorio/acordo', { cor }),         // só administrador; '' = cor padrão
 };
 
 // ============================================================

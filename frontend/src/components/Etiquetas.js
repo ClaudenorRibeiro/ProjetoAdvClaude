@@ -59,19 +59,19 @@ export function EditorEtiquetasCinco({ rows, onChange, emUso = [], statusOpcoes 
         const travada = emUso.includes(row.slot);
         return (
           <div key={row.slot} style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <input type="color" value={row.cor} disabled={travada}
+            <input type="color" aria-label={`Cor da etiqueta ${i + 1}`} value={row.cor} disabled={travada}
               onChange={e => onChange(i, 'cor', e.target.value)}
               title={travada ? 'Cor em uso — não pode ser trocada' : ''}
               style={{
                 width: 40, height: 28, border: 'none', background: 'none', padding: 0, flexShrink: 0,
                 cursor: travada ? 'not-allowed' : 'pointer', opacity: travada ? 0.5 : 1,
               }} />
-            <input className="form-control" maxLength={60}
+            <input className="form-control" maxLength={60} aria-label={`Significado da etiqueta ${i + 1}`}
               placeholder={`Significado da cor ${i + 1} (ex.: aguardando retorno)`}
               value={row.significado} onChange={e => onChange(i, 'significado', e.target.value)}
               style={{ flex: 1, minWidth: 180 }} />
             {temStatus && (
-              <select className="form-control"
+              <select className="form-control" aria-label={`Status ao aplicar a etiqueta ${i + 1}`}
                 value={row.status_id ?? ''}
                 onChange={e => onChange(i, 'status_id', e.target.value ? Number(e.target.value) : null)}
                 title="Status que o processo assume quando esta etiqueta é aplicada"

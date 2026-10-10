@@ -474,8 +474,67 @@ async function historicoEscritorio(req, res) {
   }
 }
 
+// ------------------------------------------------------------
+// Etiqueta AUTOMÁTICA "Acordo" (processo com acordo cadastrado e não cancelado ganha etiqueta e fundo).
+// Não é um dos 5 espaços das etiquetas manuais: só a COR é escolhida (uma por escritório,
+// coluna configuracoes_escritorio.cor_etiqueta_acordo). Sem cor escolhida vale a padrão.
+// Tolerante ao banco que ainda não rodou o script sql_cor_etiqueta_acordo_para_heidi.sql.
+// ------------------------------------------------------------
+const COR_ACORDO_PADRAO = '#86efac';
+const COR_HEX = /^#[0-9a-fA-F]{6}$/;
+const COLUNA_AUSENTE = 'ER_BAD_FIELD_ERROR';
+
+// GET /api/etiquetas/escritorio/acordo — { cor, padrao, configuravel }
+async function buscarCorAcordo(req, res) {
+  try {
+    let cor = null;
+    let configuravel = true;
+    try {
+      const [rows] = await pool.execute('SELECT cor_etiqueta_acordo FROM configuracoes_escritorio LIMIT 1');
+      cor = rows[0]?.cor_etiqueta_acordo || null;
+    } catch (err) {
+      if (err.code !== COLUNA_AUSENTE) throw err;
+      configuravel = false;       // banco ainda sem a coluna: usa a cor padrão e a tela avisa
+    }
+    const valida = cor && COR_HEX.test(cor) ? cor.toLowerCase() : null;
+    return sucesso(res, { cor: valida || COR_ACORDO_PADRAO, padrao: COR_ACORDO_PADRAO, personalizada: !!valida, configuravel });
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
+// PUT /api/etiquetas/escritorio/acordo — só administrador. Body: { cor: '#rrggbb' } (vazio = voltar à cor padrão)
+async function salvarCorAcordo(req, res) {
+  const bruto = req.body?.cor;
+  if (bruto != null && typeof bruto !== 'string') return erro(res, 'Cor inválida.');
+  const cor = String(bruto || '').trim();
+  if (cor && !COR_HEX.test(cor)) return erro(res, 'Cor inválida. Escolha uma cor no seletor.');
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    let r;
+    try {
+      [r] = await conn.execute('UPDATE configuracoes_escritorio SET cor_etiqueta_acordo = ? LIMIT 1', [cor ? cor.toLowerCase() : null]);
+    } catch (err) {
+      await conn.rollback();
+      if (err.code === COLUNA_AUSENTE) return erro(res, 'O banco ainda não tem a coluna da cor. Rode o script sql_cor_etiqueta_acordo_para_heidi.sql e tente de novo.', 409);
+      throw err;
+    }
+    if (!r.affectedRows && !(await conn.execute('SELECT 1 FROM configuracoes_escritorio LIMIT 1'))[0].length) {
+      await conn.rollback();
+      return erro(res, 'Cadastre primeiro os dados do escritório.', 409);
+    }
+    await auditoria.registrar(req.usuario.id, 'configuracoes_escritorio', 'editar', 1, null, null, conn);
+    await conn.commit();
+    return sucesso(res, { cor: cor ? cor.toLowerCase() : COR_ACORDO_PADRAO, personalizada: !!cor }, 'Cor da etiqueta Acordo salva.');
+  } catch (err) {
+    try { await conn.rollback(); } catch { /* já desfeito */ }
+    return erroInterno(res, err);
+  } finally { conn.release(); }
+}
+
 module.exports = {
   listarDefinicoes, salvarDefinicoes, marcar, listarSlotsEmUso,
   listarCatalogo, salvarCatalogo, marcarEscritorio, listarSlotsEmUsoEscritorio,
-  historicoEscritorio,
+  historicoEscritorio, buscarCorAcordo, salvarCorAcordo,
 };
