@@ -171,7 +171,7 @@ export default function Dashboard() {
               <div className="card-titulo">⚠️ Processos sem movimentação</div>
               {/* Altura limitada com rolagem: o card fica compacto como os outros
                   mesmo quando há muitos processos (a lista pode ter até 20). */}
-              <div className="tabela-wrapper" style={{maxHeight: '260px', overflowY: 'auto'}}>
+              <div className="tabela-wrapper" tabIndex={0} role="region" aria-label="Processos sem movimentação" style={{maxHeight: '260px', overflowY: 'auto'}}>
                 <table className="tabela">
                   <thead>
                     <tr><th>Pasta</th><th>Processo</th><th>Última mov.</th><th>Dias</th></tr>
@@ -271,7 +271,7 @@ function TabelaTarefas({ tarefas }) {
   const PRIORIDADE_BADGE = { urgente: 'badge-vermelho', normal: 'badge-laranja', baixa: 'badge-verde' };
   return (
     // Mesma altura limitada do quadro "Processos sem movimentação" (rolagem interna).
-    <div className="tabela-wrapper" style={{maxHeight: '260px', overflowY: 'auto'}}>
+    <div className="tabela-wrapper" tabIndex={0} role="region" aria-label="Tarefas pendentes" style={{maxHeight: '260px', overflowY: 'auto'}}>
       <table className="tabela">
         <thead>
           <tr><th>Tarefa</th><th>Prioridade</th><th>Vencimento</th><th>Para</th></tr>

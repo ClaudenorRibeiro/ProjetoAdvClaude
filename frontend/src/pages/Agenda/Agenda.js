@@ -6,6 +6,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import useAcessibilidadeCalendario from './useAcessibilidadeCalendario';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay, startOfMonth, endOfMonth, isSameDay } from 'date-fns';
 import ptBR from 'date-fns/locale/pt-BR';
@@ -104,6 +105,7 @@ function fmtDataHora(v) {
 }
 
 export default function Agenda() {
+  const refCalendario = useAcessibilidadeCalendario();
   const { usuario, temPermissao, ehAdmin } = useAuth();
   // Cores efetivas dos eventos: padrão do sistema + o que o usuário personalizou em "Aparência".
   const cores = coresEfetivas(usuario?.cores_agenda);
@@ -387,7 +389,7 @@ export default function Agenda() {
 
       {/* Calendário */}
       <div className="card" style={{padding:'0'}}>
-        <div style={{height:'75vh', padding:'16px'}}>
+        <div ref={refCalendario} style={{height:'75vh', padding:'16px'}}>
           <Calendar
             localizer={localizer}
             events={eventos}

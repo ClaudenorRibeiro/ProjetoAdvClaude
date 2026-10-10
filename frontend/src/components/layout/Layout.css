@@ -968,6 +968,7 @@ body {
    subimos para 120%. !important para vencer o CSS padrão da biblioteca. */
 .rbc-row-segment .rbc-show-more {
   font-size: 120% !important;
+  color: #1e3a8a;   /* o azul padrão da lib (#3174ad) dava só 3,8:1 sobre o fundo azul claro; este passa de 4,5:1 */
 }
 
 /* Respiro vertical entre os eventos dentro de cada dia (SÓ na visão de Mês).
