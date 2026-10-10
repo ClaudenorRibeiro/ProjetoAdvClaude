@@ -357,3 +357,33 @@ test('link da audiência: a nova audiência criada pela ata também limpa o link
   const c2 = await conectarBancoTeste();
   try { assert.equal((await c2.execute("SELECT COUNT(*) n FROM audiencia WHERE data = '2031-03-04' AND hora = '09:30:00'"))[0][0].n, 1); } finally { await c2.end(); }   // a recusada não criou nada
 });
+
+test('ato sem comparecimento: conclui SEM responsável, recusa acordo/desistência/retorno e o presencial continua exigindo o advogado', async () => {
+  const ata = (id, corpo) => request(app).post(`/api/audiencias/${id}/ata`).set('Authorization', `Bearer ${tokenAdmin}`).send(corpo);
+  const criada = await criar(audiencia({ tipo_audiencia_id: 3, hora: '10:41' }));
+  const id = criada.body.dados.id;
+
+  for (const extra of [{ houve_acordo: true }, { teve_desistencia: true, motivo_desistencia: 'x' }, { teve_retorno_autos: true }]) {
+    const r = await ata(id, { resultado_texto: 'Sentença publicada.', ...extra });
+    assert.equal(r.status, 400, JSON.stringify(r.body));
+    assert.match(r.body.mensagem, /não registra acordo, desistência/i);
+  }
+  const ok = await ata(id, { resultado_texto: 'Sentença publicada.', observacoes: 'Conferir prazo de recurso.' });   // sem advogado_acompanhante
+  assert.equal(ok.status, 201, JSON.stringify(ok.body));
+  const det = await request(app).get(`/api/audiencias/${id}/detalhes-ata`).set('Authorization', `Bearer ${tokenAdmin}`);
+  assert.equal(det.body.dados.ata.advogado_id, null);
+  assert.equal(det.body.dados.ata.advogado_freela_id, null);
+  assert.equal(det.body.dados.ata.resultado, 'Sentença publicada.');
+  assert.ok(det.body.dados.ata.criado_por_nome, 'quem concluiu fica registrado');
+
+  // editar a conclusão também não aceita acordo/desistência/retorno novos
+  const ed = await request(app).put(`/api/audiencias/${id}/ata`).set('Authorization', `Bearer ${tokenAdmin}`).send({ houve_acordo: true });
+  assert.equal(ed.status, 400, JSON.stringify(ed.body));
+  assert.match(ed.body.mensagem, /não registra acordo, desistência/i);
+
+  // presencial: o advogado acompanhante continua obrigatório
+  const pres = await criar(audiencia({ modalidade: 'presencial', tipo_audiencia_id: 4, hora: '10:42' }));
+  const semAdv = await ata(pres.body.dados.id, { teve_prazo: true });
+  assert.equal(semAdv.status, 400);
+  assert.match(semAdv.body.mensagem, /advogado que acompanhou/i);
+});

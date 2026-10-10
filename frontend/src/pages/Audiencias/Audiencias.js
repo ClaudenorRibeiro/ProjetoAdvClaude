@@ -364,15 +364,15 @@ export default function Audiencias() {
                           onMarcar: (slot) => marcarEtq(a.id, slot)
                         }),
                         // Registrar o resultado/ata só após o horário, em status pendente e com a permissão de ATA.
-                        { label: a.modalidade === 'sem_comparecimento' ? 'Registrar resultado' : 'Registrar ata', icone: '📝', oculto: !((a.status === 'agendada' || a.status === 'adiada') && audienciaJaPassou(a.data, a.hora) && temPermissao('audiencias.ata', 'visualizar')), onClick: () => setModalAta(a) },
-                        { label: 'Gerar documento', icone: '📄', oculto: !temPermissao('documentos', 'cadastrar') || ['remarcada', 'cancelada'].includes(a.status), gerarDoc: { ancoraTipo: 'audiencia', ancoraId: a.id } },
+                        { label: a.modalidade === 'sem_comparecimento' ? 'Concluir' : 'Registrar ata', icone: '📝', oculto: !((a.status === 'agendada' || a.status === 'adiada') && audienciaJaPassou(a.data, a.hora) && temPermissao('audiencias.ata', 'visualizar')), onClick: () => setModalAta(a) },
+                        { label: 'Gerar documento', icone: '📄', oculto: !temPermissao('documentos', 'cadastrar') || a.modalidade === 'sem_comparecimento' || ['remarcada', 'cancelada'].includes(a.status), gerarDoc: { ancoraTipo: 'audiencia', ancoraId: a.id } },
                         { label: 'Cancelar', icone: '✖', oculto: !((a.status === 'agendada' || a.status === 'adiada') && temPermissao('audiencias', 'alterar')), onClick: () => setModalCancelar(a) },
                         { label: 'Remarcar', icone: '🔁', oculto: !((a.status === 'agendada' || a.status === 'adiada') && temPermissao('audiencias', 'alterar')), onClick: () => setModalRemarcar(a) },
                         { label: 'Marcar impressa', icone: '🖨️', oculto: !(['realizada', 'adiada', 'acordo', 'cancelada'].includes(a.status) && !a.ata_impressa && temPermissao('audiencias.ata', 'visualizar')), onClick: () => marcarAtaImpressa(a.id) },
                         { label: 'Reverter status', icone: '↩️', oculto: !(a.status === 'realizada' && ehAdmin), onClick: () => setModalReverter(a) },
                         { label: 'Editar', icone: '✏️', oculto: !podeEditar(a), onClick: () => { setModalEditar(a); setModalEditarLeitura(false); } },
                         { label: 'Histórico', icone: '📋', onClick: () => setModalHistorico(a) },
-                        { label: a.modalidade === 'sem_comparecimento' ? 'Detalhes do resultado' : 'Detalhes da ATA', icone: '📝', oculto: !a.tem_ata, onClick: () => setModalDetalhesAta(a) },
+                        { label: a.modalidade === 'sem_comparecimento' ? 'Detalhes da conclusão' : 'Detalhes da ATA', icone: '📝', oculto: !a.tem_ata, onClick: () => setModalDetalhesAta(a) },
                         { label: 'Excluir', icone: '🗑️', perigo: true, oculto: !podeExcluir(a), onClick: () => setConfirmarExcluir(a) },
                       ]} />
                     </td>
@@ -622,17 +622,19 @@ export function ModalDetalhesAta({ audiencia, onFechar, onEditar }) {
     <div className="modal-overlay">
       <div className="modal-box modal-grande" style={{ maxWidth: 820 }}>
         <div className="modal-header">
-          <h3>{ehSemComparecimento ? 'Detalhes do resultado' : 'Detalhes da ATA'} — {formatarData(audiencia.data)} {audiencia.hora?.slice(0, 5)}</h3>
+          <h3>{ehSemComparecimento ? 'Detalhes da conclusão' : 'Detalhes da ATA'} — {formatarData(audiencia.data)} {audiencia.hora?.slice(0, 5)}</h3>
           <button className="modal-fechar" onClick={onFechar}>✕</button>
         </div>
         <div className="modal-body">
           {carregando ? <div className="loading">Carregando...</div> : !dados ? (
-            <p className="lista-vazia">{ehSemComparecimento ? 'Não há resultado disponível para este ato.' : 'Não há detalhes disponíveis para esta ATA.'}</p>
+            <p className="lista-vazia">{ehSemComparecimento ? 'Não há conclusão registrada para este ato.' : 'Não há detalhes disponíveis para esta ATA.'}</p>
           ) : <>
             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12, marginBottom: 14, fontSize: 13 }}>
               <div><strong>Processo:</strong> {dados.ata.processo_numero} &nbsp; <strong>Pasta:</strong> {String(dados.ata.pasta_numero || '').padStart(4, '0')}</div>
-              <div style={{ marginTop: 5 }}><strong>Registrada por:</strong> {dados.ata.criado_por_nome || '—'} em {formatarDataHora(dados.ata.criado_em)}</div>
-              <div style={{ marginTop: 5 }}><strong>{ehSemComparecimento ? 'Responsável pelo acompanhamento:' : 'Advogado(a) acompanhante:'}</strong> {dados.ata.advogado_nome || 'Não informado'}</div>
+              <div style={{ marginTop: 5 }}><strong>{ehSemComparecimento ? 'Concluída por:' : 'Registrada por:'}</strong> {dados.ata.criado_por_nome || '—'} em {formatarDataHora(dados.ata.criado_em)}</div>
+              {(!ehSemComparecimento || dados.ata.advogado_id || dados.ata.advogado_freela_id) && (
+                <div style={{ marginTop: 5 }}><strong>{ehSemComparecimento ? 'Responsável pelo acompanhamento:' : 'Advogado(a) acompanhante:'}</strong> {dados.ata.advogado_nome || 'Não informado'}</div>
+              )}
               {dados.ata.resultado && dados.ata.resultado !== 'realizada' && <div style={{ marginTop: 8 }}><strong>{ehSemComparecimento ? 'O que aconteceu no ato processual:' : 'Resumo / termos:'}</strong><br />{dados.ata.resultado}</div>}
               {dados.ata.observacoes && <div style={{ marginTop: 8 }}><strong>Observações:</strong><br />{dados.ata.observacoes}</div>}
             </div>
@@ -652,7 +654,7 @@ export function ModalDetalhesAta({ audiencia, onFechar, onEditar }) {
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onFechar}>Fechar</button>
           {onEditar && dados && dados.ata.audiencia_status === 'realizada' && (
-            <button className="btn btn-primary" onClick={onEditar}>{ehSemComparecimento ? 'Editar resultado' : 'Editar ata'}</button>
+            <button className="btn btn-primary" onClick={onEditar}>{ehSemComparecimento ? 'Editar conclusão' : 'Editar ata'}</button>
           )}
         </div>
       </div>
@@ -2628,7 +2630,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
   async function salvar() {
     setAviso('');
     if (ehSemComparecimento && !String(form.resultado_texto || '').trim()) {
-      setAviso('Descreva o que aconteceu no ato processual antes de registrar o resultado.');
+      setAviso('Descreva o que aconteceu no ato processual antes de concluir.');
       return;
     }
     // Testemunha(s) é complementar: não basta sozinha para concluir a ATA.
@@ -2637,10 +2639,8 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
       return;
     }
     // "Ninguém" já é uma escolha válida, mas a ATA sempre exige uma escolha explícita.
-    if (!advogadoSel) {
-      setAviso(ehSemComparecimento
-        ? 'Informe o responsável pelo acompanhamento (ou selecione "Não informado").'
-        : 'Informe o advogado que acompanhou a audiência (ou selecione "Ninguém").');
+    if (!ehSemComparecimento && !advogadoSel) {
+      setAviso('Informe o advogado que acompanhou a audiência (ou selecione "Ninguém").');
       return;
     }
     if (itens.nova_audiencia && !novaAudienciaRascunho) {
@@ -2688,7 +2688,8 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
       // registro: tudo como foi digitado; edição: só o que a pessoa mudou (o resto fica como está na ata)
       ...(!modoEdicao || (resumoDigitado || '') !== textosOriginais.current.resultado ? { resultado_texto: resumoDigitado } : {}),
       ...(!modoEdicao || (obsDigitada || '') !== textosOriginais.current.observacoes ? { observacoes: obsDigitada } : {}),
-      advogado_acompanhante: advogadoSel || '',
+      // ato sem comparecimento não tem advogado acompanhante: o campo nem é enviado (quem concluiu fica no Histórico)
+      ...(ehSemComparecimento ? {} : { advogado_acompanhante: advogadoSel || '' }),
       houve_acordo: itens.acordo ? 1 : 0,
       nova_audiencia: itens.nova_audiencia ? 1 : 0,
       teve_prazo: itens.prazo ? 1 : 0,
@@ -2712,10 +2713,10 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
     try {
       if (modoEdicao) {
         await audienciasAPI.editarAta(audiencia.id, payload);
-        toast.success(ehSemComparecimento ? 'Resultado atualizado com sucesso!' : 'Ata atualizada com sucesso!');
+        toast.success(ehSemComparecimento ? 'Conclusão atualizada com sucesso!' : 'Ata atualizada com sucesso!');
       } else {
         await audienciasAPI.registrarAta(audiencia.id, payload);
-        toast.success(ehSemComparecimento ? 'Resultado registrado com sucesso!' : 'Ata registrada com sucesso!');
+        toast.success(ehSemComparecimento ? 'Audiência concluída com sucesso!' : 'Ata registrada com sucesso!');
       }
       onFechar(true);
     } catch (err) { setAviso(err.response?.data?.mensagem || (modoEdicao ? 'Não foi possível salvar a ata. Tente novamente.' : 'Não foi possível registrar o resultado. Tente novamente.')); }
@@ -2726,7 +2727,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
     <div className="modal-overlay">
       <div className="modal-box modal-grande">
         <div className="modal-header">
-          <h3>{modoEdicao ? (ehSemComparecimento ? 'Editar resultado' : 'Editar Ata') : (ehSemComparecimento ? 'Registrar resultado' : 'Registrar Ata')} — {formatarData(audiencia.data)} {audiencia.hora?.slice(0, 5)}</h3>
+          <h3>{modoEdicao ? (ehSemComparecimento ? 'Editar conclusão' : 'Editar Ata') : (ehSemComparecimento ? 'Concluir' : 'Registrar Ata')} — {formatarData(audiencia.data)} {audiencia.hora?.slice(0, 5)}</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
         </div>
         <div className="modal-body">
@@ -2746,8 +2747,8 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
             </div>
           )}
 
-          {/* Advogado(a) que acompanhou a audiência — usuários advogados + freelas (com OAB); "(…)" cadastra novo */}
-          <div className="form-group">
+          {/* Advogado(a) que acompanhou a audiência — usuários advogados + freelas (com OAB); "(…)" cadastra novo. Ato sem comparecimento não tem. */}
+          {!ehSemComparecimento && (<div className="form-group">
             <label className="form-label obrigatorio">{ehSemComparecimento ? 'Responsável pelo acompanhamento' : 'Advogado(a) que acompanhou a audiência'}</label>
             <div style={{ display: 'flex', gap: '6px' }}>
               <select aria-label={ehSemComparecimento ? 'Responsável pelo acompanhamento' : 'Advogado(a) que acompanhou a audiência'}
@@ -2774,7 +2775,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
                 style={{ padding: '0 10px', border: '1px solid #ddd', borderRadius: '6px', background: '#f8fafc', cursor: 'pointer', fontSize: '16px', whiteSpace: 'nowrap' }}
                 onClick={() => setModalNovoFreela(true)}>…</button>
             </div>
-          </div>
+          </div>)}
 
           <div className="form-group">
             <label className={`form-label ${ehSemComparecimento ? 'obrigatorio' : ''}`}>{ehSemComparecimento ? 'O que aconteceu no ato processual?' : 'Resumo / Termos'}</label>
@@ -2793,7 +2794,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
                 ['nova_audiencia', 'Nova audiência'], ['alvara', 'Alvará'],
                 ['testemunha', 'Testemunha(s)'], ['desistencia', 'Desistência da Ação'], ['retorno_autos', 'Retornem aos autos'],
                 ['tarefa', 'Tarefa'],
-              ].filter(([k]) => !ehSemComparecimento || k !== 'testemunha').map(([k, rotulo]) => (
+              ].filter(([k]) => !ehSemComparecimento || !['testemunha', 'acordo', 'desistencia', 'retorno_autos'].includes(k)).map(([k, rotulo]) => (
                 <label key={k} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', cursor: 'pointer' }}>
                   <input type="checkbox" checked={itens[k]} disabled={modoEdicao && !!jaTem[k]} onChange={() => toggleItem(k)} />
                   {rotulo}{modoEdicao && jaTem[k] ? ' (já registrado)' : ''}
@@ -2954,7 +2955,7 @@ export function ModalRegistrarAta({ audiencia, onFechar, tipos = [], onTiposChan
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
           <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
-            {salvando ? 'Salvando...' : modoEdicao ? 'Salvar alterações' : ehSemComparecimento ? 'Registrar resultado' : 'Registrar Ata'}
+            {salvando ? 'Salvando...' : modoEdicao ? 'Salvar alterações' : ehSemComparecimento ? 'Concluir' : 'Registrar Ata'}
           </button>
         </div>
       </div>

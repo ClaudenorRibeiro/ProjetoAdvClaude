@@ -497,6 +497,43 @@ async function criarAtaDaA4() {
 const linhaA4 = (page) => page.locator('tbody tr').filter({ hasText: '10/01/2001' });
 const caixa = (j, nome) => j.getByRole('checkbox', { name: nome });
 
+test('@critical Aba Audiências da pasta: ato sem comparecimento (sentença) tem "Concluir", sem "Registrar ata" nem "Gerar documento", e a janela não tem responsável, acordo, desistência nem retorno aos autos', async ({ page }) => {
+  const sentenca = (await noBanco(
+    `INSERT INTO audiencia (processo_id, tipo_audiencia_id, data, hora, modalidade, status, criado_por) VALUES (?, ?, '2001-03-10', '12:00', 'sem_comparecimento', 'agendada', 1)`,
+    [d.proc2, d.julgamento])).insertId;
+  await loginPelaTela(page);
+  await abrirAba(page, CNJ2);
+  const linhaS = page.locator('tbody tr').filter({ hasText: '10/03/2001' });
+  await abrirMenuAcoes(page, linhaS);
+  await expect(page.getByRole('button', { name: 'Registrar ata' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Gerar documento' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Concluir', exact: true }).click();
+  const j = janela(page, 'Concluir — 10/03/2001 12:00');
+  await expect(j).toBeVisible();
+  await expect(j.getByText('Responsável pelo acompanhamento')).toHaveCount(0);
+  for (const fora of ['Acordo', 'Desistência da Ação', 'Retornem aos autos', 'Testemunha(s)']) await expect(j.getByText(fora, { exact: true })).toHaveCount(0);
+  for (const dentro of ['Prazo', 'Perícia', 'Nova audiência', 'Alvará', 'Tarefa']) await expect(j.getByRole('checkbox', { name: dentro })).toBeVisible();
+  await semViolacoes(page, 'janela Concluir');
+  await j.getByRole('button', { name: 'Concluir', exact: true }).click();                       // sem texto: recusa
+  await expect(j.getByText('Descreva o que aconteceu no ato processual antes de concluir.')).toBeVisible();
+  await j.getByPlaceholder('Descreva o resultado disponibilizado ou a baixa realizada...').fill('Sentença de procedência publicada.');
+  await j.getByRole('button', { name: 'Concluir', exact: true }).click();
+  await expect(j).toHaveCount(0);
+  const ata = (await noBanco('SELECT resultado, advogado_id, advogado_freela_id, criado_por FROM ata_audiencia WHERE audiencia_id = ?', [sentenca]))[0];
+  expect({ r: ata.resultado, adv: ata.advogado_id, freela: ata.advogado_freela_id, por: ata.criado_por }).toEqual({ r: 'Sentença de procedência publicada.', adv: null, freela: null, por: 1 });
+  // depois: detalhes e edição da conclusão, também sem responsável
+  await abrirMenuAcoes(page, linhaS);
+  await page.getByRole('button', { name: 'Detalhes da conclusão' }).click();
+  const det = janela(page, 'Detalhes da conclusão — 10/03/2001 12:00');
+  await expect(det.getByText('Sentença de procedência publicada.')).toBeVisible();
+  await expect(det.getByText('Concluída por:')).toBeVisible();
+  await expect(det.getByText('Responsável pelo acompanhamento:')).toHaveCount(0);
+  await det.getByRole('button', { name: 'Editar conclusão' }).click();
+  const ed = janela(page, 'Editar conclusão — 10/03/2001 12:00');
+  await expect(ed).toBeVisible();
+  await expect(ed.getByText('Responsável pelo acompanhamento')).toHaveCount(0);
+});
+
 test('@critical Aba Audiências da pasta: "Detalhes da ATA" só aparece na audiência com ata; "Editar ata" corrige o advogado e as observações e acrescenta uma tarefa esquecida', async ({ page }) => {
   const ataId = await criarAtaDaA4();
   const freela = (await noBanco("INSERT INTO advogados_freela (nome, oab) VALUES ('Freela E2E da ata', 'OAB 123')")).insertId;

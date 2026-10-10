@@ -1587,13 +1587,13 @@ export default function PastaDetalhe() {
                         <td style={{ whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
                             <MenuAcoes itens={[
                               // Registrar ata — só após o horário da audiência, em status pendente e com a permissão de ATA.
-                              { label: 'Registrar ata', icone: '📝', oculto: !(['agendada','adiada'].includes(a.status) && audienciaJaPassou(a.data, a.hora) && temPermissao('audiencias.ata','visualizar')), onClick: () => setAudienciaAta(a) },
-                              { label: 'Gerar documento', icone: '📄', oculto: !temPermissao('documentos','cadastrar'), gerarDoc: { ancoraTipo: 'audiencia', ancoraId: a.id } },
+                              { label: a.modalidade === 'sem_comparecimento' ? 'Concluir' : 'Registrar ata', icone: '📝', oculto: !(['agendada','adiada'].includes(a.status) && audienciaJaPassou(a.data, a.hora) && temPermissao('audiencias.ata','visualizar')), onClick: () => setAudienciaAta(a) },
+                              { label: 'Gerar documento', icone: '📄', oculto: !temPermissao('documentos','cadastrar') || a.modalidade === 'sem_comparecimento', gerarDoc: { ancoraTipo: 'audiencia', ancoraId: a.id } },
                               { label: 'Cancelar', icone: '✖', oculto: !(['agendada','adiada'].includes(a.status) && temPermissao('audiencias','alterar')), onClick: () => setAudienciaCancelando(a) },
                               { label: 'Remarcar', icone: '🔁', oculto: !(['agendada','adiada'].includes(a.status) && temPermissao('audiencias','alterar')), onClick: () => setAudienciaRemarcando(a) },
                               { label: 'Editar', icone: '✏️', oculto: !podeEditarAud(a), onClick: () => { setAudienciaEditando(a); setAudienciaEmLeitura(false); } },
                               { label: 'Histórico', icone: '📋', onClick: () => setAudienciaHistorico(a) },
-                              { label: a.modalidade === 'sem_comparecimento' ? 'Detalhes do resultado' : 'Detalhes da ATA', icone: '📝', oculto: !a.tem_ata, onClick: () => setAudienciaDetalhesAta(a) },
+                              { label: a.modalidade === 'sem_comparecimento' ? 'Detalhes da conclusão' : 'Detalhes da ATA', icone: '📝', oculto: !a.tem_ata, onClick: () => setAudienciaDetalhesAta(a) },
                               { label: 'Excluir', icone: '🗑️', perigo: true, oculto: !podeExcluirAud(a), onClick: () => excluirAudiencia(a) },
                             ]} />
                         </td>

@@ -105,6 +105,8 @@ function modalidadeAudienciaValida(modalidade) {
   return MODALIDADES_AUDIENCIA.has(normalizarModalidadeAudiencia(modalidade));
 }
 
+const MSG_ATO_SEM_ACORDO = 'Um ato sem comparecimento não registra acordo, desistência da ação nem retorno aos autos.';
+
 function semComparecimento(modalidade) {
   return normalizarModalidadeAudiencia(modalidade) === 'sem_comparecimento';
 }
@@ -1373,6 +1375,9 @@ async function registrarAta(req, res) {
   if (!ehSemComparecimento && !temItemSelecionado) {
     return erro(res, 'Selecione ao menos um item que ocorreu na audiência antes de registrar a ata.');
   }
+  if (ehSemComparecimento && (houve_acordo || teve_desistencia || teve_retorno_autos)) {
+    return erro(res, MSG_ATO_SEM_ACORDO);
+  }
   if (teve_desistencia && !String(motivo_desistencia || '').trim()) {
     return erro(res, 'Informe o motivo da desistência da ação.');
   }
@@ -1394,13 +1399,15 @@ async function registrarAta(req, res) {
   }
 
   // A ATA exige uma escolha explícita. "ninguem" é válido quando a parte compareceu sozinha.
-  if (!advogado_acompanhante) {
-    return erro(res, ehSemComparecimento
-      ? 'Informe o responsável pelo acompanhamento (ou selecione "Não informado").'
-      : 'Informe o advogado que acompanhou a audiência (ou selecione "Ninguém").');
+  // Ato SEM comparecimento (ex.: sentença) não tem ninguém acompanhando: o campo não existe e fica "Não informado"; quem concluiu e quando
+  // ficam em criado_por/criado_em e no Histórico.
+  if (!advogado_acompanhante && !ehSemComparecimento) {
+    return erro(res, 'Informe o advogado que acompanhou a audiência (ou selecione "Ninguém").');
   }
 
-  const { advogado_id, advogado_freela_id, sem_advogado } = lerAdvogadoDaAta(advogado_acompanhante);
+  const { advogado_id, advogado_freela_id, sem_advogado } = advogado_acompanhante
+    ? lerAdvogadoDaAta(advogado_acompanhante)
+    : { advogado_id: null, advogado_freela_id: null, sem_advogado: 1 };
 
   const conn = await pool.getConnection();
   try {
@@ -1533,6 +1540,7 @@ async function editarAta(req, res) {
     const acordoNovo = querAcordo && !ata.houve_acordo;
     const desistenciaNova = querDesistencia && !ata.teve_desistencia;
     const retornoNovo = querRetorno && !ata.teve_retorno_autos;
+    if (ehSemComparecimento && (acordoNovo || desistenciaNova || retornoNovo)) throw erroDaAta(MSG_ATO_SEM_ACORDO);
     if (nova_audiencia_dados && ata.nova_audiencia) throw erroDaAta('Esta ata já tem nova audiência. Cadastre outra pela tela de Audiências.');
     if (desistenciaNova && !String(corpo.motivo_desistencia || '').trim()) throw erroDaAta('Informe o motivo da desistência da ação.');
     if (corpo.comentario_retorno_autos != null && !String(corpo.comentario_retorno_autos).trim()) {
