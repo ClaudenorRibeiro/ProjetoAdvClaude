@@ -20,7 +20,7 @@ import { ModalNovaAudiencia, ModalEditarAudiencia, ModalCancelarAudiencia, Modal
 // Modais de perícia reutilizados da tela de Perícias (aba Perícias da pasta)
 import { ModalPericia, ModalCancelar as ModalCancelarPericia, ModalRemarcar as ModalRemarcarPericia, ModalMarcarRemarcada as ModalMarcarRemarcadaPericia, ModalHistorico as ModalHistoricoPericia } from '../Pericias/Pericias';
 // Componentes financeiros reutilizados da tela Financeiro (aba Financeiro da pasta — por processo)
-import { ModalLancamento as ModalLancamentoFin, ModalAcordo as ModalAcordoFin, AcordoBloco, ModalHistoricoLancamento, RepassesView, montarPendentes } from '../Financeiro/Financeiro';
+import { ModalLancamento as ModalLancamentoFin, ModalAcordo as ModalAcordoFin, AcordoBloco, ModalHistoricoLancamento, RepassesView, montarPendentes, ExtratoContaCorrente } from '../Financeiro/Financeiro';
 import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
@@ -1690,46 +1690,11 @@ export default function PastaDetalhe() {
                     </strong>
                   </div>
                 </div>
-                <div className="tabela-wrapper">
-                  <table className="tabela">
-                    <thead>
-                      <tr><th>Data</th><th>Descrição</th><th>Tipo</th>
-                        <th style={{ textAlign: 'right' }}>Valor</th><th>Ações</th></tr>
-                    </thead>
-                    <tbody>
-                      {(contaCorrente.lancamentos || []).map(l => {
-                        const ehAcordo = l.origem !== 'manual';
-                        return (
-                          <tr key={l.id}>
-                            <td style={{ whiteSpace: 'nowrap' }}>{formatarData(l.data)}</td>
-                            <td>{l.descricao}</td>
-                            <td><span className={`badge ${l.tipo === 'entrada' ? 'badge-verde' : 'badge-vermelho'}`}>{l.tipo === 'entrada' ? 'Entrada' : 'Saída'}</span></td>
-                            <td style={{ textAlign: 'right' }} className={l.tipo === 'entrada' ? 'valor-positivo' : 'valor-negativo'}>
-                              {l.tipo === 'saida' ? '−' : '+'}{formatarMoeda(l.valor)}
-                            </td>
-                            <td style={{ whiteSpace: 'nowrap' }}>
-                              {ehAcordo ? <span style={{ fontSize: 11, color: '#5b6472' }}>(acordo)</span> : (
-                                <MenuAcoes itens={[
-                                  { label: 'Editar', icone: '✏️',
-                                    oculto: !temPermissao('financeiro','alterar'),
-                                    onClick: () => { setLancEditandoFin(l); setModalLancamento(true); } },
-                                  { label: 'Histórico', icone: '📋',
-                                    onClick: () => setHistLancamentoFin(l) },
-                                  { label: 'Excluir', icone: '🗑️', perigo: true,
-                                    oculto: !temPermissao('financeiro','excluir'),
-                                    onClick: () => excluirLancamentoFin(l) },
-                                ]} />
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  {(!contaCorrente.lancamentos || contaCorrente.lancamentos.length === 0) && (
-                    <p className="lista-vazia">Nenhum lançamento neste processo</p>
-                  )}
-                </div>
+                <ExtratoContaCorrente conta={contaCorrente}
+                  podeAlterar={temPermissao('financeiro', 'alterar')} podeExcluir={temPermissao('financeiro', 'excluir')}
+                  onEditar={l => { setLancEditandoFin(l); setModalLancamento(true); }}
+                  onHistorico={setHistLancamentoFin}
+                  onExcluir={excluirLancamentoFin} />
               </>
             )}
           </div>

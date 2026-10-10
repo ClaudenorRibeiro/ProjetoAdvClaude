@@ -16,6 +16,7 @@ async function semViolacoes(page, rotulo) {
   const v = await violacoesGraves(page);
   expect.soft(v, `acessibilidade — ${rotulo}: ${JSON.stringify(v, null, 1)}`).toEqual([]);   // soft: mostra TODOS os problemas
 }
+const doAcordoSaldo = (page) => page.locator('tbody tr').filter({ hasText: 'Recebimento do acordo' }).locator('td').nth(5);
 const aviso = (page, texto) => expect(page.getByText(texto).first()).toBeVisible();
 const janela = (page, titulo) => page.locator('.modal-box').filter({ has: page.getByRole('heading', { name: titulo }) }).last();
 const CNJ1 = '9400001-00.2026.5.15.0001';
@@ -95,8 +96,8 @@ test('@critical Aba Financeiro: sem processo escolhido pede o processo; com proc
   await filtroProcesso(page).selectOption({ label: CNJ1 }); await aguardarTelaPronta(page);
   for (const nome of ['+ Lançamento', '+ Novo Acordo', '+ Novo Alvará']) await expect(page.getByRole('button', { name: nome })).toBeVisible();
   await expect(page.getByText('Conta corrente')).toBeVisible();
-  await expect(page.getByText(/1\.049,50/)).toBeVisible();                                   // 1.000 − 250,50 + 300
-  await expect(page.getByRole('columnheader')).toHaveText(['Data', 'Descrição', 'Tipo', 'Valor', 'Ações']);
+  await expect(page.getByText(/1\.049,50/).first()).toBeVisible();                                   // 1.000 − 250,50 + 300
+  await expect(page.getByRole('columnheader')).toHaveText(['Data', 'Descrição', 'Tipo', 'Entrada', 'Saída', 'Saldo', 'Ações']);   // as mesmas colunas do Financeiro geral
   await expect(page.locator('tbody tr')).toHaveCount(3);
   const l1 = linha(page, 'Adiantamento do cliente');
   await expect(l1.locator('td').nth(0)).toHaveText('01/03/2099');
@@ -104,9 +105,19 @@ test('@critical Aba Financeiro: sem processo escolhido pede o processo; com proc
   await expect(l1.locator('td').nth(3)).toContainText('+');
   await expect(l1.locator('td').nth(3)).toContainText('1.000,00');
   await expect(linha(page, 'Custas do cartório').locator('td').nth(2)).toHaveText('Saída');
-  await expect(linha(page, 'Custas do cartório').locator('td').nth(3)).toContainText('250,50');
+  await expect(l1.locator('td').nth(4)).toHaveText('');                                      // entrada não tem valor na coluna Saída
+  await expect(linha(page, 'Custas do cartório').locator('td').nth(3)).toHaveText('');
+  await expect(linha(page, 'Custas do cartório').locator('td').nth(4)).toContainText('250,50');
+  // Saldo acumulado: no Diário cada dia mostra o seu; no Mensal (todos em março) só o último lançamento do mês
+  await expect(l1.locator('td').nth(5)).toContainText('1.000,00');
+  await expect(linha(page, 'Custas do cartório').locator('td').nth(5)).toContainText('749,50');
+  await expect(doAcordoSaldo(page)).toContainText('1.049,50');
+  await page.getByRole('button', { name: 'Mensal', exact: true }).click();
+  await expect(l1.locator('td').nth(5)).toHaveText('');
+  await expect(doAcordoSaldo(page)).toContainText('1.049,50');
+  await page.getByRole('button', { name: 'Diário', exact: true }).click();
   const doAcordo = linha(page, 'Recebimento do acordo');
-  await expect(doAcordo.getByText('(acordo)')).toBeVisible();
+  await expect(doAcordo.getByText('(parcela de acordo)')).toBeVisible();
   await expect(doAcordo.getByTitle('Mais ações')).toHaveCount(0);                           // lançamento de acordo não se mexe aqui
   await expect(page.getByText('0/2 parcelas pagas')).toBeVisible();
   await expect(page.getByText('Acordo 1')).toBeVisible();
@@ -141,7 +152,7 @@ test('@critical Novo lançamento: janela, obrigatórios, grava entrada e saída,
   expect(e.length, 'o lançamento não foi gravado (ou o título não foi ajustado)').toBe(1);
   expect({ t: e[0].tipo, v: Number(e[0].valor), o: e[0].origem, d: e[0].dia }).toEqual({ t: 'entrada', v: 500, o: 'manual', d: '2099-03-10' });
   await expect(linha(page, 'Depósito Do Réu')).toBeVisible();
-  await expect(page.getByText(/1\.549,50/)).toBeVisible();                                   // saldo: 1.049,50 + 500
+  await expect(page.getByText(/1\.549,50/).first()).toBeVisible();                                   // saldo: 1.049,50 + 500
 });
 
 test('@critical Editar lançamento: janela preenchida, salva, o histórico mostra De → Para; só o lançamento manual tem menu', async ({ page }) => {
@@ -181,7 +192,7 @@ test('@critical Excluir lançamento: pede confirmação, "Cancelar" não apaga, 
   await aviso(page, 'Lançamento removido');
   expect((await noBanco('SELECT id FROM conta_corrente WHERE id = ?', [d.l2])).length).toBe(0);
   await expect(page.locator('tbody tr')).toHaveCount(2);
-  await expect(page.getByText(/1\.300,00/)).toBeVisible();                                   // 1.000 + 300
+  await expect(page.getByText(/1\.300,00/).first()).toBeVisible();                                   // 1.000 + 300
 });
 
 test('@critical Novo acordo: janela, obrigatórios, data retroativa pede confirmação, gera as parcelas, salva e aparece o bloco "Acordo 2"', async ({ page }) => {
@@ -323,7 +334,7 @@ test('@critical Receber e desfazer parcela pela aba: pede data, conta e forma; g
   expect(par).toEqual({ status: 'pago', dia: '2099-03-15' });
   await expect(page.getByText('1/2 parcelas pagas')).toBeVisible();
   expect((await noBanco("SELECT COUNT(*) AS n FROM conta_corrente WHERE parcela_id = ? AND tipo = 'entrada'", [d.pa1]))[0].n).toBe(1);
-  await expect(page.getByText(/2\.049,50/)).toBeVisible();                                    // 1.049,50 + 1.000 recebidos
+  await expect(page.getByText(/2\.049,50/).first()).toBeVisible();                                    // 1.049,50 + 1.000 recebidos
   // desfazer
   await bloco().getByRole('button', { name: /Parcelas/ }).click();
   await abrirMenuAcoes(page, linha(page, 'Recebida'));

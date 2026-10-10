@@ -83,7 +83,6 @@ export default function Financeiro() {
   const [confirmar, setConfirmar]             = useState(null);
   const [aba, setAba] = useState('processo');   // 'processo' (por processo) | 'repasses' (worklist global)
   const [acordoTipoNovo, setAcordoTipoNovo] = useState('acordo'); // tipo ao criar: 'acordo' | 'alvara'
-  const [periodoSaldo, setPeriodoSaldo] = useState('diario'); // agrupamento da coluna Saldo do extrato: 'diario' | 'semanal' | 'mensal'
   // Guarda contra resposta desatualizada: trocar de processo rápido pode fazer a busca do
   // processo anterior responder DEPOIS da do processo novo e sobrescrever a tela com o
   // saldo/acordos errados (auditoria 23/09).
@@ -258,82 +257,10 @@ export default function Financeiro() {
                 </strong>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-              <button className={`btn ${periodoSaldo === 'diario' ? 'btn-primary' : 'btn-outline'}`} style={{ fontSize: 12, padding: '4px 10px' }}
-                onClick={() => setPeriodoSaldo('diario')}>Diário</button>
-              <button className={`btn ${periodoSaldo === 'semanal' ? 'btn-primary' : 'btn-outline'}`} style={{ fontSize: 12, padding: '4px 10px' }}
-                onClick={() => setPeriodoSaldo('semanal')}>Semanal</button>
-              <button className={`btn ${periodoSaldo === 'mensal' ? 'btn-primary' : 'btn-outline'}`} style={{ fontSize: 12, padding: '4px 10px' }}
-                onClick={() => setPeriodoSaldo('mensal')}>Mensal</button>
-            </div>
-            <div className="tabela-wrapper" tabIndex={0} role="region" aria-label="Lançamentos da conta corrente">
-              <table className="tabela">
-                <thead>
-                  <tr>
-                    <th>Data</th><th>Descrição</th><th>Tipo</th>
-                    <th style={{ textAlign: 'right' }}>Entrada</th>
-                    <th style={{ textAlign: 'right' }}>Saída</th>
-                    <th style={{ textAlign: 'right' }}>Saldo</th>
-                    <th>Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(() => {
-                    const lista = conta.lancamentos || [];
-                    const dataAncora = lista[0]?.data;
-                    return lista.map((l, i) => {
-                      const ehAcordo = l.origem !== 'manual';
-                      const grupoAtual = grupoSaldo(l.data, dataAncora, periodoSaldo);
-                      const grupoProximo = i + 1 < lista.length ? grupoSaldo(lista[i + 1].data, dataAncora, periodoSaldo) : null;
-                      const ultimoDoGrupo = grupoProximo === null || grupoProximo !== grupoAtual;
-                      return (
-                      <tr key={l.id}>
-                        <td style={{ whiteSpace: 'nowrap' }}>{formatarData(l.data)}</td>
-                        <td>{l.descricao}</td>
-                        <td>
-                          <span className={`badge ${l.tipo === 'entrada' ? 'badge-verde' : 'badge-vermelho'}`}>
-                            {l.tipo === 'entrada' ? 'Entrada' : 'Saída'}
-                          </span>
-                        </td>
-                        <td style={{ textAlign: 'right' }} className="valor-positivo">
-                          {l.tipo === 'entrada' ? `+${formatarMoeda(l.valor)}` : ''}
-                        </td>
-                        <td style={{ textAlign: 'right' }} className="valor-negativo">
-                          {l.tipo === 'saida' ? `−${formatarMoeda(l.valor)}` : ''}
-                        </td>
-                        <td style={{ textAlign: 'right', fontWeight: ultimoDoGrupo ? 600 : 400 }}>
-                          {ultimoDoGrupo && (
-                            <span style={{ color: (l.saldo_acumulado || 0) >= 0 ? '#047857' : '#dc2626' }}>
-                              {formatarMoeda(l.saldo_acumulado)}
-                            </span>
-                          )}
-                        </td>
-                        <td style={{ whiteSpace: 'nowrap' }}>
-                          {ehAcordo ? (
-                            <span style={{ fontSize: '11px', color: '#5b6472' }}>(parcela de acordo)</span>
-                          ) : (
-                            <MenuAcoes itens={[
-                              { label: 'Editar', icone: '✏️',
-                                oculto: !podeAlterar,
-                                onClick: () => { setLancEditando(l); setModalLancamento(true); } },
-                              { label: 'Histórico', icone: '📋',
-                                onClick: () => setHistLancamento(l) },
-                              { label: 'Excluir', icone: '🗑️', perigo: true,
-                                oculto: !podeExcluir,
-                                onClick: () => excluirLancamento(l) },
-                            ]} />
-                          )}
-                        </td>
-                      </tr>
-                      );
-                    });
-                  })()}
-                </tbody>
-              </table>
-              {(!conta.lancamentos || conta.lancamentos.length === 0) && (
-                <p className="lista-vazia">Nenhum lançamento neste processo</p>
-              )}
-            </div>
+            <ExtratoContaCorrente conta={conta} podeAlterar={podeAlterar} podeExcluir={podeExcluir}
+              onEditar={l => { setLancEditando(l); setModalLancamento(true); }}
+              onHistorico={setHistLancamento}
+              onExcluir={excluirLancamento} />
           </div>
         </>
       )}
@@ -352,6 +279,82 @@ export default function Financeiro() {
         <ModalHistoricoLancamento lancamento={histLancamento} onFechar={() => setHistLancamento(null)} />
       )}
     </div>
+  );
+}
+
+// Extrato da conta corrente do processo (Diário/Semanal/Mensal + tabela Data, Descrição, Tipo, Entrada, Saída, Saldo, Ações).
+// Peça ÚNICA: usada na tela Financeiro (Por processo) e na aba Financeiro da pasta, para as duas mostrarem o mesmo extrato.
+// O agrupamento da coluna Saldo ('diario' | 'semanal' | 'mensal') é escolhido aqui dentro.
+export function ExtratoContaCorrente({ conta, podeAlterar, podeExcluir, onEditar, onHistorico, onExcluir }) {
+  const [periodoSaldo, setPeriodoSaldo] = useState('diario');
+  const lista = conta.lancamentos || [];
+  const dataAncora = lista[0]?.data;
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        {[['diario', 'Diário'], ['semanal', 'Semanal'], ['mensal', 'Mensal']].map(([chave, nome]) => (
+          <button key={chave} className={`btn ${periodoSaldo === chave ? 'btn-primary' : 'btn-outline'}`} style={{ fontSize: 12, padding: '4px 10px' }}
+            onClick={() => setPeriodoSaldo(chave)}>{nome}</button>
+        ))}
+      </div>
+      <div className="tabela-wrapper" tabIndex={0} role="region" aria-label="Lançamentos da conta corrente">
+        <table className="tabela">
+          <thead>
+            <tr>
+              <th>Data</th><th>Descrição</th><th>Tipo</th>
+              <th style={{ textAlign: 'right' }}>Entrada</th>
+              <th style={{ textAlign: 'right' }}>Saída</th>
+              <th style={{ textAlign: 'right' }}>Saldo</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lista.map((l, i) => {
+              const ehAcordo = l.origem !== 'manual';
+              const grupoAtual = grupoSaldo(l.data, dataAncora, periodoSaldo);
+              const grupoProximo = i + 1 < lista.length ? grupoSaldo(lista[i + 1].data, dataAncora, periodoSaldo) : null;
+              const ultimoDoGrupo = grupoProximo === null || grupoProximo !== grupoAtual;
+              return (
+                <tr key={l.id}>
+                  <td style={{ whiteSpace: 'nowrap' }}>{formatarData(l.data)}</td>
+                  <td>{l.descricao}</td>
+                  <td>
+                    <span className={`badge ${l.tipo === 'entrada' ? 'badge-verde' : 'badge-vermelho'}`}>
+                      {l.tipo === 'entrada' ? 'Entrada' : 'Saída'}
+                    </span>
+                  </td>
+                  <td style={{ textAlign: 'right' }} className="valor-positivo">
+                    {l.tipo === 'entrada' ? `+${formatarMoeda(l.valor)}` : ''}
+                  </td>
+                  <td style={{ textAlign: 'right' }} className="valor-negativo">
+                    {l.tipo === 'saida' ? `−${formatarMoeda(l.valor)}` : ''}
+                  </td>
+                  <td style={{ textAlign: 'right', fontWeight: ultimoDoGrupo ? 600 : 400 }}>
+                    {ultimoDoGrupo && (
+                      <span style={{ color: (l.saldo_acumulado || 0) >= 0 ? '#047857' : '#dc2626' }}>
+                        {formatarMoeda(l.saldo_acumulado)}
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {ehAcordo ? (
+                      <span style={{ fontSize: '11px', color: '#5b6472' }}>(parcela de acordo)</span>
+                    ) : (
+                      <MenuAcoes itens={[
+                        { label: 'Editar', icone: '✏️', oculto: !podeAlterar, onClick: () => onEditar(l) },
+                        { label: 'Histórico', icone: '📋', onClick: () => onHistorico(l) },
+                        { label: 'Excluir', icone: '🗑️', perigo: true, oculto: !podeExcluir, onClick: () => onExcluir(l) },
+                      ]} />
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {lista.length === 0 && <p className="lista-vazia">Nenhum lançamento neste processo</p>}
+      </div>
+    </>
   );
 }
 
