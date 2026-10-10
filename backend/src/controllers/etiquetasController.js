@@ -10,6 +10,7 @@
 const { pool } = require('../config/database');
 const { sucesso, erro, erroInterno, proibido, naoEncontrado } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
+const { motivoDeNaoArquivar } = require('../utils/pendenciasProcesso');
 
 // Whitelist dos módulos que têm etiqueta PESSOAL e onde cada marcação é gravada.
 // tabela/coluna são valores FIXOS daqui (nunca vêm do usuário) — interpolar é seguro.
@@ -406,6 +407,12 @@ async function marcarEscritorio(req, res) {
           return naoEncontrado(res, 'Processo não encontrado');
         }
         const statusAnteriorId = procRows[0].status_id ? Number(procRows[0].status_id) : null;
+        const naoArquiva = statusAnteriorId !== vincStatusId
+          ? await motivoDeNaoArquivar(conn, regId, statusAnteriorId, vincStatusId) : null;
+        if (naoArquiva) {
+          await conn.rollback();
+          return erro(res, naoArquiva, 422);
+        }
         if (statusAnteriorId !== vincStatusId) {
           await conn.execute(
             'UPDATE tblproc SET status_id = ?, alterado_por = ?, alterado_em = NOW() WHERE id = ?',

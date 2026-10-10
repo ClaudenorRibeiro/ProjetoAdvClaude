@@ -10,6 +10,7 @@ const auditoria = require('../middleware/auditoria');
 const { parseMoeda, pastaFormatadaSql, escaparLike, paginacao, numeroPastaValido } = require('../utils/helpers');
 const { texto, lerTextos } = require('../utils/camposTexto');
 const { comIdNumerico } = require('../utils/rotasSeguras');
+const { motivoDeNaoArquivar } = require('../utils/pendenciasProcesso');
 
 // Confere que TODA parte (autor/réu/perito) enviada aponta para uma pessoa que
 // existe e está ativa. tbltituloproc* e processo_perito são polimórficos SEM
@@ -899,6 +900,13 @@ async function atualizarProcesso(req, res) {
     const statusAnteriorId = antes[0].status_id ? Number(antes[0].status_id) : null;
     const statusNovoId = status_id ? Number(status_id) : null;
     const statusMudou = statusAnteriorId !== statusNovoId;
+
+    // Arquivar (status que encerra o processo) só com tudo resolvido: acordo, repasses, prazos, tarefas, audiências, perícias
+    const naoArquiva = await motivoDeNaoArquivar(conn, id, statusAnteriorId, statusNovoId);
+    if (naoArquiva) {
+      await conn.rollback();
+      return erro(res, naoArquiva, 422);
+    }
 
     // Verifica duplicidade de numProc (exclui o próprio processo da verificação)
     const numProcLimpo = numProc?.trim() || null;

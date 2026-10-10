@@ -29,7 +29,8 @@ async function limparC2() {
   await noBanco("DELETE FROM auditoria_etiqueta_escritorio WHERE modulo = 'processos' AND registro_id IN (SELECT id FROM tblproc WHERE pasta_id IN (SELECT id FROM tblpasta WHERE numPasta = 7401))");
   await noBanco("DELETE FROM processos_etiquetas_escritorio WHERE processo_id IN (SELECT id FROM tblproc WHERE pasta_id IN (SELECT id FROM tblpasta WHERE numPasta = 7401))");
   await noBanco("DELETE FROM etiquetas_escritorio_catalogo WHERE modulo = 'processos' AND significado LIKE '%C2'");
-  await noBanco("DELETE FROM tblstatusproc WHERE nome = 'Recurso C2'");
+  await noBanco("DELETE FROM tarefas WHERE titulo = 'Pendente que trava o arquivamento C2'");
+  await noBanco("DELETE FROM tblstatusproc WHERE nome IN ('Recurso C2', 'Arquivo C2')");
 }
 test.beforeAll(async () => { d = await prepararPastaPartes(); });
 test.afterAll(async () => { await limparC2(); await limparPastaPartes(d); });
@@ -215,12 +216,37 @@ test('@critical Etiqueta do escritório: erro do servidor ao aplicar mostra o av
   await loginPelaTela(page);
   await abrirPasta(page);
   await page.route('**/api/etiquetas/escritorio/marcar', (rota) => rota.request().method() === 'PUT'
-    ? rota.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ ok: false, mensagem: 'x' }) }) : rota.continue());
+    ? rota.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ ok: false }) }) : rota.continue());
   await abrirMenuAcoes(page, linha(page, CNJ1));
   await page.getByRole('button', { name: /^.*Etiqueta$/ }).first().click();
   await page.getByRole('button', { name: 'Arquivada C2' }).click();
   await aviso(page, 'Não foi possível salvar a etiqueta do escritório');
   await expect(linha(page, CNJ1).getByTitle('Sem etiqueta')).toBeVisible();
+});
+
+test('@critical Etiqueta que arquiva (status que encerra): com pendência o aviso diz o que falta e nada muda; resolvida, arquiva', async ({ page }) => {
+  const arquivo = (await noBanco("INSERT INTO tblstatusproc (nome, encerra_processo, ativo) VALUES ('Arquivo C2', 1, 1)")).insertId;
+  await noBanco("UPDATE etiquetas_escritorio_catalogo SET status_id = ? WHERE modulo = 'processos' AND slot = 5", [arquivo]);
+  const id = await procId(CNJ1);
+  await noBanco("INSERT INTO tarefas (titulo, processo_id, criado_por, concluida) VALUES ('Pendente que trava o arquivamento C2', ?, 1, 0)", [id]);
+  await loginPelaTela(page);
+  await abrirPasta(page);
+  const aplicar = async () => {
+    await abrirMenuAcoes(page, linha(page, CNJ1));
+    await page.getByRole('button', { name: /^.*Etiqueta$/ }).first().click();
+    await page.getByRole('button', { name: 'Livre C2' }).click();
+    await janela(page, 'Motivo da mudança de status').getByRole('button', { name: 'Salvar sem motivo' }).click();
+  };
+  await aplicar();
+  await aviso(page, 'Não é possível arquivar: 1 tarefa em aberto.');
+  await expect(linha(page, CNJ1).getByTitle('Sem etiqueta')).toBeVisible();
+  expect(await slotNoBanco(CNJ1)).toEqual([]);
+  expect((await noBanco('SELECT status_id FROM tblproc WHERE id = ?', [id]))[0].status_id).toBe(d.statusConhecimento);
+  await noBanco("UPDATE tarefas SET concluida = 1 WHERE titulo = 'Pendente que trava o arquivamento C2'");
+  await esperarSemAviso(page);
+  await aplicar();
+  await expect(linha(page, CNJ1).getByTitle('Livre C2')).toBeVisible();
+  expect((await noBanco('SELECT status_id FROM tblproc WHERE id = ?', [id]))[0].status_id).toBe(arquivo);
 });
 
 // ------------------------------------------------------------------ + Novo Processo (mesma pasta)

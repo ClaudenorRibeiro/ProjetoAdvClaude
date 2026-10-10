@@ -97,7 +97,7 @@ export default function PastaDetalhe() {
         if (novoStatusId) { atualizado.status_id = novoStatusId; atualizado.status_nome = novoStatusNome; }
         return atualizado;
       }) } : p));
-    } catch { toast.error('Não foi possível salvar a etiqueta do escritório'); }
+    } catch (e) { toast.error(e.response?.data?.mensagem || 'Não foi possível salvar a etiqueta do escritório'); }
   }
 
   // Chamado pelo submenu de etiqueta. Se a cor que está sendo APLICADA tem status
