@@ -81,6 +81,9 @@ test('@critical Financeiro: abas, janelas, validações, recebimento, multa, rep
   await expect(modal(page).getByRole('heading', { name: 'Novo Acordo' })).toBeVisible();
   await semViolacoes(page, 'janela Novo Acordo');
   // a conta do beneficiário é escrita com agência, número e DÍGITO separado por hífen (mesmo texto nas 3 telas que listam contas)
+  // O cliente só já vem escolhido quando o processo tem UM cliente; o banco de teste é compartilhado e o processo pode ter outras pessoas
+  // (então quem escolhe é o usuário e a lista de contas fica travada): o teste escolhe o beneficiário, valha o que valer o banco.
+  await modal(page).getByLabel('Beneficiário padrão das parcelas').selectOption({ label: 'Cliente Financeiro E2E' });
   await expect(modal(page).getByLabel('Conta padrão do beneficiário').locator('option', { hasText: 'Ag. 0001' })).toHaveText('Banco E2E — Ag. 0001 · 12345-6');
   await modal(page).getByRole('button', { name: /\+ Parceria do acordo/ }).click();
   await expect(page.getByRole('heading', { name: 'Parceria do acordo (todas as parcelas)' })).toBeVisible();
@@ -193,7 +196,9 @@ test('@critical Financeiro: abas, janelas, validações, recebimento, multa, rep
   // histórico da parcela
   await acordo1.getByRole('button', { name: /Parcelas/ }).click();
   await abrirMenuAcoes(page, parcelaPendente(page).first());
-  await page.getByRole('button', { name: /Histórico/ }).last().click();
+  // o item do MENU ⋮ aberto (painel fixo de z-index 1000); "o último botão Histórico da página" mudava de dono quando outro teste
+  // deixava mais um acordo na mesma pasta (o botão Histórico do bloco do acordo vem depois da tabela)
+  await page.locator('div[style*="position: fixed"][style*="z-index: 1000"]').getByRole('button', { name: /Histórico/ }).click();
   await expect(modal(page).getByRole('heading', { name: 'Histórico da parcela 2' })).toBeVisible();
   await expect(modal(page).getByText('Carregando...')).toHaveCount(0);
   await expect(modal(page).getByText('Multa recebida').first()).toBeVisible();
