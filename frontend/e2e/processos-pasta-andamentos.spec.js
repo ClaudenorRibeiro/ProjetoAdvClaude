@@ -87,7 +87,7 @@ test('@critical Aba Andamentos: lista de todos os processos (mais novo primeiro)
   await expect(page.getByText('Nenhum andamento registrado')).toBeVisible();
 });
 
-test('@critical Aba Andamentos: mensagens do DataJud (já sincronizado, sem número, erro de comunicação) e o aviso "Consultando o DataJud…" com "Parar consulta"', async ({ page }) => {
+test('@critical Aba Andamentos: mensagens do DataJud (já sincronizado, sem número, erro de comunicação) e a faixa "Atualizando DataJud…" em segundo plano (a lista aparece antes e a tela não trava)', async ({ page }) => {
   await loginPelaTela(page);
   await sincMock(page, { andamentos: [], aviso: '', datajud: { tipo: 'ja_hoje', mensagem: 'DataJud sincronizado hoje às 09:15.' } });
   await abrirAba(page, CNJ1);
@@ -98,19 +98,48 @@ test('@critical Aba Andamentos: mensagens do DataJud (já sincronizado, sem núm
   await expect(page.getByText('O CNJ não respondeu agora.')).toBeVisible();                                  // faixa laranja
   await expect(page.getByText('DataJud sincronizado hoje às 09:15.')).toHaveCount(0);
   await page.unroute('**/api/andamento/*/sincronizar');
-  // consulta demorada: a tela mostra o aviso em tela cheia e deixa interromper
-  // a consulta fica "pendurada" até o teste soltar (nada de tempo fixo: em máquina lenta a verificação de acessibilidade demora e a consulta acabaria antes do clique)
+  // consulta demorada: a lista já salva aparece NA HORA, a faixa "Atualizando DataJud…" avisa e nada trava
+  // a consulta fica "pendurada" até o teste soltar (nada de tempo fixo: em máquina lenta a verificação de acessibilidade demora e a consulta acabaria antes)
   let soltarConsulta; const consultaPendurada = new Promise(r => { soltarConsulta = r; });
   await page.route('**/api/andamento/*/sincronizar', async (rota) => { await consultaPendurada; await rota.abort().catch(() => {}); });
   await page.goto(`/processos/pasta/${d.pastaPartes}?aba=andamentos`);
-  await expect(page.getByText('Consultando o DataJud…')).toBeVisible();
-  await expect(page.getByText('Buscando a movimentação do processo no CNJ.')).toBeVisible();
-  await semViolacoes(page, 'aviso Consultando o DataJud');
-  await page.getByRole('button', { name: 'Parar consulta' }).click();
-  soltarConsulta();                                                                                          // agora a consulta pendurada pode terminar (a tela já a interrompeu)
-  await expect(page.getByText('Consultando o DataJud…')).toHaveCount(0);
-  await aviso(page, 'Consulta ao DataJud interrompida. Mostrando os andamentos já registrados.');
-  await expect(page.locator('tbody tr')).toHaveCount(4);                                                      // a lista continua com o que já existe
+  await expect(page.getByText('Atualizando DataJud…')).toBeVisible();
+  await expect(page.locator('tbody tr')).toHaveCount(4);                                                      // a lista não esperou o DataJud
+  await expect(page.getByText('Consultando o DataJud…')).toHaveCount(0);                                      // nada de quadro que bloqueia a tela
+  await expect(page.getByRole('button', { name: 'Atualizar DataJud' })).toBeDisabled();                       // uma consulta por vez
+  await semViolacoes(page, 'faixa Atualizando DataJud');
+  // sair da aba cancela a consulta que está rodando
+  const cancelada = page.waitForEvent('requestfailed', r => /sincronizar/.test(r.url()));
+  await page.getByRole('button', { name: 'Prazos', exact: true }).click();
+  await cancelada;
+  await expect(page.getByText('Atualizando DataJud…')).toHaveCount(0);
+  soltarConsulta();
+  await page.unroute('**/api/andamento/*/sincronizar');
+  await esperarSemAviso(page);
+});
+
+test('@critical Aba Andamentos: "Atualizar DataJud" consulta na hora ignorando o limite do dia, mostra o resultado e a abertura da aba NÃO força', async ({ page }) => {
+  await loginPelaTela(page);
+  const corpos = [];
+  await page.route('**/api/andamento/*/sincronizar', async (rota) => {
+    const corpo = rota.request().postDataJSON() || {};
+    corpos.push(corpo);
+    const forcada = corpo.forcar === true;
+    const andamentos = forcada
+      ? [{ id: 990001, data: '2026-03-11', data_hora: '2026-03-11 09:00:00', descricao: 'Movimento Novo Do DataJud', fonte: 'datajud', criado_por_nome: null }]
+      : [];
+    const datajud = forcada ? { tipo: 'ok', mensagem: 'Consulta ao DataJud concluída às 10:00.', novos: 1 } : { tipo: 'ja_hoje', mensagem: 'DataJud sincronizado hoje às 08:00.' };
+    await rota.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, dados: { andamentos, aviso: '', datajud } }) });
+  });
+  await abrirAba(page, CNJ1);
+  await expect(page.getByText('DataJud sincronizado hoje às 08:00.')).toBeVisible();
+  expect(corpos.every(c => c.forcar !== true)).toBe(true);                                                    // abrir a aba respeita o limite de 1x por dia
+  await expect(page.getByText('Movimento Novo Do DataJud')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Atualizar DataJud' }).click();
+  await expect(page.getByText('Movimento Novo Do DataJud')).toBeVisible();
+  await expect(page.getByText('Consulta ao DataJud concluída às 10:00.')).toBeVisible();
+  expect(corpos[corpos.length - 1]).toEqual({ forcar: true });                                                // o botão pede a consulta forçada
+  await expect(page.getByRole('button', { name: 'Atualizar DataJud' })).toBeEnabled();                        // terminou: pode pedir de novo
 });
 
 test('@critical Novo Andamento: data de hoje, validação, iniciais maiúsculas, salvar grava e aparece na lista; Cancelar, ✕ e ESC; erro do servidor', async ({ page }) => {

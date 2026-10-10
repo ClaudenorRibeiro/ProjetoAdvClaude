@@ -382,7 +382,7 @@ export const financeiroAPI = {
 // ============================================================
 export const andamentoAPI = {
   listar:  (processoId) => api.get(`/andamento/${processoId}`),
-  sincronizar: (processoId, config) => api.post(`/andamento/${processoId}/sincronizar`, {}, config),
+  sincronizar: (processoId, config, corpo = {}) => api.post(`/andamento/${processoId}/sincronizar`, corpo, config),   // corpo { forcar: true } = botão "Atualizar DataJud" (ignora o limite de 1x por dia)
   criar:   (processoId, dados) => api.post(`/andamento/${processoId}`, dados),
   editar:  (id, dados) => api.put(`/andamento/${id}`, dados),
   excluir: (id) => api.delete(`/andamento/${id}`),

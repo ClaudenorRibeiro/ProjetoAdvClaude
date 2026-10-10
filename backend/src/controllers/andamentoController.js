@@ -140,150 +140,167 @@ async function excluir(req, res) {
   }
 }
 
-// POST /api/andamento/:processoId/sincronizar
-// Disparado ao ABRIR os andamentos do processo. Sincroniza com o DataJud no
-// MÁXIMO 1x por dia por processo (trava em tblproc.datajud_sincronizado_em).
-// SEMPRE devolve a lista atual (mesmo quando não sincroniza), com um "aviso"
-// amigável quando o DataJud falha — a tela nunca quebra por causa disso.
+// Sincronização de UM processo com o DataJud. Sincroniza no MÁXIMO 1x por dia por processo (trava em
+// tblproc.datajud_sincronizado_em), a não ser que `forcar` (botão "Atualizar DataJud"). SEMPRE devolve a lista
+// atual (mesmo quando não sincroniza), com um "aviso" amigável quando o DataJud falha — a tela nunca quebra por
+// causa disso. Devolve o conteúdo da resposta (ou { naoEncontrado: true }); erro inesperado é lançado.
+async function executarSincronizacao(processoId, forcar) {
+  // 1) Integração ativa? (se não, só devolve o que já existe)
+  const [cfgRows] = await pool.execute(
+    "SELECT ativo, configuracoes FROM configuracoes_integracoes WHERE modulo = 'datajud'"
+  );
+  const cfgRow = cfgRows[0];
+  const ativo  = cfgRow ? !!cfgRow.ativo : false;
+  if (!ativo) {
+    return { andamentos: await buscarAndamentos(processoId), aviso: '',
+      datajud: { tipo: 'inativo', mensagem: 'DataJud desativado (ative em Configurações → Integrações).' } };
+  }
+  const cfg = cfgRow && cfgRow.configuracoes
+    ? (typeof cfgRow.configuracoes === 'string' ? JSON.parse(cfgRow.configuracoes) : cfgRow.configuracoes)
+    : {};
+
+  // 2) Processo + trava "1x por dia" (data em fuso de Brasília via DATE_FORMAT).
+  const [procRows] = await pool.execute(
+    `SELECT id, numProc,
+            DATE_FORMAT(datajud_sincronizado_em, '%Y-%m-%d') AS sync_dia,
+            DATE_FORMAT(datajud_sincronizado_em, '%H:%i')    AS sync_hora
+     FROM tblproc WHERE id = ?`,
+    [processoId]
+  );
+  if (!procRows.length) return { naoEncontrado: true };
+  const proc = procRows[0];
+
+  const hoje = hojeBrasilia();
+  if (!forcar && proc.sync_dia && proc.sync_dia === hoje) {
+    return { andamentos: await buscarAndamentos(processoId), aviso: '',
+      datajud: { tipo: 'ja_hoje', mensagem: `DataJud sincronizado hoje às ${proc.sync_hora}.` } };
+  }
+  if (!proc.numProc || !String(proc.numProc).trim()) {
+    // Sem número CNJ não há como consultar; não trava o dia (pode ser cadastrado depois).
+    return { andamentos: await buscarAndamentos(processoId), aviso: '',
+      datajud: { tipo: 'sem_numero', mensagem: 'Processo sem número CNJ — nada a consultar no DataJud.' } };
+  }
+
+  // 3) Consulta o DataJud. Falha de rede NÃO trava o dia (permite nova tentativa).
+  let resultado;
+  try {
+    resultado = await datajud.buscarMovimentos({
+      url: cfg.url, apikey: cfg.apikey, numProc: proc.numProc,
+    });
+  } catch (e) {
+    return { andamentos: await buscarAndamentos(processoId), aviso: e.message,
+      datajud: { tipo: 'erro', mensagem: e.message } };
+  }
+
+  const nowBR  = agora().replace('T', ' '); // datetime de Brasília p/ a trava diária
+  const horaBR = nowBR.slice(11, 16);        // HH:MM para as mensagens de status
+
+  // Tribunal não coberto por esta versão: marca o dia (é determinístico) e devolve.
+  if (!resultado.suportado) {
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE tblproc SET datajud_sincronizado_em = ? WHERE id = ?', [nowBR, processoId]);
+      await conn.commit();
+    } catch (err) { await conn.rollback(); throw err; }
+    finally { conn.release(); }
+    return { andamentos: await buscarAndamentos(processoId), aviso: '',
+      datajud: { tipo: 'nao_suportado', mensagem: 'O tribunal deste processo ainda não é coberto pela sincronização automática.' } };
+  }
+
+  // 4) Monta candidatos com a impressão digital (dedup) e ignora vazios.
+  const candidatos = [];
+  for (const m of resultado.movimentos) {
+    if (!m || (m.nome == null && m.codigo == null)) continue;
+    const dh = datajud.parseDataHora(m.dataHora);
+    candidatos.push({
+      hash: datajud.hashMovimento(processoId, m),
+      codigo: m.codigo != null ? Number(m.codigo) : null,
+      descricao: datajud.descricaoMovimento(m),   // nome + complementos tabelados
+      data: dh ? dh.data : hoje,
+      dataHora: dh ? dh.dataHora : null,
+    });
+  }
+
+  // Filtra os que já existem (por hash) e os repetidos dentro do próprio lote.
+  let novos = 0;
+  if (candidatos.length) {
+    const hashes = candidatos.map(c => c.hash);
+    const ph = hashes.map(() => '?').join(',');
+    const [ex] = await pool.execute(
+      `SELECT hash_movimento FROM andamento_processual
+       WHERE processo_id = ? AND fonte = 'datajud' AND hash_movimento IN (${ph})`,
+      [processoId, ...hashes]
+    );
+    const existentes = new Set(ex.map(r => r.hash_movimento));
+    const vistos = new Set();
+    const inserir = [];
+    for (const c of candidatos) {
+      if (existentes.has(c.hash) || vistos.has(c.hash)) continue;
+      vistos.add(c.hash);
+      inserir.push(c);
+    }
+
+    // 5) Insere os novos em transação (tudo ou nada) + marca a sincronização.
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      for (const c of inserir) {
+        // INSERT IGNORE + índice UNIQUE(hash_movimento) = trava dura contra duplicidade.
+        await conn.execute(
+          `INSERT IGNORE INTO andamento_processual
+             (processo_id, data, data_hora, descricao, fonte, codigo_movimento, hash_movimento, criado_por)
+           VALUES (?, ?, ?, ?, 'datajud', ?, ?, NULL)`,
+          [processoId, c.data, c.dataHora, c.descricao, c.codigo, c.hash]
+        );
+      }
+      await conn.execute('UPDATE tblproc SET datajud_sincronizado_em = ? WHERE id = ?', [nowBR, processoId]);
+      await conn.commit();
+      novos = inserir.length;
+    } catch (e) {
+      await conn.rollback();
+      throw e;
+    } finally {
+      conn.release();
+    }
+  } else {
+    // Sem movimentos: ainda assim marca o dia para não repetir a consulta.
+    const conn2 = await pool.getConnection();
+    try {
+      await conn2.beginTransaction();
+      await conn2.execute('UPDATE tblproc SET datajud_sincronizado_em = ? WHERE id = ?', [nowBR, processoId]);
+      await conn2.commit();
+    } catch (err) { await conn2.rollback(); throw err; }
+    finally { conn2.release(); }
+  }
+
+  // Status final: consultou e achou X registros, ou consultou e não achou nada.
+  // (nome diferente do serviço 'datajud' para não colidir com ele nesta função)
+  const statusDj = candidatos.length
+    ? { tipo: 'ok',    mensagem: `Consulta ao DataJud concluída às ${horaBR}.`, novos }
+    : { tipo: 'vazio', mensagem: `Consulta concluída às ${horaBR} — nenhum registro encontrado no DataJud.` };
+  return { andamentos: await buscarAndamentos(processoId), aviso: '', datajud: statusDj, novos };
+}
+
+// Uma consulta por vez por processo: se mais de um usuário (ou o botão "Atualizar DataJud") pedir o mesmo processo enquanto
+// a consulta está em andamento, todos recebem o resultado da MESMA consulta (nunca duas idas ao DataJud ao mesmo tempo).
+const sincronizacoesEmAndamento = new Map();
+function sincronizarUmaVez(processoId, forcar) {
+  const chave = String(processoId);
+  if (!sincronizacoesEmAndamento.has(chave)) {
+    const consulta = executarSincronizacao(processoId, forcar).finally(() => sincronizacoesEmAndamento.delete(chave));
+    sincronizacoesEmAndamento.set(chave, consulta);
+  }
+  return sincronizacoesEmAndamento.get(chave);
+}
+
+// POST /api/andamento/:processoId/sincronizar   (corpo opcional: { forcar: true } ignora o limite de 1x por dia)
+// Disparado pela tela ao abrir os andamentos do processo (em segundo plano) e pelo botão "Atualizar DataJud".
 async function sincronizar(req, res) {
   try {
-    const { processoId } = req.params;
-
-    // 1) Integração ativa? (se não, só devolve o que já existe)
-    const [cfgRows] = await pool.execute(
-      "SELECT ativo, configuracoes FROM configuracoes_integracoes WHERE modulo = 'datajud'"
-    );
-    const cfgRow = cfgRows[0];
-    const ativo  = cfgRow ? !!cfgRow.ativo : false;
-    if (!ativo) {
-      return sucesso(res, { andamentos: await buscarAndamentos(processoId), aviso: '',
-        datajud: { tipo: 'inativo', mensagem: 'DataJud desativado (ative em Configurações → Integrações).' } });
-    }
-    const cfg = cfgRow && cfgRow.configuracoes
-      ? (typeof cfgRow.configuracoes === 'string' ? JSON.parse(cfgRow.configuracoes) : cfgRow.configuracoes)
-      : {};
-
-    // 2) Processo + trava "1x por dia" (data em fuso de Brasília via DATE_FORMAT).
-    const [procRows] = await pool.execute(
-      `SELECT id, numProc,
-              DATE_FORMAT(datajud_sincronizado_em, '%Y-%m-%d') AS sync_dia,
-              DATE_FORMAT(datajud_sincronizado_em, '%H:%i')    AS sync_hora
-       FROM tblproc WHERE id = ?`,
-      [processoId]
-    );
-    if (!procRows.length) return naoEncontrado(res, 'Processo não encontrado');
-    const proc = procRows[0];
-
-    const hoje = hojeBrasilia();
-    if (proc.sync_dia && proc.sync_dia === hoje) {
-      return sucesso(res, { andamentos: await buscarAndamentos(processoId), aviso: '',
-        datajud: { tipo: 'ja_hoje', mensagem: `DataJud sincronizado hoje às ${proc.sync_hora}.` } });
-    }
-    if (!proc.numProc || !String(proc.numProc).trim()) {
-      // Sem número CNJ não há como consultar; não trava o dia (pode ser cadastrado depois).
-      return sucesso(res, { andamentos: await buscarAndamentos(processoId), aviso: '',
-        datajud: { tipo: 'sem_numero', mensagem: 'Processo sem número CNJ — nada a consultar no DataJud.' } });
-    }
-
-    // 3) Consulta o DataJud. Falha de rede NÃO trava o dia (permite nova tentativa).
-    let resultado;
-    try {
-      resultado = await datajud.buscarMovimentos({
-        url: cfg.url, apikey: cfg.apikey, numProc: proc.numProc,
-      });
-    } catch (e) {
-      return sucesso(res, { andamentos: await buscarAndamentos(processoId), aviso: e.message,
-        datajud: { tipo: 'erro', mensagem: e.message } });
-    }
-
-    const nowBR  = agora().replace('T', ' '); // datetime de Brasília p/ a trava diária
-    const horaBR = nowBR.slice(11, 16);        // HH:MM para as mensagens de status
-
-    // Tribunal não coberto por esta versão: marca o dia (é determinístico) e devolve.
-    if (!resultado.suportado) {
-      const conn = await pool.getConnection();
-      try {
-        await conn.beginTransaction();
-        await conn.execute('UPDATE tblproc SET datajud_sincronizado_em = ? WHERE id = ?', [nowBR, processoId]);
-        await conn.commit();
-      } catch (err) { await conn.rollback(); throw err; }
-      finally { conn.release(); }
-      return sucesso(res, { andamentos: await buscarAndamentos(processoId), aviso: '',
-        datajud: { tipo: 'nao_suportado', mensagem: 'O tribunal deste processo ainda não é coberto pela sincronização automática.' } });
-    }
-
-    // 4) Monta candidatos com a impressão digital (dedup) e ignora vazios.
-    const candidatos = [];
-    for (const m of resultado.movimentos) {
-      if (!m || (m.nome == null && m.codigo == null)) continue;
-      const dh = datajud.parseDataHora(m.dataHora);
-      candidatos.push({
-        hash: datajud.hashMovimento(processoId, m),
-        codigo: m.codigo != null ? Number(m.codigo) : null,
-        descricao: datajud.descricaoMovimento(m),   // nome + complementos tabelados
-        data: dh ? dh.data : hoje,
-        dataHora: dh ? dh.dataHora : null,
-      });
-    }
-
-    // Filtra os que já existem (por hash) e os repetidos dentro do próprio lote.
-    let novos = 0;
-    if (candidatos.length) {
-      const hashes = candidatos.map(c => c.hash);
-      const ph = hashes.map(() => '?').join(',');
-      const [ex] = await pool.execute(
-        `SELECT hash_movimento FROM andamento_processual
-         WHERE processo_id = ? AND fonte = 'datajud' AND hash_movimento IN (${ph})`,
-        [processoId, ...hashes]
-      );
-      const existentes = new Set(ex.map(r => r.hash_movimento));
-      const vistos = new Set();
-      const inserir = [];
-      for (const c of candidatos) {
-        if (existentes.has(c.hash) || vistos.has(c.hash)) continue;
-        vistos.add(c.hash);
-        inserir.push(c);
-      }
-
-      // 5) Insere os novos em transação (tudo ou nada) + marca a sincronização.
-      const conn = await pool.getConnection();
-      try {
-        await conn.beginTransaction();
-        for (const c of inserir) {
-          // INSERT IGNORE + índice UNIQUE(hash_movimento) = trava dura contra duplicidade.
-          await conn.execute(
-            `INSERT IGNORE INTO andamento_processual
-               (processo_id, data, data_hora, descricao, fonte, codigo_movimento, hash_movimento, criado_por)
-             VALUES (?, ?, ?, ?, 'datajud', ?, ?, NULL)`,
-            [processoId, c.data, c.dataHora, c.descricao, c.codigo, c.hash]
-          );
-        }
-        await conn.execute('UPDATE tblproc SET datajud_sincronizado_em = ? WHERE id = ?', [nowBR, processoId]);
-        await conn.commit();
-        novos = inserir.length;
-      } catch (e) {
-        await conn.rollback();
-        return erroInterno(res, e);
-      } finally {
-        conn.release();
-      }
-    } else {
-      // Sem movimentos: ainda assim marca o dia para não repetir a consulta.
-      const conn2 = await pool.getConnection();
-      try {
-        await conn2.beginTransaction();
-        await conn2.execute('UPDATE tblproc SET datajud_sincronizado_em = ? WHERE id = ?', [nowBR, processoId]);
-        await conn2.commit();
-      } catch (err) { await conn2.rollback(); throw err; }
-      finally { conn2.release(); }
-    }
-
-    // Status final: consultou e achou X registros, ou consultou e não achou nada.
-    // (nome diferente do serviço 'datajud' para não colidir com ele nesta função)
-    const statusDj = candidatos.length
-      ? { tipo: 'ok',    mensagem: `Consulta ao DataJud concluída às ${horaBR}.`, novos }
-      : { tipo: 'vazio', mensagem: `Consulta concluída às ${horaBR} — nenhum registro encontrado no DataJud.` };
-    return sucesso(res, { andamentos: await buscarAndamentos(processoId), aviso: '', datajud: statusDj, novos });
+    const resultado = await sincronizarUmaVez(req.params.processoId, req.body?.forcar === true);
+    if (resultado.naoEncontrado) return naoEncontrado(res, 'Processo não encontrado');
+    return sucesso(res, resultado);
   } catch (err) {
     return erroInterno(res, err);
   }

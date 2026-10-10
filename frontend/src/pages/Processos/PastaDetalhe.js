@@ -134,9 +134,9 @@ export default function PastaDetalhe() {
   const [avisoAndamentos, setAvisoAndamentos] = useState(''); // faixa amigável (falha do DataJud)
   const [statusDataJud, setStatusDataJud]     = useState(''); // linha fixa: resultado da última consulta
   const [soEscritorio, setSoEscritorio]       = useState(false); // filtro: esconde os andamentos baixados do DataJud
-  const [consultandoDataJud, setConsultandoDataJud] = useState(false); // overlay "Consultando o DataJud…"
-  const consultaAbortRef = useRef(null);   // permite "Parar consulta" (cancela a requisição)
-  const interrompidoRef  = useRef(false);  // marca que o usuário parou a consulta
+  const [atualizandoDataJud, setAtualizandoDataJud] = useState(false); // faixa "Atualizando DataJud…" (a consulta roda em segundo plano)
+  const consultaAbortRef = useRef(null);   // cancela a consulta ao DataJud quando a pessoa sai do processo, troca de aba ou de processo
+  const listaAndamentosSeqRef = useRef(0); // só vale a resposta da última listagem pedida
   // Guarda contra resposta desatualizada: trocar de processo/filtro rápido pode fazer uma
   // busca antiga responder DEPOIS da mais nova. Cada carregarX incrementa a própria sequência
   // ao iniciar e só aplica o resultado se ainda for a chamada mais recente (auditoria 23/09).
@@ -261,10 +261,13 @@ export default function PastaDetalhe() {
     }
   }, [podeVerTodosTarefas]);
 
+  // Sair do processo (ou da pasta) cancela a consulta ao DataJud que ainda estiver rodando.
+  useEffect(() => () => { if (consultaAbortRef.current) consultaAbortRef.current.abort(); }, []);
+
   // ---- Recarrega dados quando muda a aba ou o filtro de processo ----
   useEffect(() => {
     if (!pasta) return;
-    if (abaAtiva === 'andamentos') carregarAndamentos();
+    if (abaAtiva === 'andamentos') carregarAndamentos(); else cancelarConsultaDataJud();
     if (abaAtiva === 'prazos') {
       carregarPrazos();
       if (!tiposPrazo.tipos.length) prazosAPI.tipos().then(r => { if (r.data.ok) setTiposPrazo(r.data.dados); });
@@ -284,31 +287,50 @@ export default function PastaDetalhe() {
 
   // ---- Funções de carga (todas respeitam processoFiltro) ----
 
-  async function carregarAndamentos() {
+  // Ordena por data/hora decrescente (usa data_hora quando o automático traz)
+  const ordenarAndamentos = (lista) => lista.sort((a, b) =>
+    new Date(b.data_hora || b.data || b.criado_em) - new Date(a.data_hora || a.data || a.criado_em));
+
+  // Mostra NA HORA o que já está salvo (a consulta ao DataJud não segura a tela).
+  async function listarAndamentos() {
+    const minhaSeq = ++listaAndamentosSeqRef.current;
     const ids = idsParaBuscar();
-    // Prepara o cancelamento e o overlay. O overlay só aparece se a consulta demorar
-    // (>300ms): quando o backend responde na hora (guarda de 1x/dia), não pisca nada.
+    const resultados = await Promise.all(ids.map(pid => andamentoAPI.listar(pid).catch(() => null)));
+    if (minhaSeq !== listaAndamentosSeqRef.current) return;   // já saiu outra listagem depois desta
+    const todos = resultados.flatMap((r, i) => (r && r.data.ok && Array.isArray(r.data.dados)
+      ? r.data.dados.map(a => ({ ...a, _procId: ids[i] })) : []));
+    setAndamentos(ordenarAndamentos(todos));
+    if (resultados.every(r => !r)) setAvisoAndamentos('Não foi possível carregar os andamentos agora. Tente novamente em instantes.');
+  }
+
+  // Cancela a consulta ao DataJud em andamento (ao sair da aba/do processo, ou antes de começar outra).
+  function cancelarConsultaDataJud() {
+    if (consultaAbortRef.current) consultaAbortRef.current.abort();
+    consultaAbortRef.current = null;
+    setAtualizandoDataJud(false);
+  }
+
+  // Consulta o DataJud em segundo plano (o servidor faz no máximo 1x por dia por processo e uma consulta só quando
+  // várias pessoas pedem juntas). `forcar` = botão "Atualizar DataJud": ignora o limite do dia. A tela nunca quebra:
+  // se a consulta falhar, a lista que já está na tela continua e aparece o aviso.
+  async function sincronizarDataJud({ forcar = false } = {}) {
+    cancelarConsultaDataJud();
     const controller = new AbortController();
     consultaAbortRef.current = controller;
-    interrompidoRef.current = false;
-    let revelado = false;
-    const timer = setTimeout(() => { revelado = true; setConsultandoDataJud(true); }, 300);
+    const ids = idsParaBuscar();
+    setAtualizandoDataJud(true);
+    setAvisoAndamentos('');
     try {
-      // Ao abrir, dispara a sincronização com o DataJud (o backend faz no máximo 1x/dia
-      // por processo). Se a sincronização falhar/for cancelada, cai na listagem simples
-      // (sem o signal, para ainda mostrar o que já existe) — a tela nunca quebra.
       const resultados = await Promise.all(ids.map(pid =>
-        andamentoAPI.sincronizar(pid, { signal: controller.signal })
-          .catch(() => andamentoAPI.listar(pid).catch(() => null))
-      ));
+        andamentoAPI.sincronizar(pid, { signal: controller.signal }, forcar ? { forcar: true } : {}).catch(() => null)));
+      if (controller.signal.aborted) return;                  // a pessoa saiu ou pediu outra: esta resposta não vale mais
       let avisoErro = '';
       let statusMsg = '';
       const umProcesso = ids.length === 1; // a linha de status do DataJud só faz sentido p/ 1 processo
       const todos = resultados.flatMap((r, i) => {
         if (!r || !r.data.ok) return [];
         const d = r.data.dados;
-        // sincronizar → { andamentos, aviso, datajud, novos }; listar (fallback) → array puro
-        const lista = Array.isArray(d) ? d : (Array.isArray(d?.andamentos) ? d.andamentos : []);
+        const lista = Array.isArray(d?.andamentos) ? d.andamentos : [];
         const dj = d && d.datajud;
         // Erro de comunicação vai para a faixa laranja; os demais status, para a linha fixa.
         if (dj && dj.tipo === 'erro' && !avisoErro) avisoErro = dj.mensagem;
@@ -316,32 +338,23 @@ export default function PastaDetalhe() {
         if (umProcesso && dj && dj.tipo !== 'erro' && dj.mensagem) statusMsg = dj.mensagem;
         return lista.map(a => ({ ...a, _procId: ids[i] }));
       });
-      // Ordena por data/hora decrescente (usa data_hora quando o automático traz)
-      todos.sort((a, b) =>
-        new Date(b.data_hora || b.data || b.criado_em) - new Date(a.data_hora || a.data || a.criado_em));
-      setAndamentos(todos);
-
-      if (interrompidoRef.current) {
-        setAvisoAndamentos('Consulta ao DataJud interrompida. Mostrando os andamentos já registrados.');
-        setStatusDataJud('');
+      if (resultados.some(r => r && r.data.ok)) {
+        listaAndamentosSeqRef.current += 1;                   // vale mais que uma listagem que ainda esteja a caminho
+        setAndamentos(ordenarAndamentos(todos));
       } else {
-        setAvisoAndamentos(avisoErro);
-        setStatusDataJud(statusMsg);
+        avisoErro = 'Não foi possível consultar o DataJud agora. Mostrando os andamentos já registrados.';
       }
-    } catch {
-      setAvisoAndamentos('Não foi possível carregar os andamentos agora. Tente novamente em instantes.');
-      setStatusDataJud('');
+      setAvisoAndamentos(avisoErro);
+      setStatusDataJud(statusMsg);
     } finally {
-      clearTimeout(timer);
-      setConsultandoDataJud(false);
-      consultaAbortRef.current = null;
+      if (consultaAbortRef.current === controller) { consultaAbortRef.current = null; setAtualizandoDataJud(false); }
     }
   }
 
-  // Botão "Parar consulta": cancela a espera do DataJud e mostra o que já existe.
-  function pararConsulta() {
-    interrompidoRef.current = true;
-    if (consultaAbortRef.current) consultaAbortRef.current.abort();
+  // Abre a lista na hora e consulta o DataJud por trás. `sincronizar: false` só recarrega a lista (depois de lançar/editar/excluir).
+  async function carregarAndamentos({ sincronizar = true } = {}) {
+    await listarAndamentos();
+    if (sincronizar) sincronizarDataJud();
   }
 
   async function carregarPrazos() {
@@ -688,7 +701,7 @@ export default function PastaDetalhe() {
       acao: async () => {
         await andamentoAPI.excluir(andId);
         toast.success('Andamento excluído');
-        carregarAndamentos();
+        carregarAndamentos({ sincronizar: false });
       },
     });
   }
@@ -1020,11 +1033,20 @@ export default function PastaDetalhe() {
                   + Novo Andamento
                 </button>
               )}
+              <button className="btn btn-outline" disabled={atualizandoDataJud} onClick={() => sincronizarDataJud({ forcar: true })}>
+                Atualizar DataJud
+              </button>
               <label style={{ display:'flex', alignItems:'center', gap:'6px', cursor:'pointer', userSelect:'none', fontSize:'13px', color:'#555' }}>
                 <input type="checkbox" checked={soEscritorio} onChange={e => setSoEscritorio(e.target.checked)} />
                 Mostrar somente do escritório
               </label>
             </div>
+            {atualizandoDataJud && (
+              <div role="status" style={{ fontSize:'13px', color:'#1e3a8a', marginBottom:'10px', display:'flex', alignItems:'center', gap:'8px' }}>
+                <span className="spinner-mini" style={{ width:'14px', height:'14px', borderWidth:'2px' }} />
+                <span>Atualizando DataJud…</span>
+              </div>
+            )}
             {avisoAndamentos && (
               <div style={{ background:'#fff4e5', border:'1px solid #ffcf99', color:'#8a5300',
                 padding:'8px 12px', borderRadius:'6px', fontSize:'13px', marginBottom:'12px' }}>
@@ -1725,24 +1747,6 @@ export default function PastaDetalhe() {
         />
       )}
 
-      {/* Overlay de tela cheia enquanto consulta o DataJud: bloqueia tudo, só deixa "Parar consulta". */}
-      {consultandoDataJud && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', zIndex: 3000,
-          display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#fff', borderRadius: '10px', padding: '24px 28px', textAlign: 'center',
-            maxWidth: '340px', boxShadow: '0 10px 30px rgba(0,0,0,0.25)' }}>
-            <span className="spinner-mini" style={{ width: '26px', height: '26px', borderWidth: '3px' }} />
-            <div style={{ fontSize: '15px', color: '#1e2a3a', fontWeight: 600, margin: '14px 0 4px' }}>
-              Consultando o DataJud…
-            </div>
-            <div style={{ fontSize: '13px', color: '#666', marginBottom: '18px' }}>
-              Buscando a movimentação do processo no CNJ.
-            </div>
-            <button className="btn btn-outline" onClick={pararConsulta}>Parar consulta</button>
-          </div>
-        </div>
-      )}
-
       {/* Modal: Andamento — só abre quando há um processo específico selecionado */}
       {modalAndamento && processoSelecionado && (
         <ModalAndamento
@@ -1751,7 +1755,7 @@ export default function PastaDetalhe() {
           onFechar={(reload) => {
             setModalAndamento(false);
             setAndamentoEditando(null);
-            if (reload) carregarAndamentos();
+            if (reload) carregarAndamentos({ sincronizar: false });
           }}
         />
       )}

@@ -207,6 +207,66 @@ test('sincronizar (DataJud): desativado, processo inexistente, sem número CNJ e
   await sql("DELETE FROM configuracoes_integracoes WHERE modulo = 'datajud'");
 });
 
+// DataJud FALSO local (só conta as chamadas e demora um pouco): prova o limite de 1x por dia, o botão "Atualizar DataJud" (forcar)
+// e a consulta ÚNICA quando vários pedem o mesmo processo ao mesmo tempo.
+async function comDataJudFalso(fn) {
+  const http = require('node:http');
+  const chamadas = { n: 0 };
+  const servidor = http.createServer((req, res) => {
+    chamadas.n += 1;
+    req.resume();
+    setTimeout(() => {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ hits: { hits: [{ _source: { movimentos: [{ codigo: 26, nome: 'Distribuição', dataHora: '2026-03-10T14:30:00.000Z' }] } }] } }));
+    }, 400);
+  });
+  await new Promise(ok => servidor.listen(0, '127.0.0.1', ok));
+  const url = `http://127.0.0.1:${servidor.address().port}`;
+  await sql("DELETE FROM configuracoes_integracoes WHERE modulo = 'datajud'");
+  await sql("INSERT INTO configuracoes_integracoes (modulo, ativo, configuracoes) VALUES ('datajud', 1, ?)", [JSON.stringify({ url, apikey: 'teste' })]);
+  try { await fn(chamadas); } finally {
+    await new Promise(ok => servidor.close(ok));
+    await sql("DELETE FROM configuracoes_integracoes WHERE modulo = 'datajud'");
+  }
+}
+const sincronizar = (processo, corpo = {}) => api().post(`/api/andamento/${processo}/sincronizar`).send(corpo);
+
+test('sincronizar (DataJud): consulta no máximo 1x por dia; o botão "Atualizar DataJud" (forcar) ignora esse limite', async () => {
+  await comDataJudFalso(async (chamadas) => {
+    await sql('UPDATE tblproc SET datajud_sincronizado_em = NULL WHERE id = ?', [F.outro]);
+    const primeira = await sincronizar(F.outro);
+    assert.equal(primeira.status, 200, JSON.stringify(primeira.body));
+    assert.equal(primeira.body.dados.datajud.tipo, 'ok');
+    assert.equal(chamadas.n, 1);
+    assert.equal(await total('SELECT COUNT(*) AS n FROM andamento_processual WHERE processo_id = ? AND fonte = ?', [F.outro, 'datajud']), 1);
+    const hoje = await sincronizar(F.outro);                                   // mesmo dia: não vai ao DataJud
+    assert.equal(hoje.body.dados.datajud.tipo, 'ja_hoje');
+    assert.equal(chamadas.n, 1);
+    const forcada = await sincronizar(F.outro, { forcar: true });              // botão: consulta de novo, sem duplicar andamento
+    assert.equal(forcada.status, 200, JSON.stringify(forcada.body));
+    assert.equal(forcada.body.dados.datajud.tipo, 'ok');
+    assert.equal(chamadas.n, 2);
+    assert.equal(await total('SELECT COUNT(*) AS n FROM andamento_processual WHERE processo_id = ? AND fonte = ?', [F.outro, 'datajud']), 1);
+    const texto = await sincronizar(F.outro, { forcar: 'true' });              // só o valor verdadeiro conta: texto não força
+    assert.equal(texto.body.dados.datajud.tipo, 'ja_hoje');
+    assert.equal(chamadas.n, 2);
+  });
+});
+
+test('sincronizar (DataJud): vários pedidos ao mesmo tempo para o mesmo processo fazem UMA consulta só (e outro processo tem a sua)', async () => {
+  await comDataJudFalso(async (chamadas) => {
+    await sql('UPDATE tblproc SET datajud_sincronizado_em = NULL WHERE id IN (?, ?)', [F.proc, F.outro]);
+    const antes = await total('SELECT COUNT(*) AS n FROM andamento_processual WHERE processo_id = ? AND fonte = ?', [F.proc, 'datajud']);   // outros testes já deixaram andamentos aqui
+    const respostas = await Promise.all([sincronizar(F.proc), sincronizar(F.proc), sincronizar(F.proc, { forcar: true })]);
+    for (const r of respostas) { assert.equal(r.status, 200, JSON.stringify(r.body)); assert.equal(r.body.dados.datajud.tipo, 'ok'); }
+    assert.equal(chamadas.n, 1, 'três pedidos simultâneos do mesmo processo = uma consulta');
+    assert.equal(await total('SELECT COUNT(*) AS n FROM andamento_processual WHERE processo_id = ? AND fonte = ?', [F.proc, 'datajud']), antes + 1);
+    const dois = await Promise.all([sincronizar(F.proc, { forcar: true }), sincronizar(F.outro)]);
+    assert.equal(dois.length, 2);
+    assert.equal(chamadas.n, 3, 'processos diferentes não dividem a consulta');
+  });
+});
+
 test('permissões: cada rota exige a permissão do submódulo "andamentos" (visualizar/cadastrar/alterar/excluir) e sem login é 401', async () => {
   const id = await manual(F.proc, '2026-03-01', 'Para permissões');
   const so = async (acao) => criarUsuario(`só ${acao}`, 2, [['processos', 'andamentos', acao]]);
