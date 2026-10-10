@@ -25,10 +25,20 @@ async function recomecar() {
   await F.configurar({ avisos_pericia_mostrar: 1, avisos_audiencia_mostrar: 1, avisos_parabens_mostrar: 1, dias_alerta_pericia: 2, dias_alerta_audiencia: 3, dias_aviso_parabens: 0 });
   await F.ligarComtele(false);
 }
-// Primeiro dia (a partir de amanhã) cujo lembrete de N dias úteis cai hoje.
+// O lembrete é contado em DIAS ÚTEIS, então só cai num dia útil: se a bateria roda num sábado ou domingo, não existe evento "com lembrete hoje".
+// Os testes de lembrete usam como "hoje" o último dia útil (HU; igual ao dia real de segunda a sexta) e passam esse dia para gerarAvisos.
+// diaU(n) = n dias a partir de HU; ha(n) = "criado há n dias" já contando os dias de fim de semana entre HU e o dia real.
+let HU = F.HOJE; let ATRASO = 0;
+const diaU = (n) => F.dia(n - ATRASO);
+const ha = (n) => n + ATRASO;
+async function descobrirDiaUtil() {
+  const [r] = await F.sql('SELECT DATE_FORMAT(MAX(data), \'%Y-%m-%d\') AS d FROM calendario WHERE dia_util = 1 AND data <= ?', [F.HOJE]);
+  HU = r.d; ATRASO = Math.round((Date.parse(`${F.HOJE}T12:00:00Z`) - Date.parse(`${HU}T12:00:00Z`)) / 86400000);
+}
+// Primeiro dia (a partir de amanhã) cujo lembrete de N dias úteis cai em HU.
 async function eventoComLembreteHoje(dias) {
-  for (let n = 1; n <= 20; n += 1) if ((await cal.diasUteisAntes(F.dia(n), dias)) === F.HOJE) return F.dia(n);
-  throw new Error('o calendário de teste não tem uma data cujo lembrete caia hoje');
+  for (let n = 1; n <= 20; n += 1) if ((await cal.diasUteisAntes(diaU(n), dias)) === HU) return diaU(n);
+  throw new Error('o calendário de teste não tem uma data cujo lembrete caia no dia útil de hoje');
 }
 const nascidoHa = (anos, somarDias = 0) => { const d = new Date(`${F.dia(somarDias)}T12:00:00Z`); d.setUTCFullYear(d.getUTCFullYear() - anos); return d.toISOString().slice(0, 10); };
 const tipos = async (filtro = '', p = []) => (await F.avisos(filtro, p)).map(x => `${x.modulo}:${x.tipo}:${x.status}`);
@@ -40,6 +50,7 @@ test.before(async () => {
   process.env.SMTP_HOST = '127.0.0.1'; process.env.SMTP_PORT = String(smtp.porta);
   process.env.SMTP_USER = 'u'; process.env.SMTP_PASS = 's'; process.env.EMAIL_FROM = 'Escritório Teste <envio@example.invalid>';
   await F.semearCalendario();
+  await descobrirDiaUtil();
   admin = await F.usuario({ nivel: 1 });
 });
 test.after(async () => { await smtp.parar(); require('node-cron').getTasks().forEach(tarefa => tarefa.stop()); await pool.end(); });
@@ -49,16 +60,16 @@ test('lembrete de perícia: sai no dia certo (2 dias úteis antes), uma vez só,
   const c = await F.cliente({ nome: 'Lia Prado Aviso' });
   await F.ligarAoProcesso(c);
   const dataCerta = await eventoComLembreteHoje(2);
-  const certa = await F.criarPericia({ data: dataCerta, criadoHaDias: 5 });
-  await F.criarPericia({ data: F.dia(40), criadoHaDias: 5 });                         // lembrete só daqui a semanas
-  await F.criarPericia({ data: dataCerta, status: 'cancelada', criadoHaDias: 5 });
-  await F.criarPericia({ data: F.dia(-1), criadoHaDias: 9 });                          // já passou
-  const r = await avisos.gerarAvisos();
+  const certa = await F.criarPericia({ data: dataCerta, criadoHaDias: ha(5) });
+  await F.criarPericia({ data: diaU(40), criadoHaDias: ha(5) });                         // lembrete só daqui a semanas
+  await F.criarPericia({ data: dataCerta, status: 'cancelada', criadoHaDias: ha(5) });
+  await F.criarPericia({ data: diaU(-1), criadoHaDias: ha(9) });                          // já passou
+  const r = await avisos.gerarAvisos({ hoje: HU });
   assert.equal(r.lembretes, 1);
   const [aviso] = await F.avisos();
-  assert.deepEqual([aviso.modulo, aviso.tipo, aviso.status, aviso.pericia_id, aviso.data_aviso, aviso.data_evento], ['pericia', 'lembrete', 'pendente', certa, F.HOJE, dataCerta]);
+  assert.deepEqual([aviso.modulo, aviso.tipo, aviso.status, aviso.pericia_id, aviso.data_aviso, aviso.data_evento], ['pericia', 'lembrete', 'pendente', certa, HU, dataCerta]);
   assert.match(aviso.texto, /^Olá, Lia\. Lembramos que você tem uma perícia/);
-  await avisos.gerarAvisos();
+  await avisos.gerarAvisos({ hoje: HU });
   assert.equal((await F.avisos()).length, 1, 'rodar de novo não repete');
 });
 
@@ -67,16 +78,16 @@ test('o lembrete só vale se ainda FALTAVA mais tempo quando o evento foi marcad
   const c = await F.cliente();
   await F.ligarAoProcesso(c);
   const dataCerta = await eventoComLembreteHoje(2);
-  const recente = await F.criarPericia({ data: dataCerta, criadoHaDias: 0 });          // cadastrada hoje, já dentro do prazo do lembrete
+  const recente = await F.criarPericia({ data: dataCerta, criadoHaDias: ha(0) });          // cadastrada hoje, já dentro do prazo do lembrete
   await avisos.registrarEvento({ modulo: 'pericia', tipo: 'agendada', id: recente });
-  await avisos.gerarAvisos();
+  await avisos.gerarAvisos({ hoje: HU });
   assert.deepEqual(await tipos(), ['pericia:agendada:pendente'], 'só o aviso de agendada');
   // perícia marcada com folga: o aviso de "agendada" é de 5 dias atrás, então o lembrete de hoje ainda faz sentido
   await F.limparAvisos();
-  const antiga = await F.criarPericia({ data: dataCerta, criadoHaDias: 5 });
-  await F.sql("INSERT INTO avisos_cliente (modulo, tipo, pericia_id, cliente_tipo, cliente_id, processo_id, data_evento, data_aviso, assunto, texto, status, modo) VALUES ('pericia', 'agendada', ?, ?, ?, 1, ?, DATE_SUB(CURDATE(), INTERVAL 5 DAY), 'x', 'x', 'enviado', 'tela')", [antiga, c.tipo, c.id, dataCerta]);
-  await F.sql('UPDATE avisos_cliente SET criado_em = DATE_SUB(NOW(), INTERVAL 5 DAY)');
-  await avisos.gerarAvisos();
+  const antiga = await F.criarPericia({ data: dataCerta, criadoHaDias: ha(5) });
+  await F.sql("INSERT INTO avisos_cliente (modulo, tipo, pericia_id, cliente_tipo, cliente_id, processo_id, data_evento, data_aviso, assunto, texto, status, modo) VALUES ('pericia', 'agendada', ?, ?, ?, 1, ?, DATE_SUB(CURDATE(), INTERVAL ? DAY), 'x', 'x', 'enviado', 'tela')", [antiga, c.tipo, c.id, dataCerta, ha(5)]);
+  await F.sql('UPDATE avisos_cliente SET criado_em = DATE_SUB(NOW(), INTERVAL ? DAY)', [ha(5)]);
+  await avisos.gerarAvisos({ hoje: HU });
   assert.ok((await tipos()).includes('pericia:lembrete:pendente'), 'marcada com folga: o lembrete sai');
 });
 
@@ -114,15 +125,15 @@ test('aviso pendente que não vale mais é cancelado sozinho: perícia remarcada
   const c = await F.cliente();
   await F.ligarAoProcesso(c);
   const dataCerta = await eventoComLembreteHoje(2);
-  const mudou = await F.criarPericia({ data: dataCerta, criadoHaDias: 5 });
-  const cancelou = await F.criarPericia({ data: dataCerta, criadoHaDias: 5 });
-  const apagada = await F.criarPericia({ data: dataCerta, criadoHaDias: 5 });
-  await avisos.gerarAvisos();
+  const mudou = await F.criarPericia({ data: dataCerta, criadoHaDias: ha(5) });
+  const cancelou = await F.criarPericia({ data: dataCerta, criadoHaDias: ha(5) });
+  const apagada = await F.criarPericia({ data: dataCerta, criadoHaDias: ha(5) });
+  await avisos.gerarAvisos({ hoje: HU });
   assert.equal((await F.avisos()).length, 3);
   await F.sql('UPDATE pericia SET data = DATE_ADD(data, INTERVAL 7 DAY) WHERE id = ?', [mudou]);
   await F.sql("UPDATE pericia SET status = 'cancelada' WHERE id = ?", [cancelou]);
   await F.sql('DELETE FROM pericia WHERE id = ?', [apagada]);
-  await avisos.gerarAvisos();
+  await avisos.gerarAvisos({ hoje: HU });
   const lista = await F.avisos();
   assert.equal(lista.length, 2, 'o da perícia excluída sumiu junto');
   assert.deepEqual(lista.map(x => [x.pericia_id, x.status]).sort(), [[cancelou, 'cancelado'], [mudou, 'cancelado']].sort());
@@ -134,20 +145,20 @@ test('lembrete de audiência: 3 dias úteis por padrão, vale audiência adiada,
   const c = await F.cliente({ nome: 'Rui Alves Aviso' });
   await F.ligarAoProcesso(c);
   let dataCerta = null;
-  for (let n = 1; n <= 20 && !dataCerta; n += 1) if ((await cal.diasUteisAntes(F.dia(n), 3)) === F.HOJE) dataCerta = F.dia(n);
-  const normal = await F.criarAudiencia({ data: dataCerta, hora: '14:00', criadoHaDias: 6 });
-  await F.criarAudiencia({ data: dataCerta, hora: '15:00', status: 'adiada', criadoHaDias: 6 });
-  await F.criarAudiencia({ data: dataCerta, hora: '09:00', modalidade: 'sem_comparecimento', criadoHaDias: 6 });
-  await avisos.gerarAvisos();
+  for (let n = 1; n <= 20 && !dataCerta; n += 1) if ((await cal.diasUteisAntes(diaU(n), 3)) === HU) dataCerta = diaU(n);
+  const normal = await F.criarAudiencia({ data: dataCerta, hora: '14:00', criadoHaDias: ha(6) });
+  await F.criarAudiencia({ data: dataCerta, hora: '15:00', status: 'adiada', criadoHaDias: ha(6) });
+  await F.criarAudiencia({ data: dataCerta, hora: '09:00', modalidade: 'sem_comparecimento', criadoHaDias: ha(6) });
+  await avisos.gerarAvisos({ hoje: HU });
   assert.equal((await F.avisos()).length, 2, 'normal + adiada; o ato sem comparecimento fica de fora');
   const aviso = (await F.avisos()).find(x => x.audiencia_id === normal);
   assert.match(aviso.texto, /14:00/);
   await F.sql("UPDATE audiencia SET hora = '16:30' WHERE id = ?", [normal]);
-  await avisos.gerarAvisos();
+  await avisos.gerarAvisos({ hoje: HU });
   assert.match((await F.avisos('WHERE id = ?', [aviso.id]))[0].texto, /16:30/, 'sem edição, o texto acompanha a mudança');
   await F.sql("UPDATE avisos_cliente SET texto = 'Texto escrito pela secretária', texto_editado = 1 WHERE id = ?", [aviso.id]);
   await F.sql("UPDATE audiencia SET hora = '17:00' WHERE id = ?", [normal]);
-  await avisos.gerarAvisos();
+  await avisos.gerarAvisos({ hoje: HU });
   assert.equal((await F.avisos('WHERE id = ?', [aviso.id]))[0].texto, 'Texto escrito pela secretária', 'texto editado na tela nunca é reescrito');
 });
 
