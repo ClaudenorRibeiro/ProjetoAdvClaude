@@ -29,6 +29,11 @@ PARA RODAR NO HEIDISQL (banco)
                                                             sub-item a todo usuário que JÁ tem "Alterar" no Financeiro, para ninguém perder o repasse; registra a versão 4. Só acrescenta
                                                             linhas em permissoes (não muda a estrutura). Rodar DEPOIS do sql_cor_etiqueta_acordo_para_heidi.sql, com o banco do sistema
                                                             selecionado; pode rodar várias vezes. Sem ele, só o administrador repassa até marcar o sub-item. Backup antes.
+  sql_preparar_aws_erick_antonio_para_heidi.sql IMPORTANTE  SCRIPT ÚNICO PARA PREPARAR OS BANCOS DA AWS-ERICK (erick_adv) E DA AWS-ANTÔNIO (sistema_advocacia): reúne as versões 1 a 4
+                                                            (acima) e deixa o banco IGUAL ao estrutura_banco.sql. Só roda em banco com esses 2 nomes; confere MySQL, versão registrada e a estrutura inteira
+                                                            (95 tabelas) ANTES de mexer; se achar diferença desconhecida, para sem alterar nada e lista na aba 2. Pode rodar quantas vezes quiser (no
+                                                            banco já pronto só diz "JA estava"). Parar o sistema + backup antes; atualizar o código logo depois de ver "PRONTO". Substitui, para a AWS, os 4
+                                                            scripts acima (que ficam como histórico e para o banco local). Só rodar quando o usuário decidir (a IA nunca mexe na AWS).
   SUBSTITUÍDOS pelo script único (só histórico, NÃO rodar): sql_relatorios_fase1/fase6/fase7, sql_atualizar_financeiro,
                                                             sql_contas_bancarias_pessoas, sql_remover_area_direito_da_pasta (_para_heidi.sql).
   sql_limpar_pastas_vazias_para_heidi.sql       IMPORTANTE  Apaga SÓ as pastas 9999 e 928804 (fixos: 9999 e 928804 — rodar SÓ no Antônio). Nunca em lote.
