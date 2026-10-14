@@ -72,11 +72,11 @@ test('@critical Criar apenso pelo menu do processo: número obrigatório, partes
   await jan.getByPlaceholder('Buscar e adicionar autor...').fill('Beta');
   await jan.getByLabel('Tipo de pessoa do autor').selectOption('juridica');
   await jan.getByPlaceholder('Buscar e adicionar autor...').fill('Empresa Beta');
-  await page.getByText('Empresa Beta E2E Ltda').first().click();
+  await jan.locator('div[style*="cursor: pointer"]').filter({ hasText: 'Empresa Beta E2E Ltda' }).first().click();
   await jan.getByPlaceholder('Buscar e adicionar réu...').fill('Alberto');
   await jan.getByLabel('Tipo de pessoa do réu').selectOption('fisica');
   await jan.getByPlaceholder('Buscar e adicionar réu...').fill('Alberto');
-  await page.getByText('Alberto Autor E2E').first().click();
+  await jan.locator('div[style*="cursor: pointer"]').filter({ hasText: 'Alberto Autor E2E' }).first().click();
   await jan.getByRole('button', { name: /Salvar|Criar/ }).click();
   await aviso(page, 'O número do processo do apenso é obrigatório');                                       // nada gravado
   expect((await noBanco('SELECT id FROM tblproc WHERE apenso_de_id IS NOT NULL')).length).toBe(0);
