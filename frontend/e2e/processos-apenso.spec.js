@@ -60,7 +60,7 @@ test('@critical Criar apenso pelo menu do processo: número obrigatório, partes
   await loginPelaTela(page);
   await abrirPasta(page);
   await menuDaLinha(page, CNJ1);
-  await page.getByRole('menuitem', { name: /Criar apenso/ }).click();
+  await page.getByRole('button', { name: /Criar apenso$/ }).click();
   const jan = janela(page, 'Novo Apenso');
   await expect(jan).toBeVisible();
   await aguardarTelaPronta(page);
@@ -90,7 +90,7 @@ test('@critical Criar apenso pelo menu do processo: número obrigatório, partes
   expect(ap.apenso_de_id).toBe(d.principal); expect(ap.pasta_id).toBe(d.pastaPartes); expect(ap.cliente_polo).toBeNull();
   // o apenso não oferece "Criar apenso" (apenso de apenso não existe)
   await menuDaLinha(page, CNJ_APENSO);
-  await expect(page.getByRole('menuitem', { name: /Criar apenso/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Criar apenso$/ })).toHaveCount(0);
   await page.keyboard.press('Escape');
 });
 
@@ -109,7 +109,7 @@ test('@critical Arquivar o processo principal: pergunta antes, Cancelar não gra
   await loginPelaTela(page);
   await abrirPasta(page);
   await menuDaLinha(page, CNJ1);
-  await page.getByRole('menuitem', { name: /Editar/ }).click();
+  await page.getByRole('button', { name: /Editar$/ }).click();
   const jan = janela(page, 'Editar Processo');
   await expect(jan).toBeVisible(); await aguardarTelaPronta(page);
   await jan.getByLabel('Status').first().selectOption(String(d.arquivado)).catch(async () => {
@@ -135,7 +135,7 @@ test('@critical Apenso com pendência bloqueia o arquivamento do principal e a m
   await loginPelaTela(page);
   await abrirPasta(page);
   await menuDaLinha(page, CNJ1);
-  await page.getByRole('menuitem', { name: /Editar/ }).click();
+  await page.getByRole('button', { name: /Editar$/ }).click();
   const jan = janela(page, 'Editar Processo');
   await expect(jan).toBeVisible(); await aguardarTelaPronta(page);
   await jan.locator('select').filter({ has: page.locator(`option[value="${d.arquivado}"]`) }).first().selectOption(String(d.arquivado));
@@ -150,7 +150,7 @@ test('@critical Excluir o principal com apensos: segunda pergunta, e só então 
   await loginPelaTela(page);
   await abrirPasta(page);
   await menuDaLinha(page, CNJ1);
-  await page.getByRole('menuitem', { name: /Excluir/ }).click();
+  await page.getByRole('button', { name: /Excluir$/ }).click();
   await janela(page, 'Excluir Processo').getByRole('button', { name: /Excluir Processo/ }).click();
   const pergunta = janela(page, 'Excluir também os apensos?');
   await expect(pergunta).toBeVisible();
@@ -158,7 +158,7 @@ test('@critical Excluir o principal com apensos: segunda pergunta, e só então 
   await pergunta.getByRole('button', { name: 'Cancelar' }).click();
   expect((await noBanco('SELECT id FROM tblproc WHERE id IN (?, ?)', [d.principal, ap])).length).toBe(2);
   await menuDaLinha(page, CNJ1);
-  await page.getByRole('menuitem', { name: /Excluir/ }).click();
+  await page.getByRole('button', { name: /Excluir$/ }).click();
   await janela(page, 'Excluir Processo').getByRole('button', { name: /Excluir Processo/ }).click();
   await janela(page, 'Excluir também os apensos?').getByRole('button', { name: /Excluir tudo/ }).click();
   await aviso(page, 'Processo e apensos excluídos');
@@ -170,7 +170,7 @@ test('@critical Editar o apenso: aviso de apenso e número do processo obrigató
   await loginPelaTela(page);
   await abrirPasta(page);
   await menuDaLinha(page, CNJ_APENSO);
-  await page.getByRole('menuitem', { name: /Editar/ }).click();
+  await page.getByRole('button', { name: /Editar$/ }).click();
   const jan = janela(page, 'Editar Processo');
   await expect(jan).toBeVisible(); await aguardarTelaPronta(page);
   await expect(jan.getByText('Este processo é um APENSO')).toBeVisible();
