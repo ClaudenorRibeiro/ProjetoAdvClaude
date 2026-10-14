@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { aguardarTelaPronta, bloquearRedeExterna, limparPastaPartes, loginPelaTela, prepararPastaPartes, restaurarPastaPartes, violacoesGraves } from './helpers';
+import { abrirMenuAcoes, aguardarTelaPronta, bloquearRedeExterna, limparPastaPartes, loginPelaTela, prepararPastaPartes, restaurarPastaPartes, violacoesGraves } from './helpers';
 import { createRequire } from 'node:module';
 
 // PROCESSO APENSO na tela (pasta de teste 7401): criar pelo menu "Criar apenso", marca "APENSO", contador na lista de pastas,
@@ -17,7 +17,7 @@ const janela = (page, titulo) => page.locator('.modal-box').filter({ has: page.g
 const aviso = (page, texto) => expect(page.getByText(texto).first()).toBeVisible();
 
 let d;
-test.describe.configure({ timeout: 150_000 });
+test.describe.configure({ timeout: 60_000 });
 async function limpar() {
   await noBanco("DELETE FROM processos_etiquetas_escritorio WHERE processo_id IN (SELECT id FROM tblproc WHERE pasta_id IN (SELECT id FROM tblpasta WHERE numPasta IN (7401, 7402)))");
   await noBanco("DELETE FROM auditoria_etiqueta_escritorio WHERE modulo = 'processos' AND registro_id IN (SELECT id FROM tblproc WHERE pasta_id IN (SELECT id FROM tblpasta WHERE numPasta IN (7401, 7402)))");
@@ -52,7 +52,7 @@ async function abrirPasta(page) {
   await expect(linha(page, CNJ1)).toBeVisible();
 }
 async function menuDaLinha(page, texto) {
-  await linha(page, texto).getByRole('button', { name: /ações|⋮/i }).first().click();
+  await abrirMenuAcoes(page, linha(page, texto).first());
 }
 const statusDe = async (id) => Number((await noBanco('SELECT status_id FROM tblproc WHERE id = ?', [id]))[0].status_id);
 
