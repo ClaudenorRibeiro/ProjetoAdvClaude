@@ -83,11 +83,12 @@ export default function PastaDetalhe() {
   // Aplica de fato a etiqueta do escritório. Se o backend também mudou o status do
   // processo (etiqueta com status vinculado), atualiza o badge na hora, sem recarregar.
   // `motivo` = null (não informado / "sem motivo") ou o texto digitado.
-  async function aplicarEtiquetaEscritorio(procId, slot, motivo) {
+  async function aplicarEtiquetaEscritorio(procId, slot, motivo, confirmarApensos = false) {
     try {
       const { data } = await etiquetasAPI.marcarEscritorio({
         modulo: 'processos', registro_id: procId, slot,
         ...(motivo != null && motivo !== '' ? { motivo_status: motivo } : {}),
+        ...(confirmarApensos ? { confirmar_apensos: true } : {}),
       });
       const novoStatusId   = data?.dados?.status_id   ?? null;
       const novoStatusNome = data?.dados?.status_nome ?? null;
@@ -97,7 +98,18 @@ export default function PastaDetalhe() {
         if (novoStatusId) { atualizado.status_id = novoStatusId; atualizado.status_nome = novoStatusNome; }
         return atualizado;
       }) } : p));
-    } catch (e) { toast.error(e.response?.data?.mensagem || 'Não foi possível salvar a etiqueta do escritório'); }
+    } catch (e) {
+      const resp = e.response?.data;
+      if (e.response?.status === 409 && resp?.detalhes?.codigo === 'CONFIRMAR_ARQUIVAMENTO_DE_APENSOS') {
+        // nada foi gravado: pergunta antes de arquivar o principal junto com os apensos
+        setPerguntaApensos({
+          titulo: 'Arquivar também os apensos?', mensagem: resp.mensagem, textoBotao: 'Arquivar tudo', tipo: 'aviso',
+          acao: () => aplicarEtiquetaEscritorio(procId, slot, motivo, true),
+        });
+        return;
+      }
+      toast.error(resp?.mensagem || 'Não foi possível salvar a etiqueta do escritório');
+    }
   }
 
   // Chamado pelo submenu de etiqueta. Se a cor que está sendo APLICADA tem status
@@ -218,6 +230,8 @@ export default function PastaDetalhe() {
   // Comunicar cliente / Reenviar comunicado da perícia: abre a janela com Para, Assunto e Mensagem; só "Enviar" dispara o e-mail
   const { pedirComunicado, janelaComunicado } = useComunicadoPericia(() => carregarPericias());
   const [modalProcesso, setModalProcesso]         = useState(false);
+  const [apensoDe, setApensoDe]                   = useState(null);   // processo comum escolhido para receber um APENSO (null = janela fechada)
+  const [perguntaApensos, setPerguntaApensos]     = useState(null);   // confirmação em 2º passo: arquivar/excluir o principal leva os apensos junto
   const [modalEditar, setModalEditar]             = useState(false);
   const [processoEditando, setProcessoEditando]   = useState(null);
   const [processoSomenteLeitura, setProcessoSomenteLeitura] = useState(false);
@@ -731,7 +745,20 @@ export default function PastaDetalhe() {
       textoBotao: '🗑️ Excluir Processo',
       tipo: 'perigo',
       acao: async () => {
-        await processosAPI.excluirProcesso(procId);
+        try {
+          await processosAPI.excluirProcesso(procId);
+        } catch (err) {
+          const resp = err.response?.data;
+          if (err.response?.status === 409 && resp?.detalhes?.codigo === 'CONFIRMAR_EXCLUSAO_DE_APENSOS') {
+            // nada foi apagado: pergunta antes de excluir o principal junto com os apensos
+            setPerguntaApensos({
+              titulo: 'Excluir também os apensos?', mensagem: resp.mensagem, textoBotao: '🗑️ Excluir tudo', tipo: 'perigo',
+              acao: async () => { await processosAPI.excluirProcesso(procId, true); toast.success('Processo e apensos excluídos'); carregarPasta(); },
+            });
+            return;
+          }
+          throw err;
+        }
         toast.success('Processo excluído');
         carregarPasta();
       },
@@ -767,6 +794,12 @@ export default function PastaDetalhe() {
   )];
 
   // Seletor de processo — reutilizado em todas as abas como elemento JSX
+  // Número do processo principal de um apenso (para o texto de ajuda da marca "APENSO")
+  const numeroDoPrincipal = (pr) => {
+    const principal = processos.find(x => x.id === pr.apenso_de_id);
+    return principal?.numProc || principal?.protocolo || `#${pr.apenso_de_id}`;
+  };
+
   const selectProcesso = (
     <select
       aria-label="Filtrar por processo"
@@ -778,7 +811,7 @@ export default function PastaDetalhe() {
       <option value="todos">— Todos os processos —</option>
       {processos.map(pr => (
         <option key={pr.id} value={pr.id}>
-          {pr.numProc || (pr.protocolo ? `Protocolo ${pr.protocolo}` : `Processo #${pr.id}`)}
+          {pr.numProc || (pr.protocolo ? `Protocolo ${pr.protocolo}` : `Processo #${pr.id}`)}{pr.apenso_de_id ? ' (apenso)' : ''}
         </option>
       ))}
     </select>
@@ -938,6 +971,12 @@ export default function PastaDetalhe() {
                           {pr.NomeTituloProc || '—'}
                         </button>
                         {!!Number(pr.tem_acordo) && <EtiquetaAcordo cor={corAcordo} style={{ marginLeft: '8px' }} />}
+                        {!!pr.apenso_de_id && (
+                          <span className="badge" title={`Apenso do processo ${numeroDoPrincipal(pr)}`}
+                            style={{ marginLeft: '8px', background: '#ede9fe', color: '#4c1d95', fontWeight: 700 }}>
+                            APENSO
+                          </span>
+                        )}
                       </td>
                       <td>
                         {pr.numProc
@@ -963,6 +1002,9 @@ export default function PastaDetalhe() {
                           { label: 'Editar', icone: '✏️',
                             oculto: !temPermissao('processos','alterar'),
                             onClick: () => { setProcessoEditando(pr); setProcessoSomenteLeitura(false); setModalEditar(true); } },
+                          { label: 'Criar apenso', icone: '📎',
+                            oculto: !!pr.apenso_de_id || !temPermissao('processos','cadastrar'),
+                            onClick: () => setApensoDe({ id: pr.id, numProc: pr.numProc, titulo: pr.NomeTituloProc }) },
                           { label: 'Excluir', icone: '🗑️', perigo: true,
                             oculto: !temPermissao('processos','excluir'),
                             onClick: () => excluirProcesso(pr.id) },
@@ -1745,6 +1787,18 @@ export default function PastaDetalhe() {
           onFechar={(reload) => { setModalProcesso(false); if (reload) carregarPasta(); }}
         />
       )}
+
+      {/* Modal: Novo Apenso (sempre nesta pasta, partes à mão) */}
+      {apensoDe && (
+        <ModalNovoProcesso
+          pastaId={id}
+          processoBase={null}
+          apensoDe={apensoDe}
+          onFechar={(reload) => { setApensoDe(null); if (reload) carregarPasta(); }}
+        />
+      )}
+
+      {perguntaApensos && <ModalConfirmar {...perguntaApensos} onCancelar={() => setPerguntaApensos(null)} />}
 
       {/* Modal: Editar Processo */}
       {modalEditar && processoEditando && (

@@ -189,7 +189,7 @@ export const processosAPI = {
   // Processos
   criarProcesso:     (dados) => api.post('/processos', dados),
   atualizarProcesso: (id, dados) => api.put(`/processos/${id}`, dados),
-  excluirProcesso:   (id) => api.delete(`/processos/${id}`),
+  excluirProcesso:   (id, confirmarApensos = false) => api.delete(`/processos/${id}`, confirmarApensos ? { params: { confirmar_apensos: 1 } } : undefined),
   historicoProcesso: (id) => api.get(`/processos/${id}/historico`),
   // Auxiliares (leitura)
   auxiliares:        () => api.get('/processos/auxiliares'),

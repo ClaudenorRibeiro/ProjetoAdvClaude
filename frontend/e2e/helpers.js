@@ -459,6 +459,7 @@ export async function limparPastaPartes(d) {
     for (const { id } of pastas) {
       const [procs] = await conn.execute('SELECT id FROM tblproc WHERE pasta_id = ?', [id]);
       for (const p of procs) await conn.execute("DELETE FROM logs_auditoria WHERE tabela = 'tblproc' AND registro_id = ?", [p.id]);
+      await conn.execute('UPDATE tblproc SET apenso_de_id = NULL WHERE pasta_id = ?', [id]);   // apensos primeiro: o vínculo impede apagar o principal
       await conn.execute('DELETE FROM tblproc WHERE pasta_id = ?', [id]);
       await conn.execute('DELETE FROM tblpasta WHERE id = ?', [id]);
     }

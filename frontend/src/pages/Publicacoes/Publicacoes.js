@@ -9,7 +9,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { publicacoesAPI, agendaAPI, periciasAPI, audienciasAPI, processosAPI, authAPI } from '../../services/api';
-import { formatarData, formatarDataHora, hojeLocal, textoLimpo } from '../../utils/formatters';
+import { formatarData, formatarDataHora, hojeLocal, textoLimpo, formatarNumeroPasta } from '../../utils/formatters';
 import { analisarPublicacao } from '../../utils/sugestoesPublicacao';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
@@ -234,6 +234,21 @@ function estiloAbaFontePublicacao(ativo) {
 // processo da publicação já dispara a busca da pasta (o usuário escolhe qual é).
 // Compartilhado pelas duas abas (AASP e CNJ).
 // ------------------------------------------------------------
+// O número de um APENSO está cadastrado em várias pastas (uma por cliente): mostra TODAS, para a pessoa escolher a certa.
+// Número de processo comum (uma pasta só) não mostra nada.
+function PastasDoNumero({ vinculados }) {
+  const lista = Array.isArray(vinculados) ? vinculados : [];
+  if (lista.length < 2 && !lista.some(v => v.apenso)) return null;
+  return (
+    <div style={{ fontSize: '11px', color: '#4c1d95', fontWeight: 600, whiteSpace: 'normal' }}
+      title="Pastas em que este número está cadastrado (apenso: uma linha por pasta)">
+      Pastas: {lista.map((v, i) => (
+        <span key={v.processo_id}>{i > 0 ? ' · ' : ''}{formatarNumeroPasta(v.numPasta)}{v.apenso ? ' (apenso)' : ''}</span>
+      ))}
+    </div>
+  );
+}
+
 function ModalAcaoDaPublicacao({ acao, usuariosAgenda, usuarioLogadoId, ehAdmin, onFechar }) {
   const { tipo, pub, sugestao } = acao;
   const numero = pub.numero_processo || '';
@@ -1408,6 +1423,7 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
                             <NumeroProcessoCopiavel numero={p.numero_processo} />
                           </span>
                         : <NumeroProcessoCopiavel numero={p.numero_processo} />}
+                      <PastasDoNumero vinculados={p.processos_vinculados} />
                     </td>
                     <td style={{ whiteSpace: 'nowrap' }}>{p.numero_publicacao || '—'}</td>
                     <td style={{ maxWidth: '360px' }}>
@@ -2127,6 +2143,7 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
                             <NumeroProcessoCopiavel numero={p.numero_processo} />
                           </span>
                         : <NumeroProcessoCopiavel numero={p.numero_processo} />}
+                      <PastasDoNumero vinculados={p.processos_vinculados} />
                     </td>
                     <td style={{ maxWidth: '360px' }}>
                       <div style={{

@@ -222,6 +222,11 @@ export default function Processos() {
                     </td>
                     <td style={{ textAlign: 'center' }}>
                       <span style={{ fontWeight: '600' }}>{p.total_processos}</span>
+                      {Number(p.total_apensos) > 0 && (
+                        <div style={{ fontSize: '11px', color: '#4c1d95', fontWeight: 600 }} title="Processos apensados a esta pasta (não entram na contagem acima)">
+                          + {p.total_apensos} apenso{Number(p.total_apensos) > 1 ? 's' : ''}
+                        </div>
+                      )}
                     </td>
                     <td style={{ textAlign: 'center' }}>
                       <EtiquetaCelula slot={p.etiqueta_pessoal} definicoes={etqDefs} />
