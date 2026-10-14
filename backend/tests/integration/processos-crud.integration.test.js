@@ -407,7 +407,7 @@ test('basico: devolve o processo ativo com o número da pasta; 404 para inativo,
   const { id } = await criar({ vara_id: F.vara });
   const r = await api().get(`/api/processos/${id}/basico`);
   assert.equal(r.status, 200);
-  assert.deepEqual(Object.keys(r.body.dados).sort(), ['NomeTituloProc', 'id', 'numPasta', 'numProc', 'vara_id']);
+  assert.deepEqual(Object.keys(r.body.dados).sort(), ['NomeTituloProc', 'apenso_de_id', 'id', 'numPasta', 'numProc', 'vara_id']);
   assert.equal(r.body.dados.vara_id, F.vara);
   await sql('UPDATE tblproc SET ativo = 0 WHERE id = ?', [id]);
   assert.equal((await api().get(`/api/processos/${id}/basico`)).status, 404);

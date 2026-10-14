@@ -39,7 +39,10 @@ test('excluir processo apaga os vínculos de OAB junto (não deixa órfão)', ()
   const inicio = processosController.indexOf('async function excluirProcesso');
   const fim = processosController.indexOf('async function historicoProcesso', inicio);
   const trecho = processosController.slice(inicio, fim);
-  assert.match(trecho, /DELETE FROM processo_oabs\s+WHERE processo_id = \?/);
+  // a exclusão (do processo e dos apensos dele) mora em utils/apensoProcesso.js; a rota tem de usá-la
+  assert.match(trecho, /apagarProcessoEFilhos/);
+  const apenso = fs.readFileSync(path.join(raiz, 'backend/src/utils/apensoProcesso.js'), 'utf8');
+  assert.match(apenso, /DELETE FROM processo_oabs\s+WHERE processo_id = \?/);
 });
 
 test('auxiliares do processo devolvem os advogados avulsos, para a tela montar a lista', () => {
