@@ -11,7 +11,8 @@
 --  "Pendências de Documentos"; + acordo_parcela_multa, do módulo de multa
 --  por atraso de parcela, 23/09/2026; + processo_oabs, do módulo de
 --  múltiplas OABs por processo, 28/09/2026; + avisos_cliente, do módulo
---  "Avisos aos clientes", 08/10/2026.)
+--  "Avisos aos clientes", 08/10/2026; + a coluna tblproc.apenso_de_id, do
+--  "Processo apenso", 14/10/2026.)
 -- O banco não possui procedures, triggers, views nem events.
 -- Os dados de partida (feriados, varas, tipos etc.) ficam em scripts/.
 --
@@ -2297,6 +2298,7 @@ DROP TABLE IF EXISTS `tblproc`;
 CREATE TABLE `tblproc` (
   `id` int NOT NULL AUTO_INCREMENT,
   `pasta_id` int NOT NULL,
+  `apenso_de_id` int DEFAULT NULL COMMENT 'vazio = processo comum; preenchido = APENSO do processo comum indicado (da mesma pasta)',
   `numProc` varchar(45) DEFAULT NULL,
   `protocolo` varchar(60) DEFAULT NULL,
   `datajud_sincronizado_em` datetime DEFAULT NULL,
@@ -2327,6 +2329,8 @@ CREATE TABLE `tblproc` (
   KEY `idx_proc_pasta_ativo` (`pasta_id`,`ativo`),
   KEY `idx_proc_protocolo` (`protocolo`),
   KEY `fk_tblproc_responsavel` (`responsavel_id`),
+  KEY `idx_proc_apenso_de` (`apenso_de_id`),
+  CONSTRAINT `fk_proc_apenso_de` FOREIGN KEY (`apenso_de_id`) REFERENCES `tblproc` (`id`),
   CONSTRAINT `fk_tblproc_responsavel` FOREIGN KEY (`responsavel_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tblproc_ibfk_1` FOREIGN KEY (`pasta_id`) REFERENCES `tblpasta` (`id`),
   CONSTRAINT `tblproc_ibfk_2` FOREIGN KEY (`vara_id`) REFERENCES `tblvara` (`id`) ON DELETE SET NULL,

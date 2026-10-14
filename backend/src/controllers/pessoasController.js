@@ -2080,7 +2080,7 @@ async function processosDaPessoa(req, res) {
 
     const [rows] = await pool.execute(
       `SELECT
-         pr.id, pr.numProc,
+         pr.id, pr.numProc, pr.apenso_de_id,
          pr.NomeTituloProc                       AS titulo,
          ${pastaFormatadaSql('pa')}               AS pasta_numero_fmt,
          sp.nome                                 AS status_nome,

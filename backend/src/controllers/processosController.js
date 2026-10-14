@@ -11,6 +11,7 @@ const { parseMoeda, pastaFormatadaSql, escaparLike, paginacao, numeroPastaValido
 const { texto, lerTextos } = require('../utils/camposTexto');
 const { comIdNumerico } = require('../utils/rotasSeguras');
 const { motivoDeNaoArquivar } = require('../utils/pendenciasProcesso');
+const apenso = require('../utils/apensoProcesso');
 
 // Confere que TODA parte (autor/réu/perito) enviada aponta para uma pessoa que
 // existe e está ativa. tbltituloproc* e processo_perito são polimórficos SEM
@@ -246,7 +247,7 @@ async function listarPastas(req, res) {
       where += ` AND (SELECT CASE WHEN COUNT(*) > 0 AND COUNT(*) = COUNT(pee.slot) AND COUNT(DISTINCT pee.slot) = 1
                               THEN MIN(pee.slot) ELSE NULL END
                        FROM tblproc pr2 LEFT JOIN processos_etiquetas_escritorio pee ON pee.processo_id = pr2.id
-                       WHERE pr2.pasta_id = pa.id AND pr2.ativo = 1) = ?`;
+                       WHERE pr2.pasta_id = pa.id AND pr2.ativo = 1 AND pr2.apenso_de_id IS NULL) = ?`;
       params.push(etqEscSlot);
     }
 
@@ -256,37 +257,38 @@ async function listarPastas(req, res) {
          pa.numPasta,
          pa.criado_em,
          (SELECT pr.NomeTituloProc
-          FROM tblproc pr WHERE pr.pasta_id = pa.id AND pr.ativo = 1
+          FROM tblproc pr WHERE pr.pasta_id = pa.id AND pr.ativo = 1 AND pr.apenso_de_id IS NULL
           ORDER BY pr.id DESC LIMIT 1) AS titulo_proc,
          (SELECT pr.numProc
-          FROM tblproc pr WHERE pr.pasta_id = pa.id AND pr.ativo = 1
+          FROM tblproc pr WHERE pr.pasta_id = pa.id AND pr.ativo = 1 AND pr.apenso_de_id IS NULL
           ORDER BY pr.id DESC LIMIT 1) AS num_proc,
          (SELECT pr.protocolo
-          FROM tblproc pr WHERE pr.pasta_id = pa.id AND pr.ativo = 1
+          FROM tblproc pr WHERE pr.pasta_id = pa.id AND pr.ativo = 1 AND pr.apenso_de_id IS NULL
           ORDER BY pr.id DESC LIMIT 1) AS protocolo,
          -- Tipo: exibe o nome somente se TODOS os processos da pasta têm o mesmo tipo
          CASE
            WHEN (SELECT COUNT(DISTINCT pr.tipo_id)
-                 FROM tblproc pr WHERE pr.pasta_id = pa.id AND pr.ativo = 1
+                 FROM tblproc pr WHERE pr.pasta_id = pa.id AND pr.ativo = 1 AND pr.apenso_de_id IS NULL
                  AND pr.tipo_id IS NOT NULL) = 1
            THEN (SELECT tp.nome FROM tblproc pr
                  JOIN tbltipoproc tp ON tp.id = pr.tipo_id
-                 WHERE pr.pasta_id = pa.id AND pr.ativo = 1
+                 WHERE pr.pasta_id = pa.id AND pr.ativo = 1 AND pr.apenso_de_id IS NULL
                  AND pr.tipo_id IS NOT NULL LIMIT 1)
            ELSE NULL
          END AS tipo_nome,
          -- Status: exibe o nome somente se TODOS os processos da pasta têm o mesmo status
          CASE
            WHEN (SELECT COUNT(DISTINCT pr.status_id)
-                 FROM tblproc pr WHERE pr.pasta_id = pa.id AND pr.ativo = 1
+                 FROM tblproc pr WHERE pr.pasta_id = pa.id AND pr.ativo = 1 AND pr.apenso_de_id IS NULL
                  AND pr.status_id IS NOT NULL) = 1
            THEN (SELECT sp.nome FROM tblproc pr
                  JOIN tblstatusproc sp ON sp.id = pr.status_id
-                 WHERE pr.pasta_id = pa.id AND pr.ativo = 1
+                 WHERE pr.pasta_id = pa.id AND pr.ativo = 1 AND pr.apenso_de_id IS NULL
                  AND pr.status_id IS NOT NULL LIMIT 1)
            ELSE NULL
          END AS status_nome,
-         (SELECT COUNT(*) FROM tblproc pr WHERE pr.pasta_id = pa.id AND pr.ativo = 1) AS total_processos,
+         (SELECT COUNT(*) FROM tblproc pr WHERE pr.pasta_id = pa.id AND pr.ativo = 1 AND pr.apenso_de_id IS NULL) AS total_processos,
+         (SELECT COUNT(*) FROM tblproc pr WHERE pr.pasta_id = pa.id AND pr.ativo = 1 AND pr.apenso_de_id IS NOT NULL) AS total_apensos,
          -- Etiqueta PESSOAL do usuário logado nesta pasta (só ele vê a dele)
          (SELECT pe.slot FROM pastas_etiquetas pe
           WHERE pe.pasta_id = pa.id AND pe.usuario_id = ?) AS etiqueta_pessoal,
@@ -299,7 +301,7 @@ async function listarPastas(req, res) {
                    THEN MIN(pee.slot) ELSE NULL END
           FROM tblproc pr2
           LEFT JOIN processos_etiquetas_escritorio pee ON pee.processo_id = pr2.id
-          WHERE pr2.pasta_id = pa.id AND pr2.ativo = 1) AS etiqueta_escritorio,
+          WHERE pr2.pasta_id = pa.id AND pr2.ativo = 1 AND pr2.apenso_de_id IS NULL) AS etiqueta_escritorio,
          -- Etiqueta automática "Acordo": algum processo ativo da pasta tem acordo (não alvará) que não foi cancelado
          EXISTS (SELECT 1 FROM tblproc pr3 JOIN acordo ac ON ac.processo_id = pr3.id
                   WHERE pr3.pasta_id = pa.id AND pr3.ativo = 1 AND ac.tipo = 'acordo' AND ac.status <> 'cancelado') AS tem_acordo
@@ -587,12 +589,15 @@ async function criarProcesso(req, res) {
     responsavel_id,
     oabs = [],             // OABs vinculadas ao processo: [{ tipo: 'usuario'|'freela', id }]
     pasta_existente_confirmada = false,   // true só quando o usuário confirmou, na tela, incluir mais um processo numa pasta que já existe
+    apenso_de_id,          // APENSO: id do processo comum (da mesma pasta) ao qual este processo é apensado
   } = req.body;
+  const ehApenso = apenso_de_id !== undefined && apenso_de_id !== null && apenso_de_id !== '';
 
   if (!NomeTituloProc) return erro(res, 'Título do processo é obrigatório');
   if (autores.length === 0) return erro(res, 'Inclua ao menos um autor no polo ativo');
   if (reus.length === 0)    return erro(res, 'Inclua ao menos um réu no polo passivo');
-  if (!pasta_id && !numPasta) return erro(res, 'Número da pasta é obrigatório');
+  if (ehApenso && !(typeof numProc === 'string' && numProc.trim())) return erro(res, 'O número do processo do apenso é obrigatório');
+  if (!ehApenso && !pasta_id && !numPasta) return erro(res, 'Número da pasta é obrigatório');
   // cliente_polo é opcional, mas se vier precisa ser 'autor' ou 'reu'
   if (cliente_polo && !['autor', 'reu'].includes(cliente_polo)) {
     return erro(res, 'Polo do cliente inválido (use "autor" ou "reu")');
@@ -603,6 +608,19 @@ async function criarProcesso(req, res) {
     await conn.beginTransaction();
 
     let pastaId = pasta_id ? parseInt(pasta_id) : null;
+
+    // APENSO: nasce SEMPRE na pasta do processo principal (nunca cria nem escolhe outra pasta). Trava a linha da pasta para dois
+    // apensos de mesmo número, cadastrados ao mesmo tempo, não passarem juntos pela conferência de repetidos.
+    let principalId = null;
+    if (ehApenso) {
+      const lido = await apenso.lerPrincipalDoApenso(conn, apenso_de_id);
+      if (lido.aviso) { await conn.rollback(); return erro(res, lido.aviso.mensagem, lido.aviso.status); }
+      principalId = lido.principal.id;
+      const [[daPasta]] = await conn.execute('SELECT id, numPasta FROM tblpasta WHERE id = ? FOR UPDATE', [lido.principal.pasta_id]);
+      const outraPasta = (pastaId && pastaId !== daPasta.id) || (numPasta && numeroPastaValido(numPasta) !== daPasta.numPasta);
+      if (outraPasta) { await conn.rollback(); return erro(res, 'O apenso fica sempre na pasta do processo principal'); }
+      pastaId = daPasta.id;
+    }
 
     // Se não tem pasta_id, cria ou reutiliza pasta pelo numPasta
     if (!pastaId) {
@@ -647,31 +665,14 @@ async function criarProcesso(req, res) {
       }
     }
 
-    // Verifica duplicidade de numProc (ignora null/vazio)
+    // Verifica duplicidade de numProc e de protocolo (ignora null/vazio). Processo comum: não repete entre os comuns e não pode ser
+    // número de apenso; apenso: só não repete dentro da própria pasta (o mesmo número vale em várias pastas) — ver utils/apensoProcesso.js
     const numProcLimpo = numProc?.trim() || null;
-    if (numProcLimpo) {
-      const [duplic] = await conn.execute(
-        'SELECT id FROM tblproc WHERE numProc = ? AND ativo = 1 LIMIT 1',
-        [numProcLimpo]
-      );
-      if (duplic.length) {
-        await conn.rollback();
-        return erro(res, `O número de processo "${numProcLimpo}" já está cadastrado no sistema`);
-      }
-    }
-
-    // Verifica duplicidade de protocolo (ignora null/vazio) — não pode haver 2 iguais no banco
     const protocoloLimpo = protocolo?.trim() || null;
-    if (protocoloLimpo) {
-      const [dupProt] = await conn.execute(
-        'SELECT id FROM tblproc WHERE protocolo = ? AND ativo = 1 LIMIT 1',
-        [protocoloLimpo]
-      );
-      if (dupProt.length) {
-        await conn.rollback();
-        return erro(res, `O protocolo "${protocoloLimpo}" já está cadastrado no sistema`);
-      }
-    }
+    const repetido = await apenso.conferirRepetidos(conn, numProcLimpo, protocoloLimpo, {
+      ficha: 'novo', apensoNaPasta: ehApenso ? pastaId : null,
+    });
+    if (repetido) { await conn.rollback(); return erro(res, repetido); }
 
     const responsavelId = responsavel_id ? parseInt(responsavel_id, 10) : null;
     if (responsavelId) {
@@ -688,10 +689,11 @@ async function criarProcesso(req, res) {
     // Cria o processo
     const [procResult] = await conn.execute(
       `INSERT INTO tblproc
-         (pasta_id, numProc, protocolo, NomeTituloProc, cliente_polo, vara_id, tipo_id, status_id, instancia_id,
+         (pasta_id, apenso_de_id, numProc, protocolo, NomeTituloProc, cliente_polo, vara_id, tipo_id, status_id, instancia_id,
           data_distribuicao, observacoes, responsavel_id, criado_por)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [pastaId,
+       principalId,
        numProcLimpo,
        protocoloLimpo,
        NomeTituloProc,
@@ -786,28 +788,9 @@ async function excluirProcesso(req, res) {
     if (!rows.length) { await conn.rollback(); return naoEncontrado(res, 'Processo não encontrado'); }
     const proc = rows[0];
 
-    // Verifica dados dependentes que impedem a exclusão.
-    // conta_corrente e acordo estão aqui por um motivo crítico: a FK das duas é
-    // ON DELETE CASCADE, então sem estas checagens o DELETE abaixo apagaria o
-    // financeiro do processo em silêncio.
-    const verificacoes = [
-      { tabela: 'andamento_processual', coluna: 'processo_id', label: 'andamento(s) processual(is)' },
-      { tabela: 'audiencia',            coluna: 'processo_id', label: 'audiência(s)'                 },
-      { tabela: 'pericia',              coluna: 'processo_id', label: 'perícia(s)'                   },
-      { tabela: 'prazos_processo',      coluna: 'processo_id', label: 'prazo(s)'                     },
-      { tabela: 'tarefas',              coluna: 'processo_id', label: 'tarefa(s)'                    },
-      { tabela: 'acordo',               coluna: 'processo_id', label: 'acordo(s)/alvará(s) no financeiro' },
-      { tabela: 'conta_corrente',       coluna: 'processo_id', label: 'lançamento(s) na conta corrente' },
-      { tabela: 'log_comunicacoes',     coluna: 'processo_id', label: 'comunicação(ões) registrada(s)' },
-    ];
-
-    const bloqueios = [];
-    for (const v of verificacoes) {
-      const [[{ total }]] = await conn.execute(
-        `SELECT COUNT(*) AS total FROM ${v.tabela} WHERE ${v.coluna} = ?`, [id]
-      );
-      if (total > 0) bloqueios.push(`${total} ${v.label}`);
-    }
+    // Verifica dados dependentes que impedem a exclusão (lista única em utils/apensoProcesso.js: andamentos, audiências, perícias,
+    // prazos, tarefas, acordos/alvarás, conta corrente e comunicações).
+    const bloqueios = await apenso.dependenciasDoProcesso(conn, id);
 
     if (bloqueios.length > 0) {
       await conn.rollback();
@@ -817,21 +800,15 @@ async function excluirProcesso(req, res) {
       );
     }
 
-    // Casca vazia — apaga de verdade. Os vínculos saem explicitamente (não dependemos
-    // do ON DELETE CASCADE do banco para algo que precisa ser garantido).
-    await conn.execute('DELETE FROM tbltituloprocautor WHERE proc_id = ?', [id]);
-    await conn.execute('DELETE FROM tbltituloprocreu   WHERE proc_id = ?', [id]);
-    await conn.execute('DELETE FROM processo_perito    WHERE proc_id = ?', [id]);
-    await conn.execute('DELETE FROM processo_assunto   WHERE processo_id = ?', [id]);
-    await conn.execute('DELETE FROM processo_oabs      WHERE processo_id = ?', [id]);
-    await conn.execute('DELETE FROM tblproc WHERE id = ?', [id]);
+    // PROCESSO PRINCIPAL com apensos: os apensos saem junto, só se nenhum tiver ligação com outros cadastros e depois de o
+    // usuário confirmar (?confirmar_apensos=1). Apenso (ou processo sem apenso) segue o caminho de sempre.
+    const emCadeia = await apenso.conferirExclusaoComApensos(conn, id, req.query.confirmar_apensos === '1');
+    if (emCadeia.aviso) { await conn.rollback(); return erro(res, emCadeia.aviso.mensagem, emCadeia.aviso.status, emCadeia.aviso.detalhes); }
 
-    // Auditoria na MESMA transação. Guarda o NÚMERO do processo: depois da exclusão
-    // o id não aponta mais para nada, e é o número que identifica o que foi apagado.
-    await auditoria.registrar(
-      req.usuario.id, 'tblproc', 'excluir', Number(id),
-      { numProc: proc.numProc, titulo: proc.NomeTituloProc }, null, conn
-    );
+    // Casca vazia — apaga de verdade (apensos primeiro, depois o principal). Os vínculos saem explicitamente (não dependemos
+    // do ON DELETE CASCADE do banco). A auditoria guarda o NÚMERO do processo: depois da exclusão o id não aponta mais para nada.
+    for (const a of emCadeia.apensos) await apenso.apagarProcessoEFilhos(conn, a.id, req.usuario.id, a);
+    await apenso.apagarProcessoEFilhos(conn, id, req.usuario.id, proc);
 
     await conn.commit();
     return sucesso(res, null, 'Processo excluído com sucesso');
@@ -878,6 +855,8 @@ async function atualizarProcesso(req, res) {
     autores, reus, peritos, assuntos, cliente_polo,
     responsavel_id, oabs,   // OABs vinculadas: [{ tipo: 'usuario'|'freela', id }]
     motivo_status,
+    apenso_de_id,           // o vínculo de apenso NÃO muda depois de criado (só é aceito o mesmo valor)
+    confirmar_apensos,      // true = o usuário já viu o aviso de que os apensos também serão arquivados
   } = req.body;
 
   // cliente_polo é opcional; se vier preenchido precisa ser 'autor' ou 'reu'
@@ -900,6 +879,20 @@ async function atualizarProcesso(req, res) {
     const statusAnteriorId = antes[0].status_id ? Number(antes[0].status_id) : null;
     const statusNovoId = status_id ? Number(status_id) : null;
     const statusMudou = statusAnteriorId !== statusNovoId;
+    const eraApenso = antes[0].apenso_de_id !== null;
+    const numProcLimpo = numProc?.trim() || null;
+    const protocoloLimpo = protocolo?.trim() || null;
+
+    // O vínculo de apenso não muda depois de criado (nem vira apenso um processo comum, nem o contrário).
+    const vinculoEnviado = apenso_de_id === undefined || apenso_de_id === '' ? null : apenso_de_id;
+    if (apenso_de_id !== undefined && String(vinculoEnviado ?? '') !== String(antes[0].apenso_de_id ?? '')) {
+      await conn.rollback();
+      return erro(res, 'O vínculo de apenso não pode ser alterado. Exclua e cadastre de novo.');
+    }
+    if (eraApenso && !numProcLimpo) {
+      await conn.rollback();
+      return erro(res, 'O número do processo do apenso é obrigatório');
+    }
 
     // Arquivar (status que encerra o processo) só com tudo resolvido: acordo, repasses, prazos, tarefas, audiências, perícias
     const naoArquiva = await motivoDeNaoArquivar(conn, id, statusAnteriorId, statusNovoId);
@@ -907,32 +900,18 @@ async function atualizarProcesso(req, res) {
       await conn.rollback();
       return erro(res, naoArquiva, 422);
     }
-
-    // Verifica duplicidade de numProc (exclui o próprio processo da verificação)
-    const numProcLimpo = numProc?.trim() || null;
-    if (numProcLimpo) {
-      const [duplic] = await conn.execute(
-        'SELECT id FROM tblproc WHERE numProc = ? AND ativo = 1 AND id != ? LIMIT 1',
-        [numProcLimpo, id]
-      );
-      if (duplic.length) {
-        await conn.rollback();
-        return erro(res, `O número de processo "${numProcLimpo}" já está cadastrado em outro processo`);
-      }
+    // Arquivar o PRINCIPAL arquiva os apensos abertos junto: pendência de apenso bloqueia; sem confirmação, avisa (409)
+    const avisoApensos = await apenso.conferirArquivamentoComApensos(conn, id, statusAnteriorId, statusNovoId, confirmar_apensos);
+    if (avisoApensos) {
+      await conn.rollback();
+      return erro(res, avisoApensos.mensagem, avisoApensos.status, avisoApensos.detalhes);
     }
 
-    // Verifica duplicidade de protocolo (exclui o próprio processo) — não pode haver 2 iguais no banco
-    const protocoloLimpo = protocolo?.trim() || null;
-    if (protocoloLimpo) {
-      const [dupProt] = await conn.execute(
-        'SELECT id FROM tblproc WHERE protocolo = ? AND ativo = 1 AND id != ? LIMIT 1',
-        [protocoloLimpo, id]
-      );
-      if (dupProt.length) {
-        await conn.rollback();
-        return erro(res, `O protocolo "${protocoloLimpo}" já está cadastrado em outro processo`);
-      }
-    }
+    // Verifica duplicidade de numProc e de protocolo (exclui o próprio processo). Apenso: só vale dentro da própria pasta.
+    const repetido = await apenso.conferirRepetidos(conn, numProcLimpo, protocoloLimpo, {
+      ignorarId: Number(id), ficha: 'edicao', apensoNaPasta: eraApenso ? antes[0].pasta_id : null,
+    });
+    if (repetido) { await conn.rollback(); return erro(res, repetido); }
 
     const responsavelId = responsavel_id ? parseInt(responsavel_id, 10) : null;
     if (responsavelId) {
@@ -1050,6 +1029,9 @@ async function atualizarProcesso(req, res) {
         status_novo: statusNovoId ? (nomesStatus[statusNovoId] || null) : null,
         motivo: motivo_status?.trim() || null,
       }, conn);
+    }
+    if (statusMudou) {
+      await apenso.arquivarApensosJunto(conn, Number(id), statusAnteriorId, statusNovoId, req.usuario.id, motivo_status);
     }
     await auditoria.registrar(req.usuario.id, 'tblproc', 'editar', id, antes[0], null, conn);
     await conn.commit();
@@ -1620,7 +1602,7 @@ async function buscarProcessoPorId(req, res) {
   try {
     const { id } = req.params;
     const [rows] = await pool.execute(
-      `SELECT p.id, p.numProc, p.NomeTituloProc, p.vara_id, pa.numPasta
+      `SELECT p.id, p.numProc, p.NomeTituloProc, p.vara_id, p.apenso_de_id, pa.numPasta
        FROM tblproc p
        JOIN tblpasta pa ON pa.id = p.pasta_id
        WHERE p.id = ? AND p.ativo = 1`,
@@ -1642,7 +1624,7 @@ async function buscarProcessosPorNumero(req, res) {
 
     const termo = `%${escaparLike(q)}%`;
     const [rows] = await pool.execute(
-      `SELECT p.id, p.numProc, p.NomeTituloProc, p.vara_id, pa.numPasta
+      `SELECT p.id, p.numProc, p.NomeTituloProc, p.vara_id, p.apenso_de_id, pa.numPasta
        FROM tblproc p
        JOIN tblpasta pa ON pa.id = p.pasta_id
        WHERE p.ativo = 1

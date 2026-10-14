@@ -262,8 +262,9 @@ async function lerCamposPericia(corpo, { exigeProcesso = false } = {}) {
     if (!c.processo_id) return { erro: 'Processo é obrigatório', status: 400 };
     const proc = inteiroPositivo(c.processo_id, { rotulo: 'Processo' });
     if (proc.erro) return { erro: proc.erro, status: 400 };
-    const [achou] = await pool.execute('SELECT id FROM tblproc WHERE id = ? AND ativo = 1', [proc.valor]);
+    const [achou] = await pool.execute('SELECT id, apenso_de_id FROM tblproc WHERE id = ? AND ativo = 1', [proc.valor]);
     if (!achou.length) return { erro: 'Processo não encontrado', status: 404 };
+    if (achou[0].apenso_de_id !== null) return { erro: 'Processo apenso não pode ter perícia', status: 400 };
     dados.processo_id = proc.valor;
   }
   if (!c.data) return { erro: 'Data é obrigatória', status: 400 };

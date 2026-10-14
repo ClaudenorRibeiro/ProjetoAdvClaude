@@ -412,11 +412,13 @@ async function listar(req, res) {
                 WHERE p.numero_processo IS NOT NULL AND p.numero_processo <> ''
                   AND REPLACE(REPLACE(REPLACE(t0.numProc,'.',''),'-',''),' ','')
                       = REPLACE(REPLACE(REPLACE(p.numero_processo,'.',''),'-',''),' ','')
+                ORDER BY t0.apenso_de_id IS NOT NULL, t0.id
                 LIMIT 1) AS processo_id,
               (SELECT t0.NomeTituloProc FROM tblproc t0
                 WHERE p.numero_processo IS NOT NULL AND p.numero_processo <> ''
                   AND REPLACE(REPLACE(REPLACE(t0.numProc,'.',''),'-',''),' ','')
                       = REPLACE(REPLACE(REPLACE(p.numero_processo,'.',''),'-',''),' ','')
+                ORDER BY t0.apenso_de_id IS NOT NULL, t0.id
                 LIMIT 1) AS pasta_titulo,
               EXISTS (SELECT 1 FROM tblproc t
                        WHERE p.numero_processo IS NOT NULL AND p.numero_processo <> ''
@@ -426,12 +428,13 @@ async function listar(req, res) {
               -- casado pelo NÚMERO — exatamente a mesma regra do processo_cadastrado acima
               -- (ignora ponto, traço e espaço). Fica NULL quando o processo não está cadastrado
               -- OU está cadastrado sem o campo preenchido; nesses casos a tela não escreve nada.
-              -- LIMIT 1 por segurança: hoje não há número repetido em tblproc, mas também não há
-              -- índice único, então isto garante que a consulta nunca quebre se um dia houver.
+              -- LIMIT 1 por segurança: o número só repete em APENSO (mesmo número em várias pastas); o processo
+              -- comum vem primeiro (ORDER BY). Todas as pastas do número saem em processos_vinculados, abaixo.
               (SELECT t2.cliente_polo FROM tblproc t2
                 WHERE p.numero_processo IS NOT NULL AND p.numero_processo <> ''
                   AND REPLACE(REPLACE(REPLACE(t2.numProc,'.',''),'-',''),' ','')
                       = REPLACE(REPLACE(REPLACE(p.numero_processo,'.',''),'-',''),' ','')
+                ORDER BY t2.apenso_de_id IS NOT NULL, t2.id
                 LIMIT 1) AS cliente_polo,
               -- Responsáveis das AÇÕES nascidas desta publicação (prazo/tarefa/compromisso).
               -- Sem pessoa (delegado/atribuído em branco) = "Escritório". Juntados em JS (dedup).
@@ -458,6 +461,30 @@ async function listar(req, res) {
       `SELECT COUNT(*) AS total FROM publicacoes p ${where}`, params
     );
 
+    // TODAS as pastas em que o número da publicação está cadastrado: o processo comum primeiro e depois os APENSOS (o mesmo
+    // número de apenso aparece em várias pastas). `processo_id` e `pasta_titulo` continuam trazendo só o primeiro.
+    const chaveNumero = (n) => String(n || '').replace(/[. -]/g, '');
+    const numerosPagina = [...new Set(rows.map(r => chaveNumero(r.numero_processo)))].filter(Boolean);
+    const vinculadosPorNumero = new Map();
+    if (numerosPagina.length) {
+      const [vinculados] = await pool.execute(
+        `SELECT t.id, t.pasta_id, pa.numPasta, t.NomeTituloProc, t.cliente_polo, t.apenso_de_id, t.numProc
+           FROM tblproc t JOIN tblpasta pa ON pa.id = t.pasta_id
+          WHERE t.ativo = 1
+            AND REPLACE(REPLACE(REPLACE(t.numProc,'.',''),'-',''),' ','') IN (${numerosPagina.map(() => '?').join(',')})
+          ORDER BY t.apenso_de_id IS NOT NULL, pa.numPasta, t.id`,
+        numerosPagina
+      );
+      for (const v of vinculados) {
+        const k = chaveNumero(v.numProc);
+        if (!vinculadosPorNumero.has(k)) vinculadosPorNumero.set(k, []);
+        vinculadosPorNumero.get(k).push({
+          processo_id: v.id, pasta_id: v.pasta_id, numPasta: v.numPasta, titulo: v.NomeTituloProc,
+          cliente_polo: v.cliente_polo, apenso: v.apenso_de_id !== null,
+        });
+      }
+    }
+
     // Junta os responsáveis das 3 fontes de ação numa lista distinta por publicação.
     const registros = rows.map(r => {
       const nomes = [r.resp_prazos, r.resp_tarefas, r.resp_compromissos]
@@ -480,6 +507,7 @@ async function listar(req, res) {
         atribuida_a_mim: !!atribuida_a_mim,
         pode_agir: podeAgir,
         resp_acoes: [...new Set(nomes)].join(', ') || null,
+        processos_vinculados: vinculadosPorNumero.get(chaveNumero(resto.numero_processo)) || [],
       };
     });
 

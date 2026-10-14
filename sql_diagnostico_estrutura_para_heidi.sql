@@ -1866,6 +1866,8 @@ SELECT esperado.tabela AS tabela, esperado.coluna AS coluna_que_falta
     UNION ALL
     SELECT 'tblproc' AS tabela, 'pasta_id' AS coluna
     UNION ALL
+    SELECT 'tblproc' AS tabela, 'apenso_de_id' AS coluna
+    UNION ALL
     SELECT 'tblproc' AS tabela, 'numProc' AS coluna
     UNION ALL
     SELECT 'tblproc' AS tabela, 'protocolo' AS coluna

@@ -525,7 +525,9 @@ function SeletorOabsProcesso({ oabs = [], onChange, opcoes = [], onOpcoesAtualiz
 //                  até que o checkbox "Novas Partes" seja marcado
 //   onFechar     — callback(reload, pastaId)
 // ============================================================
-export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
+// `apensoDe` ({ id, numProc, titulo }): cadastra um APENSO do processo comum indicado (sempre na mesma pasta, partes
+// escolhidas à mão, número do processo obrigatório). Sem ele, é um processo comum.
+export function ModalNovoProcesso({ pastaId, processoBase, apensoDe = null, onFechar }) {
   const { temPermissao } = useAuth();
   const overlayRef = useEscFechar(() => onFechar(false)); // ESC fecha este modal (só quando é o de cima)
   // Modal auxiliar: null = fechado, string = tipo aberto ('tipos','status','instancias','foruns','varas','assuntos')
@@ -547,7 +549,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
     // 'autor' | 'reu' | '' (não definido) — quem é o cliente do escritório.
     // Padrão 'autor': é o caso da esmagadora maioria dos processos e alinha a tela
     // com a geração de documentos, que já assume o autor quando o polo não vem definido.
-    cliente_polo: 'autor',
+    cliente_polo: apensoDe ? '' : 'autor',   // apenso é processo de OUTRA pessoa: não vem com cliente definido
     responsavel_id: '',
   });
 
@@ -814,11 +816,13 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
     if (autores.length === 0) return toast.error('Adicione ao menos um autor (polo ativo)');
     if (reus.length === 0)    return toast.error('Adicione ao menos um réu (polo passivo)');
     if (!pastaId && !form.numPasta) return toast.error('Número da pasta é obrigatório');
+    if (apensoDe && !form.numProc.trim()) return toast.error('O número do processo do apenso é obrigatório');
 
     setSalvando(true);
     try {
       const payload = {
         pasta_id:          pastaId || null,
+        apenso_de_id:      apensoDe ? apensoDe.id : undefined,
         numPasta:          pastaId ? undefined : parseInt(form.numPasta),
         pasta_existente_confirmada: !pastaId && usarPastaExistenteRef.current === true,
         numProc:           form.numProc || null,
@@ -839,10 +843,10 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
         oabs:              oabs.map(o => ({ tipo: o.tipo, id: o.id })),
       };
       const { data } = await processosAPI.criarProcesso(payload);
-      toast.success('Processo criado com sucesso!');
+      toast.success(apensoDe ? 'Apenso criado com sucesso!' : 'Processo criado com sucesso!');
       onFechar(true, data.dados?.pasta_id);
     } catch (err) {
-      toast.error(err.response?.data?.mensagem || 'Erro ao criar processo');
+      toast.error(err.response?.data?.mensagem || (apensoDe ? 'Erro ao criar apenso' : 'Erro ao criar processo'));
     } finally {
       setSalvando(false);
     }
@@ -855,11 +859,19 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
     <div className="modal-overlay" ref={overlayRef}>
       <div className="modal-box" style={{ maxWidth: '700px' }}>
         <div className="modal-header">
-          <h3>{pastaId ? 'Novo Processo (mesma pasta)' : 'Novo Processo'}</h3>
+          <h3>{apensoDe ? 'Novo Apenso' : (pastaId ? 'Novo Processo (mesma pasta)' : 'Novo Processo')}</h3>
           <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
         </div>
 
         <div className="modal-body">
+
+          {apensoDe && (
+            <div role="note" style={{ background: '#f5f3ff', border: '1px solid #c4b5fd', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: '#4c1d95' }}>
+              <strong>Apenso do processo {apensoDe.numProc || `#${apensoDe.id}`}</strong>
+              {apensoDe.titulo ? ` — ${apensoDe.titulo}` : ''}.
+              <div style={{ marginTop: '4px' }}>Fica sempre nesta pasta. Informe o número do processo do apenso (ex.: a recuperação judicial) e escolha as partes dele à mão.</div>
+            </div>
+          )}
 
           {/* Número da pasta — só exibe se vai criar nova pasta */}
           {!pastaId && (
@@ -1133,7 +1145,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, onFechar }) {
           {/* Número CNJ + Número de Protocolo (lado a lado) */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div className="form-group">
-              <label className="form-label">Número do Processo (CNJ)</label>
+              <label className="form-label">{apensoDe ? 'Número do Processo do Apenso (CNJ) *' : 'Número do Processo (CNJ)'}</label>
               <input aria-label="Número do Processo (CNJ)"
                 className="form-control"
                 value={form.numProc}
@@ -1300,6 +1312,8 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
   const { temPermissao } = useAuth();
   const overlayRef = useEscFechar(() => onFechar(false)); // ESC fecha este modal (só quando é o de cima)
   const podeAlterarProcesso = temPermissao('processos', 'alterar');
+  const ehApenso = !!processo.apenso_de_id;   // o vínculo com o processo principal não muda
+  const [avisoApensos, setAvisoApensos] = useState(null);   // { mensagem, motivo }: arquivar o principal arquiva os apensos (pede confirmação)
   const [leitura, setLeitura] = useState(somenteLeitura);
   const [modalAux, setModalAux] = useState(null);
   // Cadastro rápido de parte: null = fechado; 'autor' | 'reu' | 'perito' = campo que abriu
@@ -1446,8 +1460,9 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
     return aux.status?.find(s => String(s.id) === String(statusId))?.nome || 'Status selecionado';
   }
 
-  function montarPayload(motivoStatus = null) {
+  function montarPayload(motivoStatus = null, confirmarApensos = false) {
     return {
+      ...(confirmarApensos ? { confirmar_apensos: true } : {}),
       numProc:           form.numProc           || null,
       protocolo:         form.protocolo?.trim()  || null,
       NomeTituloProc:    nomeTitulo,
@@ -1468,14 +1483,19 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
     };
   }
 
-  async function salvarComMotivoStatus(motivoStatus = null) {
+  async function salvarComMotivoStatus(motivoStatus = null, confirmarApensos = false) {
     setSalvando(true);
     try {
-      await processosAPI.atualizarProcesso(processo.id, montarPayload(motivoStatus));
+      await processosAPI.atualizarProcesso(processo.id, montarPayload(motivoStatus, confirmarApensos));
       toast.success('Processo atualizado com sucesso!');
       onFechar(true);
     } catch (err) {
-      toast.error(err.response?.data?.mensagem || 'Erro ao salvar');
+      const resp = err.response?.data;
+      if (err.response?.status === 409 && resp?.detalhes?.codigo === 'CONFIRMAR_ARQUIVAMENTO_DE_APENSOS') {
+        setAvisoApensos({ mensagem: resp.mensagem, motivo: motivoStatus });   // nada foi gravado: pergunta antes
+      } else {
+        toast.error(resp?.mensagem || 'Erro ao salvar');
+      }
     } finally {
       setSalvando(false);
     }
@@ -1485,6 +1505,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
     if (leitura) return;
     if (!autores.length) return toast.error('Adicione ao menos um autor (polo ativo)');
     if (!reus.length)    return toast.error('Adicione ao menos um réu (polo passivo)');
+    if (ehApenso && !form.numProc.trim()) return toast.error('O número do processo do apenso é obrigatório');
     const statusAnterior = processo.status_id ? String(processo.status_id) : '';
     const statusNovo = form.status_id ? String(form.status_id) : '';
     if (statusAnterior !== statusNovo) {
@@ -1507,6 +1528,12 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
 
         <div className="modal-body" tabIndex={leitura ? 0 : undefined}>
           <fieldset disabled={leitura} style={{ border: 0, padding: 0, margin: 0 }}>
+
+          {ehApenso && (
+            <div role="note" style={{ background: '#f5f3ff', border: '1px solid #c4b5fd', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: '#4c1d95' }}>
+              <strong>Este processo é um APENSO</strong> de outro processo desta pasta. O vínculo não pode ser alterado (para mudar, exclua e cadastre de novo).
+            </div>
+          )}
 
           {/* Preview do título gerado */}
           <div className="form-group">
@@ -1710,7 +1737,7 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
           {/* Número CNJ + Número de Protocolo (lado a lado) */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div className="form-group">
-              <label className="form-label">Número do Processo (CNJ)</label>
+              <label className="form-label">{ehApenso ? 'Número do Processo do Apenso (CNJ) *' : 'Número do Processo (CNJ)'}</label>
               <input aria-label="Número do Processo (CNJ)" className="form-control"
                 value={form.numProc}
                 disabled={leitura}
@@ -1869,6 +1896,16 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
               else                               adicionarParte(nova, tipoPerito, peritos, setPeritos, [],      setBuscaPerito, setResultPerito);
               setCadastroRapido(null);
             }}
+          />
+        )}
+        {avisoApensos && (
+          <ModalConfirmar
+            titulo="Arquivar também os apensos?"
+            mensagem={avisoApensos.mensagem}
+            textoBotao="Arquivar tudo"
+            tipo="aviso"
+            acao={async () => { const m = avisoApensos.motivo; setAvisoApensos(null); await salvarComMotivoStatus(m, true); }}
+            onCancelar={() => setAvisoApensos(null)}
           />
         )}
         {!leitura && modalMotivoStatus && (

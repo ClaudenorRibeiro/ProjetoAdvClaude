@@ -11,6 +11,7 @@ const { pool } = require('../config/database');
 const { sucesso, erro, erroInterno, proibido, naoEncontrado } = require('../utils/response');
 const auditoria = require('../middleware/auditoria');
 const { motivoDeNaoArquivar } = require('../utils/pendenciasProcesso');
+const apenso = require('../utils/apensoProcesso');
 
 // Whitelist dos módulos que têm etiqueta PESSOAL e onde cada marcação é gravada.
 // tabela/coluna são valores FIXOS daqui (nunca vêm do usuário) — interpolar é seguro.
@@ -351,7 +352,7 @@ async function salvarCatalogo(req, res) {
 //   - remover a etiqueta (s = 0) ou aplicar cor SEM vínculo NÃO reverte o status;
 //   - não é retroativo (só o processo que está recebendo a etiqueta agora é afetado).
 async function marcarEscritorio(req, res) {
-  const { modulo, registro_id, slot, motivo_status } = req.body || {};
+  const { modulo, registro_id, slot, motivo_status, confirmar_apensos } = req.body || {};
   const cfg = MODULOS_ESCRITORIO[modulo];
   if (!cfg) return erro(res, 'Módulo inválido para etiqueta do escritório');
   if (!(await podeAplicarEscritorio(req, modulo))) {
@@ -413,6 +414,13 @@ async function marcarEscritorio(req, res) {
           await conn.rollback();
           return erro(res, naoArquiva, 422);
         }
+        // Arquivar o PRINCIPAL arquiva os apensos abertos junto (pendência de apenso bloqueia; sem confirmação, avisa). Nada é gravado.
+        const avisoApensos = statusAnteriorId !== vincStatusId
+          ? await apenso.conferirArquivamentoComApensos(conn, regId, statusAnteriorId, vincStatusId, confirmar_apensos) : null;
+        if (avisoApensos) {
+          await conn.rollback();
+          return erro(res, avisoApensos.mensagem, avisoApensos.status, avisoApensos.detalhes);
+        }
         if (statusAnteriorId !== vincStatusId) {
           await conn.execute(
             'UPDATE tblproc SET status_id = ?, alterado_por = ?, alterado_em = NOW() WHERE id = ?',
@@ -441,6 +449,8 @@ async function marcarEscritorio(req, res) {
             motivo,
             origem: 'etiqueta_escritorio',
           }, conn);
+
+          await apenso.arquivarApensosJunto(conn, regId, statusAnteriorId, vincStatusId, req.usuario.id, motivo);
 
           statusAplicadoId = vincStatusId;
           statusAplicadoNome = nomes[vincStatusId] || null;

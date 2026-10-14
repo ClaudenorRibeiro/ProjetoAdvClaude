@@ -57,4 +57,11 @@ async function motivoDeNaoArquivar(conn, processoId, statusAnteriorId, statusNov
   return `Não é possível arquivar: ${itens.join(', ')}.`;
 }
 
-module.exports = { pendenciasDoProcesso, motivoDeNaoArquivar };
+// A troca de status ARQUIVA agora? (de um status que não encerra para um que encerra.) Usada também pelo apenso.
+async function arquivaAgora(conn, statusAnteriorId, statusNovoId) {
+  if (!statusNovoId || Number(statusAnteriorId) === Number(statusNovoId)) return false;
+  if (!(await statusEncerra(conn, statusNovoId))) return false;
+  return !(await statusEncerra(conn, statusAnteriorId));
+}
+
+module.exports = { pendenciasDoProcesso, motivoDeNaoArquivar, arquivaAgora, statusEncerra };
