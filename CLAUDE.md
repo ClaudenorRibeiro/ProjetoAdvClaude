@@ -5,6 +5,16 @@ projeto (nuvem ou local). Ele registra as exigências do usuário (Claudenor)
 para este sistema. **Vale para qualquer IA/assistente que trabalhe neste
 repositório, em qualquer sessão futura.**
 
+## DOIS SISTEMAS IDÊNTICOS — TUDO QUE O USUÁRIO PEDIR VALE PARA OS DOIS (regra do usuário, 16/10/2026)
+
+**Vale para qualquer IA/assistente, em qualquer sessão, neste repositório e no `NovoJud-saas`.**
+
+- Existem DOIS sistemas que o usuário (Claudenor) quer **IDÊNTICOS** em funcionalidades, regras e comportamento: o **ProjetoAdvClaude** (este; repositório `ClaudenorRibeiro/ProjetoAdvClaude`) e o **NovoJud-saas** (repositório `ClaudenorRibeiro/NovoJud-saas`, a versão SaaS, multi-escritório). "Antigo" é só um apelido do ProjetoAdvClaude: **ele continua em uso pelo Erick e pelo Antônio e continua sendo desenvolvido.**
+- **TUDO que o usuário pedir** (funcionalidade nova, correção, ajuste de tela, mudança de regra, texto, permissão, aviso...) **deve ser feito nos DOIS repositórios, cada um no seu branch `rascunho`**, e nunca só em um. Ao receber um pedido, a IA faz num sistema, **porta para o outro** (cada um na sua tecnologia: o ProjetoAdvClaude é JavaScript; o SaaS é TypeScript) e só considera o pedido concluído quando os dois estão feitos e testados. No fim, relata o que foi feito em cada um.
+- Única diferença permitida: o que o SaaS **exigir** por ser multi-escritório (isolamento entre escritórios, `escritorio_id`, painel do dono, subdomínios), segurança de isolamento ou tecnologia que torne o jeito do outro impossível. Qualquer outra diferença NÃO pode ser decidida pela IA: perguntar ao usuário antes. O que existir só num dos dois por falta de tempo é pendência a registrar, não decisão.
+- Trabalhar sempre só nos branches `rascunho` (o `main` só com "PODE SUBIR" do usuário), com commits SEPARADOS em cada repositório e caminhos explícitos (`git -C`), sem submódulo, sem link e sem copiar arquivo automaticamente de um para o outro. Cada sessão consegue ter só um dos repositórios na máquina: se faltar o outro, a IA pede para ele ser anexado à sessão (`add_repo`) em vez de deixar de fazer.
+- Esta regra **substitui** qualquer trecho antigo que diga para "nunca mexer" ou "só ler" um dos dois repositórios.
+
 ## 0. Regra de certeza absoluta (a mais importante)
 
 Se a IA não tiver certeza absoluta sobre uma informação, código ou fato,
