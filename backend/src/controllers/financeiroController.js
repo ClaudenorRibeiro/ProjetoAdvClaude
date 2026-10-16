@@ -633,11 +633,23 @@ async function listarAcordos(req, res) {
   }
 }
 
+// Tipos de lançamento da estrutura acordo/parcelas: acordo, alvará e RECEBIMENTO AVULSO (valor combinado
+// à parte que o cliente pagará depois; sem repasse ao cliente: o valor é todo do escritório, com parceria opcional).
+const TIPOS_ACORDO = ['acordo', 'alvara', 'avulso'];
+const lerTipoAcordo = (t) => (TIPOS_ACORDO.includes(t) ? t : 'acordo');
+const palavraDoTipo = (t) => (t === 'alvara' ? 'alvará' : t === 'avulso' ? 'recebimento avulso' : 'acordo');
+const rotuloDoTipo = (t) => (t === 'alvara' ? 'Alvará' : t === 'avulso' ? 'Avulso' : 'Acordo');
+// No avulso o servidor FORÇA o honorário em 100% (líquido do cliente = 0) e não aceita multa: o front não decide isso.
+function ajustarParcelasAvulso(parcelas) {
+  return parcelas.map(p => ({ ...p, honor_tipo: 'percent', honor_percentual: 100, honor_valor: null, multa_percentual: null }));
+}
+
 // POST /api/financeiro/acordo/previa — gera a TABELA de parcelas (datas em dia útil),
 // SEM salvar. Alimenta o modal editável. Body: { valor_total, qtd_parcelas, data_primeira, honor_percentual }
 async function gerarPreviaParcelas(req, res) {
   try {
     const { valor_total, qtd_parcelas, data_primeira, honor_percentual, multa_percentual } = req.body;
+    const previaAvulso = req.body.tipo === 'avulso';
     const totalLido = lerDinheiro(valor_total, 'Valor total');
     if (totalLido.erro) return erro(res, totalLido.erro);
     const total = round2(totalLido.valor);
@@ -651,12 +663,12 @@ async function gerarPreviaParcelas(req, res) {
 
     const pctLido = lerPercentual(honor_percentual, 'O honorário padrão');
     if (pctLido.erro) return erro(res, pctLido.erro);
-    const pct = pctLido.valor != null ? pctLido.valor : 30; // padrão 30%
+    const pct = previaAvulso ? 100 : (pctLido.valor != null ? pctLido.valor : 30); // padrão 30% (avulso: tudo é do escritório)
     // Multa por atraso: sem valor padrão (nem todo acordo tem cláusula de multa judicial) —
     // só entra na parcela se o usuário informar algo no cabeçalho do acordo.
     const multaLida = lerPercentual(multa_percentual, 'A multa por atraso');
     if (multaLida.erro) return erro(res, multaLida.erro);
-    const multaPct = multaLida.valor;
+    const multaPct = previaAvulso ? null : multaLida.valor;
 
     // Divide o total: todas iguais (round2) e a ÚLTIMA absorve a diferença de centavos
     const base = round2(total / qtd);
@@ -678,11 +690,16 @@ async function gerarPreviaParcelas(req, res) {
 
 // POST /api/financeiro/processo/:processoId/acordo — cria acordo + parcelas (tabela já editada)
 async function criarAcordo(req, res) {
-  const { qtd_parcelas, data_primeira, parcelas, tipo,
-    beneficiario_cliente_tipo, beneficiario_cliente_id, beneficiario_cliente_conta_id } = req.body;
-  const tipoAcordo = tipo === 'alvara' ? 'alvara' : 'acordo';   // mesma estrutura serve a acordo e alvará
+  const { qtd_parcelas, data_primeira, parcelas: parcelasBody, tipo } = req.body;
+  const tipoAcordo = lerTipoAcordo(tipo);   // mesma estrutura serve a acordo, alvará e recebimento avulso
+  const avulso = tipoAcordo === 'avulso';
+  // Avulso não tem cliente beneficiário (sem repasse ao cliente).
+  const beneficiario_cliente_tipo = avulso ? null : req.body.beneficiario_cliente_tipo;
+  const beneficiario_cliente_id = avulso ? null : req.body.beneficiario_cliente_id;
+  const beneficiario_cliente_conta_id = avulso ? null : req.body.beneficiario_cliente_conta_id;
 
-  if (!Array.isArray(parcelas) || !parcelas.length) return erro(res, 'Informe as parcelas');
+  if (!Array.isArray(parcelasBody) || !parcelasBody.length) return erro(res, 'Informe as parcelas');
+  const parcelas = avulso ? ajustarParcelasAvulso(parcelasBody) : parcelasBody;
   const totalLido = lerDinheiro(req.body.valor_total, 'Valor total');
   if (totalLido.erro) return erro(res, 'Valor total inválido');
   const valor_total = totalLido.valor;
@@ -872,9 +889,10 @@ async function buscarAcordo(req, res) {
 async function atualizarAcordo(req, res) {
   const id = lerIdFin(req.params.id);
   if (!id) return naoEncontrado(res, 'Acordo não encontrado');
-  const { qtd_parcelas, data_primeira, parcelas,
-    beneficiario_cliente_tipo, beneficiario_cliente_id, beneficiario_cliente_conta_id } = req.body;
-  if (!Array.isArray(parcelas) || !parcelas.length) return erro(res, 'Informe as parcelas do acordo');
+  const { qtd_parcelas, data_primeira, parcelas: parcelasBody } = req.body;
+  let { beneficiario_cliente_tipo, beneficiario_cliente_id, beneficiario_cliente_conta_id } = req.body;
+  if (!Array.isArray(parcelasBody) || !parcelasBody.length) return erro(res, 'Informe as parcelas do acordo');
+  let parcelas = parcelasBody;
   const totalLido = lerDinheiro(req.body.valor_total, 'Valor total');
   if (totalLido.erro) return erro(res, 'Valor total inválido');
   const valor_total = totalLido.valor;
@@ -889,12 +907,16 @@ async function atualizarAcordo(req, res) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [ac] = await conn.execute('SELECT id, status FROM acordo WHERE id = ? FOR UPDATE', [id]);
+    const [ac] = await conn.execute('SELECT id, status, tipo FROM acordo WHERE id = ? FOR UPDATE', [id]);
     if (!ac.length) { await conn.rollback(); return naoEncontrado(res, 'Acordo não encontrado'); }
     // Cancelamento é definitivo: o acordo vira registro permanente (mesma regra do excluirAcordo).
     if (ac[0].status === 'cancelado') {
       await conn.rollback();
       return erro(res, 'Acordo cancelado é registro permanente e não pode ser editado.');
+    }
+    if (ac[0].tipo === 'avulso') {   // avulso: honorário 100%, sem multa e sem cliente beneficiário
+      parcelas = ajustarParcelasAvulso(parcelasBody);
+      beneficiario_cliente_tipo = beneficiario_cliente_id = beneficiario_cliente_conta_id = null;
     }
 
     // Cliente padrão: pessoa obrigatória, conta opcional (sem conta = principal ou "em mãos" na hora do repasse).
@@ -1162,7 +1184,7 @@ async function pagarParcela(req, res) {
       [parc.processo_id, parc.acordo_tipo, parc.acordo_id]
     );
     const numeroAcordo = accNum[0].n;
-    const palavraAcordo = parc.acordo_tipo === 'alvara' ? 'alvará' : 'acordo';  // texto na conta corrente
+    const palavraAcordo = palavraDoTipo(parc.acordo_tipo);  // texto na conta corrente
 
     // ENTRADA = valor efetivamente recebido pelo escritório. Honorário, cliente e parceiro
     // são apurados pelo ciclo completo; nenhum repasse é lançado antes de ser confirmado.
@@ -1337,7 +1359,7 @@ async function registrarRepasse(req, res) {
       [parc.processo_id, parc.acordo_tipo, parc.acordo_id]
     );
     const numeroAcordo = accNum[0].n;
-    const palavraAcordo = parc.acordo_tipo === 'alvara' ? 'alvará' : 'acordo';
+    const palavraAcordo = palavraDoTipo(parc.acordo_tipo);
     const nomeDestino = nomeBeneficiario || (tipo === 'cliente' ? 'cliente' : 'parceiro');
     const origemLancamento = tipo === 'cliente' ? ORIGEM_REPASSE_CLIENTE : ORIGEM_REPASSE_PARCEIRO;
     await conn.execute(
@@ -1457,6 +1479,8 @@ async function lancarMulta(req, res) {
     if (!rows.length) { await conn.rollback(); return naoEncontrado(res, 'Parcela não encontrada'); }
     const parc = rows[0];
     if (parc.status !== 'pendente') { await conn.rollback(); return erro(res, 'Só é possível lançar multa em uma parcela ainda não recebida.'); }
+    const [tipoDoAcordo] = await conn.execute('SELECT tipo FROM acordo WHERE id = ?', [parc.acordo_id]);
+    if (tipoDoAcordo[0]?.tipo === 'avulso') { await conn.rollback(); return erro(res, 'Recebimento avulso não tem multa por atraso.'); }
     if (await buscarMultaDaParcela(conn, id)) { await conn.rollback(); return erro(res, 'Já existe uma multa lançada para esta parcela. Edite ou remova a existente.'); }
 
     const v = calcularValoresMulta(parc, req.body, 'A multa');
@@ -1579,7 +1603,7 @@ async function receberMulta(req, res) {
       [multa.processo_id, multa.acordo_tipo, multa.acordo_id]
     );
     const numeroAcordo = accNum[0].n;
-    const palavraAcordo = multa.acordo_tipo === 'alvara' ? 'alvará' : 'acordo';
+    const palavraAcordo = palavraDoTipo(multa.acordo_tipo);
     const descRecebimento = `Multa por atraso — parc ${multa.numero}/${multa.total_parcelas} do ${palavraAcordo} ${numeroAcordo}`;
     await conn.execute(
       `INSERT INTO conta_corrente (processo_id, parcela_id, data, descricao, tipo, valor, origem, usuario_id, conta_financeira_id)
@@ -1709,7 +1733,7 @@ async function registrarRepasseMulta(req, res) {
       [multa.processo_id, multa.acordo_tipo, multa.acordo_id]
     );
     const numeroAcordo = accNum[0].n;
-    const palavraAcordo = multa.acordo_tipo === 'alvara' ? 'alvará' : 'acordo';
+    const palavraAcordo = palavraDoTipo(multa.acordo_tipo);
     const nomeDestino = nomeBeneficiario || (tipo === 'cliente' ? 'cliente' : 'parceiro');
     const origemLancamento = tipo === 'cliente' ? ORIGEM_MULTA_REP_CLIENTE : ORIGEM_MULTA_REP_PARCEIRO;
     await conn.execute(
@@ -1919,23 +1943,33 @@ async function listarRepassesConcluidos(req, res) {
 // ============================================================
 
 // FROM + JOINs comuns à listagem, ao total e à exportação (fonte única).
+// Modo "multa" (origem=multa): a MULTA POR ATRASO entra com o apelido `ap`, igual à parcela, para que TODOS os
+// filtros (vencimento, valor, status, parceiro, partes, processo, pasta) valham sem duplicar código. A multa
+// tem as mesmas colunas de valor da parcela; o número e o acordo vêm da parcela dona (`pr`).
 const CONSULTA_FROM = `
   FROM acordo_parcela ap
   JOIN acordo a    ON ap.acordo_id = a.id
   JOIN tblproc p   ON a.processo_id = p.id
   JOIN tblpasta pa ON p.pasta_id = pa.id`;
+const CONSULTA_FROM_MULTA = `
+  FROM acordo_parcela_multa ap
+  JOIN acordo_parcela pr ON ap.parcela_id = pr.id
+  JOIN acordo a    ON pr.acordo_id = a.id
+  JOIN tblproc p   ON a.processo_id = p.id
+  JOIN tblpasta pa ON p.pasta_id = pa.id`;
+const consultaFrom = (multa) => (multa ? CONSULTA_FROM_MULTA : CONSULTA_FROM);
 
 // SELECT das colunas exibidas (mesma lista p/ tela e Excel).
-const CONSULTA_SELECT = `SELECT ap.id, ap.numero, ap.vencimento, ap.valor_bruto, ap.honor_valor, ap.valor_liquido,
+const consultaSelect = (multa) => `SELECT ap.id, ${multa ? 'pr.numero' : 'ap.numero'}, ap.vencimento, ap.valor_bruto, ap.honor_valor, ap.valor_liquido,
        ap.parceria_valor, ap.status, ap.recebido_em,
-       a.tipo AS acordo_tipo,
-       (SELECT COUNT(*) FROM acordo_parcela x WHERE x.acordo_id = ap.acordo_id) AS total_parcelas,
+       a.tipo AS acordo_tipo, ${multa ? "'multa'" : "'parcela'"} AS linha_tipo,
+       (SELECT COUNT(*) FROM acordo_parcela x WHERE x.acordo_id = a.id) AS total_parcelas,
        (SELECT COUNT(*) FROM acordo a2 WHERE a2.processo_id = a.processo_id AND a2.tipo = a.tipo AND a2.id <= a.id) AS numero_acordo,
        CASE ap.parceria_pessoa_tipo
          WHEN 'fisica'   THEN (SELECT pf.nome         FROM pessoas_fisicas   pf WHERE pf.id = ap.parceria_pessoa_id)
          WHEN 'juridica' THEN (SELECT pj.razao_social FROM pessoas_juridicas pj WHERE pj.id = ap.parceria_pessoa_id)
          ELSE NULL END AS parceria_nome,
-       p.numProc, p.NomeTituloProc, pa.numPasta` + CONSULTA_FROM;
+       p.numProc, p.NomeTituloProc, pa.numPasta` + consultaFrom(multa);
 
 // Monta o WHERE dinâmico parametrizado (só entra a condição do filtro preenchido).
 function montarFiltroConsulta(q) {
@@ -1956,6 +1990,8 @@ function montarFiltroConsulta(q) {
   if (q.num_processo) { cond.push('p.numProc LIKE ?'); params.push(like(q.num_processo)); }
   if (q.pasta) { const n = parseInt(q.pasta, 10); if (!isNaN(n)) { cond.push('pa.numPasta = ?'); params.push(n); } }
   if (q.status && ['pendente', 'pago', 'cancelada'].includes(q.status)) { cond.push('ap.status = ?'); params.push(q.status); }
+  // Origem: acordo, alvará ou recebimento avulso (as multas têm o próprio modo: origem=multa, ver `ehConsultaDeMulta`)
+  if (TIPOS_ACORDO.includes(q.origem)) { cond.push('a.tipo = ?'); params.push(q.origem); }
 
   if (q.parceiro) {
     cond.push(`((ap.parceria_pessoa_tipo='fisica'   AND EXISTS(SELECT 1 FROM pessoas_fisicas   pf WHERE pf.id=ap.parceria_pessoa_id AND pf.nome LIKE ?))
@@ -1979,14 +2015,17 @@ function montarFiltroConsulta(q) {
   return { where: cond.join(' AND '), params };
 }
 
+const ehConsultaDeMulta = (q) => q.origem === 'multa';
+
 // GET /api/financeiro/consulta — lista paginada + totais (SUM sobre TODO o conjunto filtrado)
 async function consultarFinanceiro(req, res) {
   try {
     const { where, params } = montarFiltroConsulta(req.query);
     const { limite: limitInt, offset: offsetInt } = paginacao(req.query, { limitePadrao: 50 });   // página/limite ruins viram o padrão
+    const multa = ehConsultaDeMulta(req.query);
 
     const [rows] = await pool.execute(
-      `${CONSULTA_SELECT} WHERE ${where} ORDER BY ap.vencimento ASC, p.numProc ASC LIMIT ${limitInt} OFFSET ${offsetInt}`,
+      `${consultaSelect(multa)} WHERE ${where} ORDER BY ap.vencimento ASC, p.numProc ASC LIMIT ${limitInt} OFFSET ${offsetInt}`,
       params
     );
     const [tot] = await pool.execute(
@@ -1995,7 +2034,7 @@ async function consultarFinanceiro(req, res) {
               COALESCE(SUM(ap.honor_valor),0)    AS soma_honorario,
               COALESCE(SUM(ap.valor_liquido),0)  AS soma_liquido,
               COALESCE(SUM(ap.parceria_valor),0) AS soma_parceria
-       ${CONSULTA_FROM} WHERE ${where}`,
+       ${consultaFrom(multa)} WHERE ${where}`,
       params
     );
     return sucesso(res, {
@@ -2012,8 +2051,9 @@ async function consultarFinanceiro(req, res) {
 async function exportarConsultaFinanceiro(req, res) {
   try {
     const { where, params } = montarFiltroConsulta(req.query);
+    const multa = ehConsultaDeMulta(req.query);
     const [rows] = await pool.execute(
-      `${CONSULTA_SELECT} WHERE ${where} ORDER BY ap.vencimento ASC, p.numProc ASC LIMIT 50000`, params
+      `${consultaSelect(multa)} WHERE ${where} ORDER BY ap.vencimento ASC, p.numProc ASC LIMIT 50000`, params
     );
 
     const ExcelJS = require('exceljs');               // require lazy: não derruba o boot se faltar a lib
@@ -2037,7 +2077,7 @@ async function exportarConsultaFinanceiro(req, res) {
 
     const fmtData = d => d ? String(d).slice(0, 10).split('-').reverse().join('/') : '';
     const labelStatus = s => s === 'pago' ? 'Recebida' : s === 'cancelada' ? 'Cancelada' : 'Pendente';
-    const tipoLabel = t => t === 'alvara' ? 'Alvará' : 'Acordo';
+    const tipoLabel = rotuloDoTipo;
     let tBruto = 0, tHon = 0, tLiq = 0, tPar = 0;
     for (const r of rows) {
       tBruto += Number(r.valor_bruto || 0); tHon += Number(r.honor_valor || 0);
@@ -2046,7 +2086,7 @@ async function exportarConsultaFinanceiro(req, res) {
         pasta: String(r.numPasta).padStart(4, '0'),
         numProc: r.numProc || '',
         partes: r.NomeTituloProc || '',
-        origem: `${tipoLabel(r.acordo_tipo)} ${r.numero_acordo}`,
+        origem: `${r.linha_tipo === 'multa' ? 'Multa — ' : ''}${tipoLabel(r.acordo_tipo)} ${r.numero_acordo}`,
         parcela: `${r.numero}/${r.total_parcelas}`,
         venc: fmtData(r.vencimento),
         bruto: Number(r.valor_bruto || 0),

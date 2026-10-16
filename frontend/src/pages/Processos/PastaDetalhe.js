@@ -178,7 +178,7 @@ export default function PastaDetalhe() {
   const [lancEditandoFin, setLancEditandoFin]   = useState(null);
   const [modalAcordoFin, setModalAcordoFin]     = useState(false);
   const [acordoEditandoFin, setAcordoEditandoFin] = useState(null);
-  const [acordoTipoNovoFin, setAcordoTipoNovoFin] = useState('acordo'); // 'acordo' | 'alvara' ao criar
+  const [acordoTipoNovoFin, setAcordoTipoNovoFin] = useState('acordo'); // 'acordo' | 'alvara' | 'avulso' ao criar
   const [histLancamentoFin, setHistLancamentoFin] = useState(null);
 
   // Modais — Prazos
@@ -1724,6 +1724,9 @@ export default function PastaDetalhe() {
                   </button>
                   <button className="btn btn-primary" onClick={() => { setAcordoEditandoFin(null); setAcordoTipoNovoFin('alvara'); setModalAcordoFin(true); }}>
                     + Novo Alvará
+                  </button>
+                  <button className="btn btn-primary" onClick={() => { setAcordoEditandoFin(null); setAcordoTipoNovoFin('avulso'); setModalAcordoFin(true); }}>
+                    + Recebimento Avulso
                   </button>
                 </>
               )}

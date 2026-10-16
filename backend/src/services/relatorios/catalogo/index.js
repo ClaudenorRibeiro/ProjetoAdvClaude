@@ -16,6 +16,7 @@ const ASSUNTOS = {
   pessoas_juridicas: require('./pessoas_juridicas'),
   financeiro_parcelas: require('./financeiro_parcelas'),
   financeiro_lancamentos: require('./financeiro_lancamentos'),
+  financeiro_multas: require('./financeiro_multas'),
 };
 
 function obterAssunto(chave) {

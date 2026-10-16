@@ -1,5 +1,5 @@
 // ============================================================
-// CATÁLOGO — assunto FINANCEIRO · PARCELAS (acordos e alvarás; tabela acordo_parcela)
+// CATÁLOGO — assunto FINANCEIRO · PARCELAS (acordos, alvarás e recebimentos avulsos; tabela acordo_parcela)
 // Uma linha por parcela, como a "Consulta" do Financeiro (sem filtro por responsável: quem tem
 // permissão no módulo vê tudo). Valores em R$ (formato "moeda") podem ser somados e tirados a média.
 // "Repasse pendente" usa a mesma regra da tela de repasses pendentes.
@@ -8,7 +8,7 @@ const { opcoesTabela } = require('../visibilidade');
 const { PASTA_EXPR, opcoesLista, ORIGEM_ACORDO_EXPR } = require('./comum');
 
 const ROTULOS_STATUS = { pendente: 'Pendente', pago: 'Recebida', cancelada: 'Cancelada' };
-const ROTULOS_TIPO = { acordo: 'Acordo', alvara: 'Alvará' };
+const ROTULOS_TIPO = { acordo: 'Acordo', alvara: 'Alvará', avulso: 'Recebimento avulso' };
 const ROTULOS_ACORDO = { ativo: 'Ativo', cancelado: 'Cancelado' };
 const PARCEIRO_EXPR = `CASE ap.parceria_pessoa_tipo
   WHEN 'fisica' THEN (SELECT pf.nome FROM pessoas_fisicas pf WHERE pf.id = ap.parceria_pessoa_id)
@@ -18,7 +18,7 @@ const moeda = (rotulo, coluna) => ({ rotulo, tipo: 'numero', formato: 'moeda', e
 
 module.exports = {
   chave: 'financeiro_parcelas',
-  rotulo: 'Financeiro — parcelas de acordos e alvarás',
+  rotulo: 'Financeiro — parcelas de acordos, alvarás e recebimentos avulsos',
   permissao: { chave: 'financeiro', acao: 'visualizar' },
   from: 'acordo_parcela ap',
   pk: 'ap.id',
@@ -37,8 +37,8 @@ module.exports = {
     pasta:            { rotulo: 'Pasta',               tipo: 'texto', agrupavel: true, expr: PASTA_EXPR, formato: 'pasta' },
     processo:         { rotulo: 'Processo',            tipo: 'texto', agrupavel: true, expr: 'pr.numProc', formato: 'processo' },
     titulo_processo:  { rotulo: 'Título do processo',  tipo: 'texto', agrupavel: true, expr: 'pr.NomeTituloProc' },
-    tipo_origem:      { rotulo: 'Origem (acordo ou alvará)', tipo: 'lista', expr: 'a.tipo', rotulosValor: ROTULOS_TIPO, opcoes: opcoesLista(ROTULOS_TIPO) },
-    origem:           { rotulo: 'Acordo/alvará (nº)',  tipo: 'texto', expr: ORIGEM_ACORDO_EXPR },
+    tipo_origem:      { rotulo: 'Origem (acordo, alvará ou avulso)', tipo: 'lista', expr: 'a.tipo', rotulosValor: ROTULOS_TIPO, opcoes: opcoesLista(ROTULOS_TIPO) },
+    origem:           { rotulo: 'Acordo/alvará/avulso (nº)',  tipo: 'texto', expr: ORIGEM_ACORDO_EXPR },
     situacao_acordo:  { rotulo: 'Situação do acordo',  tipo: 'lista', expr: 'a.status', rotulosValor: ROTULOS_ACORDO, opcoes: opcoesLista(ROTULOS_ACORDO) },
     parcela:          { rotulo: 'Nº da parcela',       tipo: 'numero', expr: 'ap.numero' },
     total_parcelas:   { rotulo: 'Total de parcelas do acordo', tipo: 'numero', expr: '(SELECT COUNT(*) FROM acordo_parcela x WHERE x.acordo_id = ap.acordo_id)' },

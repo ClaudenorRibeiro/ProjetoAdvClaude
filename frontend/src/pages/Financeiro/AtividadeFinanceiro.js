@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
 import { financeiroAPI } from '../../services/api';
 import { formatarDataHora, formatarNumeroPasta } from '../../utils/formatters';
+import { rotuloTipoAcordo } from './tipoAcordo';
 
 const POR_PAGINA = 50;
 const GRUPOS = [
@@ -118,7 +119,7 @@ export function ModalHistoricoAcordo({ acordo, onFechar }) {
     <div className="modal-overlay" style={{ zIndex: 1100 }}>
       <div className="modal-box modal-grande" style={{ maxWidth: 860 }}>
         <div className="modal-header">
-          <h3>Histórico — {acordo.tipo === 'alvara' ? 'Alvará' : 'Acordo'}{acordo.descricao ? `: ${acordo.descricao}` : ''}</h3>
+          <h3>Histórico — {rotuloTipoAcordo(acordo.tipo)}{acordo.descricao ? `: ${acordo.descricao}` : ''}</h3>
           <button className="modal-fechar" onClick={onFechar}>✕</button>
         </div>
         <div className="modal-body">

@@ -15,6 +15,7 @@ import MenuAcoes from '../../components/MenuAcoes';
 import { ModalGerar } from '../../components/GerarDocumento';
 import { clientesDoProcesso, clienteUnico, destinoClienteDaParcela, contaEscritorioPadrao, formaUnica, destinoSugerido } from './destinoPadrao';
 import AtividadeFinanceiro, { ModalHistoricoAcordo } from './AtividadeFinanceiro';
+import { rotuloTipoAcordo, rotuloCurtoTipoAcordo } from './tipoAcordo';
 
 const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
 
@@ -85,7 +86,7 @@ export default function Financeiro() {
   const [acordoEditando, setAcordoEditando]   = useState(null);
   const [confirmar, setConfirmar]             = useState(null);
   const [aba, setAba] = useState('processo');   // 'processo' (por processo) | 'repasses' (worklist global)
-  const [acordoTipoNovo, setAcordoTipoNovo] = useState('acordo'); // tipo ao criar: 'acordo' | 'alvara'
+  const [acordoTipoNovo, setAcordoTipoNovo] = useState('acordo'); // tipo ao criar: 'acordo' | 'alvara' | 'avulso'
   // Guarda contra resposta desatualizada: trocar de processo rápido pode fazer a busca do
   // processo anterior responder DEPOIS da do processo novo e sobrescrever a tela com o
   // saldo/acordos errados (auditoria 23/09).
@@ -228,6 +229,11 @@ export default function Financeiro() {
                   + Novo Alvará
                 </button>
               )}
+              {podeCadastrar && (
+                <button className="btn btn-primary" onClick={() => { setAcordoEditando(null); setAcordoTipoNovo('avulso'); setModalAcordo(true); }}>
+                  + Recebimento Avulso
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -244,7 +250,7 @@ export default function Financeiro() {
           {/* ===== ACORDOS ===== */}
           {acordos.length > 0 && (
             <div className="card" style={{ marginBottom: '16px' }}>
-              <h3 style={{ marginTop: 0 }}>Acordos e Alvarás</h3>
+              <h3 style={{ marginTop: 0 }}>Acordos, Alvarás e Recebimentos Avulsos</h3>
               {acordos.map(a => (
                 <AcordoBloco key={a.id} acordo={a}
                   podeAlterar={podeAlterar} podeExcluir={podeExcluir}
@@ -453,7 +459,7 @@ export function RepassesView({ podeAlterar, onMudou, processoId, subInicial = 'p
           {formatarNumeroPasta(p.numPasta)} — {p.NomeTituloProc || '—'}
         </td>
       )}
-      <td style={{ whiteSpace: 'nowrap' }}>{p.acordo_tipo === 'alvara' ? 'Alvará' : 'Acordo'} {p.numero_acordo} · parc {p.numero}/{p.total_parcelas}</td>
+      <td style={{ whiteSpace: 'nowrap' }}>{rotuloCurtoTipoAcordo(p.acordo_tipo)} {p.numero_acordo} · parc {p.numero}/{p.total_parcelas}</td>
     </>
   );
 
@@ -852,7 +858,7 @@ function ModalNovaContaBeneficiario({ tipo, pessoaId, nome, onFechar, onSalva })
 const CONSULTA_POR_PAGINA = 50;
 const FILTRO_CONSULTA_VAZIO = {
   venc_de: '', venc_ate: '', valor_campo: 'liquido', valor_de: '', valor_ate: '',
-  autor: '', reu: '', num_processo: '', pasta: '', parceiro: '', status: '',
+  autor: '', reu: '', num_processo: '', pasta: '', parceiro: '', status: '', origem: '',
 };
 
 function ConsultaFinanceiro() {
@@ -874,7 +880,7 @@ function ConsultaFinanceiro() {
     valor_ate: f.valor_ate ? parseMoeda(f.valor_ate) : undefined,
     autor: f.autor || undefined, reu: f.reu || undefined,
     num_processo: f.num_processo || undefined, pasta: f.pasta || undefined,
-    parceiro: f.parceiro || undefined, status: f.status || undefined,
+    parceiro: f.parceiro || undefined, status: f.status || undefined, origem: f.origem || undefined,
   }), []);
 
   const carregar = useCallback(() => {
@@ -946,6 +952,11 @@ function ConsultaFinanceiro() {
             <option value="">Todos</option><option value="pendente">Pendente</option>
             <option value="pago">Recebida</option><option value="cancelada">Cancelada</option>
           </select></div>
+        <div className="form-group"><label className="form-label">Origem</label>
+          <select aria-label="Origem" className="form-control" value={filtros.origem} onChange={e => setF('origem', e.target.value)}>
+            <option value="">Todas as parcelas</option><option value="acordo">Acordo</option><option value="alvara">Alvará</option>
+            <option value="avulso">Recebimento avulso</option><option value="multa">Multa por atraso</option>
+          </select></div>
         <div className="form-group"><label className="form-label">Valor — campo</label>
           <select aria-label="Valor — campo" className="form-control" value={filtros.valor_campo} onChange={e => setF('valor_campo', e.target.value)}>
             <option value="bruto">Bruto</option><option value="liquido">Líquido</option><option value="honorario">Honorário</option>
@@ -980,13 +991,13 @@ function ConsultaFinanceiro() {
           <span>Honorário: <strong>{formatarMoeda(totais.honorario)}</strong></span>
           <span>Líquido: <strong>{formatarMoeda(totais.liquido)}</strong></span>
           <span>Parceria: <strong>{formatarMoeda(totais.parceria)}</strong></span>
-          <span style={{ marginLeft: 'auto', color: '#6b7280' }}>{dados.total} parcela(s)</span>
+          <span style={{ marginLeft: 'auto', color: '#6b7280' }}>{dados.total} {aplicados.origem === 'multa' ? 'multa(s)' : 'parcela(s)'}</span>
         </div>
       )}
 
       {/* Resultado */}
       {carregando ? <div className="loading">Carregando...</div> : !dados ? null : (
-        dados.registros.length === 0 ? <p className="lista-vazia">Nenhuma parcela encontrada para os filtros.</p> : (
+        dados.registros.length === 0 ? <p className="lista-vazia">{aplicados.origem === 'multa' ? 'Nenhuma multa encontrada para os filtros.' : 'Nenhuma parcela encontrada para os filtros.'}</p> : (
           <div className="tabela-wrapper" tabIndex={0} role="region" aria-label="Resultado da consulta">
             <table className="tabela">
               <thead>
@@ -1002,7 +1013,7 @@ function ConsultaFinanceiro() {
                     <td>{formatarNumeroPasta(r.numPasta)}</td>
                     <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{r.numProc || '—'}</td>
                     <td style={{ fontSize: 12, color: '#555', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.NomeTituloProc || ''}>{r.NomeTituloProc || '—'}</td>
-                    <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>{r.acordo_tipo === 'alvara' ? 'Alvará' : 'Acordo'} {r.numero_acordo}</td>
+                    <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>{r.linha_tipo === 'multa' ? 'Multa — ' : ''}{rotuloCurtoTipoAcordo(r.acordo_tipo)} {r.numero_acordo}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>{r.numero}/{r.total_parcelas}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>{formatarData(r.vencimento)}</td>
                     <td style={{ textAlign: 'right' }}>{formatarMoeda(r.valor_bruto)}</td>
@@ -1103,7 +1114,8 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
   const [recebendoMulta, setRecebendoMulta] = useState(null); // parcela aguardando a data do recebimento da multa
   const [confirmar, setConfirmar] = useState(null); // confirmação genérica (ex.: remover multa)
   const cancelado = acordo.status === 'cancelado';
-  const tipoLabel = acordo.tipo === 'alvara' ? 'Alvará' : 'Acordo';
+  const tipoLabel = rotuloTipoAcordo(acordo.tipo);
+  const semHonorario = acordo.tipo === 'avulso';   // recebimento avulso: todo o valor é do escritório (sem honorário, líquido nem multa)
 
   function cicloDaParcela(p) {
     if (p.status !== 'pago') return null;
@@ -1256,8 +1268,8 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
               <tr>
                 <th>#</th><th>Vencimento</th>
                 <th style={{ textAlign: 'right' }}>Bruto</th>
-                <th style={{ textAlign: 'right' }}>Honorário</th>
-                <th style={{ textAlign: 'right' }}>Líquido</th>
+                {!semHonorario && <th style={{ textAlign: 'right' }}>Honorário</th>}
+                {!semHonorario && <th style={{ textAlign: 'right' }}>Líquido</th>}
                 <th>Parceria</th><th>Obs</th><th>Status</th><th>Ações</th>
               </tr>
             </thead>
@@ -1268,12 +1280,12 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
                   <td>{p.numero}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{formatarData(p.vencimento)}</td>
                   <td style={{ textAlign: 'right' }}>{formatarMoeda(p.valor_bruto)}</td>
-                  <td style={{ textAlign: 'right' }}>
+                  {!semHonorario && <td style={{ textAlign: 'right' }}>
                     {p.honor_tipo === 'sem' ? '—' : formatarMoeda(p.honor_valor)}
                     {p.honor_tipo === 'percent' && p.honor_percentual != null && <span style={{ color: '#5b6472', fontSize: 11 }}> ({p.honor_percentual}%)</span>}
                     {p.honor_tipo === 'fixo' && <span style={{ color: '#5b6472', fontSize: 11 }}> (Fixo)</span>}
-                  </td>
-                  <td style={{ textAlign: 'right' }}>{formatarMoeda(p.valor_liquido)}</td>
+                  </td>}
+                  {!semHonorario && <td style={{ textAlign: 'right' }}>{formatarMoeda(p.valor_liquido)}</td>}
                   <td>{p.parceria_nome ? `${p.parceria_nome}${p.parceria_valor ? ' · ' + formatarMoeda(p.parceria_valor) : ''}` : '—'}</td>
                   <td style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.observacao || ''}>
                     {p.observacao || '—'}
@@ -1326,7 +1338,7 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
                           { label: 'Repassar ao parceiro', icone: '💸', onClick: () => pedirRepasse(p, 'parceiro') },
                         ] },
                       { label: 'Lançar multa', icone: '⚠️',
-                        oculto: !(podeAlterar && p.status === 'pendente' && !p.multa),
+                        oculto: !(podeAlterar && p.status === 'pendente' && !p.multa && !semHonorario),
                         onClick: () => setMultaEditando(p) },
                       { label: 'Multa', icone: '⚠️',
                         oculto: !(podeAlterar && p.multa && p.multa.status === 'pendente'),
@@ -1346,7 +1358,7 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
                       { label: 'Recibo', icone: '📄',
                         submenu: [
                           { label: 'Recibo — Cliente', icone: '📄',
-                            oculto: !(temPermissao('documentos','cadastrar') && p.repasse_cliente_em),
+                            oculto: !(temPermissao('documentos','cadastrar') && p.repasse_cliente_em && !semHonorario),
                             gerarDoc: { ancoraTipo: 'pagamento', ancoraId: p.id, beneficiario: 'cliente' } },
                           { label: `Recibo — Parceiro${p.parceria_nome ? `: ${p.parceria_nome}` : ''}`, icone: '📄',
                             oculto: !(temPermissao('documentos','cadastrar') && p.repasse_parceiro_em),
@@ -1416,8 +1428,8 @@ export function AcordoBloco({ acordo, podeAlterar, podeExcluir, onEditar, onExcl
               <tr style={{ fontWeight: 'bold', borderTop: '2px solid #e5e7eb' }}>
                 <td colSpan={2} style={{ textAlign: 'right' }}>Total</td>
                 <td style={{ textAlign: 'right' }}>{formatarMoeda(round2(parcelas.reduce((s, p) => s + Number(p.valor_bruto || 0), 0)))}</td>
-                <td style={{ textAlign: 'right' }}>{formatarMoeda(round2(parcelas.reduce((s, p) => s + Number(p.honor_valor || 0), 0)))}</td>
-                <td style={{ textAlign: 'right' }}>{formatarMoeda(round2(parcelas.reduce((s, p) => s + Number(p.valor_liquido || 0), 0)))}</td>
+                {!semHonorario && <td style={{ textAlign: 'right' }}>{formatarMoeda(round2(parcelas.reduce((s, p) => s + Number(p.honor_valor || 0), 0)))}</td>}
+                {!semHonorario && <td style={{ textAlign: 'right' }}>{formatarMoeda(round2(parcelas.reduce((s, p) => s + Number(p.valor_liquido || 0), 0)))}</td>}
                 <td>{formatarMoeda(round2(parcelas.reduce((s, p) => s + Number(p.parceria_valor || 0), 0)))}</td>
                 <td colSpan={3}></td>
               </tr>
@@ -1895,7 +1907,8 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
   const { temPermissao } = useAuth();
   const podeCadastrarContaBeneficiario = temPermissao('financeiro', 'alterar') && temPermissao('pessoas', 'alterar');
   const [tipoAcordo, setTipoAcordo] = useState(tipo || 'acordo'); // 'acordo' | 'alvara'
-  const tipoLabel = tipoAcordo === 'alvara' ? 'Alvará' : 'Acordo';
+  const tipoLabel = rotuloTipoAcordo(tipoAcordo);
+  const avulso = tipoAcordo === 'avulso';   // recebimento avulso: tudo é do escritório (honorário 100%), sem cliente beneficiário e sem multa
   // descricaoInicial: pré-preenche a descrição (usado quando o acordo é aberto a partir do "Registrar Ata")
   const [cab, setCab] = useState({ descricao: descricaoInicial || '', valor_total: '', qtd_parcelas: '', data_primeira: '', honor_percentual: 30, multa_percentual: '' });
   const [parcelas, setParcelas] = useState([]);
@@ -2005,7 +2018,8 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
     try {
       const { data } = await financeiroAPI.previaParcelas({
         valor_total: parseMoeda(cab.valor_total), qtd_parcelas: cab.qtd_parcelas,
-        data_primeira: cab.data_primeira, honor_percentual: cab.honor_percentual, multa_percentual: cab.multa_percentual,
+        data_primeira: cab.data_primeira, honor_percentual: avulso ? 100 : cab.honor_percentual, multa_percentual: avulso ? '' : cab.multa_percentual,
+        tipo: tipoAcordo,
       });
       // backend devolve números → converte campos de moeda p/ string mascarada nos inputs
       if (data.ok) setParcelas(data.dados.parcelas.map(p => ({
@@ -2077,8 +2091,8 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
       tipo: tipoAcordo,
       descricao: cab.descricao || null, valor_total: round2(somaBruto),
       qtd_parcelas: parcelasNum.length, data_primeira: parcelasNum[0].vencimento, parcelas: parcelasNum,
-      beneficiario_cliente_tipo: beneficiarioTipo || null, beneficiario_cliente_id: beneficiarioId || null,
-      beneficiario_cliente_conta_id: contaBeneficiarioId || null,
+      beneficiario_cliente_tipo: avulso ? null : (beneficiarioTipo || null), beneficiario_cliente_id: avulso ? null : (beneficiarioId || null),
+      beneficiario_cliente_conta_id: avulso ? null : (contaBeneficiarioId || null),
     };
     try {
       if (acordoId) await financeiroAPI.atualizarAcordo(acordoId, payload);
@@ -2114,24 +2128,24 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
               <input aria-label="1ª parcela" type="date" className="form-control" value={cab.data_primeira}
                 onChange={e => setC('data_primeira', e.target.value)} />
             </div>
-            <div className="form-group">
+            {!avulso && <div className="form-group">
               <label className="form-label">Honorário padrão (%)</label>
               <input aria-label="Honorário padrão (%)" type="number" step="0.01" min="0" max="100" className="form-control" value={cab.honor_percentual}
                 onChange={e => setC('honor_percentual', e.target.value)} />
-            </div>
-            <div className="form-group">
+            </div>}
+            {!avulso && <div className="form-group">
               <label className="form-label">Multa fixada pelo juiz (%)</label>
               <input aria-label="Multa fixada pelo juiz (%)" type="number" step="0.01" min="0" className="form-control" value={cab.multa_percentual}
                 onChange={e => setC('multa_percentual', e.target.value)} placeholder="Ex: 10 (opcional)" />
               <small style={{ color: '#5b6472', fontSize: 12 }}>Só fica guardada: não lança multa nenhuma. Preenche a janela "Lançar multa" das parcelas.</small>
-            </div>
+            </div>}
           </div>
           <div className="form-group">
             <label className="form-label">Descrição (opcional)</label>
             <input aria-label="Descrição (opcional)" className="form-control" autoComplete="off" value={cab.descricao}
-              onChange={e => setC('descricao', e.target.value)} placeholder="Ex: Acordo trabalhista homologado" />
+              onChange={e => setC('descricao', e.target.value)} placeholder={avulso ? 'Ex: Honorários combinados à parte' : 'Ex: Acordo trabalhista homologado'} />
           </div>
-          <div className="grid-2" style={{ gap: '12px' }}>
+          {!avulso && <div className="grid-2" style={{ gap: '12px' }}>
             <div className="form-group"><label className="form-label">Beneficiário padrão das parcelas</label>
               <select aria-label="Beneficiário padrão das parcelas" className="form-control" value={beneficiarioId ? `${beneficiarioTipo}:${beneficiarioId}` : ''}
                 onChange={e => { const [t, id] = e.target.value.split(':'); setBeneficiarioTipo(t || ''); setBeneficiarioId(id || ''); setContaBeneficiarioId(''); }}>
@@ -2147,7 +2161,7 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
                 {podeCadastrarContaBeneficiario && <button type="button" className="btn btn-outline" title={beneficiarioId ? 'Cadastrar conta do beneficiário' : 'Selecione primeiro o beneficiário'}
                   disabled={!beneficiarioId} onClick={() => setModalNovaContaBeneficiario(true)} style={{ minWidth: '42px', padding: '0 10px' }}>...</button>}
               </div></div>
-          </div>
+          </div>}
           <button className="btn btn-outline" onClick={gerar} disabled={gerando || temParcelasRecebidas}
             title={temParcelasRecebidas ? 'Não é possível regenerar parcelas após um recebimento.' : ''} style={{ marginBottom: '12px' }}>
             {gerando ? 'Gerando...' : (parcelas.length ? '↻ Regerar parcelas' : 'Gerar parcelas')}
@@ -2156,7 +2170,7 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
           <button type="button" className="btn btn-outline" style={{ marginBottom: '12px', marginLeft: '8px' }}
             onClick={() => setModalParcAcordo(true)}
             title={temParcelasRecebidas ? 'Vale só para as parcelas ainda não recebidas. As já recebidas não mudam.' : ''}>
-            {parceriaAcordo?.parceria_pessoa_id ? `👥 Parceria do acordo: ${parceriaAcordo.parceria_nome}` : '+ Parceria do acordo (todas as parcelas)'}
+            {parceriaAcordo?.parceria_pessoa_id ? `👥 Parceria do ${avulso ? 'recebimento' : 'acordo'}: ${parceriaAcordo.parceria_nome}` : '+ Parceria do acordo (todas as parcelas)'}
           </button>
           {parcelas.length > 0 && (
             <span style={{ marginLeft: '12px', color: '#6b7280', fontSize: '13px' }}>
@@ -2170,8 +2184,8 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
               <table className="tabela" style={{ fontSize: '13px' }}>
                 <thead>
                   <tr>
-                    <th>#</th><th>Vencimento</th><th>Bruto</th><th>Honor.</th>
-                    <th>%/Valor</th><th>Líquido</th><th>Parceria</th><th>Obs</th>
+                    <th>#</th><th>Vencimento</th><th>Bruto</th>{!avulso && <><th>Honor.</th>
+                    <th>%/Valor</th><th>Líquido</th></>}<th>Parceria</th><th>Obs</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2188,6 +2202,7 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
                         <input aria-label={`Valor bruto da parcela ${p.numero || i + 1}`} type="text" inputMode="numeric" className="form-control" style={{ width: '110px', padding: '4px 6px' }}
                           value={p.valor_bruto} disabled={parcelaRecebida} onChange={e => setParc(i, 'valor_bruto', mascaraMoeda(e.target.value))} />
                       </td>
+                      {!avulso && (<>
                       <td>
                         <select aria-label={`Tipo do honorário da parcela ${p.numero || i + 1}`} className="form-control" style={{ width: '90px', padding: '4px 6px' }}
                           value={p.honor_tipo} disabled={parcelaRecebida} onChange={e => setParc(i, 'honor_tipo', e.target.value)}>
@@ -2217,6 +2232,7 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
                         {p.honor_tipo === 'sem' && <span style={{ color: '#5b6472' }}>—</span>}
                       </td>
                       <td style={{ whiteSpace: 'nowrap' }}>{formatarMoeda(liquidoDaParcela(p))}</td>
+                      </>)}
                       <td>
                         {p.parceria_pessoa_id
                           ? <button className="btn btn-outline" title={`${p.parceria_nome || 'Parceiro'}${parceriaDaParcela(p) ? ' · ' + formatarMoeda(parceriaDaParcela(p)) : ''}`}
@@ -2247,12 +2263,12 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
 
       {/* Sub-modal: definir parceria de uma parcela */}
       {parceriaRow !== null && (
-        <ModalParceriaParcela parcela={parcelas[parceriaRow]}
+        <ModalParceriaParcela avulso={avulso} parcela={parcelas[parceriaRow]}
           onCancelar={() => setParceriaRow(null)}
           onAplicar={(dados) => aplicarParceria(parceriaRow, dados)} />
       )}
       {modalParcAcordo && (
-        <ModalParceriaParcela parcela={parceriaAcordo || {}} titulo={temParcelasRecebidas ? 'Parceria do acordo (parcelas ainda não recebidas)' : 'Parceria do acordo (todas as parcelas)'}
+        <ModalParceriaParcela avulso={avulso} parcela={parceriaAcordo || {}} titulo={temParcelasRecebidas ? 'Parceria do acordo (parcelas ainda não recebidas)' : 'Parceria do acordo (todas as parcelas)'}
           onCancelar={() => setModalParcAcordo(false)}
           onAplicar={aplicarParceriaAcordo} />
       )}
@@ -2268,7 +2284,7 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
 // ============================================================
 // SUB-MODAL: parceria de uma parcela (pessoa + % do honorário ou valor fixo)
 // ============================================================
-function ModalParceriaParcela({ parcela, onCancelar, onAplicar, titulo = 'Parceria da parcela' }) {
+function ModalParceriaParcela({ parcela, onCancelar, onAplicar, titulo = 'Parceria da parcela', avulso = false }) {
   const [tipoPessoa, setTipoPessoa] = useState(parcela.parceria_pessoa_tipo || 'fisica');
   const [busca, setBusca] = useState(parcela.parceria_nome || '');
   const [resultados, setResultados] = useState([]);
@@ -2306,7 +2322,7 @@ function ModalParceriaParcela({ parcela, onCancelar, onAplicar, titulo = 'Parcer
           <button className="modal-fechar" onClick={onCancelar}>✕</button>
         </div>
         <div className="modal-body">
-          <p style={{ color: '#6b7280', fontSize: '13px', marginTop: 0 }}>A parceria incide sobre o <strong>honorário</strong> desta parcela.</p>
+          <p style={{ color: '#6b7280', fontSize: '13px', marginTop: 0 }}>{avulso ? <>A parceria incide sobre o <strong>valor</strong> desta parcela (no recebimento avulso, todo o valor é do escritório).</> : <>A parceria incide sobre o <strong>honorário</strong> desta parcela.</>}</p>
           <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
             <select aria-label="Tipo de pessoa do parceiro" className="form-control" style={{ maxWidth: '130px' }} value={tipoPessoa}
               onChange={e => { setTipoPessoa(e.target.value); setResultados([]); }}>
@@ -2333,7 +2349,7 @@ function ModalParceriaParcela({ parcela, onCancelar, onAplicar, titulo = 'Parcer
             <div className="form-group">
               <label className="form-label">Forma</label>
               <select aria-label="Forma" className="form-control" value={tipo} onChange={e => setTipo(e.target.value)}>
-                <option value="percent">% do honorário</option>
+                <option value="percent">{avulso ? '% do valor' : '% do honorário'}</option>
                 <option value="fixo">Valor fixo</option>
               </select>
             </div>
