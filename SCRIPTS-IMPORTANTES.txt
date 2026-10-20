@@ -37,6 +37,10 @@ PARA RODAR NO HEIDISQL (banco)
                                                             "Acordo" existe, ativo e sem "encerra o processo" (cria, reativa ou corrige; não mexe em outros status nem em processos) e registra a versão 6.
                                                             Só dados, sem mudar estrutura. Rodar DEPOIS do sql_processo_apenso_para_heidi.sql, com o banco do sistema selecionado; pode rodar
                                                             várias vezes. Backup antes. NADA foi aplicado na AWS.
+  sql_aws_erick_antonio_versao_6_para_heidi.sql IMPORTANTE  SCRIPT ÚNICO PARA LEVAR OS BANCOS DA AWS-ERICK (erick_adv) E DA AWS-ANTÔNIO (sistema_advocacia) DA VERSÃO 4 À 6: junta o processo apenso (versão 5: coluna
+                                                            tblproc.apenso_de_id + índice + chave) e o status "Acordo" do sistema (versão 6: só garante o status; nos dois bancos ele já existe). Só roda nesses 2 nomes de banco e só
+                                                            se o banco está na versão 4; não altera dado de cliente. Pode rodar várias vezes. Backup antes. Substitui, para a AWS, o uso separado de
+                                                            sql_processo_apenso_para_heidi.sql e sql_status_acordo_do_sistema_para_heidi.sql (que seguem valendo para o banco local).
   sql_preparar_aws_erick_antonio_para_heidi.sql IMPORTANTE  SCRIPT ÚNICO PARA PREPARAR OS BANCOS DA AWS-ERICK (erick_adv) E DA AWS-ANTÔNIO (sistema_advocacia): reúne as versões 1 a 4
                                                             (acima) e deixa o banco IGUAL ao estrutura_banco.sql. Só roda em banco com esses 2 nomes; confere MySQL, versão registrada e a estrutura inteira
                                                             (95 tabelas) ANTES de mexer; se achar diferença desconhecida, para sem alterar nada e lista na aba 2. Pode rodar quantas vezes quiser (no
