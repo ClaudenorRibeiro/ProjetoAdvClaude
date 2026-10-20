@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COR_ACORDO_PADRAO, corDoTextoSobre, estiloFundoAcordo } from './EtiquetaAcordo';
+import { COR_ACORDO_PADRAO, corDoTextoSobre, estiloFundoAcordo, statusEhAcordo } from './EtiquetaAcordo';
 
 const canal = (v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
 const lum = (rgb) => 0.2126 * canal(rgb[0]) + 0.7152 * canal(rgb[1]) + 0.0722 * canal(rgb[2]);
@@ -8,6 +8,13 @@ const contraste = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n -
 const rgbDeCss = (css) => css.match(/\d+/g).map(Number);   // "rgb(r, g, b)"  (o fundo é opaco)
 const CORES = ['#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff', '#808080', '#1d4ed8', '#7c3aed', '#166534', '#ff8800', COR_ACORDO_PADRAO];
 const TEXTOS = { 'azul dos botões': '#1a56db', 'vermelho dos avisos': '#c0392b', 'cinza da tabela': '#444444' };
+
+describe('etiqueta automática "Acordo": reconhecimento do status', () => {
+  it('vale só o status chamado Acordo, sem diferenciar maiúscula, acento e espaços nas pontas', () => {
+    for (const ok of ['Acordo', 'acordo', ' ACORDO ', 'Ácordo']) expect(statusEhAcordo(ok), ok).toBe(true);
+    for (const nao of ['Acordos', 'Em acordo', 'Conhecimento', '', null, undefined]) expect(statusEhAcordo(nao), String(nao)).toBe(false);
+  });
+});
 
 describe('etiqueta automática "Acordo"', () => {
   it('o texto da etiqueta tem contraste mínimo de 4,5:1 com a cor escolhida (qualquer cor)', () => {

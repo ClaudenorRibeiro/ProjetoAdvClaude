@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { aguardarTelaPronta, bloquearRedeExterna, limparPastaPartes, loginPelaTela, prepararPastaPartes, restaurarPastaPartes, violacoesGraves } from './helpers';
 import { createRequire } from 'node:module';
 
-// Etiqueta automática "Acordo": processo com acordo (não alvará, não cancelado) ganha a etiqueta e um fundo na mesma cor — na lista de
+// Etiqueta automática "Acordo": processo com o STATUS "Acordo" (acordo lançado no Financeiro não conta) ganha a etiqueta e um fundo na mesma cor — na lista de
 // Processos, no alto da pasta e na aba Processos da pasta. A cor vem de Configurações > Etiquetas do escritório (linha "Acordo (automática)").
 const { conectarBancoTeste } = createRequire(import.meta.url)('../../backend/tests/support/testDatabase');
 async function noBanco(sql, params = []) {
@@ -20,12 +20,12 @@ const CNJ1 = '9400001-00.2026.5.15.0001';
 const CNJ2 = '9400002-00.2026.5.15.0001';
 const CAMPO_BUSCA = 'Buscar por nº pasta, título, nº CNJ ou protocolo...';
 const DIA = '2099-04-06';
-const etiqueta = (escopo) => escopo.getByTitle('Este processo tem acordo cadastrado');
+const etiqueta = (escopo) => escopo.getByTitle('O status deste processo é Acordo');
 const linhaDoProcesso = (page, cnj) => page.locator('tbody tr').filter({ hasText: cnj });
 const fundoDaCelula = (linha) => linha.locator('td').first().evaluate(el => getComputedStyle(el).backgroundColor);
 const janela = (page, titulo) => page.locator('.modal-box').filter({ has: page.getByRole('heading', { name: titulo }) }).last();
 
-let d;
+let d; let statusAcordoId; let criouStatusAcordo = false;
 test.describe.configure({ timeout: 150_000 });
 test.beforeAll(async () => {
   d = await prepararPastaPartes();
@@ -36,10 +36,14 @@ test.beforeAll(async () => {
       dias.push(`('${dt.toISOString().slice(0, 10)}', ${[0, 6].includes(dt.getUTCDay()) ? 0 : 1})`);
     }
   }
+  const achado = await noBanco("SELECT id FROM tblstatusproc WHERE TRIM(nome) = 'Acordo' LIMIT 1");
+  if (achado.length) statusAcordoId = achado[0].id;
+  else { statusAcordoId = (await noBanco("INSERT INTO tblstatusproc (nome) VALUES ('Acordo')")).insertId; criouStatusAcordo = true; }
   await noBanco(`INSERT IGNORE INTO calendario (data, dia_util) VALUES ${dias.join(',')}`);   // o banco de teste tem calendário esparso
 });
 test.afterAll(async () => {
   await limparPastaPartes(d);
+  if (criouStatusAcordo) await noBanco('DELETE FROM tblstatusproc WHERE id = ?', [statusAcordoId]);
   await noBanco('UPDATE configuracoes_escritorio SET cor_etiqueta_acordo = NULL');
   await noBanco("DELETE FROM calendario WHERE data >= '2099-04-01' AND data <= '2099-06-30'");
   await noBanco("DELETE FROM logs_auditoria WHERE tabela IN ('acordo', 'acordo_parcela', 'configuracoes_escritorio')");
@@ -52,10 +56,12 @@ test.beforeEach(async ({ page }) => {
 });
 const criarAcordo = (tipo = 'acordo', status = 'ativo') => noBanco(
   "INSERT INTO acordo (processo_id, tipo, descricao, valor_total, qtd_parcelas, data_primeira, status, criado_por) VALUES (?, ?, 'Acordo etiqueta', 1000, 1, ?, ?, 1)", [d.proc1, tipo, DIA, status]);
+// põe o primeiro processo da pasta no status "Acordo" (o que liga a etiqueta); sem isso ele fica "Conhecimento"
+const statusAcordo = () => noBanco('UPDATE tblproc SET status_id = ? WHERE id = ?', [statusAcordoId, d.proc1]);
 const abrirPasta = async (page, aba = 'processos') => { await page.goto(`/processos/pasta/${d.pastaPartes}?aba=${aba}`); await aguardarTelaPronta(page); };
 
-test('@critical Pasta com acordo: o alto da pasta e SÓ a linha do processo com acordo ganham etiqueta "Acordo" e fundo (cor padrão)', async ({ page }) => {
-  await criarAcordo();
+test('@critical Pasta com status Acordo: o alto da pasta e SÓ a linha do processo com esse status ganham etiqueta "Acordo" e fundo (cor padrão)', async ({ page }) => {
+  await statusAcordo();
   await loginPelaTela(page);
   await abrirPasta(page);
   const cartao = page.locator('.card.card-acordo');
@@ -71,9 +77,9 @@ test('@critical Pasta com acordo: o alto da pasta e SÓ a linha do processo com 
   await semViolacoes(page, 'pasta com acordo');
 });
 
-test('@critical Sem acordo, só alvará ou acordo cancelado: nada de etiqueta nem de fundo', async ({ page }) => {
+test('@critical Acordo lançado no Financeiro, mas status do processo diferente de Acordo: nada de etiqueta nem de fundo', async ({ page }) => {
+  await criarAcordo();
   await criarAcordo('alvara');
-  await criarAcordo('acordo', 'cancelado');
   await loginPelaTela(page);
   await abrirPasta(page);
   await expect(page.locator('.card.card-acordo')).toHaveCount(0);
@@ -81,8 +87,8 @@ test('@critical Sem acordo, só alvará ou acordo cancelado: nada de etiqueta ne
   await expect(linhaDoProcesso(page, CNJ1)).not.toHaveClass(/linha-acordo/);
 });
 
-test('@critical Lista de Processos: a pasta com acordo ganha etiqueta e fundo; sem acordo volta ao normal', async ({ page }) => {
-  await criarAcordo();
+test('@critical Lista de Processos: a pasta com status Acordo ganha etiqueta e fundo; trocando o status volta ao normal', async ({ page }) => {
+  await statusAcordo();
   await loginPelaTela(page);
   await page.goto('/processos'); await aguardarTelaPronta(page);
   await page.getByPlaceholder(CAMPO_BUSCA).fill('7401');
@@ -92,7 +98,7 @@ test('@critical Lista de Processos: a pasta com acordo ganha etiqueta e fundo; s
   await expect(linha).toHaveClass(/linha-acordo/);
   await expect(etiqueta(linha)).toHaveText('Acordo');
   await semViolacoes(page, 'lista de Processos com acordo');
-  await noBanco('DELETE FROM acordo WHERE processo_id = ?', [d.proc1]);
+  await noBanco('UPDATE tblproc SET status_id = ? WHERE id = ?', [d.statusConhecimento, d.proc1]);
   await page.reload(); await aguardarTelaPronta(page);
   await page.getByPlaceholder(CAMPO_BUSCA).fill('7401');
   await page.waitForTimeout(500); await aguardarTelaPronta(page);
@@ -101,7 +107,7 @@ test('@critical Lista de Processos: a pasta com acordo ganha etiqueta e fundo; s
 });
 
 test('@critical A cor escolhida em Configurações vale para a etiqueta e o fundo (e o texto da etiqueta continua legível)', async ({ page }) => {
-  await criarAcordo();
+  await statusAcordo();
   await noBanco("UPDATE configuracoes_escritorio SET cor_etiqueta_acordo = '#1d4ed8'");
   await loginPelaTela(page);
   await abrirPasta(page);
@@ -113,17 +119,10 @@ test('@critical A cor escolhida em Configurações vale para a etiqueta e o fund
   await semViolacoes(page, 'pasta com acordo em azul escuro');
 });
 
-test('@critical O alto da pasta acompanha o Financeiro: excluir o acordo tira a etiqueta e criar um acordo novo traz de volta, sem recarregar', async ({ page }) => {
-  await criarAcordo();
+test('@critical Mudar o status do processo para Acordo liga a etiqueta (apenso também); criar acordo no Financeiro não muda nada', async ({ page }) => {
   await loginPelaTela(page);
   await abrirPasta(page, 'financeiro');
   await page.getByLabel('Filtrar por processo', { exact: true }).selectOption({ label: CNJ1 }); await aguardarTelaPronta(page);
-  await expect(page.locator('.card.card-acordo')).toHaveCount(1);
-  const bloco = page.locator('div').filter({ hasText: 'Acordo etiqueta' }).filter({ has: page.getByRole('button', { name: /Parcelas/ }) }).last();
-  await bloco.getByRole('button', { name: 'Excluir', exact: true }).click();
-  await janela(page, 'Excluir acordo').getByRole('button', { name: 'Excluir', exact: true }).click();
-  await aviso(page, 'Acordo excluído');
-  await expect(page.locator('.card.card-acordo')).toHaveCount(0);
   await page.getByRole('button', { name: '+ Novo Acordo' }).click();
   const j = janela(page, 'Novo Acordo');
   await j.getByLabel('Valor total (R$)', { exact: true }).fill('200000');
@@ -132,8 +131,18 @@ test('@critical O alto da pasta acompanha o Financeiro: excluir o acordo tira a 
   await j.getByRole('button', { name: 'Gerar parcelas' }).click();
   await j.getByRole('button', { name: 'Salvar acordo' }).click();
   await aviso(page, 'Acordo criado!');
+  await expect(page.locator('.card.card-acordo')).toHaveCount(0);                                  // acordo lançado, status outro: sem marca
+  await statusAcordo();
+  await abrirPasta(page);
   await expect(page.locator('.card.card-acordo')).toHaveCount(1);
-  await expect(etiqueta(page.locator('.card.card-acordo'))).toHaveText('Acordo');
+  // apenso com o status Acordo também ganha a marca na própria linha
+  const apensoId = (await noBanco("INSERT INTO tblproc (pasta_id, numProc, NomeTituloProc, apenso_de_id, status_id, ativo, criado_por) VALUES (?, '9400077-00.2026.5.15.0001', 'APENSO ETIQUETA', ?, ?, 1, 1)", [d.pastaPartes, d.proc1, statusAcordoId])).insertId;
+  try {
+    await abrirPasta(page);
+    const linhaApenso = linhaDoProcesso(page, 'APENSO ETIQUETA');
+    await expect(linhaApenso).toHaveClass(/linha-acordo/);
+    await expect(etiqueta(linhaApenso)).toHaveCount(1);
+  } finally { await noBanco('DELETE FROM tblproc WHERE id = ?', [apensoId]); }
 });
 
 test('@critical Configurações > Etiquetas do escritório > Processos: linha "Acordo (automática)" escolhe a cor, mostra exemplo e volta à cor padrão', async ({ page }) => {

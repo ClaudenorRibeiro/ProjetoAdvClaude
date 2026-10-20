@@ -302,9 +302,10 @@ async function listarPastas(req, res) {
           FROM tblproc pr2
           LEFT JOIN processos_etiquetas_escritorio pee ON pee.processo_id = pr2.id
           WHERE pr2.pasta_id = pa.id AND pr2.ativo = 1 AND pr2.apenso_de_id IS NULL) AS etiqueta_escritorio,
-         -- Etiqueta automática "Acordo": algum processo ativo da pasta tem acordo (não alvará) que não foi cancelado
-         EXISTS (SELECT 1 FROM tblproc pr3 JOIN acordo ac ON ac.processo_id = pr3.id
-                  WHERE pr3.pasta_id = pa.id AND pr3.ativo = 1 AND ac.tipo = 'acordo' AND ac.status <> 'cancelado') AS tem_acordo
+         -- Etiqueta automática "Acordo": algum processo ativo da pasta (apenso inclusive) está com o STATUS "Acordo"
+         -- (pelo nome, sem diferenciar maiúscula/acento; acordo lançado no Financeiro não conta)
+         EXISTS (SELECT 1 FROM tblproc pr3 JOIN tblstatusproc sp3 ON sp3.id = pr3.status_id
+                  WHERE pr3.pasta_id = pa.id AND pr3.ativo = 1 AND TRIM(sp3.nome) = 'Acordo') AS status_acordo
        FROM tblpasta pa
        ${where}
        ORDER BY pa.numPasta DESC
@@ -421,8 +422,7 @@ async function buscarPasta(req, res) {
          resp.nome AS responsavel_nome,
          resp.oab AS responsavel_oab,
          (SELECT pee.slot FROM processos_etiquetas_escritorio pee
-          WHERE pee.processo_id = pr.id) AS etiqueta_escritorio,
-         EXISTS (SELECT 1 FROM acordo ac WHERE ac.processo_id = pr.id AND ac.tipo = 'acordo' AND ac.status <> 'cancelado') AS tem_acordo
+          WHERE pee.processo_id = pr.id) AS etiqueta_escritorio
        FROM tblproc pr
        LEFT JOIN tblvara v         ON pr.vara_id     = v.id
        LEFT JOIN tblforum f        ON v.forum_id     = f.id

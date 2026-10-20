@@ -7,7 +7,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { processosAPI, andamentoAPI, prazosAPI, tarefasAPI, audienciasAPI, periciasAPI, financeiroAPI, pessoasAPI, etiquetasAPI } from '../../services/api';
-import EtiquetaAcordo, { estiloFundoAcordo, useCorAcordo } from '../../components/EtiquetaAcordo';
+import EtiquetaAcordo, { estiloFundoAcordo, statusEhAcordo, useCorAcordo } from '../../components/EtiquetaAcordo';
 import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetaEscritorioSubmenu, ModalHistoricoEtiquetaEscritorio } from '../../components/Etiquetas';
 import { formatarData, formatarNumeroPasta, formatarMoeda, labelStatusPrazo, corPrazo, toTitleCase, hojeLocal, audienciaJaPassou } from '../../utils/formatters';
 // Janelas de contato/ficha reutilizadas da tela de Pessoas (painel "Partes do processo")
@@ -674,13 +674,7 @@ export default function PastaDetalhe() {
       if (rp.data.ok) setRepassesFaltam(montarPendentes(rp.data.dados).length);
       setRepassesVersao(v => v + 1);
       if (c.data.ok) setContaCorrente(c.data.dados);
-      if (a.data.ok) {
-        setAcordosFin(a.data.dados);
-        // a marca "Acordo" do alto da pasta acompanha o que acabou de mudar aqui (criar, cancelar ou excluir acordo)
-        const tem = a.data.dados.some(x => x.tipo === 'acordo' && x.status !== 'cancelado');
-        setPasta(p => (p?.processos?.some(pr => pr.id === procId && !!Number(pr.tem_acordo) !== tem)
-          ? { ...p, processos: p.processos.map(pr => (pr.id === procId ? { ...pr, tem_acordo: tem ? 1 : 0 } : pr)) } : p));
-      }
+      if (a.data.ok) setAcordosFin(a.data.dados);
     } catch {}
   }
 
@@ -778,8 +772,8 @@ export default function PastaDetalhe() {
 
   const processos        = pasta.processos || [];
   const processoSelecionado = getProcessoSelecionado(processos);
-  // Etiqueta automática "Acordo": algum processo da pasta tem acordo (não alvará) que não foi cancelado
-  const temAcordoNaPasta = processos.some(pr => Number(pr.tem_acordo));
+  // Etiqueta automática "Acordo": algum processo da pasta (apenso inclusive) está com o status "Acordo"
+  const temAcordoNaPasta = processos.some(pr => statusEhAcordo(pr.status_nome));
 
   // Empresas EM RECUPERAÇÃO JUDICIAL entre as partes desta pasta (autor ou réu, de
   // qualquer processo dela). A marca é do cadastro da empresa (Pessoas → Jurídica),
@@ -947,7 +941,7 @@ export default function PastaDetalhe() {
                 </thead>
                 <tbody>
                   {processos.map(pr => (
-                    <tr key={pr.id} className={Number(pr.tem_acordo) ? 'linha-acordo' : undefined} style={Number(pr.tem_acordo) ? estiloFundoAcordo(corAcordo) : undefined}>
+                    <tr key={pr.id} className={statusEhAcordo(pr.status_nome) ? 'linha-acordo' : undefined} style={statusEhAcordo(pr.status_nome) ? estiloFundoAcordo(corAcordo) : undefined}>
                       <td>
                         <button
                           type="button"
@@ -970,7 +964,7 @@ export default function PastaDetalhe() {
                         >
                           {pr.NomeTituloProc || '—'}
                         </button>
-                        {!!Number(pr.tem_acordo) && <EtiquetaAcordo cor={corAcordo} style={{ marginLeft: '8px' }} />}
+                        {statusEhAcordo(pr.status_nome) && <EtiquetaAcordo cor={corAcordo} style={{ marginLeft: '8px' }} />}
                         {!!pr.apenso_de_id && (
                           <span className="badge" title={`Apenso do processo ${numeroDoPrincipal(pr)}`}
                             style={{ marginLeft: '8px', background: '#ede9fe', color: '#4c1d95', fontWeight: 700 }}>

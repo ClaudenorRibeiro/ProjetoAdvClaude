@@ -1,10 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { etiquetasAPI } from '../services/api';
 
-// Etiqueta AUTOMÁTICA "Acordo": processo com acordo cadastrado (e não cancelado) ganha a etiqueta e um fundo na MESMA cor.
+// Etiqueta AUTOMÁTICA "Acordo": processo com o STATUS "Acordo" ganha a etiqueta e um fundo na MESMA cor (acordo lançado no Financeiro não conta).
 // A cor é escolhida em Configurações > Etiquetas do escritório; sem escolha vale a cor padrão. Peça única usada pela lista de
 // Processos, pelo alto da pasta e pela aba Processos da pasta.
 export const COR_ACORDO_PADRAO = '#86efac';
+
+// O status é reconhecido pelo NOME ("Acordo"), sem diferenciar maiúscula nem acento — igual à regra do servidor.
+export function statusEhAcordo(nome) {
+  return String(nome || '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() === 'acordo';
+}
 
 function rgbDe(hex) {
   const m = /^#([0-9a-f]{6})$/i.exec(String(hex || ''));
@@ -69,7 +74,7 @@ export function useCorAcordo() {
 
 export default function EtiquetaAcordo({ cor = COR_ACORDO_PADRAO, style }) {
   return (
-    <span className="badge" title="Este processo tem acordo cadastrado"
+    <span className="badge" title="O status deste processo é Acordo"
       style={{ background: cor, color: corDoTextoSobre(cor), ...style }}>Acordo</span>
   );
 }

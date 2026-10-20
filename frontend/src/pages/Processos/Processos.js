@@ -193,7 +193,7 @@ export default function Processos() {
                   // (só quando a busca é numérica; compara pelo valor, então 430 == 0430)
                   const pastaDestacada = /^\d+$/.test(busca.trim()) && Number(busca) === Number(p.numPasta);
                   return (
-                  <tr key={p.id} className={Number(p.tem_acordo) ? 'linha-acordo' : undefined} style={Number(p.tem_acordo) ? estiloFundoAcordo(corAcordo) : undefined}>
+                  <tr key={p.id} className={Number(p.status_acordo) ? 'linha-acordo' : undefined} style={Number(p.status_acordo) ? estiloFundoAcordo(corAcordo) : undefined}>
                     <td style={pastaDestacada ? { backgroundColor: '#dcfce7' } : undefined}>
                       <strong style={{ fontFamily: 'monospace', fontSize: '14px', color: pastaDestacada ? '#166534' : undefined }}>
                         {formatarNumeroPasta(p.numPasta)}
@@ -205,7 +205,7 @@ export default function Processos() {
                         title="Abrir pasta">
                       <div style={{ fontWeight: '500', color: '#1e2a3a' }}>
                         {p.titulo_proc || <em style={{ color: '#aaa' }}>Sem processos</em>}
-                        {!!Number(p.tem_acordo) && <EtiquetaAcordo cor={corAcordo} style={{ marginLeft: '8px', verticalAlign: 'middle' }} />}
+                        {!!Number(p.status_acordo) && <EtiquetaAcordo cor={corAcordo} style={{ marginLeft: '8px', verticalAlign: 'middle' }} />}
                       </div>
                     </td>
                     <td>

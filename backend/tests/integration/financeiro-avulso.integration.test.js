@@ -175,9 +175,7 @@ test('o acordo comum NÃO é afetado: honorário 30%, cliente padrão gravado e 
   // tipo desconhecido vira acordo (nunca grava texto solto)
   const estranho = await api().post('/api/financeiro/processo/1/acordo').send({ tipo: 'qualquer', valor_total: 50, qtd_parcelas: 1, data_primeira: '2027-05-05', parcelas: [{ numero: 1, vencimento: '2027-05-05', valor_bruto: 50, honor_tipo: 'sem' }] });
   assert.equal((await um('SELECT tipo FROM acordo WHERE id = ?', [estranho.body.dados.id])).tipo, 'acordo');
-  // a etiqueta "Acordo" da pasta: o processo 1 tem acordo comum → marcado; só avulso/alvará não marcaria
-  const ficha = (await api().get('/api/processos/pastas/1')).body.dados;
-  assert.ok(JSON.stringify(ficha).includes('"tem_acordo":1') || JSON.stringify(ficha).includes('"tem_acordo":true'));
+  // a etiqueta "Acordo" da pasta vale pelo STATUS do processo (etiqueta-acordo.integration.test.js), não pelo acordo lançado
 });
 
 // ------------------------------------------------------------------ Consulta

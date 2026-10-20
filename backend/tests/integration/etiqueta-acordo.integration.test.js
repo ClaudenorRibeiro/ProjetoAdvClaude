@@ -1,5 +1,5 @@
 // Etiqueta automática "Acordo": (1) a cor escolhida pelo escritório (GET/PUT, só administrador, banco sem a coluna) e
-// (2) a marca "tem_acordo" que a lista de pastas e a pasta devolvem (acordo que não é alvará e não foi cancelado).
+// (2) a marca "status_acordo" da lista de pastas (algum processo ativo da pasta, apenso inclusive, está com o STATUS "Acordo").
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const jwt = require('jsonwebtoken');
@@ -101,41 +101,42 @@ test('banco que ainda não rodou o script da cor: a leitura usa a cor padrão e 
   }
 });
 
-test('tem_acordo: só acordo que não é alvará e não foi cancelado; vale na lista de pastas e por processo dentro da pasta', async () => {
-  const comAcordo = await novoProc(7101);
-  const soAlvara = await novoProc(7102);
-  const cancelado = await novoProc(7103);
+test('status_acordo: vale só o STATUS "Acordo" (pelo nome, sem maiúscula/acento); acordo lançado não conta; lista de pastas e processo da pasta', async () => {
+  const stAcordo = (await sql("INSERT INTO tblstatusproc (nome) VALUES ('Acordo')")).insertId;
+  const stOutro = (await sql("INSERT INTO tblstatusproc (nome) VALUES ('Acordos pendentes')")).insertId;
+  const noStatus = await novoProc(7101, { status_id: stAcordo });
+  const lancadoSemStatus = await novoProc(7102);                       // status "Conhecimento"/outro + acordo lançado: nada muda
+  const nomeParecido = await novoProc(7103, { status_id: stOutro });
   const semNada = await novoProc(7104);
-  await novoAcordo(comAcordo.id);
-  await novoAcordo(soAlvara.id, 'alvara');
-  await novoAcordo(cancelado.id, 'acordo', 'cancelado');
+  await novoAcordo(lancadoSemStatus.id);
+  await novoAcordo(nomeParecido.id);
 
-  assert.equal(Number((await naLista(comAcordo.pastaId)).tem_acordo), 1);
-  assert.equal(Number((await naLista(soAlvara.pastaId)).tem_acordo), 0);
-  assert.equal(Number((await naLista(cancelado.pastaId)).tem_acordo), 0);
-  assert.equal(Number((await naLista(semNada.pastaId)).tem_acordo), 0);
+  assert.equal(Number((await naLista(noStatus.pastaId)).status_acordo), 1);        // status Acordo, sem acordo lançado: marca
+  assert.equal(Number((await naLista(lancadoSemStatus.pastaId)).status_acordo), 0); // acordo lançado, status outro: sem marca
+  assert.equal(Number((await naLista(nomeParecido.pastaId)).status_acordo), 0);
+  assert.equal(Number((await naLista(semNada.pastaId)).status_acordo), 0);
+  assert.equal((await daPasta(noStatus.pastaId))[0].status_nome, 'Acordo');         // a tela decide cada processo pelo nome do status
 
-  const [p1] = await daPasta(comAcordo.pastaId);
-  assert.equal(Number(p1.tem_acordo), 1);
-  assert.equal(Number((await daPasta(soAlvara.pastaId))[0].tem_acordo), 0);
-  assert.equal(Number((await daPasta(cancelado.pastaId))[0].tem_acordo), 0);
-
-  // cancelar o acordo ou excluí-lo tira a marca (nada guardado: a marca é calculada na hora)
-  await sql("UPDATE acordo SET status = 'cancelado' WHERE processo_id = ?", [comAcordo.id]);
-  assert.equal(Number((await naLista(comAcordo.pastaId)).tem_acordo), 0);
-  await sql("UPDATE acordo SET status = 'ativo' WHERE processo_id = ?", [comAcordo.id]);
-  assert.equal(Number((await naLista(comAcordo.pastaId)).tem_acordo), 1);
-  await sql('DELETE FROM acordo WHERE processo_id = ?', [comAcordo.id]);
-  assert.equal(Number((await naLista(comAcordo.pastaId)).tem_acordo), 0);
+  // maiúscula, acento e espaço nas pontas não atrapalham; trocar o status liga e desliga a marca na hora
+  await sql("UPDATE tblstatusproc SET nome = '  ACORDO ' WHERE id = ?", [stAcordo]);
+  assert.equal(Number((await naLista(noStatus.pastaId)).status_acordo), 1);
+  await sql('UPDATE tblproc SET status_id = ? WHERE id = ?', [stOutro, noStatus.id]);
+  assert.equal(Number((await naLista(noStatus.pastaId)).status_acordo), 0);
+  await sql('UPDATE tblproc SET status_id = ? WHERE id = ?', [stAcordo, lancadoSemStatus.id]);
+  assert.equal(Number((await naLista(lancadoSemStatus.pastaId)).status_acordo), 1);
+  await sql('DELETE FROM acordo WHERE processo_id = ?', [lancadoSemStatus.id]);      // sem o acordo lançado continua marcada: vale o status
+  assert.equal(Number((await naLista(lancadoSemStatus.pastaId)).status_acordo), 1);
 });
 
-test('tem_acordo numa pasta com dois processos: a pasta marca se QUALQUER um tem acordo, e cada processo diz o seu', async () => {
+test('status_acordo numa pasta com dois processos e com apenso: a pasta marca se QUALQUER um (apenso inclusive) está com o status Acordo', async () => {
+  const stAcordo = (await sql("SELECT id FROM tblstatusproc WHERE TRIM(nome) = 'Acordo' LIMIT 1"))[0].id;
   const primeiro = await novoProc(7110);
-  const segundo = await novoProc(7110, { pasta_existente_confirmada: true, NomeTituloProc: 'SEGUNDO PROCESSO ETQ' });
+  const segundo = await novoProc(7110, { pasta_existente_confirmada: true, NomeTituloProc: 'SEGUNDO PROCESSO ETQ', status_id: stAcordo });
   assert.equal(segundo.pastaId, primeiro.pastaId);
-  await novoAcordo(segundo.id);
-  assert.equal(Number((await naLista(primeiro.pastaId)).tem_acordo), 1);
-  const porProcesso = Object.fromEntries((await daPasta(primeiro.pastaId)).map(p => [p.id, Number(p.tem_acordo)]));
-  assert.equal(porProcesso[primeiro.id], 0);
-  assert.equal(porProcesso[segundo.id], 1);
+  assert.equal(Number((await naLista(primeiro.pastaId)).status_acordo), 1);
+  await sql('UPDATE tblproc SET status_id = 1 WHERE id = ?', [segundo.id]);
+  assert.equal(Number((await naLista(primeiro.pastaId)).status_acordo), 0);
+  // apenso com o status Acordo também marca a pasta
+  await sql("INSERT INTO tblproc (pasta_id, numProc, NomeTituloProc, apenso_de_id, status_id, ativo) VALUES (?, '9400099-00.2026.5.15.0001', 'APENSO ETQ', ?, ?, 1)", [primeiro.pastaId, primeiro.id, stAcordo]);
+  assert.equal(Number((await naLista(primeiro.pastaId)).status_acordo), 1);
 });

@@ -4,7 +4,7 @@ import { etiquetasAPI } from '../../services/api';
 import EtiquetaAcordo, { COR_ACORDO_PADRAO, esquecerCorAcordo, estiloFundoAcordo } from '../../components/EtiquetaAcordo';
 
 // Configurações > Etiquetas do escritório > Processos: linha "Acordo (automática)". Não é uma das 5 etiquetas manuais:
-// o processo que tem acordo (não cancelado) ganha SOZINHO a etiqueta "Acordo" e um fundo, os dois nesta cor.
+// o processo com o STATUS "Acordo" ganha SOZINHO a etiqueta "Acordo" e um fundo, os dois nesta cor.
 export default function EtiquetaAcordoConfig() {
   const [cor, setCor] = useState(COR_ACORDO_PADRAO);
   const [salva, setSalva] = useState(COR_ACORDO_PADRAO);
@@ -38,7 +38,7 @@ export default function EtiquetaAcordoConfig() {
     <div className="card" style={{ marginTop: 16 }} data-testid="config-etiqueta-acordo">
       <h3 style={{ margin: '0 0 6px' }}>Acordo (automática)</h3>
       <p style={{ color: '#5b6472', fontSize: 13, margin: '0 0 14px' }}>
-        Todo processo que tiver um <strong>acordo</strong> cadastrado (alvará e acordo cancelado não contam) ganha sozinho a etiqueta
+        Todo processo cujo <strong>status</strong> seja <strong>"Acordo"</strong> (ter acordo lançado no Financeiro não conta) ganha sozinho a etiqueta
         <strong> "Acordo"</strong> e um fundo colorido, na lista de Processos, no alto da pasta e na aba Processos da pasta.
         A etiqueta e o fundo usam a mesma cor, que você escolhe aqui. Ela não ocupa nenhuma das 5 etiquetas acima.
       </p>
