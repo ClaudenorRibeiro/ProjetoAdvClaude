@@ -33,6 +33,10 @@ PARA RODAR NO HEIDISQL (banco)
                                                             coluna apenso_de_id (+ índice e chave estrangeira) e registra a versão 5. Não mexe em nenhum dado. Rodar DEPOIS do
                                                             sql_cor_etiqueta_acordo_para_heidi.sql (versão 3), com o banco do sistema selecionado; pode rodar várias vezes. O sistema novo precisa dele (a tela de pastas
                                                             procura a coluna). Backup antes. NADA foi aplicado na AWS. Para Erick/Antônio: rodar o script único abaixo (leva à versão 4) e DEPOIS este.
+  sql_status_acordo_do_sistema_para_heidi.sql  IMPORTANTE  STATUS "ACORDO" DO SISTEMA (a etiqueta automática Acordo depende dele; ninguém pode renomear nem excluir): garante que o status de processo
+                                                            "Acordo" existe, ativo e sem "encerra o processo" (cria, reativa ou corrige; não mexe em outros status nem em processos) e registra a versão 6.
+                                                            Só dados, sem mudar estrutura. Rodar DEPOIS do sql_processo_apenso_para_heidi.sql, com o banco do sistema selecionado; pode rodar
+                                                            várias vezes. Backup antes. NADA foi aplicado na AWS.
   sql_preparar_aws_erick_antonio_para_heidi.sql IMPORTANTE  SCRIPT ÚNICO PARA PREPARAR OS BANCOS DA AWS-ERICK (erick_adv) E DA AWS-ANTÔNIO (sistema_advocacia): reúne as versões 1 a 4
                                                             (acima) e deixa o banco IGUAL ao estrutura_banco.sql. Só roda em banco com esses 2 nomes; confere MySQL, versão registrada e a estrutura inteira
                                                             (95 tabelas) ANTES de mexer; se achar diferença desconhecida, para sem alterar nada e lista na aba 2. Pode rodar quantas vezes quiser (no

@@ -12,6 +12,7 @@ const { texto, lerTextos } = require('../utils/camposTexto');
 const { comIdNumerico } = require('../utils/rotasSeguras');
 const { motivoDeNaoArquivar } = require('../utils/pendenciasProcesso');
 const apenso = require('../utils/apensoProcesso');
+const { ehStatusAcordo, MENSAGEM_STATUS_ACORDO } = require('../utils/statusAcordo');
 
 // Confere que TODA parte (autor/réu/perito) enviada aponta para uma pessoa que
 // existe e está ativa. tbltituloproc* e processo_perito são polimórficos SEM
@@ -1277,7 +1278,7 @@ async function criarStatusProc(req, res) {
     const nomeLido = texto(req.body.nome, { rotulo: 'Nome', max: 100, obrigatorio: true });
     if (nomeLido.erro) return erro(res, nomeLido.erro);
     const nome = nomeLido.valor;
-    const encerra = _paraFlag(req.body.encerra_processo) ?? 0;
+    const encerra = ehStatusAcordo(nome) ? 0 : (_paraFlag(req.body.encerra_processo) ?? 0);   // "Acordo" nunca encerra o processo
     const conn = await pool.getConnection();
     let r;
     try {
@@ -1493,7 +1494,9 @@ async function atualizarStatusProc(req, res) {
     if (!atual.length) return naoEncontrado(res, 'Registro não encontrado');
 
     const mudouNome = atual[0].nome !== nome;
-    const encerraFinal = encerraEnviado ?? (atual[0].encerra_processo ? 1 : 0);
+    // "Acordo" é status do sistema: nome e "encerra o processo" ficam como estão (nada é gravado)
+    if (ehStatusAcordo(atual[0].nome) && (mudouNome || (encerraEnviado ?? 0) !== 0)) return erro(res, MENSAGEM_STATUS_ACORDO);
+    const encerraFinal = ehStatusAcordo(nome) ? 0 : (encerraEnviado ?? (atual[0].encerra_processo ? 1 : 0));
     const mudouFlag = encerraFinal !== (atual[0].encerra_processo ? 1 : 0);
     if (!mudouNome && !mudouFlag) return sucesso(res, { id: parseInt(id), nome, encerra_processo: encerraFinal }, 'Atualizado com sucesso');
 
@@ -1525,6 +1528,8 @@ async function atualizarStatusProc(req, res) {
 // DELETE /api/processos/auxiliares/status/:id — bloqueia se houver processo ativo OU etiqueta ligada
 async function excluirStatusProc(req, res) {
   try {
+    const [alvo] = await pool.execute('SELECT nome FROM tblstatusproc WHERE id = ? AND ativo = 1', [req.params.id]);
+    if (alvo.length && ehStatusAcordo(alvo[0].nome)) return erro(res, MENSAGEM_STATUS_ACORDO);
     const uso = await _usoDoStatus(req.params.id);
     if (uso.processos || uso.etiquetas) return erro(res, _mensagemUsoStatus('excluir', uso));
     return _excluirAuxSimples(req, res, 'tblstatusproc', 'status_id');

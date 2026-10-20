@@ -369,3 +369,25 @@ test('@critical Gerenciar Assuntos: com a permissão própria de assuntos aparec
   await expect(linhaItem(jan, 'Aux Ui Assunto Fixo').getByRole('button', { name: /^Excluir / })).toHaveCount(0);
   await expect(jan.getByRole('button', { name: 'Adicionar' })).toHaveCount(0);                        // sem "cadastrar" de assuntos não há formulário de novo item
 });
+
+// O status "Acordo" é do sistema (a etiqueta automática "Acordo" depende dele): a lista mostra o aviso e NÃO oferece Editar nem Excluir.
+test('@critical Gerenciar Status de Processo: o status "Acordo" é do sistema (sem Editar nem Excluir); os outros continuam com os botões', async ({ page }) => {
+  const achado = await noBanco("SELECT id FROM tblstatusproc WHERE ativo = 1 AND LOWER(TRIM(nome)) = 'acordo' LIMIT 1");
+  const criou = !achado.length;
+  const acordoId = criou ? (await noBanco("INSERT INTO tblstatusproc (nome) VALUES ('Acordo')")).insertId : achado[0].id;
+  await noBanco("INSERT INTO tblstatusproc (nome) VALUES ('Aux Ui Livre')");
+  try {
+    await loginPelaTela(page);
+    const jan = await abrirAux(page, { botao: 'Gerenciar status do processo', titulo: 'Status de Processo' });
+    const linhaAcordo = linhaItem(jan, 'Acordo');
+    await expect(linhaAcordo.getByText('status do sistema')).toBeVisible();
+    await expect(linhaAcordo.getByRole('button', { name: 'Editar Acordo' })).toHaveCount(0);
+    await expect(linhaAcordo.getByRole('button', { name: 'Excluir Acordo' })).toHaveCount(0);
+    const livre = linhaItem(jan, 'Aux Ui Livre');
+    await expect(livre.getByRole('button', { name: 'Editar Aux Ui Livre' })).toBeVisible();
+    await expect(livre.getByRole('button', { name: 'Excluir Aux Ui Livre' })).toBeVisible();
+    await semViolacoes(page, 'janela Status de Processo com o status do sistema');
+  } finally {
+    if (criou) await noBanco('DELETE FROM tblstatusproc WHERE id = ?', [acordoId]);
+  }
+});

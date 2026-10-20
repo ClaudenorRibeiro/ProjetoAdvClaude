@@ -12,7 +12,7 @@ import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import MenuAcoes from '../../components/MenuAcoes';
-import EtiquetaAcordo, { estiloFundoAcordo, useCorAcordo } from '../../components/EtiquetaAcordo';
+import EtiquetaAcordo, { estiloFundoAcordo, statusEhAcordo, useCorAcordo } from '../../components/EtiquetaAcordo';
 import useEscFechar from '../../hooks/useEscFechar';
 import { buscarEnderecoPorCep } from '../../utils/cep';
 import ModalCadastroRapidoParte from '../../components/ModalCadastroRapidoParte';
@@ -2298,14 +2298,20 @@ export function ModalGerenciarAux({ tipo, itens, foruns = [], onFechar, onAtuali
                       )}
                     </span>
                     <div style={{ display: 'flex', gap: '6px' }}>
-                      {podeAlterar && (
+                      {tipo === 'status' && statusEhAcordo(item.nome) && (
+                        <span style={{ color: '#5b6472', fontSize: '11px', alignSelf: 'center' }}
+                          title="O status Acordo é do sistema: a etiqueta automática Acordo depende dele. Não pode ser renomeado nem excluído.">
+                          status do sistema
+                        </span>
+                      )}
+                      {podeAlterar && !(tipo === 'status' && statusEhAcordo(item.nome)) && (
                         <button className="btn btn-outline" aria-label={`Editar ${item.nome}`}
                           style={{ fontSize: '11px', padding: '3px 8px', color: '#1d4ed8', borderColor: '#1d4ed8' }}
                           onClick={() => iniciarEdicao(item)}>
                           Editar
                         </button>
                       )}
-                      {podeExcluir && (
+                      {podeExcluir && !(tipo === 'status' && statusEhAcordo(item.nome)) && (
                         <button className="btn btn-danger" aria-label={`Excluir ${item.nome}`}
                           style={{ fontSize: '11px', padding: '3px 8px' }}
                           onClick={() => excluir(item)}>

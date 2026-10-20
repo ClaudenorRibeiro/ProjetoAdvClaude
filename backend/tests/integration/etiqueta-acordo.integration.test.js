@@ -19,6 +19,7 @@ const api = (t = admin) => ({
   get: p => request(app).get(p).set('Authorization', `Bearer ${t}`),
   post: p => request(app).post(p).set('Authorization', `Bearer ${t}`),
   put: p => request(app).put(p).set('Authorization', `Bearer ${t}`),
+  delete: p => request(app).delete(p).set('Authorization', `Bearer ${t}`),
 });
 async function sql(q, params = []) {
   const conn = await conectarBancoTeste();
@@ -139,4 +140,35 @@ test('status_acordo numa pasta com dois processos e com apenso: a pasta marca se
   // apenso com o status Acordo também marca a pasta
   await sql("INSERT INTO tblproc (pasta_id, numProc, NomeTituloProc, apenso_de_id, status_id, ativo) VALUES (?, '9400099-00.2026.5.15.0001', 'APENSO ETQ', ?, ?, 1)", [primeiro.pastaId, primeiro.id, stAcordo]);
   assert.equal(Number((await naLista(primeiro.pastaId)).status_acordo), 1);
+});
+
+test('status "Acordo" é do sistema: ninguém renomeia nem exclui, nunca encerra o processo; os outros status continuam livres', async () => {
+  const outro = (await sql("INSERT INTO tblstatusproc (nome) VALUES ('Status Livre Etq')")).insertId;
+  let acordo = (await sql("SELECT id FROM tblstatusproc WHERE ativo = 1 AND LOWER(TRIM(nome)) = 'acordo' LIMIT 1"))[0]?.id;
+  if (!acordo) {   // criar "Acordo" pela API: mesmo pedindo "encerra o processo" ele nasce sem encerrar
+    const novo = await api().post('/api/processos/auxiliares/status').send({ nome: 'Acordo', encerra_processo: true });
+    assert.equal(novo.status, 201, JSON.stringify(novo.body));
+    acordo = novo.body.dados.id;
+    assert.equal(Number(novo.body.dados.encerra_processo), 0);
+  }
+  await sql("UPDATE tblstatusproc SET nome = 'Acordo', encerra_processo = 0 WHERE id = ?", [acordo]);
+  const intacto = async () => {
+    const [l] = await sql('SELECT nome, encerra_processo AS e, ativo FROM tblstatusproc WHERE id = ?', [acordo]);
+    assert.deepEqual([l.nome, Number(l.e), Number(l.ativo)], ['Acordo', 0, 1]);
+  };
+
+  const renomear = await api().put(`/api/processos/auxiliares/status/${acordo}`).send({ nome: 'Acordo Novo' });
+  assert.equal(renomear.status, 400, JSON.stringify(renomear.body)); assert.match(msg(renomear), /do sistema/);
+  const encerrar = await api().put(`/api/processos/auxiliares/status/${acordo}`).send({ nome: 'Acordo', encerra_processo: true });
+  assert.equal(encerrar.status, 400, JSON.stringify(encerrar.body));
+  const excluir = await api().delete(`/api/processos/auxiliares/status/${acordo}`);
+  assert.equal(excluir.status, 400, JSON.stringify(excluir.body)); assert.match(msg(excluir), /do sistema/);
+  await intacto();                                                    // nada foi gravado
+  // enviar o mesmo nome e "não encerra" não é mudança: continua aceito
+  assert.equal((await api().put(`/api/processos/auxiliares/status/${acordo}`).send({ nome: 'Acordo', encerra_processo: false })).status, 200);
+  // outro status não pode virar "Acordo" (nome repetido) e continua livre para renomear e excluir
+  assert.equal((await api().put(`/api/processos/auxiliares/status/${outro}`).send({ nome: 'Acordo' })).status, 400);
+  assert.equal((await api().put(`/api/processos/auxiliares/status/${outro}`).send({ nome: 'Status Livre Etq 2', encerra_processo: true })).status, 200);
+  assert.equal((await api().delete(`/api/processos/auxiliares/status/${outro}`)).status, 200);
+  await intacto();
 });
