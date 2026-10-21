@@ -208,24 +208,16 @@ depois desta data, esta descrição deixa de valer.
 - Estrutura: `backend/src/{controllers,routes,services,middleware,config,utils,scripts}`,
   `frontend/src/{pages,components,context,hooks,services,utils}`.
 
-## 6. Arquivos de sessões anteriores na raiz — NÃO são fonte de verdade
+## 6. Arquivos de sessões anteriores na raiz — EXCLUÍDOS em 21/10/2026 (pedido do usuário)
 
-Existem arquivos de anotações de sessões anteriores na raiz do projeto:
-`REVISAO-CODEX-10-09-2026.md`, `RESUMO-SESSAO-2026-09-14_16-33-38.txt`,
-`RELATORIO-ALTERACOES-2026-09-13_20-25-59.txt`,
-`ALTERACOES A SEREM FEITAS NO BANCO 130926-2022.txt` e
-`PROMPT - cadastrar pessoa fisica-juridica.txt`.
-
-**O usuário confirmou (25/09/2026) que TODOS esses arquivos estão
-defasados/ultrapassados.** Nenhuma afirmação neles (bugs pendentes,
-scripts SQL ainda não rodados, funcionalidades implementadas, decisões
-tomadas) deve ser tratada como estado atual do sistema. Antes de citar
-qualquer coisa desses arquivos como fato, a IA precisa reconferir
-diretamente no código-fonte, no `estrutura_banco.sql` e/ou perguntar ao
-usuário — nunca repetir o conteúdo deles como se fosse a situação
-presente. Eles só têm valor como histórico de contexto (o que já foi
-tentado/discutido no passado), não como checklist confiável do que falta
-fazer.
+As anotações de sessões antigas (`REVISAO-CODEX-10-09-2026.md`, `RESUMO-SESSAO-*.txt`, `RELATORIO-*.txt`,
+`PROMPT - cadastrar pessoa fisica-juridica.txt`, `resumo a ser dito para o outro codex.txt`) e os scripts SQL só de histórico
+(`sql_relatorios_fase1/6/7`, `sql_remover_area_direito_da_pasta`, `sql_atualizar_financeiro`, `sql_contas_bancarias_pessoas`,
+`sql_aumentar_destino_modelo_documento`, `sql_limpar_pastas_vazias`, `sql_conferir_nomes_vazios_e_anotacoes_orfas`) foram
+**apagados da raiz** a pedido do usuário (nenhum código, teste ou script os usava; seguem no histórico do Git se um dia precisar ler).
+**Regra que continua valendo:** nada que esteja em anotação antiga ou na memória de uma sessão é fonte de verdade — conferir sempre
+no código-fonte, no `estrutura_banco.sql` e/ou perguntar ao usuário. Menções antigas a esses arquivos neste CLAUDE.md (seções 9 e 10)
+são histórico: os arquivos não existem mais.
 
 ## 7. Scripts: sempre indicar a importância (pedido do usuário, 02/10/2026)
 
