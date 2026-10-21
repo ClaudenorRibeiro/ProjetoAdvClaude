@@ -13,6 +13,7 @@ const { comIdNumerico } = require('../utils/rotasSeguras');
 const { motivoDeNaoArquivar } = require('../utils/pendenciasProcesso');
 const apenso = require('../utils/apensoProcesso');
 const { ehStatusAcordo, MENSAGEM_STATUS_ACORDO } = require('../utils/statusAcordo');
+const apensoIgual = require('../utils/apensoCompartilhado');
 
 // Confere que TODA parte (autor/réu/perito) enviada aponta para uma pessoa que
 // existe e está ativa. tbltituloproc* e processo_perito são polimórficos SEM
@@ -591,6 +592,7 @@ async function criarProcesso(req, res) {
     oabs = [],             // OABs vinculadas ao processo: [{ tipo: 'usuario'|'freela', id }]
     pasta_existente_confirmada = false,   // true só quando o usuário confirmou, na tela, incluir mais um processo numa pasta que já existe
     apenso_de_id,          // APENSO: id do processo comum (da mesma pasta) ao qual este processo é apensado
+    confirmar_outras_pastas,   // true = o usuário já viu o aviso de que o mesmo apenso, em outras pastas, também será alterado
   } = req.body;
   const ehApenso = apenso_de_id !== undefined && apenso_de_id !== null && apenso_de_id !== '';
 
@@ -687,6 +689,20 @@ async function criarProcesso(req, res) {
       }
     }
 
+    // APENSO que já existe em outra pasta: vara, tipo, instância, assuntos, data de distribuição e protocolo são os mesmos em todas.
+    // Se o cadastro novo muda algum deles em relação ao que já existe, pede confirmação (409) e, confirmado, iguala as outras pastas.
+    let igualarOutras = null;
+    if (ehApenso && numProcLimpo) {
+      igualarOutras = await apensoIgual.prepararPropagacao(conn, {
+        numProc: numProcLimpo, novos: { vara_id, tipo_id, instancia_id, data_distribuicao, protocolo: protocoloLimpo, assuntos },
+      });
+      if (igualarOutras && confirmar_outras_pastas !== true) {
+        await conn.rollback();
+        const aviso = apensoIgual.avisoDaPropagacao(igualarOutras);
+        return erro(res, aviso.mensagem, aviso.status, aviso.detalhes);
+      }
+    }
+
     // Cria o processo
     const [procResult] = await conn.execute(
       `INSERT INTO tblproc
@@ -756,6 +772,11 @@ async function criarProcesso(req, res) {
       );
     }
 
+    if (igualarOutras) {
+      const r = await apensoIgual.aplicarPropagacao(conn, igualarOutras, req.usuario.id);
+      if (r.erro) { await conn.rollback(); return erro(res, r.erro); }
+    }
+
     // Auditoria na MESMA transação (tudo ou nada): antes do commit, com conn
     await auditoria.registrar(req.usuario.id, 'tblproc', 'criar', procId, null, null, conn);
     await conn.commit();
@@ -766,6 +787,20 @@ async function criarProcesso(req, res) {
   } finally {
     conn.release(); // SEMPRE devolve ao pool
   }
+}
+
+// GET /api/processos/apenso-por-numero?numero=... — o que já se sabe de um apenso que existe em outra(s) pasta(s): vara, fórum, tipo,
+// instância, assuntos, data de distribuição, protocolo, autores (para sugerir) e as pastas onde ele está. `encontrado: false` se não existe.
+async function apensoPorNumero(req, res) {
+  try {
+    const numero = typeof req.query.numero === 'string' ? req.query.numero.trim() : '';
+    if (!numero || numero.length > 45) return sucesso(res, { encontrado: false });
+    const conn = await pool.getConnection();
+    try {
+      const dados = await apensoIgual.dadosDoApensoPorNumero(conn, numero);
+      return sucesso(res, dados ? { encontrado: true, ...dados } : { encontrado: false });
+    } finally { conn.release(); }
+  } catch (err) { return erroInterno(res, err); }
 }
 
 // DELETE /api/processos/:id — Exclusão DEFINITIVA do processo (apaga do banco).
@@ -858,6 +893,7 @@ async function atualizarProcesso(req, res) {
     motivo_status,
     apenso_de_id,           // o vínculo de apenso NÃO muda depois de criado (só é aceito o mesmo valor)
     confirmar_apensos,      // true = o usuário já viu o aviso de que os apensos também serão arquivados
+    confirmar_outras_pastas,   // true = o usuário já viu o aviso de que o mesmo apenso, em outras pastas, também será alterado
   } = req.body;
 
   // cliente_polo é opcional; se vier preenchido precisa ser 'autor' ou 'reu'
@@ -923,6 +959,22 @@ async function atualizarProcesso(req, res) {
       if (!responsavel.length) {
         await conn.rollback();
         return erro(res, 'Responsável pelo processo não encontrado ou inativo');
+      }
+    }
+
+    // APENSO que também está em outras pastas: o que a pessoa MUDOU entre vara, tipo, instância, assuntos, data de distribuição e
+    // protocolo vale para todas (com confirmação). Assuntos só entram na conta se vieram no corpo. Dados antigos diferentes não são mexidos.
+    let igualarOutras = null;
+    if (eraApenso && numProcLimpo) {
+      const antigos = numProcLimpo === antes[0].numProc ? await apensoIgual.lerCompartilhados(conn, id) : null;
+      igualarOutras = await apensoIgual.prepararPropagacao(conn, {
+        numProc: numProcLimpo, ignorarId: Number(id), antigos,
+        novos: { vara_id, tipo_id, instancia_id, data_distribuicao, protocolo: protocoloLimpo, assuntos },
+      });
+      if (igualarOutras && confirmar_outras_pastas !== true) {
+        await conn.rollback();
+        const aviso = apensoIgual.avisoDaPropagacao(igualarOutras);
+        return erro(res, aviso.mensagem, aviso.status, aviso.detalhes);
       }
     }
 
@@ -1033,6 +1085,10 @@ async function atualizarProcesso(req, res) {
     }
     if (statusMudou) {
       await apenso.arquivarApensosJunto(conn, Number(id), statusAnteriorId, statusNovoId, req.usuario.id, motivo_status);
+    }
+    if (igualarOutras) {
+      const r = await apensoIgual.aplicarPropagacao(conn, igualarOutras, req.usuario.id);
+      if (r.erro) { await conn.rollback(); return erro(res, r.erro); }
     }
     await auditoria.registrar(req.usuario.id, 'tblproc', 'editar', id, antes[0], null, conn);
     await conn.commit();
@@ -1741,6 +1797,7 @@ async function listarProcessosParados(req, res) {
 }
 
 module.exports = {
+  apensoPorNumero,
   buscarProcessosPorNumero,
   buscarProcessoPorId,
   sugerirNumeroPasta,

@@ -584,6 +584,11 @@ export function ModalNovoProcesso({ pastaId, processoBase, apensoDe = null, onFe
   const [aux, setAux]                       = useState({ foruns: [], varas: [], tipos: [], status: [], instancias: [], assuntos: [] });
   const [varasFiltradas, setVarasFiltradas] = useState([]);
   const [assuntosSelecionados, setAssuntosSelecionados] = useState([]);
+  // APENSO que já existe em outra(s) pasta(s): { pastas: [numPasta] } — vara, tipo, instância, assuntos, data e protocolo vêm preenchidos
+  const [apensoJaExiste, setApensoJaExiste] = useState(null);
+  const ultimoNumeroConsultado = useRef('');
+  // Mudar um desses campos de um apenso que está em outras pastas muda nelas também: o servidor avisa (409) e a tela pergunta.
+  const [avisoOutrasPastas, setAvisoOutrasPastas] = useState(null);
 
   // Título gerado automaticamente
   const [nomeTitulo, setNomeTitulo] = useState('');
@@ -745,6 +750,33 @@ export function ModalNovoProcesso({ pastaId, processoBase, apensoDe = null, onFe
     }
   }
 
+  // APENSO: se o número digitado já existe em outra pasta, traz os dados do processo (vara, fórum, tipo, instância, assuntos, data de
+  // distribuição, protocolo) e SUGERE as partes com o polo invertido (os autores de lá entram como RÉUS aqui; os autores ficam vazios).
+  // As partes só são sugeridas se ainda estão vazias. O servidor é quem confere e avisa se algum dado for mudado.
+  async function buscarApensoExistente(numero) {
+    if (!apensoDe) return;
+    const n = (numero || '').trim();
+    if (n.length < 20 || ultimoNumeroConsultado.current === n) return;   // número incompleto ou já consultado
+    ultimoNumeroConsultado.current = n;
+    try {
+      const { data } = await processosAPI.apensoPorNumero(n);
+      const d = data?.dados;
+      if (!data.ok || !d?.encontrado || ultimoNumeroConsultado.current !== n) { if (!d?.encontrado) setApensoJaExiste(null); return; }
+      setForm(f => ({
+        ...f,
+        forum_id: d.forum_id ? String(d.forum_id) : '', vara_id: d.vara_id ? String(d.vara_id) : '',
+        tipo_id: d.tipo_id ? String(d.tipo_id) : '', instancia_id: d.instancia_id ? String(d.instancia_id) : '',
+        data_distribuicao: d.data_distribuicao || '', protocolo: d.protocolo || '',
+      }));
+      setVarasFiltradas(d.forum_id ? aux.varas.filter(v => String(v.forum_id) === String(d.forum_id)) : aux.varas);
+      setAssuntosSelecionados(d.assuntos || []);
+      if (!autores.length && !reus.length && (d.autores || []).length) {
+        setReus(d.autores.map(a => ({ pessoa_id: a.pessoa_id, tipo_pessoa: a.tipo_pessoa || 'fisica', nome: a.nome, responsavel_nome: null, parentesco_nome: null })));
+      }
+      setApensoJaExiste({ pastas: (d.pastas || []).map(p => formatarNumeroPasta(p.numPasta)) });
+    } catch { /* sem consulta o cadastro segue normal: o servidor confere no salvar */ }
+  }
+
   function mudarForum(forumId) {
     set('forum_id', forumId);
     set('vara_id', '');
@@ -817,7 +849,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, apensoDe = null, onFe
     setLista(lista.filter((_, i) => i !== index));
   }
 
-  async function salvar() {
+  async function salvar(confirmarOutrasPastas = false) {
     if (autores.length === 0) return toast.error('Adicione ao menos um autor (polo ativo)');
     if (reus.length === 0)    return toast.error('Adicione ao menos um réu (polo passivo)');
     if (!pastaId && !form.numPasta) return toast.error('Número da pasta é obrigatório');
@@ -826,6 +858,7 @@ export function ModalNovoProcesso({ pastaId, processoBase, apensoDe = null, onFe
     setSalvando(true);
     try {
       const payload = {
+        ...(confirmarOutrasPastas === true ? { confirmar_outras_pastas: true } : {}),
         pasta_id:          pastaId || null,
         apenso_de_id:      apensoDe ? apensoDe.id : undefined,
         numPasta:          pastaId ? undefined : parseInt(form.numPasta),
@@ -851,7 +884,12 @@ export function ModalNovoProcesso({ pastaId, processoBase, apensoDe = null, onFe
       toast.success(apensoDe ? 'Apenso criado com sucesso!' : 'Processo criado com sucesso!');
       onFechar(true, data.dados?.pasta_id);
     } catch (err) {
-      toast.error(err.response?.data?.mensagem || (apensoDe ? 'Erro ao criar apenso' : 'Erro ao criar processo'));
+      const resp = err.response?.data;
+      if (err.response?.status === 409 && resp?.detalhes?.codigo === 'CONFIRMAR_ALTERACAO_EM_OUTRAS_PASTAS') {
+        setAvisoOutrasPastas({ mensagem: resp.mensagem });   // nada foi gravado: pergunta antes
+      } else {
+        toast.error(resp?.mensagem || (apensoDe ? 'Erro ao criar apenso' : 'Erro ao criar processo'));
+      }
     } finally {
       setSalvando(false);
     }
@@ -875,6 +913,16 @@ export function ModalNovoProcesso({ pastaId, processoBase, apensoDe = null, onFe
               <strong>Apenso do processo {apensoDe.numProc || `#${apensoDe.id}`}</strong>
               {apensoDe.titulo ? ` — ${apensoDe.titulo}` : ''}.
               <div style={{ marginTop: '4px' }}>Fica sempre nesta pasta. Informe o número do processo do apenso (ex.: a recuperação judicial) e escolha as partes dele à mão.</div>
+            </div>
+          )}
+          {apensoDe && apensoJaExiste && (
+            <div role="status" data-testid="apenso-ja-existe" style={{ background: '#ecfeff', border: '1px solid #67e8f9', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: '#155e75' }}>
+              <strong>Este apenso já está cadastrado {apensoJaExiste.pastas.length > 1 ? 'nas pastas' : 'na pasta'} {apensoJaExiste.pastas.join(', ')}.</strong>
+              <div style={{ marginTop: '4px' }}>
+                Vara, fórum, tipo, instância, assuntos, data de distribuição e protocolo vieram preenchidos: o mesmo número de apenso tem sempre as mesmas
+                informações. Se você mudar algum deles, o sistema avisa antes de salvar que a mudança vale também para as outras pastas.
+                As partes são sugestão (os autores de lá entram aqui como réus): confira e ajuste.
+              </div>
             </div>
           )}
 
@@ -1154,7 +1202,12 @@ export function ModalNovoProcesso({ pastaId, processoBase, apensoDe = null, onFe
               <input aria-label="Número do Processo (CNJ)"
                 className="form-control"
                 value={form.numProc}
-                onChange={e => { set('numProc', mascaraCNJ(e.target.value)); preencherTipoPorCNJ(e.target.value); }}
+                onChange={e => {
+                  const mascarado = mascaraCNJ(e.target.value);
+                  set('numProc', mascarado); preencherTipoPorCNJ(e.target.value);
+                  if (apensoDe) { if (mascarado.trim() !== ultimoNumeroConsultado.current) setApensoJaExiste(null); if (mascarado.length === 25) buscarApensoExistente(mascarado); }
+                }}
+                onBlur={() => buscarApensoExistente(form.numProc)}
                 placeholder="0000000-00.0000.0.00.0000"
                 maxLength={25}
               />
@@ -1303,6 +1356,16 @@ export function ModalNovoProcesso({ pastaId, processoBase, apensoDe = null, onFe
             }}
           />
         )}
+        {avisoOutrasPastas && (
+          <ModalConfirmar
+            titulo="Alterar também nas outras pastas?"
+            mensagem={avisoOutrasPastas.mensagem}
+            textoBotao="Sim, alterar em todas"
+            tipo="aviso"
+            acao={async () => { setAvisoOutrasPastas(null); await salvar(true); }}
+            onCancelar={() => setAvisoOutrasPastas(null)}
+          />
+        )}
       </div>
     </div>
   );
@@ -1319,6 +1382,8 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
   const podeAlterarProcesso = temPermissao('processos', 'alterar');
   const ehApenso = !!processo.apenso_de_id;   // o vínculo com o processo principal não muda
   const [avisoApensos, setAvisoApensos] = useState(null);   // { mensagem, motivo }: arquivar o principal arquiva os apensos (pede confirmação)
+  // { mensagem, motivo, confirmarApensos }: o mesmo apenso, em outras pastas, também será alterado (vara, tipo, instância, assuntos, data, protocolo)
+  const [avisoOutrasPastas, setAvisoOutrasPastas] = useState(null);
   const [leitura, setLeitura] = useState(somenteLeitura);
   const [modalAux, setModalAux] = useState(null);
   // Cadastro rápido de parte: null = fechado; 'autor' | 'reu' | 'perito' = campo que abriu
@@ -1465,9 +1530,10 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
     return aux.status?.find(s => String(s.id) === String(statusId))?.nome || 'Status selecionado';
   }
 
-  function montarPayload(motivoStatus = null, confirmarApensos = false) {
+  function montarPayload(motivoStatus = null, confirmarApensos = false, confirmarOutrasPastas = false) {
     return {
       ...(confirmarApensos ? { confirmar_apensos: true } : {}),
+      ...(confirmarOutrasPastas ? { confirmar_outras_pastas: true } : {}),
       numProc:           form.numProc           || null,
       protocolo:         form.protocolo?.trim()  || null,
       NomeTituloProc:    nomeTitulo,
@@ -1488,16 +1554,18 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
     };
   }
 
-  async function salvarComMotivoStatus(motivoStatus = null, confirmarApensos = false) {
+  async function salvarComMotivoStatus(motivoStatus = null, confirmarApensos = false, confirmarOutrasPastas = false) {
     setSalvando(true);
     try {
-      await processosAPI.atualizarProcesso(processo.id, montarPayload(motivoStatus, confirmarApensos));
+      await processosAPI.atualizarProcesso(processo.id, montarPayload(motivoStatus, confirmarApensos, confirmarOutrasPastas));
       toast.success('Processo atualizado com sucesso!');
       onFechar(true);
     } catch (err) {
       const resp = err.response?.data;
       if (err.response?.status === 409 && resp?.detalhes?.codigo === 'CONFIRMAR_ARQUIVAMENTO_DE_APENSOS') {
         setAvisoApensos({ mensagem: resp.mensagem, motivo: motivoStatus });   // nada foi gravado: pergunta antes
+      } else if (err.response?.status === 409 && resp?.detalhes?.codigo === 'CONFIRMAR_ALTERACAO_EM_OUTRAS_PASTAS') {
+        setAvisoOutrasPastas({ mensagem: resp.mensagem, motivo: motivoStatus, confirmarApensos });   // nada foi gravado: pergunta antes
       } else {
         toast.error(resp?.mensagem || 'Erro ao salvar');
       }
@@ -1911,6 +1979,16 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
             tipo="aviso"
             acao={async () => { const m = avisoApensos.motivo; setAvisoApensos(null); await salvarComMotivoStatus(m, true); }}
             onCancelar={() => setAvisoApensos(null)}
+          />
+        )}
+        {avisoOutrasPastas && (
+          <ModalConfirmar
+            titulo="Alterar também nas outras pastas?"
+            mensagem={avisoOutrasPastas.mensagem}
+            textoBotao="Sim, alterar em todas"
+            tipo="aviso"
+            acao={async () => { const a = avisoOutrasPastas; setAvisoOutrasPastas(null); await salvarComMotivoStatus(a.motivo, a.confirmarApensos, true); }}
+            onCancelar={() => setAvisoOutrasPastas(null)}
           />
         )}
         {!leitura && modalMotivoStatus && (

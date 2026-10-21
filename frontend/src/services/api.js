@@ -184,6 +184,7 @@ export const processosAPI = {
   renumerarPasta:    (id, dados) => api.put(`/processos/pastas/${id}/renumerar`, dados),
   sugerirPasta:      () => api.get('/processos/sugerir-pasta'),
   checarPasta:       (numPasta) => api.get('/processos/pastas/checar', { params: { numPasta } }),
+  apensoPorNumero:   (numero) => api.get('/processos/apenso-por-numero', { params: { numero } }),
   buscarPorNumero:   (q) => api.get('/processos/buscar', { params: { q } }),
   buscarPorId:       (id) => api.get(`/processos/${id}/basico`),
   // Processos
