@@ -14,36 +14,12 @@ PARA RODAR NO PC (duplo clique)
                                                             tecla fecha) e o resultado todo fica salvo em quality\test-results\ultima-bateria.txt (fora do Git).
 
 PARA RODAR NO HEIDISQL (banco)
-  sql_atualizar_banco_para_heidi.sql            IMPORTANTE  SCRIPT ÚNICO de atualização do banco (Antônio e Erick): cria tabelas/colunas do Financeiro, contas
-                                                            bancárias e Relatórios, aumenta modelo_documento.destino para 40 letras (recibo consolidado do acordo), registra a versão e apaga tblpasta.area_direito. Confere banco/versão do MySQL, pode rodar
-                                                            várias vezes. Parar o sistema + backup antes; atualizar o código logo depois de ver "PRONTO".
-  sql_avisos_clientes_para_heidi.sql            IMPORTANTE  AVISOS AOS CLIENTES (perícia, audiência, parabéns): cria a tabela avisos_cliente, as caixinhas WhatsApp/SMS dos
-                                                            telefones (um número de cada por pessoa), as opções por módulo no escritório e registra a versão 2. Rodar DEPOIS do script
-                                                            único, com o banco do sistema selecionado; pode rodar várias vezes. Backup antes.
-  sql_cor_etiqueta_acordo_para_heidi.sql        IMPORTANTE  ETIQUETA "ACORDO" (processo com acordo ganha etiqueta e fundo colorido): acrescenta a coluna da cor em
-                                                            configuracoes_escritorio e registra a versão 3. Rodar DEPOIS do sql_avisos_clientes_para_heidi.sql, com o banco do
-                                                            sistema selecionado; pode rodar várias vezes; só acrescenta. Sem ele o sistema funciona, mas sem escolher a cor. Backup antes.
-  sql_permissao_repasses_financeiro_para_heidi.sql IMPORTANTE  PERMISSÃO PRÓPRIA DE "REPASSES" NO FINANCEIRO (Configurações > Permissões > Financeiro > Repasses): dá o novo
-                                                            sub-item a todo usuário que JÁ tem "Alterar" no Financeiro, para ninguém perder o repasse; registra a versão 4. Só acrescenta
-                                                            linhas em permissoes (não muda a estrutura). Rodar DEPOIS do sql_cor_etiqueta_acordo_para_heidi.sql, com o banco do sistema
-                                                            selecionado; pode rodar várias vezes. Sem ele, só o administrador repassa até marcar o sub-item. Backup antes.
-  sql_processo_apenso_para_heidi.sql           IMPORTANTE  PROCESSO APENSO (processo de outra pessoa — falência, recuperação judicial — pendurado nos processos dos clientes): acrescenta em tblproc a
-                                                            coluna apenso_de_id (+ índice e chave estrangeira) e registra a versão 5. Não mexe em nenhum dado. Rodar DEPOIS do
-                                                            sql_cor_etiqueta_acordo_para_heidi.sql (versão 3), com o banco do sistema selecionado; pode rodar várias vezes. O sistema novo precisa dele (a tela de pastas
-                                                            procura a coluna). Backup antes. NADA foi aplicado na AWS. Para Erick/Antônio: rodar o script único abaixo (leva à versão 4) e DEPOIS este.
-  sql_status_acordo_do_sistema_para_heidi.sql  IMPORTANTE  STATUS "ACORDO" DO SISTEMA (a etiqueta automática Acordo depende dele; ninguém pode renomear nem excluir): garante que o status de processo
-                                                            "Acordo" existe, ativo e sem "encerra o processo" (cria, reativa ou corrige; não mexe em outros status nem em processos) e registra a versão 6.
-                                                            Só dados, sem mudar estrutura. Rodar DEPOIS do sql_processo_apenso_para_heidi.sql, com o banco do sistema selecionado; pode rodar
-                                                            várias vezes. Backup antes. NADA foi aplicado na AWS.
-  sql_aws_erick_antonio_versao_6_para_heidi.sql IMPORTANTE  SCRIPT ÚNICO PARA LEVAR OS BANCOS DA AWS-ERICK (erick_adv) E DA AWS-ANTÔNIO (sistema_advocacia) DA VERSÃO 4 À 6: junta o processo apenso (versão 5: coluna
-                                                            tblproc.apenso_de_id + índice + chave) e o status "Acordo" do sistema (versão 6: só garante o status; nos dois bancos ele já existe). Só roda nesses 2 nomes de banco e só
-                                                            se o banco está na versão 4; não altera dado de cliente. Pode rodar várias vezes. Backup antes. Substitui, para a AWS, o uso separado de
-                                                            sql_processo_apenso_para_heidi.sql e sql_status_acordo_do_sistema_para_heidi.sql (que seguem valendo para o banco local).
-  sql_preparar_aws_erick_antonio_para_heidi.sql IMPORTANTE  SCRIPT ÚNICO PARA PREPARAR OS BANCOS DA AWS-ERICK (erick_adv) E DA AWS-ANTÔNIO (sistema_advocacia): reúne as versões 1 a 4
-                                                            (acima) e deixa o banco IGUAL ao estrutura_banco.sql. Só roda em banco com esses 2 nomes; confere MySQL, versão registrada e a estrutura inteira
-                                                            (95 tabelas) ANTES de mexer; se achar diferença desconhecida, para sem alterar nada e lista na aba 2. Pode rodar quantas vezes quiser (no
-                                                            banco já pronto só diz "JA estava"). Parar o sistema + backup antes; atualizar o código logo depois de ver "PRONTO". Substitui, para a AWS, os 4
-                                                            scripts acima (que ficam como histórico e para o banco local). Só rodar quando o usuário decidir (a IA nunca mexe na AWS).
+  Os scripts das versões 1 a 6 do banco (atualizar_banco, avisos, cor da etiqueta, permissão de repasses, apenso, preparar AWS e o da versão 6 da
+  AWS) foram EXCLUÍDOS em 21/10/2026, a pedido do usuário, depois de rodados no local, no Erick e no Antônio (todos na versão 6). Seguem no histórico do Git.
+  Um banco NOVO nasce do estrutura_banco.sql (já na estrutura atual) e só precisa do script do status "Acordo" abaixo.
+  sql_status_acordo_do_sistema_para_heidi.sql  IMPORTANTE  STATUS "ACORDO" DO SISTEMA (a etiqueta automática Acordo depende dele; ninguém pode renomear nem excluir): garante que o
+                                                            status de processo "Acordo" existe, ativo e sem "encerra o processo" (cria, reativa ou corrige; não mexe em outros status nem em processos) e
+                                                            registra a versão 6. Só dados, sem mudar estrutura; pode rodar várias vezes. Backup antes. Para banco novo ou banco onde ele falte.
   sql_diagnostico_estrutura_para_heidi.sql      IMPORTANTE  Só lê. Mostra o que falta no banco comparado ao estrutura_banco.sql.
   quality/sql/CRIAR_BANCO_TESTE_HEIDISQL.sql    IMPORTANTE  Cria o banco isolado de testes (necessário para a bateria completa).
 

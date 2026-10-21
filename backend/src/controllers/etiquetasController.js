@@ -495,7 +495,7 @@ async function historicoEscritorio(req, res) {
 // Etiqueta AUTOMÁTICA "Acordo" (processo com acordo cadastrado e não cancelado ganha etiqueta e fundo).
 // Não é um dos 5 espaços das etiquetas manuais: só a COR é escolhida (uma por escritório,
 // coluna configuracoes_escritorio.cor_etiqueta_acordo). Sem cor escolhida vale a padrão.
-// Tolerante ao banco que ainda não rodou o script sql_cor_etiqueta_acordo_para_heidi.sql.
+// Tolerante ao banco que ainda não tem a coluna da cor (versão 3 do banco).
 // ------------------------------------------------------------
 const COR_ACORDO_PADRAO = '#86efac';
 const COR_HEX = /^#[0-9a-fA-F]{6}$/;
@@ -534,7 +534,7 @@ async function salvarCorAcordo(req, res) {
       [r] = await conn.execute('UPDATE configuracoes_escritorio SET cor_etiqueta_acordo = ? LIMIT 1', [cor ? cor.toLowerCase() : null]);
     } catch (err) {
       await conn.rollback();
-      if (err.code === COLUNA_AUSENTE) return erro(res, 'O banco ainda não tem a coluna da cor. Rode o script sql_cor_etiqueta_acordo_para_heidi.sql e tente de novo.', 409);
+      if (err.code === COLUNA_AUSENTE) return erro(res, 'O banco ainda não tem a coluna da cor da etiqueta. Atualize o banco de dados (versão 3) e tente de novo.', 409);
       throw err;
     }
     if (!r.affectedRows && !(await conn.execute('SELECT 1 FROM configuracoes_escritorio LIMIT 1'))[0].length) {

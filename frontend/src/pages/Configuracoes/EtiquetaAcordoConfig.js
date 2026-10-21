@@ -44,7 +44,7 @@ export default function EtiquetaAcordoConfig() {
       </p>
       {!configuravel && (
         <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', color: '#92400e', padding: '8px 12px', borderRadius: 6, fontSize: 13, marginBottom: 12 }}>
-          Para escolher a cor, o banco precisa ser atualizado: rode o script <strong>sql_cor_etiqueta_acordo_para_heidi.sql</strong> no HeidiSQL.
+          Para escolher a cor, o banco de dados precisa ser atualizado (falta a coluna da cor, versão 3).
           Enquanto isso vale a cor padrão.
         </div>
       )}

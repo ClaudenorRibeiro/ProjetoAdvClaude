@@ -96,7 +96,7 @@ test('banco que ainda não rodou o script da cor: a leitura usa a cor padrão e 
     assert.equal(lido.body.dados.cor, lido.body.dados.padrao);
     const salvo = await api().put('/api/etiquetas/escritorio/acordo').send({ cor: '#ff0000' });
     assert.equal(salvo.status, 409);
-    assert.match(msg(salvo), /sql_cor_etiqueta_acordo_para_heidi/);
+    assert.match(msg(salvo), /banco ainda não tem a coluna da cor/);
   } finally {
     await sql("ALTER TABLE configuracoes_escritorio ADD COLUMN cor_etiqueta_acordo varchar(7) DEFAULT NULL COMMENT 'cor (#rrggbb) da etiqueta e do fundo automaticos de processo com acordo; vazio = cor padrao do sistema'");
   }

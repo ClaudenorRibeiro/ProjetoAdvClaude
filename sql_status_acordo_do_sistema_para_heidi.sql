@@ -4,7 +4,7 @@
 --   (banco novo, ou banco onde alguém o apagou), ativo e sem a opção "encerra o processo".
 -- QUEM RODA E QUANDO: o usuário, no HeidiSQL, em cada banco (local primeiro; Erick e Antônio só quando ele decidir, com backup antes).
 --   Pode rodar quantas vezes quiser: se o status já está certo, não muda nada.
--- ORDEM EM PRODUÇÃO: depois do sql_preparar_aws_erick_antonio_para_heidi.sql e do sql_processo_apenso_para_heidi.sql.
+-- ORDEM EM PRODUÇÃO: com o banco já na versão 5 (processo apenso).
 --   Este é a versão 6 do banco (só mexe em DADOS da tabela tblstatusproc; não muda estrutura).
 -- ----------------------------------------------------------------------------------------------------------
 -- O QUE FAZ (tabela tblstatusproc):
