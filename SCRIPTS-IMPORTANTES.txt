@@ -14,13 +14,9 @@ PARA RODAR NO PC (duplo clique)
                                                             tecla fecha) e o resultado todo fica salvo em quality\test-results\ultima-bateria.txt (fora do Git).
 
 PARA RODAR NO HEIDISQL (banco)
-  Os scripts das versões 1 a 6 do banco (atualizar_banco, avisos, cor da etiqueta, permissão de repasses, apenso, preparar AWS e o da versão 6 da
-  AWS) foram EXCLUÍDOS em 21/10/2026, a pedido do usuário, depois de rodados no local, no Erick e no Antônio (todos na versão 6). Seguem no histórico do Git.
-  Um banco NOVO nasce do estrutura_banco.sql (já na estrutura atual) e só precisa do script do status "Acordo" abaixo.
-  sql_status_acordo_do_sistema_para_heidi.sql  IMPORTANTE  STATUS "ACORDO" DO SISTEMA (a etiqueta automática Acordo depende dele; ninguém pode renomear nem excluir): garante que o
-                                                            status de processo "Acordo" existe, ativo e sem "encerra o processo" (cria, reativa ou corrige; não mexe em outros status nem em processos) e
-                                                            registra a versão 6. Só dados, sem mudar estrutura; pode rodar várias vezes. Backup antes. Para banco novo ou banco onde ele falte.
-  sql_diagnostico_estrutura_para_heidi.sql      IMPORTANTE  Só lê. Mostra o que falta no banco comparado ao estrutura_banco.sql.
+  Não há mais script SQL de atualização na raiz: todos foram EXCLUÍDOS em 21/10/2026, a pedido do usuário (versões 1 a 6 do banco, o do status "Acordo" e o
+  diagnóstico de estrutura). Seguem no histórico do Git (git log --diff-filter=D -- <arquivo>). Banco NOVO: nasce do estrutura_banco.sql, que NÃO traz dados;
+  o status de processo "Acordo" (do sistema) precisa ser cadastrado à mão nele, ou recuperar o script do Git. Banco só de testes: ver quality/sql abaixo.
   quality/sql/CRIAR_BANCO_TESTE_HEIDISQL.sql    IMPORTANTE  Cria o banco isolado de testes (necessário para a bateria completa).
 
 PARA RODAR NO SSH DA AWS (Lightsail, como usuário ubuntu, SEM sudo)
