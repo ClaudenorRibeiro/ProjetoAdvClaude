@@ -80,6 +80,8 @@ test('tela de processo: seletor de OABs só mostra quem já tem OAB e permite ca
 
 test('tela "Detalhes do Processo" (somente leitura) trava a lista de OABs, sem editar', () => {
   const inicio = processosFront.indexOf('export function ModalEditarProcesso');
-  const trecho = processosFront.slice(inicio, inicio + 20000);
+  // até o início da próxima função de nível superior (não depende do tamanho da janela)
+  const fim = processosFront.indexOf('\nfunction ', inicio + 10);
+  const trecho = processosFront.slice(inicio, fim > inicio ? fim : undefined);
   assert.match(trecho, /<SeletorOabsProcesso[^>]*somenteLeitura=\{leitura\}/);
 });

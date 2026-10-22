@@ -64,7 +64,7 @@ test('@critical Financeiro: abas, janelas, validações, recebimento, multa, rep
   await page.getByRole('button', { name: 'Por processo' }).click();
 
   await abrirProcesso(page);
-  await expect(page.getByText('Acordos e Alvarás')).toBeVisible();
+  await expect(page.getByText('Acordos, Alvarás e Recebimentos Avulsos')).toBeVisible();
   await expect(page.getByText('Nenhum lançamento neste processo')).toBeVisible();
   await semViolacoes(page, 'Financeiro — processo com acordos');
   await erroDeTela(page);
