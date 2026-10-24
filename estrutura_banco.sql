@@ -5,14 +5,15 @@
 -- Gerado em 31/08/2026 a partir do banco LOCAL (sistema_advocacia), via:
 --   mysqldump --no-data --databases --add-drop-database
 --             --routines --triggers --events sistema_advocacia
--- Contém 95 tabelas — SOMENTE A ESTRUTURA, sem nenhum dado.
+-- Contém 96 tabelas — SOMENTE A ESTRUTURA, sem nenhum dado.
 -- (79 do dump de 31/08/2026 + tipo_documento_pendencia, pendencia_documento,
 --  pendencia_documento_item e pendencia_documento_responsavel, do módulo
 --  "Pendências de Documentos"; + acordo_parcela_multa, do módulo de multa
 --  por atraso de parcela, 23/09/2026; + processo_oabs, do módulo de
 --  múltiplas OABs por processo, 28/09/2026; + avisos_cliente, do módulo
 --  "Avisos aos clientes", 08/10/2026; + a coluna tblproc.apenso_de_id, do
---  "Processo apenso", 14/10/2026.)
+--  "Processo apenso", 14/10/2026; + a tabela datajud_tipos_andamento e as colunas do "Aviso diário de
+--  andamentos do DataJud", versão 7 do banco, 24/10/2026.)
 -- O banco não possui procedures, triggers, views nem events.
 -- Os dados de partida (feriados, varas, tipos etc.) ficam em scripts/.
 --
@@ -327,11 +328,14 @@ CREATE TABLE `andamento_processual` (
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   `editado_por` int DEFAULT NULL,
   `editado_em` datetime DEFAULT NULL,
+  `novidade_em` datetime DEFAULT NULL COMMENT 'quando um andamento do DataJud entrou DEPOIS da primeira leitura do processo (o que merece aviso)',
+  `avisado_em` datetime DEFAULT NULL COMMENT 'quando o andamento entrou num resumo de aviso',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_andamento_hash` (`hash_movimento`),
   KEY `processo_id` (`processo_id`),
   KEY `criado_por` (`criado_por`),
   KEY `editado_por` (`editado_por`),
+  KEY `idx_andamento_novidade` (`novidade_em`),
   CONSTRAINT `andamento_processual_ibfk_2` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `andamento_processual_ibfk_3` FOREIGN KEY (`editado_por`) REFERENCES `usuarios` (`id`),
   CONSTRAINT `fk_andamento_tblproc` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`)
@@ -762,9 +766,13 @@ CREATE TABLE `configuracoes_escritorio` (
   `avisos_parabens_mostrar` tinyint(1) NOT NULL DEFAULT '1' COMMENT '1 = parabens de aniversario passam pela tela de conferencia; 0 = saem sozinhos (e-mail e SMS)',
   `dias_aviso_parabens` int NOT NULL DEFAULT '0' COMMENT 'dias ANTES do aniversario para aparecer o aviso de parabens (0 = no proprio dia)',
   `cor_etiqueta_acordo` varchar(7) DEFAULT NULL COMMENT 'cor (#rrggbb) da etiqueta e do fundo automaticos de processo com acordo; vazio = cor padrao do sistema',
+  `datajud_aviso_modo` varchar(12) NOT NULL DEFAULT 'todos' COMMENT 'o resumo traz todos os andamentos novos (todos) ou so os dos tipos marcados como importantes (importantes)',
+  `datajud_aviso_horario` char(5) NOT NULL DEFAULT '07:30' COMMENT 'hora (Brasilia, HH:MM) em que o resumo de andamentos sai',
   PRIMARY KEY (`id`),
   KEY `fk_config_advogado_principal` (`advogado_principal_id`),
-  CONSTRAINT `fk_config_advogado_principal` FOREIGN KEY (`advogado_principal_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL
+  CONSTRAINT `fk_config_advogado_principal` FOREIGN KEY (`advogado_principal_id`) REFERENCES `usuarios` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `ck_config_datajud_modo` CHECK ((`datajud_aviso_modo` in (_utf8mb4'todos',_utf8mb4'importantes'))),
+  CONSTRAINT `ck_config_datajud_horario` CHECK (regexp_like(`datajud_aviso_horario`,_utf8mb4'^([01][0-9]|2[0-3]):[0-5][0-9]$'))
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -920,6 +928,27 @@ CREATE TABLE `controle_versao_banco` (
   `sql_aplicado` mediumtext,
   `aplicado_em` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`numero`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `datajud_tipos_andamento`
+--
+
+DROP TABLE IF EXISTS `datajud_tipos_andamento`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `datajud_tipos_andamento` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `codigo` int NOT NULL COMMENT 'codigo do movimento no CNJ',
+  `nome` varchar(150) NOT NULL,
+  `importante` tinyint(1) NOT NULL DEFAULT '0' COMMENT '1 = entra no resumo quando o modo e "importantes"',
+  `novo` tinyint(1) NOT NULL DEFAULT '1' COMMENT '1 = chegou e ninguem olhou ainda',
+  `quantidade` int NOT NULL DEFAULT '0' COMMENT 'quantas vezes o tipo ja apareceu',
+  `criado_em` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_datajud_tipo_codigo` (`codigo`),
+  KEY `idx_datajud_tipo_nome` (`nome`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -1298,6 +1327,7 @@ CREATE TABLE `notificacoes` (
   `mensagem` varchar(300) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
   `lida` tinyint(1) DEFAULT '0',
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
+  `destino` varchar(30) DEFAULT NULL COMMENT 'tela que o sino abre ao clicar (ex.: novidades-processos)',
   PRIMARY KEY (`id`),
   KEY `usuario_id` (`usuario_id`),
   KEY `prazo_id` (`prazo_id`),
@@ -2317,6 +2347,10 @@ CREATE TABLE `tblproc` (
   `criado_em` datetime DEFAULT CURRENT_TIMESTAMP,
   `alterado_por` int DEFAULT NULL,
   `alterado_em` datetime DEFAULT NULL,
+  `datajud_atualizado_cnj` varchar(40) DEFAULT NULL COMMENT 'data da ultima atualizacao do processo no CNJ, como o CNJ informou (para so gravar quando mudou)',
+  `datajud_qtd_movimentos` int DEFAULT NULL COMMENT 'quantidade de movimentos que o CNJ informou na ultima consulta',
+  `datajud_ultima_movimentacao` date DEFAULT NULL COMMENT 'data do ultimo movimento do DataJud (vale para processos parados mesmo depois da limpeza dos 6 meses)',
+  `datajud_nao_encontrado_em` date DEFAULT NULL COMMENT 'dia em que o CNJ nao achou o processo (tenta de novo depois de 7 dias)',
   PRIMARY KEY (`id`),
   KEY `pasta_id` (`pasta_id`),
   KEY `vara_id` (`vara_id`),
@@ -2623,10 +2657,14 @@ CREATE TABLE `usuarios` (
   `google_agenda_email` varchar(255) DEFAULT NULL,
   `publicacoes_escopo` varchar(10) NOT NULL DEFAULT 'todas',
   `max_relatorios` int DEFAULT NULL COMMENT 'limite individual de relatorios (vazio = usa o padrao do escritorio)',
+  `datajud_aviso_canal` varchar(10) NOT NULL DEFAULT 'nenhum' COMMENT 'como a pessoa recebe o resumo de andamentos do DataJud: nenhum, sino, email ou ambos',
+  `datajud_aviso_escopo` varchar(10) NOT NULL DEFAULT 'meus' COMMENT 'de quais processos: meus (responsavel ou OAB do processo) ou todos',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_login` (`login`),
   KEY `fk_usuarios_criado_por` (`criado_por`),
-  CONSTRAINT `fk_usuarios_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`)
+  CONSTRAINT `fk_usuarios_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `ck_usuarios_datajud_canal` CHECK ((`datajud_aviso_canal` in (_utf8mb4'nenhum',_utf8mb4'sino',_utf8mb4'email',_utf8mb4'ambos'))),
+  CONSTRAINT `ck_usuarios_datajud_escopo` CHECK ((`datajud_aviso_escopo` in (_utf8mb4'meus',_utf8mb4'todos')))
 ) ENGINE=InnoDB AUTO_INCREMENT=27 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 

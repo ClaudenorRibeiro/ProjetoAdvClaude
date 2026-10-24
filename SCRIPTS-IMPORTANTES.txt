@@ -14,9 +14,12 @@ PARA RODAR NO PC (duplo clique)
                                                             tecla fecha) e o resultado todo fica salvo em quality\test-results\ultima-bateria.txt (fora do Git).
 
 PARA RODAR NO HEIDISQL (banco)
-  Não há mais script SQL de atualização na raiz: todos foram EXCLUÍDOS em 21/10/2026, a pedido do usuário (versões 1 a 6 do banco, o do status "Acordo" e o
+  Os scripts das versões 1 a 6 foram EXCLUÍDOS em 21/10/2026, a pedido do usuário (versões 1 a 6 do banco, o do status "Acordo" e o
   diagnóstico de estrutura). Seguem no histórico do Git (git log --diff-filter=D -- <arquivo>). Banco NOVO: nasce do estrutura_banco.sql, que NÃO traz dados;
   o status de processo "Acordo" (do sistema) precisa ser cadastrado à mão nele, ou recuperar o script do Git. Banco só de testes: ver quality/sql abaixo.
+  sql_aviso_andamentos_datajud_para_heidi.sql   IMPORTANTE  Versao 7 do banco (24/10/2026): colunas e tabela do AVISO DIARIO de andamentos do DataJud. Rodar no HeidiSQL
+                                                            em cada banco (local primeiro; Erick/Antonio so quando o usuario decidir, com backup). Repetivel; recusa banco errado
+                                                            ou sem o apenso (versao 5). Termina com UMA linha: deve dizer PRONTO.
   quality/sql/CRIAR_BANCO_TESTE_HEIDISQL.sql    IMPORTANTE  Cria o banco isolado de testes (necessário para a bateria completa).
 
 PARA RODAR NO SSH DA AWS (Lightsail, como usuário ubuntu, SEM sudo)
