@@ -60,6 +60,7 @@ const Processos       = lazyComRetry(() => import('./pages/Processos/Processos')
 const PastaDetalhe    = lazyComRetry(() => import('./pages/Processos/PastaDetalhe'));
 const Publicacoes     = lazyComRetry(() => import('./pages/Publicacoes/Publicacoes'));
 const Avisos = lazyComRetry(() => import('./pages/Avisos/Avisos'));
+const NovidadesProcessos = lazyComRetry(() => import('./pages/Novidades/NovidadesProcessos'));
 const PendenciasDocumento = lazyComRetry(() => import('./pages/Pendencias/PendenciasDocumento'));
 // Fase 5: Prazos e Tarefas (exportam modais reusados pela PastaDetalhe) + Agenda
 // (traz o calendário pesado) + Dashboard.
@@ -183,6 +184,7 @@ function AppRoutes() {
       <Route path="/documentos/*"  element={<RotaProtegida modulo="documentos"><Documentos /></RotaProtegida>} />
       <Route path="/publicacoes/*" element={<RotaProtegida modulo="publicacoes"><Publicacoes /></RotaProtegida>} />
       <Route path="/pendencias-documento/*" element={<RotaProtegida modulo="pendencias"><PendenciasDocumento /></RotaProtegida>} />
+      <Route path="/novidades-processos" element={<RotaProtegida modulo="processos"><NovidadesProcessos /></RotaProtegida>} />
       <Route path="/avisos"        element={<RotaProtegida algumDe={PERMISSOES_AVISOS}><Avisos /></RotaProtegida>} />
       <Route path="/agenda/*"      element={<RotaProtegida><Agenda /></RotaProtegida>} />
       <Route path="/relatorios/*"  element={<RotaProtegida modulo="relatorios"><RelatoriosNovo /></RotaProtegida>} />

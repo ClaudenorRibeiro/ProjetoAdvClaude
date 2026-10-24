@@ -12,6 +12,7 @@ const { hojeBrasilia, agora } = require('../utils/helpers');
 const auditoria = require('../middleware/auditoria');
 const { texto, dataIso } = require('../utils/camposTexto');
 const datajud = require('../services/datajudService');
+const { aplicarRespostaDoProcesso, marcarNaoEncontrado } = require('../andamentosDatajud/aplicar');
 
 // SELECT único da listagem — usa LEFT JOIN em criado_por para que os andamentos
 // AUTOMÁTICOS (sem usuário) também apareçam. Ordena pela data/hora quando existe.
@@ -208,75 +209,19 @@ async function executarSincronizacao(processoId, forcar) {
       datajud: { tipo: 'nao_suportado', mensagem: 'O tribunal deste processo ainda não é coberto pela sincronização automática.' } };
   }
 
-  // 4) Monta candidatos com a impressão digital (dedup) e ignora vazios.
-  const candidatos = [];
-  for (const m of resultado.movimentos) {
-    if (!m || (m.nome == null && m.codigo == null)) continue;
-    const dh = datajud.parseDataHora(m.dataHora);
-    candidatos.push({
-      hash: datajud.hashMovimento(processoId, m),
-      codigo: m.codigo != null ? Number(m.codigo) : null,
-      descricao: datajud.descricaoMovimento(m),   // nome + complementos tabelados
-      data: dh ? dh.data : hoje,
-      dataHora: dh ? dh.dataHora : null,
-    });
-  }
-
-  // Filtra os que já existem (por hash) e os repetidos dentro do próprio lote.
+  // 4) Grava pelo caminho ÚNICO (o mesmo da consulta noturna): só os últimos 6 meses, sem repetir andamento, e o que entra
+  //    depois da primeira leitura do processo fica marcado como novidade para o resumo da manhã. O CNJ não ter o processo
+  //    marca o dia (a noite só tenta de novo em uma semana).
   let novos = 0;
-  if (candidatos.length) {
-    const hashes = candidatos.map(c => c.hash);
-    const ph = hashes.map(() => '?').join(',');
-    const [ex] = await pool.execute(
-      `SELECT hash_movimento FROM andamento_processual
-       WHERE processo_id = ? AND fonte = 'datajud' AND hash_movimento IN (${ph})`,
-      [processoId, ...hashes]
-    );
-    const existentes = new Set(ex.map(r => r.hash_movimento));
-    const vistos = new Set();
-    const inserir = [];
-    for (const c of candidatos) {
-      if (existentes.has(c.hash) || vistos.has(c.hash)) continue;
-      vistos.add(c.hash);
-      inserir.push(c);
-    }
-
-    // 5) Insere os novos em transação (tudo ou nada) + marca a sincronização.
-    const conn = await pool.getConnection();
-    try {
-      await conn.beginTransaction();
-      for (const c of inserir) {
-        // INSERT IGNORE + índice UNIQUE(hash_movimento) = trava dura contra duplicidade.
-        await conn.execute(
-          `INSERT IGNORE INTO andamento_processual
-             (processo_id, data, data_hora, descricao, fonte, codigo_movimento, hash_movimento, criado_por)
-           VALUES (?, ?, ?, ?, 'datajud', ?, ?, NULL)`,
-          [processoId, c.data, c.dataHora, c.descricao, c.codigo, c.hash]
-        );
-      }
-      await conn.execute('UPDATE tblproc SET datajud_sincronizado_em = ? WHERE id = ?', [nowBR, processoId]);
-      await conn.commit();
-      novos = inserir.length;
-    } catch (e) {
-      await conn.rollback();
-      throw e;
-    } finally {
-      conn.release();
-    }
+  if (resultado.achou) {
+    novos = (await aplicarRespostaDoProcesso(processoId, { movimentos: resultado.movimentos, atualizado: resultado.atualizado }, hoje)).inseridos;
   } else {
-    // Sem movimentos: ainda assim marca o dia para não repetir a consulta.
-    const conn2 = await pool.getConnection();
-    try {
-      await conn2.beginTransaction();
-      await conn2.execute('UPDATE tblproc SET datajud_sincronizado_em = ? WHERE id = ?', [nowBR, processoId]);
-      await conn2.commit();
-    } catch (err) { await conn2.rollback(); throw err; }
-    finally { conn2.release(); }
+    await marcarNaoEncontrado(processoId);
   }
 
   // Status final: consultou e achou X registros, ou consultou e não achou nada.
   // (nome diferente do serviço 'datajud' para não colidir com ele nesta função)
-  const statusDj = candidatos.length
+  const statusDj = resultado.movimentos.length
     ? { tipo: 'ok',    mensagem: `Consulta ao DataJud concluída às ${horaBR}.`, novos }
     : { tipo: 'vazio', mensagem: `Consulta concluída às ${horaBR} — nenhum registro encontrado no DataJud.` };
   return { andamentos: await buscarAndamentos(processoId), aviso: '', datajud: statusDj, novos };

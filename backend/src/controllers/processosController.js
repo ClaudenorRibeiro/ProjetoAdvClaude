@@ -1719,6 +1719,9 @@ const JOIN_ULTIMA_ACAO = `
       -- no sistema. Importar hoje um andamento antigo NÃO "reanima" o processo.
       SELECT processo_id, \`data\` AS dt FROM andamento_processual
       UNION ALL
+      -- O dia do último movimento do DataJud fica guardado no processo e SOBREVIVE à limpeza dos 6 meses (que apaga os andamentos antigos)
+      SELECT id, datajud_ultima_movimentacao FROM tblproc WHERE datajud_ultima_movimentacao IS NOT NULL
+      UNION ALL
       SELECT processo_id, GREATEST(criado_em, COALESCE(status_alterado_em, criado_em), COALESCE(concluido_em, criado_em)) FROM prazos_processo
       UNION ALL
       SELECT processo_id, GREATEST(criado_em, COALESCE(concluida_em, criado_em)) FROM tarefas WHERE processo_id IS NOT NULL

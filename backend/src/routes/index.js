@@ -65,6 +65,8 @@ const financeiroAtividadeCtrl = require('../controllers/financeiroAtividadeContr
 const formaPagamentoCtrl = require('../controllers/formaPagamentoController');
 const instituicaoFinanceiraCtrl = require('../controllers/instituicaoFinanceiraController');
 const andamentoCtrl     = require('../controllers/andamentoController');
+const andamentosAvisosCtrl = require('../andamentosDatajud/configController');
+const andamentosNovidadesCtrl = require('../andamentosDatajud/novidadesController');
 const documentosCtrl    = require('../controllers/documentosController');
 const publicacoesCtrl   = require('../controllers/publicacoesController');
 const configuracaoCtrl  = require('../controllers/configuracaoController');
@@ -344,6 +346,10 @@ router.post('/andamento/:processoId/sincronizar', autenticar, verificarPermissao
 router.post('/andamento/:processoId',   autenticar, verificarPermissao('processos','andamentos','cadastrar'),  andamentoCtrl.criar);
 router.put('/andamento/:id',            autenticar, verificarPermissao('processos','andamentos','alterar'),    andamentoCtrl.editar);
 router.delete('/andamento/:id',         autenticar, verificarPermissao('processos','andamentos','excluir'),    andamentoCtrl.excluir);
+// Aviso diário de andamentos do DataJud: configuração (só administrador) e a tela "Novidades dos processos" (para onde o sino leva)
+router.get('/andamentos/novidades',     autenticar, verificarPermissao('processos','visualizar'), andamentosNovidadesCtrl.novidades);
+router.get('/configuracoes/datajud-avisos', autenticar, apenasAdmin, andamentosAvisosCtrl.buscar);
+router.put('/configuracoes/datajud-avisos', autenticar, apenasAdmin, andamentosAvisosCtrl.salvar);
 
 // ---- DOCUMENTOS ----
 // Catálogo de variáveis disponíveis nos modelos (referência ao montar o .docx)

@@ -357,7 +357,9 @@ export default function Layout({ children }) {
                         const cor = n.lida ? '#6b7280' : '#111';
                         return (
                         <div key={n.id} style={{padding:'12px 16px',borderBottom:'1px solid #f3f4f6',fontSize:'13px'}}>
-                          <div style={{color:cor}}>{n.mensagem}</div>
+                          {n.destino === 'novidades-processos'
+                            ? <Link to="/novidades-processos" style={{color:cor,textDecoration:'underline'}} onClick={() => setSinoAberto(false)}>{n.mensagem}</Link>
+                            : <div style={{color:cor}}>{n.mensagem}</div>}
                           <div style={{color:cor,fontSize:'11px',marginTop:'4px'}}>
                             {formatarDataHora(n.criado_em)}
                           </div>

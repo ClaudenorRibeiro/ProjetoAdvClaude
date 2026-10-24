@@ -10,7 +10,7 @@ const { sucesso, erroInterno } = require('../utils/response');
 async function listar(req, res) {
   try {
     const [rows] = await pool.execute(
-      `SELECT n.id, n.mensagem, n.criado_em,
+      `SELECT n.id, n.mensagem, n.criado_em, n.destino,
               pp.data_vencimento,
               ps.nome AS subtipo_nome,
               pr.numProc AS processo_numero
@@ -33,7 +33,7 @@ async function listar(req, res) {
 async function listarTodas(req, res) {
   try {
     const [rows] = await pool.execute(
-      `SELECT n.id, n.mensagem, n.criado_em, n.lida,
+      `SELECT n.id, n.mensagem, n.criado_em, n.lida, n.destino,
               pp.data_vencimento,
               ps.nome AS subtipo_nome,
               pr.numProc AS processo_numero

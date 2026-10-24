@@ -84,12 +84,20 @@ function hashMovimento(processoId, mov) {
   return crypto.createHash('sha1').update(base).digest('hex');
 }
 
+// A data de atualização do processo no CNJ ("dataHoraUltimaAtualizacao"), como veio (até 40 letras), ou null.
+// Serve para a consulta só gravar de novo quando o processo mudou no CNJ.
+function atualizacaoDoAchado(achado) {
+  const v = achado && achado._source ? achado._source.dataHoraUltimaAtualizacao : null;
+  return typeof v === 'string' && v.trim() !== '' ? v.trim().slice(0, 40) : null;
+}
+
 // Busca os movimentos de UM processo no DataJud. Retorna sempre um objeto
-// { suportado, movimentos }. Lança erro com mensagem amigável só em falha de
+// { suportado, achou, movimentos, atualizado } (achou = o CNJ respondeu e tem o processo; atualizado = ver
+// atualizacaoDoAchado). Lança erro com mensagem amigável só em falha de
 // comunicação/credencial (para a tela poder avisar sem quebrar).
 async function buscarMovimentos({ url, apikey, numProc }) {
   const alias = aliasDoTribunal(numProc);
-  if (!alias) return { suportado: false, movimentos: [] };
+  if (!alias) return { suportado: false, achou: false, movimentos: [], atualizado: null };
 
   const dig      = String(numProc).replace(/\D/g, '');
   const base     = (url || URL_PADRAO_DATAJUD).replace(/\/+$/, '');
@@ -114,7 +122,12 @@ async function buscarMovimentos({ url, apikey, numProc }) {
   const hits  = resp.data && resp.data.hits && resp.data.hits.hits;
   const fonte = Array.isArray(hits) && hits[0] && hits[0]._source ? hits[0]._source : null;
   const movimentos = fonte && Array.isArray(fonte.movimentos) ? fonte.movimentos : [];
-  return { suportado: true, movimentos };
+  return {
+    suportado: true,
+    achou: Array.isArray(hits) && hits.length > 0,
+    movimentos,
+    atualizado: atualizacaoDoAchado(Array.isArray(hits) ? hits[0] : null),
+  };
 }
 
 module.exports = {
@@ -123,6 +136,7 @@ module.exports = {
   parseDataHora,
   descricaoMovimento,
   hashMovimento,
+  atualizacaoDoAchado,
   URL_PADRAO_DATAJUD,
   APIKEY_PADRAO_DATAJUD,
 };

@@ -11,6 +11,7 @@ const { liberarFazendoExpirados } = require('../controllers/prazosController');
 const { hojeBrasilia } = require('../utils/helpers');
 const { gerarAvisos } = require('../avisos');
 const { executarVencidos: enviarRelatoriosAgendados } = require('./relatorios/agendamento/envio');
+const { agendarAndamentosDatajud } = require('../andamentosDatajud/agendamento');
 
 // Fuso horário de todos os crons — sem isso, no servidor (Ubuntu/UTC) o cron
 // dispararia 3 horas mais cedo que o horário configurado pelo escritório
@@ -75,6 +76,9 @@ async function iniciarAlertas() {
   }, OPCOES_CRON);
 
   setTimeout(rodarAvisosAosClientes, 30000);   // recuperação depois de servidor parado
+
+  // Aviso diário de andamentos do DataJud: consulta noturna (2h), resumo da manhã (horário configurável) e limpeza dos 6 meses (3h30)
+  agendarAndamentosDatajud(cron, OPCOES_CRON);
 
   console.log('✅ Serviço de alertas iniciado');
 }

@@ -367,8 +367,9 @@ export default function PastaDetalhe() {
     }
   }
 
-  // Abre a lista na hora e consulta o DataJud por trás. `sincronizar: false` só recarrega a lista (depois de lançar/editar/excluir).
-  async function carregarAndamentos({ sincronizar = true } = {}) {
+  // Mostra o que está salvo. O DataJud NÃO é consultado ao abrir a aba: o servidor consulta toda noite (e guarda 6 meses);
+  // o botão "Atualizar DataJud" consulta na hora. `sincronizar: true` existe só para quem quiser consultar logo depois de listar.
+  async function carregarAndamentos({ sincronizar = false } = {}) {
     await listarAndamentos();
     if (sincronizar) sincronizarDataJud();
   }

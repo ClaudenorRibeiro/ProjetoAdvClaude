@@ -13,6 +13,7 @@ import { UFS } from '../../utils/ufs';
 import { toast } from 'react-toastify';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import AvisosConfig from './AvisosConfig';
+import AvisoAndamentosConfig from './AvisoAndamentosConfig';
 import LimitesRelatorios from './LimitesRelatorios';
 import { validarSenha, DICA_SENHA } from '../../utils/senha';
 import MenuAcoes from '../../components/MenuAcoes';
@@ -1774,9 +1775,10 @@ function TabIntegracoes() {
             </div>
             <div style={{ background:'#eef2ff', border:'1px solid #c7d2fe', color:'#3730a3',
               padding:'8px 12px', borderRadius:'6px', fontSize:'13px' }}>
-              Com a integração ativa, ao abrir os Andamentos de um processo o sistema busca a
-              tramitação no CNJ (no máximo uma vez por dia, por processo). Os andamentos vindos
-              do DataJud entram como <b>somente leitura</b>; os manuais continuam normais.
+              Com a integração ativa, o sistema consulta o CNJ <b>toda noite</b> e guarda os andamentos
+              dos <b>últimos 6 meses</b> (em Andamentos, o botão "Atualizar DataJud" consulta na hora um
+              processo). Os andamentos vindos do DataJud entram como <b>somente leitura</b>; os manuais
+              continuam normais.
             </div>
           </>
         )}
@@ -1785,6 +1787,9 @@ function TabIntegracoes() {
           {salvando === 'datajud' ? 'Salvando...' : 'Salvar configurações DataJud'}
         </button>
       </div>
+
+      {/* Aviso diário de andamentos (DataJud): quem recebe o resumo da manhã */}
+      <AvisoAndamentosConfig datajudAtivo={!!datajud.ativo} />
 
       {/* E-mail */}
       <div className="card">

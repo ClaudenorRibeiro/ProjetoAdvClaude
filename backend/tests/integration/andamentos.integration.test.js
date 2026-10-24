@@ -209,6 +209,8 @@ test('sincronizar (DataJud): desativado, processo inexistente, sem número CNJ e
 
 // DataJud FALSO local (só conta as chamadas e demora um pouco): prova o limite de 1x por dia, o botão "Atualizar DataJud" (forcar)
 // e a consulta ÚNICA quando vários pedem o mesmo processo ao mesmo tempo.
+// O banco só guarda 6 meses de DataJud: o movimento do servidor falso precisa ser recente.
+const diasAtras = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 async function comDataJudFalso(fn) {
   const http = require('node:http');
   const chamadas = { n: 0 };
@@ -217,7 +219,7 @@ async function comDataJudFalso(fn) {
     req.resume();
     setTimeout(() => {
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ hits: { hits: [{ _source: { movimentos: [{ codigo: 26, nome: 'Distribuição', dataHora: '2026-03-10T14:30:00.000Z' }] } }] } }));
+      res.end(JSON.stringify({ hits: { hits: [{ _source: { movimentos: [{ codigo: 26, nome: 'Distribuição', dataHora: `${diasAtras(10)}T14:30:00.000Z` }] } }] } }));
     }, 400);
   });
   await new Promise(ok => servidor.listen(0, '127.0.0.1', ok));

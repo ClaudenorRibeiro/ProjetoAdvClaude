@@ -17,6 +17,11 @@ const alvos = [
   'backend/src/avisos',
   'frontend/src/pages/Avisos',
   'frontend/src/pages/Configuracoes/AvisosConfig.js',
+  'backend/src/andamentosDatajud',
+  'frontend/src/pages/Novidades',
+  'frontend/src/pages/Configuracoes/AvisoAndamentosConfig.js',
+  'frontend/src/pages/Configuracoes/AvisoAndamentosPessoas.js',
+  'frontend/src/pages/Configuracoes/AvisoAndamentosTipos.js',
 ];
 
 function arquivos(caminho) {

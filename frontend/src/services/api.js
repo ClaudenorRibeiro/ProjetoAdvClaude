@@ -392,6 +392,13 @@ export const andamentoAPI = {
   excluir: (id) => api.delete(`/andamento/${id}`),
 };
 
+// Aviso diário de andamentos do DataJud: configuração (só administrador) e a tela "Novidades dos processos" (para onde o sino leva)
+export const andamentosAvisosAPI = {
+  ler:       () => api.get('/configuracoes/datajud-avisos'),
+  salvar:    (dados) => api.put('/configuracoes/datajud-avisos', dados),
+  novidades: () => api.get('/andamentos/novidades'),
+};
+
 // ============================================================
 // DOCUMENTOS
 // ============================================================
