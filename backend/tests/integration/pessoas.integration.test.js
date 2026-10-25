@@ -1115,3 +1115,31 @@ test('outras rotas de Pessoas: valores que não são texto em unificar, WhatsApp
   }
   assert.deepEqual(falhas, []);
 });
+
+// AUDITORIA 25/10/2026 (item 3b): as conferências de vínculo da unificação NÃO podem ser puladas quando o banco falha — antes o erro era só
+// registrado e a unificação seguia, apagando um duplicado que podia estar em uso. A falha é simulada tirando a tabela do lugar por um instante.
+async function comTabelaIndisponivel(tabela, fn) {
+  const provisorio = `${tabela}_fora_do_lugar`;
+  await sql(`RENAME TABLE ${tabela} TO ${provisorio}`);
+  try { await fn(); } finally { await sql(`RENAME TABLE ${provisorio} TO ${tabela}`); }
+}
+
+test('unificar: se uma conferência de vínculo falhar no banco, a unificação NÃO segue (nada é apagado)', async () => {
+  const casos = [
+    ['fisicas', 'pessoas_fisicas', criarPF, 'pericia_local_reu'],
+    ['fisicas', 'pessoas_fisicas', criarPF, 'pendencia_documento'],
+    ['fisicas', 'pessoas_fisicas', criarPF, 'pessoas_avisos_idade'],
+    ['juridicas', 'pessoas_juridicas', criarPJ, 'pericia_local_reu'],
+    ['juridicas', 'pessoas_juridicas', criarPJ, 'pendencia_documento'],
+  ];
+  const falhas = [];
+  for (const [rota, tabelaPessoa, criar, tabela] of casos) {
+    const principal = await criar({ cpf: '', cnpj: '' }); const duplicado = await criar({ cpf: '', cnpj: '' });
+    await comTabelaIndisponivel(tabela, async () => {
+      const r = await api().post(`/api/pessoas/${rota}/unificar`).send({ principal_id: principal, duplicados_ids: [duplicado] });
+      if (r.status < 500) falhas.push(`${rota} sem ${tabela} → ${r.status} (unificou)`);
+    });
+    if (await total(`SELECT COUNT(*) AS n FROM ${tabelaPessoa} WHERE id IN (?, ?)`, [principal, duplicado]) !== 2) falhas.push(`${rota} sem ${tabela}: um cadastro foi apagado`);
+  }
+  assert.deepEqual(falhas, []);
+});

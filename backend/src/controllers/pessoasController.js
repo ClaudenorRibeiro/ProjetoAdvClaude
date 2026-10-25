@@ -957,7 +957,7 @@ async function unificarJuridicas(req, res) {
   // A unificação NÃO migra "local de perícia" nem "pendência de documentos" (vínculos
   // polimórficos SEM chave estrangeira). Se um DUPLICADO — que será apagado — estiver
   // em uso nesses vínculos, BLOQUEIA (decisão do usuário 10/09), para não deixar
-  // registro apontando para um id apagado. Tolerante a banco sem as tabelas.
+  // registro apontando para um id apagado.
   try {
     const [[locPer], [pendDoc]] = await Promise.all([
       pool.execute(`SELECT COUNT(*) AS total FROM pericia_local_reu WHERE tipo_pessoa = 'juridica' AND pessoa_id IN (${dupPh})`, duplicados),
@@ -969,8 +969,9 @@ async function unificarJuridicas(req, res) {
     if (pendDoc[0].total > 0) {
       return erro(res, 'Não é possível unificar: um dos cadastros selecionados tem pendência(s) de documentos. Resolva ou cancele a pendência, unifique e refaça.');
     }
-  } catch (e) {
-    console.error('Checagem de local de perícia / pendência de documentos indisponível:', e.message);
+  } catch (err) {
+    // Se a conferência falhar, NÃO se pode supor "sem vínculo": a unificação para (antes o erro era só registrado e ela seguia).
+    return erroInterno(res, err);
   }
 
   // Se algum DUPLICADO tiver acordo, alvará ou qualquer lançamento no Financeiro, a
@@ -1155,7 +1156,6 @@ async function unificarFisicas(req, res) {
     }
     // Mesma decisão: a unificação NÃO migra avisos de idade — bloqueia para não
     // apagá-los em silêncio junto com o cadastro duplicado.
-    // TOLERANTE ao banco sem o script: sem a tabela, não há avisos a proteger.
     try {
       const [avisos] = await pool.execute(
         `SELECT COUNT(*) AS total FROM pessoas_avisos_idade WHERE pessoa_id IN (${phTodos})`, idsTodos
@@ -1163,8 +1163,9 @@ async function unificarFisicas(req, res) {
       if (avisos[0].total > 0) {
         return erro(res, 'Não é possível unificar: um dos cadastros selecionados tem aviso de idade configurado. Remova os avisos, unifique e configure de novo.');
       }
-    } catch (e) {
-      console.error('Checagem de avisos de idade indisponível:', e.message);
+    } catch (err) {
+      // Mesma regra: conferência que falhou não vira "sem avisos".
+      return erroInterno(res, err);
     }
   } catch (err) {
     return erroInterno(res, err);
@@ -1177,7 +1178,7 @@ async function unificarFisicas(req, res) {
 
   // A unificação NÃO migra "local de perícia" nem "pendência de documentos" (vínculos
   // polimórficos SEM chave estrangeira). Se um DUPLICADO estiver em uso neles, BLOQUEIA
-  // (decisão do usuário 10/09). Tolerante a banco sem as tabelas.
+  // (decisão do usuário 10/09).
   try {
     const [[locPer], [pendDoc]] = await Promise.all([
       pool.execute(`SELECT COUNT(*) AS total FROM pericia_local_reu WHERE tipo_pessoa = 'fisica' AND pessoa_id IN (${dupPh})`, duplicados),
@@ -1189,8 +1190,9 @@ async function unificarFisicas(req, res) {
     if (pendDoc[0].total > 0) {
       return erro(res, 'Não é possível unificar: um dos cadastros selecionados tem pendência(s) de documentos. Resolva ou cancele a pendência, unifique e refaça.');
     }
-  } catch (e) {
-    console.error('Checagem de local de perícia / pendência de documentos indisponível:', e.message);
+  } catch (err) {
+    // Se a conferência falhar, NÃO se pode supor "sem vínculo": a unificação para (antes o erro era só registrado e ela seguia).
+    return erroInterno(res, err);
   }
 
   // Se algum DUPLICADO tiver acordo, alvará ou qualquer lançamento no Financeiro, a
