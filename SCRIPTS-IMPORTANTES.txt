@@ -20,6 +20,10 @@ PARA RODAR NO HEIDISQL (banco)
   sql_aviso_andamentos_datajud_para_heidi.sql   IMPORTANTE  Versao 7 do banco (24/10/2026): colunas e tabela do AVISO DIARIO de andamentos do DataJud. Rodar no HeidiSQL
                                                             em cada banco (local primeiro; Erick/Antonio so quando o usuario decidir, com backup). Repetivel; recusa banco errado
                                                             ou sem o apenso (versao 5). Termina com UMA linha: deve dizer PRONTO.
+  sql_aws_erick_antonio_versao_7_para_heidi.sql IMPORTANTE  PRODUCAO (25/10/2026): leva o banco do Erick (erick_adv) e o do Antonio (sistema_advocacia), na versao 6, a versao 7
+                                                            (aviso diario de andamentos do DataJud). Rodar no HeidiSQL em UM banco de cada vez, com backup e o sistema parado. So acrescenta;
+                                                            recusa outro nome de banco, banco sem a versao 6 e estrutura diferente da esperada; repetivel. Termina com UMA linha: PRONTO ou JA estava.
+                                                            Apagar so depois de Erick e Antonio estarem na versao 7.
   quality/sql/CRIAR_BANCO_TESTE_HEIDISQL.sql    IMPORTANTE  Cria o banco isolado de testes (necessário para a bateria completa).
 
 PARA RODAR NO SSH DA AWS (Lightsail, como usuário ubuntu, SEM sudo)
