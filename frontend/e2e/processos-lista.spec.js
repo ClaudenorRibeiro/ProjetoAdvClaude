@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { abrirMenuAcoes, aguardarTelaPronta, bloquearRedeExterna, contarPastasDaLista, criarUsuarioSoVisualiza, loginPelaTela, prepararListaProcessos, violacoesGraves } from './helpers';
+import { abrirMenuAcoes, aguardarRespostaProcessada, aguardarTelaPronta, bloquearRedeExterna, contarPastasDaLista, criarUsuarioSoVisualiza, loginPelaTela, prepararListaProcessos, violacoesGraves } from './helpers';
 import { createRequire } from 'node:module';
 
 // Passo B1 do plano (PLANO-TESTES-PROCESSOS.md): a tela "lista de Processos" (/processos), controle por controle —
@@ -20,11 +20,17 @@ const CAMPO_BUSCA = 'Buscar por nº pasta, título, nº CNJ ou protocolo...';
 const linhas = (page) => page.locator('tbody tr');
 const pastasDasLinhas = async (page) => (await page.locator('tbody tr td:nth-child(1)').allInnerTexts()).map(t => Number(t.trim()));
 const contador = (page) => page.getByText(/^\d+ pasta\(s\)$/);
+// Faz a ação e espera a resposta da lista de pastas (e a página desenhá-la). Não usa "rede quieta" (networkidle): no Windows esse aviso
+// às vezes não vem, e cada espera ficava 15 s parada com a tela já pronta (o teste estourava os 90 s com a lista carregada, como no vídeo).
+async function comRecargaDaLista(page, acao) {
+  const resposta = page.waitForResponse(r => r.request().method() === 'GET' && /\/api\/processos\/pastas\?/.test(r.url()));
+  await acao();
+  await aguardarRespostaProcessada(page, await resposta);
+}
 async function buscar(page, texto) {
   const campo = page.getByPlaceholder(CAMPO_BUSCA);
-  await campo.fill(texto);
-  await aguardarTelaPronta(page);        // o servidor só é consultado 350 ms depois de parar de digitar
-  await page.waitForTimeout(500); await aguardarTelaPronta(page);
+  if ((await campo.inputValue()) === texto) return;
+  await comRecargaDaLista(page, () => campo.fill(texto));        // o servidor só é consultado 350 ms depois de parar de digitar
 }
 async function abrirLista(page) { await page.goto('/processos'); await aguardarTelaPronta(page); await expect(linhas(page).first()).toBeVisible(); }
 
@@ -177,33 +183,33 @@ test('@critical Lista de Processos: etiquetas pessoais e do escritório — lege
   await buscar(page, '');
   await semViolacoes(page, 'lista com legendas de etiquetas');
   // filtro pessoal
-  await chipPessoal('Urgente E2E').click(); await aguardarTelaPronta(page);
+  await comRecargaDaLista(page, () => chipPessoal('Urgente E2E').click());
   expect((await pastasDasLinhas(page)).sort()).toEqual([8101, 8102]);
   await expect(chipPessoal('Urgente E2E')).toHaveAttribute('title', 'Clique para tirar o filtro');
   await expect(page.getByRole('button', { name: 'limpar filtro' }).first()).toBeVisible();
   await semViolacoes(page, 'lista com filtro de etiqueta pessoal ligado');
-  await chipPessoal('Aguardando E2E').click(); await aguardarTelaPronta(page);                       // trocar de cor troca o filtro
+  await comRecargaDaLista(page, () => chipPessoal('Aguardando E2E').click());                       // trocar de cor troca o filtro
   expect(await pastasDasLinhas(page)).toEqual([8103]);
-  await chipPessoal('Aguardando E2E').click(); await aguardarTelaPronta(page);                       // clicar de novo desliga
+  await comRecargaDaLista(page, () => chipPessoal('Aguardando E2E').click());                       // clicar de novo desliga
   await expect(contador(page)).toHaveText(`${totalPastas} pasta(s)`);
   // filtro do escritório (derivado: só pastas onde TODOS os processos têm a mesma etiqueta)
-  await chipPessoal('Arquivada E2E').click(); await aguardarTelaPronta(page);
+  await comRecargaDaLista(page, () => chipPessoal('Arquivada E2E').click());
   expect((await pastasDasLinhas(page)).sort()).toEqual([8101, 8102]);
-  await chipPessoal('Em recurso E2E').click(); await aguardarTelaPronta(page);
+  await comRecargaDaLista(page, () => chipPessoal('Em recurso E2E').click());
   expect(await pastasDasLinhas(page)).toEqual([8103]);
   // os dois ao mesmo tempo (E): pessoal "Urgente" + escritório "Arquivada" = 8101 e 8102; pessoal "Aguardando" + "Arquivada" = nenhuma
-  await chipPessoal('Arquivada E2E').click(); await aguardarTelaPronta(page);
-  await chipPessoal('Urgente E2E').click(); await aguardarTelaPronta(page);
+  await comRecargaDaLista(page, () => chipPessoal('Arquivada E2E').click());
+  await comRecargaDaLista(page, () => chipPessoal('Urgente E2E').click());
   expect((await pastasDasLinhas(page)).sort()).toEqual([8101, 8102]);
-  await chipPessoal('Aguardando E2E').click(); await aguardarTelaPronta(page);
+  await comRecargaDaLista(page, () => chipPessoal('Aguardando E2E').click());
   await expect(page.getByText('Nenhuma pasta encontrada')).toBeVisible();
   await semViolacoes(page, 'lista com dois filtros de etiqueta sem resultado');
   // "limpar filtro" desliga um de cada vez
-  while (await page.getByRole('button', { name: 'limpar filtro' }).count()) { await page.getByRole('button', { name: 'limpar filtro' }).first().click(); await aguardarTelaPronta(page); }
+  while (await page.getByRole('button', { name: 'limpar filtro' }).count()) { await comRecargaDaLista(page, () => page.getByRole('button', { name: 'limpar filtro' }).first().click()); }
   await expect(contador(page)).toHaveText(`${totalPastas} pasta(s)`);
   // filtro de etiqueta + busca + página 2: mudar o filtro volta para a página 1
-  await page.getByRole('button', { name: 'Próxima →' }).click(); await aguardarTelaPronta(page);
-  await chipPessoal('Urgente E2E').click(); await aguardarTelaPronta(page);
+  await comRecargaDaLista(page, () => page.getByRole('button', { name: 'Próxima →' }).click());
+  await comRecargaDaLista(page, () => chipPessoal('Urgente E2E').click());
   await expect(page.getByText(/^Página \d+ de \d+$/)).toHaveCount(0);                               // com 2 pastas só há uma página (sem paginação)
   expect((await pastasDasLinhas(page)).sort()).toEqual([8101, 8102]);
 });
