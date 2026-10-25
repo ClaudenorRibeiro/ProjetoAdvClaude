@@ -5,15 +5,16 @@ projeto (nuvem ou local). Ele registra as exigências do usuário (Claudenor)
 para este sistema. **Vale para qualquer IA/assistente que trabalhe neste
 repositório, em qualquer sessão futura.**
 
-## DOIS SISTEMAS IDÊNTICOS — TUDO QUE O USUÁRIO PEDIR VALE PARA OS DOIS (regra do usuário, 16/10/2026)
+## UMA SESSÃO = UM SISTEMA (regra do usuário, 25/10/2026; SUBSTITUI a antiga regra "DOIS SISTEMAS IDÊNTICOS", que foi APAGADA)
 
-**Vale para qualquer IA/assistente, em qualquer sessão, neste repositório e no `NovoJud-saas`.**
+**Vale para qualquer IA/assistente, em qualquer sessão.**
 
-- Existem DOIS sistemas que o usuário (Claudenor) quer **IDÊNTICOS** em funcionalidades, regras e comportamento: o **ProjetoAdvClaude** (este; repositório `ClaudenorRibeiro/ProjetoAdvClaude`) e o **NovoJud-saas** (repositório `ClaudenorRibeiro/NovoJud-saas`, a versão SaaS, multi-escritório). "Antigo" é só um apelido do ProjetoAdvClaude: **ele continua em uso pelo Erick e pelo Antônio e continua sendo desenvolvido.**
-- **TUDO que o usuário pedir** (funcionalidade nova, correção, ajuste de tela, mudança de regra, texto, permissão, aviso...) **deve ser feito nos DOIS repositórios, cada um no seu branch `rascunho`**, e nunca só em um. Ao receber um pedido, a IA faz num sistema, **porta para o outro** (cada um na sua tecnologia: o ProjetoAdvClaude é JavaScript; o SaaS é TypeScript) e só considera o pedido concluído quando os dois estão feitos e testados. No fim, relata o que foi feito em cada um.
-- Única diferença permitida: o que o SaaS **exigir** por ser multi-escritório (isolamento entre escritórios, `escritorio_id`, painel do dono, subdomínios), segurança de isolamento ou tecnologia que torne o jeito do outro impossível. Qualquer outra diferença NÃO pode ser decidida pela IA: perguntar ao usuário antes. O que existir só num dos dois por falta de tempo é pendência a registrar, não decisão.
-- Trabalhar sempre só nos branches `rascunho` (o `main` só com "PODE SUBIR" do usuário), com commits SEPARADOS em cada repositório e caminhos explícitos (`git -C`), sem submódulo, sem link e sem copiar arquivo automaticamente de um para o outro. Cada sessão consegue ter só um dos repositórios na máquina: se faltar o outro, a IA pede para ele ser anexado à sessão (`add_repo`) em vez de deixar de fazer.
-- Esta regra **substitui** qualquer trecho antigo que diga para "nunca mexer" ou "só ler" um dos dois repositórios.
+- O usuário (Claudenor) separa o trabalho em três sessões: **mono** (este repositório, `ProjetoAdvClaude`), **SaaS** (`NovoJud-saas`) e **site** (novojud.com.br). Os sistemas **NÃO são mais obrigados a ser idênticos**: cada um pode ter o que o outro não tem.
+- **Nesta sessão (mono) só se altera o mono.** Nunca alterar o SaaS nem o site, em hipótese alguma, e nunca "portar" um pedido para o outro por conta própria.
+- Ler o outro repositório só como **consulta** (para ajudar numa decisão) e **somente com autorização do usuário**, com muito cuidado e sem alterar nada nele.
+- Textos antigos deste arquivo que falem em "feito também no SaaS", "pendente no SaaS" ou "igual ao SaaS" são **histórico**, não obrigação.
+- **Resumo do dia:** ao final do trabalho do dia, gerar um arquivo de texto com o que foi feito **naquele dia** (não a sessão inteira), para o usuário usar de base nas outras sessões.
+- Trabalhar só no `rascunho` (o `main` só com "PODE SUBIR" do usuário).
 
 ## 0. Regra de certeza absoluta (a mais importante)
 
