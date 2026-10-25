@@ -527,10 +527,17 @@ async function redefinirSenha(req, res) {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
+      // O link é gasto PRIMEIRO, numa instrução que só vale se ele ainda estiver livre e dentro do prazo: dois pedidos ao mesmo
+      // tempo com o mesmo link passaram juntos pela conferência acima e ambos trocavam a senha; agora só um vence.
+      const [gasto] = await conn.execute(
+        'UPDATE reset_tokens SET usado = 1 WHERE id = ? AND usado = 0 AND expires_at > NOW()', [tokenId]);
+      if (gasto.affectedRows !== 1) {
+        await conn.rollback();
+        return erro(res, 'Link inválido ou expirado. Solicite um novo link.');
+      }
       // sessao_atual = NULL derruba qualquer sessão aberta (mesma trava de "logou em outro
       // aparelho" do middleware) — senha trocada exige login de novo em todo lugar.
       await conn.execute('UPDATE usuarios SET senha_hash = ?, sessao_atual = NULL WHERE id = ?', [novoHash, usuario_id]);
-      await conn.execute('UPDATE reset_tokens SET usado = 1 WHERE id = ?',  [tokenId]);
       await conn.commit();
     } catch (err) {
       await conn.rollback();

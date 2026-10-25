@@ -357,3 +357,19 @@ test('primeiro administrador: só antes do setup e sem nenhum administrador; dep
     if (admins.length) await sql(`UPDATE usuarios SET nivel = 1 WHERE id IN (${admins.map(() => '?').join(',')})`, admins);
   }
 });
+
+test('o MESMO link usado por dois pedidos ao mesmo tempo: só um vence, a outra senha NÃO é gravada', async () => {
+  const u = await novoUsuario();
+  await request(app).post('/api/auth/esqueci-senha').send({ loginOuEmail: u.login });
+  const t = await tokenDe(u);
+  const [a, b] = await Promise.all([
+    request(app).post('/api/auth/redefinir-senha').send({ token: t, senha: 'Primeira@Senha1' }),
+    request(app).post('/api/auth/redefinir-senha').send({ token: t, senha: 'Segunda@Senha1' }),
+  ]);
+  assert.deepEqual([a.status, b.status].sort(), [200, 400], `respostas: ${a.status} e ${b.status}`);
+  const vencedora = a.status === 200 ? 'Primeira@Senha1' : 'Segunda@Senha1';
+  const perdedora = a.status === 200 ? 'Segunda@Senha1' : 'Primeira@Senha1';
+  assert.equal((await entrar(u.login, vencedora)).status, 200);
+  assert.equal((await entrar(u.login, perdedora)).status, 401);
+  assert.match((a.status === 400 ? a : b).body.mensagem, /inválido ou expirado/);
+});
