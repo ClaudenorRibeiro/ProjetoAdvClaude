@@ -387,3 +387,42 @@ test('ato sem comparecimento: conclui SEM responsável, recusa acordo/desistênc
   assert.equal(semAdv.status, 400);
   assert.match(semAdv.body.mensagem, /advogado que acompanhou/i);
 });
+
+test('excluir audiência deixa no histórico geral quem excluiu, quando e um resumo do que foi apagado (auditoria 25/10/2026, item 4)', async () => {
+  const c = await criar(audiencia({ data: '2001-03-05', hora: '09:17' }));
+  assert.equal(c.status, 201, JSON.stringify(c.body));
+  const id = c.body.dados.id;
+  const r = await request(app).delete(`/api/audiencias/${id}`).set('Authorization', `Bearer ${tokenAdmin}`);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const conn = await conectarBancoTeste();
+  try {
+    const [[sumiu]] = await conn.execute('SELECT COUNT(*) AS n FROM audiencia WHERE id = ?', [id]);
+    assert.equal(Number(sumiu.n), 0);
+    const [logs] = await conn.execute("SELECT usuario_id, descricao, dados_antigos, criado_em FROM logs_auditoria WHERE tabela = 'audiencia' AND acao = 'excluir' AND registro_id = ?", [id]);
+    assert.equal(logs.length, 1, 'a exclusão precisa ficar registrada uma vez');
+    assert.equal(logs[0].usuario_id, 1);
+    assert.match(String(logs[0].descricao), /Audiência/);
+    const antigos = typeof logs[0].dados_antigos === 'string' ? JSON.parse(logs[0].dados_antigos) : logs[0].dados_antigos;
+    assert.equal(antigos.processo_id, 1);
+    assert.equal(antigos.status, 'agendada');
+    assert.match(String(antigos.data), /2001-03-05/);
+    assert.match(String(antigos.hora), /09:17/);
+    assert.ok(logs[0].criado_em);
+  } finally { await conn.end(); }
+});
+
+test('excluir audiência: se o registro no histórico geral falhar, a audiência NÃO é apagada (tudo ou nada)', async () => {
+  const c = await criar(audiencia({ data: '2001-03-06', hora: '09:18' }));
+  assert.equal(c.status, 201, JSON.stringify(c.body));
+  const id = c.body.dados.id;
+  const conn = await conectarBancoTeste();
+  try {
+    await conn.execute('RENAME TABLE logs_auditoria TO logs_auditoria_fora_do_lugar');
+    try {
+      const r = await request(app).delete(`/api/audiencias/${id}`).set('Authorization', `Bearer ${tokenAdmin}`);
+      assert.ok(r.status >= 500, `esperava erro, veio ${r.status}`);
+    } finally { await conn.execute('RENAME TABLE logs_auditoria_fora_do_lugar TO logs_auditoria'); }
+    const [[ainda]] = await conn.execute('SELECT COUNT(*) AS n FROM audiencia WHERE id = ?', [id]);
+    assert.equal(Number(ainda.n), 1, 'a audiência não pode sumir sem o registro');
+  } finally { await conn.end(); }
+});

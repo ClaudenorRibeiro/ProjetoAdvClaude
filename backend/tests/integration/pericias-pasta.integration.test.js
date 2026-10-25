@@ -236,6 +236,10 @@ test('excluir: agendada some com o histórico; cancelada/remarcada não podem (h
   t.checar((await api(comum.token).delete(`/api/pericias/${a}`).send()).status === 403, 'sem permissão de excluir');
   t.checar((await api().delete(`/api/pericias/${a}`).send()).status === 200, 'excluir agendada');
   t.checar(await total('SELECT COUNT(*) AS n FROM pericia WHERE id = ?', [a]) === 0 && (await hist(a)).length === 0, 'sobrou perícia ou histórico');
+  // auditoria 25/10/2026 (item 4): o histórico PRÓPRIO sai junto, mas a exclusão fica no histórico GERAL (quem, quando e resumo)
+  const logExc = await sql("SELECT usuario_id, descricao, dados_antigos FROM logs_auditoria WHERE tabela = 'pericia' AND acao = 'excluir' AND registro_id = ?", [a]);
+  const antigos = logExc[0] && (typeof logExc[0].dados_antigos === 'string' ? JSON.parse(logExc[0].dados_antigos) : logExc[0].dados_antigos);
+  t.checar(logExc.length === 1 && logExc[0].usuario_id === 1 && /Perícia/.test(String(logExc[0].descricao)) && antigos && antigos.processo_id === F.proc && antigos.status === 'agendada' && String(antigos.data).includes(util(16)), `exclusão sem registro no histórico geral: ${JSON.stringify(logExc)}`);
   for (const rota of ['cancelar', 'marcar-remarcada']) {
     const c = await nova({ data: util(17), tipo_pericia_id: F.tipoB });
     await api().put(`/api/pericias/${c}/${rota}`).send({ motivo: 'x' });

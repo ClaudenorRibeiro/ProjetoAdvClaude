@@ -1359,6 +1359,17 @@ async function excluir(req, res) {
     const dadosGoogleExcluir = await dadosPericiaParaGoogle(id);
 
     await conn.beginTransaction();
+    // O histórico PRÓPRIO da perícia sai junto (abaixo), então a exclusão fica registrada no histórico GERAL: quem, quando e um
+    // resumo do que foi apagado. Dentro da transação: se o registro falhar, a perícia não é apagada (auditoria 25/10/2026).
+    const [[resumo]] = await conn.execute(
+      `SELECT processo_id, tipo_pericia_id, DATE_FORMAT(data, '%Y-%m-%d') AS data, TIME_FORMAT(hora, '%H:%i') AS hora,
+              status, perito_id, responsavel_id, responsavel_freela_id
+         FROM pericia WHERE id = ? FOR UPDATE`, [id]);
+    if (!resumo) {
+      await conn.rollback();
+      return naoEncontrado(res, 'Perícia não encontrada');
+    }
+    await auditoria.registrar(req.usuario.id, 'pericia', 'excluir', id, resumo, null, conn);
     await conn.execute('DELETE FROM auditoria_pericia WHERE pericia_id = ?', [id]);
     // Se esta perícia nasceu de uma Ata de audiência, desvincula o item (mantém o
     // histórico da Ata, só remove a referência a um registro que vai deixar de existir).

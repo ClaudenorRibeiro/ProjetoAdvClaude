@@ -1877,6 +1877,19 @@ async function excluir(req, res) {
 
     await conn.beginTransaction();
 
+    // O histórico PRÓPRIO da audiência sai junto (abaixo), então a exclusão fica registrada no histórico GERAL: quem, quando e um
+    // resumo do que foi apagado. Dentro da transação: se o registro falhar, a audiência não é apagada (auditoria 25/10/2026).
+    const [[resumo]] = await conn.execute(
+      `SELECT processo_id, tipo_audiencia_id, DATE_FORMAT(data, '%Y-%m-%d') AS data, TIME_FORMAT(hora, '%H:%i') AS hora,
+              modalidade, status, vara_id, responsavel_id, responsavel_freela_id, publicacao_id
+         FROM audiencia WHERE id = ? FOR UPDATE`, [id]);
+    if (!resumo) {
+      await conn.rollback();
+      return naoEncontrado(res, 'Audiência não encontrada');
+    }
+    await auditoria.registrar(req.usuario.id, 'audiencia', 'excluir', id,
+      { ...resumo, tinha_ata: temAta, tinha_testemunha: temTestemunha }, null, conn);
+
     // Se esta audiência nasceu como "nova audiência" a partir da Ata de OUTRA
     // audiência, desvincula o item daquela Ata (mantém o histórico, só remove a
     // referência a um registro que vai deixar de existir). A ata_audiencia_itens da
