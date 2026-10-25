@@ -196,21 +196,6 @@ async function login(req, res) {
 // Cria o primeiro usuário administrador (só funciona antes do setup concluído)
 async function criarPrimeiroAdmin(req, res) {
   try {
-    // Verifica se já existe um admin (nível 1)
-    const [admins] = await pool.execute(
-      'SELECT id FROM usuarios WHERE nivel = 1 LIMIT 1'
-    );
-    if (admins.length > 0) {
-      return erro(res, 'Administrador já cadastrado. Use a tela de usuários para criar novos.');
-    }
-
-    // Trava permanente: uma vez concluído o setup do escritório (só um admin logado faz isso),
-    // esta rota pública nunca mais pode criar admin — mesmo que o(s) admin(s) sejam excluídos depois.
-    const [config] = await pool.execute('SELECT setup_concluido FROM configuracoes_escritorio LIMIT 1');
-    if (config[0]?.setup_concluido) {
-      return erro(res, 'Administrador já cadastrado. Use a tela de usuários para criar novos.');
-    }
-
     const { nome, login: loginAdmin, senha, email } = req.body;
     if (typeof nome !== 'string' || typeof loginAdmin !== 'string' || typeof senha !== 'string' || !nome.trim() || !loginAdmin.trim() || !senha) {
       return erro(res, 'Nome, login e senha são obrigatórios');
@@ -221,20 +206,36 @@ async function criarPrimeiroAdmin(req, res) {
     const errSenha1 = validarSenha(senha);
     if (errSenha1) return erro(res, errSenha1);
 
-    // Verifica se o login já existe
-    const [existente] = await pool.execute(
-      'SELECT id FROM usuarios WHERE login = ?', [loginAdmin]
-    );
-    if (existente.length > 0) {
-      return erro(res, 'Este login já está em uso');
-    }
-
     const senhaHash = await bcrypt.hash(senha, 12);
 
     const conn = await pool.getConnection();
     let result;
+    let travou = false;
     try {
+      // Trava nomeada: dois pedidos ao mesmo tempo (logins diferentes) passavam juntos pela conferência "já existe administrador?"
+      // e criavam DOIS. As conferências agora acontecem DENTRO da trava, uma pessoa de cada vez (vale mesmo sem nenhuma linha no banco).
+      const [[trava]] = await conn.execute("SELECT GET_LOCK('criar_primeiro_admin', 10) AS ok");
+      if (Number(trava.ok) !== 1) return erro(res, 'Outro cadastro de administrador está em andamento. Tente de novo.');
+      travou = true;
+
       await conn.beginTransaction();
+      const [admins] = await conn.execute('SELECT id FROM usuarios WHERE nivel = 1 LIMIT 1');
+      if (admins.length > 0) {
+        await conn.rollback();
+        return erro(res, 'Administrador já cadastrado. Use a tela de usuários para criar novos.');
+      }
+      // Trava permanente: uma vez concluído o setup do escritório (só um admin logado faz isso),
+      // esta rota pública nunca mais pode criar admin — mesmo que o(s) admin(s) sejam excluídos depois.
+      const [config] = await conn.execute('SELECT setup_concluido FROM configuracoes_escritorio LIMIT 1');
+      if (config[0]?.setup_concluido) {
+        await conn.rollback();
+        return erro(res, 'Administrador já cadastrado. Use a tela de usuários para criar novos.');
+      }
+      const [existente] = await conn.execute('SELECT id FROM usuarios WHERE login = ?', [loginAdmin]);
+      if (existente.length > 0) {
+        await conn.rollback();
+        return erro(res, 'Este login já está em uso');
+      }
       [result] = await conn.execute(
         `INSERT INTO usuarios (nome, login, senha_hash, email, tipo, nivel, ativo)
          VALUES (?, ?, ?, ?, 'administrador', 1, 1)`,
@@ -242,7 +243,10 @@ async function criarPrimeiroAdmin(req, res) {
       );
       await conn.commit();
     } catch (err) { await conn.rollback(); throw err; }
-    finally { conn.release(); }
+    finally {
+      if (travou) { try { await conn.execute("SELECT RELEASE_LOCK('criar_primeiro_admin')"); } catch (_) { /* a trava some sozinha ao fechar a conexão */ } }
+      conn.release();
+    }
 
     return sucesso(res, { id: result.insertId }, 'Administrador criado com sucesso', 201);
 

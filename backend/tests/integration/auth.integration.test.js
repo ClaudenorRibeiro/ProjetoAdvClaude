@@ -373,3 +373,21 @@ test('o MESMO link usado por dois pedidos ao mesmo tempo: só um vence, a outra 
   assert.equal((await entrar(u.login, perdedora)).status, 401);
   assert.match((a.status === 400 ? a : b).body.mensagem, /inválido ou expirado/);
 });
+
+test('primeiro administrador: dois pedidos ao mesmo tempo (logins diferentes) criam UM administrador só', async () => {
+  const admins = (await sql('SELECT id FROM usuarios WHERE nivel = 1')).map(a => a.id);
+  await sql('UPDATE usuarios SET nivel = 2 WHERE nivel = 1');
+  await sql('UPDATE configuracoes_escritorio SET setup_concluido = 0');
+  try {
+    const envia = (login) => request(app).post('/api/auth/criar-admin').send({ nome: 'Admin Corrida', login, senha: 'Admin@Forte1', email: `${login}@example.invalid` });
+    const respostas = await Promise.all([envia('corridaum'), envia('corridadois')]);
+    const status = respostas.map(r => r.status).sort();
+    const criados = await sql("SELECT id FROM usuarios WHERE nivel = 1 AND login IN ('corridaum', 'corridadois')");
+    assert.deepEqual(status, [201, 400], `respostas: ${status.join(' e ')}`);
+    assert.equal(criados.length, 1, 'só um administrador pode ter sido criado');
+  } finally {
+    await sql("DELETE FROM usuarios WHERE login IN ('corridaum', 'corridadois')");
+    await sql('UPDATE configuracoes_escritorio SET setup_concluido = 1');
+    if (admins.length) await sql(`UPDATE usuarios SET nivel = 1 WHERE id IN (${admins.map(() => '?').join(',')})`, admins);
+  }
+});
