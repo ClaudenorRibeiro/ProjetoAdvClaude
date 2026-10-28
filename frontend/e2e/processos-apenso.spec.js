@@ -225,7 +225,7 @@ test('@critical Novo apenso com número que já existe em outra pasta: vem tudo 
   const banner = jan.getByTestId('apenso-ja-existe');
   await expect(banner).toBeVisible();
   await expect(banner).toContainText('na pasta 7402');
-  await expect(jan.getByLabel('Vara', { exact: true })).toHaveValue(String(d.varaSul1));                       // vara e fórum do apenso
+  await expect(jan.getByText('Vara Sul 1 E2E').first()).toBeVisible();                                        // vara e fórum do apenso
   await expect(jan.getByText('Fórum Sul E2E').first()).toBeVisible();
   await expect(jan.getByLabel('Número de Protocolo')).toHaveValue('PROT-E2E');
   await expect(jan.locator('input[type="date"]')).toHaveValue('2026-02-15');

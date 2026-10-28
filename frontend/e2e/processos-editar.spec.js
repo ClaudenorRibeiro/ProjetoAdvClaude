@@ -76,7 +76,7 @@ test('@critical Detalhes do Processo: mostra tudo do processo e TODO campo fica 
   await expect(rotulo(page, 'Número de Protocolo')).toHaveValue('PROT-EDIT-E2E');
   await expect(rotulo(page, 'Status')).toHaveValue(String(d.statusConhecimento));
   await expect(rotulo(page, 'Instância')).toHaveValue(String(d.instancia1));
-  await expect(rotulo(page, 'Fórum')).toHaveValue(String(d.forumNorte));
+  await expect(grupo(page, 'Fórum')).toContainText('Fórum Norte E2E');
   await expect(grupo(page, 'Vara').getByText('1ª Norte')).toBeVisible();
   await expect(grupo(page, 'Assuntos').getByText('Assunto Novo A E2E')).toBeVisible();
   await expect(rotulo(page, 'Data de Distribuição')).toHaveValue('2026-03-10');
@@ -139,6 +139,25 @@ test('@critical Editar Processo: abre com tudo preenchido do jeito que está no 
   expect(JSON.stringify(await procNoBanco())).toBe(antes);
 });
 
+test('@critical Editar Processo: o campo Fórum é pesquisável (digita e filtra, sem diferenciar acento nem maiúscula)', async ({ page }) => {
+  await loginPelaTela(page);
+  await abrirEditar(page);
+  const forum = rotulo(page, 'Fórum');
+  await forum.click(); await forum.pressSequentially('forum sul e2e', { delay: 15 });   // sem acento e em minúsculas
+  await expect(page.locator('div[role="option"]').filter({ hasText: 'Fórum Sul E2E' })).toHaveCount(1);
+  await expect(page.locator('div[role="option"]').filter({ hasText: 'Fórum Norte E2E' })).toHaveCount(0);
+  await forum.fill('xyzxyz');
+  await expect(page.getByText('Nenhuma opção encontrada')).toBeVisible();
+  await forum.fill('sul e2e');                                                          // parte do nome, em qualquer posição
+  await page.locator('div[role="option"]').filter({ hasText: 'Fórum Sul E2E' }).click();
+  await expect(grupo(page, 'Fórum')).toContainText('Fórum Sul E2E');
+  await expect(grupo(page, 'Vara')).not.toContainText('1ª Norte');                      // trocar o fórum zera a vara
+  await salvar(page).click();
+  await aviso(page, 'Processo atualizado com sucesso!');
+  const p = await procNoBanco();
+  expect(p.vara_id).toBeNull();
+});
+
 test('@critical Editar Processo: alterar os campos simples e salvar grava no banco (sem pedir motivo quando o status não muda)', async ({ page }) => {
   await loginPelaTela(page);
   await abrirEditar(page);
@@ -147,7 +166,8 @@ test('@critical Editar Processo: alterar os campos simples e salvar grava no ban
   await expect(rotulo(page, 'Número do Processo (CNJ)')).toHaveValue('1234567-00.2026.5.15.0001');
   await rotulo(page, 'Número de Protocolo').fill('PROT-EDIT-NOVO');
   await rotulo(page, 'Instância').selectOption({ label: '2ª Instância E2E' });
-  await rotulo(page, 'Fórum').selectOption({ label: 'Fórum Sul E2E' });                          // trocar o fórum zera a vara
+  await rotulo(page, 'Fórum').click();
+  await page.locator('div[role="option"]').filter({ hasText: 'Fórum Sul E2E' }).click();            // trocar o fórum zera a vara
   await expect(grupo(page, 'Vara').getByText('— Selecione —')).toBeVisible();
   await rotulo(page, 'Vara').click();
   await page.locator('div[role="option"]').filter({ hasText: 'Vara Sul 1 E2E' }).click();

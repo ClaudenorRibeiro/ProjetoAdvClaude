@@ -1262,10 +1262,9 @@ export function ModalNovoProcesso({ pastaId, processoBase, apensoDe = null, onFe
             <div className="form-group">
               <label className="form-label">Vara</label>
               <div style={{ display: 'flex', gap: '4px' }}>
-                <select aria-label="Vara" className="form-control" value={form.vara_id} onChange={e => set('vara_id', e.target.value)} disabled={!form.forum_id}>
-                  <option value="">{form.forum_id ? '— Selecione —' : '— Selecione o fórum primeiro —'}</option>
-                  {varasFiltradas.map(v => <option key={v.id} value={v.id}>{v.abrev_nome || v.nome}</option>)}
-                </select>
+                <SelectPesquisavel ariaLabel="Vara" className="form-control" value={form.vara_id}
+                  onChange={valor => set('vara_id', valor)} disabled={!form.forum_id}
+                  opcoes={[{ value: '', label: form.forum_id ? '— Selecione —' : '— Selecione o fórum primeiro —' }, ...varasFiltradas.map(v => ({ value: v.id, label: v.abrev_nome || v.nome }))]} />
                 {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} aria-label="Gerenciar varas" title="Gerenciar varas" onClick={() => setModalAux('varas')}>…</button>}
               </div>
             </div>
@@ -1869,10 +1868,9 @@ export function ModalEditarProcesso({ processo, onFechar, somenteLeitura = false
             <div className="form-group">
               <label className="form-label">Fórum</label>
               <div style={{ display: 'flex', gap: '4px' }}>
-                <select aria-label="Fórum" className="form-control" value={form.forum_id} onChange={e => mudarForum(e.target.value)}>
-                  <option value="">— Selecione —</option>
-                  {aux.foruns?.map(f => <option key={f.id} value={f.id}>{f.abrev_nome || f.nome}</option>)}
-                </select>
+                <SelectPesquisavel ariaLabel="Fórum" className="form-control" value={form.forum_id}
+                  onChange={mudarForum} disabled={leitura}
+                  opcoes={[{ value: '', label: '— Selecione —' }, ...(aux.foruns || []).map(f => ({ value: f.id, label: f.abrev_nome || f.nome }))]} />
                 {podeGerenciarAux && <button type="button" className="btn btn-outline" style={{ padding: '0 8px', fontSize: '13px', flexShrink: 0 }} aria-label="Gerenciar fóruns" title="Gerenciar fóruns" onClick={() => setModalAux('foruns')}>…</button>}
               </div>
             </div>

@@ -338,16 +338,22 @@ test('@critical Novo Processo: tipo, status, instância, fórum/vara, responsáv
   await expect(grupo(page, 'Instância')).toContainText('2ª Instância E2E');
   // fórum e vara: a vara fica travada até escolher o fórum e só mostra as varas daquele fórum
   const vara = page.getByLabel('Vara', { exact: true });
+  const opcoesDaVara = async () => { await vara.click(); const t = await page.locator('div[role="option"]').allInnerTexts(); await page.keyboard.press('Escape'); return t; };
   await expect(vara).toBeDisabled();
-  await expect(vara.locator('option').first()).toHaveText('— Selecione o fórum primeiro —');   // travada (as varas só ficam escolhíveis depois do fórum)
+  await expect(grupo(page, 'Vara')).toContainText('— Selecione o fórum primeiro —');   // travada (as varas só ficam escolhíveis depois do fórum)
   await escolher(page, 'Fórum', 'Fórum Norte E2E');
   await expect(vara).toBeEnabled();
-  const norte = await vara.locator('option').allInnerTexts();
-  expect(norte).toEqual(['— Selecione —', '1ª Norte', 'Vara Norte 2 E2E']);                              // mostra a abreviação quando há
-  await vara.selectOption({ label: '1ª Norte' });
+  expect(await opcoesDaVara()).toEqual(['— Selecione —', '1ª Norte', 'Vara Norte 2 E2E']);                // mostra a abreviação quando há
+  await escolher(page, 'Vara', '1ª Norte');
+  await expect(grupo(page, 'Vara')).toContainText('1ª Norte');
   await escolher(page, 'Fórum', 'Fórum Sul E2E');                                                         // trocar de fórum zera a vara e troca a lista
-  await expect(vara).toHaveValue('');
-  expect(await vara.locator('option').allInnerTexts()).toEqual(['— Selecione —', 'Vara Sul 1 E2E']);
+  await expect(grupo(page, 'Vara')).not.toContainText('1ª Norte');
+  expect(await opcoesDaVara()).toEqual(['— Selecione —', 'Vara Sul 1 E2E']);
+  // a vara também se acha digitando (sem diferenciar acento nem maiúscula)
+  await vara.click(); await vara.pressSequentially('sul 1', { delay: 15 });
+  await expect(page.locator('div[role="option"]')).toHaveText(['Vara Sul 1 E2E']);
+  await vara.fill('xyzxyz'); await expect(page.getByText('Nenhuma opção encontrada')).toBeVisible();
+  await page.keyboard.press('Escape');
   // CNJ: máscara; com 14+ dígitos preenche o TIPO (J=5 → Trabalhista); completo preenche também fórum e vara (5150002)
   const cnj = page.getByLabel('Número do Processo (CNJ)');
   await escolher(page, 'Tipo do processo', 'Judicial');
@@ -359,7 +365,7 @@ test('@critical Novo Processo: tipo, status, instância, fórum/vara, responsáv
   await cnj.pressSequentially('150002', { delay: 15 });                                                   // completa os 20 dígitos
   await expect(cnj).toHaveValue('0000000-00.2026.5.15.0002');
   await expect(grupo(page, 'Fórum')).toContainText('Fórum Norte E2E');
-  await expect(page.getByLabel('Vara', { exact: true })).toHaveValue(String(d.varaNorte1));
+  await expect(grupo(page, 'Vara')).toContainText('1ª Norte');
   // protocolo, data e observações (iniciais maiúsculas ao sair do campo)
   await page.getByLabel('Número de Protocolo').fill('PROT-NOVO-CAMPOS');
   await expect(page.getByLabel('Número de Protocolo')).toHaveValue('PROT-NOVO-CAMPOS');
