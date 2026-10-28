@@ -35,7 +35,8 @@ export default defineConfig({
     proxy: {
       // Redireciona /api para o backend — substitui o "proxy" do package.json do CRA
       '/api': {
-        target: 'http://localhost:3001',
+        // VITE_API_PROXY só é usado pelo teste de navegador (servidor de teste na 3201); no uso normal é a 3001
+        target: process.env.VITE_API_PROXY || 'http://localhost:3001',
         changeOrigin: true,
       },
     },

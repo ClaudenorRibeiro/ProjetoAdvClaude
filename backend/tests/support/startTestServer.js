@@ -7,7 +7,7 @@ async function iniciar() {
 
   const { criarApp } = require('../../src/app');
   const { pool } = require('../../src/config/database');
-  const porta = Number(process.env.TEST_BACKEND_PORT || 3001);
+  const porta = Number(process.env.TEST_BACKEND_PORT || 3201);
   const servidor = criarApp().listen(porta, '127.0.0.1', () => {
     console.log(`Servidor isolado de testes em http://127.0.0.1:${porta}`);
   });

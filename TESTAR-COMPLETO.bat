@@ -22,20 +22,19 @@ if not exist "backend\.env.test" (
   )
 )
 
-rem --- 2) servidor de desenvolvimento aberto atrapalha o teste de navegador (porta 3001)
-netstat -ano | findstr ":3001 " | findstr "LISTENING" >nul
+rem --- 2) o teste de navegador usa portas PROPRIAS (3201 e 4173): o sistema aberto (3001/3000) e o NovoJud SaaS NAO atrapalham.
+rem     So atrapalha outra bateria deste sistema rodando ao mesmo tempo, ou algo que use essas portas.
+netstat -ano | findstr /R /C:":3201 " /C:":4173 " | findstr "LISTENING" >nul
 if %ERRORLEVEL% EQU 0 (
-  echo ATENCAO: o sistema parece estar aberto agora ^(porta 3001 em uso^).
-  echo O teste de navegador precisa dessa porta livre.
-  echo.
-  echo Feche a janela preta do servidor ^(a que mostra "Servidor rodando na porta 3001"^)
-  echo e depois aperte uma tecla aqui para continuar.
+  echo ATENCAO: as portas do teste de navegador ^(3201 ou 4173^) estao em uso agora.
+  echo Provavelmente outra bateria deste sistema esta rodando.
+  echo Espere ela terminar ^(ou feche a janela dela^) e depois aperte uma tecla aqui para continuar.
   echo.
   pause
-  netstat -ano | findstr ":3001 " | findstr "LISTENING" >nul
+  netstat -ano | findstr /R /C:":3201 " /C:":4173 " | findstr "LISTENING" >nul
   if %ERRORLEVEL% EQU 0 (
     echo.
-    echo A porta 3001 continua em uso. Feche o servidor e rode este arquivo de novo.
+    echo As portas 3201/4173 continuam em uso. Termine a outra bateria e rode este arquivo de novo.
     goto :fim
   )
 )
