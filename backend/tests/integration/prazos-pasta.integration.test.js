@@ -13,6 +13,7 @@ carregarAmbienteTeste();
 const { criarApp } = require('../../src/app');
 const { pool } = require('../../src/config/database');
 const { liberarFazendoExpirados } = require('../../src/controllers/prazosController');
+const { reagendarCronPrazos } = require('../../src/services/alertasService');
 
 let app; let admin;
 const F = {};
@@ -404,6 +405,9 @@ test('configuração do "Fazendo": 0 grava 0 (= nunca); vazio ou texto volta a 6
     t.checar(r.status === 400, `${ruim} deveria ser recusado → ${r.status}`);
   }
   await api().put('/api/configuracoes/escritorio').send({ ...bom, prazo_fazendo_timeout: 60 });
+  // Cada salvamento agenda o cron de alertas; sem horário nenhum, o último reagendamento para todos e o processo de teste pode encerrar.
+  await sql('UPDATE configuracoes_escritorio SET horario_alerta_prazos = NULL, horario_alerta_prazos_2 = NULL WHERE id = 1');
+  await reagendarCronPrazos();
   t.fim();
 });
 
