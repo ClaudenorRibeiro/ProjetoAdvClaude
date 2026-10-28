@@ -6,7 +6,7 @@ Este arquivo é o índice. Se um script não estiver aqui, pergunte antes de apa
 
 PARA RODAR NO PC (duplo clique)
   iniciar_pc_casa.bat / iniciar_pc_escrit.bat   IMPORTANTE  Liga o sistema neste PC.
-  parar_pc_casa.bat / parar_pc_escrit.bat       IMPORTANTE  Desliga o sistema (fecha TODAS as janelas do Prompt de Comando).
+  parar_pc_casa.bat / parar_pc_escrit.bat       IMPORTANTE  Desliga o sistema (fecha SO as janelas do sistema; nao mexe em outros Prompts, no NovoJud SaaS nem em baterias abertas).
   salvar_RASCUNHO_do_GIT_no_pc.bat              IMPORTANTE  Baixa o rascunho do GitHub para testar.
   salvar_pc_casa_no_Git.bat / ..._escrit_...    IMPORTANTE  ENVIA para o main (produção). Uso exclusivo do usuário.
   TESTAR-SISTEMA.bat                            IMPORTANTE  Bateria de testes (rápida; "completo" ou "profundo" como argumento). Ao terminar a janela só fecha no X.

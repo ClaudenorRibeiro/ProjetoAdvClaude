@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import AxeBuilder from '@axe-core/playwright';
+import { API_DE_TESTE } from './portas.js';
 
 export async function loginPelaTela(page, login = 'admteste', senha = 'TesteSeguro123!') {
   await page.goto('/login');
@@ -19,12 +20,12 @@ export async function bloquearRedeExterna(page) {
 }
 
 export async function criarAudiencia(request, hora = '10:20', modalidade = 'sem_comparecimento') {
-  const login = await request.post('http://127.0.0.1:3001/api/auth/login', {
+  const login = await request.post(`${API_DE_TESTE}/auth/login`, {
     data: { login: 'admteste', senha: 'TesteSeguro123!' },
   });
   if (!login.ok()) throw new Error(`Login de preparação falhou: ${login.status()} ${await login.text()}`);
   const token = (await login.json()).dados.token;
-  const resposta = await request.post('http://127.0.0.1:3001/api/audiencias', {
+  const resposta = await request.post(`${API_DE_TESTE}/audiencias`, {
     headers: { Authorization: `Bearer ${token}` },
     data: {
       processo_id: 1,
@@ -143,7 +144,7 @@ async function lerViolacoesGraves(page, excluir = []) {
 // Cria: banco, conta do escritório, caixa físico, formas de pagamento, cliente (autor) e parceiro com conta bancária, e
 // devolve os identificadores. Pessoas entram direto no banco de teste (a mesma conexão isolada dos testes de banco).
 export async function prepararFinanceiro(request) {
-  const API = 'http://127.0.0.1:3001/api';
+  const API = API_DE_TESTE;
   const login = await request.post(`${API}/auth/login`, { data: { login: 'admteste', senha: 'TesteSeguro123!' } });
   const t = (await login.json()).dados.token;
   const h = { Authorization: `Bearer ${t}` };

@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { API_DE_TESTE, PORTA_DO_SERVIDOR_DE_TESTE } from './e2e/portas.js';
 
 export default defineConfig({
   testDir: './e2e',
@@ -25,12 +26,15 @@ export default defineConfig({
   webServer: [
     {
       command: 'node ../backend/tests/support/startTestServer.js',
-      url: 'http://127.0.0.1:3001/api/public/info',
+      env: { TEST_BACKEND_PORT: String(PORTA_DO_SERVIDOR_DE_TESTE) },
+      url: `${API_DE_TESTE}/public/info`,
       reuseExistingServer: false,
       timeout: 120_000,
     },
     {
       command: 'npm run start -- --host 127.0.0.1 --port 4173',
+      // a tela de teste fala com o servidor de TESTE (3201), nunca com o do sistema aberto (3001)
+      env: { VITE_API_PROXY: `http://127.0.0.1:${PORTA_DO_SERVIDOR_DE_TESTE}` },
       url: 'http://127.0.0.1:4173/login',
       reuseExistingServer: false,
       timeout: 120_000,

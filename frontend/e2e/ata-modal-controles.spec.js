@@ -1,10 +1,11 @@
 import { test, expect } from '@playwright/test';
+import { API_DE_TESTE } from './portas';
 import { abrirMenuAcoes, adicionarAutorAoProcesso, aguardarTelaPronta, bloquearRedeExterna, criarAudiencia, loginPelaTela, violacoesGraves } from './helpers';
 
 // Verifica TODOS os controles do modal "Registrar Ata" (aberto pela Pasta do processo):
 // campos, as 8 caixas "O que teve nessa audiência?", o que cada uma revela, as janelas filhas,
 // as mensagens de validação, cadastro/remoção dos rascunhos e o registro final da ata.
-const API = 'http://127.0.0.1:3001/api';
+const API = API_DE_TESTE;
 const ITENS = ['Prazo', 'Perícia', 'Acordo', 'Nova audiência', 'Alvará', 'Testemunha(s)', 'Desistência da Ação', 'Retornem aos autos', 'Tarefa'];
 // Cada teste usa a sua audiência (horário próprio), pois o banco de teste é compartilhado.
 

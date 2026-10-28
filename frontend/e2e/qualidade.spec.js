@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { API_DE_TESTE } from './portas';
 import { aguardarTelaPronta, bloquearRedeExterna, loginPelaTela, violacoesGraves } from './helpers';
 
 test.beforeEach(async ({ page }) => bloquearRedeExterna(page));
@@ -48,7 +49,7 @@ test('@critical todas as telas não têm violações sérias ou críticas de ace
 // (rolagem precisa funcionar pelo teclado) e a semana da Agenda só ganha "+N mais" e a linha de eventos com vários eventos no dia.
 test('@critical Dashboard e Agenda com muitos itens no mesmo dia não têm violações sérias de acessibilidade', async ({ page, request }) => {
   test.setTimeout(240_000);
-  const API = 'http://127.0.0.1:3001/api';
+  const API = API_DE_TESTE;
   const login = await request.post(`${API}/auth/login`, { data: { login: 'admteste', senha: 'TesteSeguro123!' } });
   const h = { Authorization: `Bearer ${(await login.json()).dados.token}` };
   const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
