@@ -13,6 +13,7 @@ import ModalLerPublicacao from '../../components/ModalLerPublicacao';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
 import ModalInfo from '../../components/ui/ModalInfo';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
+import TempoFazendo from '../../components/TempoFazendo';
 import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetasSubmenu, useEtiquetasPessoais } from '../../components/Etiquetas';
 import useEscFechar from '../../hooks/useEscFechar';
 import SelectPesquisavel from '../../components/ui/SelectPesquisavel';
@@ -257,6 +258,7 @@ export default function Prazos() {
                         </span>
                       )}
                       {!p.fazendo_por && '—'}
+                      <TempoFazendo prazo={p} />
                     </td>
                     <td><span className={`badge ${STATUS_COR[p.status]}`}>{labelStatusPrazo(p.status)}</span></td>
                     <td style={{ textAlign: 'center' }}>

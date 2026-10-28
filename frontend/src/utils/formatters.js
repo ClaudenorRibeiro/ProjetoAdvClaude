@@ -325,3 +325,15 @@ export function formatarContaBancaria(conta, { titular = false, vazio = '' } = {
   const principal = numero ? `${numero}${digito ? `-${digito}` : ''}` : (String(conta?.chave_pix ?? '').trim() || (titular ? String(conta?.titular ?? '').trim() : ''));
   return `${agencia ? `Ag. ${agencia} · ` : ''}${principal || vazio}`;
 }
+
+// "há 5 min", "há 3 h", "há 2 dias" — tempo decorrido desde `desde` (data ISO ou Date); vazio se a data não existe/é inválida.
+export function haQuantoTempo(desde, agora = Date.now()) {
+  if (!desde) return '';
+  const d = desde instanceof Date ? desde : new Date(desde);
+  if (Number.isNaN(d.getTime())) return '';
+  const minutos = Math.max(0, Math.floor((agora - d.getTime()) / 60000));
+  if (minutos < 60) return `há ${minutos} min`;
+  if (minutos < 24 * 60) return `há ${Math.floor(minutos / 60)} h`;
+  const dias = Math.floor(minutos / (24 * 60));
+  return dias === 1 ? 'há 1 dia' : `há ${dias} dias`;
+}

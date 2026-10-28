@@ -497,3 +497,48 @@ test('aviso de pendência — sino + e-mail: o sino sai e o e-mail vai junto; e 
 });
 
 // O comunicado/lembrete de perícia ao cliente passou para o módulo de avisos aos clientes (testes em avisos-*.integration.test.js).
+
+// ============================================================ E-MAIL "PRAZOS EM FAZENDO" (todos os que alguém marcou e não concluiu)
+async function prazoFazendo({ venc, por, horas = 1, status = 'aberto', descricao }) {
+  return (await sql(`INSERT INTO prazos_processo (processo_id, descricao, data_inicio, data_vencimento, status, criado_por, fazendo_por, fazendo_desde)
+                     VALUES (1, ?, ?, ?, ?, 1, ?, DATE_SUB(NOW(), INTERVAL ? HOUR))`, [descricao, dia(-20), venc, status, por, horas])).insertId;
+}
+test('e-mail "PRAZOS EM FAZENDO": traz TODOS os que estão em Fazendo (qualquer vencimento), com quem faz e há quanto tempo; concluídos, cancelados e sem Fazendo ficam de fora', async () => {
+  await apagarPrazosDeTeste();
+  const quem = await novoUsuario({ nome: 'Quem Faz Fulano' });
+  await prazoFazendo({ venc: dia(10), por: quem.id, horas: 72, descricao: 'Futuro do alerta fazendo' });
+  await prazoFazendo({ venc: dia(-4), por: quem.id, horas: 5, descricao: 'Atrasado do alerta fazendo' });
+  await prazoFazendo({ venc: dia(3), por: quem.id, status: 'concluido', descricao: 'Concluido do alerta fazendo' });
+  await prazoFazendo({ venc: dia(3), por: quem.id, status: 'cancelado', descricao: 'Cancelado do alerta fazendo' });
+  await prazoDireto({ venc: dia(8), descricao: 'Sem fazendo do alerta' });
+  await configurarAlertas({ emails: 'alerta3@example.invalid', atrasado: 0 });
+  limparEmails();
+  await alertas.executarAlertasPrazos();
+  const m = emailsPara('alerta3@example.invalid').find(x => /PRAZOS EM FAZENDO/.test(assuntoDoEmail(x)));
+  assert.ok(m, 'e-mail de Fazendo enviado mesmo com os atrasados desligados');
+  const html = textoDoEmail(m);
+  assert.match(html, /Futuro do alerta fazendo/); assert.match(html, /Atrasado do alerta fazendo/);
+  assert.match(html, /Quem Faz Fulano/); assert.match(html, /3 dias/); assert.match(html, /5 h/);
+  for (const fora of ['Concluido do alerta fazendo', 'Cancelado do alerta fazendo', 'Sem fazendo do alerta']) assert.ok(!html.includes(fora), `${fora} não pode aparecer`);
+  await apagarPrazosDeTeste();
+  limparEmails();
+  await alertas.executarAlertasPrazos();
+  assert.ok(!emailsPara('alerta3@example.invalid').some(x => /FAZENDO/.test(assuntoDoEmail(x))), 'sem nenhum Fazendo, não manda e-mail vazio');
+});
+
+test('e-mails de pendentes e de atrasados ganharam a coluna "Quem faz"', async () => {
+  await apagarPrazosDeTeste();
+  const quem = await novoUsuario({ nome: 'Quem Faz Beltrana' });
+  await prazoFazendo({ venc: HOJE, por: quem.id, descricao: 'Hoje do alerta fazendo' });
+  await prazoFazendo({ venc: dia(-2), por: quem.id, descricao: 'Atrasado dois do alerta fazendo' });
+  await configurarAlertas({ emails: 'alerta4@example.invalid', atrasado: 1 });
+  limparEmails();
+  await alertas.executarAlertasPrazos();
+  for (const assunto of [/PRAZO PENDENTE HOJE/, /PRAZO ATRASADO/]) {
+    const m = emailsPara('alerta4@example.invalid').find(x => assunto.test(assuntoDoEmail(x)));
+    assert.ok(m, `e-mail ${assunto} enviado`);
+    const html = textoDoEmail(m);
+    assert.match(html, /Quem faz/); assert.match(html, /Quem Faz Beltrana/);
+  }
+  await apagarPrazosDeTeste();
+});

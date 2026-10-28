@@ -114,6 +114,13 @@ export function AuthProvider({ children }) {
   // Sem motivo (ex.: token inválido na abertura do app), apenas limpa, sem logar (evita 401 à toa).
   function deslogar(motivo) {
     const token = sessionStorage.getItem('token');
+    // Logout por inatividade não pode perguntar nada: guarda um sinal para o próximo login lembrar dos prazos "Fazendo"
+    if (motivo === 'inatividade') {
+      try {
+        const u = JSON.parse(sessionStorage.getItem('usuario') || 'null');
+        if (u?.id) localStorage.setItem(`fazendoAviso:${u.id}`, '1');
+      } catch { /* sem armazenamento local: o prazo continua marcado, só não há lembrete */ }
+    }
     sessionStorage.removeItem('token');
     sessionStorage.removeItem('usuario');
     setUsuario(null);

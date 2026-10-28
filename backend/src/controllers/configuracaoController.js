@@ -186,12 +186,16 @@ async function atualizarEscritorio(req, res) {
     };
     for (const [chave, padrao, rotulo] of [
       ['dias_sem_movimentacao', 30, 'Dias sem movimentação'], ['dias_processo_parado', 365, 'Dias de processo parado'],
-      ['prazo_fazendo_timeout', 60, 'Tempo de "fazendo" do prazo'], ['dias_audiencia_sem_adv', 7, 'Dias de audiência sem advogado'],
+      ['dias_audiencia_sem_adv', 7, 'Dias de audiência sem advogado'],
     ]) {
       const lido = inteiroOuPadrao(corpo[chave], padrao, rotulo);
       if (lido.erro) return erro(res, lido.erro);
       numeros[chave] = lido.valor;
     }
+    // "Fazendo" do prazo: 0 = NUNCA libera sozinho; ausente/texto volta ao padrão de 60 minutos
+    const fazendo = inteiroDiasAviso(corpo.prazo_fazendo_timeout, 60, 'Tempo de "fazendo" do prazo');
+    if (fazendo.erro) return erro(res, fazendo.erro);
+    numeros.prazo_fazendo_timeout = fazendo.valor;
     // Piso de 15 minutos no tempo de inatividade (defesa no servidor, além da tela).
     const inatividade = inteiroOuPadrao(corpo.tempo_inatividade_min, 15, 'Tempo de inatividade');
     if (inatividade.erro) return erro(res, inatividade.erro);

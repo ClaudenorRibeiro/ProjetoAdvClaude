@@ -6,11 +6,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { notificacoesAPI, authAPI } from '../../services/api';
+import { notificacoesAPI, authAPI, prazosAPI } from '../../services/api';
 import { toast } from 'react-toastify';
 import './Layout.css';
 import ModalAparencia from '../ModalAparencia';
 import ModalGoogleAgenda from '../ModalGoogleAgenda';
+import ModalFazendoAoSair from '../ModalFazendoAoSair';
 import { variaveisMenu } from '../../utils/coresMenu';
 import { variaveisLinha, variaveisLinhaLida } from '../../utils/coresLinha';
 import { formatarDataHora } from '../../utils/formatters';
@@ -84,6 +85,8 @@ export default function Layout({ children }) {
   const [modalSenha, setModalSenha]       = useState(false);
   const [modalAparencia, setModalAparencia] = useState(false);
   const [modalGoogleAgenda, setModalGoogleAgenda] = useState(false);
+  const [fazendoAviso, setFazendoAviso]   = useState(null); // { modo: 'sair'|'entrada', prazos } — prazos que a pessoa ainda está fazendo
+  const [liberandoFazendo, setLiberandoFazendo] = useState(false);
   const [escritorio, setEscritorio]       = useState({ nome: '', logo_base64: null }); // logo + nome (do banco desta instância)
   const sinoRef    = useRef(null);
   const usuarioRef = useRef(null);
@@ -190,10 +193,57 @@ export default function Layout({ children }) {
     }
   }
 
-  function handleLogout() {
+  function sairDoSistema() {
     deslogar('manual');   // logout manual (botão "Sair") — registra na auditoria
     navigate('/login');
   }
+
+  // Botão "Sair": se a pessoa ainda tem prazo em "Fazendo", pergunta antes (manter para o próximo login ou liberar).
+  // Se a consulta falhar, sai normalmente — nunca prende a pessoa dentro do sistema.
+  async function handleLogout() {
+    try {
+      const r = await prazosAPI.meusFazendo();
+      const prazos = r.data?.dados || [];
+      if (prazos.length) { setFazendoAviso({ modo: 'sair', prazos }); return; }
+    } catch { /* segue para sair */ }
+    sairDoSistema();
+  }
+
+  // Resposta da janela: libera os marcados (um erro não impede os outros) e, no modo "sair", sai.
+  async function resolverFazendo(idsParaLiberar) {
+    const modo = fazendoAviso?.modo;
+    setLiberandoFazendo(true);
+    let falhas = 0;
+    for (const id of idsParaLiberar) {
+      try { await prazosAPI.liberarFazendo(id); } catch { falhas += 1; }
+    }
+    setLiberandoFazendo(false);
+    setFazendoAviso(null);
+    if (falhas) toast.error(`Não foi possível liberar ${falhas} prazo(s). Eles continuam em "Fazendo".`);
+    else if (idsParaLiberar.length) toast.success(idsParaLiberar.length === 1 ? 'Prazo liberado' : `${idsParaLiberar.length} prazos liberados`);
+    if (modo === 'sair') sairDoSistema();
+  }
+
+  // Login seguinte a um logout por INATIVIDADE: lembra dos prazos que continuam em "Fazendo" (uma vez só).
+  // O sinal só é apagado quando a resposta chega e ainda vale (o modo estrito do React roda este efeito duas vezes
+  // no desenvolvimento: apagar antes da consulta faria o aviso nunca aparecer).
+  useEffect(() => {
+    if (!usuario?.id) return;
+    const chave = `fazendoAviso:${usuario.id}`;
+    let tinha = false;
+    try { tinha = localStorage.getItem(chave) === '1'; } catch { /* sem aviso */ }
+    if (!tinha) return;
+    let ativo = true;
+    prazosAPI.meusFazendo()
+      .then(r => {
+        if (!ativo) return;
+        try { localStorage.removeItem(chave); } catch { /* sem aviso */ }
+        const prazos = r.data?.dados || [];
+        if (prazos.length) setFazendoAviso({ modo: 'entrada', prazos });
+      })
+      .catch(() => {});
+    return () => { ativo = false; };
+  }, [usuario?.id]);
 
   // Decide se o item deve aparecer no menu
 
@@ -435,6 +485,8 @@ export default function Layout({ children }) {
             {modalSenha && <ModalTrocarSenha onFechar={() => setModalSenha(false)} />}
             {modalAparencia && <ModalAparencia onFechar={() => setModalAparencia(false)} />}
             {modalGoogleAgenda && <ModalGoogleAgenda onFechar={() => setModalGoogleAgenda(false)} />}
+            {fazendoAviso && <ModalFazendoAoSair modo={fazendoAviso.modo} prazos={fazendoAviso.prazos} ocupado={liberandoFazendo}
+              onContinuar={resolverFazendo} onCancelar={() => setFazendoAviso(null)} />}
           </div>
         </header>
 

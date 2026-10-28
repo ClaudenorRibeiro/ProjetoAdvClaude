@@ -23,6 +23,7 @@ import { ModalPericia, ModalCancelar as ModalCancelarPericia, ModalRemarcar as M
 import { ModalLancamento as ModalLancamentoFin, ModalAcordo as ModalAcordoFin, AcordoBloco, ModalHistoricoLancamento, RepassesView, montarPendentes, ExtratoContaCorrente } from '../Financeiro/Financeiro';
 import { useAuth } from '../../context/AuthContext';
 import ModalConfirmar from '../../components/ui/ModalConfirmar';
+import TempoFazendo from '../../components/TempoFazendo';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
 import MenuAcoes from '../../components/MenuAcoes';
 import useComunicadoPericia from '../../components/ComunicadoPericia';
@@ -1247,6 +1248,7 @@ export default function PastaDetalhe() {
                             </span>
                           )}
                           {!p.fazendo_por && '—'}
+                          <TempoFazendo prazo={p} />
                         </td>
                         <td><span className={`badge ${STATUS_COR_PRAZO[p.status] || 'badge-cinza'}`}>{labelStatusPrazo(p.status)}</span></td>
                         <td onClick={e => e.stopPropagation()}>

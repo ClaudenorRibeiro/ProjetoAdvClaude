@@ -12,6 +12,7 @@ const { recriarBancoTeste, conectarBancoTeste } = require('../support/testDataba
 carregarAmbienteTeste();
 const { criarApp } = require('../../src/app');
 const { pool } = require('../../src/config/database');
+const { liberarFazendoExpirados } = require('../../src/controllers/prazosController');
 
 let app; let admin;
 const F = {};
@@ -364,5 +365,66 @@ test('permissões: cada rota exige a permissão certa (visualizar/cadastrar/alte
       else t.checar(r.status === 403, `${metodo} ${caminho} com só "${acao}" → ${r.status} (esperado 403)`);
     }
   }
+  t.fim();
+});
+
+test('"Fazendo" com 0 = nunca: a rotina de expiração não libera nada; com limite em minutos libera só o que passou do limite', async () => {
+  const t = juntar();
+  const velho = await criarPrazo(); const recente = await criarPrazo();
+  for (const id of [velho, recente]) await api(F.comum.token).put(`/api/prazos/${id}/fazendo`).send({});
+  await sql('UPDATE prazos_processo SET fazendo_desde = DATE_SUB(NOW(), INTERVAL 3 DAY) WHERE id = ?', [velho]);
+  await sql('UPDATE configuracoes_escritorio SET prazo_fazendo_timeout = 0');
+  await liberarFazendoExpirados();
+  t.checar((await prazo(velho)).fazendo_por === F.comum.id, 'com 0 = nunca, o "Fazendo" de 3 dias NÃO pode ser liberado');
+  t.checar((await prazo(recente)).fazendo_por === F.comum.id, 'com 0 = nunca, o recente também fica');
+  await sql('UPDATE configuracoes_escritorio SET prazo_fazendo_timeout = 60');
+  await liberarFazendoExpirados();
+  t.checar((await prazo(velho)).fazendo_por === null, 'com 60 minutos, o de 3 dias é liberado');
+  t.checar((await prazo(recente)).fazendo_por === F.comum.id, 'com 60 minutos, o recém-marcado continua');
+  await api().put(`/api/prazos/${recente}/liberar-fazendo`).send({});
+  t.fim();
+});
+
+test('configuração do "Fazendo": 0 grava 0 (= nunca); vazio ou texto volta a 60; negativo e absurdo são recusados', async () => {
+  const t = juntar();
+  const bom = { nome: 'Escritório Fazendo', horario_alerta_prazos: '18:00' };
+  const lido = async () => (await um('SELECT prazo_fazendo_timeout AS n FROM configuracoes_escritorio WHERE id = 1')).n;
+  const zero = await api().put('/api/configuracoes/escritorio').send({ ...bom, prazo_fazendo_timeout: 0 });
+  t.checar(zero.status === 200 && (await lido()) === 0, `0 deveria gravar 0 → ${zero.status}, lido ${await lido()}`);
+  const zeroTexto = await api().put('/api/configuracoes/escritorio').send({ ...bom, prazo_fazendo_timeout: '0' });
+  t.checar(zeroTexto.status === 200 && (await lido()) === 0, `"0" deveria gravar 0 → ${zeroTexto.status}`);
+  const quinze = await api().put('/api/configuracoes/escritorio').send({ ...bom, prazo_fazendo_timeout: 120 });
+  t.checar(quinze.status === 200 && (await lido()) === 120, '120 deveria gravar 120');
+  for (const vazio of ['', 'abc', null]) {
+    const r = await api().put('/api/configuracoes/escritorio').send({ ...bom, prazo_fazendo_timeout: vazio });
+    t.checar(r.status === 200 && (await lido()) === 60, `${JSON.stringify(vazio)} deveria voltar ao padrão 60 → ${r.status}, lido ${await lido()}`);
+  }
+  for (const ruim of [-1, -30, 99999999999]) {
+    const r = await api().put('/api/configuracoes/escritorio').send({ ...bom, prazo_fazendo_timeout: ruim });
+    t.checar(r.status === 400, `${ruim} deveria ser recusado → ${r.status}`);
+  }
+  await api().put('/api/configuracoes/escritorio').send({ ...bom, prazo_fazendo_timeout: 60 });
+  t.fim();
+});
+
+test('meus-fazendo: lista só o que a própria pessoa está fazendo (mais antigo primeiro), sem concluídos/cancelados; exige login e a permissão de ver prazos', async () => {
+  const t = juntar();
+  const a = await criarPrazo({ descricao: 'Meu A fazendo' }); const b = await criarPrazo({ descricao: 'Meu B fazendo' });
+  const c = await criarPrazo({ descricao: 'Meu C concluido' }); const d = await criarPrazo({ descricao: 'De outro fazendo' });
+  for (const id of [a, b, c]) await api(F.comum.token).put(`/api/prazos/${id}/fazendo`).send({});
+  await api(F.comum2.token).put(`/api/prazos/${d}/fazendo`).send({});
+  await sql('UPDATE prazos_processo SET fazendo_desde = DATE_SUB(NOW(), INTERVAL 2 DAY) WHERE id = ?', [b]);
+  await sql("UPDATE prazos_processo SET status = 'concluido' WHERE id = ?", [c]);
+  const r = await api(F.comum.token).get('/api/prazos/meus-fazendo');
+  t.checar(r.status === 200, `status ${r.status}`);
+  const ids = (r.body.dados || []).map(x => x.id);
+  t.checar(JSON.stringify(ids) === JSON.stringify([b, a]), `esperado [${b}, ${a}] (o mais antigo primeiro), veio ${JSON.stringify(ids)}`);
+  const um1 = (r.body.dados || [])[0] || {};
+  t.checar(um1.processo_numero && um1.fazendo_desde && 'data_vencimento' in um1, 'cada item traz processo, vencimento e desde quando');
+  const vazio = await api(F.comum2.token).get('/api/prazos/meus-fazendo');
+  t.checar((vazio.body.dados || []).map(x => x.id).join() === String(d), 'a outra pessoa vê só o dela');
+  const semLogin = await request(app).get('/api/prazos/meus-fazendo');
+  t.checar(semLogin.status === 401, `sem login → ${semLogin.status}`);
+  for (const id of [a, b, d]) await api().put(`/api/prazos/${id}/liberar-fazendo`).send({});
   t.fim();
 });

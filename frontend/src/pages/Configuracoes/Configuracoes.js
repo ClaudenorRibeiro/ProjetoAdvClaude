@@ -608,11 +608,11 @@ function TabEscritorio() {
 
       <h4 style={{margin:'20px 0 12px',fontSize:'13px',fontWeight:600,color:'#555'}}>Controle "Fazendo" em prazos</h4>
       <div className="form-group" style={{maxWidth:'300px'}}>
-        <label className="form-label">Liberar prazo "Fazendo" automaticamente após (minutos)</label>
-        <input aria-label="Liberar prazo &quot;Fazendo&quot; automaticamente após (minutos)" type="number" min="5" max="480" className="form-control"
-          value={form.prazo_fazendo_timeout || 60}
+        <label className="form-label">Liberar prazo "Fazendo" automaticamente após (minutos) — 0 = nunca</label>
+        <input aria-label="Liberar prazo &quot;Fazendo&quot; automaticamente após (minutos) — 0 = nunca" type="number" min="0" className="form-control"
+          value={form.prazo_fazendo_timeout ?? 60}
           onChange={e => set('prazo_fazendo_timeout', e.target.value)} />
-        <small style={{color:'#5b6472'}}>O prazo volta ao status anterior se ninguém concluiu no prazo definido</small>
+        <small style={{color:'#5b6472'}}>Com 0 o "Fazendo" nunca some sozinho: fica até a pessoa concluir ou liberar (e o administrador recebe, nos e-mails de alerta, a lista dos prazos que continuam em "Fazendo"). Com um número, o prazo é liberado se ninguém concluiu nesse tempo.</small>
       </div>
 
       <h4 style={{margin:'20px 0 12px',fontSize:'13px',fontWeight:600,color:'#555'}}>Segurança da sessão</h4>

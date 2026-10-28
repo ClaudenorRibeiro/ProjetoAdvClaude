@@ -131,4 +131,16 @@ describe('formatadores e validadores compartilhados', () => {
     expect(f.formatarContaBancaria({}, { vazio: '—' })).toBe('—');
     expect(f.formatarContaBancaria(null)).toBe('');
   });
+  it('haQuantoTempo escreve o tempo decorrido em minutos, horas e dias (e fica vazio sem data)', () => {
+    const agora = new Date('2026-10-28T12:00:00Z').getTime();
+    const antes = (min) => new Date(agora - min * 60000).toISOString();
+    expect(f.haQuantoTempo(antes(0), agora)).toBe('há 0 min');
+    expect(f.haQuantoTempo(antes(59), agora)).toBe('há 59 min');
+    expect(f.haQuantoTempo(antes(60), agora)).toBe('há 1 h');
+    expect(f.haQuantoTempo(antes(23 * 60 + 59), agora)).toBe('há 23 h');
+    expect(f.haQuantoTempo(antes(24 * 60), agora)).toBe('há 1 dia');
+    expect(f.haQuantoTempo(antes(3 * 24 * 60 + 5), agora)).toBe('há 3 dias');
+    expect(f.haQuantoTempo(antes(-10), agora)).toBe('há 0 min');   // relógio adiantado nunca dá tempo negativo
+    for (const ruim of [null, undefined, '', 'abc']) expect(f.haQuantoTempo(ruim, agora)).toBe('');
+  });
 });

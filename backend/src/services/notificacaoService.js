@@ -146,6 +146,7 @@ async function emailPrazosPendentes({ destinatarios, prazos, escritorio }) {
       <td style="padding:8px;border-bottom:1px solid #e5e7eb">${escaparHtml(p.processo_numero || '—')}</td>
       <td style="padding:8px;border-bottom:1px solid #e5e7eb">${escaparHtml(p.subtipo_nome || p.descricao || '—')}</td>
       <td style="padding:8px;border-bottom:1px solid #e5e7eb">${escaparHtml(p.responsavel_nome || 'Escritório')}</td>
+      <td style="padding:8px;border-bottom:1px solid #e5e7eb">${escaparHtml(p.fazendo_por_nome || '—')}</td>
     </tr>`).join('');
 
   const html = `
@@ -162,6 +163,7 @@ async function emailPrazosPendentes({ destinatarios, prazos, escritorio }) {
             <th style="padding:10px;text-align:left">Processo</th>
             <th style="padding:10px;text-align:left">Prazo</th>
             <th style="padding:10px;text-align:left">Responsável</th>
+            <th style="padding:10px;text-align:left">Quem faz</th>
           </tr>
         </thead>
         <tbody>${linhas}</tbody>
@@ -186,6 +188,7 @@ async function emailPrazosAtrasados({ destinatarios, prazos, escritorio }) {
       <td style="padding:8px;border-bottom:1px solid #e5e7eb">${escaparHtml(p.data_vencimento)}</td>
       <td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#dc2626;font-weight:bold">${Math.abs(p.dias_restantes)}d</td>
       <td style="padding:8px;border-bottom:1px solid #e5e7eb">${escaparHtml(p.responsavel_nome || 'Escritório')}</td>
+      <td style="padding:8px;border-bottom:1px solid #e5e7eb">${escaparHtml(p.fazendo_por_nome || '—')}</td>
     </tr>`).join('');
 
   const html = `
@@ -204,6 +207,7 @@ async function emailPrazosAtrasados({ destinatarios, prazos, escritorio }) {
             <th style="padding:10px;text-align:left">Venceu em</th>
             <th style="padding:10px;text-align:left">Atraso</th>
             <th style="padding:10px;text-align:left">Responsável</th>
+            <th style="padding:10px;text-align:left">Quem faz</th>
           </tr>
         </thead>
         <tbody>${linhas}</tbody>
@@ -216,6 +220,56 @@ async function emailPrazosAtrasados({ destinatarios, prazos, escritorio }) {
   return enviarEmailColetivo({ destinatarios, assunto: 'PRAZO ATRASADO', html });
 }
 
+// "5 min", "3 h", "2 dias" — há quanto tempo o prazo está marcado como "Fazendo"
+function tempoDecorrido(minutos) {
+  const m = Math.max(0, Math.floor(Number(minutos) || 0));
+  if (m < 60) return `${m} min`;
+  if (m < 24 * 60) return `${Math.floor(m / 60)} h`;
+  const d = Math.floor(m / (24 * 60));
+  return d === 1 ? '1 dia' : `${d} dias`;
+}
+
+// E-mail "PRAZOS EM FAZENDO" — TODOS os prazos que alguém marcou como "Fazendo" e ainda não concluiu nem cancelou
+// (o "Fazendo" não expira mais sozinho quando o escritório usa 0 = nunca; o administrador acompanha por aqui).
+// Retorna o número de e-mails enviados com SUCESSO.
+async function emailPrazosFazendo({ destinatarios, prazos, escritorio }) {
+  if (!destinatarios?.length || !prazos?.length) return 0;
+
+  const linhas = prazos.map(p => `
+    <tr>
+      <td style="padding:8px;border-bottom:1px solid #e5e7eb">${escaparHtml(p.processo_numero || '—')}</td>
+      <td style="padding:8px;border-bottom:1px solid #e5e7eb">${escaparHtml(p.subtipo_nome || p.descricao || '—')}</td>
+      <td style="padding:8px;border-bottom:1px solid #e5e7eb">${escaparHtml(p.data_vencimento)}</td>
+      <td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:bold">${escaparHtml(p.fazendo_por_nome || '—')}</td>
+      <td style="padding:8px;border-bottom:1px solid #e5e7eb">${escaparHtml(tempoDecorrido(p.minutos_fazendo))}</td>
+    </tr>`).join('');
+
+  const html = `
+  <div style="font-family:Arial,sans-serif;max-width:720px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
+    <div style="background:#7c3aed;padding:20px;text-align:center">
+      <h1 style="color:#fff;margin:0;font-size:22px;letter-spacing:1px">▶ PRAZOS EM FAZENDO</h1>
+      <p style="color:#fff;margin:8px 0 0;font-size:14px">${escaparHtml(escritorio || 'Sistema de Advocacia')}</p>
+    </div>
+    <div style="padding:24px">
+      <p>Os seguintes prazos estão marcados como <strong>"Fazendo"</strong> e ainda não foram concluídos nem cancelados:</p>
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:#f3f4f6">
+            <th style="padding:10px;text-align:left">Processo</th>
+            <th style="padding:10px;text-align:left">Prazo</th>
+            <th style="padding:10px;text-align:left">Vencimento</th>
+            <th style="padding:10px;text-align:left">Quem faz</th>
+            <th style="padding:10px;text-align:left">Fazendo há</th>
+          </tr>
+        </thead>
+        <tbody>${linhas}</tbody>
+      </table>
+    </div>
+  </div>`;
+
+  return enviarEmailColetivo({ destinatarios, assunto: 'PRAZOS EM FAZENDO', html });
+}
+
 module.exports = {
   criarNotificacao,
   notificarConclusao,
@@ -223,5 +277,7 @@ module.exports = {
   emailTarefaAtribuida,
   emailPrazosPendentes,
   emailPrazosAtrasados,
+  emailPrazosFazendo,
+  tempoDecorrido,
   escaparHtml,
 };

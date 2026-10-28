@@ -228,6 +228,7 @@ export const prazosAPI = {
   mudarStatus:      (id, dados) => api.put(`/prazos/${id}/status`, dados),
   marcarFazendo:    (id)        => api.put(`/prazos/${id}/fazendo`),
   liberarFazendo:   (id)        => api.put(`/prazos/${id}/liberar-fazendo`),
+  meusFazendo:      ()          => api.get('/prazos/meus-fazendo'),
   tipos:            ()          => api.get('/prazos/tipos'),
   usuariosFiltro:   ()          => api.get('/prazos/usuarios'),
   criarTipo:        (dados)     => api.post('/prazos/tipos', dados),

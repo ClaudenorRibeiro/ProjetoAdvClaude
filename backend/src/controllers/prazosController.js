@@ -139,7 +139,10 @@ function sincronizarPrazoGoogle(prazoId, { cancelar = false, sequence = 0 } = {}
 async function liberarFazendoExpirados() {
   try {
     const [cfg] = await pool.execute('SELECT prazo_fazendo_timeout FROM configuracoes_escritorio LIMIT 1');
-    const timeout = cfg[0]?.prazo_fazendo_timeout || 60;
+    // 0 = NUNCA expira (o "Fazendo" fica até a pessoa concluir ou liberar); sem configuração = 60 minutos
+    const configurado = cfg[0]?.prazo_fazendo_timeout;
+    const timeout = configurado === undefined || configurado === null ? 60 : Number(configurado);
+    if (!(timeout > 0)) return;
     const conn = await pool.getConnection();
     let result;
     try {
@@ -951,6 +954,27 @@ async function marcarFazendo(req, res) {
 
 // PUT /api/prazos/:id/liberar-fazendo — Libera prazo travado em "Fazendo"
 // Usuário libera o próprio; admin libera qualquer um
+// GET /api/prazos/meus-fazendo — prazos que ESTA pessoa está fazendo (ainda não concluídos nem cancelados).
+// Usado pelo aviso ao clicar em "Sair" e no próximo login após logout por inatividade.
+async function meusFazendo(req, res) {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT pp.id, pp.descricao, pp.data_vencimento, pp.fazendo_desde,
+              ps.nome AS subtipo_nome, pr.numProc AS processo_numero
+         FROM prazos_processo pp
+         LEFT JOIN prazo_subtipo ps ON pp.subtipo_id = ps.id
+         JOIN tblproc pr            ON pp.processo_id = pr.id
+        WHERE pp.fazendo_por = ?
+          AND pp.status NOT IN ('concluido','cancelado')
+        ORDER BY pp.fazendo_desde ASC, pp.id ASC`,
+      [req.usuario.id]
+    );
+    return sucesso(res, rows);
+  } catch (err) {
+    return erroInterno(res, err);
+  }
+}
+
 async function liberarFazendo(req, res) {
   const { id } = req.params;
   try {
@@ -1096,4 +1120,4 @@ async function listarUsuariosFiltro(req, res) {
 
 module.exports = { listar, criar, editar, excluir, mudarStatus, buscarTipos, criarTipo, criarSubtipo,
   editarTipo: comIdNumerico(editarTipo, 'Tipo de prazo não encontrado'), excluirTipo: comIdNumerico(excluirTipo, 'Tipo de prazo não encontrado'),
-  editarSubtipo: comIdNumerico(editarSubtipo, 'Subtipo não encontrado'), excluirSubtipo: comIdNumerico(excluirSubtipo, 'Subtipo não encontrado'), vencemHoje, calcularDataFinal, calcularDias, marcarFazendo, liberarFazendo, liberarFazendoExpirados, buscarHistorico, listarUsuariosFiltro };
+  editarSubtipo: comIdNumerico(editarSubtipo, 'Subtipo não encontrado'), excluirSubtipo: comIdNumerico(excluirSubtipo, 'Subtipo não encontrado'), vencemHoje, calcularDataFinal, calcularDias, marcarFazendo, liberarFazendo, meusFazendo, liberarFazendoExpirados, buscarHistorico, listarUsuariosFiltro };

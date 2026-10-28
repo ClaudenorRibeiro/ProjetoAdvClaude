@@ -5,7 +5,7 @@
 
 const cron = require('node-cron');
 const { pool } = require('../config/database');
-const { emailPrazosPendentes, emailPrazosAtrasados, escaparHtml } = require('./notificacaoService');
+const { emailPrazosPendentes, emailPrazosAtrasados, emailPrazosFazendo, escaparHtml } = require('./notificacaoService');
 const { enviarEmail } = require('../utils/email');
 const { liberarFazendoExpirados } = require('../controllers/prazosController');
 const { hojeBrasilia } = require('../utils/helpers');
@@ -149,6 +149,8 @@ async function executarAlertasPrazos() {
     if (config[0].alerta_atrasado_ativo) {
       await enviarAlertaAtrasados(destinatarios, escritorio);
     }
+    // Todos os "Fazendo" em andamento (qualquer vencimento): o administrador acompanha os que a pessoa esqueceu marcados
+    await enviarAlertaFazendo(destinatarios, escritorio);
   } catch (err) {
     console.error('Erro ao executar alertas de prazos:', err.message);
   }
@@ -160,10 +162,11 @@ async function enviarAlertaPendentes(destinatarios, escritorio) {
     `SELECT pp.descricao, pp.data_vencimento,
             ps.nome AS subtipo_nome,
             pr.numProc AS processo_numero,
-            u.nome AS responsavel_nome
+            u.nome AS responsavel_nome, uf.nome AS fazendo_por_nome
      FROM prazos_processo pp
      LEFT JOIN prazo_subtipo ps ON pp.subtipo_id = ps.id
      LEFT JOIN usuarios u       ON pp.delegado_para = u.id
+     LEFT JOIN usuarios uf      ON pp.fazendo_por = uf.id
      JOIN tblproc pr            ON pp.processo_id = pr.id
      WHERE pp.data_vencimento = ?
        AND pp.status NOT IN ('concluido','cancelado')
@@ -184,10 +187,11 @@ async function enviarAlertaAtrasados(destinatarios, escritorio) {
             DATEDIFF(CURDATE(), pp.data_vencimento) AS dias_restantes,
             ps.nome AS subtipo_nome,
             pr.numProc AS processo_numero,
-            u.nome AS responsavel_nome
+            u.nome AS responsavel_nome, uf.nome AS fazendo_por_nome
      FROM prazos_processo pp
      LEFT JOIN prazo_subtipo ps ON pp.subtipo_id = ps.id
      LEFT JOIN usuarios u       ON pp.delegado_para = u.id
+     LEFT JOIN usuarios uf      ON pp.fazendo_por = uf.id
      JOIN tblproc pr            ON pp.processo_id = pr.id
      WHERE pp.data_vencimento < CURDATE()
        AND pp.status NOT IN ('concluido','cancelado')
@@ -198,6 +202,28 @@ async function enviarAlertaAtrasados(destinatarios, escritorio) {
   // Retorna quantos e-mails saíram com sucesso — usado para marcar a trava do dia
   const enviados = await emailPrazosAtrasados({ destinatarios, prazos, escritorio });
   if (!enviados) console.error('⚠️ Alerta de atrasados: NENHUM e-mail saiu (verificar SMTP/destinatários) — será tentado no próximo disparo');
+  return enviados;
+}
+
+async function enviarAlertaFazendo(destinatarios, escritorio) {
+  const [prazos] = await pool.execute(
+    `SELECT pp.descricao, pp.data_vencimento,
+            TIMESTAMPDIFF(MINUTE, pp.fazendo_desde, NOW()) AS minutos_fazendo,
+            ps.nome AS subtipo_nome,
+            pr.numProc AS processo_numero,
+            uf.nome AS fazendo_por_nome
+     FROM prazos_processo pp
+     LEFT JOIN prazo_subtipo ps ON pp.subtipo_id = ps.id
+     LEFT JOIN usuarios uf      ON pp.fazendo_por = uf.id
+     JOIN tblproc pr            ON pp.processo_id = pr.id
+     WHERE pp.fazendo_por IS NOT NULL
+       AND pp.status NOT IN ('concluido','cancelado')
+     ORDER BY pp.fazendo_desde ASC, pp.id ASC`
+  );
+  if (!prazos.length) { console.log('▶ Nenhum prazo em "Fazendo"'); return 0; }
+  console.log(`▶ Enviando alerta de ${prazos.length} prazo(s) em "Fazendo"...`);
+  const enviados = await emailPrazosFazendo({ destinatarios, prazos, escritorio });
+  if (!enviados) console.error('⚠️ Alerta de "Fazendo": NENHUM e-mail saiu (verificar SMTP/destinatários) — será tentado no próximo disparo');
   return enviados;
 }
 

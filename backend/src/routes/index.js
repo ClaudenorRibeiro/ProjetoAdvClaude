@@ -208,6 +208,8 @@ router.delete('/prazos/subtipos/:id', autenticar, verificarPermissao('prazos','e
 router.get('/prazos/calcular',      autenticar, prazosCtrl.calcularDataFinal);
 router.get('/prazos/calcular-dias', autenticar, prazosCtrl.calcularDias);
 router.get('/prazos/hoje',        autenticar, prazosCtrl.vencemHoje);
+// Prazos que a própria pessoa está fazendo (aviso ao sair) — ANTES de /prazos/:id
+router.get('/prazos/meus-fazendo', autenticar, verificarPermissao('prazos','visualizar'), prazosCtrl.meusFazendo);
 // Lista de usuários para o filtro "Responsável" — só quem pode ver prazos de todos (admin passa automático)
 router.get('/prazos/usuarios',    autenticar, verificarPermissao('prazos','ver_todos','visualizar'), prazosCtrl.listarUsuariosFiltro);
 router.get('/prazos',             autenticar, verificarPermissao('prazos','visualizar'), prazosCtrl.listar);
