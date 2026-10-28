@@ -162,9 +162,9 @@ async function buscarDados(req, res) {
       ),
 
       // Audiências sem ata (já ocorreram e não têm ata nem foram marcadas como impressas).
-      // Cancelada/remarcada não gera cobrança de ata.
+      // Cancelada/remarcada não gera cobrança de ata. `modalidade` vai junto: o ato "sem comparecimento" (ex.: Julgamento) não tem ata, tem "Concluir".
       pool.execute(
-        `SELECT a.id, a.data, a.hora, ta.nome AS tipo,
+        `SELECT a.id, a.data, a.hora, a.modalidade, ta.nome AS tipo,
                 pr.numProc AS processo_numero, pr.NomeTituloProc AS pasta_titulo,
                 ${pastaFormatadaSql('pa')} AS pasta_numero_fmt
          FROM audiencia a

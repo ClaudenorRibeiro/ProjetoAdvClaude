@@ -147,17 +147,20 @@ export default function Dashboard() {
                       <small>{a.pasta_numero_fmt} — {a.pasta_titulo}</small>
                     </div>
                     <div className="item-sem-ata-acoes">
+                      {/* Ato "sem comparecimento" (ex.: Julgamento) não tem ata nem ata impressa: tem "Concluir" */}
                       <Link to={`/audiencias/${a.id}`} className="btn btn-outline" style={{fontSize:'12px',padding:'4px 10px'}}>
-                        Registrar ata
+                        {a.modalidade === 'sem_comparecimento' ? 'Concluir' : 'Registrar ata'}
                       </Link>
-                      <button
-                        className="btn btn-secondary"
-                        style={{fontSize:'12px',padding:'4px 10px'}}
-                        onClick={() => handleAtaImpressa(a.id)}
-                        title="Clique se a ata já foi impressa fisicamente"
-                      >
-                        Ata impressa
-                      </button>
+                      {a.modalidade !== 'sem_comparecimento' && (
+                        <button
+                          className="btn btn-secondary"
+                          style={{fontSize:'12px',padding:'4px 10px'}}
+                          onClick={() => handleAtaImpressa(a.id)}
+                          title="Clique se a ata já foi impressa fisicamente"
+                        >
+                          Ata impressa
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
