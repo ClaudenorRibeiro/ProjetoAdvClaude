@@ -422,6 +422,14 @@ body {
   color: #1a56db;
 }
 
+/* Sob o mouse o botão de contorno não fica translúcido (isso clareava a letra e
+   o contraste caía abaixo de 4,5:1 sobre fundos claros): ganha fundo azul claro. */
+.btn-outline:hover:not(:disabled) {
+  opacity: 1;
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+
 /* Formulários */
 .form-group {
   margin-bottom: 16px;
