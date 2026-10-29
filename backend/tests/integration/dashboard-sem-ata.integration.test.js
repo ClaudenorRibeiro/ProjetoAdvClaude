@@ -47,3 +47,13 @@ test('audiências sem ata: cada linha traz a modalidade (julgamento "sem compare
   assert.ok(!(cancelada in porId), 'cancelada não entra');
   assert.ok(!(comAta in porId), 'com ata (ou ata impressa) não entra');
 });
+
+test('filtro sem_ata=true da lista de audiências: não lista ato "sem comparecimento" (ele não tem ata), mas lista a presencial sem ata', async () => {
+  const julgamento = await nova('sem_comparecimento', '12:00:00');
+  const presencial = await nova('presencial', '13:00:00');
+  const r = await request(app).get('/api/audiencias?sem_ata=true&limite=100').set('Authorization', `Bearer ${token}`);
+  assert.equal(r.status, 200, JSON.stringify(r.body).slice(0, 200));
+  const ids = r.body.dados.registros.map(l => l.id);
+  assert.ok(ids.includes(presencial), 'a presencial sem ata continua na lista');
+  assert.ok(!ids.includes(julgamento), 'o ato sem comparecimento não entra no filtro "sem ata"');
+});

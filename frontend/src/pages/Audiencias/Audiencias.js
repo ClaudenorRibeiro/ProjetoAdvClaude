@@ -161,6 +161,33 @@ export default function Audiencias() {
   }
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  // Vindo do Dashboard (/audiencias/<id>): abre direto a janela de ata (ou "Concluir") DESSA audiência.
+  // O endereço volta a /audiencias para a janela não reabrir ao recarregar a tela.
+  const idDaUrl = (location.pathname.match(/^\/audiencias\/(\d+)\/?$/) || [])[1];
+  useEffect(() => {
+    if (!idDaUrl) return undefined;
+    let ativo = true;
+    audienciasAPI.buscar(idDaUrl).then(({ data }) => {
+      if (!ativo || !data.ok) return;
+      const d = data.dados;
+      const aberta = d.status === 'agendada' || d.status === 'adiada';
+      if (!aberta || !temPermissao('audiencias.ata', 'visualizar')) {
+        toast.info('Esta audiência não está disponível para registrar ata.');
+      } else if (!audienciaJaPassou(String(d.data).slice(0, 10), d.hora)) {
+        toast.info('A ata só pode ser registrada depois do horário da audiência.');
+      } else {
+        setModalAta({
+          ...d,
+          pasta_numero_fmt: String(d.pasta_numero ?? '').padStart(4, '0'),
+          pasta_titulo: d.processo_titulo || '',
+        });
+      }
+    }).catch(() => { if (ativo) toast.error('Não foi possível abrir a audiência.'); })
+      .finally(() => { if (ativo) navigate('/audiencias', { replace: true }); });
+    return () => { ativo = false; };
+  }, [idDaUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     audienciasAPI.tipos().then(r => { if (r.data.ok) setTipos(r.data.dados); });
   }, []);

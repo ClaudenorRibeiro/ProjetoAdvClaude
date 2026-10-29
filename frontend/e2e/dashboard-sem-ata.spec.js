@@ -28,3 +28,19 @@ test('@critical Dashboard: Audiências sem ata — julgamento (sem compareciment
   await expect(presencial.getByRole('button', { name: 'Ata impressa' })).toBeVisible();
   await expect(presencial.getByRole('link', { name: 'Concluir' })).toHaveCount(0);
 });
+
+test('@critical Dashboard: "Registrar ata" e "Concluir" abrem direto a janela da audiência certa (e o endereço volta a /audiencias)', async ({ page, request }) => {
+  ids.push(await criarAudiencia(request, '03:21', 'sem_comparecimento'));
+  ids.push(await criarAudiencia(request, '03:22', 'presencial'));
+  await loginPelaTela(page);
+  await aguardarTelaPronta(page);
+  await page.locator('.item-sem-ata').filter({ hasText: '01/01/2001 03:22' }).getByRole('link', { name: 'Registrar ata' }).click();
+  await expect(page.getByRole('heading', { name: /Registrar Ata — 01\/01\/2001 03:22/ })).toBeVisible();
+  await expect(page).toHaveURL(/\/audiencias$/);
+  await page.getByRole('button', { name: 'Cancelar' }).first().click();
+  await page.goto('/dashboard');
+  await aguardarTelaPronta(page);
+  await page.locator('.item-sem-ata').filter({ hasText: '01/01/2001 03:21' }).getByRole('link', { name: 'Concluir' }).click();
+  await expect(page.getByRole('heading', { name: /Concluir — 01\/01\/2001 03:21/ })).toBeVisible();
+  await expect(page).toHaveURL(/\/audiencias$/);
+});

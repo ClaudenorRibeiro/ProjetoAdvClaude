@@ -278,7 +278,8 @@ async function listar(req, res) {
 
     // Dashboard: audiências agendadas com data passada e sem ata registrada
     if (sem_ata === 'true') {
-      where += ' AND a.status = \'agendada\' AND a.data < CURDATE() AND a.ata_impressa = 0 AND NOT EXISTS (SELECT 1 FROM ata_audiencia aa WHERE aa.audiencia_id = a.id)';
+      // Ato "sem comparecimento" (ex.: julgamento) não tem ata: não entra neste filtro.
+      where += ' AND a.status = \'agendada\' AND a.modalidade <> \'sem_comparecimento\' AND a.data < CURDATE() AND a.ata_impressa = 0 AND NOT EXISTS (SELECT 1 FROM ata_audiencia aa WHERE aa.audiencia_id = a.id)';
     }
 
     // Filtro por etiqueta PESSOAL do usuário logado.
