@@ -138,7 +138,8 @@ export default function Dashboard() {
           {dados.audiencias_sem_ata.length > 0 && (
             <div className="card">
               <div className="card-titulo">📋 Audiências sem ata ({dados.audiencias_sem_ata.length})</div>
-              <div className="lista-sem-ata">
+              {/* Altura limitada com rolagem: o quadro não cresce com o número de audiências. */}
+              <div className="lista-sem-ata" tabIndex={0} role="region" aria-label="Audiências sem ata" style={{maxHeight: '260px', overflowY: 'auto'}}>
                 {dados.audiencias_sem_ata.map(a => (
                   <div key={a.id} className="item-sem-ata">
                     <div>
@@ -147,20 +148,17 @@ export default function Dashboard() {
                       <small>{a.pasta_numero_fmt} — {a.pasta_titulo}</small>
                     </div>
                     <div className="item-sem-ata-acoes">
-                      {/* Ato "sem comparecimento" (ex.: Julgamento) não tem ata nem ata impressa: tem "Concluir" */}
                       <Link to={`/audiencias/${a.id}`} className="btn btn-outline" style={{fontSize:'12px',padding:'4px 10px'}}>
-                        {a.modalidade === 'sem_comparecimento' ? 'Concluir' : 'Registrar ata'}
+                        Registrar ata
                       </Link>
-                      {a.modalidade !== 'sem_comparecimento' && (
-                        <button
-                          className="btn btn-secondary"
-                          style={{fontSize:'12px',padding:'4px 10px'}}
-                          onClick={() => handleAtaImpressa(a.id)}
-                          title="Clique se a ata já foi impressa fisicamente"
-                        >
-                          Ata impressa
-                        </button>
-                      )}
+                      <button
+                        className="btn btn-secondary"
+                        style={{fontSize:'12px',padding:'4px 10px'}}
+                        onClick={() => handleAtaImpressa(a.id)}
+                        title="Clique se a ata já foi impressa fisicamente"
+                      >
+                        Ata impressa
+                      </button>
                     </div>
                   </div>
                 ))}

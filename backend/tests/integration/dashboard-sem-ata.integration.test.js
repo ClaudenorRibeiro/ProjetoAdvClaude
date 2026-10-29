@@ -1,5 +1,4 @@
-// Dashboard > "Audiências sem ata": cada linha traz a MODALIDADE, para a tela mostrar "Concluir" (e não "Registrar ata")
-// no ato "sem comparecimento" (ex.: Julgamento), que não tem ata. Contra MySQL real isolado.
+// Dashboard > "Audiências sem ata": o ato "sem comparecimento" (ex.: Julgamento) não tem ata e NÃO aparece no quadro. Contra MySQL real isolado.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const jwt = require('jsonwebtoken');
@@ -32,20 +31,20 @@ const nova = (modalidade, hora, status = 'agendada') => sql(
   'INSERT INTO audiencia (processo_id, tipo_audiencia_id, data, hora, modalidade, status, criado_por) VALUES (?, ?, DATE_SUB(CURDATE(), INTERVAL 3 DAY), ?, ?, ?, 1)',
   [F.proc, F.tipo, hora, modalidade, status]).then(r => r.insertId);
 
-test('audiências sem ata: cada linha traz a modalidade (julgamento "sem comparecimento" e presencial); cancelada e com ata continuam de fora', async () => {
+test('audiências sem ata: o ato "sem comparecimento" (julgamento) NÃO entra; presencial entra; cancelada e com ata continuam de fora', async () => {
   const julgamento = await nova('sem_comparecimento', '08:00:00');
   const presencial = await nova('presencial', '09:00:00');
-  const cancelada = await nova('sem_comparecimento', '10:00:00', 'cancelada');
-  const comAta = await nova('sem_comparecimento', '11:00:00');
+  const cancelada = await nova('presencial', '10:00:00', 'cancelada');
+  const comAta = await nova('presencial', '11:00:00');
   await sql('INSERT INTO ata_audiencia (audiencia_id, criado_por) VALUES (?, 1)', [comAta]).catch(async () => { await sql('UPDATE audiencia SET ata_impressa = 1 WHERE id = ?', [comAta]); });
   const r = await request(app).get('/api/dashboard').set('Authorization', `Bearer ${token}`);
   assert.equal(r.status, 200, JSON.stringify(r.body).slice(0, 200));
-  const linhas = r.body.dados.audiencias_sem_ata;
-  const porId = Object.fromEntries(linhas.map(l => [l.id, l.modalidade]));
-  assert.equal(porId[julgamento], 'sem_comparecimento', 'o julgamento traz a modalidade "sem_comparecimento"');
-  assert.equal(porId[presencial], 'presencial', 'a audiência presencial traz "presencial"');
-  assert.ok(!(cancelada in porId), 'cancelada não entra');
-  assert.ok(!(comAta in porId), 'com ata (ou ata impressa) não entra');
+  const ids = r.body.dados.audiencias_sem_ata.map(l => l.id);
+  assert.ok(ids.includes(presencial), 'a presencial sem ata entra');
+  assert.ok(!ids.includes(julgamento), 'o julgamento (sem comparecimento) não entra');
+  assert.ok(!ids.includes(cancelada), 'cancelada não entra');
+  assert.ok(!ids.includes(comAta), 'com ata (ou ata impressa) não entra');
+  assert.equal(r.body.dados.contadores.sem_ata, ids.length, 'o contador do sino acompanha a lista');
 });
 
 test('filtro sem_ata=true da lista de audiências: não lista ato "sem comparecimento" (ele não tem ata), mas lista a presencial sem ata', async () => {
