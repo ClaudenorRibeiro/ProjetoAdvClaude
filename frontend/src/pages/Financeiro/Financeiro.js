@@ -16,6 +16,7 @@ import { ModalGerar } from '../../components/GerarDocumento';
 import { clientesDoProcesso, clienteUnico, destinoClienteDaParcela, contaEscritorioPadrao, formaUnica, destinoSugerido } from './destinoPadrao';
 import AtividadeFinanceiro, { ModalHistoricoAcordo } from './AtividadeFinanceiro';
 import { rotuloTipoAcordo, rotuloCurtoTipoAcordo } from './tipoAcordo';
+import { recalcularParcelasAoEditarBruto } from '../../utils/acordoParcelas';
 
 const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
 
@@ -2038,6 +2039,21 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
     setParcelas(arr => arr.map((p, idx) => idx === i ? { ...p, [campo]: valor } : p));
   }
 
+  // Edição manual do Bruto de UMA parcela: o valor total do acordo é soberano.
+  // As demais parcelas ainda livres (não recebidas e não editadas na mão) se reajustam para a
+  // soma bater com o total (função pura, com teste próprio, em utils/acordoParcelas.js).
+  function setBrutoManual(i, valorMascarado) {
+    const valorTotal = parseMoeda(cab.valor_total);
+    setParcelas(arr => {
+      const resultado = recalcularParcelasAoEditarBruto(arr, valorTotal, i, valorMascarado);
+      if (resultado.erro) {
+        toast.error(`O valor da parcela não pode ultrapassar o valor total do acordo (${formatarMoeda(valorTotal)}).`);
+        return arr; // mantém como estava, descarta a digitação
+      }
+      return resultado.parcelas;
+    });
+  }
+
   function aplicarParceria(i, dados) {
     setParcelas(arr => arr.map((p, idx) => idx === i ? { ...p, ...dados } : p));
     setParceriaRow(null);
@@ -2200,7 +2216,8 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
                       </td>
                       <td>
                         <input aria-label={`Valor bruto da parcela ${p.numero || i + 1}`} type="text" inputMode="numeric" className="form-control" style={{ width: '110px', padding: '4px 6px' }}
-                          value={p.valor_bruto} disabled={parcelaRecebida} onChange={e => setParc(i, 'valor_bruto', mascaraMoeda(e.target.value))} />
+                          title={p._brutoManual ? 'Valor editado na mão: as outras parcelas se ajustam para fechar o total.' : ''}
+                          value={p.valor_bruto} disabled={parcelaRecebida} onChange={e => setBrutoManual(i, mascaraMoeda(e.target.value))} />
                       </td>
                       {!avulso && (<>
                       <td>
