@@ -358,7 +358,8 @@ function montaBlocoAudiencia(a, minutosAntes = 0) {
     local_audiencia: a.local || '',
     vara_audiencia: a.vara_nome || '',
     forum_audiencia: a.forum_nome || '',
-    endereco_audiencia: montarEndereco(a.forum_log, a.forum_num, a.forum_compl, a.forum_bairro, a.forum_cidade, a.forum_uf, a.forum_cep),
+    // O endereço completo leva os DOIS complementos: o do fórum e, logo depois, o da vara (ex.: "Bloco B - 3º andar, sala 12").
+    endereco_audiencia: montarEndereco(a.forum_log, a.forum_num, [a.forum_compl, a.vara_compl].filter(c => c && String(c).trim()).join(' - '), a.forum_bairro, a.forum_cidade, a.forum_uf, a.forum_cep),
     cep_audiencia: a.forum_cep || '',
     logradouro_audiencia: a.forum_log || '',
     numero_audiencia: a.forum_num || '',

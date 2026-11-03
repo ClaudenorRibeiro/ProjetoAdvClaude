@@ -177,6 +177,31 @@ test('audiência: dados do processo (cliente, parte adversa, partes) e da audiê
   assert.equal(ctx.referencia, 'Proc 0000001-01.2026.5.15.0001 · Cliente Maria da Silva Souza · Audiência 18/06/2026');
 });
 
+test('endereço completo da audiência leva o complemento do fórum E o da vara, nessa ordem; cada um sozinho não deixa hífen sobrando', async () => {
+  const forum = async (nome, compl) => (await sql(
+    "INSERT INTO tblforum (nome, cep, logradouro, num_end, compl_end, bairro, cidade, uf, ativo) VALUES (?, '13000000', 'Rua Tal', '100', ?, 'Centro', 'Campinas', 'SP', 1)", [nome, compl])).insertId;
+  const vara = async (forumId, compl) => (await sql(
+    "INSERT INTO tblvara (nome, abrev_nome, forum_id, compl_end, ativo) VALUES ('Vara do Teste', '3ª Vara', ?, ?, 1)", [forumId, compl])).insertId;
+  let minuto = 0; // cada audiência com um horário próprio (o mesmo processo não aceita duas no mesmo horário)
+  const audiencia = async varaId => (await sql(
+    `INSERT INTO audiencia (processo_id, tipo_audiencia_id, data, hora, modalidade, vara_id, status, criado_por)
+     VALUES (1, 4, '2026-07-01', ?, 'presencial', ?, 'agendada', 1)`, [`10:${String(++minuto).padStart(2, '0')}:00`, varaId])).insertId;
+  const endereco = async id => (await resolverVariaveis.resolver('audiencia', id, USUARIO)).dados.endereco_audiencia;
+
+  const f1 = await forum('Foro Dois Complementos', 'Bloco B');
+  assert.equal(await endereco(await audiencia(await vara(f1, '3º andar, sala 12'))),
+    'Rua Tal, 100 - Bloco B - 3º andar, sala 12 - Centro - Campinas/SP - CEP 13000000');
+  const f2 = await forum('Foro Sem Complemento', null);
+  assert.equal(await endereco(await audiencia(await vara(f2, '3º andar, sala 12'))),
+    'Rua Tal, 100 - 3º andar, sala 12 - Centro - Campinas/SP - CEP 13000000', 'só o complemento da vara');
+  const f3 = await forum('Foro So Complemento Dele', 'Bloco B');
+  assert.equal(await endereco(await audiencia(await vara(f3, null))),
+    'Rua Tal, 100 - Bloco B - Centro - Campinas/SP - CEP 13000000', 'só o complemento do fórum, como sempre foi');
+  const f4 = await forum('Foro Nenhum', '');
+  assert.equal(await endereco(await audiencia(await vara(f4, '   '))),
+    'Rua Tal, 100 - Centro - Campinas/SP - CEP 13000000', 'nenhum complemento (ou só espaços)');
+});
+
 test('audiência virtual traz o link e a plataforma; "minutos antes" do modelo adianta só o horário impresso', async () => {
   const d = (await resolverVariaveis.resolver('audiencia', F.audVirtual, USUARIO)).dados;
   assert.equal(d.link_audiencia, 'https://zoom.exemplo/abc');
