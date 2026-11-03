@@ -293,7 +293,7 @@ async function listar(req, res) {
 
     const ordenacoes = {
       processo: 'pr.numProc', pasta: 'pa.numPasta', titulo: 'pr.NomeTituloProc', tipo: 'ta.nome',
-      data_hora: null, modalidade: 'a.modalidade', responsavel: 'responsavel_nome', status: 'a.status',
+      data_hora: null, vara: 'COALESCE(vr.abrev_nome, vr.nome)', modalidade: 'a.modalidade', responsavel: 'responsavel_nome', status: 'a.status',
     };
     const ordemPadrao = "(a.status = 'agendada') DESC, a.data ASC, a.hora ASC";
     const ordem = ordenar === 'data_hora' && (direcao === 'ASC' || direcao === 'DESC')

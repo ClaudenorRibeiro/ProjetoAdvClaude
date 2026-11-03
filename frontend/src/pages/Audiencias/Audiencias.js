@@ -322,6 +322,7 @@ export default function Audiencias() {
                   <CabecalhoOrdenavel campo="titulo">Título do Processo</CabecalhoOrdenavel>
                   <CabecalhoOrdenavel campo="tipo">Tipo</CabecalhoOrdenavel>
                   <CabecalhoOrdenavel campo="data_hora">Data / Hora</CabecalhoOrdenavel>
+                  <CabecalhoOrdenavel campo="vara">Vara</CabecalhoOrdenavel>
                   <CabecalhoOrdenavel campo="modalidade">Modalidade</CabecalhoOrdenavel>
                   <CabecalhoOrdenavel campo="responsavel">Responsável</CabecalhoOrdenavel>
                   <CabecalhoOrdenavel campo="status">Status</CabecalhoOrdenavel>
@@ -364,6 +365,14 @@ export default function Audiencias() {
                       {/*  <strong>{formatarData(a.data)}</strong> */}
                       <strong style={{ fontSize: '17px', color: '#333' }}>{formatarData(a.data)}</strong>
                       <div style={{ fontSize: '17px', color: '#333', fontWeight: 700 }}>{a.hora?.slice(0, 5)}</div>
+                    </td>
+                    <td style={{ fontSize: '14px' }}>
+                      {(a.vara_abrev_nome || a.vara_nome) ? (
+                        <>
+                          {a.vara_abrev_nome || a.vara_nome}
+                          {a.vara_forum_nome && <div style={{ fontSize: '12px', color: '#5b6472' }}>{a.vara_forum_nome}</div>}
+                        </>
+                      ) : '—'}
                     </td>
                     <td>
                       <span className={`badge ${a.modalidade === 'virtual' ? 'badge-azul' : 'badge-cinza'}`}>
