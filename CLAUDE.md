@@ -13,7 +13,7 @@ repositório, em qualquer sessão futura.**
 - **Nesta sessão (mono) só se altera o mono.** Nunca alterar o SaaS nem o site, em hipótese alguma, e nunca "portar" um pedido para o outro por conta própria.
 - Ler o outro repositório só como **consulta** (para ajudar numa decisão) e **somente com autorização do usuário**, com muito cuidado e sem alterar nada nele.
 - Textos antigos deste arquivo que falem em "feito também no SaaS", "pendente no SaaS" ou "igual ao SaaS" são **histórico**, não obrigação.
-- **Resumo do dia:** ao final do trabalho do dia, gerar um arquivo de texto com o que foi feito **naquele dia** (não a sessão inteira), para o usuário usar de base nas outras sessões.
+- **Resumo do dia — SÓ QUANDO O USUÁRIO PEDIR (regra dele, 03/11/2026: "nunca gere resumo sem que eu peça antes"; SUBSTITUI a regra antiga de gerar sempre no fim do dia):** a IA NÃO gera, NÃO oferece e NÃO pergunta se quer o resumo do dia. Quando ele pedir, gerar um arquivo de texto com o que foi feito **naquele dia** (não a sessão inteira), para ele usar de base nas outras sessões.
 - Trabalhar só no `rascunho` (o `main` só com "PODE SUBIR" do usuário).
 
 ## 0. Regra de certeza absoluta (a mais importante)
