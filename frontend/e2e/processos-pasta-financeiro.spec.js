@@ -285,23 +285,28 @@ test('@critical Novo alvará: mesma janela com o nome "Alvará", valor com centa
   await expect(page.getByText('Alvará 1')).toBeVisible();
 });
 
-test('@critical Editar acordo: janela carregada com as parcelas, muda uma parcela, o total muda (pede confirmação) e o histórico da parcela registra', async ({ page }) => {
+test('@critical Editar acordo: janela carregada com as parcelas, muda uma parcela na mão e a OUTRA se reajusta sozinha (o total continua o mesmo, sem pedir confirmação) e o histórico das duas parcelas registra', async ({ page }) => {
   await loginPelaTela(page);
   await abrirAba(page, CNJ1);
   await blocoAcordo(page, 'Acordo C8').getByRole('button', { name: 'Editar', exact: true }).click();
   const j = janela(page, 'Editar Acordo');
   await expect(j.getByLabel('Descrição (opcional)', { exact: true })).toHaveValue('Acordo C8');
+  await expect(j.getByLabel('Valor bruto da parcela 1', { exact: true })).toHaveValue('1.000,00');
   await expect(j.getByLabel('Valor bruto da parcela 2', { exact: true })).toHaveValue('1.000,00');
   await j.getByLabel('Valor bruto da parcela 2', { exact: true }).fill('150000');
+  // o valor total do acordo é soberano: a parcela 1 (não editada na mão) se ajusta sozinha para a soma continuar batendo com o total
+  await expect(j.getByLabel('Valor bruto da parcela 1', { exact: true })).toHaveValue('500,00');
   await j.getByRole('button', { name: 'Salvar alterações' }).click();
-  await expect(page.getByText('Total do acordo alterado')).toBeVisible();
-  await page.getByRole('button', { name: 'Sim, salvar' }).click();
+  // o total do acordo não mudou (2.000,00 continua 2.000,00): não há confirmação para pedir
   await aviso(page, 'Acordo atualizado!');
   const a = (await noBanco('SELECT valor_total FROM acordo WHERE id = ?', [d.ac]))[0];
-  expect(Number(a.valor_total)).toBe(2500);
+  expect(Number(a.valor_total)).toBe(2000);
+  expect(Number((await noBanco('SELECT valor_bruto FROM acordo_parcela WHERE id = ?', [d.pa1]))[0].valor_bruto)).toBe(500);
   expect(Number((await noBanco('SELECT valor_bruto FROM acordo_parcela WHERE id = ?', [d.pa2]))[0].valor_bruto)).toBe(1500);
-  const h = await noBanco("SELECT campo_alterado, valor_anterior, valor_novo FROM auditoria_parcela WHERE parcela_id = ? AND acao = 'editada'", [d.pa2]);
-  expect(h.map(x => x.campo_alterado)).toContain('Valor bruto');
+  const h1 = await noBanco("SELECT campo_alterado FROM auditoria_parcela WHERE parcela_id = ? AND acao = 'editada'", [d.pa1]);
+  expect(h1.map(x => x.campo_alterado)).toContain('Valor bruto');
+  const h2 = await noBanco("SELECT campo_alterado FROM auditoria_parcela WHERE parcela_id = ? AND acao = 'editada'", [d.pa2]);
+  expect(h2.map(x => x.campo_alterado)).toContain('Valor bruto');
 });
 
 test('@critical Receber e desfazer parcela pela aba: pede data, conta e forma; gera a entrada no extrato; desfazer limpa tudo', async ({ page }) => {
