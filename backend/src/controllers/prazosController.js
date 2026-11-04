@@ -12,6 +12,7 @@ const auditoria = require('../middleware/auditoria');
 const { texto, dataIso, inteiroPositivo } = require('../utils/camposTexto');
 const { comIdNumerico } = require('../utils/rotasSeguras');
 const { lerBuscaFrase, condBuscaFrase } = require('../utils/buscaFrase');
+const { proximoHorarioDisponivel, horaFimCurta } = require('../utils/horaAgenda');
 
 function responderErroCalendario(res, err) {
   if (err?.code === 'CALENDARIO_INSUFICIENTE' || err?.code === 'CALENDARIO_QUANTIDADE_INVALIDA') {
@@ -83,7 +84,7 @@ function lerCamposPrazo(corpo) {
 async function dadosPrazoParaGoogle(prazoId) {
   try {
     const [rows] = await pool.execute(
-      `SELECT pp.delegado_para, pp.data_vencimento, pp.descricao,
+      `SELECT pp.delegado_para, pp.data_vencimento, pp.descricao, pp.hora_agenda,
               ps.nome AS subtipo_nome, pr.numProc AS num_processo
          FROM prazos_processo pp
          LEFT JOIN prazo_subtipo ps ON pp.subtipo_id = ps.id
@@ -95,11 +96,14 @@ async function dadosPrazoParaGoogle(prazoId) {
     const partes = [];
     if (p.subtipo_nome) partes.push(`Tipo: ${p.subtipo_nome}`);
     if (p.descricao)    partes.push(p.descricao);
+    // Com hora_agenda, o evento sai com horário só de organização (nunca é a hora do vencimento).
+    if (p.hora_agenda) partes.push('O prazo vale o dia inteiro; o horário é só de organização.');
     return {
       delegado_para: p.delegado_para,
       resumo: `Prazo: ${p.num_processo || ''}`.trim(),
       descricao: partes.join('\n'),
       data: p.data_vencimento,
+      hora_agenda: p.hora_agenda,
     };
   } catch (e) {
     console.error('[prazo->google] falha ao montar dados:', e.message);
@@ -120,7 +124,10 @@ async function enviarPrazoParaGoogle(usuarioId, prazoId, dados, cancelar = false
     await agendaGoogle.enviarConviteEvento({
       tipo: 'prazo', id: prazoId, cancelar, sequence,
       resumo: dados.resumo, descricao: dados.descricao,
-      data: dados.data, diaTodo: true,
+      data: dados.data,
+      diaTodo: !dados.hora_agenda,
+      horaInicio: dados.hora_agenda || undefined,
+      horaFim: dados.hora_agenda ? horaFimCurta(dados.hora_agenda) : undefined,
       destinatarioEmail: dono.google_agenda_email, destinatarioNome: dono.nome,
     });
   } catch (e) {
@@ -246,7 +253,7 @@ async function listar(req, res) {
     const { limite: limitInt, offset: offsetInt } = paginacao(req.query, { limitePadrao: 30 });   // página/limite ruins viram o padrão (nunca erro de SQL)
 
     const [rows] = await pool.execute(
-      `SELECT pp.id, pp.descricao, pp.data_inicio, pp.data_vencimento,
+      `SELECT pp.id, pp.descricao, pp.data_inicio, pp.data_vencimento, pp.hora_agenda,
               pp.quantidade, pp.tipo_dias, pp.delegado_para, pp.publicacao_id,
               pp.notificar_conclusao,
               pp.subtipo_id, tp.id AS tipo_prazo_id,
@@ -342,15 +349,17 @@ async function criar(req, res) {
     let result;
     try {
       await conn.beginTransaction();
+      // Prazo NOVO: horário só de organização (fila por responsável/dia; sem vaga = sem hora, sem erro).
+      const horaAgenda = await proximoHorarioDisponivel(conn, { usuarioId: delegado_para || null, data: data_vencimento });
       [result] = await conn.execute(
         `INSERT INTO prazos_processo
            (processo_id, subtipo_id, descricao, data_inicio, quantidade, tipo_dias,
-            data_vencimento, delegado_para, criado_por, publicacao_id, notificar_conclusao)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            data_vencimento, delegado_para, criado_por, publicacao_id, notificar_conclusao, hora_agenda)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           procLido.valor, subtipo_id || null, descricao || null, data_inicio,
           quantidade || null, tipo_dias || 'uteis', data_vencimento,
-          delegado_para || null, req.usuario.id, publicacao_id || null, notificar_conclusao ? 1 : 0
+          delegado_para || null, req.usuario.id, publicacao_id || null, notificar_conclusao ? 1 : 0, horaAgenda
         ]
       );
       await auditoria.registrar(req.usuario.id, 'prazos_processo', 'criar', result.insertId, null, null, conn);

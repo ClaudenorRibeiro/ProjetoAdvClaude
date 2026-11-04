@@ -16,6 +16,7 @@ import { prazosAPI, audienciasAPI, tarefasAPI, periciasAPI, agendaAPI, configura
 import { formatarData, formatarNumeroPasta } from '../../utils/formatters';
 import { coresEfetivas, corTextoPara } from '../../utils/coresAgenda';
 import { apareceNaAgenda, esmaecidoNaAgenda } from '../../utils/statusAgenda';
+import { proximoMinuto } from '../../utils/horaAgenda';
 import { useAuth } from '../../context/AuthContext';
 import { ModalTarefa } from '../Tarefas/Tarefas';
 import useEscFechar from '../../hooks/useEscFechar';
@@ -156,15 +157,20 @@ export default function Agenda() {
       if (filtros.prazos) {
         promises.push(
           prazosAPI.listar({ data_de, data_ate, limite: 200, ...(usuarioId && { usuario_id: usuarioId }) })
-            .then(r => r.data.ok ? r.data.dados.registros.map(p => ({
-              id: `prazo-${p.id}`,
-              title: `📋 ${p.subtipo_nome || p.descricao || 'Prazo'}`,
-              start: new Date(p.data_vencimento + 'T00:00:00'),
-              end:   new Date(p.data_vencimento + 'T23:59:00'),
-              allDay: true,
-              tipo: 'prazo',
-              dados: p,
-            })) : [])
+            .then(r => r.data.ok ? r.data.dados.registros.map(p => {
+              // Prazo NOVO (criado após o horário sequencial): a hora é só de organização visual na
+              // agenda, nunca o vencimento — o prazo continua valendo o dia inteiro.
+              const hora = p.hora_agenda ? p.hora_agenda.slice(0, 5) : null;
+              return {
+                id: `prazo-${p.id}`,
+                title: `📋 ${p.subtipo_nome || p.descricao || 'Prazo'}`,
+                start: new Date(`${p.data_vencimento}T${hora || '00:00'}:00`),
+                end:   new Date(`${p.data_vencimento}T${hora ? proximoMinuto(hora) : '23:59'}:00`),
+                allDay: !hora,
+                tipo: 'prazo',
+                dados: p,
+              };
+            }) : [])
             .catch(() => [])
         );
       }
@@ -208,15 +214,20 @@ export default function Agenda() {
           tarefasAPI.listar({ concluida: '0', limite: 200, ...(usuarioId && { usuario_id: usuarioId }) })
             .then(r => r.data.ok ? r.data.dados.registros
               .filter(t => t.data_vencimento)
-              .map(t => ({
-                id: `tarefa-${t.id}`,
-                title: `✅ ${t.titulo}`,
-                start: new Date(t.data_vencimento + 'T00:00:00'),
-                end:   new Date(t.data_vencimento + 'T23:59:00'),
-                allDay: true,
-                tipo: 'tarefa',
-                dados: t,
-              })) : [])
+              .map(t => {
+                // Tarefa NOVA (criada após o horário sequencial): a hora é só de organização visual na
+                // agenda, nunca o vencimento — a tarefa continua valendo o dia inteiro.
+                const hora = t.hora_agenda ? t.hora_agenda.slice(0, 5) : null;
+                return {
+                  id: `tarefa-${t.id}`,
+                  title: `✅ ${t.titulo}`,
+                  start: new Date(`${t.data_vencimento}T${hora || '00:00'}:00`),
+                  end:   new Date(`${t.data_vencimento}T${hora ? proximoMinuto(hora) : '23:59'}:00`),
+                  allDay: !hora,
+                  tipo: 'tarefa',
+                  dados: t,
+                };
+              }) : [])
             .catch(() => [])
         );
       }

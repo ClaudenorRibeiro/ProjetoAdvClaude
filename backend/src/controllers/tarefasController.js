@@ -79,6 +79,7 @@ async function podeAgirNaTarefa(req, atribuidaPara) {
 }
 const { notificarConclusao, emailTarefaAtribuida } = require('../services/notificacaoService');
 const agendaGoogle = require('../services/agendaGoogleService');
+const { proximoHorarioDisponivel, horaFimCurta } = require('../utils/horaAgenda');
 
 // ===== Integração com o Google Agenda (convite .ics) =====
 // A tarefa vai para o Google de quem ela foi ATRIBUÍDA (atribuida_para). Sem
@@ -90,15 +91,20 @@ const agendaGoogle = require('../services/agendaGoogleService');
 async function dadosTarefaParaGoogle(tarefaId) {
   try {
     const [rows] = await pool.execute(
-      'SELECT atribuida_para, titulo, descricao, data_vencimento FROM tarefas WHERE id = ?', [tarefaId]
+      'SELECT atribuida_para, titulo, descricao, data_vencimento, hora_agenda FROM tarefas WHERE id = ?', [tarefaId]
     );
     const t = rows[0];
     if (!t) return null;
+    // Com hora_agenda, o evento sai com horário só de organização (nunca é a hora do vencimento).
+    const descricaoComAviso = t.hora_agenda
+      ? [t.descricao, 'A tarefa vale o dia inteiro; o horário é só de organização.'].filter(Boolean).join('\n')
+      : (t.descricao || '');
     return {
       atribuida_para: t.atribuida_para,
       resumo: `Tarefa: ${t.titulo || ''}`.trim(),
-      descricao: t.descricao || '',
+      descricao: descricaoComAviso,
       data: t.data_vencimento, // null = tarefa sem vencimento → o serviço não envia
+      hora_agenda: t.hora_agenda,
     };
   } catch (e) {
     console.error('[tarefa->google] falha ao montar dados:', e.message);
@@ -119,7 +125,10 @@ async function enviarTarefaParaGoogle(usuarioId, tarefaId, dados, cancelar = fal
     await agendaGoogle.enviarConviteEvento({
       tipo: 'tarefa', id: tarefaId, cancelar, sequence,
       resumo: dados.resumo, descricao: dados.descricao,
-      data: dados.data, diaTodo: true,
+      data: dados.data,
+      diaTodo: !dados.hora_agenda,
+      horaInicio: dados.hora_agenda || undefined,
+      horaFim: dados.hora_agenda ? horaFimCurta(dados.hora_agenda) : undefined,
       destinatarioEmail: dono.google_agenda_email, destinatarioNome: dono.nome,
     });
   } catch (e) {
@@ -274,7 +283,7 @@ async function listar(req, res) {
     const { limite: limitInt, offset: offsetInt } = paginacao(req.query, { limitePadrao: 30, limiteMax: 100 });
 
     const [rows] = await pool.execute(
-      `SELECT t.id, t.titulo, t.descricao, t.prioridade, t.data_vencimento,
+      `SELECT t.id, t.titulo, t.descricao, t.prioridade, t.data_vencimento, t.hora_agenda,
               t.concluida, t.concluida_em, t.criado_em,
               t.pasta_id, t.processo_id, t.publicacao_id,
               t.atribuida_para, t.notificar_conclusao, t.criado_por,
@@ -340,17 +349,19 @@ async function criar(req, res) {
   try {
     await conn.beginTransaction();
 
+    // Tarefa NOVA: horário só de organização (fila por responsável/dia; sem vaga = sem hora, sem erro).
+    const horaAgenda = await proximoHorarioDisponivel(conn, { usuarioId: responsavel || null, data: venc });
     const [result] = await conn.execute(
       `INSERT INTO tarefas
          (titulo, descricao, prioridade, processo_id, pasta_id, prazo_id,
-          atribuida_para, data_vencimento, criado_por, publicacao_id, notificar_conclusao)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          atribuida_para, data_vencimento, criado_por, publicacao_id, notificar_conclusao, hora_agenda)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         titulo, descricao,
         prioridade,
         processo_id, pasta_id, prazo_id,
         responsavel, venc,
-        req.usuario.id, publicacao_id, (notificar_conclusao && responsavel) ? 1 : 0
+        req.usuario.id, publicacao_id, (notificar_conclusao && responsavel) ? 1 : 0, horaAgenda
       ]
     );
 
