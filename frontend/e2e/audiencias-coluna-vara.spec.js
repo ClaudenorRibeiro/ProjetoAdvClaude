@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { aguardarTelaPronta, bloquearRedeExterna, loginPelaTela } from './helpers';
 import { createRequire } from 'node:module';
 
-// Tela Audiências: a tabela tem a coluna "Vara" (vara abreviada e o fórum embaixo); audiência sem vara mostra traço.
+// Tela Audiências: a tabela tem a coluna "Vara" (só a vara abreviada, sem o nome do fórum); audiência sem vara mostra traço.
 const { conectarBancoTeste } = createRequire(import.meta.url)('../../backend/tests/support/testDatabase');
 async function noBanco(sql, params = []) {
   const conn = await conectarBancoTeste();
@@ -24,7 +24,7 @@ test.afterAll(async () => {
 });
 test.beforeEach(async ({ page }) => bloquearRedeExterna(page));
 
-test('@critical Audiências: coluna "Vara" mostra a vara e o fórum; sem vara mostra traço; o cabeçalho ordena', async ({ page }) => {
+test('@critical Audiências: coluna "Vara" mostra só a vara (sem o fórum); sem vara mostra traço; o cabeçalho ordena', async ({ page }) => {
   await loginPelaTela(page);
   await page.goto('/audiencias?data_de=2001-01-01&data_ate=2001-01-01');
   await aguardarTelaPronta(page);
@@ -34,7 +34,7 @@ test('@critical Audiências: coluna "Vara" mostra a vara e o fórum; sem vara mo
   expect(colunas.indexOf('Vara')).toBe(colunas.indexOf('Data / Hora') + 1);
   const comVara = page.locator('table.tabela tbody tr').filter({ hasText: '04:31' });
   await expect(comVara).toContainText('9ª Vara E2E');
-  await expect(comVara).toContainText('Foro E2E Coluna Vara');
+  await expect(comVara).not.toContainText('Foro E2E Coluna Vara');
   const semVara = page.locator('table.tabela tbody tr').filter({ hasText: '04:32' });
   await expect(semVara).not.toContainText('9ª Vara E2E');
   const indice = colunas.indexOf('Vara');

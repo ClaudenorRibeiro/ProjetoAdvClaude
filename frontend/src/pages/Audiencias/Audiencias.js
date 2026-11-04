@@ -367,12 +367,7 @@ export default function Audiencias() {
                       <div style={{ fontSize: '17px', color: '#333', fontWeight: 700 }}>{a.hora?.slice(0, 5)}</div>
                     </td>
                     <td style={{ fontSize: '14px' }}>
-                      {(a.vara_abrev_nome || a.vara_nome) ? (
-                        <>
-                          {a.vara_abrev_nome || a.vara_nome}
-                          {a.vara_forum_nome && <div style={{ fontSize: '12px', color: '#5b6472' }}>{a.vara_forum_nome}</div>}
-                        </>
-                      ) : '—'}
+                      {(a.vara_abrev_nome || a.vara_nome) || '—'}
                     </td>
                     <td>
                       <span className={`badge ${a.modalidade === 'virtual' ? 'badge-azul' : 'badge-cinza'}`}>
