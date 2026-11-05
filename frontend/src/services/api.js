@@ -249,6 +249,20 @@ export const prazosAPI = {
 };
 
 // ============================================================
+// VIGILÂNCIA DO PROCESSO — lembrete sem data que fica de olho num processo (ex.: Recurso adesivo)
+// ============================================================
+export const vigilanciasAPI = {
+  listar:      (pastaId, todas) => api.get('/vigilancias', { params: { pasta_id: pastaId, ...(todas ? { todas: 1 } : {}) } }),
+  criar:       (dados)     => api.post('/vigilancias', dados),
+  editar:      (id, dados) => api.put(`/vigilancias/${id}`, dados),
+  encerrar:    (id, motivo) => api.put(`/vigilancias/${id}/encerrar`, { motivo }),
+  tipos:       ()          => api.get('/vigilancias/tipos'),
+  criarTipo:   (dados)     => api.post('/vigilancias/tipos', dados),
+  editarTipo:  (id, dados) => api.put(`/vigilancias/tipos/${id}`, dados),
+  excluirTipo: (id)        => api.delete(`/vigilancias/tipos/${id}`),
+};
+
+// ============================================================
 // NOTIFICAÇÕES
 // ============================================================
 export const notificacoesAPI = {

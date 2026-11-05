@@ -5,7 +5,7 @@
 -- Gerado em 31/08/2026 a partir do banco LOCAL (sistema_advocacia), via:
 --   mysqldump --no-data --databases --add-drop-database
 --             --routines --triggers --events sistema_advocacia
--- Contém 96 tabelas — SOMENTE A ESTRUTURA, sem nenhum dado.
+-- Contém 99 tabelas — SOMENTE A ESTRUTURA, sem nenhum dado.
 -- (79 do dump de 31/08/2026 + tipo_documento_pendencia, pendencia_documento,
 --  pendencia_documento_item e pendencia_documento_responsavel, do módulo
 --  "Pendências de Documentos"; + acordo_parcela_multa, do módulo de multa
@@ -13,7 +13,8 @@
 --  múltiplas OABs por processo, 28/09/2026; + avisos_cliente, do módulo
 --  "Avisos aos clientes", 08/10/2026; + a coluna tblproc.apenso_de_id, do
 --  "Processo apenso", 14/10/2026; + a tabela datajud_tipos_andamento e as colunas do "Aviso diário de
---  andamentos do DataJud", versão 7 do banco, 24/10/2026.)
+--  andamentos do DataJud", versão 7 do banco, 24/10/2026; + vigilancia_tipo, vigilancia e
+--  vigilancia_usuario, da "Vigilância do processo", 05/11/2026.)
 -- O banco não possui procedures, triggers, views nem events.
 -- Os dados de partida (feriados, varas, tipos etc.) ficam em scripts/.
 --
@@ -2668,6 +2669,73 @@ CREATE TABLE `usuarios` (
   CONSTRAINT `ck_usuarios_datajud_canal` CHECK ((`datajud_aviso_canal` in (_utf8mb4'nenhum',_utf8mb4'sino',_utf8mb4'email',_utf8mb4'ambos'))),
   CONSTRAINT `ck_usuarios_datajud_escopo` CHECK ((`datajud_aviso_escopo` in (_utf8mb4'meus',_utf8mb4'todos')))
 ) ENGINE=InnoDB AUTO_INCREMENT=27 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `vigilancia`
+--
+
+DROP TABLE IF EXISTS `vigilancia`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `vigilancia` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `processo_id` int NOT NULL,
+  `tipo_id` int NOT NULL,
+  `observacao` varchar(1000) DEFAULT NULL,
+  `situacao` varchar(12) NOT NULL DEFAULT 'aguardando',
+  `criado_por` int NOT NULL,
+  `criado_em` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `encerrada_por` int DEFAULT NULL,
+  `encerrada_em` datetime DEFAULT NULL,
+  `motivo_encerramento` varchar(300) DEFAULT NULL,
+  `aberta_chave` varchar(30) GENERATED ALWAYS AS (if((`situacao` = 'aguardando'),concat(`processo_id`,'-',`tipo_id`),NULL)) VIRTUAL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_vig_aberta` (`aberta_chave`),
+  KEY `idx_vig_processo` (`processo_id`),
+  KEY `idx_vig_tipo` (`tipo_id`),
+  KEY `fk_vig_criado_por` (`criado_por`),
+  KEY `fk_vig_encerrada_por` (`encerrada_por`),
+  CONSTRAINT `fk_vig_criado_por` FOREIGN KEY (`criado_por`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `fk_vig_encerrada_por` FOREIGN KEY (`encerrada_por`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `fk_vig_processo` FOREIGN KEY (`processo_id`) REFERENCES `tblproc` (`id`),
+  CONSTRAINT `fk_vig_tipo` FOREIGN KEY (`tipo_id`) REFERENCES `vigilancia_tipo` (`id`),
+  CONSTRAINT `ck_vig_situacao` CHECK ((`situacao` in (_utf8mb4'aguardando',_utf8mb4'encerrada')))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='lembrete sem data que fica de olho num processo (ex.: recurso adesivo)';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `vigilancia_tipo`
+--
+
+DROP TABLE IF EXISTS `vigilancia_tipo`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `vigilancia_tipo` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `nome` varchar(100) NOT NULL,
+  `ativo` tinyint(1) NOT NULL DEFAULT '1',
+  `nome_ativo` varchar(100) GENERATED ALWAYS AS (if((`ativo` = 1),`nome`,NULL)) VIRTUAL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_vigtipo_nome_ativo` (`nome_ativo`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='tipos de vigilancia do processo (ex.: Recurso adesivo)';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `vigilancia_usuario`
+--
+
+DROP TABLE IF EXISTS `vigilancia_usuario`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `vigilancia_usuario` (
+  `vigilancia_id` int NOT NULL,
+  `usuario_id` int NOT NULL,
+  PRIMARY KEY (`vigilancia_id`,`usuario_id`),
+  KEY `idx_vigusu_usuario` (`usuario_id`),
+  CONSTRAINT `fk_vigusu_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`),
+  CONSTRAINT `fk_vigusu_vigilancia` FOREIGN KEY (`vigilancia_id`) REFERENCES `vigilancia` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='quem e avisado por cada vigilancia';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --

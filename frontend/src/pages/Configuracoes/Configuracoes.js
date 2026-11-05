@@ -62,6 +62,9 @@ const MODULOS_PERM = [
   { chave: 'pendencias', label: 'Pendências de documentos — quem tem "Visualizar" vê as de todos os clientes', submodulos: [
     { chave: 'pendencias.tipos', label: 'Tipos de documento (editar a lista)' },
   ]},
+  { chave: 'vigilancias', label: 'Vigilância do processo (lembrete sem data; ex.: Recurso adesivo)', submodulos: [
+    { chave: 'vigilancias.tipos', label: 'Tipos de vigilância (editar a lista)' },
+  ]},
   { chave: 'relatorios',   label: 'Relatórios', submodulos: [
     { chave: 'relatorios.criar', label: 'Criar e alterar os próprios relatórios — marque Cadastrar' },
   ]},

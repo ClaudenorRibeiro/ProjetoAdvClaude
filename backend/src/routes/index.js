@@ -78,6 +78,7 @@ const avisosCtrl        = require('../avisos/controller');
 const etiquetasCtrl     = require('../controllers/etiquetasController');
 const manutencaoCtrl    = require('../controllers/manutencaoController');
 const pendenciasDocCtrl = require('../controllers/pendenciasDocumentoController');
+const vigilanciasCtrl   = require('../controllers/vigilanciasController');
 
 // ---- PÚBLICO (sem autenticação) ----
 router.get('/public/info',              configuracaoCtrl.infoPublica);
@@ -221,6 +222,17 @@ router.put('/prazos/:id/liberar-fazendo', autenticar, verificarPermissao('prazos
 router.get('/prazos/:id/historico',       autenticar, verificarPermissao('prazos','historico'), prazosCtrl.buscarHistorico);
 router.put('/prazos/:id',                 autenticar, verificarPermissao('prazos','alterar'), prazosCtrl.editar);
 router.delete('/prazos/:id',              autenticar, verificarPermissao('prazos','excluir'), prazosCtrl.excluir);
+
+// ---- VIGILÂNCIA DO PROCESSO (lembrete sem data; trava arquivar/excluir e avisa de possível recurso) ----
+// Rotas estáticas ("/tipos") ANTES de "/:id".
+router.get('/vigilancias/tipos',        autenticar, vigilanciasCtrl.listarTipos);
+router.post('/vigilancias/tipos',       autenticar, verificarPermissao('vigilancias','tipos','cadastrar'), vigilanciasCtrl.criarTipo);
+router.put('/vigilancias/tipos/:id',    autenticar, verificarPermissao('vigilancias','tipos','alterar'), vigilanciasCtrl.editarTipo);
+router.delete('/vigilancias/tipos/:id', autenticar, verificarPermissao('vigilancias','tipos','excluir'), vigilanciasCtrl.excluirTipo);
+router.get('/vigilancias',              autenticar, verificarPermissao('vigilancias','visualizar'), vigilanciasCtrl.listar);
+router.post('/vigilancias',             autenticar, verificarPermissao('vigilancias','cadastrar'), vigilanciasCtrl.criar);
+router.put('/vigilancias/:id',          autenticar, verificarPermissao('vigilancias','alterar'), vigilanciasCtrl.editar);
+router.put('/vigilancias/:id/encerrar', autenticar, verificarPermissao('vigilancias','alterar'), vigilanciasCtrl.encerrar);
 
 // ---- NOTIFICAÇÕES ----
 router.get('/notificacoes/contagem',     autenticar, notificacoesCtrl.contagem);

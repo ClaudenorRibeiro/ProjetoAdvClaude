@@ -9,7 +9,7 @@ const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
 // Lê só o que falta em aberto. `conn` pode ser a conexão da transação (os números valem para o momento da gravação).
 async function pendenciasDoProcesso(conn, processoId) {
   const um = async (sql) => Number((await conn.execute(sql, [processoId]))[0][0].n) || 0;
-  const [parcelas, multas, repassesParcela, repassesMulta, prazos, tarefas, audiencias, pericias] = await Promise.all([
+  const [parcelas, multas, repassesParcela, repassesMulta, prazos, tarefas, audiencias, pericias, vigilancias] = await Promise.all([
     um(`SELECT COUNT(*) AS n FROM acordo_parcela ap JOIN acordo a ON a.id = ap.acordo_id
          WHERE a.processo_id = ? AND a.status <> 'cancelado' AND ap.status = 'pendente'`),
     um(`SELECT COUNT(*) AS n FROM acordo_parcela_multa m JOIN acordo_parcela ap ON ap.id = m.parcela_id JOIN acordo a ON a.id = ap.acordo_id
@@ -27,6 +27,7 @@ async function pendenciasDoProcesso(conn, processoId) {
     um(`SELECT COUNT(*) AS n FROM tarefas WHERE processo_id = ? AND COALESCE(concluida, 0) = 0`),
     um(`SELECT COUNT(*) AS n FROM audiencia WHERE processo_id = ? AND status IN ('agendada', 'adiada')`),
     um(`SELECT COUNT(*) AS n FROM pericia WHERE processo_id = ? AND status IN ('agendada', 'aguardando_data')`),
+    um(`SELECT COUNT(*) AS n FROM vigilancia WHERE processo_id = ? AND situacao = 'aguardando'`),
   ]);
   const itens = [];
   if (parcelas) itens.push(plural(parcelas, 'parcela a receber', 'parcelas a receber'));
@@ -37,6 +38,7 @@ async function pendenciasDoProcesso(conn, processoId) {
   if (tarefas) itens.push(plural(tarefas, 'tarefa em aberto', 'tarefas em aberto'));
   if (audiencias) itens.push(plural(audiencias, 'audiência em aberto', 'audiências em aberto'));
   if (pericias) itens.push(plural(pericias, 'perícia em aberto', 'perícias em aberto'));
+  if (vigilancias) itens.push(plural(vigilancias, 'vigilância em andamento (encerre a vigilância antes)', 'vigilâncias em andamento (encerre as vigilâncias antes)'));
   return itens;
 }
 

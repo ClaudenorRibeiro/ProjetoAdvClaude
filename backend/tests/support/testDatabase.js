@@ -66,6 +66,7 @@ async function semearDadosBase(conn) {
   await conn.execute("INSERT INTO tipo_prazo (id, nome, ativo) VALUES (1, 'Processual', 1)");
   await conn.execute("INSERT INTO prazo_subtipo (id, tipo_prazo_id, nome, ativo) VALUES (1, 1, 'Contestação', 1)");
   await conn.execute("INSERT INTO forma_pagamento (id, nome, ativo) VALUES (1, 'Transferência de teste', 1)");
+  await conn.execute("INSERT INTO vigilancia_tipo (id, nome, ativo) VALUES (1, 'Recurso adesivo', 1)");
   await conn.query(
     `INSERT INTO calendario (data, dia_util) VALUES
       ('2026-01-03', 0), ('2026-01-04', 0),
@@ -73,7 +74,7 @@ async function semearDadosBase(conn) {
       ('2026-01-08', 1), ('2026-01-09', 1), ('2026-01-10', 0), ('2026-01-11', 0),
       ('2026-02-05', 1), ('2026-03-05', 1)`
   );
-  const modulos = ['audiencias', 'processos', 'tarefas', 'prazos', 'pericias', 'documentos', 'financeiro', 'pessoas', 'publicacoes', 'pendencias', 'relatorios'];
+  const modulos = ['audiencias', 'processos', 'tarefas', 'prazos', 'pericias', 'documentos', 'financeiro', 'pessoas', 'publicacoes', 'pendencias', 'relatorios', 'vigilancias'];
   const acoes = ['visualizar', 'cadastrar', 'alterar', 'excluir', 'historico'];
   const valores = [];
   for (const modulo of modulos) for (const acao of acoes) valores.push([2, modulo, null, acao, 1]);
@@ -83,7 +84,10 @@ async function semearDadosBase(conn) {
       (2, 'audiencias', 'tipos', 'cadastrar', 1),
       (2, 'audiencias', 'tipos', 'alterar', 1),
       (2, 'audiencias', 'tipos', 'excluir', 1),
-      (2, 'audiencias', 'ata', 'visualizar', 1)`
+      (2, 'audiencias', 'ata', 'visualizar', 1),
+      (2, 'vigilancias', 'tipos', 'cadastrar', 1),
+      (2, 'vigilancias', 'tipos', 'alterar', 1),
+      (2, 'vigilancias', 'tipos', 'excluir', 1)`
   );
 }
 

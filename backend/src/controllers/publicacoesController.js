@@ -26,6 +26,7 @@ const iaService = require('../services/iaService');
 const { enviarEmail } = require('../utils/email');
 const { paginacao, escaparLike } = require('../utils/helpers');
 const { texto } = require('../utils/camposTexto');
+const { avisarPublicacoes } = require('../utils/vigilanciasAvisos');
 
 // "Impressão digital" (SHA-256) do texto EXATO da publicação — base da dedup fiel.
 function hashTexto(texto) {
@@ -245,6 +246,9 @@ async function importarCnj(req, res) {
     } finally {
       conn.release();
     }
+
+    // Vigilância do processo: publicação nova que parece recurso, num processo vigiado, avisa no sino (melhor esforço).
+    await avisarPublicacoes(novos.map((c) => ({ numero_processo: c.numero_processo, texto: c.texto })));
 
     return sucesso(res, { configurado: true, novas: novos.length, recebidas: itens.length },
       `${novos.length} nova(s) publicação(ões) importada(s).`);
@@ -634,6 +638,9 @@ async function importar(req, res) {
     } finally {
       conn.release();
     }
+
+    // Vigilância do processo: publicação nova que parece recurso, num processo vigiado, avisa no sino (melhor esforço).
+    await avisarPublicacoes(novos.map((c) => ({ numero_processo: c.numero_processo, texto: c.texto })));
 
     return sucesso(res, { configurado: true, novas: novos.length, recebidas: intimacoes.length },
       `${novos.length} nova(s) publicação(ões) importada(s).`);

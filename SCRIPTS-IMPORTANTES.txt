@@ -27,6 +27,9 @@ PARA RODAR NO HEIDISQL (banco)
   sql_hora_agenda_prazo_tarefa_para_heidi.sql   IMPORTANTE  Horario sequencial (04/11/2026): coluna hora_agenda em prazos_processo e tarefas (so prazo/tarefa criado depois deste
                                                             script ganha hora; os antigos ficam como estao). Nao depende de versao numerada; pode rodar em qualquer banco do sistema.
                                                             Repetivel; recusa banco sem as 2 tabelas. Termina com UMA linha: deve dizer PRONTO.
+  sql_vigilancias_para_heidi.sql                IMPORTANTE  Vigilancia do processo (05/11/2026): cria as tabelas vigilancia_tipo, vigilancia e vigilancia_usuario (lembrete sem data
+                                                            que fica de olho num processo, ex.: Recurso adesivo) e ja grava o tipo "Recurso adesivo". Nao depende de versao numerada;
+                                                            pode rodar em qualquer banco do sistema. Repetivel; recusa banco sem tblproc/usuarios/logs_auditoria. Termina com PRONTO.
   quality/sql/CRIAR_BANCO_TESTE_HEIDISQL.sql    IMPORTANTE  Cria o banco isolado de testes (necessário para a bateria completa).
 
 PARA RODAR NO SSH DA AWS (Lightsail, como usuário ubuntu, SEM sudo)

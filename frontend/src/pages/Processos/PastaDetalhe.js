@@ -6,7 +6,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { processosAPI, andamentoAPI, prazosAPI, tarefasAPI, audienciasAPI, periciasAPI, financeiroAPI, pessoasAPI, etiquetasAPI } from '../../services/api';
+import { processosAPI, andamentoAPI, prazosAPI, tarefasAPI, audienciasAPI, periciasAPI, financeiroAPI, pessoasAPI, etiquetasAPI, vigilanciasAPI } from '../../services/api';
 import EtiquetaAcordo, { estiloFundoAcordo, statusEhAcordo, useCorAcordo } from '../../components/EtiquetaAcordo';
 import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetaEscritorioSubmenu, ModalHistoricoEtiquetaEscritorio } from '../../components/Etiquetas';
 import { formatarData, formatarNumeroPasta, formatarMoeda, labelStatusPrazo, corPrazo, toTitleCase, hojeLocal, audienciaJaPassou } from '../../utils/formatters';
@@ -226,6 +226,11 @@ export default function PastaDetalhe() {
   const [periciaMarcandoRemarcada, setPericiaMarcandoRemarcada] = useState(null); // perícia só marcada como remarcada
   const [periciaHistorico, setPericiaHistorico]   = useState(null); // perícia com histórico aberto
 
+  // Vigilâncias do processo (lembrete sem data; ex.: Recurso adesivo) — lista guardada aqui (selo do topo, em
+  // QUALQUER aba); a aba Vigilâncias (AbaVigilancias, abaixo) controla as próprias janelas.
+  const [vigilancias, setVigilancias]           = useState([]);
+  const [mostrarEncerradas, setMostrarEncerradas] = useState(false);
+
   // Modal de confirmação reutilizável (substitui window.confirm)
   const [confirmar, setConfirmar] = useState(null);
   // Comunicar cliente / Reenviar comunicado da perícia: abre a janela com Para, Assunto e Mensagem; só "Enviar" dispara o e-mail
@@ -263,6 +268,14 @@ export default function PastaDetalhe() {
 
   // Pasta diferente (outro id) volta a mostrar "Carregando pasta..." na 1ª carga
   useEffect(() => { pastaJaCarregada.current = false; carregarPasta(); }, [carregarPasta]);
+
+  // Vigilâncias da pasta: carregadas sempre que a pasta muda (o selo do topo aparece em QUALQUER aba) e de novo
+  // quando a aba Vigilâncias troca o filtro "Mostrar encerradas".
+  const carregarVigilancias = useCallback(async () => {
+    const { data } = await vigilanciasAPI.listar(id, mostrarEncerradas);
+    if (data.ok) setVigilancias(data.dados);
+  }, [id, mostrarEncerradas]);
+  useEffect(() => { carregarVigilancias(); }, [carregarVigilancias]);
 
   // Lista de usuários do filtro "Responsável" da aba Prazos — só carrega para quem pode ver todos.
   useEffect(() => {
@@ -888,6 +901,9 @@ export default function PastaDetalhe() {
               <span className="badge badge-cinza">{processos[0].status_nome}</span>
             )}
             {temAcordoNaPasta && <EtiquetaAcordo cor={corAcordo} />}
+            {vigilancias.filter(v => v.situacao === 'aguardando').map(v => (
+              <span key={v.id} className="badge badge-laranja">Vigilância: {v.tipo_nome}</span>
+            ))}
           </div>
         </div>
       </div>
@@ -906,6 +922,7 @@ export default function PastaDetalhe() {
             { key: 'audiencias', label: 'Audiências' },
             { key: 'pericias',   label: 'Perícias' },
             { key: 'financeiro', label: 'Financeiro' },
+            { key: 'vigilancias', label: 'Vigilâncias' },
           ].map(({ key, label }) => (
             <button key={key} className={`aba-btn ${abaAtiva === key ? 'ativa' : ''}`}
               onClick={() => setAbaAtiva(key)}>
@@ -1776,6 +1793,17 @@ export default function PastaDetalhe() {
             )}
           </div>
         )}
+
+        {/* === ABA: VIGILÂNCIAS === (lembrete sem data; ex.: Recurso adesivo) */}
+        {abaAtiva === 'vigilancias' && (
+          <AbaVigilancias
+            processos={processos}
+            vigilancias={vigilancias}
+            mostrarEncerradas={mostrarEncerradas}
+            onMudarFiltro={setMostrarEncerradas}
+            onReload={carregarVigilancias}
+          />
+        )}
       </div>
 
       {/* Modal: Novo Processo (na mesma pasta)
@@ -2141,6 +2169,348 @@ function ItemParteContato({ parte, smsAtivo, onReload }) {
       {copiarEmail && (
         <ModalCopiarEmail pessoa={pessoaObj} emails={copiarEmail.emails}
           onFechar={() => setCopiarEmail(null)} />
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// VIGILÂNCIA DO PROCESSO (pedido do usuário, 05/11/2026; porte do NovoJud-saas).
+// Lembrete SEM DATA que fica de olho num processo (ex.: "Recurso adesivo"). Aba da ficha da pasta + janelas.
+// ============================================================
+
+const SITUACAO_VIGILANCIA = { aguardando: 'Aguardando', encerrada: 'Encerrada' };
+
+// Aba "Vigilâncias" — lista das vigilâncias da pasta (todos os processos, apensos inclusive).
+function AbaVigilancias({ processos, vigilancias, mostrarEncerradas, onMudarFiltro, onReload }) {
+  const { temPermissao } = useAuth();
+  const [nova, setNova]           = useState(false);
+  const [editando, setEditando]   = useState(null);
+  const [encerrando, setEncerrando] = useState(null);
+  const [recorreu, setRecorreu]   = useState(null);
+  const podeAlterar   = temPermissao('vigilancias', 'alterar');
+  const podeCadastrar = temPermissao('vigilancias', 'cadastrar');
+
+  const processoDe = (v) => processos.find(p => p.id === v.processo_id);
+  const recorrido = recorreu ? processoDe(recorreu) : null;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+        <label style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '13px', cursor: 'pointer' }}>
+          <input type="checkbox" checked={mostrarEncerradas} onChange={e => onMudarFiltro(e.target.checked)} />
+          <span>Mostrar encerradas</span>
+        </label>
+        {podeCadastrar && (
+          <button className="btn btn-primary" onClick={() => setNova(true)}>+ Nova Vigilância</button>
+        )}
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="tabela">
+          <thead>
+            <tr>
+              <th>Tipo</th><th>Processo</th><th>Situação</th><th>Avisar</th><th>Observação</th><th>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {vigilancias.map(v => (
+              <tr key={v.id}>
+                <td>{v.tipo_nome}</td>
+                <td>{v.processo_numero || `Processo #${v.processo_id}`}{v.apenso ? ' (apenso)' : ''}</td>
+                <td>
+                  <span className={`badge ${v.situacao === 'aguardando' ? 'badge-laranja' : 'badge-cinza'}`}>
+                    {SITUACAO_VIGILANCIA[v.situacao]}
+                  </span>
+                  {v.situacao === 'encerrada' && v.motivo_encerramento && (
+                    <div style={{ fontSize: '12px', color: '#5b6472', marginTop: '2px' }}>{v.motivo_encerramento}</div>
+                  )}
+                </td>
+                <td>{(v.usuarios || []).map(u => u.nome).join(', ')}</td>
+                <td>{v.observacao || ''}</td>
+                <td>
+                  {v.situacao !== 'encerrada' && podeAlterar && (
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      {temPermissao('prazos', 'cadastrar') && (
+                        <button className="btn btn-danger" style={{ fontSize: '12px', padding: '4px 10px' }} onClick={() => setRecorreu(v)}>
+                          A parte contrária recorreu
+                        </button>
+                      )}
+                      <button className="btn btn-outline" style={{ fontSize: '12px', padding: '4px 10px' }} onClick={() => setEditando(v)}>Editar</button>
+                      <button className="btn btn-outline" style={{ fontSize: '12px', padding: '4px 10px' }} onClick={() => setEncerrando(v)}>Encerrar</button>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {vigilancias.length === 0 && <p style={{ textAlign: 'center', color: '#888', padding: '20px' }}>Nenhuma vigilância</p>}
+      </div>
+      {(nova || editando) && (
+        <ModalDaVigilancia
+          processos={processos}
+          vigilancia={editando}
+          onFechar={(gravou) => { setNova(false); setEditando(null); if (gravou) onReload(); }}
+        />
+      )}
+      {encerrando && (
+        <ModalEncerrarVigilancia
+          vigilancia={encerrando}
+          onFechar={(gravou) => { setEncerrando(null); if (gravou) onReload(); }}
+        />
+      )}
+      {recorreu && recorrido && (
+        <ModalNovoPrazo
+          tipos={{ tipos: [], subtipos: [] }}
+          vigilanciaInicial={recorreu.id}
+          descricaoInicial={`${recorreu.tipo_nome} — a parte contrária recorreu`}
+          processoInicial={{ processo_id: recorrido.id, numero: recorrido.numProc, titulo: recorrido.NomeTituloProc || '' }}
+          onFechar={(gravou) => { setRecorreu(null); if (gravou) onReload(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Janela Nova/Editar Vigilância.
+function ModalDaVigilancia({ processos, vigilancia, onFechar }) {
+  const { temPermissao } = useAuth();
+  const [tipos, setTipos] = useState([]);
+  const [usuarios, setUsuarios] = useState([]);
+  const [gerenciandoTipos, setGerenciandoTipos] = useState(false);
+  const comumNaoApenso = processos.find(p => !p.apenso_de_id) || processos[0];
+  const [processoId, setProcessoId] = useState(vigilancia?.processo_id ?? comumNaoApenso?.id ?? '');
+  const [tipoId, setTipoId]         = useState(vigilancia?.tipo_id ?? '');
+  const [observacao, setObservacao] = useState(vigilancia?.observacao ?? '');
+  const [avisados, setAvisados]     = useState((vigilancia?.usuarios || []).map(u => u.id));
+  const [erro, setErro]             = useState('');
+  const [salvando, setSalvando]     = useState(false);
+
+  const recarregarTipos = useCallback(() => {
+    vigilanciasAPI.tipos().then(r => { if (r.data.ok) setTipos(r.data.dados); });
+  }, []);
+  useEffect(() => { recarregarTipos(); }, [recarregarTipos]);
+  useEffect(() => { processosAPI.auxiliares().then(r => { if (r.data.ok) setUsuarios(r.data.dados.usuarios || []); }); }, []);
+
+  function alternar(id) {
+    setAvisados(a => a.includes(id) ? a.filter(x => x !== id) : [...a, id]);
+  }
+
+  async function salvar() {
+    if (!vigilancia && !tipoId) return setErro('Escolha o tipo de vigilância.');
+    if (avisados.length === 0) return setErro('Escolha ao menos um usuário para ser avisado.');
+    setErro('');
+    setSalvando(true);
+    try {
+      const texto = observacao.trim() === '' ? null : observacao.trim();
+      if (vigilancia) await vigilanciasAPI.editar(vigilancia.id, { observacao: texto, usuarios: avisados });
+      else await vigilanciasAPI.criar({ processo_id: processoId, tipo_id: tipoId, observacao: texto, usuarios: avisados });
+      onFechar(true);
+    } catch (err) { setErro(err.response?.data?.mensagem || 'Erro ao salvar a vigilância'); }
+    finally { setSalvando(false); }
+  }
+
+  // Usuário desativado que já estava na vigilância continua aparecendo (para poder tirar).
+  const listaUsuarios = [
+    ...usuarios,
+    ...(vigilancia?.usuarios || []).filter(u => !usuarios.some(x => x.id === u.id)).map(u => ({ id: u.id, nome: `${u.nome} (desativado)` })),
+  ];
+
+  return (
+    <>
+      <div className="modal-overlay">
+        <div className="modal-box" style={{ maxWidth: '560px' }}>
+          <div className="modal-header">
+            <h3>{vigilancia ? 'Editar Vigilância' : 'Nova Vigilância'}</h3>
+            <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
+          </div>
+          <div className="modal-body">
+            {erro && (
+              <div style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#b91c1c', padding: '8px 12px', borderRadius: '6px', fontSize: '13px', marginBottom: '12px' }}>
+                {erro}
+              </div>
+            )}
+            <div className="form-group">
+              <label className="form-label">Processo</label>
+              <select className="form-control" value={processoId} disabled={!!vigilancia}
+                onChange={e => setProcessoId(Number(e.target.value))}>
+                {processos.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.numProc || (p.protocolo ? `Protocolo ${p.protocolo}` : `Processo #${p.id}`)}
+                    {p.apenso_de_id ? ' (apenso)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Tipo de vigilância</label>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <select className="form-control" value={tipoId} disabled={!!vigilancia}
+                  onChange={e => setTipoId(Number(e.target.value))}>
+                  <option value="">Selecione...</option>
+                  {tipos.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+                </select>
+                {!vigilancia && (temPermissao('vigilancias.tipos', 'cadastrar') || temPermissao('vigilancias.tipos', 'alterar') || temPermissao('vigilancias.tipos', 'excluir')) && (
+                  <button type="button" className="btn btn-outline" style={{ padding: '0 8px' }} title="Gerenciar tipos"
+                    onClick={() => setGerenciandoTipos(true)}>…</button>
+                )}
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Observação</label>
+              <textarea className="form-control" rows={3} maxLength={1000} value={observacao}
+                onChange={e => setObservacao(e.target.value)} style={{ resize: 'vertical' }} />
+            </div>
+            <fieldset style={{ border: '1px solid #d1d5db', borderRadius: '6px', padding: '8px 12px', maxHeight: '200px', overflowY: 'auto' }}>
+              <legend style={{ fontSize: '12px', padding: '0 4px' }}>Quem deve ser avisado</legend>
+              {listaUsuarios.map(u => (
+                <label key={u.id} style={{ display: 'flex', gap: '8px', alignItems: 'center', cursor: 'pointer', padding: '2px 0' }}>
+                  <input type="checkbox" checked={avisados.includes(u.id)} onChange={() => alternar(u.id)} />
+                  <span>{u.nome}</span>
+                </label>
+              ))}
+            </fieldset>
+          </div>
+          <div className="modal-footer">
+            <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
+            <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+              {salvando ? 'Salvando...' : 'Salvar'}
+            </button>
+          </div>
+        </div>
+      </div>
+      {gerenciandoTipos && (
+        <ModalDeTiposVigilancia tipos={tipos} onMudar={recarregarTipos} onFechar={() => setGerenciandoTipos(false)} />
+      )}
+    </>
+  );
+}
+
+// Janela "Encerrar vigilância" — pede o motivo (o processo volta ao normal; ninguém mais é avisado).
+function ModalEncerrarVigilancia({ vigilancia, onFechar }) {
+  const [motivo, setMotivo]     = useState('');
+  const [salvando, setSalvando] = useState(false);
+
+  async function confirmar() {
+    if (!motivo.trim()) return toast.error('Informe o motivo');
+    setSalvando(true);
+    try {
+      await vigilanciasAPI.encerrar(vigilancia.id, motivo.trim());
+      toast.success('Vigilância encerrada');
+      onFechar(true);
+    } catch (err) { toast.error(err.response?.data?.mensagem || 'Erro ao encerrar'); }
+    finally { setSalvando(false); }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box modal-pequeno">
+        <div className="modal-header">
+          <h3>Encerrar vigilância</h3>
+          <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
+        </div>
+        <div className="modal-body">
+          <p style={{ marginBottom: '12px', color: '#555' }}>
+            Encerrar a vigilância "<strong>{vigilancia.tipo_nome}</strong>"? O processo volta ao normal e ninguém mais será avisado.
+          </p>
+          <div className="form-group">
+            <label className="form-label">Motivo *</label>
+            <textarea className="form-control" rows={3} maxLength={300} value={motivo}
+              onChange={e => setMotivo(e.target.value)} style={{ resize: 'vertical' }} />
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={() => onFechar(false)}>Voltar</button>
+          <button className="btn btn-primary" onClick={confirmar} disabled={salvando}>
+            {salvando ? 'Encerrando...' : 'Encerrar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Cadastro dos tipos de vigilância ("Recurso adesivo"...): criar, renomear e excluir.
+function ModalDeTiposVigilancia({ tipos, onMudar, onFechar }) {
+  const { temPermissao } = useAuth();
+  const [novoNome, setNovoNome] = useState('');
+  const [editandoId, setEditandoId] = useState(null);
+  const [nomeEditado, setNomeEditado] = useState('');
+  const [erro, setErro]         = useState('');
+  const [confirmarExcluir, setConfirmarExcluir] = useState(null);
+  const podeCadastrar = temPermissao('vigilancias.tipos', 'cadastrar');
+  const podeAlterar   = temPermissao('vigilancias.tipos', 'alterar');
+  const podeExcluir   = temPermissao('vigilancias.tipos', 'excluir');
+
+  async function criar() {
+    if (!novoNome.trim()) return setErro('Informe o nome do tipo');
+    try {
+      await vigilanciasAPI.criarTipo({ nome: novoNome.trim() });
+      setNovoNome(''); setErro(''); onMudar();
+    } catch (err) { setErro(err.response?.data?.mensagem || 'Erro ao criar'); }
+  }
+  async function salvarEdicao(id) {
+    if (!nomeEditado.trim()) return setErro('Informe o nome do tipo');
+    try {
+      await vigilanciasAPI.editarTipo(id, { nome: nomeEditado.trim() });
+      setEditandoId(null); setErro(''); onMudar();
+    } catch (err) { setErro(err.response?.data?.mensagem || 'Erro ao renomear'); }
+  }
+  async function excluir(id) {
+    await vigilanciasAPI.excluirTipo(id);
+    onMudar();
+  }
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 1100 }}>
+      <div className="modal-box modal-pequeno">
+        <div className="modal-header">
+          <h3>Tipos de Vigilância</h3>
+          <button className="modal-fechar" onClick={onFechar}>✕</button>
+        </div>
+        <div className="modal-body">
+          {erro && <div style={{ color: '#b91c1c', fontSize: '13px', marginBottom: '10px' }}>{erro}</div>}
+          {podeCadastrar && (
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+              <input className="form-control" placeholder="Novo tipo..." value={novoNome}
+                onChange={e => setNovoNome(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') criar(); }} />
+              <button className="btn btn-primary" onClick={criar}>+ Adicionar</button>
+            </div>
+          )}
+          {tipos.length === 0 && <p style={{ color: '#888' }}>Nenhum tipo cadastrado</p>}
+          {tipos.map(t => (
+            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
+              {editandoId === t.id ? (
+                <>
+                  <input className="form-control" value={nomeEditado} onChange={e => setNomeEditado(e.target.value)} style={{ flex: 1 }} />
+                  <button className="btn btn-outline" style={{ fontSize: '12px', padding: '4px 10px' }} aria-label="Salvar o novo nome" onClick={() => salvarEdicao(t.id)}>✓</button>
+                </>
+              ) : (
+                <>
+                  <span style={{ flex: 1 }}>{t.nome}</span>
+                  {podeAlterar && (
+                    <button className="btn btn-outline" style={{ fontSize: '12px', padding: '4px 10px' }} onClick={() => { setEditandoId(t.id); setNomeEditado(t.nome); }}>Editar</button>
+                  )}
+                  {podeExcluir && (
+                    <button className="btn btn-outline" style={{ fontSize: '12px', padding: '4px 10px' }} onClick={() => setConfirmarExcluir(t)}>Excluir</button>
+                  )}
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onFechar}>Fechar</button>
+        </div>
+      </div>
+      {confirmarExcluir && (
+        <ModalConfirmar
+          titulo="Excluir tipo"
+          mensagem={`Excluir o tipo "${confirmarExcluir.nome}"?`}
+          textoBotao="Excluir"
+          acao={() => excluir(confirmarExcluir.id)}
+          onCancelar={() => setConfirmarExcluir(null)}
+        />
       )}
     </div>
   );

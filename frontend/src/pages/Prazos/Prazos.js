@@ -19,6 +19,7 @@ import useEscFechar from '../../hooks/useEscFechar';
 import SelectPesquisavel from '../../components/ui/SelectPesquisavel';
 import SelectComCRUD from '../../components/ui/SelectComCRUD';
 import CampoPesquisa from '../../components/ui/CampoPesquisa';
+import PerguntaDasVigilancias from '../../components/PerguntaDasVigilancias';
 
 // Status calculados pela data — concluido/cancelado são os únicos armazenados no banco
 // 'fazendo' é filtro auxiliar que mostra prazos ativos com alguém fazendo
@@ -405,7 +406,7 @@ export function ModalCancelarPrazo({ prazo, onFechar }) {
 // uma SUGESTÃO da publicação (nº de dias + descrição; a data de início o usuário confere).
 export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial, publicacaoId,
                                  descricaoInicial, quantidadeInicial, tipoDiasInicial,
-                                 onSalvarRascunho, dataInicioInicial, pastaInicial }) {
+                                 onSalvarRascunho, dataInicioInicial, pastaInicial, vigilanciaInicial }) {
   // ESC fecha esta janela — mas só quando ela é a mais acima (nunca fecha a de trás).
   const overlayRef = useEscFechar(() => onFechar(false));
   const [form, setForm]         = useState({
@@ -418,6 +419,8 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
   const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso]       = useState(''); // faixa de aviso DENTRO do modal (erros de salvamento)
   const [info, setInfo]         = useState(null); // pequeno modal informativo p/ validações obrigatórias
+  // o servidor pergunta se o prazo encerra a vigilância do processo (409, detalhes.codigo = PERGUNTAR_VIGILANCIAS)
+  const [pergunta, setPergunta] = useState(null);
   // Refs dos campos obrigatórios — ao fechar o aviso, o foco vai para o campo que faltou
   const procRef        = useRef(null);
   const tipoWrapRef    = useRef(null);
@@ -547,8 +550,10 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
 
   function set(k, v) { setForm(f => ({...f, [k]: v})); }
 
-  async function salvar() {
+  async function salvar(encerrarVigilancias) {
     // Validações obrigatórias: pequeno modal informativo; ao fechar, o foco vai para o campo que faltou.
+    // (não repete quando já está respondendo a pergunta das vigilâncias — os campos já foram validados antes)
+    if (encerrarVigilancias !== undefined) return salvarDeVerdade(encerrarVigilancias);
     if (!form.processo_id) return setInfo({
       titulo: naoCadastrado ? 'Processo não cadastrado' : 'Processo obrigatório',
       mensagem: naoCadastrado
@@ -559,21 +564,37 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
     if (!form.tipo_prazo_id) return setInfo({ titulo: 'Tipo de prazo obrigatório', mensagem: 'Selecione o tipo de prazo.', focar: () => tipoWrapRef.current?.querySelector('select')?.focus() });
     if (!form.subtipo_id)    return setInfo({ titulo: 'Subtipo obrigatório', mensagem: 'Selecione o subtipo.', focar: () => subtipoWrapRef.current?.querySelector('select')?.focus() });
     if (!form.data_final)    return setInfo({ titulo: 'Data final obrigatória', mensagem: 'Informe a data final (ou a quantidade de dias).', focar: () => dataFinalRef.current?.focus() });
-    setAviso('');
-    // Quando aberto pelo registro de ATA, o prazo ainda é apenas um rascunho.
-    // A persistência acontece junto com a ATA, em uma única transação.
+    // Quando aberto pelo registro de ATA, o prazo ainda é apenas um rascunho (nunca pergunta de vigilância: a ata não
+    // passa por aqui para gravar).
     if (onSalvarRascunho) {
+      setAviso('');
       onSalvarRascunho({ ...form, notificar_conclusao: (notificarConclusao && form.delegado_para) ? 1 : 0 });
       onFechar(false);
       return;
     }
+    return salvarDeVerdade();
+  }
+
+  async function salvarDeVerdade(encerrarVigilancias) {
+    setAviso('');
     setSalvando(true);
     try {
-      await prazosAPI.criar({ ...form, publicacao_id: publicacaoId || null, notificar_conclusao: (notificarConclusao && form.delegado_para) ? 1 : 0 });
+      await prazosAPI.criar({
+        ...form, publicacao_id: publicacaoId || null,
+        notificar_conclusao: (notificarConclusao && form.delegado_para) ? 1 : 0,
+        ...(encerrarVigilancias === undefined ? {} : { encerrar_vigilancias: encerrarVigilancias }),
+      });
       toast.success('Prazo criado com sucesso!');
       onFechar(true);
-    } catch (err) { setAviso(err.response?.data?.mensagem || 'Não foi possível criar o prazo.'); }
-    finally { setSalvando(false); }
+    } catch (err) {
+      const resp = err.response?.data;
+      if (err.response?.status === 409 && resp?.detalhes?.codigo === 'PERGUNTAR_VIGILANCIAS') {
+        const lista = resp.detalhes.vigilancias;
+        if (lista && lista.length > 0) { setPergunta(lista); setSalvando(false); return; }
+      }
+      setPergunta(null);
+      setAviso(resp?.mensagem || 'Não foi possível criar o prazo.');
+    } finally { setSalvando(false); }
   }
 
   const subtiposFiltrados = form.tipo_prazo_id
@@ -736,12 +757,21 @@ export function ModalNovoPrazo({ tipos, onFechar, processoInicial, buscaInicial,
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+          <button className="btn btn-primary" onClick={() => salvar()} disabled={salvando}>
             {salvando ? 'Salvando...' : (onSalvarRascunho ? 'Adicionar à ata' : 'Salvar Prazo')}
           </button>
         </div>
       </div>
     </div>
+    {pergunta && (
+      <PerguntaDasVigilancias
+        vigilancias={pergunta}
+        sugerida={vigilanciaInicial}
+        salvando={salvando}
+        onResponder={(encerrar) => salvarDeVerdade(encerrar)}
+        onVoltar={() => setPergunta(null)}
+      />
+    )}
     {info && (
       <div style={{ position: 'relative', zIndex: 2000 }}>
         <ModalInfo {...info} onFechar={() => { const f = info.focar; setInfo(null); if (f) setTimeout(f, 50); }} />

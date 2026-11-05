@@ -13,6 +13,7 @@ const { texto, dataIso, inteiroPositivo } = require('../utils/camposTexto');
 const { comIdNumerico } = require('../utils/rotasSeguras');
 const { lerBuscaFrase, condBuscaFrase } = require('../utils/buscaFrase');
 const { proximoHorarioDisponivel, horaFimCurta } = require('../utils/horaAgenda');
+const { resolverVigilanciasDoPrazo, encerrarVigilancia } = require('../utils/vigilanciasCiclo');
 
 function responderErroCalendario(res, err) {
   if (err?.code === 'CALENDARIO_INSUFICIENTE' || err?.code === 'CALENDARIO_QUANTIDADE_INVALIDA') {
@@ -349,6 +350,12 @@ async function criar(req, res) {
     let result;
     try {
       await conn.beginTransaction();
+      // Vigilância do processo: o usuário diz se este prazo a encerra (sem resposta = volta a pergunta; nada é gravado).
+      const vigilanciaResolvida = await resolverVigilanciasDoPrazo(conn, procLido.valor, req.body.encerrar_vigilancias);
+      if (vigilanciaResolvida.aviso) {
+        await conn.rollback();
+        return erro(res, vigilanciaResolvida.aviso.mensagem, vigilanciaResolvida.aviso.status, vigilanciaResolvida.aviso.detalhes);
+      }
       // Prazo NOVO: horário só de organização (fila por responsável/dia; sem vaga = sem hora, sem erro).
       const horaAgenda = await proximoHorarioDisponivel(conn, { usuarioId: delegado_para || null, data: data_vencimento });
       [result] = await conn.execute(
@@ -362,6 +369,12 @@ async function criar(req, res) {
           delegado_para || null, req.usuario.id, publicacao_id || null, notificar_conclusao ? 1 : 0, horaAgenda
         ]
       );
+      for (const vigilanciaId of vigilanciaResolvida.encerrar) {
+        await encerrarVigilancia(conn, {
+          vigilanciaId, usuarioId: req.usuario.id,
+          motivo: 'Encerrada pelo cadastro de um prazo.', prazoId: result.insertId,
+        });
+      }
       await auditoria.registrar(req.usuario.id, 'prazos_processo', 'criar', result.insertId, null, null, conn);
       await conn.commit();
     } catch (err) { await conn.rollback(); throw err; }

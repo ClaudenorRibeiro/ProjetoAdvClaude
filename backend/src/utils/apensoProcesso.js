@@ -149,6 +149,11 @@ async function dependenciasDoProcesso(conn, processoId) {
     const [[{ total }]] = await conn.execute(`SELECT COUNT(*) AS total FROM ${v.tabela} WHERE ${v.coluna} = ?`, [processoId]);
     if (total > 0) bloqueios.push(`${total} ${v.label}`);
   }
+  // Vigilância: só a AGUARDANDO bloqueia (a encerrada é só histórico e sai junto com o processo, ver apagarProcessoEFilhos).
+  const [[{ total: totalVigilancia }]] = await conn.execute(
+    `SELECT COUNT(*) AS total FROM vigilancia WHERE processo_id = ? AND situacao = 'aguardando'`, [processoId]
+  );
+  if (totalVigilancia > 0) bloqueios.push(`${totalVigilancia} vigilância(s) em andamento`);
   return bloqueios;
 }
 
@@ -183,6 +188,9 @@ async function apagarProcessoEFilhos(conn, id, usuarioId, antes) {
   await conn.execute('DELETE FROM processo_perito    WHERE proc_id = ?', [id]);
   await conn.execute('DELETE FROM processo_assunto   WHERE processo_id = ?', [id]);
   await conn.execute('DELETE FROM processo_oabs      WHERE processo_id = ?', [id]);
+  // Só sobram vigilâncias ENCERRADAS (a aguardando já bloqueou em dependenciasDoProcesso) — ficam só como histórico,
+  // saem junto com o processo (vigilancia_usuario sai em cascata).
+  await conn.execute('DELETE FROM vigilancia WHERE processo_id = ?', [id]);
   await conn.execute('DELETE FROM tblproc WHERE id = ?', [id]);
   await auditoria.registrar(usuarioId, 'tblproc', 'excluir', Number(id),
     { numProc: antes.numProc, titulo: antes.NomeTituloProc }, null, conn);
