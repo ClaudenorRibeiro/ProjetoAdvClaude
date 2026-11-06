@@ -13,6 +13,32 @@ IA/assistente que trabalhe neste repositório, em qualquer sessão futura.**
 > contra o código atual** (regra 0 abaixo: relatório antigo expira quando o
 > código muda).
 
+## REGRA Nº 1 — Fluxo de branches e publicação (vale para TODOS os
+projetos do usuário, cada um com seu próprio branch de rascunho)
+
+O usuário mantém **vários projetos totalmente separados e independentes**
+(ProjetoAdvClaude, AC-Portaria, NovoJud-saas — e outros que vierem). O que
+é pedido em um nunca tem relação com outro — nunca presumir, copiar ou
+"portar" nada de um projeto para o outro por conta própria.
+
+Em cada projeto existem dois branches: **`rascunho`** (neste projeto) —
+onde a IA trabalha e pode dar `push` livremente, sem pedir autorização a
+cada vez, desde que dentro do escopo já autorizado — e **`main`** —
+a versão que vai para o servidor; a IA só dá `push` ali quando o usuário
+disser explicitamente, na hora, **"PODE SUBIR"** (autorização anterior
+não vale para a próxima vez).
+
+Fluxo completo: (1) a IA codifica e envia só para o `rascunho`; (2) o
+usuário baixa o rascunho no PC local e testa; (3) se estiver tudo certo,
+o usuário autoriza a IA a atualizar o `main`; (4) o usuário mesmo entra
+por SSH na AWS daquele projeto e atualiza o servidor para os usuários
+finais — a IA nunca mexe na AWS/produção por conta própria.
+
+**Antes de afirmar algo sobre branches de qualquer projeto (quais
+existem, em qual está o quê), sempre conferir com `git fetch` completo
+(nunca clone raso/`--depth 1` sem buscar todos os branches) — nunca
+supor pela memória ou por um clone parcial.**
+
 ## 0. Regra de certeza absoluta (a mais importante)
 
 Se a IA não tiver certeza absoluta sobre uma informação, código ou fato,
