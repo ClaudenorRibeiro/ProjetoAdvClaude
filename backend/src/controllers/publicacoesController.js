@@ -26,7 +26,8 @@ const iaService = require('../services/iaService');
 const { enviarEmail } = require('../utils/email');
 const { paginacao, escaparLike } = require('../utils/helpers');
 const { texto } = require('../utils/camposTexto');
-const { avisarPublicacoes } = require('../utils/vigilanciasAvisos');
+const { vigilanciasAtivasPorProcessos } = require('../utils/vigilanciasConsulta');
+const { temPermissao: usuarioTemPermissao } = require('../middleware/permissoes');
 
 // "Impressão digital" (SHA-256) do texto EXATO da publicação — base da dedup fiel.
 function hashTexto(texto) {
@@ -246,9 +247,6 @@ async function importarCnj(req, res) {
     } finally {
       conn.release();
     }
-
-    // Vigilância do processo: publicação nova que parece recurso, num processo vigiado, avisa no sino (melhor esforço).
-    await avisarPublicacoes(novos.map((c) => ({ numero_processo: c.numero_processo, texto: c.texto })));
 
     return sucesso(res, { configurado: true, novas: novos.length, recebidas: itens.length },
       `${novos.length} nova(s) publicação(ões) importada(s).`);
@@ -489,6 +487,13 @@ async function listar(req, res) {
       }
     }
 
+    // Vigilância do processo (lembrete sem data; ex.: "Recurso adesivo"): o 👁 na lista e o aviso ao abrir a
+    // publicação só aparecem para quem tem permissão de ver Vigilâncias (mesma regra da aba da pasta).
+    const podeVerVigilancias = await usuarioTemPermissao(req.usuario, 'vigilancias', null, 'visualizar');
+    const vigilanciasPorProcesso = podeVerVigilancias
+      ? await vigilanciasAtivasPorProcessos(pool, rows.map(r => r.processo_id).filter(Boolean))
+      : new Map();
+
     // Junta os responsáveis das 3 fontes de ação numa lista distinta por publicação.
     const registros = rows.map(r => {
       const nomes = [r.resp_prazos, r.resp_tarefas, r.resp_compromissos]
@@ -512,6 +517,7 @@ async function listar(req, res) {
         pode_agir: podeAgir,
         resp_acoes: [...new Set(nomes)].join(', ') || null,
         processos_vinculados: vinculadosPorNumero.get(chaveNumero(resto.numero_processo)) || [],
+        vigilancias_ativas: vigilanciasPorProcesso.get(resto.processo_id) || [],
       };
     });
 
@@ -638,9 +644,6 @@ async function importar(req, res) {
     } finally {
       conn.release();
     }
-
-    // Vigilância do processo: publicação nova que parece recurso, num processo vigiado, avisa no sino (melhor esforço).
-    await avisarPublicacoes(novos.map((c) => ({ numero_processo: c.numero_processo, texto: c.texto })));
 
     return sucesso(res, { configurado: true, novas: novos.length, recebidas: intimacoes.length },
       `${novos.length} nova(s) publicação(ões) importada(s).`);
@@ -1119,11 +1122,21 @@ async function obter(req, res) {
     }
     const [rows] = await pool.execute(
       `SELECT id, fonte, data_publicacao, numero_processo, numero_publicacao,
-              tribunal, oab, titulo, cabecalho, texto, hash_cnj, tratada
-         FROM publicacoes WHERE id = ?`, [id]
+              tribunal, oab, titulo, cabecalho, texto, hash_cnj, tratada,
+              (SELECT t0.id FROM tblproc t0
+                WHERE p.numero_processo IS NOT NULL AND p.numero_processo <> ''
+                  AND REPLACE(REPLACE(REPLACE(t0.numProc,'.',''),'-',''),' ','')
+                      = REPLACE(REPLACE(REPLACE(p.numero_processo,'.',''),'-',''),' ','')
+                ORDER BY t0.apenso_de_id IS NOT NULL, t0.id
+                LIMIT 1) AS processo_id
+         FROM publicacoes p WHERE p.id = ?`, [id]
     );
     if (!rows.length) return naoEncontrado(res, 'Publicação não encontrada');
-    return sucesso(res, rows[0]);
+    const podeVerVigilancias = await usuarioTemPermissao(req.usuario, 'vigilancias', null, 'visualizar');
+    const vigilanciasPorProcesso = podeVerVigilancias
+      ? await vigilanciasAtivasPorProcessos(pool, [rows[0].processo_id])
+      : new Map();
+    return sucesso(res, { ...rows[0], vigilancias_ativas: vigilanciasPorProcesso.get(rows[0].processo_id) || [] });
   } catch (err) {
     return erroInterno(res, err);
   }

@@ -30,6 +30,9 @@ PARA RODAR NO HEIDISQL (banco)
   sql_vigilancias_para_heidi.sql                IMPORTANTE  Vigilancia do processo (05/11/2026): cria as tabelas vigilancia_tipo, vigilancia e vigilancia_usuario (lembrete sem data
                                                             que fica de olho num processo, ex.: Recurso adesivo) e ja grava o tipo "Recurso adesivo". Nao depende de versao numerada;
                                                             pode rodar em qualquer banco do sistema. Repetivel; recusa banco sem tblproc/usuarios/logs_auditoria. Termina com PRONTO.
+  sql_remover_vigilancia_usuario_para_heidi.sql IMPORTANTE  Redesenho da Vigilancia (06/11/2026): remove a tabela vigilancia_usuario (o aviso deixou de ser so para quem era
+                                                            marcado e passou a aparecer para quem tem permissao de ver Vigilancias). So apaga essa tabela; vigilancia_tipo e
+                                                            vigilancia continuam. Roda DEPOIS de sql_vigilancias_para_heidi.sql. Repetivel. Termina com PRONTO.
   quality/sql/CRIAR_BANCO_TESTE_HEIDISQL.sql    IMPORTANTE  Cria o banco isolado de testes (necessário para a bateria completa).
 
 PARA RODAR NO SSH DA AWS (Lightsail, como usuário ubuntu, SEM sudo)

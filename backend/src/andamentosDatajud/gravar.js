@@ -37,8 +37,8 @@ async function anotarTipos(conn, tipos) {
 }
 
 // Grava, DENTRO da transação da conexão recebida, os movimentos novos dos últimos 6 meses.
-// `novidade` = marca como novidade (ainda não avisada). Devolve { inseridos, descricoesNovidade } — a 2ª lista só tem
-// as descrições dos movimentos marcados como novidade (serve à vigilância do processo: ver utils/vigilanciasAvisos.js).
+// `novidade` = marca como novidade (ainda não avisada; usado pelo aviso diário de andamentos do DataJud).
+// Devolve { inseridos }.
 async function gravarMovimentosNovos(conn, processoId, movimentos, { hoje, corte, novidade }) {
   const candidatos = new Map();
   for (const m of movimentos) {
@@ -56,7 +56,7 @@ async function gravarMovimentosNovos(conn, processoId, movimentos, { hoje, corte
       dataHora: dh ? dh.dataHora : null,
     });
   }
-  if (candidatos.size === 0) return { inseridos: 0, descricoesNovidade: [] };
+  if (candidatos.size === 0) return { inseridos: 0 };
 
   const hashes = [...candidatos.keys()];
   const [existentes] = await conn.execute(
@@ -66,7 +66,6 @@ async function gravarMovimentosNovos(conn, processoId, movimentos, { hoje, corte
   );
   const jaTem = new Set(existentes.map((r) => r.hash_movimento));
   let novos = 0;
-  const descricoesNovidade = [];
   const tipos = new Map();
   for (const [hash, c] of candidatos) {
     if (jaTem.has(hash)) continue;
@@ -79,7 +78,6 @@ async function gravarMovimentosNovos(conn, processoId, movimentos, { hoje, corte
     );
     if (!r.affectedRows) continue;
     novos += 1;
-    if (novidade) descricoesNovidade.push(c.descricao);
     if (c.codigo !== null) {
       const t = tipos.get(c.codigo) || { nome: c.nome, vezes: 0 };
       t.vezes += 1;
@@ -87,7 +85,7 @@ async function gravarMovimentosNovos(conn, processoId, movimentos, { hoje, corte
     }
   }
   await anotarTipos(conn, tipos);
-  return { inseridos: novos, descricoesNovidade };
+  return { inseridos: novos };
 }
 
 module.exports = { corteDosSeisMeses, resumirMovimentos, gravarMovimentosNovos, LIMITE_DESCRICAO };

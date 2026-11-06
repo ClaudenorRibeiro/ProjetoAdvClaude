@@ -13,7 +13,7 @@ const { texto, dataIso, inteiroPositivo } = require('../utils/camposTexto');
 const { comIdNumerico } = require('../utils/rotasSeguras');
 const { lerBuscaFrase, condBuscaFrase } = require('../utils/buscaFrase');
 const { proximoHorarioDisponivel, horaFimCurta } = require('../utils/horaAgenda');
-const { resolverVigilanciasDoPrazo, encerrarVigilancia } = require('../utils/vigilanciasCiclo');
+const { resolverVigilanciasDoRegistro, encerrarVigilancia } = require('../utils/vigilanciasCiclo');
 
 function responderErroCalendario(res, err) {
   if (err?.code === 'CALENDARIO_INSUFICIENTE' || err?.code === 'CALENDARIO_QUANTIDADE_INVALIDA') {
@@ -351,7 +351,7 @@ async function criar(req, res) {
     try {
       await conn.beginTransaction();
       // Vigilância do processo: o usuário diz se este prazo a encerra (sem resposta = volta a pergunta; nada é gravado).
-      const vigilanciaResolvida = await resolverVigilanciasDoPrazo(conn, procLido.valor, req.body.encerrar_vigilancias);
+      const vigilanciaResolvida = await resolverVigilanciasDoRegistro(conn, procLido.valor, req.body.encerrar_vigilancias, 'prazo');
       if (vigilanciaResolvida.aviso) {
         await conn.rollback();
         return erro(res, vigilanciaResolvida.aviso.mensagem, vigilanciaResolvida.aviso.status, vigilanciaResolvida.aviso.detalhes);

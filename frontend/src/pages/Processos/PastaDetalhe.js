@@ -2209,7 +2209,7 @@ function AbaVigilancias({ processos, vigilancias, mostrarEncerradas, onMudarFilt
         <table className="tabela">
           <thead>
             <tr>
-              <th>Tipo</th><th>Processo</th><th>Situação</th><th>Avisar</th><th>Observação</th><th>Ações</th>
+              <th>Tipo</th><th>Processo</th><th>Situação</th><th>Observação</th><th>Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -2225,7 +2225,6 @@ function AbaVigilancias({ processos, vigilancias, mostrarEncerradas, onMudarFilt
                     <div style={{ fontSize: '12px', color: '#5b6472', marginTop: '2px' }}>{v.motivo_encerramento}</div>
                   )}
                 </td>
-                <td>{(v.usuarios || []).map(u => u.nome).join(', ')}</td>
                 <td>{v.observacao || ''}</td>
                 <td>
                   {v.situacao !== 'encerrada' && podeAlterar && (
@@ -2276,13 +2275,11 @@ function AbaVigilancias({ processos, vigilancias, mostrarEncerradas, onMudarFilt
 function ModalDaVigilancia({ processos, vigilancia, onFechar }) {
   const { temPermissao } = useAuth();
   const [tipos, setTipos] = useState([]);
-  const [usuarios, setUsuarios] = useState([]);
   const [gerenciandoTipos, setGerenciandoTipos] = useState(false);
   const comumNaoApenso = processos.find(p => !p.apenso_de_id) || processos[0];
   const [processoId, setProcessoId] = useState(vigilancia?.processo_id ?? comumNaoApenso?.id ?? '');
   const [tipoId, setTipoId]         = useState(vigilancia?.tipo_id ?? '');
   const [observacao, setObservacao] = useState(vigilancia?.observacao ?? '');
-  const [avisados, setAvisados]     = useState((vigilancia?.usuarios || []).map(u => u.id));
   const [erro, setErro]             = useState('');
   const [salvando, setSalvando]     = useState(false);
 
@@ -2290,31 +2287,19 @@ function ModalDaVigilancia({ processos, vigilancia, onFechar }) {
     vigilanciasAPI.tipos().then(r => { if (r.data.ok) setTipos(r.data.dados); });
   }, []);
   useEffect(() => { recarregarTipos(); }, [recarregarTipos]);
-  useEffect(() => { processosAPI.auxiliares().then(r => { if (r.data.ok) setUsuarios(r.data.dados.usuarios || []); }); }, []);
-
-  function alternar(id) {
-    setAvisados(a => a.includes(id) ? a.filter(x => x !== id) : [...a, id]);
-  }
 
   async function salvar() {
     if (!vigilancia && !tipoId) return setErro('Escolha o tipo de vigilância.');
-    if (avisados.length === 0) return setErro('Escolha ao menos um usuário para ser avisado.');
     setErro('');
     setSalvando(true);
     try {
       const texto = observacao.trim() === '' ? null : observacao.trim();
-      if (vigilancia) await vigilanciasAPI.editar(vigilancia.id, { observacao: texto, usuarios: avisados });
-      else await vigilanciasAPI.criar({ processo_id: processoId, tipo_id: tipoId, observacao: texto, usuarios: avisados });
+      if (vigilancia) await vigilanciasAPI.editar(vigilancia.id, { observacao: texto });
+      else await vigilanciasAPI.criar({ processo_id: processoId, tipo_id: tipoId, observacao: texto });
       onFechar(true);
     } catch (err) { setErro(err.response?.data?.mensagem || 'Erro ao salvar a vigilância'); }
     finally { setSalvando(false); }
   }
-
-  // Usuário desativado que já estava na vigilância continua aparecendo (para poder tirar).
-  const listaUsuarios = [
-    ...usuarios,
-    ...(vigilancia?.usuarios || []).filter(u => !usuarios.some(x => x.id === u.id)).map(u => ({ id: u.id, nome: `${u.nome} (desativado)` })),
-  ];
 
   return (
     <>
@@ -2361,15 +2346,6 @@ function ModalDaVigilancia({ processos, vigilancia, onFechar }) {
               <textarea className="form-control" rows={3} maxLength={1000} value={observacao}
                 onChange={e => setObservacao(e.target.value)} style={{ resize: 'vertical' }} />
             </div>
-            <fieldset style={{ border: '1px solid #d1d5db', borderRadius: '6px', padding: '8px 12px', maxHeight: '200px', overflowY: 'auto' }}>
-              <legend style={{ fontSize: '12px', padding: '0 4px' }}>Quem deve ser avisado</legend>
-              {listaUsuarios.map(u => (
-                <label key={u.id} style={{ display: 'flex', gap: '8px', alignItems: 'center', cursor: 'pointer', padding: '2px 0' }}>
-                  <input type="checkbox" checked={avisados.includes(u.id)} onChange={() => alternar(u.id)} />
-                  <span>{u.nome}</span>
-                </label>
-              ))}
-            </fieldset>
           </div>
           <div className="modal-footer">
             <button className="btn btn-secondary" onClick={() => onFechar(false)}>Cancelar</button>

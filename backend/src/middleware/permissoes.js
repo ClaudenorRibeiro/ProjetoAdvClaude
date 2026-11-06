@@ -22,36 +22,37 @@ function verificarPermissao(modulo, submoduloOuAcao, acaoOpcional) {
 
   return async (req, res, next) => {
     try {
-      // Superusuário (nível 0) e Admin (nível 1) têm acesso irrestrito
-      // Number() garante que string "1" (improvável mas possível em tokens antigos) também passe
-      if (Number(req.usuario.nivel) <= 1) return next();
-
-      // Para demais usuários, consulta a tabela de permissões
-      let query, params;
-      if (submodulo) {
-        query  = `SELECT permitido FROM permissoes
-                  WHERE usuario_id = ? AND modulo = ? AND submodulo = ? AND acao = ?`;
-        params = [req.usuario.id, modulo, submodulo, acao];
-      } else {
-        query  = `SELECT permitido FROM permissoes
-                  WHERE usuario_id = ? AND modulo = ? AND submodulo IS NULL AND acao = ?`;
-        params = [req.usuario.id, modulo, acao];
-      }
-
-      const [rows] = await pool.execute(query, params);
-
-      // Number() garante que TINYINT(1) retornado como boolean true/false pelo MySQL2
-      // também seja comparado corretamente (true !== 1 seria verdadeiro com ===)
-      if (!rows.length || Number(rows[0].permitido) !== 1) {
-        const alvo = submodulo ? `${modulo}/${submodulo}` : modulo;
-        return proibido(res, `Sem permissão para ${acao} em ${alvo}`);
-      }
-
-      next();
+      if (await temPermissao(req.usuario, modulo, submodulo, acao)) return next();
+      const alvo = submodulo ? `${modulo}/${submodulo}` : modulo;
+      return proibido(res, `Sem permissão para ${acao} em ${alvo}`);
     } catch (err) {
       return erroInterno(res, err);
     }
   };
+}
+
+// Mesma regra do middleware acima, mas como função direta (sem req/res) — para telas que precisam saber,
+// DENTRO de outra rota, se o usuário enxergaria um recurso (ex.: Publicações mostrando aviso de Vigilância
+// só para quem tem "vigilancias/visualizar"). `submodulo` pode ser null.
+async function temPermissao(usuario, modulo, submodulo, acao) {
+  // Superusuário (nível 0) e Admin (nível 1) têm acesso irrestrito.
+  // Number() garante que string "1" (improvável mas possível em tokens antigos) também passe.
+  if (Number(usuario.nivel) <= 1) return true;
+
+  let query, params;
+  if (submodulo) {
+    query  = `SELECT permitido FROM permissoes
+              WHERE usuario_id = ? AND modulo = ? AND submodulo = ? AND acao = ?`;
+    params = [usuario.id, modulo, submodulo, acao];
+  } else {
+    query  = `SELECT permitido FROM permissoes
+              WHERE usuario_id = ? AND modulo = ? AND submodulo IS NULL AND acao = ?`;
+    params = [usuario.id, modulo, acao];
+  }
+  const [rows] = await pool.execute(query, params);
+  // Number() garante que TINYINT(1) retornado como boolean true/false pelo MySQL2
+  // também seja comparado corretamente (true !== 1 seria verdadeiro com ===)
+  return rows.length > 0 && Number(rows[0].permitido) === 1;
 }
 
 // Busca todas as permissões de um usuário (usado no login para montar o menu)
@@ -72,4 +73,4 @@ async function buscarPermissoesUsuario(usuarioId) {
   return permissoes;
 }
 
-module.exports = { verificarPermissao, buscarPermissoesUsuario };
+module.exports = { verificarPermissao, buscarPermissoesUsuario, temPermissao };

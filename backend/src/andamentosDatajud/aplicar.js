@@ -7,7 +7,6 @@
 // ============================================================
 const { pool } = require('../config/database');
 const { corteDosSeisMeses, resumirMovimentos, gravarMovimentosNovos } = require('./gravar');
-const { avisarAndamentos } = require('../utils/vigilanciasAvisos');
 
 // Grava o resultado de uma consulta que ACHOU o processo. resposta = { movimentos, atualizado }.
 // Devolve { inseridos, novidades } (quantos andamentos entraram e quantos deles são novidade).
@@ -28,8 +27,8 @@ async function aplicarRespostaDoProcesso(processoId, resposta, hoje) {
     const primeiraLeitura = proc.datajud_qtd_movimentos === null;
     const semMudanca = !primeiraLeitura && resposta.atualizado !== null
       && proc.datajud_atualizado_cnj === resposta.atualizado && proc.datajud_qtd_movimentos === quantidade;
-    const { inseridos, descricoesNovidade } = semMudanca
-      ? { inseridos: 0, descricoesNovidade: [] }
+    const { inseridos } = semMudanca
+      ? { inseridos: 0 }
       : await gravarMovimentosNovos(conn, processoId, resposta.movimentos, { hoje, corte, novidade: !primeiraLeitura });
     const maisRecente = ultimaData !== null && (proc.ultima === null || ultimaData > proc.ultima) ? ultimaData : proc.ultima;
     await conn.execute(
@@ -39,8 +38,6 @@ async function aplicarRespostaDoProcesso(processoId, resposta, hoje) {
       [resposta.atualizado, quantidade, maisRecente, processoId]
     );
     await conn.commit();
-    // Vigilância do processo: andamento novo que parece recurso, num processo vigiado, avisa no sino (melhor esforço).
-    if (descricoesNovidade.length) await avisarAndamentos(processoId, descricoesNovidade);
     return { inseridos, novidades: primeiraLeitura ? 0 : inseridos };
   } catch (err) {
     await conn.rollback();

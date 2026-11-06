@@ -5,7 +5,7 @@
 -- Gerado em 31/08/2026 a partir do banco LOCAL (sistema_advocacia), via:
 --   mysqldump --no-data --databases --add-drop-database
 --             --routines --triggers --events sistema_advocacia
--- Contém 99 tabelas — SOMENTE A ESTRUTURA, sem nenhum dado.
+-- Contém 98 tabelas — SOMENTE A ESTRUTURA, sem nenhum dado.
 -- (79 do dump de 31/08/2026 + tipo_documento_pendencia, pendencia_documento,
 --  pendencia_documento_item e pendencia_documento_responsavel, do módulo
 --  "Pendências de Documentos"; + acordo_parcela_multa, do módulo de multa
@@ -13,8 +13,9 @@
 --  múltiplas OABs por processo, 28/09/2026; + avisos_cliente, do módulo
 --  "Avisos aos clientes", 08/10/2026; + a coluna tblproc.apenso_de_id, do
 --  "Processo apenso", 14/10/2026; + a tabela datajud_tipos_andamento e as colunas do "Aviso diário de
---  andamentos do DataJud", versão 7 do banco, 24/10/2026; + vigilancia_tipo, vigilancia e
---  vigilancia_usuario, da "Vigilância do processo", 05/11/2026.)
+--  andamentos do DataJud", versão 7 do banco, 24/10/2026; + vigilancia_tipo e vigilancia, da
+--  "Vigilância do processo", 05/11/2026 [a vigilancia_usuario foi removida em 06/11/2026: o
+--  aviso deixou de ser seletivo por usuário marcado].)
 -- O banco não possui procedures, triggers, views nem events.
 -- Os dados de partida (feriados, varas, tipos etc.) ficam em scripts/.
 --
@@ -2719,23 +2720,6 @@ CREATE TABLE `vigilancia_tipo` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_vigtipo_nome_ativo` (`nome_ativo`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='tipos de vigilancia do processo (ex.: Recurso adesivo)';
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `vigilancia_usuario`
---
-
-DROP TABLE IF EXISTS `vigilancia_usuario`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `vigilancia_usuario` (
-  `vigilancia_id` int NOT NULL,
-  `usuario_id` int NOT NULL,
-  PRIMARY KEY (`vigilancia_id`,`usuario_id`),
-  KEY `idx_vigusu_usuario` (`usuario_id`),
-  CONSTRAINT `fk_vigusu_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`),
-  CONSTRAINT `fk_vigusu_vigilancia` FOREIGN KEY (`vigilancia_id`) REFERENCES `vigilancia` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='quem e avisado por cada vigilancia';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --

@@ -13,6 +13,7 @@ import ModalInfo from '../../components/ui/ModalInfo';
 import useEscFechar from '../../hooks/useEscFechar';
 import MenuAcoes from '../../components/MenuAcoes';
 import ModalLerPublicacao from '../../components/ModalLerPublicacao';
+import PerguntaDasVigilancias from '../../components/PerguntaDasVigilancias';
 import NumeroProcessoCopiavel from '../../components/NumeroProcessoCopiavel';
 import { EtiquetaCelula, LegendaEtiquetasPessoais, itemEtiquetasSubmenu, useEtiquetasPessoais } from '../../components/Etiquetas';
 
@@ -530,6 +531,8 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
   const [confirmarData, setConfirmarData] = useState(false); // confirmação do admin p/ data passada
   const [aviso, setAviso] = useState(''); // faixa de aviso DENTRO do modal (erros de salvamento)
   const [info, setInfo]   = useState(null); // pequeno modal informativo p/ validações obrigatórias
+  // o servidor pergunta se a tarefa encerra a vigilância do processo (409, detalhes.codigo = PERGUNTAR_VIGILANCIAS)
+  const [pergunta, setPergunta] = useState(null);
   // Esc fecha o formulário — só quando ele é a janela mais acima (confirmação/aviso por cima fecham primeiro).
   const overlayRef = useEscFechar(() => onFechar(false));
   // Refs dos campos obrigatórios — ao fechar o aviso, o foco vai para o campo que faltou
@@ -647,8 +650,9 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
 
   // ── Salvar ────────────────────────────────────────────────────────────────
 
-  // Grava de fato (chamado direto ou após a confirmação da data passada)
-  async function executarSalvar() {
+  // Grava de fato (chamado direto, após a confirmação da data passada, ou após responder a pergunta da
+  // vigilância). `encerrarVigilancias`: lista de ids a encerrar (undefined = ainda não perguntou nada).
+  async function executarSalvar(encerrarVigilancias) {
     setSalvando(true);
     try {
       const payload = {
@@ -656,6 +660,7 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
         titulo:      prefixoTitulo + form.titulo.trim(),
         pasta_id:    null,                                            // pasta não é mais tipo suportado
         processo_id: tipo === 'processo' ? form.processo_id : null,
+        ...(encerrarVigilancias === undefined ? {} : { encerrar_vigilancias: encerrarVigilancias }),
       };
 
       // Sem responsável (tarefa do "Escritório") não há para quem mandar — o back também confere.
@@ -700,7 +705,13 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
       toast.success((tarefa?.id ? 'Tarefa atualizada!' : 'Tarefa criada!') + (email?.ok ? ' E-mail enviado.' : ''));
       onFechar(true);
     } catch (err) {
-      setAviso(err.response?.data?.mensagem || 'Não foi possível salvar a tarefa.');
+      const resp = err.response?.data;
+      if (err.response?.status === 409 && resp?.detalhes?.codigo === 'PERGUNTAR_VIGILANCIAS') {
+        const lista = resp.detalhes.vigilancias;
+        if (lista && lista.length > 0) { setPergunta(lista); setSalvando(false); return; }
+      }
+      setPergunta(null);
+      setAviso(resp?.mensagem || 'Não foi possível salvar a tarefa.');
     } finally {
       setSalvando(false);
     }
@@ -949,6 +960,15 @@ export function ModalTarefa({ tarefa, onFechar, preSelecao, dataInicial, publica
         onCancelar={() => setConfirmarData(false)}
       />
       </div>
+    )}
+    {pergunta && (
+      <PerguntaDasVigilancias
+        vigilancias={pergunta}
+        assunto="tarefa"
+        salvando={salvando}
+        onResponder={(encerrar) => executarSalvar(encerrar)}
+        onVoltar={() => setPergunta(null)}
+      />
     )}
     {info && (
       // z-index acima do modal para o aviso ficar sempre à frente

@@ -1,7 +1,8 @@
-// VIGILÂNCIA DO PROCESSO (pedido do usuário, 05/11/2026; porte do NovoJud-saas): lembrete sem data que fica de olho num
-// processo (ex.: "Recurso adesivo"). Contra MySQL real isolado: tipos, criar/listar/editar/encerrar, a pergunta ao
-// cadastrar prazo (409 PERGUNTAR_VIGILANCIAS / encerrar_vigilancias), trava de arquivamento e de exclusão, e o aviso
-// de possível recurso por publicação/andamento do DataJud.
+// VIGILÂNCIA DO PROCESSO (pedido do usuário, 05/11/2026; porte do NovoJud-saas; redesenhada em 06/11/2026): lembrete
+// sem data que fica de olho num processo (ex.: "Recurso adesivo"). Contra MySQL real isolado: tipos,
+// criar/listar/editar/encerrar (sem "quem deve ser avisado" — removido), a pergunta ao cadastrar prazo OU tarefa
+// (409 PERGUNTAR_VIGILANCIAS / encerrar_vigilancias), trava de arquivamento e de exclusão, e o 👁/aviso nas
+// Publicações para quem tem a permissão de ver Vigilâncias.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const jwt = require('jsonwebtoken');
@@ -13,7 +14,6 @@ const { recriarBancoTeste, conectarBancoTeste } = require('../support/testDataba
 carregarAmbienteTeste();
 const { criarApp } = require('../../src/app');
 const { pool } = require('../../src/config/database');
-const { aplicarRespostaDoProcesso } = require('../../src/andamentosDatajud/aplicar');
 
 let app; let admin;
 const F = {};
@@ -39,6 +39,12 @@ test.before(async () => {
     [pasta]
   )).insertId;
   F.pastaId = pasta;
+  // Usuário 3 ("sem permissão") ganha, só para o teste de Publicações, as permissões de buscador de
+  // Publicações (vê todas, não só as atribuídas) — mas de propósito NÃO ganha "vigilancias/visualizar".
+  await sql(
+    `INSERT INTO permissoes (usuario_id, modulo, submodulo, acao, permitido) VALUES
+      (3, 'publicacoes', NULL, 'visualizar', 1), (3, 'publicacoes', NULL, 'cadastrar', 1)`
+  );
 });
 test.after(async () => pool.end());
 
@@ -59,7 +65,7 @@ test('tipos de vigilância: lista aberta já traz "Recurso adesivo"; criar/edita
   assert.equal(r4.status, 409);
 
   // cria vigilância usando o tipo, depois a exclusão é bloqueada
-  const criada = await api().post('/api/vigilancias').send({ processo_id: F.proc, tipo_id: tipoId, usuarios: [1] });
+  const criada = await api().post('/api/vigilancias').send({ processo_id: F.proc, tipo_id: tipoId });
   assert.equal(criada.status, 201, JSON.stringify(criada.body));
   const r5 = await api().delete(`/api/vigilancias/tipos/${tipoId}`);
   assert.equal(r5.status, 409);
@@ -72,45 +78,42 @@ test('tipos de vigilância: lista aberta já traz "Recurso adesivo"; criar/edita
   assert.equal(r7.status, 404);
 });
 
-test('criar vigilância: exige processo e tipo existentes, usuários ativos; não repete tipo no mesmo processo enquanto aguardando', async () => {
-  const r1 = await api().post('/api/vigilancias').send({ processo_id: 999999, tipo_id: 1, usuarios: [1] });
+test('criar vigilância: exige processo e tipo existentes; não repete tipo no mesmo processo enquanto aguardando; não pede nem grava usuários', async () => {
+  const r1 = await api().post('/api/vigilancias').send({ processo_id: 999999, tipo_id: 1 });
   assert.equal(r1.status, 404);
-  const r2 = await api().post('/api/vigilancias').send({ processo_id: F.proc, tipo_id: 999999, usuarios: [1] });
+  const r2 = await api().post('/api/vigilancias').send({ processo_id: F.proc, tipo_id: 999999 });
   assert.equal(r2.status, 404);
-  const r3 = await api().post('/api/vigilancias').send({ processo_id: F.proc, tipo_id: 1, usuarios: [999999] });
-  assert.equal(r3.status, 400);
-  const r4 = await api().post('/api/vigilancias').send({ processo_id: F.proc, tipo_id: 1, usuarios: [] });
-  assert.equal(r4.status, 400);
 
   const ok1 = await api().post('/api/vigilancias').send({ processo_id: F.proc, tipo_id: 1, observacao: 'Sentença de improcedência', usuarios: [1, 2] });
   assert.equal(ok1.status, 201, JSON.stringify(ok1.body));
   F.vigilanciaId = ok1.body.dados.id;
+  // "usuarios" mandado pela tela antiga (ou por engano) é só ignorado: não cria vínculo nenhum.
+  const [vinculo] = await sql("SHOW TABLES LIKE 'vigilancia_usuario'");
+  assert.equal(vinculo, undefined, 'a tabela vigilancia_usuario não deveria mais existir no banco de teste');
 
   // mesmo tipo, mesmo processo, ainda aguardando = 409
-  const rep = await api().post('/api/vigilancias').send({ processo_id: F.proc, tipo_id: 1, usuarios: [1] });
+  const rep = await api().post('/api/vigilancias').send({ processo_id: F.proc, tipo_id: 1 });
   assert.equal(rep.status, 409);
 });
 
-test('listar por pasta: traz a vigilância com os usuários avisados; "todas" também mostra as encerradas', async () => {
+test('listar por pasta: traz a vigilância (sem usuários); "todas" também mostra as encerradas', async () => {
   const r1 = await api().get(`/api/vigilancias?pasta_id=${F.pastaId}`);
   assert.equal(r1.status, 200);
   const v = r1.body.dados.find(x => x.id === F.vigilanciaId);
   assert.ok(v, 'vigilância não apareceu na lista da pasta');
   assert.equal(v.situacao, 'aguardando');
   assert.equal(v.apenso, false);
-  assert.deepEqual(v.usuarios.map(u => u.id).sort(), [1, 2]);
+  assert.equal(v.usuarios, undefined, 'a lista não deveria mais trazer "usuarios"');
 
   const semPasta = await api().get('/api/vigilancias');
   assert.equal(semPasta.status, 400);
 });
 
-test('editar: observação e avisados, só enquanto aguardando', async () => {
-  const r1 = await api().put(`/api/vigilancias/${F.vigilanciaId}`).send({ observacao: 'Observação nova', usuarios: [2] });
+test('editar: só observação, enquanto aguardando', async () => {
+  const r1 = await api().put(`/api/vigilancias/${F.vigilanciaId}`).send({ observacao: 'Observação nova' });
   assert.equal(r1.status, 200, JSON.stringify(r1.body));
   const [linha] = await sql('SELECT observacao FROM vigilancia WHERE id = ?', [F.vigilanciaId]);
   assert.equal(linha.observacao, 'Observação nova');
-  const [avisados] = [await sql('SELECT usuario_id FROM vigilancia_usuario WHERE vigilancia_id = ?', [F.vigilanciaId])];
-  assert.deepEqual(avisados.map(a => a.usuario_id), [2]);
 });
 
 test('arquivar/excluir o processo é bloqueado com a vigilância aguardando; encerrar manualmente libera os dois', async () => {
@@ -151,7 +154,7 @@ test('cadastrar prazo no processo com vigilância aguardando pergunta antes; "Si
   const dataFinal = d.toISOString().slice(0, 10);
   const tipo = (await sql("SELECT id FROM vigilancia_tipo WHERE nome = 'Recurso adesivo'"))[0].id;
 
-  const v1 = await api().post('/api/vigilancias').send({ processo_id: F.proc, tipo_id: tipo, usuarios: [1] });
+  const v1 = await api().post('/api/vigilancias').send({ processo_id: F.proc, tipo_id: tipo });
   assert.equal(v1.status, 201);
   const vigId = v1.body.dados.id;
 
@@ -181,70 +184,73 @@ test('cadastrar prazo no processo com vigilância aguardando pergunta antes; "Si
   assert.equal(encerrada.situacao, 'encerrada');
   assert.match(encerrada.motivo_encerramento, /prazo/);
 
-  // vigilância escolhida que não está mais aguardando = 409
+  // vigilância escolhida que não está mais aguardando = cria normal, sem perguntar
   const jaNao = await api().post('/api/prazos').send({
     processo_id: F.proc, data_inicio: new Date().toISOString().slice(0, 10), data_final: dataFinal, encerrar_vigilancias: [vigId],
   });
-  assert.equal(jaNao.status, 201, JSON.stringify(jaNao.body)); // já não há vigilância aguardando: cria normal, sem perguntar
+  assert.equal(jaNao.status, 201, JSON.stringify(jaNao.body));
 });
 
-test('aviso de possível recurso: publicação importada e andamento novo do DataJud, num processo vigiado, avisam no sino (texto com "cabe recurso" sozinho não avisa)', async () => {
+test('cadastrar TAREFA no processo com vigilância aguardando pergunta antes (mesma regra de Prazos); tarefa "Rotina Interna" (sem processo) não pergunta', async () => {
   const tipo = (await sql("SELECT id FROM vigilancia_tipo WHERE nome = 'Recurso adesivo'"))[0].id;
-  const criada = await api().post('/api/vigilancias').send({ processo_id: F.proc, tipo_id: tipo, usuarios: [2] });
-  assert.equal(criada.status, 201);
-  const vigId = criada.body.dados.id;
+  const v1 = await api().post('/api/vigilancias').send({ processo_id: F.proc, tipo_id: tipo });
+  assert.equal(v1.status, 201);
+  const vigId = v1.body.dados.id;
 
-  const [antes] = await sql("SELECT COUNT(*) AS n FROM notificacoes WHERE usuario_id = 2 AND mensagem LIKE '%Possível recurso%'");
-  const { avisarPublicacoes, avisarAndamentos } = require('../../src/utils/vigilanciasAvisos');
+  // sem resposta = pergunta (409) e NADA é gravado
+  const semResposta = await api().post('/api/tarefas').send({ titulo: 'Conferir recurso', processo_id: F.proc, data_vencimento: new Date().toISOString().slice(0, 10) });
+  assert.equal(semResposta.status, 409, JSON.stringify(semResposta.body));
+  assert.equal(semResposta.body.detalhes.codigo, 'PERGUNTAR_VIGILANCIAS');
+  const [semGravar] = await sql("SELECT COUNT(*) AS n FROM tarefas WHERE titulo = 'Conferir recurso'");
+  assert.equal(semGravar.n, 0);
 
-  const numero = (await sql('SELECT numProc FROM tblproc WHERE id = ?', [F.proc]))[0].numProc;
+  // responde "Sim": a tarefa encerra a vigilância, dentro da mesma gravação
+  const encerra = await api().post('/api/tarefas').send({
+    titulo: 'Conferir recurso', processo_id: F.proc, data_vencimento: new Date().toISOString().slice(0, 10), encerrar_vigilancias: [vigId],
+  });
+  assert.equal(encerra.status, 201, JSON.stringify(encerra.body));
+  const [encerrada] = await sql('SELECT situacao, motivo_encerramento FROM vigilancia WHERE id = ?', [vigId]);
+  assert.equal(encerrada.situacao, 'encerrada');
+  assert.match(encerrada.motivo_encerramento, /tarefa/);
 
-  // sentença (só "cabe recurso", frase ignorada) não avisa
-  await avisarPublicacoes([{ numero_processo: numero, texto: 'Sentença de improcedência. Desta decisão cabe recurso no prazo legal.' }]);
-  const [depoisSentenca] = await sql("SELECT COUNT(*) AS n FROM notificacoes WHERE usuario_id = 2 AND mensagem LIKE '%Possível recurso%'");
-  assert.equal(depoisSentenca.n, antes.n);
-
-  // recurso de verdade avisa
-  await avisarPublicacoes([{ numero_processo: numero, texto: 'Foi interposto recurso de apelação pela parte ré.' }]);
-  const [depoisRecurso] = await sql("SELECT COUNT(*) AS n FROM notificacoes WHERE usuario_id = 2 AND mensagem LIKE '%Possível recurso%'");
-  assert.equal(depoisRecurso.n, antes.n + 1);
-
-  // andamento novo do DataJud com a mesma palavra também avisa
-  await avisarAndamentos(F.proc, ['Juntada de apelação pela parte contrária.']);
-  const [depoisAndamento] = await sql("SELECT COUNT(*) AS n FROM notificacoes WHERE usuario_id = 2 AND mensagem LIKE '%Possível recurso%'");
-  assert.equal(depoisAndamento.n, antes.n + 2);
-
-  // encerrada não é mais avisada
-  await sql("UPDATE vigilancia SET situacao = 'encerrada' WHERE id = ?", [vigId]);
-  await avisarAndamentos(F.proc, ['Interposto recurso de apelação de novo.']);
-  const [depoisEncerrada] = await sql("SELECT COUNT(*) AS n FROM notificacoes WHERE usuario_id = 2 AND mensagem LIKE '%Possível recurso%'");
-  assert.equal(depoisEncerrada.n, antes.n + 2);
+  // tarefa de "Rotina Interna" (sem processo) nunca pergunta, mesmo com outra vigilância aguardando
+  const v2 = await api().post('/api/vigilancias').send({ processo_id: F.proc, tipo_id: tipo });
+  assert.equal(v2.status, 201);
+  const rotina = await api().post('/api/tarefas').send({ titulo: 'Tarefa solta', data_vencimento: new Date().toISOString().slice(0, 10) });
+  assert.equal(rotina.status, 201, JSON.stringify(rotina.body));
+  const [aindaAguardando] = await sql('SELECT situacao FROM vigilancia WHERE id = ?', [v2.body.dados.id]);
+  assert.equal(aindaAguardando.situacao, 'aguardando');
+  // encerra manualmente para não atrapalhar o teste seguinte (ele cria sua própria vigilância do mesmo tipo)
+  await api().put(`/api/vigilancias/${v2.body.dados.id}/encerrar`).send({ motivo: 'fim do teste' });
 });
 
-test('andamento novo do DataJud que parece recurso avisa também pelo caminho real (aplicarRespostaDoProcesso)', async () => {
+test('Publicações: 👁 e o aviso de vigilância só aparecem para quem tem "vigilancias/visualizar"', async () => {
   const tipo = (await sql("SELECT id FROM vigilancia_tipo WHERE nome = 'Recurso adesivo'"))[0].id;
-  const criada = await api().post('/api/vigilancias').send({ processo_id: F.proc, tipo_id: tipo, usuarios: [2] });
-  assert.equal(criada.status, 201);
+  const v1 = await api().post('/api/vigilancias').send({ processo_id: F.proc, tipo_id: tipo });
+  assert.equal(v1.status, 201);
 
-  // primeira leitura: só base, sem aviso (mesmo contendo a palavra)
-  const [antesBase] = await sql("SELECT COUNT(*) AS n FROM notificacoes WHERE usuario_id = 2 AND mensagem LIKE '%Possível recurso%'");
-  await aplicarRespostaDoProcesso(F.proc, {
-    movimentos: [{ nome: 'Juntada de recurso', codigo: 123, dataHora: new Date().toISOString() }],
-    atualizado: '2026-01-01T10:00:00',
-  }, '2026-01-02');
-  const [depoisBase] = await sql("SELECT COUNT(*) AS n FROM notificacoes WHERE usuario_id = 2 AND mensagem LIKE '%Possível recurso%'");
-  assert.equal(depoisBase.n, antesBase.n, 'a primeira leitura é só base, não deve avisar');
+  await sql(
+    "INSERT INTO publicacoes (fonte, data_publicacao, numero_processo, titulo, texto, texto_hash, escritorio) VALUES ('aasp', CURDATE(), '0000401-00.2026.5.15.0001', 'Publicação de teste', 'texto qualquer', 'hash-teste-vigilancia', 1)"
+  );
 
-  // segunda leitura com movimento NOVO que parece recurso: avisa
-  await aplicarRespostaDoProcesso(F.proc, {
-    movimentos: [
-      { nome: 'Juntada de recurso', codigo: 123, dataHora: new Date().toISOString() },
-      { nome: 'Recebo a apelação', codigo: 456, dataHora: new Date().toISOString() },
-    ],
-    atualizado: '2026-01-03T10:00:00',
-  }, '2026-01-03');
-  const [depoisNovidade] = await sql("SELECT COUNT(*) AS n FROM notificacoes WHERE usuario_id = 2 AND mensagem LIKE '%Possível recurso%'");
-  assert.equal(depoisNovidade.n, antesBase.n + 1);
+  // administrador (nível 1) vê, mesmo sem linha na tabela de permissões
+  const lista = await api().get('/api/publicacoes?busca=0000401');
+  assert.equal(lista.status, 200, JSON.stringify(lista.body));
+  const pub = lista.body.dados.registros.find(r => r.numero_processo === '0000401-00.2026.5.15.0001');
+  assert.ok(pub, 'publicação de teste não apareceu na lista');
+  assert.deepEqual(pub.vigilancias_ativas, ['Recurso adesivo']);
+
+  const detalhe = await api().get(`/api/publicacoes/${pub.id}`);
+  assert.equal(detalhe.status, 200);
+  assert.deepEqual(detalhe.body.dados.vigilancias_ativas, ['Recurso adesivo']);
+
+  // usuário comum SEM a permissão "vigilancias/visualizar": não vê nada de vigilância
+  const semPermissao = emitir(3, 2, 'sessao-sem-permissao');
+  const listaSem = await api(semPermissao).get('/api/publicacoes?busca=0000401');
+  assert.equal(listaSem.status, 200, JSON.stringify(listaSem.body));
+  const pubSem = listaSem.body.dados.registros.find(r => r.numero_processo === '0000401-00.2026.5.15.0001');
+  assert.ok(pubSem, 'publicação de teste não apareceu para o usuário sem permissão');
+  assert.deepEqual(pubSem.vigilancias_ativas, []);
 });
 
 test('permissões: cadastrar/alterar/excluir tipos e vigilâncias exigem a permissão certa; sem login é 401', async () => {
@@ -256,7 +262,7 @@ test('permissões: cadastrar/alterar/excluir tipos e vigilâncias exigem a permi
   assert.equal(r1.status, 403);
   const r2 = await api(sessaoSemPermissao).get('/api/vigilancias?pasta_id=1');
   assert.equal(r2.status, 403);
-  const r3 = await api(sessaoSemPermissao).post('/api/vigilancias').send({ processo_id: F.proc, tipo_id: 1, usuarios: [1] });
+  const r3 = await api(sessaoSemPermissao).post('/api/vigilancias').send({ processo_id: F.proc, tipo_id: 1 });
   assert.equal(r3.status, 403);
 
   // "usuteste" (id 2) tem todas as permissões de vigilancias (seed de teste) e de tipos

@@ -1,11 +1,11 @@
 // ============================================================
-// VIGILÂNCIA DO PROCESSO (pedido do usuário, 05/11/2026; porte do NovoJud-saas).
+// VIGILÂNCIA DO PROCESSO (pedido do usuário, 05/11/2026; porte do NovoJud-saas; redesenhada em 06/11/2026).
 // Lembrete SEM DATA que fica de olho num processo (ex.: "Recurso adesivo": o escritório não quer recorrer da sentença,
 // mas precisa ser avisado se a OUTRA parte recorrer). Enquanto está "aguardando": trava arquivar e excluir o processo
-// (ver utils/pendenciasProcesso.js e utils/apensoProcesso.js) e o sistema avisa no sino quando uma publicação nova ou
-// um andamento novo do DataJud parece falar de recurso nesse processo (ver utils/vigilanciasAvisos.js).
-// Ao cadastrar um prazo no processo, o usuário é PERGUNTADO se o prazo encerra a vigilância — ver
-// utils/vigilanciasCiclo.js e o cadastro de prazo em prazosController.js.
+// (ver utils/pendenciasProcesso.js e utils/apensoProcesso.js). O aviso NÃO depende mais de "quem foi marcado" nem de
+// adivinhar pelo texto: aparece direto pra quem tem permissão de ver Vigilâncias — selo na pasta (PastaDetalhe.js),
+// 👁 + mensagem nas Publicações (ver utils/vigilanciasConsulta.js) e a pergunta ao cadastrar prazo/tarefa no processo
+// (ver utils/vigilanciasCiclo.js, prazosController.js e tarefasController.js).
 // ============================================================
 
 const { pool } = require('../config/database');
@@ -94,34 +94,6 @@ async function excluirTipo(req, res) {
   }
 }
 
-// ---- quem é avisado ---------------------------------------------------------------------------------------------
-
-// Lê a lista de usuários a avisar (array de ids, 1 a 50, só ativos, sem repetir). Devolve { valor } ou { erro }.
-async function lerUsuariosAvisados(conn, bruto) {
-  if (!Array.isArray(bruto) || !bruto.length) return { erro: 'Escolha ao menos um usuário para ser avisado.' };
-  if (bruto.length > 50) return { erro: 'Escolha no máximo 50 usuários.' };
-  const ids = [];
-  for (const v of bruto) {
-    const n = Number(v);
-    if (!Number.isInteger(n) || n <= 0) return { erro: 'Usuário inválido.' };
-    if (!ids.includes(n)) ids.push(n);
-  }
-  const [achados] = await conn.query(
-    'SELECT id FROM usuarios WHERE id IN (?) AND ativo = 1', [ids]
-  );
-  if (achados.length !== ids.length) return { erro: 'Um dos usuários escolhidos não existe ou está desativado.' };
-  return { valor: ids };
-}
-
-async function gravarUsuariosAvisados(conn, vigilanciaId, ids) {
-  await conn.execute('DELETE FROM vigilancia_usuario WHERE vigilancia_id = ?', [vigilanciaId]);
-  if (!ids.length) return;
-  await conn.query(
-    'INSERT INTO vigilancia_usuario (vigilancia_id, usuario_id) VALUES ?',
-    [ids.map((usuario_id) => [vigilanciaId, usuario_id])]
-  );
-}
-
 // ---- vigilâncias --------------------------------------------------------------------------------------------------
 
 // GET /api/vigilancias?pasta_id=&todas=1 — vigilâncias de UMA pasta (todos os processos dela, apensos inclusive).
@@ -145,18 +117,7 @@ async function listar(req, res) {
     if (!incluirEncerradas) sql += " AND v.situacao <> 'encerrada'";
     sql += ' ORDER BY v.id DESC';
     const [linhas] = await pool.execute(sql, params);
-    if (!linhas.length) return sucesso(res, []);
-    const [avisados] = await pool.query(
-      `SELECT vu.vigilancia_id, u.id, u.nome, u.ativo
-         FROM vigilancia_usuario vu JOIN usuarios u ON u.id = vu.usuario_id
-        WHERE vu.vigilancia_id IN (?) ORDER BY u.nome`,
-      [linhas.map((l) => l.id)]
-    );
-    const dados = linhas.map((l) => ({
-      ...l,
-      apenso: !!l.apenso,
-      usuarios: avisados.filter((a) => a.vigilancia_id === l.id).map((a) => ({ id: a.id, nome: a.nome, ativo: a.ativo })),
-    }));
+    const dados = linhas.map((l) => ({ ...l, apenso: !!l.apenso }));
     return sucesso(res, dados);
   } catch (err) {
     return erroInterno(res, err);
@@ -182,8 +143,6 @@ async function criar(req, res) {
       'SELECT id FROM vigilancia_tipo WHERE id = ? AND ativo = 1 FOR SHARE', [tipoId]
     );
     if (!tipo.length) { await conn.rollback(); return naoEncontrado(res, 'Tipo de vigilância não encontrado'); }
-    const usuariosLidos = await lerUsuariosAvisados(conn, req.body?.usuarios);
-    if (usuariosLidos.erro) { await conn.rollback(); return erro(res, usuariosLidos.erro); }
     const [repetida] = await conn.execute(
       `SELECT id FROM vigilancia WHERE processo_id = ? AND tipo_id = ? AND situacao = 'aguardando' FOR UPDATE`,
       [processoId, tipoId]
@@ -194,7 +153,6 @@ async function criar(req, res) {
       [processoId, tipoId, obsLida.valor, req.usuario.id]
     );
     const id = criada.insertId;
-    await gravarUsuariosAvisados(conn, id, usuariosLidos.valor);
     await auditoria.registrar(req.usuario.id, 'vigilancia', 'criar', id, null, null, conn);
     await conn.commit();
     return sucesso(res, { id }, 'Vigilância criada com sucesso', 201);
@@ -206,7 +164,7 @@ async function criar(req, res) {
   }
 }
 
-// PUT /api/vigilancias/:id — observação e/ou avisados (só enquanto aguardando)
+// PUT /api/vigilancias/:id — observação (só enquanto aguardando)
 async function editar(req, res) {
   const { id } = req.params;
   const conn = await pool.getConnection();
@@ -215,11 +173,6 @@ async function editar(req, res) {
     const [atual] = await conn.execute('SELECT id, situacao FROM vigilancia WHERE id = ? FOR UPDATE', [id]);
     if (!atual.length) { await conn.rollback(); return naoEncontrado(res, 'Vigilância não encontrada'); }
     if (atual[0].situacao === 'encerrada') { await conn.rollback(); return erro(res, 'Esta vigilância já foi encerrada e não pode ser alterada.', 409); }
-    if (req.body?.usuarios !== undefined) {
-      const usuariosLidos = await lerUsuariosAvisados(conn, req.body.usuarios);
-      if (usuariosLidos.erro) { await conn.rollback(); return erro(res, usuariosLidos.erro); }
-      await gravarUsuariosAvisados(conn, id, usuariosLidos.valor);
-    }
     if (req.body?.observacao !== undefined) {
       const obsLida = texto(req.body.observacao, { rotulo: 'Observação', max: 1000, feminino: true });
       if (obsLida.erro) { await conn.rollback(); return erro(res, obsLida.erro); }

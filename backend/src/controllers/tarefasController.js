@@ -7,6 +7,7 @@ const { sucesso, erro, naoEncontrado, erroInterno } = require('../utils/response
 const auditoria = require('../middleware/auditoria');
 const { bloqueiaAgendarPassado, hojeBrasilia, pastaFormatadaSql, paginacao, escaparLike } = require('../utils/helpers');
 const { texto, dataIso, inteiroPositivo } = require('../utils/camposTexto');
+const { resolverVigilanciasDoRegistro, encerrarVigilancia } = require('../utils/vigilanciasCiclo');
 
 const PRIORIDADES_TAREFA = ['urgente', 'normal', 'baixa'];
 const LIMITE_TITULO_TAREFA = 300;       // tamanho da coluna tarefas.titulo
@@ -349,6 +350,17 @@ async function criar(req, res) {
   try {
     await conn.beginTransaction();
 
+    // Vigilância do processo: o usuário diz se esta tarefa a encerra (sem resposta = volta a pergunta;
+    // nada é gravado). Tarefa de "Rotina Interna" não tem processo, então nunca pergunta.
+    let vigilanciaResolvida = { encerrar: [] };
+    if (processo_id) {
+      vigilanciaResolvida = await resolverVigilanciasDoRegistro(conn, processo_id, req.body.encerrar_vigilancias, 'tarefa');
+      if (vigilanciaResolvida.aviso) {
+        await conn.rollback();
+        return erro(res, vigilanciaResolvida.aviso.mensagem, vigilanciaResolvida.aviso.status, vigilanciaResolvida.aviso.detalhes);
+      }
+    }
+
     // Tarefa NOVA: horário só de organização (fila por responsável/dia; sem vaga = sem hora, sem erro).
     const horaAgenda = await proximoHorarioDisponivel(conn, { usuarioId: responsavel || null, data: venc });
     const [result] = await conn.execute(
@@ -364,6 +376,13 @@ async function criar(req, res) {
         req.usuario.id, publicacao_id, (notificar_conclusao && responsavel) ? 1 : 0, horaAgenda
       ]
     );
+
+    for (const vigilanciaId of vigilanciaResolvida.encerrar) {
+      await encerrarVigilancia(conn, {
+        vigilanciaId, usuarioId: req.usuario.id,
+        motivo: 'Encerrada pelo cadastro de uma tarefa.', tarefaId: result.insertId,
+      });
+    }
 
     await auditoria.registrar(req.usuario.id, 'tarefas', 'criar', result.insertId, null, null, conn);
 

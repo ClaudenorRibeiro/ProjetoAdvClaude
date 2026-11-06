@@ -249,6 +249,30 @@ function PastasDoNumero({ vinculados }) {
   );
 }
 
+// 👁 ao lado do número do processo, na lista, quando ele tem vigilância ativa (ex.: "Recurso adesivo").
+function IconeVigilancia({ vigilancias }) {
+  if (!vigilancias?.length) return null;
+  return (
+    <span role="img" aria-label={`Processo em vigilância: ${vigilancias.join(', ')}`}
+      title={`Processo em vigilância: ${vigilancias.join(', ')}`}
+      style={{ marginLeft: '4px', fontSize: '13px' }}>👁</span>
+  );
+}
+
+// Faixa fixa ao abrir a publicação, quando o processo dela tem vigilância ativa.
+function FaixaVigilancia({ vigilancias }) {
+  if (!vigilancias?.length) return null;
+  const rotulo = vigilancias.length === 1
+    ? `Este processo tem 1 vigilância ativa: ${vigilancias[0]}`
+    : `Este processo tem ${vigilancias.length} vigilâncias ativas: ${vigilancias.join(', ')}`;
+  return (
+    <div style={{ fontSize: '13px', fontWeight: 700, color: '#92400e', background: '#fef3c7',
+      border: '1px solid #f59e0b', borderRadius: '6px', padding: '8px 12px', marginBottom: '12px' }}>
+      ⚠️ {rotulo}
+    </div>
+  );
+}
+
 function ModalAcaoDaPublicacao({ acao, usuariosAgenda, usuarioLogadoId, ehAdmin, onFechar }) {
   const { tipo, pub, sugestao } = acao;
   const numero = pub.numero_processo || '';
@@ -1423,6 +1447,7 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
                             <NumeroProcessoCopiavel numero={p.numero_processo} />
                           </span>
                         : <NumeroProcessoCopiavel numero={p.numero_processo} />}
+                      <IconeVigilancia vigilancias={p.vigilancias_ativas} />
                       <PastasDoNumero vinculados={p.processos_vinculados} />
                     </td>
                     <td style={{ whiteSpace: 'nowrap' }}>{p.numero_publicacao || '—'}</td>
@@ -1546,6 +1571,7 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
                 <button className="modal-fechar" onClick={() => setTextoAberto(null)}>✕</button>
               </div>
               <div className="modal-body">
+                <FaixaVigilancia vigilancias={textoAberto.vigilancias_ativas} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
                   gap: '12px', marginBottom: '12px', fontSize: '13px', color: '#555' }}>
                   <div>
@@ -2143,6 +2169,7 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
                             <NumeroProcessoCopiavel numero={p.numero_processo} />
                           </span>
                         : <NumeroProcessoCopiavel numero={p.numero_processo} />}
+                      <IconeVigilancia vigilancias={p.vigilancias_ativas} />
                       <PastasDoNumero vinculados={p.processos_vinculados} />
                     </td>
                     <td style={{ maxWidth: '360px' }}>
@@ -2264,6 +2291,7 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
                 <button className="modal-fechar" onClick={() => setTextoAberto(null)}>✕</button>
               </div>
               <div className="modal-body">
+                <FaixaVigilancia vigilancias={textoAberto.vigilancias_ativas} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
                   gap: '12px', marginBottom: '12px', fontSize: '13px', color: '#555' }}>
                   {textoAberto.numero_publicacao && (

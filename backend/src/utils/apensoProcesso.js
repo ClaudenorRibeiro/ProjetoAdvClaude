@@ -188,8 +188,8 @@ async function apagarProcessoEFilhos(conn, id, usuarioId, antes) {
   await conn.execute('DELETE FROM processo_perito    WHERE proc_id = ?', [id]);
   await conn.execute('DELETE FROM processo_assunto   WHERE processo_id = ?', [id]);
   await conn.execute('DELETE FROM processo_oabs      WHERE processo_id = ?', [id]);
-  // Só sobram vigilâncias ENCERRADAS (a aguardando já bloqueou em dependenciasDoProcesso) — ficam só como histórico,
-  // saem junto com o processo (vigilancia_usuario sai em cascata).
+  // Só sobram vigilâncias ENCERRADAS (a aguardando já bloqueou em dependenciasDoProcesso) — ficam só como
+  // histórico, saem junto com o processo.
   await conn.execute('DELETE FROM vigilancia WHERE processo_id = ?', [id]);
   await conn.execute('DELETE FROM tblproc WHERE id = ?', [id]);
   await auditoria.registrar(usuarioId, 'tblproc', 'excluir', Number(id),
