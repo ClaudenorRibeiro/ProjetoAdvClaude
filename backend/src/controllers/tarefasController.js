@@ -296,6 +296,14 @@ async function listar(req, res) {
               pr.numProc  AS processo_numero,
               pa2.id      AS pasta_do_processo_id,
               ${pastaFormatadaSql('pa2')} AS pasta_do_processo_fmt,
+              -- Título da pasta (coluna "Pasta"): do processo vinculado, ou do processo mais recente
+              -- ativo da pasta direta quando a tarefa está presa na pasta sem um processo escolhido.
+              COALESCE(
+                pr.NomeTituloProc,
+                (SELECT pr3.NomeTituloProc FROM tblproc pr3
+                  WHERE pr3.pasta_id = pa.id AND pr3.ativo = 1 AND pr3.apenso_de_id IS NULL
+                  ORDER BY pr3.id DESC LIMIT 1)
+              ) AS pasta_titulo,
               DATEDIFF(t.data_vencimento, CURDATE()) AS dias_restantes,
               (SELECT pe.slot FROM tarefas_etiquetas pe
                 WHERE pe.tarefa_id = t.id AND pe.usuario_id = ?) AS etiqueta_pessoal

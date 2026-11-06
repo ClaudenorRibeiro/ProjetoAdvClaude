@@ -199,6 +199,14 @@ export default function Tarefas() {
     return <span style={{ fontSize: '13px', color: '#5b6472' }}>Rotina Interna</span>;
   }
 
+  // Coluna "Pasta": número + título das partes (como na tela de Prazos); Rotina Interna não tem pasta.
+  function renderPasta(t) {
+    const tipo = tipoTarefa(t);
+    if (tipo === 'pasta') return `${t.pasta_numero_fmt || t.pasta_id} — ${t.pasta_titulo || ''}`;
+    if (tipo === 'processo') return `${t.pasta_do_processo_fmt || ''} — ${t.pasta_titulo || ''}`;
+    return '—';
+  }
+
   const totalPaginas = Math.ceil(total / LIMITE);
 
   return (
@@ -296,6 +304,7 @@ export default function Tarefas() {
               <thead>
                 <tr>
                   <th>Tarefa</th>
+                  <th>Pasta</th>
                   <th>Prioridade</th>
                   <th>Vencimento</th>
                   <th>Para</th>
@@ -317,6 +326,7 @@ export default function Tarefas() {
                         </div>
                       )}
                     </td>
+                    <td>{renderPasta(t)}</td>
                     <td>
                       <span className={`badge ${PRIORIDADE_COR[t.prioridade]}`}>
                         {labelPrioridade(t.prioridade)}
