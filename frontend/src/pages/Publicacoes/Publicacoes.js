@@ -255,7 +255,11 @@ function IconeVigilancia({ vigilancias }) {
   return (
     <span role="img" aria-label={`Processo em vigilância: ${vigilancias.join(', ')}`}
       title={`Processo em vigilância: ${vigilancias.join(', ')}`}
-      style={{ marginLeft: '4px', fontSize: '13px' }}>👁</span>
+      style={{
+        marginLeft: '6px', fontSize: '15px', display: 'inline-flex', alignItems: 'center',
+        justifyContent: 'center', width: '22px', height: '22px', borderRadius: '50%',
+        background: '#fcd34d', verticalAlign: 'middle',
+      }}>👁</span>
   );
 }
 
