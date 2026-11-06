@@ -147,6 +147,11 @@ pode depender de arquivo que não está no Git.
   instalação manual.
 - **Erro é erro, não importa a origem ou a idade.** Não existe "já
   falhava" como justificativa.
+- **Bateria completa só com autorização prévia:** rodar a bateria
+  inteira (`node quality/run.mjs`) consome muito token. A cada ajuste a
+  IA roda só os testes rápidos e dirigidos àquele ajuste; para rodar a
+  bateria completa, **perguntar ao usuário antes**, mesmo que pareça
+  necessário.
 - No `rascunho` a IA pode alterar e enviar sem pedir autorização a cada
   vez; no `main` a IA nunca mexe (só o usuário, ou com "PODE SUBIR").
 - Horário do banco é o de Brasília (`backend/src/config/database.js`,
