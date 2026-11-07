@@ -3,6 +3,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { pessoasAPI } from '../../services/api';
 import { formatarCPF, formatarCNPJ, formatarTelefone, formatarData, formatarDataHora, hojeLocal, mascaraCPF, validarCPF, mascaraCNPJ, validarCNPJ, toTitleCase } from '../../utils/formatters';
 import { toast } from 'react-toastify';
@@ -495,9 +496,10 @@ export default function Pessoas() {
 // Tabela de pessoas físicas
 // ============================================================
 // MODAL — Processos de uma pessoa (abre ao clicar na "Qtde Proc")
-// Lista os processos (autor + réu, sem repetir) com o número copiável.
+// Lista os processos (autor + réu, sem repetir). O número abre a pasta; o ⧉ copia.
 // ============================================================
 function ModalProcessosDaPessoa({ pessoa, tipo, onFechar }) {
+  const navigate = useNavigate();
   const [lista, setLista]         = useState([]);
   const [carregando, setCarregando] = useState(true);
   const nomePessoa = pessoa.nome || pessoa.razao_social || 'Pessoa';
@@ -528,7 +530,7 @@ function ModalProcessosDaPessoa({ pessoa, tipo, onFechar }) {
 
   return (
     <div className="modal-overlay">
-      <div className="modal-box modal-grande">
+      <div className="modal-box modal-largo">
         <div className="modal-header">
           <h3>Processos — {nomePessoa}</h3>
           <button className="modal-fechar" onClick={onFechar}>✕</button>
@@ -541,7 +543,7 @@ function ModalProcessosDaPessoa({ pessoa, tipo, onFechar }) {
           ) : (
             <>
               <p style={{fontSize:'13px',color:'#666',margin:'0 0 10px'}}>
-                {lista.length} processo(s). Clique no número para copiar.
+                {lista.length} processo(s). Clique no número para abrir a pasta. Use o ícone para copiar.
               </p>
               <div className="tabela-wrapper" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
                 <table className="tabela tabela-sticky">
@@ -554,7 +556,11 @@ function ModalProcessosDaPessoa({ pessoa, tipo, onFechar }) {
                   <tbody>
                     {lista.map(p => (
                       <tr key={p.id}>
-                        <td><NumeroProcessoCopiavel numero={p.numProc} /></td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          <NumeroProcessoCopiavel numero={p.numProc}
+                            href={p.pasta_id ? `/processos/pasta/${p.pasta_id}` : undefined}
+                            onAbrir={p.pasta_id ? () => navigate(`/processos/pasta/${p.pasta_id}`) : undefined} />
+                        </td>
                         <td>{p.pasta_numero_fmt || '—'}</td>
                         <td>{p.titulo || '—'}</td>
                         <td>{p.status_nome ? <span className="badge badge-cinza">{p.status_nome}</span> : '—'}</td>

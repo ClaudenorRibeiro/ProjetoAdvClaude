@@ -272,7 +272,9 @@ test('@critical Menu ⋮ e "Qtde Proc": itens do menu, Editar, Anotações, Envi
   await page.keyboard.press('Enter');
   const procs = janela(page, `Processos — Alfa ${MARCA} Silva`);
   await expect(procs.getByText('1 processo(s).')).toBeVisible();
-  await expect(procs.getByText('0000001-01.2026.5.15.0001')).toBeVisible();
+  await expect(procs.getByText('Clique no número para abrir a pasta.')).toBeVisible();
+  await expect(procs.getByRole('link', { name: '0000001-01.2026.5.15.0001' })).toHaveAttribute('href', /\/processos\/pasta\/\d+/);
+  await expect(procs.getByRole('button', { name: /Copiar número/ })).toBeVisible();
   await semViolacoes(page, 'janela Processos da pessoa');
   await procs.getByRole('button', { name: '✕', exact: true }).click(); await expect(page.locator('.modal-box')).toHaveCount(0);
   await alfa.getByTitle('Ver os processos').click(); await expect(janela(page, `Processos — Alfa ${MARCA} Silva`)).toBeVisible();

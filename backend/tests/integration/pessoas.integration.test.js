@@ -660,7 +660,7 @@ test('processos da pessoa: junta autor e réu sem repetir (inclusive processo in
   const p3 = await novoProcesso({ autores: [['juridica', pj]] });
   const lista = (await api().get(`/api/pessoas/fisicas/${pf}/processos`)).body.dados;
   assert.deepEqual(lista.map(p => p.id).sort(), [p1, p2].sort());
-  assert.ok(lista[0].titulo && lista[0].pasta_numero_fmt);
+  assert.ok(lista[0].titulo && lista[0].pasta_numero_fmt && lista[0].pasta_id);
   assert.deepEqual((await api().get(`/api/pessoas/juridicas/${pj}/processos`)).body.dados.map(p => p.id), [p3]);
   assert.deepEqual((await api().get(`/api/pessoas/fisicas/${sem}/processos`)).body.dados, []);
   assert.deepEqual((await api().get('/api/pessoas/fisicas/999999/processos')).body.dados, []);
