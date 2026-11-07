@@ -300,11 +300,11 @@ export default function Tarefas() {
           onFiltrar={(slot) => setFiltro('etiqueta', slot)} />
         {carregando ? <div className="loading">Carregando...</div> : (
           <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
-            <table className="tabela tabela-sticky">
+            <table className="tabela tabela-sticky" style={{ tableLayout: 'fixed' }}>
               <thead>
                 <tr>
-                  <th>Tarefa</th>
-                  <th>Pasta</th>
+                  <th style={{ width: '40%' }}>Tarefa</th>
+                  <th style={{ width: '30%' }}>Pasta</th>
                   <th>Prioridade</th>
                   <th>Vencimento</th>
                   <th>Para</th>
@@ -316,7 +316,7 @@ export default function Tarefas() {
               <tbody>
                 {lista.map(t => (
                   <tr key={t.id} style={t.concluida ? { opacity: 0.6 } : {}}>
-                    <td>
+                    <td style={{ overflowWrap: 'break-word' }}>
                       <strong style={t.concluida ? { textDecoration: 'line-through' } : {}}>
                         {t.titulo}
                       </strong>
@@ -326,7 +326,7 @@ export default function Tarefas() {
                         </div>
                       )}
                     </td>
-                    <td>{renderPasta(t)}</td>
+                    <td style={{ overflowWrap: 'break-word' }}>{renderPasta(t)}</td>
                     <td>
                       <span className={`badge ${PRIORIDADE_COR[t.prioridade]}`}>
                         {labelPrioridade(t.prioridade)}
