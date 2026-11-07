@@ -5,6 +5,7 @@ Regra: todo script do projeto traz, nas primeiras linhas, o aviso
 Este arquivo é o índice. Se um script não estiver aqui, pergunte antes de apagar.
 
 PARA RODAR NO PC (duplo clique)
+  instalar_dependencias.bat                     IMPORTANTE  PC NOVO: instala Node LTS/Git/HeidiSQL se faltarem (via winget) e roda npm install no backend e no frontend. NAO instala MySQL nem importa o banco. NAO liga o sistema.
   iniciar_pc_casa.bat / iniciar_pc_escrit.bat   IMPORTANTE  Liga o sistema neste PC.
   parar_pc_casa.bat / parar_pc_escrit.bat       IMPORTANTE  Desliga o sistema (fecha SO as janelas do sistema; nao mexe em outros Prompts, no NovoJud SaaS nem em baterias abertas).
   salvar_RASCUNHO_do_GIT_no_pc.bat              IMPORTANTE  Baixa o rascunho do GitHub para testar.
