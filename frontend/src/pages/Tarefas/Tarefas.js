@@ -323,7 +323,7 @@ export default function Tarefas() {
                         onClick={() => { setEditando(t); setTarefaEmLeitura(true); setModalAberto(true); }}
                         style={{
                           display: 'inline', background: 'none', border: 0, padding: 0, margin: 0,
-                          font: 'inherit', fontWeight: 700, textAlign: 'left', color: '#2563eb',
+                          font: 'inherit', fontWeight: 400, textAlign: 'left', color: '#2563eb',
                           textDecoration: 'underline', cursor: 'pointer',
                           ...(t.concluida ? { textDecoration: 'line-through underline' } : {}),
                         }}>
