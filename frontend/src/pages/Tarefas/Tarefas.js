@@ -305,40 +305,38 @@ export default function Tarefas() {
                 <tr>
                   <th>Tarefa</th>
                   <th>Pasta</th>
-                  <th>Prioridade</th>
-                  <th>Vencimento</th>
-                  <th>Para</th>
-                  <th>Vínculo</th>
-                  <th style={{ textAlign: 'center' }}>Etiq. Pessoal</th>
-                  <th>Ações</th>
+                  <th style={{ width: '1%', whiteSpace: 'nowrap' }}>Prioridade</th>
+                  <th style={{ width: '1%', whiteSpace: 'nowrap' }}>Vencimento</th>
+                  <th style={{ width: '1%', whiteSpace: 'nowrap' }}>Para</th>
+                  <th style={{ width: '1%', whiteSpace: 'nowrap' }}>Vínculo</th>
+                  <th style={{ width: '1%', textAlign: 'center', whiteSpace: 'nowrap' }}>Etiq. Pessoal</th>
+                  <th style={{ width: '1%', whiteSpace: 'nowrap' }}>Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {lista.map(t => (
                   <tr key={t.id} style={t.concluida ? { opacity: 0.6 } : {}}>
-                    <td>
-                      <div style={{ maxWidth: '340px', overflowWrap: 'break-word' }}>
-                        <strong style={t.concluida ? { textDecoration: 'line-through' } : {}}>
-                          {t.titulo}
-                        </strong>
-                        {t.descricao && (
-                          <div style={{ fontSize: '13px', color: '#555', marginTop: '2px' }}>
-                            {t.descricao}
-                          </div>
-                        )}
-                      </div>
+                    <td style={{ overflowWrap: 'break-word' }}>
+                      <strong style={t.concluida ? { textDecoration: 'line-through' } : {}}>
+                        {t.titulo}
+                      </strong>
+                      {t.descricao && (
+                        <div style={{ fontSize: '13px', color: '#555', marginTop: '2px' }}>
+                          {t.descricao}
+                        </div>
+                      )}
                     </td>
-                    <td>
-                      <div style={{ minWidth: '240px', maxWidth: '320px', overflowWrap: 'break-word' }}>
-                        {renderPasta(t)}
-                      </div>
-                    </td>
-                    <td>
+                    <td style={{ minWidth: '220px', overflowWrap: 'break-word' }}>{renderPasta(t)}</td>
+                    <td style={{ width: '1%', whiteSpace: 'nowrap' }}>
                       <span className={`badge ${PRIORIDADE_COR[t.prioridade]}`}>
                         {labelPrioridade(t.prioridade)}
                       </span>
                     </td>
-                    <td style={!t.concluida && t.dias_restantes < 0 ? { color: '#dc2626', fontWeight: 600 } : {}}>
+                    <td style={{
+                      width: '1%',
+                      whiteSpace: 'nowrap',
+                      ...(!t.concluida && t.dias_restantes < 0 ? { color: '#dc2626', fontWeight: 600 } : {}),
+                    }}>
                       {t.data_vencimento ? formatarData(t.data_vencimento) : '—'}
                       {!t.concluida && t.dias_restantes < 0 && (
                         <span style={{ fontSize: '11px', display: 'block' }}>
@@ -346,12 +344,12 @@ export default function Tarefas() {
                         </span>
                       )}
                     </td>
-                    <td>{t.atribuida_para_nome || 'Escritório'}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{renderVinculo(t)}</td>
-                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                    <td style={{ width: '1%', whiteSpace: 'nowrap' }}>{t.atribuida_para_nome || 'Escritório'}</td>
+                    <td style={{ width: '1%', whiteSpace: 'nowrap' }}>{renderVinculo(t)}</td>
+                    <td style={{ width: '1%', textAlign: 'center', whiteSpace: 'nowrap' }}>
                       <EtiquetaCelula slot={t.etiqueta_pessoal} definicoes={etqDefs} />
                     </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
+                    <td style={{ width: '1%', whiteSpace: 'nowrap' }}>
                       <MenuAcoes itens={[
                         itemEtiquetasSubmenu({ definicoes: etqDefs, slotAtual: t.etiqueta_pessoal,
                           onMarcar: (slot) => marcarEtq(t.id, slot) }),
