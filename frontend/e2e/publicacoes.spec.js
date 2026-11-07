@@ -381,6 +381,46 @@ test('@critical Publicações: janelas de E-mail, Criar prazo, tarefa e compromi
   expect((await noBanco('SELECT tratada FROM publicacoes WHERE id = ?', [x]))[0].tratada).toBe(0);   // cancelar não trata a publicação
 });
 
+test('@critical Publicações: Nova vigilância no menu e na leitura, só com processo cadastrado, e não marca Tratada', async ({ page }) => {
+  const comProc = await nova({ data: '2026-02-18', numero_processo: PROC, texto: 'Pub E2E T10 vig com processo' });
+  await nova({ data: '2026-02-18', numero_processo: SEM_PROC, texto: 'Pub E2E T10 vig sem processo' });
+  const nomeTipo = `E2E vig pub ${Date.now()}`;
+  await noBanco('INSERT INTO vigilancia_tipo (nome, ativo) VALUES (?, 1)', [nomeTipo]);
+  await abrir(page);
+  await procurar(page, 'Pub E2E T10');
+  await abrirMenuAcoes(page, linha(page, 'T10 vig sem'));
+  await expect(item(page, 'Nova vigilância')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await abrirMenuAcoes(page, linha(page, 'T10 vig com'));
+  await expect(item(page, 'Nova vigilância')).toBeVisible();
+  await item(page, 'Nova vigilância').click();
+  const j = janela(page, 'Nova Vigilância');
+  await expect(j).toBeVisible();
+  await semViolacoes(page, 'janela Nova Vigilância da publicação');
+  await j.getByRole('button', { name: 'Cancelar' }).click();
+  await expect(j).toHaveCount(0);
+  await linha(page, 'T10 vig com').getByText('Pub E2E T10 vig com').click();
+  const leitura = page.locator('.modal-box.modal-largo');
+  await expect(leitura.getByRole('heading', { name: /Publicação/ })).toBeVisible();
+  await leitura.getByRole('button', { name: /Nova vigilância/ }).click();
+  const j2 = janela(page, 'Nova Vigilância');
+  await expect(j2).toBeVisible();
+  await expect(j2.getByLabel('Processo')).toBeDisabled();
+  await expect(j2.getByLabel('Tipo de vigilância').locator('option', { hasText: nomeTipo })).toHaveCount(1);
+  await j2.getByLabel('Tipo de vigilância').selectOption({ label: nomeTipo });
+  await j2.getByRole('button', { name: 'Salvar' }).click();
+  await expect(j2).toHaveCount(0);
+  expect((await noBanco('SELECT tratada FROM publicacoes WHERE id = ?', [comProc]))[0].tratada).toBe(0);
+  const vig = await noBanco(
+    `SELECT v.id FROM vigilancia v
+       JOIN tblproc p ON p.id = v.processo_id
+       JOIN vigilancia_tipo t ON t.id = v.tipo_id
+      WHERE p.numProc = ? AND t.nome = ? AND v.situacao = 'aguardando'`,
+    [PROC, nomeTipo],
+  );
+  expect(vig).toHaveLength(1);
+});
+
 test('@critical Permissões: quem só VISUALIZA não vê Importar, "Ver", seleção, Atribuir nem Excluir, e vê só o que recebeu', async ({ page }) => {
   const meu = await nova({ data: '2026-02-17', numero_processo: PROC, texto: 'Pub E2E T9 recebida' });
   await nova({ data: '2026-02-17', numero_processo: PROC, texto: 'Pub E2E T9 alheia' });

@@ -25,6 +25,7 @@ import { ModalTarefa } from '../Tarefas/Tarefas';
 import { ModalCompromisso } from '../Agenda/Agenda';
 import { ModalPericia } from '../Pericias/Pericias';
 import { ModalNovaAudiencia } from '../Audiencias/Audiencias';
+import { ModalDaVigilancia } from '../Processos/ModalDaVigilancia';
 
 const POR_PAGINA = 30;
 
@@ -229,9 +230,10 @@ function estiloAbaFontePublicacao(ativo) {
 }
 
 // ------------------------------------------------------------
-// A partir de uma publicação: cria Prazo, Tarefa, Compromisso ou Perícia reusando os modais
-// existentes, já injetando o vínculo de origem (publicacao_id). No Prazo, o número do
-// processo da publicação já dispara a busca da pasta (o usuário escolhe qual é).
+// A partir de uma publicação: cria Prazo, Tarefa, Compromisso, Perícia ou Vigilância
+// reusando os modais existentes. Prazo/tarefa/compromisso/perícia/audiência marcam a
+// publicação como tratada ao salvar (se o processo estiver cadastrado). Vigilância NÃO:
+// ela fica só como lembrete à parte e a publicação continua Pendente.
 // Compartilhado pelas duas abas (AASP e CNJ).
 // ------------------------------------------------------------
 // O número de um APENSO está cadastrado em várias pastas (uma por cliente): mostra TODAS, para a pessoa escolher a certa.
@@ -292,6 +294,9 @@ function ModalAcaoDaPublicacao({ acao, usuariosAgenda, usuarioLogadoId, ehAdmin,
   // precisa da PASTA e da vara; a publicação só tem o id, então buscamos pelo número.
   const [processoAud, setProcessoAud] = useState(null);
   const [carregandoProcAud, setCarregandoProcAud] = useState(false);
+  const [processoVig, setProcessoVig] = useState(null);
+  const [carregandoProcVig, setCarregandoProcVig] = useState(false);
+  const [avisoVig, setAvisoVig] = useState('');
 
   const soDigitos = (s) => String(s || '').replace(/\D/g, '');
   // Prioridade: o processo_id que a publicação JÁ TEM (busca exata por ID, sem ambiguidade).
@@ -320,6 +325,24 @@ function ModalAcaoDaPublicacao({ acao, usuariosAgenda, usuarioLogadoId, ehAdmin,
       setCarregandoProcAud(false);
     }
   }, [pub.processo_id, pub.processo_numero, numero]);
+
+  const carregarProcessoVigilancia = useCallback(async () => {
+    setCarregandoProcVig(true);
+    setAvisoVig('');
+    try {
+      if (!pub.processo_id) {
+        setAvisoVig('Esta publicação ainda não está vinculada a um processo cadastrado. Cadastre ou vincule o processo antes de criar a vigilância.');
+        return;
+      }
+      const { data } = await processosAPI.buscarPorId(pub.processo_id);
+      if (data && data.ok && data.dados) { setProcessoVig(data.dados); return; }
+      setAvisoVig('Não foi possível localizar o processo cadastrado. Abra a vigilância pela pasta do processo.');
+    } catch (err) {
+      setAvisoVig(err.response?.data?.mensagem || 'Não foi possível carregar o processo da vigilância.');
+    } finally {
+      setCarregandoProcVig(false);
+    }
+  }, [pub.processo_id]);
 
   const processoInicialPericia = pub.processo_id
     ? {
@@ -359,8 +382,9 @@ function ModalAcaoDaPublicacao({ acao, usuariosAgenda, usuarioLogadoId, ehAdmin,
 
   useEffect(() => {
     if (tipo === 'pericia') carregarTiposPericia();
+    if (tipo === 'vigilancia') carregarProcessoVigilancia();
     if (ehSugestaoAudiencia && pub.processo_id) { carregarTiposAudiencia(); carregarProcessoAudiencia(); }
-  }, [tipo, ehSugestaoAudiencia, pub.processo_id, carregarTiposPericia, carregarTiposAudiencia, carregarProcessoAudiencia]);
+  }, [tipo, ehSugestaoAudiencia, pub.processo_id, carregarTiposPericia, carregarTiposAudiencia, carregarProcessoAudiencia, carregarProcessoVigilancia]);
 
   if (tipo === 'prazo') {
     // Da sugestão: dias + descrição já preenchidos (a data de início o usuário confere).
@@ -370,6 +394,73 @@ function ModalAcaoDaPublicacao({ acao, usuariosAgenda, usuarioLogadoId, ehAdmin,
       quantidadeInicial={sugestao?.quantidadeInicial}
       tipoDiasInicial={sugestao?.tipoDiasInicial}
       onFechar={onFechar} />;
+  }
+  if (tipo === 'vigilancia') {
+    if (!pub.processo_id) {
+      return (
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <div className="modal-header">
+              <h3>Nova Vigilância</h3>
+              <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div className="alerta alerta-aviso">
+                Esta publicação ainda não está vinculada a um processo cadastrado. Cadastre ou vincule o processo antes de criar a vigilância.
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => onFechar(false)}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    if (carregandoProcVig) {
+      return (
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <div className="modal-header">
+              <h3>Nova Vigilância</h3>
+              <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
+            </div>
+            <div className="modal-body">Carregando cadastro da vigilância...</div>
+          </div>
+        </div>
+      );
+    }
+    if (avisoVig) {
+      return (
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <div className="modal-header">
+              <h3>Nova Vigilância</h3>
+              <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div className="alerta alerta-erro">{avisoVig}</div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => onFechar(false)}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    if (!processoVig) {
+      return (
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <div className="modal-header">
+              <h3>Nova Vigilância</h3>
+              <button className="modal-fechar" onClick={() => onFechar(false)}>✕</button>
+            </div>
+            <div className="modal-body">Carregando cadastro da vigilância...</div>
+          </div>
+        </div>
+      );
+    }
+    return <ModalDaVigilancia processos={[processoVig]} bloquearProcesso onFechar={onFechar} />;
   }
   if (tipo === 'tarefa') {
     // Da sugestão: título/descrição já preenchidos (objeto SEM id = nova tarefa).
@@ -527,10 +618,30 @@ function ModalAcaoDaPublicacao({ acao, usuariosAgenda, usuarioLogadoId, ehAdmin,
     ehAdmin={ehAdmin} publicacaoId={pub.id} onFechar={onFechar} />;
 }
 
+// Fecha a janela de ação criada a partir da publicação. Prazo/tarefa/compromisso/perícia/audiência
+// marcam Tratada (se o processo estiver cadastrado). Vigilância NÃO marca — continua Pendente.
+async function aoSalvarAcaoDaPublicacao({ tipo, pub, salvou, carregar, onFalhaTratamento, onLimparFalhaTratamento }) {
+  if (!salvou) return;
+  if (tipo === 'vigilancia') {
+    toast.success('Vigilância criada. A publicação continua pendente.');
+    carregar();
+    return;
+  }
+  if (pub.processo_cadastrado) {
+    try {
+      await publicacoesAPI.tratar(pub.id, { tratada: true });
+      onLimparFalhaTratamento(pub.id);
+    } catch {
+      onFalhaTratamento(pub);
+    }
+  }
+  carregar();
+}
+
 // Barra com os mesmos botões de ação do menu ⋮, para usar DENTRO da janela de leitura
 // da publicação. Compartilhada pelas duas abas.
-function BarraAcoesPublicacao({ pub, podeAgir, podeCriarPericia, podeAtribuir, onCriar, onTratar, onEmail, onAtribuir }) {
-  if (!podeAgir && !podeCriarPericia && !podeAtribuir) return null;
+function BarraAcoesPublicacao({ pub, podeAgir, podeCriarPericia, podeCriarVigilancia, podeAtribuir, onCriar, onTratar, onEmail, onAtribuir }) {
+  if (!podeAgir && !podeCriarPericia && !podeCriarVigilancia && !podeAtribuir) return null;
   return (
     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
       {podeAgir && (
@@ -549,6 +660,13 @@ function BarraAcoesPublicacao({ pub, podeAgir, podeCriarPericia, podeAtribuir, o
           title={pub.processo_cadastrado ? undefined : 'Processo não está cadastrado !'}>
           <button className="btn btn-outline" disabled={!pub.processo_cadastrado}
             onClick={() => onCriar('pericia', pub)}>🔬 Criar perícia</button>
+        </span>
+      )}
+      {podeCriarVigilancia && (
+        <span style={{ display: 'inline-flex' }}
+          title={pub.processo_cadastrado ? undefined : 'Processo não está cadastrado !'}>
+          <button className="btn btn-outline" disabled={!pub.processo_cadastrado}
+            onClick={() => onCriar('vigilancia', pub)}>👁 Nova vigilância</button>
         </span>
       )}
       {/* Só pode marcar tratada com o processo cadastrado; Reabrir é sempre permitido.
@@ -991,6 +1109,7 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
   const podeAlterar  = temPermissao('publicacoes', 'alterar');
   const podeExcluir  = temPermissao('publicacoes', 'excluir');
   const podeCriarPericia = temPermissao('pericias', 'cadastrar');
+  const podeCriarVigilancia = temPermissao('vigilancias', 'cadastrar');
   // Permissão de CADASTRO no módulo de destino de cada tipo de sugestão (item 13 da
   // auditoria 02/09) — o painel de sugestão passa a respeitar as mesmas regras que já
   // valem pro botão manual de cada módulo.
@@ -1490,6 +1609,9 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
                         { label: 'Criar perícia', icone: '🔬',
                           oculto: !podeCriarPericia || !p.processo_cadastrado,
                           onClick: () => setAcaoAberta({ tipo: 'pericia', pub: p }) },
+                        { label: 'Nova vigilância', icone: '👁',
+                          oculto: !podeCriarVigilancia || !p.processo_cadastrado,
+                          onClick: () => setAcaoAberta({ tipo: 'vigilancia', pub: p }) },
                         { label: 'Enviar por e-mail', icone: '📧',
                           oculto: !p.pode_agir,
                           onClick: () => setEnviandoEmailPub(p) },
@@ -1621,6 +1743,7 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
                 <BarraAcoesPublicacao pub={textoAberto}
                   podeAgir={podeAlterar || !!textoAberto.pode_agir}
                   podeCriarPericia={podeCriarPericia}
+                  podeCriarVigilancia={podeCriarVigilancia}
                   podeAtribuir={podeImportar}
                   onCriar={(tipo, p) => setAcaoAberta({ tipo, pub: p })}
                   onTratar={(p) => alternarTratada(p)}
@@ -1634,8 +1757,8 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
         );
       })()}
 
-      {/* Modais de ação (Prazo/Tarefa/Compromisso) criados a partir da publicação.
-          Ao salvar, a publicação é marcada como tratada automaticamente. */}
+      {/* Modais de ação criados a partir da publicação. Prazo/tarefa/compromisso/perícia
+          marcam Tratada ao salvar (se o processo estiver cadastrado). Vigilância não. */}
       {acaoAberta && (
         <ModalAcaoDaPublicacao
           acao={acaoAberta}
@@ -1643,24 +1766,11 @@ function PublicacoesAASP({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrat
           usuarioLogadoId={usuario?.id}
           ehAdmin={ehAdmin}
           onFechar={async (salvou) => {
-            const pub = acaoAberta.pub;
+            const { tipo, pub } = acaoAberta;
             setAcaoAberta(null);
-            if (salvou) {
-              // Só marca Tratada se o processo estiver cadastrado (regra). Sem processo
-              // cadastrado, a publicação continua Pendente mesmo tendo gerado uma ação.
-              // A ação (prazo/tarefa/audiência/perícia) JÁ FOI CRIADA nesse ponto — se marcar
-              // como tratada falhar, avisa (não pode sumir silenciosamente, senão a publicação
-              // fica pendente pra sempre sem ninguém saber o motivo — auditoria 02/09, item 4).
-              if (pub.processo_cadastrado) {
-                try {
-                  await publicacoesAPI.tratar(pub.id, { tratada: true });
-                  onLimparFalhaTratamento(pub.id);
-                } catch {
-                  onFalhaTratamento(pub);
-                }
-              }
-              carregar();
-            }
+            await aoSalvarAcaoDaPublicacao({
+              tipo, pub, salvou, carregar, onFalhaTratamento, onLimparFalhaTratamento,
+            });
           }} />
       )}
 
@@ -1709,6 +1819,7 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
   const podeAlterar  = temPermissao('publicacoes', 'alterar');
   const podeExcluir  = temPermissao('publicacoes', 'excluir');
   const podeCriarPericia = temPermissao('pericias', 'cadastrar');
+  const podeCriarVigilancia = temPermissao('vigilancias', 'cadastrar');
   // Permissão de CADASTRO no módulo de destino de cada tipo de sugestão (item 13 da
   // auditoria 02/09) — o painel de sugestão passa a respeitar as mesmas regras que já
   // valem pro botão manual de cada módulo.
@@ -2211,6 +2322,9 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
                         { label: 'Criar perícia', icone: '🔬',
                           oculto: !podeCriarPericia || !p.processo_cadastrado,
                           onClick: () => setAcaoAberta({ tipo: 'pericia', pub: p }) },
+                        { label: 'Nova vigilância', icone: '👁',
+                          oculto: !podeCriarVigilancia || !p.processo_cadastrado,
+                          onClick: () => setAcaoAberta({ tipo: 'vigilancia', pub: p }) },
                         { label: 'Enviar por e-mail', icone: '📧',
                           oculto: !p.pode_agir,
                           onClick: () => setEnviandoEmailPub(p) },
@@ -2351,6 +2465,7 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
                 <BarraAcoesPublicacao pub={textoAberto}
                   podeAgir={podeAlterar || !!textoAberto.pode_agir}
                   podeCriarPericia={podeCriarPericia}
+                  podeCriarVigilancia={podeCriarVigilancia}
                   podeAtribuir={podeImportar}
                   onCriar={(tipo, p) => setAcaoAberta({ tipo, pub: p })}
                   onTratar={(p) => alternarTratada(p)}
@@ -2364,8 +2479,8 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
         );
       })()}
 
-      {/* Modais de ação (Prazo/Tarefa/Compromisso) criados a partir da publicação.
-          Ao salvar, a publicação é marcada como tratada automaticamente. */}
+      {/* Modais de ação criados a partir da publicação. Prazo/tarefa/compromisso/perícia
+          marcam Tratada ao salvar (se o processo estiver cadastrado). Vigilância não. */}
       {acaoAberta && (
         <ModalAcaoDaPublicacao
           acao={acaoAberta}
@@ -2373,24 +2488,11 @@ function PublicacoesCNJ({ avisoTratamento, onFalhaTratamento, onLimparFalhaTrata
           usuarioLogadoId={usuario?.id}
           ehAdmin={ehAdmin}
           onFechar={async (salvou) => {
-            const pub = acaoAberta.pub;
+            const { tipo, pub } = acaoAberta;
             setAcaoAberta(null);
-            if (salvou) {
-              // Só marca Tratada se o processo estiver cadastrado (regra). Sem processo
-              // cadastrado, a publicação continua Pendente mesmo tendo gerado uma ação.
-              // A ação (prazo/tarefa/audiência/perícia) JÁ FOI CRIADA nesse ponto — se marcar
-              // como tratada falhar, avisa (não pode sumir silenciosamente, senão a publicação
-              // fica pendente pra sempre sem ninguém saber o motivo — auditoria 02/09, item 4).
-              if (pub.processo_cadastrado) {
-                try {
-                  await publicacoesAPI.tratar(pub.id, { tratada: true });
-                  onLimparFalhaTratamento(pub.id);
-                } catch {
-                  onFalhaTratamento(pub);
-                }
-              }
-              carregar();
-            }
+            await aoSalvarAcaoDaPublicacao({
+              tipo, pub, salvou, carregar, onFalhaTratamento, onLimparFalhaTratamento,
+            });
           }} />
       )}
 
