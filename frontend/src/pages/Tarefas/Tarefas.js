@@ -70,6 +70,7 @@ export default function Tarefas() {
   const [carregando, setCarregando]   = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
   const [editando, setEditando]       = useState(null);
+  const [tarefaEmLeitura, setTarefaEmLeitura] = useState(false); // título da lista → Detalhes (só ver)
   const [confirmar, setConfirmar]     = useState(null);
   const [tarefaHistorico, setTarefaHistorico] = useState(null);
   const [tarefaVerPub, setTarefaVerPub]       = useState(null); // publicacao_id p/ ler a publicação de origem
@@ -82,6 +83,7 @@ export default function Tarefas() {
     const params = new URLSearchParams(location.search);
     if (params.get('nova') === '1') {
       setEditando(null);
+      setTarefaEmLeitura(false);
       setNovaData(params.get('data') || '');
       setModalAberto(true);
     }
@@ -271,7 +273,7 @@ export default function Tarefas() {
           </button>
           {temPermissao('tarefas', 'cadastrar') && (
             <button className="btn btn-primary" style={{ marginBottom: '1px' }}
-              onClick={() => { setEditando(null); setNovaData(''); setModalAberto(true); }}>
+              onClick={() => { setEditando(null); setTarefaEmLeitura(false); setNovaData(''); setModalAberto(true); }}>
               + Nova Tarefa
             </button>
           )}
@@ -317,9 +319,16 @@ export default function Tarefas() {
                 {lista.map(t => (
                   <tr key={t.id} style={t.concluida ? { opacity: 0.6 } : {}}>
                     <td style={{ overflowWrap: 'break-word' }}>
-                      <strong style={t.concluida ? { textDecoration: 'line-through' } : {}}>
+                      <button type="button" title="Ver detalhes da tarefa"
+                        onClick={() => { setEditando(t); setTarefaEmLeitura(true); setModalAberto(true); }}
+                        style={{
+                          display: 'inline', background: 'none', border: 0, padding: 0, margin: 0,
+                          font: 'inherit', fontWeight: 700, textAlign: 'left', color: '#2563eb',
+                          textDecoration: 'underline', cursor: 'pointer',
+                          ...(t.concluida ? { textDecoration: 'line-through underline' } : {}),
+                        }}>
                         {t.titulo}
-                      </strong>
+                      </button>
                       {t.descricao && (
                         <div style={{ fontSize: '13px', color: '#555', marginTop: '2px' }}>
                           {t.descricao}
@@ -357,7 +366,7 @@ export default function Tarefas() {
                           onClick: () => toggleConcluir(t) },
                         { label: 'Editar', icone: '✏️',
                           oculto: !(temPermissao('tarefas','alterar') && !t.concluida && souDono(t)),
-                          onClick: () => { setEditando(t); setModalAberto(true); } },
+                          onClick: () => { setEditando(t); setTarefaEmLeitura(false); setModalAberto(true); } },
                         { label: 'Histórico', icone: '📋',
                           oculto: !(temPermissao('tarefas','historico') && souDono(t)),
                           onClick: () => setTarefaHistorico(t) },
@@ -407,7 +416,9 @@ export default function Tarefas() {
         <ModalTarefa
           tarefa={editando}
           dataInicial={novaData}
-          onFechar={(reload) => { setModalAberto(false); setNovaData(''); if (reload) carregar(); }}
+          somenteLeitura={tarefaEmLeitura}
+          podeEditar={!!editando && temPermissao('tarefas', 'alterar') && !editando.concluida && souDono(editando)}
+          onFechar={(reload) => { setModalAberto(false); setTarefaEmLeitura(false); setNovaData(''); if (reload) carregar(); }}
         />
       )}
     </div>
