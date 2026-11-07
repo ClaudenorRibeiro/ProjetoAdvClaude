@@ -300,11 +300,11 @@ export default function Tarefas() {
           onFiltrar={(slot) => setFiltro('etiqueta', slot)} />
         {carregando ? <div className="loading">Carregando...</div> : (
           <div className="tabela-wrapper" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
-            <table className="tabela tabela-sticky" style={{ tableLayout: 'fixed' }}>
+            <table className="tabela tabela-sticky">
               <thead>
                 <tr>
-                  <th style={{ width: '40%' }}>Tarefa</th>
-                  <th style={{ width: '30%' }}>Pasta</th>
+                  <th>Tarefa</th>
+                  <th>Pasta</th>
                   <th>Prioridade</th>
                   <th>Vencimento</th>
                   <th>Para</th>
@@ -316,17 +316,23 @@ export default function Tarefas() {
               <tbody>
                 {lista.map(t => (
                   <tr key={t.id} style={t.concluida ? { opacity: 0.6 } : {}}>
-                    <td style={{ overflowWrap: 'break-word' }}>
-                      <strong style={t.concluida ? { textDecoration: 'line-through' } : {}}>
-                        {t.titulo}
-                      </strong>
-                      {t.descricao && (
-                        <div style={{ fontSize: '13px', color: '#555', marginTop: '2px' }}>
-                          {t.descricao}
-                        </div>
-                      )}
+                    <td>
+                      <div style={{ maxWidth: '340px', overflowWrap: 'break-word' }}>
+                        <strong style={t.concluida ? { textDecoration: 'line-through' } : {}}>
+                          {t.titulo}
+                        </strong>
+                        {t.descricao && (
+                          <div style={{ fontSize: '13px', color: '#555', marginTop: '2px' }}>
+                            {t.descricao}
+                          </div>
+                        )}
+                      </div>
                     </td>
-                    <td style={{ overflowWrap: 'break-word' }}>{renderPasta(t)}</td>
+                    <td>
+                      <div style={{ minWidth: '240px', maxWidth: '320px', overflowWrap: 'break-word' }}>
+                        {renderPasta(t)}
+                      </div>
+                    </td>
                     <td>
                       <span className={`badge ${PRIORIDADE_COR[t.prioridade]}`}>
                         {labelPrioridade(t.prioridade)}
@@ -342,10 +348,10 @@ export default function Tarefas() {
                     </td>
                     <td>{t.atribuida_para_nome || 'Escritório'}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>{renderVinculo(t)}</td>
-                    <td style={{ textAlign: 'center' }}>
+                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                       <EtiquetaCelula slot={t.etiqueta_pessoal} definicoes={etqDefs} />
                     </td>
-                    <td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
                       <MenuAcoes itens={[
                         itemEtiquetasSubmenu({ definicoes: etqDefs, slotAtual: t.etiqueta_pessoal,
                           onMarcar: (slot) => marcarEtq(t.id, slot) }),
