@@ -225,8 +225,6 @@ diário de andamentos do DataJud, integração DataJud/CNJ.
     prévio do usuário.
   - Rotas "só login" sem trava de permissão de módulo — usuário decidiu
     "deixa como está"; não propor de novo.
-  - CNJ/DJEN do Antônio em espera — usuário pediu para aguardar antes de
-    mexer no código do CNJ.
 - Regra "DOIS SISTEMAS IDÊNTICOS" foi **substituída** em 25/10/2026 pela
   regra "UMA SESSÃO = UM SISTEMA": o ProjetoAdvClaude (mono) e o
   NovoJud-saas **não são mais obrigados a ser idênticos**. Nesta sessão
