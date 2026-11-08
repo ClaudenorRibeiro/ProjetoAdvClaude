@@ -1,0 +1,30 @@
+Vou conferir o dump real do banco do Antônio (sem me conectar em nada — só o arquivo que você mandou) e comparar com o que o sistema atual precisa.
+
+Agora vou comparar a lista completa de tabelas do dump com a estrutura_banco.sql atual, pra não deixar passar nada além do que eu já sabia.
+
+Conferido de verdade (lendo o dump inteiro, não por memória). Resultado:
+
+O que está OK:
+
+MySQL 8.0.46 (Ubuntu) — atende o mínimo exigido (8.0.16+), não é MariaDB.
+Banco sistema_advocacia, 96 tabelas, todas InnoDB, todas utf8mb4_0900_ai_ci — nada fora do padrão.
+controle_versao_banco mostra que o Antônio está na versão 7 (24/10/2026 — aviso diário de andamentos do DataJud), exatamente como já era esperado.
+Comparei tabela por tabela (estrutura inteira) contra o estrutura_banco.sql atual: fora os 2 itens abaixo, está tudo idêntico (as poucas diferenças de texto que apareceram em CHECK/coluna calculada são só formatação diferente do HeidiSQL ao exportar — mesma regra, mesmo efeito).
+
+O que falta rodar no banco do Antônio antes de subir o código novo (isso eu não posso fazer — é você, no HeidiSQL, conectado no Antônio):
+
+1 - Faltam as 2 tabelas da Vigilância do processo: vigilancia_tipo e vigilancia.
+2 - Falta a coluna hora_agenda em prazos_processo e em tarefas (horário automático na Agenda).
+
+Sem rodar isso, o código novo vai quebrar ao tentar gravar prazo/tarefa (coluna hora_agenda não existe) e ao usar Vigilância (tabela não existe).
+
+Sequência exata para você rodar no HeidiSQL, conectado no banco do Antônio, nesta ordem:
+
+1 - Fazer backup do banco do Antônio (HeidiSQL: Exportar como SQL) e conferir que o arquivo não ficou com 0 KB.
+2 - Parar o sistema no Antônio.
+3 - Rodar sql_hora_agenda_prazo_tarefa_para_heidi.sql inteiro (F9) — deve terminar em “PRONTO”.
+4 - Rodar sql_vigilancias_para_heidi.sql inteiro (F9) — deve terminar em “PRONTO”.
+5 - Rodar sql_remover_vigilancia_usuario_para_heidi.sql inteiro (F9) — deve terminar em “PRONTO” (precisa ser depois do passo 4, porque ele apaga uma tabela que o passo 4 acabou de criar).
+6 - Aí sim, atualizar o código no Antônio e iniciar o sistema de novo.
+
+Os três scripts não dependem de nenhuma versão numerada — rodam direto nesse banco (versão 7), sem precisar de mais nada antes.
