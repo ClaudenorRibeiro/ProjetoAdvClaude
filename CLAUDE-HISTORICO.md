@@ -428,6 +428,8 @@ Os 3 caminhos: endereço do réu, endereço do perito e endereço novo (local ma
 
 - **QTDE PROC — janela mais larga, número abre a pasta, ícone copia — FEITO no `rascunho` em 07/11/2026 (pedido do usuário: o número do processo não pode quebrar; clicar no número vai para a pasta; copiar só pelo ⧉).** A janela passou de `modal-grande` para `modal-largo`; o número usa o mesmo componente das outras telas (`NumeroProcessoCopiavel` com abrir pasta). A lista de processos da pessoa agora devolve também `pasta_id` (sem mudança de banco).
 
+- **REGRA — apto para produção = rascunho testado e aprovado (08/11/2026, todos os projetos).** O `main` só depois disso. SQL no Heidi de Antônio/Erick e AWS: só o usuário, por último. Auditoria de “produção” foca o rascunho. Gravado na memória eterna.
+
 - **PC NOVO — `instalar_dependencias.bat` — FEITO no `rascunho` em 07/11/2026 (pedido do usuário: um .bat para instalar o que o projeto precisa, para rodar no cmd).** Instala Node LTS, Git e HeidiSQL só se faltarem (winget); depois `npm install` em backend e frontend. Se não existir `backend\.env`, copia o exemplo e avisa para preencher a senha. NÃO instala MySQL nem importa o banco (HeidiSQL, como sempre). NÃO liga o sistema. Sem mudança de banco.
 
 - **LISTA DE TAREFAS — clicar no título abre Detalhes (só leitura) — FEITO no `rascunho` em 06/11/2026 (pedido do usuário: igual a outros lugares; Fechar e Editar embaixo).** Reusa `ModalTarefa` com `somenteLeitura`. Editar no rodapé segue a mesma regra da pasta (alterar + dono + não concluída). ⋮ → Editar continua abrindo já em edição. Sem mudança de banco.

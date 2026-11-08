@@ -28,11 +28,15 @@ a versão que vai para o servidor; a IA só dá `push` ali quando o usuário
 disser explicitamente, na hora, **"PODE SUBIR"** (autorização anterior
 não vale para a próxima vez).
 
-Fluxo completo: (1) a IA codifica e envia só para o `rascunho`; (2) o
-usuário baixa o rascunho no PC local e testa; (3) se estiver tudo certo,
-o usuário autoriza a IA a atualizar o `main`; (4) o usuário mesmo entra
-por SSH na AWS daquele projeto e atualiza o servidor para os usuários
-finais — a IA nunca mexe na AWS/produção por conta própria.
+Fluxo completo (confirmado 08/11/2026, vale em todos os projetos): (1) a
+IA deixa o `rascunho` pronto; (2) o usuário baixa no PC, testa de ponta
+a ponta e **aprova**; (3) só então, com **"PODE SUBIR"** na hora, atualiza-se
+o `main`; (4) o usuário roda o SQL no HeidiSQL de cada banco de produção
+(Antônio e Erick, se houver script novo); (5) o usuário mesmo atualiza o
+servidor AWS. A IA nunca mexe na AWS. **“Apto para produção” = o rascunho
+está testado e aprovado** — não é auditar servidor. Sem bateria completa
+neste rascunho (quando houve mudança grande) e sem SQL local conferido,
+o rascunho **não** está apto.
 
 **Antes de afirmar algo sobre branches de qualquer projeto (quais
 existem, em qual está o quê), sempre conferir com `git fetch` completo
