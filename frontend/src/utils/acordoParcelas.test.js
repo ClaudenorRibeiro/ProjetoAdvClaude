@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { recalcularParcelasAoEditarBruto } from './acordoParcelas';
+import { recalcularParcelasAoEditarBruto, soNumeroParcelas } from './acordoParcelas';
 
 function parcelas(valores) {
   return valores.map((v) => ({ valor_bruto: v, status: 'pendente' }));
@@ -65,5 +65,16 @@ describe('recalcularParcelasAoEditarBruto', () => {
     ({ parcelas: r } = recalcularParcelasAoEditarBruto(r, 4000, 1, '1.000,00'));
     expect(r[0].valor_bruto).toBe('1.000,00');
     expect(r[1].valor_bruto).toBe('1.000,00'); // ambas já manuais, nenhuma "livre" para reajustar
+  });
+});
+
+describe('soNumeroParcelas', () => {
+  it('aceita só dígitos e recusa letra, sinal e o e do type=number', () => {
+    expect(soNumeroParcelas('25')).toBe('25');
+    expect(soNumeroParcelas('6-66+212')).toBe('360');
+    expect(soNumeroParcelas('abc')).toBe('');
+    expect(soNumeroParcelas('12e3')).toBe('123');
+    expect(soNumeroParcelas('0')).toBe('');
+    expect(soNumeroParcelas(3)).toBe('3');
   });
 });

@@ -223,8 +223,6 @@ diário de andamentos do DataJud, integração DataJud/CNJ.
 - Pendências conhecidas em aberto (conferir com o usuário antes de agir):
   - **P7**: conferir PM2 no servidor real — só no fim de semana, com aviso
     prévio do usuário.
-  - Campo "Nº de parcelas" do Novo Acordo aceitando letras — anotado,
-    ainda não corrigido (baixa prioridade).
   - Rotas "só login" sem trava de permissão de módulo — usuário decidiu
     "deixa como está"; não propor de novo.
   - CNJ/DJEN do Antônio em espera — usuário pediu para aguardar antes de

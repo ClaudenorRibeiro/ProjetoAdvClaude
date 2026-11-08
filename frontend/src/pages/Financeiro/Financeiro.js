@@ -16,7 +16,7 @@ import { ModalGerar } from '../../components/GerarDocumento';
 import { clientesDoProcesso, clienteUnico, destinoClienteDaParcela, contaEscritorioPadrao, formaUnica, destinoSugerido } from './destinoPadrao';
 import AtividadeFinanceiro, { ModalHistoricoAcordo } from './AtividadeFinanceiro';
 import { rotuloTipoAcordo, rotuloCurtoTipoAcordo } from './tipoAcordo';
-import { recalcularParcelasAoEditarBruto } from '../../utils/acordoParcelas';
+import { recalcularParcelasAoEditarBruto, soNumeroParcelas } from '../../utils/acordoParcelas';
 
 const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
 
@@ -1978,7 +1978,7 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
         setContaBeneficiarioId(data.dados.beneficiario_cliente_conta_id || '');
         setCab({
           descricao: data.dados.descricao || '', valor_total: numeroParaMascaraMoeda(data.dados.valor_total),
-          qtd_parcelas: data.dados.qtd_parcelas, data_primeira: String(data.dados.data_primeira).slice(0, 10),
+          qtd_parcelas: soNumeroParcelas(data.dados.qtd_parcelas), data_primeira: String(data.dados.data_primeira).slice(0, 10),
           honor_percentual: 30, multa_percentual: '',
         });
         setParcelas(data.dados.parcelas.map(p => ({
@@ -2136,8 +2136,8 @@ export function ModalAcordo({ processoId, acordoId, tipo, onFechar, descricaoIni
             </div>
             <div className="form-group">
               <label className="form-label">Nº de parcelas *</label>
-              <input aria-label="Nº de parcelas" type="number" min="1" className="form-control" value={cab.qtd_parcelas}
-                onChange={e => setC('qtd_parcelas', e.target.value)} placeholder="Ex: 25" />
+              <input aria-label="Nº de parcelas" type="text" inputMode="numeric" autoComplete="off" className="form-control" value={cab.qtd_parcelas}
+                onChange={e => setC('qtd_parcelas', soNumeroParcelas(e.target.value))} placeholder="Ex: 25" />
             </div>
             <div className="form-group">
               <label className="form-label">1ª parcela *</label>

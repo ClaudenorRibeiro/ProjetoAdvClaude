@@ -1,5 +1,15 @@
 import { parseMoeda, numeroParaMascaraMoeda } from './formatters';
 
+// Nº de parcelas do Novo Acordo: só dígitos, inteiro de 1 a 360 (mesmo teto do servidor).
+// Caixa type=number do navegador aceitava e, +, - e texto colado (print 08/11/2026).
+export function soNumeroParcelas(valor) {
+  const d = String(valor ?? '').replace(/\D/g, '');
+  if (!d) return '';
+  const n = Number(d);
+  if (!Number.isSafeInteger(n) || n < 1) return '';
+  return String(Math.min(n, 360));
+}
+
 // Edição manual do valor Bruto de UMA parcela do acordo: o valor total do acordo é soberano.
 // As parcelas ainda LIVRES (não recebidas e não editadas na mão antes) se reajustam, divisão
 // igual com a diferença de centavos acumulada na ÚLTIMA parcela livre, para a soma bater com o total.
