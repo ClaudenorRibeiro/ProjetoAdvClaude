@@ -219,7 +219,7 @@ Documentos, Avisos aos Clientes, Agenda (+ Google Agenda), Relatórios
 (fóruns/varas/auxiliares), Configurações, Vigilância de processo, aviso
 diário de andamentos do DataJud, integração DataJud/CNJ.
 
-- Últimas baterias completas no Windows: todas passando (12/12 etapas).
+- Última bateria completa no Windows: **08/11/2026, 12/12** (rascunho atual: Vigilância, horário na Agenda, Tarefas, Qtde Proc e o que veio depois de 29/10).
 - Pendências conhecidas em aberto (conferir com o usuário antes de agir):
   - **P7**: conferir PM2 no servidor real — só no fim de semana, com aviso
     prévio do usuário.
